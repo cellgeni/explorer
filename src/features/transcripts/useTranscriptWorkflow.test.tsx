@@ -207,6 +207,23 @@ function renderWorkflow(options: ProbeOptions = {}): Loaders {
   return loaders
 }
 
+// Renders the probe and returns a function that rerenders it with new options.
+function renderProbe(loaders: Loaders, options: ProbeOptions) {
+  const onReady = (nextSnapshot: Snapshot) => {
+    snapshot = nextSnapshot
+  }
+  const view = render(<Probe loaders={loaders} options={options} onReady={onReady} />)
+
+  return (nextOptions: ProbeOptions) => {
+    view.rerender(<Probe loaders={loaders} options={nextOptions} onReady={onReady} />)
+  }
+}
+
+const XENIUM_CAPABILITIES: TranscriptCapabilities = {
+  rawParquet: true,
+  nativeZarr: false,
+}
+
 const PER_GENE_CAPABILITIES: TranscriptCapabilities = {
   rawParquet: false,
   nativeZarr: true,
@@ -543,12 +560,106 @@ describe('useTranscriptWorkflow', () => {
       message: 'Per-gene transcript density is unavailable: HTTP 403',
     })
   })
-  describe('Cancel (15.3-D)', () => {
-    const XENIUM_CAPABILITIES: TranscriptCapabilities = {
-      rawParquet: true,
-      nativeZarr: false,
+
+  // ViewerCore reports the same view again as a new object, and other
+  // dependencies the request key leaves out can change mid-read. The effect
+  // cleanup stops the read, so the rerun has to start it again.
+  describe('reruns for the same view', () => {
+    function abortedSignals(loader: { mock: { calls: readonly unknown[][] } }) {
+      return loader.mock.calls.map(
+        (call) => (call[2] as { signal?: AbortSignal } | undefined)?.signal?.aborted,
+      )
     }
 
+    it('restarts a native density read', async () => {
+      const density = deferredPromise<TranscriptAggregateResult>()
+      const loadTranscriptAggregates = vi.fn<Loaders['loadTranscriptAggregates']>(
+        () => density.promise,
+      )
+      const options: ProbeOptions = {
+        capabilities: { rawParquet: true, nativeZarr: true },
+        detailMode: 'density',
+        featureFilterMode: 'all',
+        showTranscriptOverlay: true,
+        visibleTranscriptEstimate: 20,
+      }
+      const rerender = renderProbe(
+        { ...defaultLoaders(), loadTranscriptAggregates },
+        options,
+      )
+      await waitFor(() => expect(loadTranscriptAggregates).toHaveBeenCalledTimes(1))
+
+      rerender({ ...options, viewportDetail: { ...viewportDetail } })
+      await waitFor(() => expect(loadTranscriptAggregates).toHaveBeenCalledTimes(2))
+      await act(async () => {
+        density.resolve(emptyAggregate())
+      })
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+      expect(abortedSignals(loadTranscriptAggregates)).toEqual([true, false])
+    })
+
+    it('starts an exact read again, before and after it reaches the loader', async () => {
+      const exact = deferredPromise<TranscriptViewportResult>()
+      const loadTranscriptViewport = vi.fn<Loaders['loadTranscriptViewport']>(
+        () => exact.promise,
+      )
+      const options: ProbeOptions = {
+        capabilities: XENIUM_CAPABILITIES,
+        detailMode: 'exact',
+        showTranscriptOverlay: true,
+        visibleTranscriptEstimate: 10,
+      }
+      const rerender = renderProbe(
+        { ...defaultLoaders(), loadTranscriptViewport },
+        options,
+      )
+
+      // Within the 220 ms wait before the read.
+      rerender({ ...options, viewportDetail: { ...viewportDetail } })
+      await waitFor(() => expect(loadTranscriptViewport).toHaveBeenCalledTimes(1))
+
+      rerender({ ...options, viewportDetail: { ...viewportDetail } })
+      await waitFor(() => expect(loadTranscriptViewport).toHaveBeenCalledTimes(2))
+      await act(async () => {
+        exact.resolve({ points: [], groups: [], hitPointLimit: false })
+      })
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('ready'))
+      expect(abortedSignals(loadTranscriptViewport)).toEqual([true, false])
+    })
+
+    it('restarts a per-gene density read', async () => {
+      const density = deferredPromise<TranscriptAggregateResult>()
+      const loadTranscriptAggregates = vi.fn<Loaders['loadTranscriptAggregates']>(
+        () => density.promise,
+      )
+      const options: ProbeOptions = {
+        capabilities: PER_GENE_CAPABILITIES,
+        selectedGenes: ['UMOD'],
+        showTranscriptOverlay: true,
+      }
+      const rerender = renderProbe(
+        { ...defaultLoaders(), loadTranscriptAggregates },
+        options,
+      )
+      await waitFor(() => expect(loadTranscriptAggregates).toHaveBeenCalledTimes(1))
+
+      rerender({ ...options, viewportDetail: { ...viewportDetail } })
+      await waitFor(() => expect(loadTranscriptAggregates).toHaveBeenCalledTimes(2))
+      await act(async () => {
+        density.resolve(perGeneAggregate(250_000))
+      })
+
+      // The per-gene read checks no request key, so any rerun before its
+      // result starts it again.
+      await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+      expect(snapshot.layerState).toMatchObject({ visibleTranscriptEstimate: 250_000 })
+      expect(loadTranscriptAggregates).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('Cancel (15.3-D)', () => {
     function viewportAt(x: number): ViewerViewportDetail {
       return {
         ...viewportDetail,
@@ -569,17 +680,6 @@ describe('useTranscriptWorkflow', () => {
         fovName: null,
         position: { x: micrometers(2), y: micrometers(2) },
         qv: 40,
-      }
-    }
-
-    function renderProbe(loaders: Loaders, options: ProbeOptions) {
-      const onReady = (nextSnapshot: Snapshot) => {
-        snapshot = nextSnapshot
-      }
-      const view = render(<Probe loaders={loaders} options={options} onReady={onReady} />)
-
-      return (nextOptions: ProbeOptions) => {
-        view.rerender(<Probe loaders={loaders} options={nextOptions} onReady={onReady} />)
       }
     }
 

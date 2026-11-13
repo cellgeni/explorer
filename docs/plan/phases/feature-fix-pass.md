@@ -29,3 +29,9 @@ Fixes recorded:
       as an explicit mode.
 - [x] Visium HD ROIs load genes for all selected barcodes and label the panel
       `ROI genes`.
+- [x] Transcripts stayed loading after a rerun for the same view. Selecting a
+      gene with Feature filter set to All, or ViewerCore reporting the same
+      view again as a new object, stopped the read, and the rerun skipped its
+      unchanged request key. The effect cleanup now clears the key of a read it
+      stops while that read is still running, so the rerun starts it again; a
+      cancelled read (15.3-D) keeps its key.
