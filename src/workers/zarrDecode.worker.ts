@@ -3,9 +3,11 @@
 import type * as zarr from 'zarrita'
 import { labelWindow, traceLabelEdges } from '../datasets/spatialDataLabelTrace'
 import { numericPixelsToRgba } from '../zarr/omeZarrPixels'
+import { decodeZarrCodec } from './zarrCodecCore'
 import { chunkWindow, chunkWindowSamples, decodeChunk } from './zarrDecodeCore'
 import type {
   ZarrChunkSource,
+  ZarrDecodeCodecMessage,
   ZarrDecodeRequest,
   ZarrDecodeResponse,
   ZarrRenderTileMessage,
@@ -40,6 +42,11 @@ workerScope.onmessage = (event: MessageEvent<ZarrDecodeRequest>) => {
 
   if (message.type === 'sample-tile') {
     void sampleTile(message)
+    return
+  }
+
+  if (message.type === 'decode-codec') {
+    void decodeCodec(message)
     return
   }
 
@@ -181,6 +188,15 @@ async function traceLabels(message: ZarrTraceLabelsMessage): Promise<void> {
       trace.bounds.buffer,
       trace.pixelCounts.buffer,
     ])
+  } catch (error) {
+    respond({ type: 'error', id: message.id, error: errorMessage(error) })
+  }
+}
+
+async function decodeCodec(message: ZarrDecodeCodecMessage): Promise<void> {
+  try {
+    const result = await decodeZarrCodec(message.id, message.codec, message.bytes)
+    respond(result.response, result.transfer)
   } catch (error) {
     respond({ type: 'error', id: message.id, error: errorMessage(error) })
   }

@@ -2,6 +2,7 @@ import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { asCellId, cellIdToInt, intToCellId } from './cellid'
 import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
+import { getWholeArray } from '../zarr/zarrWholeArray'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { coalesceCellMajorRanges, emptyCellsFor } from './featureBarcodeMatrixH5'
 import { createGeneFeatureIndex } from './geneFeatures'
@@ -1074,7 +1075,7 @@ function loadZarrMatrixCellIdData(url: string): Promise<Uint32Array> {
   const promise = loadZarrMatrixMetadata(url)
     .then(async (matrix) =>
       expectUint32Array(
-        (await zarr.get(matrix.cellIdArray, [null, null])).data,
+        (await getWholeArray(matrix.cellIdArray)).data,
         'cell_features/cell_id',
       ),
     )

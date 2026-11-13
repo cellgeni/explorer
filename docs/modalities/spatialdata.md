@@ -132,7 +132,7 @@ coordinate system.
 | ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
 | `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                             |
 | `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita`                                            | Cells, genes, annotations, embeddings |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita` + decode worker (codecs)                   | Cells, genes, annotations, embeddings |
 | `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` (`HEAD` + range reads, or the zip entry) | Cell positions and boundaries         |
 | `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                                            | Morphology layer                      |
 | `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker                            | Cell outlines                         |

@@ -7,6 +7,7 @@ import {
 } from '../zarr/icechunkStore'
 import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
+import { getWholeArray } from '../zarr/zarrWholeArray'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
@@ -3387,8 +3388,11 @@ async function readDatasetValue(dataset: H5DatasetLike): Promise<unknown> {
   }
 
   if (isZarrDataset(dataset)) {
+    const array = dataset.source.array
     return zarrChunkValue(
-      await zarr.get(dataset.source.array, fullArraySelection(dataset.source.array)),
+      array.shape.length >= 2
+        ? await getWholeArray(array)
+        : await zarr.get(array, fullArraySelection(array)),
     )
   }
 

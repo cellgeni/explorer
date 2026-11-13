@@ -148,7 +148,9 @@ compressed). The viewer never reads it.
      `var`, `obsm`, `uns`, and `/X/indptr`), 6 at a time.
 4. Reads chunks as Range requests to the H5AD, at most 6 at a time
    (`H5AD_REFERENCE_FETCH_CONCURRENCY`, and the same limit for everything an
-   Icechunk repository reads), only when they are needed:
+   Icechunk repository reads), only when they are needed. The requests are
+   made on the main thread; the chunks are decompressed, and strings decoded,
+   in the Zarr decode workers ([Workers](./architecture.md#workers)):
 
 | When                                  | What is read                                                                                                                                                                     |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

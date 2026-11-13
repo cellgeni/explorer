@@ -169,11 +169,12 @@ What the POC lacked, and what this plan set out to close:
   arrays, and `ImageBitmap`s live in modules or caches, referenced by ID.
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
-  Known exceptions (2026-11): hyparquet reads other than the Xenium overview
-  and zarrita reads for the Xenium matrix, H5AD references, and SpatialData
-  tables run on the main thread. Since 2026-11-13 h5wasm runs only in
-  workers, the Xenium `cells.parquet` overview is decoded in one, and
-  auto-contrast decodes and samples its tiles in them. See
+  Known exceptions (2026-11): hyparquet reads other than the Xenium overview run
+  on the main thread, and zarrita still fetches chunks and assembles selections
+  there. Since 2026-11-13 h5wasm runs only in workers, the Xenium
+  `cells.parquet` overview is decoded in one, auto-contrast decodes and samples
+  its tiles in them, and zarrita's decompressors and string codecs run in the
+  Zarr decode workers. See
   [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
@@ -377,6 +378,18 @@ Later additions:
   pixel index, as before, so results are unchanged. The main thread sorts at
   most 250,000 samples as a `Float64Array` (about 18 ms, against 44 ms for the
   `number[]` it used) and builds the histogram.
+- **Zarr codec workers (2026-11-13).** zarrita reads made on the main thread
+  (Xenium matrix and transcripts, H5AD references, SpatialData tables) run their
+  decompressors (`blosc`, `zstd`, `lz4`, `gzip`, `zlib`) and string codecs
+  (`vlen-utf8`, `json2`) in the Zarr decode workers. `main.tsx` points zarrita's
+  codec registry at worker versions (`workerZarrCodecs.ts`) that copy each chunk
+  to a worker and get the bytes back by transfer, or the strings by clone, so
+  one hook covers every store (HTTP, zip, references, Icechunk) without moving
+  reads or their caches into workers. zarrita still fetches chunks and assembles
+  selections on the main thread; whole arrays chunked only by row are assembled
+  a chunk at a time (`getWholeArray`) instead of with zarrita's row-by-row copy,
+  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. If a
+  worker fails, the chunk is decoded on the main thread.
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -4129,26 +4142,39 @@ Other gaps found in the review:
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
       than the Xenium overview (Visium HD positions and barcode mappings,
-      SpatialData shapes) and zarrita reads. h5wasm for H5AD, the Xenium H5
-      fallback and the standard Visium matrix moved to H5 file workers
-      (2026-11-13). On the Xenium demo a Cell card's H5 fallback (worker fetch,
-      open in 1.35 s, first cell read in 1.2–1.3 s) left no main-thread task
-      over 50 ms. A first version that fetched on the main thread still left a
-      255 ms task joining the body and a 720 ms one after it. The Xenium
-      `cells.parquet` overview moved to a cells overview worker (2026-11-13).
-      CPU profiles of the demo's load to the first overview draw (production
-      builds, headless Chromium, two runs each): hyparquet code took 1.63–1.67 s
-      of main-thread time, in stretches of up to 861 ms, before the change;
-      after it, building the cells from the transferred columns takes 54–59 ms
-      and nothing before the overview commit runs over 156 ms. Read in the page
-      (dev build), the columns took 66 ms to receive and 107–180 ms to turn into
-      cells, against 324–358 ms for the old per-row parse. Auto-contrast moved
-      to workers (2026-11-13). Profiles of the demo's load until its four
-      channels are auto-contrasted (same setup): the OpenJPEG codec took 540–559
-      ms of main-thread time, in stretches of up to 634 ms, before the change,
-      and none after it; the auto-contrast module itself takes 23–44 ms. Read in
-      the page (dev build), one focus channel went from a 140–165 ms task to
-      none, about 40 ms slower end to end for starting the worker.
+      SpatialData shapes), and the fetching and assembly in zarrita reads.
+      h5wasm for H5AD, the Xenium H5 fallback and the standard Visium matrix
+      moved to H5 file workers (2026-11-13). On the Xenium demo a Cell card's H5
+      fallback (worker fetch, open in 1.35 s, first cell read in 1.2–1.3 s) left
+      no main-thread task over 50 ms. A first version that fetched on the main
+      thread still left a 255 ms task joining the body and a 720 ms one after
+      it. The Xenium `cells.parquet` overview moved to a cells overview worker
+      (2026-11-13). CPU profiles of the demo's load to the first overview draw
+      (production builds, headless Chromium, two runs each): hyparquet code took
+      1.63–1.67 s of main-thread time, in stretches of up to 861 ms, before the
+      change; after it, building the cells from the transferred columns takes
+      54–59 ms and nothing before the overview commit runs over 156 ms. Read in
+      the page (dev build), the columns took 66 ms to receive and 107–180 ms to
+      turn into cells, against 324–358 ms for the old per-row parse.
+      Auto-contrast moved to workers (2026-11-13). Profiles of the demo's load
+      until its four channels are auto-contrasted (same setup): the OpenJPEG
+      codec took 540–559 ms of main-thread time, in stretches of up to 634 ms,
+      before the change, and none after it; the auto-contrast module itself
+      takes 23–44 ms. Read in the page (dev build), one focus channel went from
+      a 140–165 ms task to none, about 40 ms slower end to end for starting the
+      worker. zarrita's codecs moved to the Zarr decode workers (2026-11-13).
+      CPU profiles (unminified production builds, headless Chromium, one or two
+      runs each): colouring the SpatialData Visium table by a gene spent 291–304
+      ms in blosc on the main thread before and none after; loading the
+      SpatialData Xenium table spent 227–231 ms decoding strings before and none
+      after; and on the Xenium demo, from load to a gene's colours, the codecs
+      (47–50 ms) and zarrita's copy of the cell IDs (one 124–127 ms task) left
+      the main thread, which now spends 10 ms in zarrita. On the heart H5AD
+      reference, served locally, zarrita's main-thread time while loading fell
+      from 90–113 ms to 47–51 ms, and a 94–98 ms task went. The table code that
+      uses the decoded arrays still runs on the main thread, for both H5AD
+      backends: the CSR scan for a gene (230–270 ms on the Visium table) and the
+      per-cell metadata (about 200 ms for 73,579 cells).
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.

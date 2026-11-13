@@ -239,7 +239,8 @@ not passed to the readers, so it does not change the result.
 - DuckDB-WASM runs in a worker per client; each `XeniumDataset` creates its own
   client. The H5 fallback's file is fetched, opened and read in an H5 file
   worker, and the overview's `cells.parquet` columns in a cells overview
-  worker. zarrita runs on the main thread.
+  worker. zarrita reads (matrix, transcripts, analysis) run on the main
+  thread, with their chunks decompressed in the Zarr decode workers.
 
 ## Source Files
 

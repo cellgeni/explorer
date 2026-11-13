@@ -3,6 +3,8 @@ import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
 import type {
   ZarrChunkSource,
   ZarrChunkWindow,
+  ZarrCodecCall,
+  ZarrCodecChunk,
   ZarrDecodeRequest,
   ZarrDecodeResponse,
   ZarrTileRender,
@@ -46,7 +48,7 @@ export class ZarrDecodePool {
   private readonly pending = new Map<number, PendingResponse>()
   private readonly chunkWorkers = new Map<string, Promise<number>>()
   private nextRequestId = 1
-  private nextTraceWorker = 0
+  private nextTurn = 0
 
   constructor(options: ZarrDecodePoolOptions = {}) {
     this.size = Math.max(1, options.size ?? defaultWorkerPoolSize())
@@ -106,11 +108,9 @@ export class ZarrDecodePool {
     readonly levelY0: number
     readonly levelWidth: number
   }): Promise<PackedLabelTrace> {
-    const workerIndex = this.nextTraceWorker % this.size
-    this.nextTraceWorker += 1
     const bytes = request.bytes === undefined ? null : transferableCopy(request.bytes)
     const response = await this.send(
-      workerIndex,
+      this.takeTurn(),
       (id) => ({
         type: 'trace-labels',
         id,
@@ -133,8 +133,42 @@ export class ZarrDecodePool {
     )
   }
 
+  // Runs one codec step of a chunk zarrita decodes on the main thread (see
+  // src/zarr/workerZarrCodecs.ts): decompressed bytes, or the strings of a
+  // string codec.
+  async decodeCodec(
+    codec: ZarrCodecCall,
+    bytes: Uint8Array,
+  ): Promise<Uint8Array | ZarrCodecChunk> {
+    const payload = transferableCopy(bytes)
+    const response = await this.send(
+      this.takeTurn(),
+      (id) => ({ type: 'decode-codec', id, codec, bytes: payload }),
+      [payload],
+    )
+
+    if (response.type === 'codec-bytes') {
+      return new Uint8Array(response.bytes)
+    }
+
+    if (response.type === 'codec-chunk') {
+      return { data: response.data, shape: response.shape, stride: response.stride }
+    }
+
+    throw new Error(
+      response.type === 'error' ? response.error : 'Unexpected Zarr codec response.',
+    )
+  }
+
   terminate(): void {
     this.reset(new Error('Zarr decode worker pool terminated.'))
+  }
+
+  // Requests not tied to a cached chunk go to the workers in turn.
+  private takeTurn(): number {
+    const workerIndex = this.nextTurn % this.size
+    this.nextTurn += 1
+    return workerIndex
   }
 
   // Sends a request about a chunk to the worker holding it, placing the chunk

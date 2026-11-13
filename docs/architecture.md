@@ -352,7 +352,7 @@ their cards stayed on "Loading".
 | DuckDB-WASM worker               | `src/data/duckdb.ts`             | One per DuckDB client                                                                          |
 | `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
 | `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
-| `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr image chunks into `ImageBitmap`s; trace SpatialData label chunks into outlines |
+| `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
 | `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One whole downloaded HDF5 file each: H5AD, the Xenium H5 fallback, the standard Visium matrix  |
 | `cellsOverview.worker.ts`        | `readCellsOverviewInWorker`      | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
 
@@ -381,10 +381,22 @@ OME-Zarr tile is sampled by the Zarr decode worker that holds its chunk. The
 main thread sorts the samples and builds the histogram. Where there is no
 `Worker`, or a Zarr decode worker fails, tiles are sampled on the main thread.
 
-Other hyparquet reads and zarrita reads (Xenium matrix, H5AD references,
-SpatialData tables) run on the main thread. OME-Zarr chunk bytes are fetched
-on the main thread and decoded in the Zarr decode workers, which fall back to
-the main thread if they fail.
+zarrita reads (Xenium matrix and transcripts, H5AD references, SpatialData
+tables) are made on the main thread, but their costly codec steps are not:
+`installWorkerZarrCodecs` (`src/zarr/workerZarrCodecs.ts`, called from
+`main.tsx`) points zarrita's codec registry at worker versions of its
+decompressors (`blosc`, `zstd`, `lz4`, `gzip`, `zlib`) and string codecs
+(`vlen-utf8`, `json2`). Each chunk zarrita decodes is copied to a Zarr decode
+worker, which runs zarrita's own codec and sends back the bytes by transfer
+(strings by clone). Byte order, filters and assembling the selection stay on
+the main thread; whole arrays whose chunks span every axis but the first are
+assembled a chunk at a time (`getWholeArray`, `src/zarr/zarrWholeArray.ts`)
+instead of zarrita's row-by-row copy. If a worker fails, the chunk is decoded
+on the main thread with zarrita's codec; with no `Worker` the registry is left
+alone. OME-Zarr image chunk bytes are fetched on the main thread and decoded
+whole in the Zarr decode workers, which fall back to the main thread if they
+fail. Other hyparquet reads (Visium HD positions and barcode mappings,
+SpatialData shapes) run on the main thread.
 
 ## Performance Budget
 
