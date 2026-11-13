@@ -172,6 +172,12 @@ except the index and `__*` entries:
   0/1); masked values are missing.
 - Other groups are skipped.
 
+Categorical and string tracks keep the arrays they were read as: a
+categorical column's codes and categories, a string column's strings. A row's
+label is looked up when an annotation set or the Cell card needs it, instead
+of every column being expanded into a label per row at load (about 15 ms a
+column on a 598,222-cell table).
+
 Continuous `obs` values appear as per-cell "Observations" rows in the Cell
 tab and as `Cell color` → `Metadata` tracks. The track list (label, range, cell
 count) loads with the dataset; a track's per-cell values are built only when it

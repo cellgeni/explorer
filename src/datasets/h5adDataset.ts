@@ -230,8 +230,19 @@ interface H5adCategoricalTrack {
   readonly label: string
   // For a plain string column, counted only up to DISTINCT_LABEL_COUNT_LIMIT.
   readonly categoryCount: number
-  readonly values: readonly (string | null)[]
+  readonly values: H5adLabels
 }
+
+// A label column as it was read, read by row with `labelAt`: a categorical
+// column's codes and categories, or a plain string column's strings. Neither
+// is expanded into a label per row up front.
+type H5adLabels =
+  | {
+      readonly kind: 'codes'
+      readonly codes: NumericArrayLike
+      readonly categories: readonly string[]
+    }
+  | { readonly kind: 'strings'; readonly strings: readonly string[] }
 
 interface H5adContinuousTrack {
   readonly id: string
@@ -672,11 +683,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     for (const track of selectedTracks) {
       const cellIdsByLabel = new Map<string, string[]>()
 
-      for (let index = 0; index < track.values.length; index += 1) {
-        const label = track.values[index]
+      for (let index = 0; index < cache.cellIds.length; index += 1) {
+        const label = labelAt(track.values, index)
         const cellId = cache.cellIds[index]
 
-        if (label === null || label === undefined || cellId === undefined) {
+        if (label === null || cellId === undefined) {
           continue
         }
 
@@ -1444,13 +1455,14 @@ async function readVisiumSource(
     libraryIds.map((id) => readVisiumLibrary(spatial, id)),
   )
   // With several libraries, an obs column says which rows belong to each.
-  const libraryTrack =
+  const libraryLabels =
     libraryIds.length > 1
-      ? tracks.categoricalTracks.find(
-          (track) =>
-            VISIUM_LIBRARY_COLUMNS.includes(track.id) &&
-            track.values.some((value) => value !== null && libraryIds.includes(value)),
-        )
+      ? tracks.categoricalTracks
+          .filter((track) => VISIUM_LIBRARY_COLUMNS.includes(track.id))
+          .map((track) => labelsByRow(track.values))
+          .find((labels) =>
+            labels.some((value) => value !== null && libraryIds.includes(value)),
+          )
       : undefined
   const continuous = (id: string) =>
     tracks.continuousTracks.find((track) => track.id === id)?.values ?? null
@@ -1460,10 +1472,10 @@ async function readVisiumSource(
     libraries,
     defaultLibraryId:
       libraryIds.find(
-        (id) => libraryTrack === undefined || libraryTrack.values.includes(id),
+        (id) => libraryLabels === undefined || libraryLabels.includes(id),
       ) ?? libraryIds[0]!,
     pixels: embedding.points,
-    rowLibraries: libraryTrack?.values ?? null,
+    rowLibraries: libraryLabels ?? null,
     // Unless no row is under tissue, in which case the column is ignored.
     inTissue: inTissue?.some((value) => value !== 0) === true ? inTissue : null,
     arrayRows: continuous('array_row'),
@@ -2335,9 +2347,7 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: Array.from({ length: rowCount }, (_value, index) =>
-            categoricalLabel(codes, categories, index),
-          ),
+          values: { kind: 'codes', codes, categories },
         })
         continue
       }
@@ -2373,9 +2383,7 @@ async function readObservationTracks(
             id: key,
             label: key,
             categoryCount: categories.length,
-            values: Array.from({ length: rowCount }, (_value, index) =>
-              categoricalLabel(codes, categories, index),
-            ),
+            values: { kind: 'codes', codes, categories },
           })
           continue
         }
@@ -2410,7 +2418,7 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: countUniqueLabels(labels),
-          values: labels.map((value) => (value.length === 0 ? null : value)),
+          values: { kind: 'strings', strings: labels },
         })
       }
     } catch (error) {
@@ -2641,6 +2649,23 @@ function categoricalLabel(
 ): string | null {
   const code = Math.trunc(numericValue(codes, index))
   return code < 0 ? null : (categories[code] ?? null)
+}
+
+// A row's label, or null where it is missing: a negative code, or an empty
+// string.
+function labelAt(labels: H5adLabels, row: number): string | null {
+  if (labels.kind === 'codes') {
+    return categoricalLabel(labels.codes, labels.categories, row)
+  }
+
+  const label = labels.strings[row]
+  return label === undefined || label.length === 0 ? null : label
+}
+
+// Every row's label, for the few readers that need the whole column.
+function labelsByRow(labels: H5adLabels): readonly (string | null)[] {
+  const rowCount = labels.kind === 'codes' ? labels.codes.length : labels.strings.length
+  return Array.from({ length: rowCount }, (_value, row) => labelAt(labels, row))
 }
 
 async function readObsColumnValues(
@@ -3229,9 +3254,9 @@ function h5adCellMetadata(cache: H5adCache, row: number): CellMetadata {
   const metadata: Record<string, string | number | boolean> = {}
 
   for (const track of cache.categoricalTracks) {
-    const value = track.values[row]
+    const value = labelAt(track.values, row)
 
-    if (value !== null && value !== undefined) {
+    if (value !== null) {
       metadata[track.label] = value
     }
   }

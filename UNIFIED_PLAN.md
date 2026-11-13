@@ -4225,9 +4225,14 @@ Other gaps found in the review:
       `overview()`, and Atera reads its two overview columns by row.
       `h5adDataset` takes 0.71 s, the longest busy stretch fell from about 4.0 s
       to 0.43–0.51 s, and the load reached the gene search in 5.9–6.3 s instead
-      of 12.8–13.5 s, with the same Cell card and annotation sets. Still on the
-      main thread: expanding categorical codes into labels (about 250 ms here),
-      and the CSR scan for a gene.
+      of 12.8–13.5 s, with the same Cell card and annotation sets. Categorical
+      columns now keep their codes instead of a label per row (2026-11-13),
+      which took 15–18 ms for each of the six here: `h5adDataset` went from
+      719–725 ms to 639–643 ms. Still on the main thread: making the cell IDs
+      unique (about 240 ms in one task, a `Map` of all 598,222), converting
+      numeric columns to number arrays (110–145 ms over 20 columns),
+      counting the distinct values of string columns (about 110 ms), and the
+      CSR scan for a gene.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
