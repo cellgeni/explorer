@@ -3989,6 +3989,14 @@ describe('App', () => {
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
       openControls('transcripts')
       expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+      // The density plan needs the view, which the viewer reports 180 ms after
+      // fitting it; until then the meter counts no transcripts.
+      await waitFor(() => {
+        expect(screen.getByRole('meter', { name: 'Exact points' })).toHaveAttribute(
+          'aria-valuetext',
+          '20 of 100,000 points',
+        )
+      })
 
       fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
         target: { value: 'all' },
@@ -3998,6 +4006,19 @@ describe('App', () => {
       })
       fireEvent.click(screen.getByRole('checkbox', { name: 'Show transcripts' }))
 
+      // The status follows the native density read.
+      await waitFor(() => {
+        expect(loadTranscriptAggregates).toHaveBeenCalledWith(
+          DEMO_DATASET_URL,
+          expect.any(Object),
+          expect.objectContaining({
+            mode: 'density',
+            featureNames: [],
+            maxBins: 1_500,
+            signal: expect.any(AbortSignal) as AbortSignal,
+          }),
+        )
+      })
       expect(
         await screen.findByText(/Showing native all-transcript density squares/),
       ).toBeInTheDocument()
@@ -4009,16 +4030,6 @@ describe('App', () => {
       expect(within(densityScale).getByText('100')).toBeInTheDocument()
       expect(screen.getByText('Native')).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)
-      expect(loadTranscriptAggregates).toHaveBeenCalledWith(
-        DEMO_DATASET_URL,
-        expect.any(Object),
-        expect.objectContaining({
-          mode: 'density',
-          featureNames: [],
-          maxBins: 1_500,
-          signal: expect.any(AbortSignal) as AbortSignal,
-        }),
-      )
     } finally {
       viewport.restore()
     }

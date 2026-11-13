@@ -186,7 +186,12 @@ From a run of `npm test` and the repository:
       channels and the linked annotation set before they loaded now wait.
 - [ ] Make the coverage job required once it has passed on the runner for a
       while; if another `App.test.tsx` check fails there, make it wait for the
-      state it reads.
+      state it reads. The native density-squares check failed in the required
+      job (CI #126 and #138, 2026-11-13): it showed transcripts before the
+      viewer reported its fitted view, so one 1 s wait held the 180 ms report
+      and the renders after it. It now waits for the Exact points meter, then
+      the density read. The checks that wait for `loadGeneExpression` (CI
+      #128) have the same shape.
 - [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
       Done 2026-11-12; see [Closed Open Items](#closed-open-items).
