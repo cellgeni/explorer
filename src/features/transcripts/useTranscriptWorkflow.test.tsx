@@ -9,13 +9,17 @@ import type {
   TranscriptCapabilities,
   TranscriptDetailMode,
   TranscriptFeatureFilterMode,
+  TranscriptViewportResult,
 } from '../../data/transcriptOverlay'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import { deferredPromise } from '../../test/appTestHarness'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
-import type {
-  TranscriptCapabilityState,
-  TranscriptLayerState,
+import {
+  TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE,
+  TRANSCRIPT_EXACT_SLOW_QUERY_MS,
+  type TranscriptCapabilityState,
+  type TranscriptLayerState,
 } from './transcriptLayerModel'
 import { useTranscriptWorkflow } from './useTranscriptWorkflow'
 
@@ -480,6 +484,46 @@ describe('useTranscriptWorkflow', () => {
     expect(snapshot.debugMessages).toContain(
       'Transcript exact query started: 1,031 estimated',
     )
+  })
+
+  it('keeps loading slow per-gene exact points and says it is slow', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+
+    try {
+      const exact = deferredPromise<TranscriptViewportResult>()
+      const loaders = renderWorkflow({
+        capabilities: PER_GENE_CAPABILITIES,
+        loaders: {
+          loadTranscriptAggregates: vi.fn(async () => perGeneAggregate(8_546)),
+          loadTranscriptViewport: vi.fn(() => exact.promise),
+        },
+        selectedGenes: ['UMOD'],
+        showTranscriptOverlay: true,
+      })
+
+      await waitFor(() => expect(loaders.loadTranscriptViewport).toHaveBeenCalled())
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TRANSCRIPT_EXACT_SLOW_QUERY_MS)
+      })
+
+      expect(snapshot.layerState).toMatchObject({
+        status: 'loading',
+        message: TRANSCRIPT_EXACT_SLOW_QUERY_MESSAGE,
+      })
+      const exactOptions = vi.mocked(loaders.loadTranscriptViewport).mock.calls[0]?.[2]
+      expect(exactOptions?.signal?.aborted).toBe(false)
+
+      await act(async () => {
+        exact.resolve({ points: [], groups: [], hitPointLimit: false })
+      })
+
+      await waitFor(() => expect(snapshot.layerState.status).toBe('ready'))
+      expect(snapshot.debugMessages).toContain(
+        'Transcript exact query still loading after 12 s',
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('reports per-gene density as unavailable when its store cannot be read', async () => {

@@ -84,7 +84,15 @@ request:
 | Visium (Space Ranger) | `https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/` through a manifest ([example](./docs/dataset-manifest.md#standard-visium)) | The same sample's GEO files, gzipped; same spots and scale as the H5AD                                                        |
 
 The SpatialData stores are for manual testing; there is no E2E coverage for them
-yet.
+yet. Two zipped SpatialData stores on the BioImage Archive are also used:
+
+- `https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/898/S-BIAD2898/Files/460-plex/output-XETG00055__0027377__AT6-BRA-3-FO-4-S52-ii__20241031__140902_coarse.zarr.zip`:
+  Xenium 460-plex, Zarr v3; 598,222 cells × 460 genes; `cell_boundaries`
+  polygons (97 MB, stored); true scale 0.2125 µm per unit.
+- `https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/146/S-BIAD2146/Files/STHELAR/sdata_slides/sdata_bone_marrow_s0.zarr.zip`:
+  STHELAR bone marrow, Zarr v2 with no root `.zattrs`; 225,906 cells × 477
+  genes; scanpy `rank_genes_groups` record arrays in `uns`; a flipped H&E
+  image.
 
 ### Starting Point: The Proof Of Concept
 
@@ -489,6 +497,13 @@ Amendments made in later phases:
 - Absent chunks read as fill values, so an interrupted upload loads silently with
   empty data. Diagnostics therefore send a `HEAD` for every table chunk, and
   missing string chunks fail fast.
+- **Zipped SpatialData (2026-11-13).** A `.zip` URL is read through zarrita's
+  `ZipFileStore` over the cached range reader (`src/zarr/zarrZipStore.ts`).
+  The central directory is read once and shared by detection, the dataset,
+  and diagnostics; keys are relative to the store folder inside the zip.
+  Stored entries are read by range, deflated entries whole. Only SpatialData
+  is read from zips. Diagnostics check chunks against the zip directory
+  instead of sending `HEAD`s.
 
 ### 4.11 Units For Stores Without Declared Scale (Phase 10)
 
@@ -653,6 +668,11 @@ matrices.
 - The root is SpatialData when `spatialdata_attrs` is present and none of
   `coordinateTransformations`, `encoding-type`, `multiscales`, or `ome` is (so a
   URL to `…/images/<name>` opens as a plain OME-Zarr image).
+- A `.zip` URL is a zipped store. Its root is the shallowest folder in the zip
+  holding Zarr root metadata. Besides `spatialdata_attrs`, a zipped root is
+  SpatialData when it holds `images`, `labels`, `points`, `shapes`, or
+  `tables` groups and its attributes do not mark an image or AnnData, because
+  some writers leave root attributes out.
 - Consolidated metadata is required.
 - Elements are `<kind>/<name>` groups under `images`, `labels`, `points`,
   `shapes`, and `tables`. Supported transforms: `identity`, `scale`,
@@ -664,8 +684,8 @@ matrices.
   whether it holds an image, then element count, then the name `global`.
 - One image is shown: axis-aligned, positive-scale, highest resolution.
 - Shapes: `shapes.parquet` (GeoParquet or WKB; Point, Polygon, MultiPolygon).
-  Points become circles from the `radius` column. MultiPolygons keep their
-  largest polygon.
+  Points become circles from the `radius` column. Polygons keep the outer ring
+  of their largest polygon, read from WKB into a `Float32Array`.
 - Labels: rows are placed from `obsm` through the labels transform, and cell
   outlines are traced from the label raster on demand.
 - Not read: `points` (transcripts), extra images, and extra tables.
@@ -1149,8 +1169,11 @@ windowed level-of-detail system, not one point layer over
       show a clear fallback state.
 - [x] The exact tier renders every visible matching transcript when within
       budget, with record-level hover.
-- [x] Exact mode never samples silently. Over budget or timeout, the UI explains
-      why and how to reach exact rendering.
+- [x] Exact mode never samples silently. Over budget, the UI explains why and
+      how to reach exact rendering. Until 2026-11-13 a load past 12 s was also
+      aborted; it now keeps going, says it is slow, and can be cancelled from
+      the loading list. The nightly Atera live test failed on the abort at
+      about 150 ms from the host.
 - [x] Aggregate bins are stable across pans and LOD thresholds.
 - [x] Transcript work is abortable and does not block ROI lookup, ROI export,
       Magic Lens, or selected-cell detail.
@@ -1659,11 +1682,24 @@ planned in advance.
       (`92defed`; see [4.9](#49-cell-boundaries)).
 - [x] Platform gating (`SPATIALDATA_PLATFORM_ADAPTER`): boundaries from
       `elements(bbox)`; transcripts, nucleus boundaries, and Magic Lens off.
+- [x] Zipped stores (2026-11-13): `.zarr.zip` URLs such as the BioImage
+      Archive exports in [1](#reference-datasets) are read by range (see
+      [4.10](#410-zarr-store-access-phases-910)). Found on the way:
+  - Numeric `obs` columns over about 120,000 rows overflowed the stack
+    (`Math.min(...values)`); min and max are now a loop. This affected H5AD
+    too.
+  - Arrays under `uns/` that zarrita cannot open (scanpy `rank_genes_groups`
+    record dtypes) are left out instead of failing the table.
+  - Shapes held as GeoJSON ran the browser to 3.7 GB on 598,222 polygons.
+    Outer rings are now `Float32Array`s with bounds in typed arrays, and
+    `elements(bbox)` builds elements only for cells in view: 2.3 GB peak,
+    1.4 GB settled.
 
 #### Known Gaps
 
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
-- [ ] Shapes are read whole, not by viewport.
+- [ ] Shapes are read whole, not by viewport, and parsed on the main thread
+      (about 12 s for the 598,222-cell zip after a 97 MB download).
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
 - [x] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
       [Phase 7](#phase-7--anndata-h5ad)). Boolean `obs` columns were fixed on
@@ -3820,7 +3856,9 @@ and has `Diagnose Dataset`.
   handle, so `HEAD` must be allowed and fast.
 - **Zipped Zarr:** `ZipFileStore.fromUrl` Range-reads the central directory and
   then member offsets. Offering unzipped `.zarr/` too avoids the directory
-  seeks.
+  seeks. For a zipped SpatialData store, store entries uncompressed (`zip -0`)
+  so `shapes.parquet` can be read in parts; deflated entries are downloaded
+  whole.
 - **No transfer compression** (`Content-Encoding`) on Parquet, Zarr, TIFF, or
   HDF5. They are already compressed, and gzip breaks Range offsets.
 - **Caching:** long `Cache-Control` plus `ETag`, on immutable dataset paths.
@@ -4128,7 +4166,8 @@ Features:
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and
       viewport-scoped shape reads. Partly done: the info drawer picks one image
       at a time, and the primary table is read. Points are not read, and shapes
-      are read whole, then filtered to the viewport.
+      are read whole on the main thread, then filtered to the viewport; a
+      598,222-cell zip spends about 12 s parsing them (2026-11-13).
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
 - [x] Standard Visium (spots) from the original Phase 6

@@ -13,6 +13,7 @@ import { datasetDetectionError } from './datasetDetectionError'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
+import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import { isQptiffUrl } from '../tiff/qptiff'
 import { isSvsUrl } from '../tiff/svs'
 import {
@@ -299,6 +300,10 @@ async function detectSpatialDatasetLayout(
     return detectIcechunkRepository(normalizedBaseUrl, options, checked)
   }
 
+  if (isZarrZipUrl(normalizedBaseUrl)) {
+    return detectZarrZip(normalizedBaseUrl, options, checked)
+  }
+
   if (isZarrImageOnlyUrl(normalizedBaseUrl)) {
     const zarrRootUrl = omeZarrImageRootUrl(normalizedBaseUrl)
     const probes = await Promise.all(
@@ -501,6 +506,88 @@ async function detectIcechunkRepository(
     imageUrl: url,
     imageKind: 'ome-zarr',
     checked,
+  }
+}
+
+// Routes a zipped Zarr store. Only SpatialData is read from a zip, so a zip
+// holding anything else throws: a file URL has no folder to probe further.
+async function detectZarrZip(
+  url: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const zipProbe = await probeDirectDatasetUrl(url, 'store.zip', options)
+  checked.push(zipProbe)
+
+  if (!zipProbe.ok) {
+    return { platform: 'unknown', baseUrl: url, checked }
+  }
+
+  const { openZippedZarrStore } = await import('../zarr/zarrZipStore')
+  const zip = await openZippedZarrStore(
+    url,
+    options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+  )
+  const rootPath = zip.entry('zarr.json') === undefined ? '.zattrs' : 'zarr.json'
+  const rootBytes = await zip.store.get(`/${rootPath}`)
+  const rootMetadata =
+    rootBytes === undefined ? null : jsonOrNull(new TextDecoder().decode(rootBytes))
+  const rootAttributes =
+    objectOrNull(objectOrNull(rootMetadata)?.attributes) ??
+    objectOrNull(rootMetadata) ??
+    {}
+  // Some writers leave the root attributes out. A zip lists its files, so a
+  // root holding SpatialData element groups is recognised without them.
+  const elementGroups = SPATIALDATA_ELEMENT_GROUPS.filter(
+    (kind) =>
+      zip.entry(`${kind}/.zgroup`) !== undefined ||
+      zip.entry(`${kind}/zarr.json`) !== undefined,
+  )
+  const rootLabel = `${zip.root}${rootPath}`
+
+  if (isSpatialDataRootMetadata(rootMetadata)) {
+    checked.push({ path: `${rootLabel} in the zip (SpatialData)`, url, ok: true })
+    return { platform: 'spatialdata', baseUrl: url, spatialDataUrl: url, checked }
+  }
+
+  if (
+    elementGroups.length > 0 &&
+    !('multiscales' in rootAttributes) &&
+    !('ome' in rootAttributes) &&
+    !('encoding-type' in rootAttributes)
+  ) {
+    checked.push({
+      path: `${zip.root || '/'} in the zip (SpatialData ${elementGroups.join(', ')})`,
+      url,
+      ok: true,
+    })
+    return { platform: 'spatialdata', baseUrl: url, spatialDataUrl: url, checked }
+  }
+
+  throw new Error(
+    `The zip at ${url} holds a Zarr store (${rootLabel}) that is not SpatialData. Only SpatialData stores are read from a zip; unzip other stores and host them as folders.`,
+  )
+}
+
+const SPATIALDATA_ELEMENT_GROUPS = [
+  'images',
+  'labels',
+  'points',
+  'shapes',
+  'tables',
+] as const
+
+function objectOrNull(value: unknown): Record<string, unknown> | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null
+}
+
+function jsonOrNull(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return null
   }
 }
 

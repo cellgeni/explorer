@@ -1,3 +1,5 @@
+import { zipArchive } from './zipFixtures'
+
 // In-memory Zarr v2 and zip fixtures for Atera tests. Stores are maps from
 // entry path (no leading slash) to bytes, uncompressed.
 
@@ -202,77 +204,7 @@ export function mapStore(
 // A zip archive with every entry STORED (uncompressed), like the per-gene
 // zips inside binned_transcripts.zarr.zip.
 export function storedZip(entries: ZarrEntries): Uint8Array {
-  const encoder = new TextEncoder()
-  const localParts: Uint8Array[] = []
-  const centralParts: Uint8Array[] = []
-  let offset = 0
-
-  for (const [name, data] of entries) {
-    const nameBytes = encoder.encode(name)
-    const crc = crc32(data)
-    const local = new Uint8Array(30 + nameBytes.length)
-    const localView = new DataView(local.buffer)
-    localView.setUint32(0, 0x04034b50, true)
-    localView.setUint16(4, 20, true)
-    localView.setUint32(14, crc, true)
-    localView.setUint32(18, data.length, true)
-    localView.setUint32(22, data.length, true)
-    localView.setUint16(26, nameBytes.length, true)
-    local.set(nameBytes, 30)
-
-    const central = new Uint8Array(46 + nameBytes.length)
-    const centralView = new DataView(central.buffer)
-    centralView.setUint32(0, 0x02014b50, true)
-    centralView.setUint16(4, 20, true)
-    centralView.setUint16(6, 20, true)
-    centralView.setUint32(16, crc, true)
-    centralView.setUint32(20, data.length, true)
-    centralView.setUint32(24, data.length, true)
-    centralView.setUint16(28, nameBytes.length, true)
-    centralView.setUint32(42, offset, true)
-    central.set(nameBytes, 46)
-
-    localParts.push(local, data)
-    centralParts.push(central)
-    offset += local.length + data.length
-  }
-
-  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0)
-  const end = new Uint8Array(22)
-  const endView = new DataView(end.buffer)
-  endView.setUint32(0, 0x06054b50, true)
-  endView.setUint16(8, entries.size, true)
-  endView.setUint16(10, entries.size, true)
-  endView.setUint32(12, centralSize, true)
-  endView.setUint32(16, offset, true)
-
-  return concat([...localParts, ...centralParts, end])
-}
-
-function crc32(data: Uint8Array): number {
-  let crc = 0xffff_ffff
-
-  for (const byte of data) {
-    crc ^= byte
-
-    for (let bit = 0; bit < 8; bit += 1) {
-      crc = crc & 1 ? (crc >>> 1) ^ 0xedb8_8320 : crc >>> 1
-    }
-  }
-
-  return (crc ^ 0xffff_ffff) >>> 0
-}
-
-function concat(parts: readonly Uint8Array[]): Uint8Array {
-  const output = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0))
-  let offset = 0
-
-  for (const part of parts) {
-    output.set(part, offset)
-    offset += part.length
-  }
-
-  return output
+  return zipArchive(Array.from(entries, ([name, data]) => ({ name, data })))
 }
 
 function bytes(view: ArrayBufferView): Uint8Array {

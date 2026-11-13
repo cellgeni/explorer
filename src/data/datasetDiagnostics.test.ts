@@ -3,6 +3,7 @@ import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDia
 import type { SpatialDatasetDetection } from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
@@ -360,6 +361,109 @@ describe('runDatasetDiagnostics', () => {
       message:
         '2 of 4 table chunks missing or unreadable: tables/table/obs/_index/1 (HTTP 403), tables/table/obs/area/1 (HTTP 404)',
     })
+  })
+
+  it('checks a zipped SpatialData store against the zip directory', async () => {
+    const zipUrl = 'https://example.test/upload.zarr.zip'
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const array = {
+      zarr_format: 2,
+      shape: [4],
+      chunks: [2],
+      dtype: '<f8',
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+    }
+    const shapes = (name: string) => ({
+      [`shapes/${name}/.zgroup`]: { zarr_format: 2 },
+      [`shapes/${name}/.zattrs`]: {
+        coordinateTransformations: [
+          { type: 'identity', input: { axes: ['x', 'y'] }, output: { name: 'global' } },
+        ],
+      },
+    })
+    const metadata = {
+      '.zgroup': { zarr_format: 2 },
+      ...shapes('cells'),
+      ...shapes('nuclei'),
+      ...shapes('spots'),
+      'tables/table/.zgroup': { zarr_format: 2 },
+      'tables/table/.zattrs': {
+        region: ['cells', 'nuclei', 'spots'],
+        instance_key: 'cell_id',
+      },
+      'tables/table/obs/.zgroup': { zarr_format: 2 },
+      'tables/table/obs/area/.zarray': array,
+    }
+    const requests: ByteRangeRequest[] = []
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          zipUrl,
+          zipArchive([
+            {
+              name: 'upload.zarr/zmetadata',
+              data: json({ zarr_consolidated_format: 1, metadata }),
+            },
+            { name: 'upload.zarr/tables/table/obs/area/0', data: new Uint8Array(16) },
+            {
+              name: 'upload.zarr/shapes/cells/shapes.parquet',
+              data: new TextEncoder().encode('PAR1....PAR1'),
+              deflate: true,
+            },
+            {
+              name: 'upload.zarr/shapes/nuclei/shapes.parquet',
+              data: new TextEncoder().encode('PAR1....PAR1'),
+            },
+          ]),
+        ],
+      ]),
+      requests,
+    )
+
+    const report = await runDatasetDiagnostics(zipUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'spatialdata' as const,
+        baseUrl: zipUrl,
+        spatialDataUrl: zipUrl,
+        checked: [],
+      })),
+      fetcher,
+    })
+
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected SpatialData'],
+        [
+          'spatialdata-metadata',
+          'pass',
+          'Zip with 4 files under upload.zarr/. Coordinate system global; image none; table table',
+        ],
+        [
+          'spatialdata-table-chunks',
+          'warning',
+          expect.stringMatching(
+            /^1 of 2 table chunks missing or unreadable: tables\/table\/obs\/area\/1 \(HTTP 404\)/,
+          ),
+        ],
+        [
+          'spatialdata-shapes-cells',
+          'pass',
+          'In the zip, compressed: read whole (0.0 MB) when loaded',
+        ],
+        ['spatialdata-shapes-nuclei', 'pass', 'In the zip, stored: byte-range readable'],
+        [
+          'spatialdata-shapes-spots',
+          'fail',
+          'shapes/spots/shapes.parquet is missing from the zip',
+        ],
+      ],
+    )
+    // Chunks come from the zip directory, not a HEAD request each.
+    expect(requests.filter((request) => request.method === 'HEAD')).toHaveLength(1)
   })
 
   it('checks Visium HD binned outputs instead of Xenium files', async () => {

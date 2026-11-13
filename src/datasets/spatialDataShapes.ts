@@ -1,5 +1,6 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
-import type { AsyncBuffer, Compressors, FileMetaData } from 'hyparquet'
+import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
+import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
 import { affineScale, applyAffine, type Affine2D } from './spatialDataTransforms'
 
 export interface SpatialDataPoint {
@@ -15,7 +16,10 @@ export type SpatialDataShapeGeometry =
     }
   | {
       readonly kind: 'polygon'
-      readonly rings: readonly (readonly SpatialDataPoint[])[]
+      // Outer ring as interleaved x, y. Holes, and all but the largest
+      // polygon of a MultiPolygon, are dropped. Float32 keeps a 600,000-cell
+      // segmentation (about 25 vertices a cell) near 120 MB.
+      readonly ring: Float32Array
     }
 
 export interface SpatialDataShape {
@@ -26,6 +30,9 @@ export interface SpatialDataShape {
 
 export interface ReadSpatialDataShapesOptions {
   readonly url: string
+  // The file's bytes when they are not fetched from `url`, as for a zipped
+  // store.
+  readonly file?: AsyncBuffer
   readonly affine: Affine2D
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
@@ -42,13 +49,25 @@ interface GeoJsonGeometry {
 }
 
 const DEFAULT_CIRCLE_RADIUS = 1
+// Geometry stays WKB so rows are read straight into typed rings: hyparquet's
+// GeoJSON costs an array per vertex, gigabytes for a large segmentation.
+// hyparquet replaces rather than merges a partial `parsers`, so all are given.
+const WKB_PARSERS: ParquetParsers = {
+  ...DEFAULT_PARSERS,
+  geometryFromBytes: (bytes) => bytes,
+  geographyFromBytes: (bytes) => bytes,
+}
 
 export const readSpatialDataShapes: SpatialDataShapesReader = async (options) => {
-  const file = await asyncBufferFromUrl({
-    url: options.url,
-    ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
-    ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
-  })
+  const file =
+    options.file ??
+    (await asyncBufferFromUrl({
+      url: options.url,
+      ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+      ...(options.signal === undefined
+        ? {}
+        : { requestInit: { signal: options.signal } }),
+    }))
   const metadata = await parquetMetadataAsync(file)
   const compressors = options.compressors ?? (await loadDefaultCompressors())
   const layout = shapesParquetLayout(metadata)
@@ -57,6 +76,7 @@ export const readSpatialDataShapes: SpatialDataShapesReader = async (options) =>
     metadata,
     columns: layout.columns,
     compressors,
+    parsers: WKB_PARSERS,
   })
 
   return shapesFromRows(rows, layout, options.affine)
@@ -133,11 +153,9 @@ export function shapesFromRows(
       layout.index.kind === 'column'
         ? instanceIdString(row[layout.index.column])
         : String(layout.index.start + rowIndex * layout.index.step)
-    const rawGeometry = row[layout.geometryColumn]
-    const geometry =
-      rawGeometry instanceof Uint8Array ? geometryFromWkb(rawGeometry) : rawGeometry
+    const geometry = row[layout.geometryColumn]
 
-    if (id === null || !isGeoJsonGeometry(geometry)) {
+    if (id === null) {
       return
     }
 
@@ -145,7 +163,14 @@ export function shapesFromRows(
       layout.radiusColumn === undefined
         ? undefined
         : finiteNumber(row[layout.radiusColumn])
-    const shape = shapeFromGeometry(id, geometry, radius, affine, radiusScale)
+    const parsed =
+      geometry instanceof Uint8Array
+        ? wkbGeometry(geometry)
+        : isGeoJsonGeometry(geometry)
+          ? geoJsonGeometry(geometry)
+          : null
+    const shape =
+      parsed === null ? null : placeShape(id, parsed, radius, affine, radiusScale)
 
     if (shape !== null) {
       shapes.push(shape)
@@ -171,21 +196,21 @@ export function instanceIdString(value: unknown): string | null {
   return null
 }
 
-function shapeFromGeometry(
+// A shape before placement: a point, or one polygon's outer ring as
+// interleaved x, y.
+type ParsedGeometry =
+  | { readonly kind: 'point'; readonly x: number; readonly y: number }
+  | { readonly kind: 'polygon'; readonly ring: ArrayLike<number> }
+
+function placeShape(
   id: string,
-  geometry: GeoJsonGeometry,
+  geometry: ParsedGeometry,
   radius: number | undefined,
   affine: Affine2D,
   radiusScale: number,
 ): SpatialDataShape | null {
-  if (geometry.type === 'Point') {
-    const point = readPosition(geometry.coordinates)
-
-    if (point === null) {
-      return null
-    }
-
-    const center = applyAffine(affine, point.x, point.y)
+  if (geometry.kind === 'point') {
+    const center = applyAffine(affine, geometry.x, geometry.y)
 
     return {
       id,
@@ -198,54 +223,83 @@ function shapeFromGeometry(
     }
   }
 
-  const polygon =
-    geometry.type === 'Polygon'
-      ? readRings(geometry.coordinates)
-      : geometry.type === 'MultiPolygon'
-        ? largestPolygon(geometry.coordinates)
-        : null
-  const outer = polygon?.[0]
+  const source = geometry.ring
 
-  if (
-    polygon === null ||
-    polygon === undefined ||
-    outer === undefined ||
-    outer.length < 3
-  ) {
+  if (source.length < 6) {
     return null
   }
 
-  const rings = polygon.map((ring) =>
-    ring.map((point) => applyAffine(affine, point.x, point.y)),
-  )
+  const ring = new Float32Array(source.length)
 
-  return {
-    id,
-    geometry: { kind: 'polygon', rings },
-    centroid: ringCentroid(rings[0] ?? []),
+  for (let index = 0; index < source.length; index += 2) {
+    const point = applyAffine(affine, source[index] ?? 0, source[index + 1] ?? 0)
+    ring[index] = point.x
+    ring[index + 1] = point.y
   }
+
+  return { id, geometry: { kind: 'polygon', ring }, centroid: ringCentroid(ring) }
 }
 
-function largestPolygon(value: unknown): readonly (readonly SpatialDataPoint[])[] | null {
+function geoJsonGeometry(geometry: GeoJsonGeometry): ParsedGeometry | null {
+  if (geometry.type === 'Point') {
+    const position = readPosition(geometry.coordinates)
+    return position === null ? null : { kind: 'point', x: position[0], y: position[1] }
+  }
+
+  const polygons =
+    geometry.type === 'Polygon'
+      ? [geometry.coordinates]
+      : geometry.type === 'MultiPolygon' && Array.isArray(geometry.coordinates)
+        ? geometry.coordinates
+        : []
+  const rings = polygons.flatMap((polygon: unknown) => {
+    const outer = Array.isArray(polygon) ? readRing(polygon[0]) : null
+    return outer === null ? [] : [outer]
+  })
+  const ring = largestRing(rings)
+
+  return ring === null ? null : { kind: 'polygon', ring }
+}
+
+function readRing(value: unknown): number[] | null {
   if (!Array.isArray(value)) {
     return null
   }
 
-  let largest: readonly (readonly SpatialDataPoint[])[] | null = null
-  let largestArea = -1
+  const ring: number[] = []
 
-  for (const polygonCoordinates of value) {
-    const rings = readRings(polygonCoordinates)
-    const outer = rings?.[0]
+  for (const position of value) {
+    const point = readPosition(position)
 
-    if (rings === null || outer === undefined) {
-      continue
+    if (point === null) {
+      return null
     }
 
-    const area = Math.abs(signedRingArea(outer))
+    ring.push(point[0], point[1])
+  }
+
+  return ring
+}
+
+function readPosition(value: unknown): readonly [number, number] | null {
+  if (!Array.isArray(value)) {
+    return null
+  }
+
+  const x = finiteNumber(value[0])
+  const y = finiteNumber(value[1])
+  return x === undefined || y === undefined ? null : [x, y]
+}
+
+function largestRing<T extends ArrayLike<number>>(rings: readonly T[]): T | null {
+  let largest: T | null = null
+  let largestArea = -1
+
+  for (const ring of rings) {
+    const area = ringArea(ring)
 
     if (area > largestArea) {
-      largest = rings
+      largest = ring
       largestArea = area
     }
   }
@@ -253,64 +307,28 @@ function largestPolygon(value: unknown): readonly (readonly SpatialDataPoint[])[
   return largest
 }
 
-function readRings(value: unknown): readonly (readonly SpatialDataPoint[])[] | null {
-  if (!Array.isArray(value)) {
-    return null
-  }
-
-  const rings: SpatialDataPoint[][] = []
-
-  for (const ringCoordinates of value) {
-    if (!Array.isArray(ringCoordinates)) {
-      return null
-    }
-
-    const ring: SpatialDataPoint[] = []
-
-    for (const position of ringCoordinates) {
-      const point = readPosition(position)
-
-      if (point === null) {
-        return null
-      }
-
-      ring.push(point)
-    }
-
-    rings.push(ring)
-  }
-
-  return rings
+// Area of an interleaved x, y ring.
+export function ringArea(ring: ArrayLike<number>): number {
+  return Math.abs(signedRingArea(ring))
 }
 
-function readPosition(value: unknown): SpatialDataPoint | null {
-  if (!Array.isArray(value)) {
-    return null
-  }
-
-  const x = finiteNumber(value[0])
-  const y = finiteNumber(value[1])
-  return x === undefined || y === undefined ? null : { x, y }
-}
-
-function ringCentroid(ring: readonly SpatialDataPoint[]): SpatialDataPoint {
+function ringCentroid(ring: ArrayLike<number>): SpatialDataPoint {
   const area = signedRingArea(ring)
+  const count = ring.length / 2
 
   if (Math.abs(area) > 1e-12) {
     let cx = 0
     let cy = 0
 
-    for (let index = 0; index < ring.length; index += 1) {
-      const current = ring[index]
-      const next = ring[(index + 1) % ring.length]
-
-      if (current === undefined || next === undefined) {
-        continue
-      }
-
-      const cross = current.x * next.y - next.x * current.y
-      cx += (current.x + next.x) * cross
-      cy += (current.y + next.y) * cross
+    for (let index = 0; index < ring.length; index += 2) {
+      const next = (index + 2) % ring.length
+      const x = ring[index] ?? 0
+      const y = ring[index + 1] ?? 0
+      const nextX = ring[next] ?? 0
+      const nextY = ring[next + 1] ?? 0
+      const cross = x * nextY - nextX * y
+      cx += (x + nextX) * cross
+      cy += (y + nextY) * cross
     }
 
     return { x: cx / (6 * area), y: cy / (6 * area) }
@@ -319,35 +337,30 @@ function ringCentroid(ring: readonly SpatialDataPoint[]): SpatialDataPoint {
   let sumX = 0
   let sumY = 0
 
-  for (const point of ring) {
-    sumX += point.x
-    sumY += point.y
+  for (let index = 0; index < ring.length; index += 2) {
+    sumX += ring[index] ?? 0
+    sumY += ring[index + 1] ?? 0
   }
 
-  return ring.length === 0
-    ? { x: 0, y: 0 }
-    : { x: sumX / ring.length, y: sumY / ring.length }
+  return count === 0 ? { x: 0, y: 0 } : { x: sumX / count, y: sumY / count }
 }
 
-function signedRingArea(ring: readonly SpatialDataPoint[]): number {
+function signedRingArea(ring: ArrayLike<number>): number {
   let area = 0
 
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index]
-    const next = ring[(index + 1) % ring.length]
-
-    if (current !== undefined && next !== undefined) {
-      area += current.x * next.y - next.x * current.y
-    }
+  for (let index = 0; index < ring.length; index += 2) {
+    const next = (index + 2) % ring.length
+    area +=
+      (ring[index] ?? 0) * (ring[next + 1] ?? 0) -
+      (ring[next] ?? 0) * (ring[index + 1] ?? 0)
   }
 
   return area / 2
 }
 
-// Minimal WKB decoder for GeoParquet files written without `geo` metadata,
-// where hyparquet returns raw geometry bytes. Supports the geometry types
-// SpatialData shapes use: Point, Polygon, and MultiPolygon (2D, ISO or EWKB).
-export function geometryFromWkb(bytes: Uint8Array): GeoJsonGeometry | null {
+// WKB as GeoParquet stores it (ISO or EWKB, 2D to 4D): Point, Polygon, and
+// MultiPolygon, the types SpatialData shapes use. Only outer rings are read.
+function wkbGeometry(bytes: Uint8Array): ParsedGeometry | null {
   try {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
     return readWkbGeometry(view, { offset: 0 })
@@ -359,7 +372,7 @@ export function geometryFromWkb(bytes: Uint8Array): GeoJsonGeometry | null {
 function readWkbGeometry(
   view: DataView,
   cursor: { offset: number },
-): GeoJsonGeometry | null {
+): ParsedGeometry | null {
   const littleEndian = view.getUint8(cursor.offset) === 1
   cursor.offset += 1
   const rawType = view.getUint32(cursor.offset, littleEndian)
@@ -370,42 +383,61 @@ function readWkbGeometry(
   const hasM = (rawType & 0x40000000) !== 0 || Math.floor((rawType & 0xffff) / 1000) >= 2
   const hasSrid = (rawType & 0x20000000) !== 0
   const type = (rawType & 0xffff) % 1000
-  const dimensions = 2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0)
+  const pointBytes = 8 * (2 + (hasZ ? 1 : 0) + (hasM ? 1 : 0))
 
   if (hasSrid) {
     cursor.offset += 4
   }
 
-  const readPoint = (): [number, number] => {
-    const x = view.getFloat64(cursor.offset, littleEndian)
-    const y = view.getFloat64(cursor.offset + 8, littleEndian)
-    cursor.offset += 8 * dimensions
-    return [x, y]
-  }
   const readCount = (): number => {
     const count = view.getUint32(cursor.offset, littleEndian)
     cursor.offset += 4
     return count
   }
-  const readPolygonRings = (): [number, number][][] =>
-    Array.from({ length: readCount() }, () =>
-      Array.from({ length: readCount() }, () => readPoint()),
-    )
 
   if (type === 1) {
-    return { type: 'Point', coordinates: readPoint() }
+    const x = view.getFloat64(cursor.offset, littleEndian)
+    const y = view.getFloat64(cursor.offset + 8, littleEndian)
+    cursor.offset += pointBytes
+    return { kind: 'point', x, y }
   }
 
   if (type === 3) {
-    return { type: 'Polygon', coordinates: readPolygonRings() }
+    const ringCount = readCount()
+    let outer = new Float64Array(0)
+
+    for (let ringIndex = 0; ringIndex < ringCount; ringIndex += 1) {
+      const pointCount = readCount()
+
+      if (ringIndex === 0) {
+        outer = new Float64Array(pointCount * 2)
+
+        for (let point = 0; point < pointCount; point += 1) {
+          outer[point * 2] = view.getFloat64(cursor.offset, littleEndian)
+          outer[point * 2 + 1] = view.getFloat64(cursor.offset + 8, littleEndian)
+          cursor.offset += pointBytes
+        }
+      } else {
+        cursor.offset += pointCount * pointBytes
+      }
+    }
+
+    return { kind: 'polygon', ring: outer }
   }
 
   if (type === 6) {
-    const polygons = Array.from({ length: readCount() }, () => {
+    const rings: ArrayLike<number>[] = []
+
+    for (let count = readCount(), index = 0; index < count; index += 1) {
       const polygon = readWkbGeometry(view, cursor)
-      return polygon?.type === 'Polygon' ? polygon.coordinates : []
-    })
-    return { type: 'MultiPolygon', coordinates: polygons }
+
+      if (polygon?.kind === 'polygon') {
+        rings.push(polygon.ring)
+      }
+    }
+
+    const ring = largestRing(rings)
+    return ring === null ? null : { kind: 'polygon', ring }
   }
 
   return null

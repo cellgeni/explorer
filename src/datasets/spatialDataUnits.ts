@@ -150,23 +150,6 @@ export function estimateUnitsFromVisiumHdBins(
   )
 }
 
-export function polygonArea(
-  ring: readonly { readonly x: number; readonly y: number }[],
-): number {
-  let area = 0
-
-  for (let index = 0; index < ring.length; index += 1) {
-    const current = ring[index]
-    const next = ring[(index + 1) % ring.length]
-
-    if (current !== undefined && next !== undefined) {
-      area += current.x * next.y - next.x * current.y
-    }
-  }
-
-  return Math.abs(area) / 2
-}
-
 export function formatSpatialDataUnits(units: SpatialDataUnits): string {
   if (units.source === 'unknown') {
     return `unknown (${units.detail}; shown as 1 µm per unit)`

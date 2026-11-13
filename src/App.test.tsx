@@ -4260,7 +4260,7 @@ describe('App', () => {
     }
   })
 
-  it('times out exact transcript loading instead of staying busy forever', async () => {
+  it('says when exact transcript loading is slow and shows the points once they arrive', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
     )
@@ -4278,8 +4278,9 @@ describe('App', () => {
       rawParquet: true,
       nativeZarr: false,
     }))
+    const exactResult = deferredPromise<Awaited<ReturnType<TranscriptViewportLoader>>>()
     const loadTranscriptViewport: ReturnType<typeof vi.fn<TranscriptViewportLoader>> =
-      vi.fn(() => pendingPromise())
+      vi.fn(() => exactResult.promise)
 
     try {
       render(
@@ -4332,8 +4333,50 @@ describe('App', () => {
       })
 
       expect(
-        screen.getByText(/Exact transcript loading exceeded 12 seconds/),
+        screen.getByText(/Exact transcripts are still loading after 12 seconds/),
       ).toBeInTheDocument()
+      // The load keeps going and stays in the loading list, where it can be
+      // cancelled.
+      expect(
+        screen.getByRole('button', { name: /^Transcripts.* · loading/ }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: 'Cancel loading transcripts' }),
+      ).toBeInTheDocument()
+      const exactOptions = loadTranscriptViewport.mock.calls[0]?.[2]
+      expect(exactOptions?.signal?.aborted).toBe(false)
+
+      await act(async () => {
+        exactResult.resolve({
+          points: [
+            {
+              id: 'F1:101',
+              transcriptId: '101',
+              cellId: null,
+              cellAssignment: 'unavailable',
+              featureName: 'Actb',
+              fovName: 'F1',
+              position: { x: micrometers(10), y: micrometers(20) },
+              qv: 37,
+              isGene: true,
+            },
+          ],
+          groups: [],
+          hitPointLimit: false,
+        })
+        await vi.advanceTimersByTimeAsync(0)
+      })
+
+      expect(screen.getByTestId('deck-layer-transcript-exact-points')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+      expect(
+        screen.queryByText(/Exact transcripts are still loading/),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: 'Cancel loading transcripts' }),
+      ).not.toBeInTheDocument()
     } finally {
       vi.useRealTimers()
       viewport.restore()

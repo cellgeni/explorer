@@ -16,7 +16,8 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
   squidpy, or CELLxGENE.
-- SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
+- SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
+  such as `sample.zarr.zip`.
 - Direct OME-TIFF, TIFF, QPTIFF, SVS, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
@@ -178,6 +179,13 @@ color, and clicking a swatch changes it.
 When exact mode is close to the configured point budget, the section shows
 `Load exact viewport` instead of starting the fetch automatically. Use it when
 you intentionally want to load that dense exact viewport.
+
+Exact points can take a while on a slow connection or computer. After 12
+seconds the Transcripts section says they are still loading; they appear
+when they arrive.
+For a faster view, switch `Detail` to `Density`, zoom closer, or select fewer
+genes, which cancels the slow load. `Cancel` in the loading list stops it and
+keeps the earlier view.
 
 Transcript hover details show transcript IDs. Click a transcript point or
 aggregate bin to pin the same inspection details in the Transcript card; close

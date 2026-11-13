@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { FileMetaData } from 'hyparquet'
 import {
-  geometryFromWkb,
+  ringArea,
   shapesFromRows,
   shapesParquetLayout,
   type SpatialDataShapesParquetLayout,
@@ -85,47 +85,50 @@ describe('SpatialData shapes', () => {
       centroid: { x: 12, y: 24 },
     })
     expect(shapes[1]?.id).toBe('cell-b')
-    expect(shapes[1]?.geometry).toMatchObject({
+    // The larger polygon's outer ring, as interleaved x, y.
+    expect(shapes[1]?.geometry).toEqual({
       kind: 'polygon',
-      rings: [
-        [
-          { x: 10, y: 20 },
-          { x: 18, y: 20 },
-          { x: 18, y: 28 },
-          { x: 10, y: 28 },
-          { x: 10, y: 20 },
-        ],
-      ],
+      ring: Float32Array.of(10, 20, 18, 20, 18, 28, 10, 28, 10, 20),
     })
     expect(shapes[1]?.centroid).toEqual({ x: 14, y: 24 })
   })
 
-  it('decodes WKB points and polygons when GeoParquet metadata is missing', () => {
-    expect(geometryFromWkb(wkbPoint(1.5, -2))).toEqual({
-      type: 'Point',
-      coordinates: [1.5, -2],
-    })
-    expect(
-      geometryFromWkb(
-        wkbPolygon([
-          [0, 0],
-          [2, 0],
-          [2, 2],
-          [0, 0],
-        ]),
-      ),
-    ).toEqual({
-      type: 'Polygon',
-      coordinates: [
-        [
-          [0, 0],
-          [2, 0],
-          [2, 2],
-          [0, 0],
-        ],
+  it('reads WKB points, polygon outer rings, and the largest polygon of a MultiPolygon', () => {
+    const layout: SpatialDataShapesParquetLayout = {
+      columns: ['geometry', 'id'],
+      geometryColumn: 'geometry',
+      index: { kind: 'column', column: 'id' },
+    }
+    const square = (size: number): [number, number][] => [
+      [0, 0],
+      [size, 0],
+      [size, size],
+      [0, size],
+      [0, 0],
+    ]
+    const shapes = shapesFromRows(
+      [
+        { geometry: wkbPoint(1.5, -2), id: 'point' },
+        // The hole is dropped.
+        { geometry: wkbPolygon([square(2), square(1)]), id: 'polygon' },
+        {
+          geometry: wkbMultiPolygon([wkbPolygon([square(1)]), wkbPolygon([square(3)])]),
+          id: 'multi',
+        },
+        { geometry: new Uint8Array([1, 2]), id: 'broken' },
       ],
+      layout,
+      DOUBLE_AFFINE,
+    )
+
+    expect(shapes.map((shape) => shape.id)).toEqual(['point', 'polygon', 'multi'])
+    expect(shapes[0]?.centroid).toEqual({ x: 13, y: 16 })
+    expect(shapes[1]?.geometry).toEqual({
+      kind: 'polygon',
+      ring: Float32Array.of(10, 20, 14, 20, 14, 24, 10, 24, 10, 20),
     })
-    expect(geometryFromWkb(new Uint8Array([1, 2]))).toBeNull()
+    expect(shapes[2]?.centroid).toEqual({ x: 13, y: 23 })
+    expect(ringArea(Float32Array.of(0, 0, 3, 0, 3, 3, 0, 3))).toBe(9)
   })
 })
 
@@ -151,15 +154,44 @@ function wkbPoint(x: number, y: number): Uint8Array {
   return new Uint8Array(view.buffer)
 }
 
-function wkbPolygon(ring: readonly (readonly [number, number])[]): Uint8Array {
-  const view = new DataView(new ArrayBuffer(13 + ring.length * 16))
+function wkbPolygon(
+  rings: readonly (readonly (readonly [number, number])[])[],
+): Uint8Array {
+  const size = 9 + rings.reduce((sum, ring) => sum + 4 + ring.length * 16, 0)
+  const view = new DataView(new ArrayBuffer(size))
   view.setUint8(0, 1)
   view.setUint32(1, 3, true)
-  view.setUint32(5, 1, true)
-  view.setUint32(9, ring.length, true)
-  ring.forEach(([x, y], index) => {
-    view.setFloat64(13 + index * 16, x, true)
-    view.setFloat64(21 + index * 16, y, true)
-  })
+  view.setUint32(5, rings.length, true)
+  let offset = 9
+
+  for (const ring of rings) {
+    view.setUint32(offset, ring.length, true)
+    offset += 4
+
+    for (const [x, y] of ring) {
+      view.setFloat64(offset, x, true)
+      view.setFloat64(offset + 8, y, true)
+      offset += 16
+    }
+  }
+
   return new Uint8Array(view.buffer)
+}
+
+function wkbMultiPolygon(polygons: readonly Uint8Array[]): Uint8Array {
+  const bytes = new Uint8Array(
+    9 + polygons.reduce((sum, polygon) => sum + polygon.length, 0),
+  )
+  const view = new DataView(bytes.buffer)
+  view.setUint8(0, 1)
+  view.setUint32(1, 6, true)
+  view.setUint32(5, polygons.length, true)
+  let offset = 9
+
+  for (const polygon of polygons) {
+    bytes.set(polygon, offset)
+    offset += polygon.length
+  }
+
+  return bytes
 }
