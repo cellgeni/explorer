@@ -31,6 +31,7 @@ import {
   type SpatialDataStore,
   type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
+import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
   VisiumHdBinDescriptor,
@@ -727,6 +728,7 @@ async function runSpatialDataDiagnostics(
   const url = detection.spatialDataUrl
   const startedAt = Date.now()
   let store: SpatialDataStore
+  let zip: ZippedZarrStore | undefined
   let catalog: SpatialDataCatalog
   let view: SpatialDataView
 
@@ -735,6 +737,7 @@ async function runSpatialDataDiagnostics(
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
     })
     store = opened.store
+    zip = opened.zip
     catalog = await readSpatialDataCatalog(store, opened.zarrFormat)
     view = selectSpatialDataView(catalog)
   } catch (cause) {
@@ -758,12 +761,22 @@ async function runSpatialDataDiagnostics(
       url,
       required: true,
       status: 'pass',
-      message: `Coordinate system ${view.coordinateSystem}; image ${
+      message: `${
+        zip === undefined
+          ? ''
+          : `Zip with ${zip.fileCount.toLocaleString()} files${zip.root === '' ? '' : ` under ${zip.root}`}. `
+      }Coordinate system ${view.coordinateSystem}; image ${
         view.image?.element.name ?? 'none'
       }; table ${view.table?.name ?? 'none'}`,
       startedAt,
     }),
   ]
+  // A zip lists every file, so chunks are checked against its directory
+  // instead of with a request each.
+  const probe: ChunkProber =
+    zip === undefined
+      ? (targets) => probeChunks(url, targets, options)
+      : (targets) => Promise.resolve(zipChunkProbes(zip, targets))
 
   if (view.table === undefined) {
     checks.push(
@@ -780,25 +793,23 @@ async function runSpatialDataDiagnostics(
   }
 
   if (view.table !== undefined) {
-    checks.push(await checkSpatialDataTableChunks(url, store, catalog, view, options))
+    checks.push(await checkSpatialDataTableChunks(url, store, catalog, view, probe))
   }
 
   if (view.image !== undefined) {
-    checks.push(await checkSpatialDataImageChunk(url, store, view, options))
+    checks.push(await checkSpatialDataImageChunk(url, store, view, probe))
   }
 
   for (const entry of view.regionShapes) {
+    const file = {
+      id: `spatialdata-shapes-${entry.element.name}`,
+      label: `SpatialData shapes ${entry.element.name}`,
+      path: `${entry.element.path}/shapes.parquet`,
+    }
     checks.push(
-      await checkRangeFile(
-        url,
-        {
-          id: `spatialdata-shapes-${entry.element.name}`,
-          label: `SpatialData shapes ${entry.element.name}`,
-          path: `${entry.element.path}/shapes.parquet`,
-        },
-        true,
-        options,
-      ),
+      zip === undefined
+        ? await checkRangeFile(url, file, true, options)
+        : await checkZipParquetFile(url, zip, file),
     )
   }
 
@@ -814,6 +825,13 @@ interface ChunkProbe {
   readonly stringArray: boolean
 }
 
+interface ChunkTarget {
+  readonly key: string
+  readonly stringArray: boolean
+}
+
+type ChunkProber = (targets: readonly ChunkTarget[]) => Promise<readonly ChunkProbe[]>
+
 // Zarr reads absent chunks as fill values, so an interrupted upload loads
 // without errors but with empty columns. HEAD every table chunk to find them.
 async function checkSpatialDataTableChunks(
@@ -821,11 +839,11 @@ async function checkSpatialDataTableChunks(
   store: SpatialDataStore,
   catalog: SpatialDataCatalog,
   view: SpatialDataView,
-  options: DatasetDiagnosticsOptions,
+  probe: ChunkProber,
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
   const tablePath = view.table?.path ?? ''
-  const targets: { readonly key: string; readonly stringArray: boolean }[] = []
+  const targets: ChunkTarget[] = []
 
   for (const node of catalog.nodes) {
     if (node.kind !== 'array' || !node.path.startsWith(`${tablePath}/`)) {
@@ -848,7 +866,7 @@ async function checkSpatialDataTableChunks(
   }
 
   const checked = targets.slice(0, SPATIALDATA_MAX_CHECKED_CHUNKS)
-  const probes = await probeChunks(url, checked, options)
+  const probes = await probe(checked)
   const failed = probes.filter((probe) => probe.status !== 200 && probe.status !== 206)
   const blocking = failed.filter((probe) => probe.status !== 404 || probe.stringArray)
   const scope =
@@ -878,7 +896,7 @@ async function checkSpatialDataImageChunk(
   url: string,
   store: SpatialDataStore,
   view: SpatialDataView,
-  options: DatasetDiagnosticsOptions,
+  probe: ChunkProber,
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
   const element = view.image?.element
@@ -912,31 +930,81 @@ async function checkSpatialDataImageChunk(
     })
   }
 
-  const [probe] = await probeChunks(
-    url,
-    [{ key: `${levelPath}/${chunkKey}`, stringArray: false }],
-    options,
-  )
-  const ok = probe?.status === 200 || probe?.status === 206
+  const [chunk] = await probe([{ key: `${levelPath}/${chunkKey}`, stringArray: false }])
+  const ok = chunk?.status === 200 || chunk?.status === 206
 
   return diagnosticCheck({
     id: 'spatialdata-image-chunk',
     label,
     url: datasetFileUrl(url, `${levelPath}/${chunkKey}`),
     required: false,
-    status: ok ? 'pass' : probe?.status === 404 ? 'warning' : 'fail',
+    status: ok ? 'pass' : chunk?.status === 404 ? 'warning' : 'fail',
     message: ok
       ? 'Coarsest level chunk readable'
-      : probe === undefined
+      : chunk === undefined
         ? 'Not checked'
-        : `Coarsest level chunk ${describeChunkProbes([probe])}`,
+        : `Coarsest level chunk ${describeChunkProbes([chunk])}`,
     startedAt,
   })
 }
 
+function zipChunkProbes(
+  zip: ZippedZarrStore,
+  targets: readonly ChunkTarget[],
+): readonly ChunkProbe[] {
+  return targets.map((target) => ({
+    ...target,
+    status: zip.entry(target.key) === undefined ? 404 : 200,
+  }))
+}
+
+// A Parquet file inside a zip: present, and for a stored entry, its footer
+// readable by range. A compressed entry is read whole when it is loaded.
+async function checkZipParquetFile(
+  url: string,
+  zip: ZippedZarrStore,
+  file: { readonly id: string; readonly label: string; readonly path: string },
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  const fileUrl = datasetFileUrl(url, file.path)
+  const entry = zip.entry(file.path)
+  const check = (status: 'pass' | 'fail', message: string) =>
+    diagnosticCheck({
+      id: file.id,
+      label: file.label,
+      url: fileUrl,
+      required: true,
+      status,
+      message,
+      startedAt,
+    })
+
+  if (entry === undefined) {
+    return check('fail', `${file.path} is missing from the zip`)
+  }
+
+  if (entry.compressed) {
+    return check(
+      'pass',
+      `In the zip, compressed: read whole (${(entry.size / (1024 * 1024)).toFixed(1)} MB) when loaded`,
+    )
+  }
+
+  try {
+    const footer = await zip.file(file.path)?.slice(entry.size - 4, entry.size)
+    const magic = footer === undefined ? '' : new TextDecoder().decode(footer)
+
+    return magic === 'PAR1'
+      ? check('pass', 'In the zip, stored: byte-range readable')
+      : check('fail', `${file.path} in the zip is not a Parquet file`)
+  } catch (cause) {
+    return check('fail', errorMessage(cause))
+  }
+}
+
 async function probeChunks(
   url: string,
-  targets: readonly { readonly key: string; readonly stringArray: boolean }[],
+  targets: readonly ChunkTarget[],
   options: DatasetDiagnosticsOptions,
 ): Promise<readonly ChunkProbe[]> {
   const results: ChunkProbe[] = new Array<ChunkProbe>(targets.length)

@@ -16,7 +16,8 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
   squidpy, or CELLxGENE.
-- SpatialData Zarr store URLs, such as `sample.sdata.zarr`.
+- SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
+  such as `sample.zarr.zip`.
 - Direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI image URLs.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 

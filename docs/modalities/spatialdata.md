@@ -34,6 +34,19 @@ A URL whose path ends in `.icechunk` is an [Icechunk](https://icechunk.io/)
 repository; it is SpatialData when its root group has `spatialdata_attrs` (see
 [AnnData in Icechunk](./h5ad.md#anndata-in-icechunk) for how it is opened).
 
+A URL whose path ends in `.zip` (usually `.zarr.zip`) is a zipped store
+(`detectZarrZip`). After a `HEAD` probe, the zip's central directory is read
+by range (`openZippedZarrStore`, `src/zarr/zarrZipStore.ts`) and the store
+root is the shallowest folder holding `zarr.json`, `.zgroup`, `.zattrs`, or
+`zmetadata`: the top of the zip, or the `sample.zarr/` folder that zipping a
+store folder keeps. `__MACOSX/` is ignored, and a zip with no store or with
+two side by side is an error. The store is SpatialData when its root
+metadata passes `isSpatialDataRootMetadata`, or, since some writers (for
+example the STHELAR exports) leave root attributes out, when the root holds
+`images`, `labels`, `points`, `shapes`, or `tables` groups and its attributes
+do not mark an image or AnnData. A zip holding any other Zarr store is an
+error, since only SpatialData is read from zips.
+
 A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
 `options` (`coordinateSystem`, `image`, `micrometersPerUnit`) are the starting
@@ -58,6 +71,16 @@ stores from `src/zarr/zarrStores.ts`:
 - **Chunk cache.** `consolidatedZarrStore` answers metadata keys from memory
   and keeps every other `get` (matrix chunks, obs arrays, image tiles) in a
   256 MiB LRU (`CHUNK_CACHE_MAX_BYTES`). Range reads (`getRange`) bypass it.
+- **Zipped stores.** For a `.zip` URL the base store is zarrita's
+  `ZipFileStore` over `CachedHttpRangeReader` (`src/zarr/cachedZipStore.ts`),
+  with keys relative to the store root inside the zip. Each entry is read with
+  two ranges, its local header and its data; ranges up to 8 MiB go through
+  the persistent byte-range cache. Entries stored without compression are
+  read by range; deflated entries are read and inflated whole. The opened zip
+  is returned as `zip` and kept in a four-entry cache, so detection, the
+  dataset, and diagnostics share one central-directory read; diagnostics
+  check table chunks and `shapes.parquet` against the zip directory instead
+  of with requests. Consolidated metadata is still required.
 
 ## Catalog And View Selection
 
@@ -105,14 +128,14 @@ coordinate system.
 
 ## Files Read
 
-| Store path                               | Read by                                                         | Library                            | Used for                              |
-| ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------- | ------------------------------------- |
-| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                       | Detection                             |
-| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                       | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita`                          | Cells, genes, annotations, embeddings |
-| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` (`HEAD` + range reads) | Cell positions and boundaries         |
-| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                          | Morphology layer                      |
-| `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker          | Cell outlines                         |
+| Store path                               | Read by                                                         | Library                                              | Used for                              |
+| ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
+| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                             |
+| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                     |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita`                                            | Cells, genes, annotations, embeddings |
+| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` (`HEAD` + range reads, or the zip entry) | Cell positions and boundaries         |
+| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                                            | Morphology layer                      |
+| `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker                            | Cell outlines                         |
 
 `points` (transcripts), extra images, and extra tables are not read. Label
 chunks in view are decoded and traced into cell outlines in the Zarr decode
@@ -142,16 +165,20 @@ table annotates regions in the chosen coordinate system:
 ## Shapes
 
 `readSpatialDataShapes` reads the whole `shapes.parquet` with
-`parquetReadObjects` and `hyparquet-compressors`:
+`parquetReadObjects` and `hyparquet-compressors`. In a zipped store the file
+is the zip entry, passed as `file`.
 
-- Geometry column: `geo.primary_column`, else `geometry`. WKB is decoded by
-  hyparquet when GeoParquet `geo` metadata exists, otherwise by
-  `geometryFromWkb` (Point, Polygon, MultiPolygon; ISO and EWKB).
+- Geometry column: `geo.primary_column`, else `geometry`. hyparquet's GeoJSON
+  decoding is replaced (`WKB_PARSERS`) so the WKB bytes are read straight into
+  typed rings (Point, Polygon, MultiPolygon; ISO and EWKB, 2D to 4D).
+  GeoJSON-shaped values are still accepted.
 - Instance ids: the first pandas `index_columns` entry, or a `RangeIndex`
   start/step.
 - Points become circles with diameter from the `radius` column (default 1)
   times the affine scale.
-- MultiPolygons keep only their largest polygon; holes are dropped.
+- Polygons keep only the outer ring of their largest polygon, as a
+  `Float32Array` of interleaved x, y. A 598,222-cell Xenium
+  `cell_boundaries` (about 15 million vertices) holds about 120 MB.
 - Centroid: area-weighted centroid of the transformed outer ring.
 
 ### Boundaries
@@ -164,8 +191,10 @@ table annotates regions in the chosen coordinate system:
   boundary candidate is drawn, matched to cells through the region instance
   ids. If no id matches, it falls back to the region geometry.
 
-`readBoundaryIndex` precomputes outer rings for every cell; `elements(bbox)` is
-a linear bbox filter over them.
+`readBoundaryIndex` keeps every cell's ring and bounds in typed arrays;
+`elements(bbox)` is a linear bounds filter over them that builds polygon
+elements only for the cells it returns, reusing the previous request's
+elements for cells still in view.
 
 ## Image
 
@@ -221,6 +250,7 @@ off.
 | `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table                                            |
 | `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                                                                 |
 | `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                                                               |
+| `src/zarr/zarrZipStore.ts`              | Zipped stores: central directory, store root, Parquet entries                                                            |
 | `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                                                            |
 | `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, table presence and every table chunk, one image chunk, region `shapes.parquet` range checks |
 
@@ -237,7 +267,11 @@ off.
 - Only one coordinate system and one image are shown at a time. They are
   chosen automatically; the `Coordinate system` and `Image` selects in View
   options override the choice and reload the store.
-- Shapes are read whole, not by viewport.
+- Shapes are read whole, not by viewport, and on the main thread: the
+  598,222-cell example spends about 12 s parsing after a 97 MB download.
+- A zipped store needs consolidated metadata like any other. Deflated zip
+  entries are read whole, so a compressed `shapes.parquet` is downloaded in
+  full before any of it is parsed.
 - Imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
   not match SpatialData obs names.
 - Diagnostics send a `HEAD` for every table chunk but check only the first

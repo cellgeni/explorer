@@ -42,12 +42,13 @@ export async function cachedZipFileStoreWithEntries(
   return { store, entryNames }
 }
 
-class CachedHttpRangeReader {
+export class CachedHttpRangeReader {
   private byteLength: number | undefined
 
   constructor(
     readonly url: string,
     private readonly cache: PersistentByteRangeCache | null,
+    private readonly fetcher: typeof fetch = (input, init) => fetch(input, init),
   ) {}
 
   async getLength(): Promise<number> {
@@ -55,7 +56,7 @@ class CachedHttpRangeReader {
       return this.byteLength
     }
 
-    const response = await fetch(this.url, { method: 'HEAD' })
+    const response = await this.fetcher(this.url, { method: 'HEAD' })
 
     if (!response.ok) {
       throw new Error(
@@ -85,7 +86,7 @@ class CachedHttpRangeReader {
       start: offset,
       end: offset + size,
       fetchRange: async () => {
-        const response = await fetch(this.url, {
+        const response = await this.fetcher(this.url, {
           headers: {
             Range: `bytes=${offset}-${offset + size - 1}`,
           },

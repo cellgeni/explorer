@@ -3,6 +3,7 @@ import { micrometers } from '../data/coords'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { SpatialDataDataset, type SpatialDataImageRequest } from './spatialDataDataset'
 import { shapesFromRows, type SpatialDataShapesReader } from './spatialDataShapes'
+import { byteRangeFetcher, zipArchive, type ZipFixtureFile } from '../test/zipFixtures'
 
 const STORE_URL = 'https://example.test/sample.sdata.zarr'
 const XY = { name: 'xy', axes: [{ name: 'x' }, { name: 'y' }] }
@@ -325,6 +326,17 @@ describe('SpatialDataDataset incomplete stores', () => {
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1'])
   })
 
+  it('leaves out uns arrays zarrita cannot open', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(withRankGenesGroups(storeFixture())),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.overview()).resolves.toHaveLength(2)
+  })
+
   it('reports forbidden chunks directly', async () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
@@ -341,6 +353,86 @@ describe('SpatialDataDataset incomplete stores', () => {
     })
   })
 })
+
+describe('SpatialDataDataset long tables', () => {
+  it('reads numeric obs ranges of tables too long to spread into Math.min', async () => {
+    const rows = 150_000
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(longTableFixture(rows)),
+      readShapes: vi.fn(async () =>
+        Array.from({ length: rows }, (_value, index) => ({
+          id: String(index),
+          geometry: { kind: 'circle' as const, center: { x: index, y: 0 }, radius: 1 },
+          centroid: { x: index, y: 0 },
+        })),
+      ),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.metadataTracks()).resolves.toContainEqual(
+      expect.objectContaining({ label: 'cell_id', min: 0, max: rows - 1 }),
+    )
+  })
+})
+
+describe('SpatialDataDataset zipped stores', () => {
+  const ZIP_URL = 'https://example.test/sample.zarr.zip'
+  const SHAPES = new TextEncoder().encode('PAR1 shapes PAR1')
+
+  it('reads the store and its shapes from a zip', async () => {
+    const readShapes = shapesReaderFixture({ cells: polygonRows() })
+    const dataset = new SpatialDataDataset({
+      url: ZIP_URL,
+      fetcher: zippedStoreFetcher(ZIP_URL, [
+        { name: 'sample.zarr/shapes/cells/shapes.parquet', data: SHAPES },
+      ]),
+      readShapes,
+      openImage: imageOpenerFixture(),
+    })
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => cell.cellId)).toEqual(['cell-a', 'cell-b'])
+    const matrix = await dataset.matrix(['cell-c'])
+    expect(matrix.cells.get('cell-c')).toEqual({
+      geneNames: ['Actb', 'Gad1'],
+      counts: [3, 4],
+    })
+
+    const request = vi.mocked(readShapes).mock.calls[0]?.[0]
+    expect(request?.url).toBe(`${ZIP_URL}/shapes/cells/shapes.parquet`)
+    expect(new TextDecoder().decode(await request?.file?.slice(0))).toBe(
+      'PAR1 shapes PAR1',
+    )
+  })
+
+  it('names a shapes file missing from the zip', async () => {
+    const readShapes = shapesReaderFixture({ cells: polygonRows() })
+    const dataset = new SpatialDataDataset({
+      url: 'https://example.test/no-shapes.zarr.zip',
+      fetcher: zippedStoreFetcher('https://example.test/no-shapes.zarr.zip', []),
+      readShapes,
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.overview()).rejects.toThrow(
+      'shapes/cells/shapes.parquet is missing from the zip',
+    )
+    expect(readShapes).not.toHaveBeenCalled()
+  })
+})
+
+// storeFixture() zipped in a sample.zarr/ folder, with the matrix chunks
+// deflated and the rest stored.
+function zippedStoreFetcher(url: string, extra: readonly ZipFixtureFile[]): typeof fetch {
+  const files = Array.from(storeFixture(), ([path, data]) => ({
+    name: `sample.zarr${path}`,
+    data,
+    deflate: path.startsWith('/tables/table/X/'),
+  }))
+
+  return byteRangeFetcher(new Map([[url, zipArchive([...files, ...extra])]]))
+}
 
 function storeFixture(
   options: {
@@ -464,6 +556,71 @@ function storeFixture(
     ['/tables/table/X/data/0', bytes(new Float32Array([1, 2, 3, 4]))],
     ['/tables/table/X/indices/0', bytes(new Int32Array([0, 1, 0, 1]))],
     ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 2, 4]))],
+  ])
+}
+
+// One shapes region of `rows` circles annotated by a table with an integer
+// cell_id column and a single gene.
+function longTableFixture(rows: number): ReadonlyMap<string, Uint8Array> {
+  const metadata: Record<string, unknown> = {
+    '.zgroup': { zarr_format: 2 },
+    '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    'shapes/.zgroup': { zarr_format: 2 },
+    'shapes/cells/.zgroup': { zarr_format: 2 },
+    'shapes/cells/.zattrs': {
+      'encoding-type': 'ngff:shapes',
+      coordinateTransformations: [
+        { type: 'identity', input: XY, output: { name: 'global', axes: XY.axes } },
+      ],
+    },
+    'tables/.zgroup': { zarr_format: 2 },
+    'tables/table/.zgroup': { zarr_format: 2 },
+    'tables/table/.zattrs': {
+      'encoding-type': 'anndata',
+      region: 'cells',
+      instance_key: 'cell_id',
+    },
+    'tables/table/obs/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/.zattrs': {
+      _index: '_index',
+      'column-order': ['cell_id'],
+      'encoding-type': 'dataframe',
+    },
+    'tables/table/obs/_index/.zarray': arrayMeta([rows], '|S7'),
+    'tables/table/obs/cell_id/.zarray': arrayMeta([rows], '<i8'),
+    'tables/table/var/.zgroup': { zarr_format: 2 },
+    'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
+    'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
+    'tables/table/obsm/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zattrs': { 'encoding-type': 'csr_matrix', shape: [rows, 1] },
+    'tables/table/X/data/.zarray': arrayMeta([1], '<f4'),
+    'tables/table/X/indices/.zarray': arrayMeta([1], '<i4'),
+    'tables/table/X/indptr/.zarray': arrayMeta([rows + 1], '<i4'),
+  }
+  const indptr = new Int32Array(rows + 1)
+  indptr[rows] = 1
+
+  return new Map<string, Uint8Array>([
+    [
+      '/zmetadata',
+      new TextEncoder().encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
+    ],
+    [
+      '/tables/table/obs/_index/0',
+      fixedStrings(
+        Array.from({ length: rows }, (_value, index) => `c${index.toString()}`),
+        7,
+      ),
+    ],
+    [
+      '/tables/table/obs/cell_id/0',
+      bytes(BigInt64Array.from({ length: rows }, (_value, index) => BigInt(index))),
+    ],
+    ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
+    ['/tables/table/X/data/0', bytes(new Float32Array([1]))],
+    ['/tables/table/X/indices/0', bytes(new Int32Array([0]))],
+    ['/tables/table/X/indptr/0', bytes(indptr)],
   ])
 }
 
@@ -679,6 +836,30 @@ function withNullableTableStrings(
     output.set(`/${path}/mask/0`, Uint8Array.from(mask))
   }
 
+  output.set('/zmetadata', new TextEncoder().encode(JSON.stringify(consolidated)))
+  return output
+}
+
+// scanpy's rank_genes_groups result in uns: record arrays with one field per
+// group, which zarr-python writes with a structured dtype.
+function withRankGenesGroups(
+  files: ReadonlyMap<string, Uint8Array>,
+): ReadonlyMap<string, Uint8Array> {
+  const consolidated = JSON.parse(new TextDecoder().decode(files.get('/zmetadata'))) as {
+    metadata: Record<string, unknown>
+  }
+  Object.assign(consolidated.metadata, {
+    'tables/table/uns/.zgroup': { zarr_format: 2 },
+    'tables/table/uns/rank_genes_groups/.zgroup': { zarr_format: 2 },
+    'tables/table/uns/rank_genes_groups/names/.zarray': {
+      ...arrayMeta([2], '|S4'),
+      dtype: [
+        ['0', '<U9'],
+        ['1', '<U9'],
+      ],
+    },
+  })
+  const output = new Map(files)
   output.set('/zmetadata', new TextEncoder().encode(JSON.stringify(consolidated)))
   return output
 }
