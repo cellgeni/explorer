@@ -7,6 +7,7 @@ import {
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
 import { AnnDataH5adDataset } from './h5adDataset'
+import { withCellMetadata } from '../test/cellMetadataFixtures'
 
 describe('AnnDataH5adDataset', () => {
   it('loads H5AD points, obs annotations, metadata tracks, and dense expression', async () => {
@@ -32,7 +33,7 @@ describe('AnnDataH5adDataset', () => {
       },
     })
 
-    const overview = await dataset.overview()
+    const overview = withCellMetadata(await dataset.overview())
 
     expect(overview).toHaveLength(4)
     expect(overview[0]).toMatchObject({
@@ -232,7 +233,7 @@ describe('AnnDataH5adDataset', () => {
       fetcher: h5adFetcher(bytes),
     })
 
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },
@@ -344,6 +345,25 @@ describe('AnnDataH5adDataset', () => {
     await expect(empty.geneAliases()).resolves.toEqual(new Map())
   })
 
+  it('leaves rows without a label out of annotations and cell metadata', async () => {
+    // A negative code marks a missing categorical label.
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/missing-labels.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', { clusterCodes: [0, -1, 0, 1] }),
+      ),
+    })
+
+    await expect(dataset.annotations()).resolves.toEqual([
+      { id: 'analysis:cluster:a', label: 'cluster: A', cellIds: ['cell-a', 'cell-c'] },
+      { id: 'analysis:cluster:b', label: 'cluster: B', cellIds: ['cell-d'] },
+    ])
+    const overview = withCellMetadata(await dataset.overview())
+    expect(overview.find(({ cellId }) => cellId === 'cell-b')?.metadata).toEqual({
+      score: 0.5,
+    })
+  })
+
   it('keeps the var index as gene names without an alias', async () => {
     const dataset = new AnnDataH5adDataset({
       url: 'https://example.test/index.h5ad',
@@ -395,7 +415,7 @@ describe('AnnDataH5adDataset', () => {
       ])
       await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1', 'Gapdh'])
 
-      const overview = await dataset.overview()
+      const overview = withCellMetadata(await dataset.overview())
       expect(overview.map(({ cellId, metadata }) => ({ cellId, metadata }))).toEqual([
         {
           cellId: 'cell-a',
@@ -429,6 +449,11 @@ describe('AnnDataH5adDataset', () => {
           groupCount: 2,
         },
         { id: 'analysis:batch', label: 'batch', groupingName: 'batch', groupCount: 2 },
+      ])
+      // A masked string is a missing label.
+      await expect(dataset.annotations({ groupId: 'analysis:batch' })).resolves.toEqual([
+        { id: 'analysis:batch:b1', label: 'batch: b1', cellIds: ['cell-a', 'cell-d'] },
+        { id: 'analysis:batch:b2', label: 'batch: b2', cellIds: ['obs-1'] },
       ])
       await expect(dataset.metadataTracks()).resolves.toMatchObject([
         { id: 'h5ad:score' },
@@ -498,7 +523,7 @@ describe('AnnDataH5adDataset', () => {
       }),
     })
 
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         metadata: { cluster: 'B', score: 0.5, 'Cancer Epithelial': 0.25 },
@@ -539,7 +564,7 @@ describe('AnnDataH5adDataset', () => {
     expect(readBody).not.toHaveBeenCalled()
 
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },
@@ -707,7 +732,7 @@ describe('AnnDataH5adDataset', () => {
       },
     })
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh', 'Sst'])
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },
@@ -819,6 +844,9 @@ interface TinyH5adOptions {
   // Writes the obs and var indexes and extra obs columns as nullable arrays,
   // the anndata 0.13 layout under pandas 3.
   readonly nullableStrings?: boolean
+  // Codes of the categorical obs `cluster` column (categories A and B); -1
+  // marks a missing label.
+  readonly clusterCodes?: readonly number[]
 }
 
 interface CategoricalFeatureNames {
@@ -877,6 +905,7 @@ async function createTinyH5ad(
   const fileName = `/vitest-${matrixKind}.h5ad`
   const categoricalEncoding = options.categoricalEncoding ?? 'group'
   const coordinateKey = options.coordinateKey ?? 'X_spatial'
+  const clusterCodes = new Int8Array(options.clusterCodes ?? [0, 1, 0, 1])
 
   try {
     FS.unlink(fileName)
@@ -916,9 +945,9 @@ async function createTinyH5ad(
     const cluster = obs.create_group('cluster')
     cluster.create_attribute('encoding-type', 'categorical')
     cluster.create_dataset({ name: 'categories', data: ['A', 'B'] })
-    cluster.create_dataset({ name: 'codes', data: new Int8Array([0, 1, 0, 1]) })
+    cluster.create_dataset({ name: 'codes', data: clusterCodes })
   } else {
-    obs.create_dataset({ name: 'cluster', data: new Int8Array([0, 1, 0, 1]) })
+    obs.create_dataset({ name: 'cluster', data: clusterCodes })
     const categories = obs.create_group('__categories')
     categories.create_dataset({ name: 'cluster', data: ['A', 'B'] })
   }

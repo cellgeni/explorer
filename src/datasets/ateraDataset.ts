@@ -581,16 +581,19 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   // segmentation methods come from cells.zarr.zip when it can be read.
   private async readOverview(): Promise<AteraOverview> {
     const { table } = await this.table()
-    const [tablePoints, cellIds, cellDetails] = await Promise.all([
-      table.overview(),
-      table.cellIds(),
-      this.cellDetails().catch((error: unknown) => {
-        this.onProgress?.(
-          `Atera cell details unavailable: ${error instanceof Error ? error.message : String(error)}`,
-        )
-        return null
-      }),
-    ])
+    const [tablePoints, cellIds, transcriptCounts, cellAreas, cellDetails] =
+      await Promise.all([
+        table.overview(),
+        table.cellIds(),
+        table.numericObsColumn('transcript_counts'),
+        table.numericObsColumn('cell_area'),
+        this.cellDetails().catch((error: unknown) => {
+          this.onProgress?.(
+            `Atera cell details unavailable: ${error instanceof Error ? error.message : String(error)}`,
+          )
+          return null
+        }),
+      ])
     const rowById = new Map<string, number>()
 
     cellIds.forEach((id, row) => {
@@ -601,9 +604,9 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     const pointByRow: (CellOverviewPoint | undefined)[] = new Array(cellIds.length)
     const points = tablePoints.map((point) => {
       const row = point.cellId === undefined ? undefined : rowById.get(point.cellId)
-      const metadata = point.metadata ?? {}
-      const transcriptCount = finiteNumber(metadata.transcript_counts) ?? 0
-      const cellArea = finiteNumber(metadata.cell_area)
+      const transcriptCount =
+        finiteNumber(row === undefined ? undefined : transcriptCounts?.[row]) ?? 0
+      const cellArea = finiteNumber(row === undefined ? undefined : cellAreas?.[row])
       const nucleusCount = row === undefined ? undefined : cellDetails?.nucleusCounts[row]
       const segmentationMethod =
         row === undefined ? undefined : cellDetails?.segmentationMethods[row]

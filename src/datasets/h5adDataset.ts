@@ -19,6 +19,7 @@ import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
 } from '../data/customAnnotations'
+import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import {
@@ -227,9 +228,21 @@ interface H5adVisiumLayout {
 interface H5adCategoricalTrack {
   readonly id: string
   readonly label: string
+  // For a plain string column, counted only up to DISTINCT_LABEL_COUNT_LIMIT.
   readonly categoryCount: number
-  readonly values: readonly (string | null)[]
+  readonly values: H5adLabels
 }
+
+// A label column as it was read, read by row with `labelAt`: a categorical
+// column's codes and categories, or a plain string column's strings. Neither
+// is expanded into a label per row up front.
+type H5adLabels =
+  | {
+      readonly kind: 'codes'
+      readonly codes: NumericArrayLike
+      readonly categories: readonly string[]
+    }
+  | { readonly kind: 'strings'; readonly strings: readonly string[] }
 
 interface H5adContinuousTrack {
   readonly id: string
@@ -372,6 +385,9 @@ const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
 const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
 const CSR_ZARR_BATCH_MAX_VALUES = 4_000_000
 const CSR_ZARR_BATCH_MAX_GAP_VALUES = 262_144
+// String obs columns with more distinct values than this are counted as this
+// plus one. The annotation list sets apart columns of more than 500.
+const DISTINCT_LABEL_COUNT_LIMIT = 10_000
 
 export class H5adFileSizeLimitExceededError extends Error {
   readonly url: string
@@ -451,6 +467,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private cachePromise: Promise<H5adCache> | null = null
   private visiumView: AnnDataVisiumView = {}
   private spotElementsPromise: Promise<readonly VisiumSpotEntry[]> | null = null
+  // The overview built from a cache, kept while that cache is current:
+  // building it again for every caller cost 0.6–1.4 s each on a 598,222-cell
+  // table.
+  private overviewPoints: {
+    readonly cache: H5adCache
+    readonly points: readonly CellOverviewPoint[]
+  } | null = null
   // Per library and image kind.
   private readonly tissueImageUrls = new Map<string, Promise<string>>()
 
@@ -525,6 +548,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.visiumView = view
       this.cachePromise = null
       this.spotElementsPromise = null
+      this.overviewPoints = null
     }
 
     return this
@@ -541,8 +565,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
     const cache = await this.cache()
-    const spotArea = visiumSpotArea(cache)
 
+    if (this.overviewPoints?.cache === cache) {
+      return this.overviewPoints.points
+    }
+
+    const spotArea = visiumSpotArea(cache)
     const points: CellOverviewPoint[] = []
 
     cache.cellIds.forEach((cellId, index) => {
@@ -557,10 +585,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         position,
         transcriptCount: 0,
         ...(spotArea === undefined ? {} : { cellArea: spotArea }),
-        metadata: h5adCellMetadata(cache, index),
+        // Read from the obs columns when shown: an object per cell holding
+        // every column took seconds on large tables.
+        readMetadata: () => h5adCellMetadata(cache, index),
       })
     })
 
+    this.overviewPoints = { cache, points }
     return points
   }
 
@@ -652,11 +683,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     for (const track of selectedTracks) {
       const cellIdsByLabel = new Map<string, string[]>()
 
-      for (let index = 0; index < track.values.length; index += 1) {
-        const label = track.values[index]
+      for (let index = 0; index < cache.cellIds.length; index += 1) {
+        const label = labelAt(track.values, index)
         const cellId = cache.cellIds[index]
 
-        if (label === null || label === undefined || cellId === undefined) {
+        if (label === null || cellId === undefined) {
           continue
         }
 
@@ -760,6 +791,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async cellIds(): Promise<readonly string[]> {
     const cache = await this.cache()
     return cache.cellIds
+  }
+
+  // A numeric obs column by row, or null when the table has none by that
+  // name.
+  async numericObsColumn(key: string): Promise<readonly number[] | null> {
+    const cache = await this.cache()
+    return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
   }
 
   async cells(
@@ -1417,13 +1455,14 @@ async function readVisiumSource(
     libraryIds.map((id) => readVisiumLibrary(spatial, id)),
   )
   // With several libraries, an obs column says which rows belong to each.
-  const libraryTrack =
+  const libraryLabels =
     libraryIds.length > 1
-      ? tracks.categoricalTracks.find(
-          (track) =>
-            VISIUM_LIBRARY_COLUMNS.includes(track.id) &&
-            track.values.some((value) => value !== null && libraryIds.includes(value)),
-        )
+      ? tracks.categoricalTracks
+          .filter((track) => VISIUM_LIBRARY_COLUMNS.includes(track.id))
+          .map((track) => labelsByRow(track.values))
+          .find((labels) =>
+            labels.some((value) => value !== null && libraryIds.includes(value)),
+          )
       : undefined
   const continuous = (id: string) =>
     tracks.continuousTracks.find((track) => track.id === id)?.values ?? null
@@ -1433,10 +1472,10 @@ async function readVisiumSource(
     libraries,
     defaultLibraryId:
       libraryIds.find(
-        (id) => libraryTrack === undefined || libraryTrack.values.includes(id),
+        (id) => libraryLabels === undefined || libraryLabels.includes(id),
       ) ?? libraryIds[0]!,
     pixels: embedding.points,
-    rowLibraries: libraryTrack?.values ?? null,
+    rowLibraries: libraryLabels ?? null,
     // Unless no row is under tissue, in which case the column is ignored.
     inTissue: inTissue?.some((value) => value !== 0) === true ? inTissue : null,
     arrayRows: continuous('array_row'),
@@ -2308,9 +2347,7 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: Array.from({ length: rowCount }, (_value, index) =>
-            categoricalLabel(codes, categories, index),
-          ),
+          values: { kind: 'codes', codes, categories },
         })
         continue
       }
@@ -2346,9 +2383,7 @@ async function readObservationTracks(
             id: key,
             label: key,
             categoryCount: categories.length,
-            values: Array.from({ length: rowCount }, (_value, index) =>
-              categoricalLabel(codes, categories, index),
-            ),
+            values: { kind: 'codes', codes, categories },
           })
           continue
         }
@@ -2383,7 +2418,7 @@ async function readObservationTracks(
           id: key,
           label: key,
           categoryCount: countUniqueLabels(labels),
-          values: labels.map((value) => (value.length === 0 ? null : value)),
+          values: { kind: 'strings', strings: labels },
         })
       }
     } catch (error) {
@@ -2614,6 +2649,23 @@ function categoricalLabel(
 ): string | null {
   const code = Math.trunc(numericValue(codes, index))
   return code < 0 ? null : (categories[code] ?? null)
+}
+
+// A row's label, or null where it is missing: a negative code, or an empty
+// string.
+function labelAt(labels: H5adLabels, row: number): string | null {
+  if (labels.kind === 'codes') {
+    return categoricalLabel(labels.codes, labels.categories, row)
+  }
+
+  const label = labels.strings[row]
+  return label === undefined || label.length === 0 ? null : label
+}
+
+// Every row's label, for the few readers that need the whole column.
+function labelsByRow(labels: H5adLabels): readonly (string | null)[] {
+  const rowCount = labels.kind === 'codes' ? labels.codes.length : labels.strings.length
+  return Array.from({ length: rowCount }, (_value, row) => labelAt(labels, row))
 }
 
 async function readObsColumnValues(
@@ -3198,16 +3250,13 @@ function h5adCellsInBbox(
   return cells
 }
 
-function h5adCellMetadata(
-  cache: H5adCache,
-  row: number,
-): Readonly<Record<string, string | number | boolean>> {
+function h5adCellMetadata(cache: H5adCache, row: number): CellMetadata {
   const metadata: Record<string, string | number | boolean> = {}
 
   for (const track of cache.categoricalTracks) {
-    const value = track.values[row]
+    const value = labelAt(track.values, row)
 
-    if (value !== null && value !== undefined) {
+    if (value !== null) {
       metadata[track.label] = value
     }
   }
@@ -3231,12 +3280,23 @@ function h5adMetadataTrackId(track: H5adContinuousTrack): string {
   return `h5ad:${slug(track.id)}`
 }
 
-function countUniqueLabels(labels: readonly string[]): number {
+// Distinct non-empty labels, counted up to `limit`; a column with more
+// reports limit + 1. Counting stops there because such a column identifies
+// cells (cell IDs, barcodes) rather than grouping them, and a Set of every
+// value cost 1.7 s for 598,222 cell IDs during a load.
+function countUniqueLabels(
+  labels: readonly string[],
+  limit = DISTINCT_LABEL_COUNT_LIMIT,
+): number {
   const values = new Set<string>()
 
   for (const label of labels) {
     if (label.length > 0) {
       values.add(label)
+
+      if (values.size > limit) {
+        break
+      }
     }
   }
 

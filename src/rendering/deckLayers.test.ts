@@ -1197,6 +1197,22 @@ describe('deck layer factory', () => {
     expect(datum.segmentationMethod).toBe('nucleus_expansion')
   })
 
+  it('passes metadata built on demand through to the cell datum unread', () => {
+    const readMetadata = vi.fn(() => ({ cell_type: 'Astrocyte' }))
+    const [datum] = overviewCellsToLayerData([
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 0,
+        readMetadata,
+      },
+    ])
+
+    expect(datum?.readMetadata).toBe(readMetadata)
+    expect(datum?.metadata).toBeUndefined()
+    expect(readMetadata).not.toHaveBeenCalled()
+  })
+
   it('converts expression cells into deck.gl overlay coordinates', () => {
     const [datum] = geneExpressionElementsToLayerData(
       [

@@ -4,6 +4,7 @@ import {
   parquetRead,
   parquetSchema,
 } from 'hyparquet'
+import type { CellMetadata } from './cellMetadata'
 import { asCellId } from './cellid'
 import { micrometers } from './coords'
 import {
@@ -44,7 +45,11 @@ export interface CellOverviewPoint {
   readonly cellArea?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
-  readonly metadata?: Readonly<Record<string, string | number | boolean>>
+  readonly metadata?: CellMetadata
+  // Builds the metadata when it is shown, for sources that hold it by column
+  // (AnnData tables): an object per cell built up front takes seconds and
+  // hundreds of MB for a table of 600,000 cells.
+  readonly readMetadata?: () => CellMetadata
 }
 
 // The overview columns of cells.parquet, one entry per cell. The overview

@@ -1,6 +1,7 @@
 import type { CellPointGeometry } from './cellPointStyle'
 import type { BinaryAttribute, Color, Position } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
+import type { CellMetadata } from '../data/cellMetadata'
 import type {
   TranscriptAggregateFeatureSummary,
   TranscriptCellAssignment,
@@ -18,7 +19,8 @@ export interface OverviewCellDatum {
   readonly binSizeMicrometers?: number
   readonly nucleusCount?: number
   readonly segmentationMethod?: string
-  readonly metadata?: Readonly<Record<string, string | number | boolean>>
+  readonly metadata?: CellMetadata
+  readonly readMetadata?: () => CellMetadata
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
 }
