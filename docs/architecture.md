@@ -14,7 +14,7 @@ files. Parsing happens in the browser:
 
 | Library                               | Used for                                                                                                             |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `hyparquet` + `hyparquet-compressors` | Parquet reads on the main thread (Xenium overview, Visium HD positions and barcode mappings, SpatialData shapes)     |
+| `hyparquet` + `hyparquet-compressors` | Parquet reads (the Xenium overview in a worker; Visium HD positions and barcode mappings, SpatialData shapes)        |
 | `@duckdb/duckdb-wasm`                 | SQL over remote Parquet (Xenium cells, boundaries, transcripts; Visium HD per-cell mappings)                         |
 | `zarrita` + `@zarrita/storage`        | Zarr v2/v3, zipped Zarr, kerchunk references (Xenium matrix and transcripts, H5AD references, SpatialData, OME-Zarr) |
 | `icechunk-js`                         | Icechunk repositories as zarrita stores (H5AD companion repositories; AnnData, SpatialData, OME-Zarr in Icechunk)    |
@@ -40,7 +40,7 @@ files. Parsing happens in the browser:
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
-| `src/workers/`                          | Tile decode pool, H5 file worker, Visium HD matrix and Feature Slice workers                                                                                                             |
+| `src/workers/`                          | Tile decode pool, H5 file worker, cells overview worker, Visium HD matrix and Feature Slice workers                                                                                      |
 | `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
 | `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                                         |
 | `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
@@ -354,6 +354,7 @@ their cards stayed on "Loading".
 | `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
 | `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr image chunks into `ImageBitmap`s; trace SpatialData label chunks into outlines |
 | `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One whole downloaded HDF5 file each: H5AD, the Xenium H5 fallback, the standard Visium matrix  |
+| `cellsOverview.worker.ts`        | `readCellsOverviewInWorker`      | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
 Visium) or fetches the file itself (the Xenium H5 fallback), writes them into
@@ -365,8 +366,16 @@ the main thread; the standard Visium matrix's ends once it is read. Where
 there is no `Worker` (Vitest's jsdom), the same handler runs on the main
 thread.
 
-hyparquet, zarrita reads (Xenium matrix, H5AD references, SpatialData tables),
-and auto-contrast run on the main thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
+A cells overview worker fetches `cells.parquet` and decodes the overview
+columns from hyparquet's column chunks, without an object per row. The columns
+come back as transferred typed arrays, with cell IDs and the distinct
+segmentation methods as strings, and the main thread builds the overview cells
+from them. The worker ends once it has answered, or when the load is aborted.
+With an option a worker cannot take (a custom fetcher, an in-memory file, a
+test reader) or no `Worker`, the same reader runs on the main thread.
+
+Other hyparquet reads, zarrita reads (Xenium matrix, H5AD references,
+SpatialData tables), and auto-contrast run on the main thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
 Zarr decode workers, which fall back to the main thread if they fail.
 
 ## Performance Budget

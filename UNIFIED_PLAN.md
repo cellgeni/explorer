@@ -169,10 +169,11 @@ What the POC lacked, and what this plan set out to close:
   arrays, and `ImageBitmap`s live in modules or caches, referenced by ID.
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
-  Known exceptions (2026-11): hyparquet reads, zarrita reads for the Xenium
-  matrix, H5AD references, and SpatialData tables, and auto-contrast run on
-  the main thread. Since 2026-11-13 h5wasm runs only in workers. See
-  [Open Items](#12-open-items).
+  Known exceptions (2026-11): hyparquet reads other than the Xenium overview,
+  zarrita reads for the Xenium matrix, H5AD references, and SpatialData
+  tables, and auto-contrast run on the main thread. Since 2026-11-13 h5wasm
+  runs only in workers, and the Xenium `cells.parquet` overview is decoded in
+  one. See [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
 - **Tests go in the same PR as the code.** A module without tests is not done.
@@ -283,8 +284,8 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   row-group skipping, and joins. It costs about 40 MB of WASM and seconds of
   start-up time.
 - hyparquet (about 10 KB, with `hyparquet-compressors` for ZSTD) reads
-  `cells.parquet` centroids for a fast first paint. DuckDB is imported
-  dynamically, only when a query needs it.
+  `cells.parquet` centroids for a fast first paint, in a worker since
+  2026-11-13. DuckDB is imported dynamically, only when a query needs it.
 - If hyparquet cannot decode the `cells.parquet` page encoding, the overview
   falls back to DuckDB.
 - Use the non-threaded MVP/EH DuckDB bundles. The cross-origin-isolated pthread
@@ -360,6 +361,13 @@ Later additions:
   packed in typed arrays. One worker per file, because h5wasm's heap cannot
   shrink: terminating it frees the file. An H5AD's worker ends when its
   dataset is garbage collected (`FinalizationRegistry`).
+- **Cells overview worker (2026-11-13).** The Xenium `cells.parquet` overview
+  is fetched and decoded in a worker of its own (`cellsOverview.worker.ts`).
+  It reads hyparquet's column chunks instead of an object per row, and sends
+  the columns back as transferred typed arrays; cell IDs and the distinct
+  segmentation methods are cloned as strings. The main thread only builds the
+  overview cells from the columns. Decode errors keep their name across the
+  worker, so the DuckDB fallback still applies.
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -4109,13 +4117,23 @@ Other gaps found in the review:
       range request (about 300 KB for a 16 µm bin on the reference).
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
-- [ ] Main-thread exceptions to the worker convention: hyparquet, zarrita
-      reads, and auto-contrast. h5wasm for H5AD, the Xenium H5 fallback and
-      the standard Visium matrix moved to H5 file workers (2026-11-13). On the
-      Xenium demo a Cell card's H5 fallback (worker fetch, open in 1.35 s,
-      first cell read in 1.2–1.3 s) left no main-thread task over 50 ms. A
-      first version that fetched on the main thread still left a 255 ms task
-      joining the body and a 720 ms one after it.
+- [ ] Main-thread exceptions to the worker convention: hyparquet reads other
+      than the Xenium overview (Visium HD positions and barcode mappings,
+      SpatialData shapes), zarrita reads, and auto-contrast. h5wasm for H5AD,
+      the Xenium H5 fallback and the standard Visium matrix moved to H5 file
+      workers (2026-11-13). On the Xenium demo a Cell card's H5 fallback
+      (worker fetch, open in 1.35 s, first cell read in 1.2–1.3 s) left no
+      main-thread task over 50 ms. A first version that fetched on the main
+      thread still left a 255 ms task joining the body and a 720 ms one after
+      it. The Xenium `cells.parquet` overview moved to a cells overview worker
+      (2026-11-13). CPU profiles of the demo's load to the first overview draw
+      (production builds, headless Chromium, two runs each): hyparquet code
+      took 1.63–1.67 s of main-thread time, in stretches of up to 861 ms,
+      before the change; after it, building the cells from the transferred
+      columns takes 54–59 ms and nothing before the overview commit runs over
+      156 ms. Read in the page (dev build), the columns took 66 ms to receive
+      and 107–180 ms to turn into cells, against 324–358 ms for the old
+      per-row parse.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
@@ -4169,10 +4187,11 @@ Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
       this on the viewport warm-up ("Preparing cell feature matrix"). CPU
       profiles over CDP on 2026-11-12 (headless Chromium with GPU, fresh and
       warm profiles; stalls of up to 1.8 s here) put it on the load instead:
-      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s), the
-      first render with the overview layer build (2.3–3.0 s), and the first
-      JPEG 2000 morphology decode (0.6–0.7 s). The warm-up's cell query runs in
-      DuckDB's worker. The H5 download (above) was not part of these: its
+      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s; in a
+      worker since 2026-11-13), the first render with the overview layer
+      build (2.3–3.0 s), and the first JPEG 2000 morphology decode
+      (0.6–0.7 s). The warm-up's cell query runs in DuckDB's worker. The H5
+      download (above) was not part of these: its
       1.3–1.7 s block came when the download ended, 63–70 s after load, and
       would land in the first 30 s only above about 20 MB/s. That block is
       gone with the fix.
