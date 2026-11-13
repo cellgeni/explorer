@@ -1,3 +1,4 @@
+import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
 import type {
   ZarrChunkSource,
@@ -59,33 +60,42 @@ export class ZarrDecodePool {
     readonly window: ZarrChunkWindow
     readonly render: ZarrTileRender
   }): Promise<ZarrWorkerTile> {
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const workerIndex = await this.placeChunk(
-        request.cacheKey,
-        request.source,
-        request.loadBytes,
-      )
-      const response = await this.send(workerIndex, (id) => ({
-        type: 'render-tile',
-        id,
-        cacheKey: request.cacheKey,
-        window: request.window,
-        render: request.render,
-      }))
+    const response = await this.askChunkWorker(request, (id) => ({
+      type: 'render-tile',
+      id,
+      cacheKey: request.cacheKey,
+      window: request.window,
+      render: request.render,
+    }))
 
-      if (response.type === 'tile') {
-        return response
-      }
-
-      if (response.type === 'error') {
-        throw new Error(response.error)
-      }
-
-      // The worker evicted the chunk; place it again.
-      this.chunkWorkers.delete(request.cacheKey)
+    if (response.type !== 'tile') {
+      throw new Error('Unexpected Zarr tile response.')
     }
 
-    throw new Error('Zarr decode worker could not keep the chunk cached.')
+    return response
+  }
+
+  // Auto-contrast samples of a tile, read from the chunk the worker holds.
+  async sampleTile(request: {
+    readonly cacheKey: string
+    readonly source: ZarrChunkSource
+    readonly loadBytes: () => Promise<Uint8Array | undefined>
+    readonly window: ZarrChunkWindow
+    readonly sampling: TileSampling
+  }): Promise<TileSamples> {
+    const response = await this.askChunkWorker(request, (id) => ({
+      type: 'sample-tile',
+      id,
+      cacheKey: request.cacheKey,
+      window: request.window,
+      sampling: request.sampling,
+    }))
+
+    if (response.type !== 'samples') {
+      throw new Error('Unexpected Zarr tile samples response.')
+    }
+
+    return { samples: response.samples, pixelCount: response.pixelCount }
   }
 
   async traceLabels(request: {
@@ -125,6 +135,39 @@ export class ZarrDecodePool {
 
   terminate(): void {
     this.reset(new Error('Zarr decode worker pool terminated.'))
+  }
+
+  // Sends a request about a chunk to the worker holding it, placing the chunk
+  // first when needed.
+  private async askChunkWorker(
+    request: {
+      readonly cacheKey: string
+      readonly source: ZarrChunkSource
+      readonly loadBytes: () => Promise<Uint8Array | undefined>
+    },
+    message: (id: number) => ZarrDecodeRequest,
+  ): Promise<ZarrDecodeResponse> {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const workerIndex = await this.placeChunk(
+        request.cacheKey,
+        request.source,
+        request.loadBytes,
+      )
+      const response = await this.send(workerIndex, message)
+
+      if (response.type === 'error') {
+        throw new Error(response.error)
+      }
+
+      if (response.type !== 'miss') {
+        return response
+      }
+
+      // The worker evicted the chunk; place it again.
+      this.chunkWorkers.delete(request.cacheKey)
+    }
+
+    throw new Error('Zarr decode worker could not keep the chunk cached.')
   }
 
   private placeChunk(

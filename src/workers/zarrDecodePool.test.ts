@@ -30,17 +30,24 @@ class FakeWorker implements ZarrDecodeWorkerLike {
               pixelCounts: Uint32Array.from([1]),
             },
           }
-        : this.chunks.has(message.cacheKey)
-          ? {
-              type: 'tile',
-              id: message.id,
-              bitmap: {} as ImageBitmap,
-              width: message.window.width,
-              height: message.window.height,
-              lo: 0,
-              hi: 255,
-            }
-          : { type: 'miss', id: message.id }
+        : !this.chunks.has(message.cacheKey)
+          ? { type: 'miss', id: message.id }
+          : message.type === 'sample-tile'
+            ? {
+                type: 'samples',
+                id: message.id,
+                samples: Float64Array.from([message.sampling.startIndex]),
+                pixelCount: message.window.width * message.window.height,
+              }
+            : {
+                type: 'tile',
+                id: message.id,
+                bitmap: {} as ImageBitmap,
+                width: message.window.width,
+                height: message.window.height,
+                lo: 0,
+                hi: 255,
+              }
 
     queueMicrotask(() => {
       this.onmessage?.({ data: response } as MessageEvent<ZarrDecodeResponse>)
@@ -108,6 +115,30 @@ describe('ZarrDecodePool', () => {
     worker.chunks.clear()
     await expect(pool.renderTile(request)).resolves.toMatchObject({ width: 2 })
     expect(loadBytes).toHaveBeenCalledTimes(2)
+  })
+
+  it('samples a tile from the chunk the worker holds, placing it again after eviction', async () => {
+    const worker = new FakeWorker()
+    const pool = new ZarrDecodePool({ size: 1, workerFactory: () => worker })
+    const loadBytes = vi.fn(async () => Uint8Array.from([1]))
+    const request = {
+      cacheKey: 'image/0/2,0',
+      source: SOURCE,
+      loadBytes,
+      window: WINDOW,
+      sampling: { startIndex: 12, stride: 3, width: 2, height: 2 },
+    }
+
+    await expect(pool.sampleTile(request)).resolves.toEqual({
+      samples: Float64Array.from([12]),
+      pixelCount: 4,
+    })
+    worker.chunks.clear()
+    await expect(pool.sampleTile(request)).resolves.toMatchObject({ pixelCount: 4 })
+    expect(loadBytes).toHaveBeenCalledTimes(2)
+    expect(
+      worker.messages.filter((message) => message.type === 'sample-tile'),
+    ).toHaveLength(3)
   })
 
   it('returns label traces and fails pending work when a worker crashes', async () => {

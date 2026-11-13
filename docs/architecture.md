@@ -348,7 +348,7 @@ their cards stayed on "Loading".
 
 | Worker                           | Created by                       | Purpose                                                                                        |
 | -------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`           | `TileDecodeWorkerPool` (≤ 4)     | Decode TIFF tiles into `ImageBitmap`s                                                          |
+| `tileDecode.worker.ts`           | `TileDecodeWorkerPool` (≤ 4)     | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                           |
 | DuckDB-WASM worker               | `src/data/duckdb.ts`             | One per DuckDB client                                                                          |
 | `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
 | `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
@@ -374,9 +374,17 @@ from them. The worker ends once it has answered, or when the load is aborted.
 With an option a worker cannot take (a custom fetcher, an in-memory file, a
 test reader) or no `Worker`, the same reader runs on the main thread.
 
-Other hyparquet reads, zarrita reads (Xenium matrix, H5AD references,
-SpatialData tables), and auto-contrast run on the main thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
-Zarr decode workers, which fall back to the main thread if they fail.
+Auto-contrast decodes and samples tiles off the main thread and gets back only
+the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile
+decode worker started for the run, which ends with the run or on abort. An
+OME-Zarr tile is sampled by the Zarr decode worker that holds its chunk. The
+main thread sorts the samples and builds the histogram. Where there is no
+`Worker`, or a Zarr decode worker fails, tiles are sampled on the main thread.
+
+Other hyparquet reads and zarrita reads (Xenium matrix, H5AD references,
+SpatialData tables) run on the main thread. OME-Zarr chunk bytes are fetched
+on the main thread and decoded in the Zarr decode workers, which fall back to
+the main thread if they fail.
 
 ## Performance Budget
 

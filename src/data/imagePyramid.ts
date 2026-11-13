@@ -2,6 +2,7 @@ import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from './coords'
 import type { FallbackNotifier } from './fallbackNotice'
+import type { TileSamples, TileSampling } from './tileSamples'
 
 export interface ImagePyramidChannelContrast {
   readonly min: number
@@ -111,6 +112,15 @@ export interface ImagePyramidLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<ImagePyramidTilePixels>
+  // Auto-contrast samples of a tile, taken off the main thread; null when the
+  // loader cannot.
+  sampleTilePixels?(
+    level: number,
+    col: number,
+    row: number,
+    sampling: TileSampling,
+    signal?: AbortSignal,
+  ): Promise<TileSamples | null>
 }
 
 export interface OpenImagePyramidOptions {

@@ -1,3 +1,4 @@
+import type { TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
 
 // Zarr array metadata as stored (`.zarray` for v2, `zarr.json` for v3), so a
@@ -45,6 +46,15 @@ export interface ZarrRenderTileMessage {
   readonly render: ZarrTileRender
 }
 
+// Auto-contrast samples of a window of a chunk the worker holds.
+export interface ZarrSampleTileMessage {
+  readonly type: 'sample-tile'
+  readonly id: number
+  readonly cacheKey: string
+  readonly window: ZarrChunkWindow
+  readonly sampling: TileSampling
+}
+
 export interface ZarrTraceLabelsMessage {
   readonly type: 'trace-labels'
   readonly id: number
@@ -60,6 +70,7 @@ export interface ZarrTraceLabelsMessage {
 export type ZarrDecodeRequest =
   | ZarrPutChunkMessage
   | ZarrRenderTileMessage
+  | ZarrSampleTileMessage
   | ZarrTraceLabelsMessage
 
 export type ZarrDecodeResponse =
@@ -71,6 +82,12 @@ export type ZarrDecodeResponse =
       readonly height: number
       readonly lo: number
       readonly hi: number
+    }
+  | {
+      readonly type: 'samples'
+      readonly id: number
+      readonly samples: Float64Array
+      readonly pixelCount: number
     }
   | { readonly type: 'labels'; readonly id: number; readonly trace: PackedLabelTrace }
   // The worker no longer holds the chunk; the caller resends it.

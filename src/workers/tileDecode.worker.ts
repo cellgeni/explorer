@@ -6,13 +6,24 @@ import { decodeTiffTilePixels, TIFF_COMPRESSION_JPEG } from '../codecs/tiffTile'
 import type {
   TileDecodeRequest,
   TileDecodeResponse,
+  TileDecodeWorkerRequest,
   WorkerDecodedTile,
 } from './tileDecodeMessages'
+import { handleTileSamplesRequest } from './tileSamplesCore'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 
-workerScope.onmessage = (event: MessageEvent<TileDecodeRequest>) => {
-  void decodeTile(event.data)
+workerScope.onmessage = (event: MessageEvent<TileDecodeWorkerRequest>) => {
+  const request = event.data
+
+  if ('sampling' in request) {
+    void handleTileSamplesRequest(request, (response, transfer) => {
+      workerScope.postMessage(response, transfer)
+    })
+    return
+  }
+
+  void decodeTile(request)
 }
 
 async function decodeTile(request: TileDecodeRequest): Promise<void> {

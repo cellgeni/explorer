@@ -1,4 +1,9 @@
 import * as zarr from 'zarrita'
+import {
+  sampleDecodedTile,
+  type TileSamples,
+  type TileSampling,
+} from '../data/tileSamples'
 import { isSupportedPixelArray, newPixelArray } from '../zarr/omeZarrPixels'
 import type { ZarrChunkSource, ZarrChunkWindow } from './zarrDecodeMessages'
 
@@ -55,4 +60,17 @@ export function chunkWindow(chunk: zarr.Chunk<zarr.DataType>, window: ZarrChunkW
   }
 
   return pixels
+}
+
+export function chunkWindowSamples(
+  chunk: zarr.Chunk<zarr.DataType>,
+  window: ZarrChunkWindow,
+  sampling: TileSampling,
+): TileSamples {
+  return sampleDecodedTile(
+    chunkWindow(chunk, window),
+    window.width,
+    window.height,
+    sampling,
+  )
 }

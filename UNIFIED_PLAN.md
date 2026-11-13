@@ -169,11 +169,12 @@ What the POC lacked, and what this plan set out to close:
   arrays, and `ImageBitmap`s live in modules or caches, referenced by ID.
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
-  Known exceptions (2026-11): hyparquet reads other than the Xenium overview,
-  zarrita reads for the Xenium matrix, H5AD references, and SpatialData
-  tables, and auto-contrast run on the main thread. Since 2026-11-13 h5wasm
-  runs only in workers, and the Xenium `cells.parquet` overview is decoded in
-  one. See [Open Items](#12-open-items).
+  Known exceptions (2026-11): hyparquet reads other than the Xenium overview
+  and zarrita reads for the Xenium matrix, H5AD references, and SpatialData
+  tables run on the main thread. Since 2026-11-13 h5wasm runs only in
+  workers, the Xenium `cells.parquet` overview is decoded in one, and
+  auto-contrast decodes and samples its tiles in them. See
+  [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
 - **Tests go in the same PR as the code.** A module without tests is not done.
@@ -368,6 +369,14 @@ Later additions:
   segmentation methods are cloned as strings. The main thread only builds the
   overview cells from the columns. Decode errors keep their name across the
   worker, so the DuckDB fallback still applies.
+- **Auto-contrast worker (2026-11-13).** Auto-contrast decodes and samples
+  tiles off the main thread and gets back only the sampled pixels. TIFF tile
+  bytes go to a tile decode worker started for the run and ended with it or
+  on abort; an OME-Zarr tile is sampled by the Zarr decode worker that holds
+  its chunk, often already decoded for drawing. Samples are taken by level
+  pixel index, as before, so results are unchanged. The main thread sorts at
+  most 250,000 samples as a `Float64Array` (about 18 ms, against 44 ms for the
+  `number[]` it used) and builds the histogram.
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -843,6 +852,7 @@ Notes:
 - Auto-contrast samples the coarsest pyramid level, crops padded edge tiles,
   computes robust percentiles, and draws a histogram from the same samples. It
   runs automatically when an image finishes loading; the `Auto` buttons rerun it.
+  Since 2026-11-13 tiles are decoded and sampled in workers.
 - Grayscale intensity drives both channel colour and alpha, so enabled channels
   do not fill tiles with solid colour.
 
@@ -4119,21 +4129,26 @@ Other gaps found in the review:
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
       than the Xenium overview (Visium HD positions and barcode mappings,
-      SpatialData shapes), zarrita reads, and auto-contrast. h5wasm for H5AD,
-      the Xenium H5 fallback and the standard Visium matrix moved to H5 file
-      workers (2026-11-13). On the Xenium demo a Cell card's H5 fallback
-      (worker fetch, open in 1.35 s, first cell read in 1.2–1.3 s) left no
-      main-thread task over 50 ms. A first version that fetched on the main
-      thread still left a 255 ms task joining the body and a 720 ms one after
-      it. The Xenium `cells.parquet` overview moved to a cells overview worker
-      (2026-11-13). CPU profiles of the demo's load to the first overview draw
-      (production builds, headless Chromium, two runs each): hyparquet code
-      took 1.63–1.67 s of main-thread time, in stretches of up to 861 ms,
-      before the change; after it, building the cells from the transferred
-      columns takes 54–59 ms and nothing before the overview commit runs over
-      156 ms. Read in the page (dev build), the columns took 66 ms to receive
-      and 107–180 ms to turn into cells, against 324–358 ms for the old
-      per-row parse.
+      SpatialData shapes) and zarrita reads. h5wasm for H5AD, the Xenium H5
+      fallback and the standard Visium matrix moved to H5 file workers
+      (2026-11-13). On the Xenium demo a Cell card's H5 fallback (worker fetch,
+      open in 1.35 s, first cell read in 1.2–1.3 s) left no main-thread task
+      over 50 ms. A first version that fetched on the main thread still left a
+      255 ms task joining the body and a 720 ms one after it. The Xenium
+      `cells.parquet` overview moved to a cells overview worker (2026-11-13).
+      CPU profiles of the demo's load to the first overview draw (production
+      builds, headless Chromium, two runs each): hyparquet code took 1.63–1.67 s
+      of main-thread time, in stretches of up to 861 ms, before the change;
+      after it, building the cells from the transferred columns takes 54–59 ms
+      and nothing before the overview commit runs over 156 ms. Read in the page
+      (dev build), the columns took 66 ms to receive and 107–180 ms to turn into
+      cells, against 324–358 ms for the old per-row parse. Auto-contrast moved
+      to workers (2026-11-13). Profiles of the demo's load until its four
+      channels are auto-contrasted (same setup): the OpenJPEG codec took 540–559
+      ms of main-thread time, in stretches of up to 634 ms, before the change,
+      and none after it; the auto-contrast module itself takes 23–44 ms. Read in
+      the page (dev build), one focus channel went from a 140–165 ms task to
+      none, about 40 ms slower end to end for starting the worker.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.

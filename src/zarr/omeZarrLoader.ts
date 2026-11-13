@@ -14,6 +14,7 @@ import type {
   ImagePyramidTilePixels,
   ImagePyramidTileRenderOptions,
 } from '../data/imagePyramid'
+import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { Array as ZarrArray, DataType } from 'zarrita'
 import {
   consolidatedZarrStore,
@@ -23,6 +24,7 @@ import {
   zarrArrayMetadata,
   zarrChunkKey,
 } from './zarrStores'
+import type { ZarrChunkSource, ZarrChunkWindow } from '../workers/zarrDecodeMessages'
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
 import { isIcechunkUrl } from './icechunkUrl'
 import {
@@ -528,6 +530,35 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     }
   }
 
+  // Auto-contrast samples of a tile, taken in the worker that caches its
+  // chunk. Returns null when workers are unavailable or cannot handle the
+  // tile, so the caller samples decoded pixels on the main thread.
+  async sampleTilePixels(
+    level: number,
+    col: number,
+    row: number,
+    sampling: TileSampling,
+    signal?: AbortSignal,
+  ): Promise<TileSamples | null> {
+    const target = await this.workerChunkTarget(level, col, row)
+
+    if (target === null) {
+      return null
+    }
+
+    try {
+      const tile = await target.pool.sampleTile({ ...target.request, sampling })
+      throwIfAborted(signal)
+      return tile
+    } catch (error) {
+      if (isFinalWorkerError(error)) {
+        throw error
+      }
+
+      return null
+    }
+  }
+
   // Decodes and renders a tile in a worker that caches its chunk. Returns null
   // when workers are unavailable or cannot handle the tile, so the caller
   // decodes on the main thread.
@@ -538,41 +569,15 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     options: ImagePyramidTileRenderOptions,
     signal: AbortSignal | undefined,
   ): Promise<ImagePyramidDecodedTile | null> {
-    const pool = this.decodePool
-    const meta = this.levelMetaFor(level)
-    const selection = this.tileSelection(meta, col, row)
-    const placement = this.chunkPlacement(meta, selection)
+    const target = await this.workerChunkTarget(level, col, row)
 
-    if (pool === null || placement === null) {
+    if (target === null) {
       return null
     }
-
-    const arrayMetadata = await zarrArrayMetadata(meta.array)
-
-    if (arrayMetadata === null) {
-      return null
-    }
-
-    const chunkKey = zarrChunkKey(arrayMetadata.metadata, placement.coords)
-    const arrayPath = meta.array.path === '/' ? '' : meta.array.path
 
     try {
-      const tile = await pool.renderTile({
-        cacheKey: placement.cacheKey,
-        source: { ...arrayMetadata, chunkKey, coords: placement.coords },
-        loadBytes: () =>
-          Promise.resolve(
-            meta.array.store.get(`${arrayPath}/${chunkKey}` as `/${string}`),
-          ),
-        window: {
-          xAxis: this.xAxis,
-          yAxis: this.yAxis,
-          x0: placement.x0,
-          y0: placement.y0,
-          width: selection.width,
-          height: selection.height,
-          fixedAxes: placement.fixedAxes,
-        },
+      const tile = await target.pool.renderTile({
+        ...target.request,
         render: {
           ...(options.displayWindow === undefined
             ? {}
@@ -591,16 +596,66 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
 
       return tile
     } catch (error) {
-      // Store errors and aborts are final; worker failures fall back to the
-      // main thread.
-      if (
-        error instanceof ZarrChunkUnavailableError ||
-        (error instanceof Error && error.name === 'AbortError')
-      ) {
+      if (isFinalWorkerError(error)) {
         throw error
       }
 
       return null
+    }
+  }
+
+  // The decode pool and the chunk a tile lies in, or null when there is no
+  // pool or the tile straddles chunks.
+  private async workerChunkTarget(
+    level: number,
+    col: number,
+    row: number,
+  ): Promise<{
+    readonly pool: ZarrDecodePool
+    readonly request: {
+      readonly cacheKey: string
+      readonly source: ZarrChunkSource
+      readonly loadBytes: () => Promise<Uint8Array | undefined>
+      readonly window: ZarrChunkWindow
+    }
+  } | null> {
+    const pool = this.decodePool
+    const meta = this.levelMetaFor(level)
+    const selection = this.tileSelection(meta, col, row)
+    const placement = this.chunkPlacement(meta, selection)
+
+    if (pool === null || placement === null) {
+      return null
+    }
+
+    const arrayMetadata = await zarrArrayMetadata(meta.array)
+
+    if (arrayMetadata === null) {
+      return null
+    }
+
+    const chunkKey = zarrChunkKey(arrayMetadata.metadata, placement.coords)
+    const arrayPath = meta.array.path === '/' ? '' : meta.array.path
+
+    return {
+      pool,
+      request: {
+        cacheKey: placement.cacheKey,
+        source: { ...arrayMetadata, chunkKey, coords: placement.coords },
+        loadBytes: () =>
+          Promise.resolve(
+            meta.array.store.get(`${arrayPath}/${chunkKey}` as `/${string}`),
+          ),
+        window: {
+          xAxis: this.xAxis,
+          yAxis: this.yAxis,
+          x0: placement.x0,
+          y0: placement.y0,
+          width: selection.width,
+          height: selection.height,
+          fixedAxes: placement.fixedAxes,
+        },
+      },
     }
   }
 
@@ -1245,6 +1300,15 @@ function chunkByteLength(chunk: zarr.Chunk<DataType>): number {
     : typeof data.length === 'number'
       ? data.length * 8
       : 0
+}
+
+// Store errors and aborts are final; worker failures fall back to the main
+// thread.
+function isFinalWorkerError(error: unknown): boolean {
+  return (
+    error instanceof ZarrChunkUnavailableError ||
+    (error instanceof Error && error.name === 'AbortError')
+  )
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

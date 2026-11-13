@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { chunkWindow, decodeChunk } from './zarrDecodeCore'
+import { chunkWindow, chunkWindowSamples, decodeChunk } from './zarrDecodeCore'
 
 describe('Zarr decode worker core', () => {
   it('decodes a v2 chunk from its metadata and copies a window', async () => {
@@ -35,6 +35,23 @@ describe('Zarr decode worker core', () => {
       fixedAxes: [{ axis: 0, index: 1 }],
     })
     expect(Array.from(pixels)).toEqual([18, 19, 22, 23])
+
+    // The same window, sampling every other pixel after one earlier pixel.
+    const tile = chunkWindowSamples(
+      chunk,
+      {
+        xAxis: 2,
+        yAxis: 1,
+        x0: 2,
+        y0: 1,
+        width: 2,
+        height: 2,
+        fixedAxes: [{ axis: 0, index: 1 }],
+      },
+      { startIndex: 1, stride: 2, width: 2, height: 2 },
+    )
+    expect(Array.from(tile.samples)).toEqual([19, 23])
+    expect(tile.pixelCount).toBe(4)
   })
 
   it('fills absent v3 chunks with the fill value', async () => {

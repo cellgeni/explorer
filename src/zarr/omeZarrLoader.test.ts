@@ -1,9 +1,51 @@
+import type * as zarr from 'zarrita'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
+import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import { chunkWindowSamples, decodeChunk } from '../workers/zarrDecodeCore'
+import type { ZarrDecodeRequest, ZarrDecodeResponse } from '../workers/zarrDecodeMessages'
+import { ZarrDecodePool, type ZarrDecodeWorkerLike } from '../workers/zarrDecodePool'
 import { omeZarrImageRootUrl, openOmeZarrImageWithOptions } from './omeZarrLoader'
 
 const encoder = new TextEncoder()
+
+// Holds chunks and samples them with the real worker code, behind a
+// structured-clone boundary.
+class SamplingZarrWorker implements ZarrDecodeWorkerLike {
+  onmessage: ((event: MessageEvent<ZarrDecodeResponse>) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  private readonly chunks = new Map<string, Promise<zarr.Chunk<zarr.DataType>>>()
+
+  postMessage(message: ZarrDecodeRequest): void {
+    const request = structuredClone(message)
+
+    if (request.type === 'put-chunk') {
+      this.chunks.set(request.cacheKey, decodeChunk(request.source, request.bytes))
+      return
+    }
+
+    if (request.type !== 'sample-tile') {
+      throw new Error(`Unexpected ${request.type} request.`)
+    }
+
+    const chunk = this.chunks.get(request.cacheKey)
+    void (async (): Promise<ZarrDecodeResponse> => {
+      if (chunk === undefined) {
+        return { type: 'miss', id: request.id }
+      }
+
+      const tile = chunkWindowSamples(await chunk, request.window, request.sampling)
+      return { type: 'samples', id: request.id, ...tile }
+    })().then((response) => {
+      this.onmessage?.({
+        data: structuredClone(response),
+      } as MessageEvent<ZarrDecodeResponse>)
+    })
+  }
+
+  terminate(): void {}
+}
 
 describe('OME-Zarr image loader', () => {
   it('opens an OME-Zarr 0.5 image from an Icechunk repository', async () => {
@@ -235,6 +277,61 @@ describe('OME-Zarr image loader', () => {
         maxY: micrometers(55),
       }),
     ).toEqual([{ col: 0, row: 1 }])
+  })
+
+  it('samples a virtual tile in the worker that holds its chunk', async () => {
+    const rootPath = '/images/sampled.zarr'
+    const size = 600
+    const pixels = Uint8Array.from(
+      { length: size * size },
+      (_value, index) => index % 251,
+    )
+    const files = new Map([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            {
+              axes: [
+                { name: 'y', type: 'space' },
+                { name: 'x', type: 'space' },
+              ],
+              datasets: [{ path: '0' }],
+            },
+          ],
+        }),
+      ],
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([size, size], [size, size]))],
+      [`${rootPath}/0/0.0`, pixels],
+    ])
+    const url = `https://example.test${rootPath}`
+    const inWorker = await openOmeZarrImageWithOptions(url, {
+      fetcher: fetcherForFiles(files),
+      decodePool: new ZarrDecodePool({
+        size: 1,
+        workerFactory: () => new SamplingZarrWorker(),
+      }),
+    })
+    const onMainThread = await openOmeZarrImageWithOptions(url, {
+      fetcher: fetcherForFiles(files),
+      decodePool: null,
+    })
+    const sampling = { startIndex: 90_001, stride: 7, width: 300, height: 300 }
+    const decoded = await onMainThread.loadTilePixels(0, 1, 1)
+    const expected = sampleDecodedTile(
+      decoded.pixels,
+      decoded.width,
+      decoded.height,
+      sampling,
+    )
+
+    const tile = await inWorker.sampleTilePixels(0, 1, 1, sampling)
+
+    expect(Array.from(tile?.samples ?? [])).toEqual(Array.from(expected.samples))
+    expect(tile?.pixelCount).toBe(90_000)
+    expect(expected.samples.length).toBeGreaterThan(12_000)
+    await expect(onMainThread.sampleTilePixels(0, 1, 1, sampling)).resolves.toBeNull()
   })
 
   it('reads a selected Zarr channel tile as decoded pixels and bitmap data', async () => {
