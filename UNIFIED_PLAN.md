@@ -169,13 +169,13 @@ What the POC lacked, and what this plan set out to close:
   arrays, and `ImageBitmap`s live in modules or caches, referenced by ID.
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
-  Known exceptions (2026-11): hyparquet reads other than the Xenium overview run
-  on the main thread, and zarrita still fetches chunks and assembles selections
-  there. Since 2026-11-13 h5wasm runs only in workers, the Xenium
-  `cells.parquet` overview is decoded in one, auto-contrast decodes and samples
-  its tiles in them, and zarrita's decompressors and string codecs run in the
-  Zarr decode workers. See
-  [Open Items](#12-open-items).
+  Known exceptions (2026-11): hyparquet reads other than the Xenium overview and
+  SpatialData shapes run on the main thread, and zarrita still fetches chunks
+  and assembles selections there. Since 2026-11-13 h5wasm runs only in workers,
+  the Xenium `cells.parquet` overview and SpatialData shapes are decoded in
+  workers of their own, auto-contrast decodes and samples its tiles in them,
+  and zarrita's decompressors and string codecs run in the Zarr decode
+  workers. See [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
 - **Tests go in the same PR as the code.** A module without tests is not done.
@@ -390,6 +390,18 @@ Later additions:
   a chunk at a time (`getWholeArray`) instead of with zarrita's row-by-row copy,
   which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. If a
   worker fails, the chunk is decoded on the main thread.
+- **SpatialData shapes worker (2026-11-13).** Each `shapes.parquet` is decoded
+  in a worker of its own (`spatialDataShapes.worker.ts`). The worker fetches a
+  plain URL itself; a file inside a zipped store, or behind a custom fetcher,
+  is read on the main thread and handed over slice by slice, so the zip store
+  and its caches stay where they are. Shapes come back as columns
+  (`SpatialDataShapes`): ids, kinds, centroids, radii, ring areas, bounds, and
+  every outer ring in one `Float32Array`, all transferred. The main thread
+  keeps no object or typed array per shape: a table row first tries the shape
+  after the last one matched and builds an id `Map` only when that misses,
+  coordinates are scaled to µm when used, and outlines are built only for
+  cells in view. If the worker fails to start, the file is read on the main
+  thread.
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -1741,8 +1753,11 @@ planned in advance.
 #### Known Gaps
 
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
-- [ ] Shapes are read whole, not by viewport, and parsed on the main thread
-      (about 12 s for the 598,222-cell zip after a 97 MB download).
+- [ ] Shapes are read whole, not by viewport: spatialdata-io writes one row
+      group with no per-shape bounding boxes, so a viewport-scoped read needs
+      a spatially sorted companion file. Parsing moved to a worker on
+      2026-11-13 (see
+      [4.5](#45-rendering--decision-two-canvases-decode-off-the-main-thread)).
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
 - [x] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
       [Phase 7](#phase-7--anndata-h5ad)). Boolean `obs` columns were fixed on
@@ -4141,8 +4156,8 @@ Other gaps found in the review:
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
-      than the Xenium overview (Visium HD positions and barcode mappings,
-      SpatialData shapes), and the fetching and assembly in zarrita reads.
+      than the Xenium overview and SpatialData shapes (Visium HD positions and
+      barcode mappings), and the fetching and assembly in zarrita reads.
       h5wasm for H5AD, the Xenium H5 fallback and the standard Visium matrix
       moved to H5 file workers (2026-11-13). On the Xenium demo a Cell card's H5
       fallback (worker fetch, open in 1.35 s, first cell read in 1.2–1.3 s) left
@@ -4174,7 +4189,20 @@ Other gaps found in the review:
       from 90–113 ms to 47–51 ms, and a 94–98 ms task went. The table code that
       uses the decoded arrays still runs on the main thread, for both H5AD
       backends: the CSR scan for a gene (230–270 ms on the Visium table) and the
-      per-cell metadata (about 200 ms for 73,579 cells).
+      per-cell metadata (about 200 ms for 73,579 cells). SpatialData shapes
+      moved to a worker (2026-11-13). Profiles of the 598,222-cell 460-plex zip
+      loading until the gene search is ready, served from a local mirror of the
+      byte ranges the app reads (unminified production builds, headless
+      Chromium, two runs each): the SpatialData dataset code and hyparquet took
+      4.7–4.8 s of main-thread time, in stretches of up to 4.5 s, before the
+      change, and 116–126 ms after it; the loads finished in 15.4–15.8 s instead
+      of 20.2–20.3 s, with pixel-identical boundaries. Most of the old time was
+      per-shape objects, not the WKB parse (1.3 s in Node): with 600,000 shape
+      objects and rings on the heap, building the id `Map` took 1.5 s and
+      matching the table rows 1.1 s, against about 150 ms for the same `Map` in
+      an idle page. The table code still runs on the main thread: 5.6–5.9 s in
+      `h5adDataset` on this load, mostly counting distinct labels and building
+      per-cell metadata.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
@@ -4248,9 +4276,11 @@ Features:
       answers Range requests or the repository opens.
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and
       viewport-scoped shape reads. Partly done: the info drawer picks one image
-      at a time, and the primary table is read. Points are not read, and shapes
-      are read whole on the main thread, then filtered to the viewport; a
-      598,222-cell zip spends about 12 s parsing them (2026-11-13).
+      at a time, and the primary table is read. Points are not read. Shapes
+      are read whole, in a worker since 2026-11-13, then filtered to the
+      viewport. spatialdata-io's `shapes.parquet` cannot be read by viewport:
+      the 460-plex `cell_boundaries` is one row group of 598,222 rows with no
+      per-shape bounding-box column.
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
 - [x] Standard Visium (spots) from the original Phase 6

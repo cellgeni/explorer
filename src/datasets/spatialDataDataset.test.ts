@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { SpatialDataDataset, type SpatialDataImageRequest } from './spatialDataDataset'
-import { shapesFromRows, type SpatialDataShapesReader } from './spatialDataShapes'
+import {
+  shapesFromRows,
+  SpatialDataShapesBuilder,
+  type SpatialDataShapesReader,
+} from './spatialDataShapes'
 import { byteRangeFetcher, zipArchive, type ZipFixtureFile } from '../test/zipFixtures'
 
 const STORE_URL = 'https://example.test/sample.sdata.zarr'
@@ -101,6 +105,42 @@ describe('SpatialDataDataset', () => {
         transform: { scaleX: 0.5, scaleY: 0.5, translateX: 20, translateY: 10 },
       }),
     )
+  })
+
+  it('matches rows to shapes stored in another order and outlines region circles', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture()),
+      readShapes: shapesReaderFixture({
+        cells: [
+          { geometry: { type: 'Point', coordinates: [2.5, 0.5] }, radius: 1, id: 11n },
+          { geometry: { type: 'Point', coordinates: [0.5, 0.5] }, radius: 1, id: 10n },
+        ],
+      }),
+      openImage: imageOpenerFixture(),
+    })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => [cell.cellId, cell.position])).toEqual([
+      ['cell-a', { x: 1, y: 1 }],
+      ['cell-b', { x: 5, y: 1 }],
+    ])
+
+    const { elements } = await dataset.elements(bbox)
+    const outline =
+      elements[0]?.geometry.kind === 'polygon' ? elements[0].geometry.rings[0] : undefined
+    expect(elements.map((element) => element.id)).toEqual(['cell-a', 'cell-b'])
+    // A 32-segment polygon around the circle at (1, 1) with radius 2.
+    expect(outline).toHaveLength(32)
+    expect(outline?.[0]).toEqual({ x: 3, y: 1 })
+    // Cells still in view keep their element objects.
+    expect((await dataset.elements(bbox)).elements[0]).toBe(elements[0])
   })
 
   it('draws a polygon companion element instead of region circles', async () => {
@@ -360,13 +400,15 @@ describe('SpatialDataDataset long tables', () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
       fetcher: inMemoryZarrFetcher(longTableFixture(rows)),
-      readShapes: vi.fn(async () =>
-        Array.from({ length: rows }, (_value, index) => ({
-          id: String(index),
-          geometry: { kind: 'circle' as const, center: { x: index, y: 0 }, radius: 1 },
-          centroid: { x: index, y: 0 },
-        })),
-      ),
+      readShapes: vi.fn(async () => {
+        const shapes = new SpatialDataShapesBuilder()
+
+        for (let index = 0; index < rows; index += 1) {
+          shapes.addCircle(String(index), index, 0, 1)
+        }
+
+        return shapes.build()
+      }),
       openImage: imageOpenerFixture(),
     })
 

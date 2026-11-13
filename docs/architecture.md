@@ -14,7 +14,7 @@ files. Parsing happens in the browser:
 
 | Library                               | Used for                                                                                                             |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `hyparquet` + `hyparquet-compressors` | Parquet reads (the Xenium overview in a worker; Visium HD positions and barcode mappings, SpatialData shapes)        |
+| `hyparquet` + `hyparquet-compressors` | Parquet reads (the Xenium overview and SpatialData shapes in workers; Visium HD positions and barcode mappings)      |
 | `@duckdb/duckdb-wasm`                 | SQL over remote Parquet (Xenium cells, boundaries, transcripts; Visium HD per-cell mappings)                         |
 | `zarrita` + `@zarrita/storage`        | Zarr v2/v3, zipped Zarr, kerchunk references (Xenium matrix and transcripts, H5AD references, SpatialData, OME-Zarr) |
 | `icechunk-js`                         | Icechunk repositories as zarrita stores (H5AD companion repositories; AnnData, SpatialData, OME-Zarr in Icechunk)    |
@@ -355,6 +355,7 @@ their cards stayed on "Loading".
 | `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
 | `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One whole downloaded HDF5 file each: H5AD, the Xenium H5 fallback, the standard Visium matrix  |
 | `cellsOverview.worker.ts`        | `readCellsOverviewInWorker`      | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
+| `spatialDataShapes.worker.ts`    | `readSpatialDataShapesInWorker`  | SpatialData `shapes.parquet` files: decode them into transferred shape columns (one per read)  |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
 Visium) or fetches the file itself (the Xenium H5 fallback), writes them into
@@ -373,6 +374,15 @@ segmentation methods as strings, and the main thread builds the overview cells
 from them. The worker ends once it has answered, or when the load is aborted.
 With an option a worker cannot take (a custom fetcher, an in-memory file, a
 test reader) or no `Worker`, the same reader runs on the main thread.
+
+A SpatialData shapes worker decodes one `shapes.parquet` (WKB points and
+polygons) into columns: instance ids, kinds, centroids, radii, ring areas and
+bounds, and every outer ring in one `Float32Array`, all transferred. It
+fetches a plain URL itself; a file inside a zipped store, or one behind a
+custom fetcher, is read on the main thread and handed over slice by slice, so
+the zip store and its byte-range cache stay on the main thread. The worker
+ends once it has answered, or on abort. If it fails to start, or there is no
+`Worker`, the file is read on the main thread.
 
 Auto-contrast decodes and samples tiles off the main thread and gets back only
 the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile
@@ -395,8 +405,8 @@ instead of zarrita's row-by-row copy. If a worker fails, the chunk is decoded
 on the main thread with zarrita's codec; with no `Worker` the registry is left
 alone. OME-Zarr image chunk bytes are fetched on the main thread and decoded
 whole in the Zarr decode workers, which fall back to the main thread if they
-fail. Other hyparquet reads (Visium HD positions and barcode mappings,
-SpatialData shapes) run on the main thread.
+fail. Other hyparquet reads (Visium HD positions and barcode mappings) run on
+the main thread.
 
 ## Performance Budget
 

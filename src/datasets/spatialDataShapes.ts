@@ -1,31 +1,39 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
 import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
-import { affineScale, applyAffine, type Affine2D } from './spatialDataTransforms'
+import {
+  affineScale,
+  applyAffine,
+  IDENTITY_AFFINE,
+  type Affine2D,
+} from './spatialDataTransforms'
 
-export interface SpatialDataPoint {
-  readonly x: number
-  readonly y: number
-}
+export const SHAPE_CIRCLE = 0
+export const SHAPE_POLYGON = 1
 
-export type SpatialDataShapeGeometry =
-  | {
-      readonly kind: 'circle'
-      readonly center: SpatialDataPoint
-      readonly radius: number
-    }
-  | {
-      readonly kind: 'polygon'
-      // Outer ring as interleaved x, y. Holes, and all but the largest
-      // polygon of a MultiPolygon, are dropped. Float32 keeps a 600,000-cell
-      // segmentation (about 25 vertices a cell) near 120 MB.
-      readonly ring: Float32Array
-    }
-
-export interface SpatialDataShape {
-  readonly id: string
-  readonly geometry: SpatialDataShapeGeometry
-  readonly centroid: SpatialDataPoint
+// The shapes of one element as columns. A 600,000-cell segmentation is then a
+// few typed arrays, cheap to transfer from a worker and light on the main
+// thread's heap, instead of an object and a ring per cell.
+export interface SpatialDataShapes {
+  // Instance id per shape.
+  readonly ids: readonly string[]
+  // SHAPE_CIRCLE or SHAPE_POLYGON per shape.
+  readonly kinds: Uint8Array
+  // x, y per shape: a circle's centre, or the area-weighted centroid of a
+  // polygon's ring.
+  readonly centroids: Float64Array
+  // Circle radius per shape; 0 for polygons.
+  readonly radii: Float64Array
+  // Ring area per shape; NaN for circles.
+  readonly areas: Float64Array
+  // minX, minY, maxX, maxY per shape.
+  readonly bounds: Float64Array
+  // Polygon i's outer ring is coords[ringOffsets[i]] up to
+  // coords[ringOffsets[i + 1]], as interleaved x, y; circles have none. Holes,
+  // and all but the largest polygon of a MultiPolygon, are dropped. Float32
+  // keeps a 600,000-cell segmentation (about 25 vertices a cell) near 120 MB.
+  readonly ringOffsets: Uint32Array
+  readonly coords: Float32Array
 }
 
 export interface ReadSpatialDataShapesOptions {
@@ -41,7 +49,7 @@ export interface ReadSpatialDataShapesOptions {
 
 export type SpatialDataShapesReader = (
   options: ReadSpatialDataShapesOptions,
-) => Promise<readonly SpatialDataShape[]>
+) => Promise<SpatialDataShapes>
 
 interface GeoJsonGeometry {
   readonly type: string
@@ -144,9 +152,9 @@ export function shapesFromRows(
   rows: readonly Record<string, unknown>[],
   layout: SpatialDataShapesParquetLayout,
   affine: Affine2D,
-): readonly SpatialDataShape[] {
+): SpatialDataShapes {
   const radiusScale = affineScale(affine)
-  const shapes: SpatialDataShape[] = []
+  const shapes = new SpatialDataShapesBuilder()
 
   rows.forEach((row, rowIndex) => {
     const id =
@@ -154,30 +162,151 @@ export function shapesFromRows(
         ? instanceIdString(row[layout.index.column])
         : String(layout.index.start + rowIndex * layout.index.step)
     const geometry = row[layout.geometryColumn]
-
-    if (id === null) {
-      return
-    }
-
-    const radius =
-      layout.radiusColumn === undefined
-        ? undefined
-        : finiteNumber(row[layout.radiusColumn])
     const parsed =
       geometry instanceof Uint8Array
         ? wkbGeometry(geometry)
         : isGeoJsonGeometry(geometry)
           ? geoJsonGeometry(geometry)
           : null
-    const shape =
-      parsed === null ? null : placeShape(id, parsed, radius, affine, radiusScale)
 
-    if (shape !== null) {
-      shapes.push(shape)
+    if (id === null || parsed === null) {
+      return
     }
+
+    if (parsed.kind === 'polygon') {
+      shapes.addPolygon(id, parsed.ring, affine)
+      return
+    }
+
+    const center = applyAffine(affine, parsed.x, parsed.y)
+    const radius =
+      layout.radiusColumn === undefined
+        ? undefined
+        : finiteNumber(row[layout.radiusColumn])
+    shapes.addCircle(
+      id,
+      center.x,
+      center.y,
+      (radius ?? DEFAULT_CIRCLE_RADIUS) * radiusScale,
+    )
   })
 
-  return shapes
+  return shapes.build()
+}
+
+export class SpatialDataShapesBuilder {
+  private readonly ids: string[] = []
+  private readonly kinds: number[] = []
+  private readonly centroids: number[] = []
+  private readonly radii: number[] = []
+  private readonly areas: number[] = []
+  private readonly bounds: number[] = []
+  private readonly ringOffsets: number[] = [0]
+  private coords = new Float32Array(1024)
+  private coordCount = 0
+
+  addCircle(id: string, x: number, y: number, radius: number): void {
+    this.add(id, SHAPE_CIRCLE, x, y, radius, Number.NaN, [
+      x - radius,
+      y - radius,
+      x + radius,
+      y + radius,
+    ])
+  }
+
+  // Adds a polygon from its outer ring as interleaved x, y, placed by
+  // `affine`. Rings of fewer than three points are left out.
+  addPolygon(id: string, source: ArrayLike<number>, affine = IDENTITY_AFFINE): void {
+    if (source.length < 6) {
+      return
+    }
+
+    const start = this.coordCount
+    this.reserve(source.length)
+    const ring = this.coords.subarray(start, start + source.length)
+
+    for (let index = 0; index < source.length; index += 2) {
+      const point = applyAffine(affine, source[index] ?? 0, source[index + 1] ?? 0)
+      ring[index] = point.x
+      ring[index + 1] = point.y
+    }
+
+    this.coordCount += source.length
+    const centroid = ringCentroid(ring)
+    this.add(
+      id,
+      SHAPE_POLYGON,
+      centroid.x,
+      centroid.y,
+      0,
+      ringArea(ring),
+      ringBounds(ring),
+    )
+  }
+
+  build(): SpatialDataShapes {
+    return {
+      ids: this.ids,
+      kinds: Uint8Array.from(this.kinds),
+      centroids: Float64Array.from(this.centroids),
+      radii: Float64Array.from(this.radii),
+      areas: Float64Array.from(this.areas),
+      bounds: Float64Array.from(this.bounds),
+      ringOffsets: Uint32Array.from(this.ringOffsets),
+      coords: this.coords.slice(0, this.coordCount),
+    }
+  }
+
+  private add(
+    id: string,
+    kind: number,
+    x: number,
+    y: number,
+    radius: number,
+    area: number,
+    bounds: readonly number[],
+  ): void {
+    this.ids.push(id)
+    this.kinds.push(kind)
+    this.centroids.push(x, y)
+    this.radii.push(radius)
+    this.areas.push(area)
+    this.bounds.push(...bounds)
+    this.ringOffsets.push(this.coordCount)
+  }
+
+  private reserve(length: number): void {
+    if (this.coordCount + length <= this.coords.length) {
+      return
+    }
+
+    const grown = new Float32Array(
+      Math.max(this.coords.length * 2, this.coordCount + length),
+    )
+    grown.set(this.coords.subarray(0, this.coordCount))
+    this.coords = grown
+  }
+}
+
+// Polygon `index`'s outer ring, a view into `coords`; empty for a circle.
+export function shapeRing(shapes: SpatialDataShapes, index: number): Float32Array {
+  return shapes.coords.subarray(
+    shapes.ringOffsets[index] ?? 0,
+    shapes.ringOffsets[index + 1] ?? 0,
+  )
+}
+
+// Every column has a buffer of its own.
+export function spatialDataShapesTransferables(shapes: SpatialDataShapes): ArrayBuffer[] {
+  return [
+    shapes.kinds,
+    shapes.centroids,
+    shapes.radii,
+    shapes.areas,
+    shapes.bounds,
+    shapes.ringOffsets,
+    shapes.coords,
+  ].map((column) => column.buffer as ArrayBuffer)
 }
 
 export function instanceIdString(value: unknown): string | null {
@@ -201,44 +330,6 @@ export function instanceIdString(value: unknown): string | null {
 type ParsedGeometry =
   | { readonly kind: 'point'; readonly x: number; readonly y: number }
   | { readonly kind: 'polygon'; readonly ring: ArrayLike<number> }
-
-function placeShape(
-  id: string,
-  geometry: ParsedGeometry,
-  radius: number | undefined,
-  affine: Affine2D,
-  radiusScale: number,
-): SpatialDataShape | null {
-  if (geometry.kind === 'point') {
-    const center = applyAffine(affine, geometry.x, geometry.y)
-
-    return {
-      id,
-      geometry: {
-        kind: 'circle',
-        center,
-        radius: (radius ?? DEFAULT_CIRCLE_RADIUS) * radiusScale,
-      },
-      centroid: center,
-    }
-  }
-
-  const source = geometry.ring
-
-  if (source.length < 6) {
-    return null
-  }
-
-  const ring = new Float32Array(source.length)
-
-  for (let index = 0; index < source.length; index += 2) {
-    const point = applyAffine(affine, source[index] ?? 0, source[index + 1] ?? 0)
-    ring[index] = point.x
-    ring[index + 1] = point.y
-  }
-
-  return { id, geometry: { kind: 'polygon', ring }, centroid: ringCentroid(ring) }
-}
 
 function geoJsonGeometry(geometry: GeoJsonGeometry): ParsedGeometry | null {
   if (geometry.type === 'Point') {
@@ -312,7 +403,28 @@ export function ringArea(ring: ArrayLike<number>): number {
   return Math.abs(signedRingArea(ring))
 }
 
-function ringCentroid(ring: ArrayLike<number>): SpatialDataPoint {
+function ringBounds(ring: ArrayLike<number>): readonly number[] {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (let index = 0; index < ring.length; index += 2) {
+    const x = ring[index] ?? 0
+    const y = ring[index + 1] ?? 0
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
+  }
+
+  return [minX, minY, maxX, maxY]
+}
+
+function ringCentroid(ring: ArrayLike<number>): {
+  readonly x: number
+  readonly y: number
+} {
   const area = signedRingArea(ring)
   const count = ring.length / 2
 
