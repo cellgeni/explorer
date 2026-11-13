@@ -102,8 +102,9 @@ in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
 z-stack (such as Xenium `morphology.ome.tif` or Atera `morphology_3d/`),
 `Z plane` picks the plane shown; it opens at the middle plane. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
-Appearance when cells are available. Visium HD exposes cell and nucleus
-segmentation toggles there when segmented outputs are detected.
+Appearance when cells are available. `Nucleus boundaries` there draws Xenium
+`nucleus_boundaries.parquet` and Atera nuclei, and Visium HD exposes cell and
+nucleus segmentation toggles when segmented outputs are detected.
 
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.

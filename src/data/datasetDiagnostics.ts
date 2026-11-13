@@ -99,6 +99,7 @@ const XENIUM_REQUIRED_RANGE_FILES: readonly DatasetRoleFile[] = [
 
 const XENIUM_OPTIONAL_RANGE_FILES: readonly DatasetRoleFile[] = [
   { id: 'cell-boundaries', label: 'Cell boundaries', role: 'cellBoundaries' },
+  { id: 'nucleus-boundaries', label: 'Nucleus boundaries', role: 'nucleusBoundaries' },
   { id: 'transcripts', label: 'Transcripts', role: 'transcripts' },
   { id: 'transcripts-zarr', label: 'Transcript native LOD', role: 'transcriptsZarr' },
   { id: 'feature-matrix', label: 'Feature matrix', role: 'cellFeatureMatrix' },

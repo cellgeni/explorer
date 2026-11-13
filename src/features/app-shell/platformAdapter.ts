@@ -84,6 +84,9 @@ export interface AppPlatformAdapter {
     showCellBoundaries: boolean,
     showNucleusBoundaries: boolean,
   ): boolean
+  // Whether a boundary request reads cell outlines; when false only nuclei
+  // are read.
+  cellBoundaryLoadingEnabled(showCellBoundaries: boolean): boolean
   boundaryOverlayRequestKey(
     showCellBoundaries: boolean,
     showNucleusBoundaries: boolean,
@@ -104,6 +107,8 @@ export interface PlatformRoiDrawOptions {
   readonly visiumHdControlState: VisiumHdControlState
 }
 
+// Cell and nucleus outlines are separate DuckDB queries on one instance, which
+// runs one query at a time, so cell outlines are read only while shown.
 const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'xenium',
   labels: { embeddingElementPlural: 'cells' },
@@ -112,7 +117,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    nucleusBoundaries: false,
+    nucleusBoundaries: true,
     transcripts: true,
     cellTranscriptDistribution: true,
     transcriptGeneOnlyFilter: true,
@@ -121,9 +126,16 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
-  boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
-  boundaryOverlayRequestKey: (showCellBoundaries) =>
-    `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
+  boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
+    showCellBoundaries || showNucleusBoundaries,
+  cellBoundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  boundaryOverlayRequestKey: (showCellBoundaries, showNucleusBoundaries) => {
+    const enabled = showCellBoundaries || showNucleusBoundaries
+    const cell = showCellBoundaries ? 'cell' : 'no-cell'
+    const nucleus = showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
+
+    return `${enabled ? 'enabled' : 'disabled'}:${cell}:${nucleus}`
+  },
   geneExpressionOverlayEnabled: () => true,
   cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
   magicLensAvailability: (loadState) => ({
@@ -155,6 +167,7 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   effectiveTranscriptOverlay: (showTranscriptOverlay) => showTranscriptOverlay,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
     showCellBoundaries || showNucleusBoundaries,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: (showCellBoundaries, showNucleusBoundaries) => {
     const enabled = showCellBoundaries || showNucleusBoundaries
     const nucleus = showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
@@ -189,6 +202,7 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries, showNucleusBoundaries) =>
     showCellBoundaries || showNucleusBoundaries,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: (showCellBoundaries, showNucleusBoundaries) => {
     const enabled = showCellBoundaries || showNucleusBoundaries
     const nucleus = showNucleusBoundaries ? 'nucleus' : 'no-nucleus'
@@ -231,6 +245,7 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: () => false,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: () => 'disabled:no-nucleus',
   geneExpressionOverlayEnabled: () => true,
   cellBoundaryHoverEnabled: () => false,
@@ -262,6 +277,7 @@ const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: (showCellBoundaries) =>
     `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
   geneExpressionOverlayEnabled: () => true,
@@ -291,6 +307,7 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: (showCellBoundaries) =>
     `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
   geneExpressionOverlayEnabled: () => true,
@@ -320,6 +337,7 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
   featureLoadEnabled: () => false,
   effectiveTranscriptOverlay: () => false,
   boundaryLoadingEnabled: () => false,
+  cellBoundaryLoadingEnabled: () => true,
   boundaryOverlayRequestKey: () => 'disabled:no-nucleus',
   geneExpressionOverlayEnabled: () => false,
   cellBoundaryHoverEnabled: () => false,
@@ -573,7 +591,11 @@ export async function loadPlatformNucleusBoundaryElements(
 ): ReturnType<BoundaryElementsLoader> {
   const [baseUrl, bbox] = args
 
-  if (adapter.kind !== 'visium-hd' && adapter.kind !== 'atera') {
+  if (
+    adapter.kind !== 'visium-hd' &&
+    adapter.kind !== 'atera' &&
+    adapter.kind !== 'xenium'
+  ) {
     return { elements: [] }
   }
 

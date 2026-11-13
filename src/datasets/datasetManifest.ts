@@ -39,6 +39,7 @@ export const XENIUM_MANIFEST_FILE_DEFAULTS = {
   experiment: 'experiment.xenium',
   cells: 'cells.parquet',
   cellBoundaries: 'cell_boundaries.parquet',
+  nucleusBoundaries: 'nucleus_boundaries.parquet',
   transcripts: 'transcripts.parquet',
   transcriptsZarr: 'transcripts.zarr.zip',
   cellFeatureMatrix: 'cell_feature_matrix.zarr.zip',

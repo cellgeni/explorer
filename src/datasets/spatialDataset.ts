@@ -105,7 +105,7 @@ export interface SegmentationInfo {
   readonly id: string
   readonly kind: 'cell' | 'nucleus'
   readonly label: string
-  readonly sourceKind: 'geojson' | 'tiff' | 'zarr'
+  readonly sourceKind: 'geojson' | 'tiff' | 'zarr' | 'parquet'
   readonly path: string
   readonly annotated?: boolean
 }

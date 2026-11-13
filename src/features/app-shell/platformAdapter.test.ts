@@ -200,15 +200,23 @@ describe('platformAdapter', () => {
     expect(adapter.labels.embeddingElementPlural).toBe('cells')
     expect(adapter.capabilities).toMatchObject({
       annotations: true,
-      nucleusBoundaries: false,
+      nucleusBoundaries: true,
       transcripts: true,
       cellTranscriptDistribution: true,
       transcriptGeneOnlyFilter: true,
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(true)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(false)
-    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:no-nucleus')
+    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
+    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    // Cell outlines are read only while shown, so toggling them changes the key.
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
+    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:cell:nucleus')
+    expect(adapter.boundaryOverlayRequestKey(false, true)).toBe('enabled:no-cell:nucleus')
+    expect(adapter.boundaryOverlayRequestKey(false, false)).toBe(
+      'disabled:no-cell:no-nucleus',
+    )
     expect(adapter.geneExpressionOverlayEnabled(25)).toBe(true)
     expect(adapter.cellBoundaryHoverEnabled(false)).toBe(false)
     expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
@@ -419,6 +427,40 @@ describe('platformAdapter', () => {
     )
   })
 
+  it('reads Xenium nuclei from the dataset when it lists nucleus outlines', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'xenium')
+    const nucleusElements = [
+      {
+        id: 'aaaaaaaa-1',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const dataset = {
+      meta: vi.fn(async () => ({
+        capabilities: { cellBoundaries: true },
+        segmentations: [{ kind: 'cell' }, { kind: 'nucleus' }],
+      })),
+      segmentationElements: vi.fn(async () => nucleusElements),
+    }
+
+    await expect(
+      loadPlatformNucleusBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      ),
+    ).resolves.toEqual({ elements: nucleusElements })
+    expect(dataset.segmentationElements).toHaveBeenCalledWith('nucleus', selection.bbox)
+  })
+
   it('does not request boundary elements for H5AD datasets', async () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'h5ad')
     const loadBoundaryElements = vi.fn()
@@ -571,6 +613,7 @@ describe('platformAdapter', () => {
     })
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
     expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(true)
     expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:nucleus')
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: false,

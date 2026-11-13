@@ -165,13 +165,16 @@ describe('runDatasetDiagnostics', () => {
     const report = await runDatasetDiagnostics('https://example.test/output', {
       fetcher: vi.fn(async () => new Response('{}', { status: 200 })),
       rangeValidator: vi.fn(async (url: string) => {
-        if (url.endsWith('cell_boundaries.parquet')) {
+        if (/(cell|nucleus)_boundaries\.parquet$/.test(url)) {
           throw new Error('HTTP 404')
         }
       }),
     })
 
     expect(report.checks.find((check) => check.id === 'cell-boundaries')?.status).toBe(
+      'warning',
+    )
+    expect(report.checks.find((check) => check.id === 'nucleus-boundaries')?.status).toBe(
       'warning',
     )
     expect(summarizeDatasetDiagnostics(report)).toContain('warnings')

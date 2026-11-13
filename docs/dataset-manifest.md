@@ -127,6 +127,7 @@ All entries are optional. Leave one out to use the standard name.
 | `experiment`            | `experiment.xenium`                 | Optional with a manifest. Supplies the pixel size and, when `morphology` is not set, the morphology image paths |
 | `cells`                 | `cells.parquet`                     | Required to load, at whatever path                                                                              |
 | `cellBoundaries`        | `cell_boundaries.parquet`           |                                                                                                                 |
+| `nucleusBoundaries`     | `nucleus_boundaries.parquet`        |                                                                                                                 |
 | `transcripts`           | `transcripts.parquet`               |                                                                                                                 |
 | `transcriptsZarr`       | `transcripts.zarr.zip`              |                                                                                                                 |
 | `cellFeatureMatrix`     | `cell_feature_matrix.zarr.zip`      |                                                                                                                 |
