@@ -272,6 +272,12 @@ written by `spatialdata` (Zarr v2 or v3). Enter the store root URL in
 https://bucket.example/path/to/sample.sdata.zarr
 ```
 
+A store zipped into one file (`sample.zarr.zip`, with the store at the top of
+the zip or in one folder inside it) can be entered the same way. Zip entries
+are read by byte range, so storing them uncompressed (`zip -0`, or
+`zipfile.ZIP_STORED`) lets the app read GeoParquet shapes in parts; deflated
+entries are downloaded whole.
+
 The store is detected from `spatialdata_attrs` in the root `.zattrs` or
 `zarr.json`. It must be written with consolidated metadata (`zmetadata`,
 `.zmetadata`, or `consolidated_metadata` in the root `zarr.json`), which

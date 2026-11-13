@@ -119,7 +119,8 @@ Enter a source in the `Dataset or image URL` field:
   `obsm` coordinate matrix. Files over 300 MiB need a `.h5ad.json` reference
   or `.h5ad.icechunk` repository next to them.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
-  table annotating a shapes or labels element, and optionally image elements.
+  table annotating a shapes or labels element, and optionally image elements;
+  or the same store zipped as one `.zarr.zip` file.
 - Image-only: direct OME-TIFF, TIFF, QPTIFF, OME-Zarr, or validated NDPI URL.
 - Icechunk: a `.icechunk` repository URL holding AnnData, SpatialData (images,
   labels, and tables), or an OME-Zarr image.

@@ -1734,7 +1734,23 @@ async function hydrateZarrAnnDataGroup(
     }
 
     if (childKind === 'array') {
-      children.set(childName, await hydrateZarrAnnDataDataset(location, childPath))
+      const dataset = await hydrateZarrAnnDataDataset(location, childPath).catch(
+        (error: unknown) => {
+          // uns holds analysis results the viewer mostly ignores, such as
+          // scanpy's rank_genes_groups record arrays, whose structured dtype
+          // zarrita cannot open. Such arrays are left out rather than failing
+          // the table.
+          if (childPath.startsWith('uns/')) {
+            return null
+          }
+
+          throw error
+        },
+      )
+
+      if (dataset !== null) {
+        children.set(childName, dataset)
+      }
     }
   }
 
@@ -2308,19 +2324,23 @@ async function readObservationTracks(
 
       if (isNumericArray(entityValue)) {
         const values = numericArrayToNumbers(readNumericArray(entityValue, `/obs/${key}`))
-        const finiteValues = values.filter(Number.isFinite)
+        // A loop, not Math.min(...values): spreading a column of more than
+        // about 120,000 cells overflows the call stack.
+        let min = Number.POSITIVE_INFINITY
+        let max = Number.NEGATIVE_INFINITY
 
-        if (finiteValues.length === 0) {
+        for (const value of values) {
+          if (Number.isFinite(value)) {
+            min = Math.min(min, value)
+            max = Math.max(max, value)
+          }
+        }
+
+        if (min > max) {
           continue
         }
 
-        continuousTracks.push({
-          id: key,
-          label: key,
-          values,
-          min: Math.min(...finiteValues),
-          max: Math.max(...finiteValues),
-        })
+        continuousTracks.push({ id: key, label: key, values, min, max })
         continue
       }
 

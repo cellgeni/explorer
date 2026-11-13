@@ -22,6 +22,7 @@ import { ImageOnlyDataset } from './imageOnlyDataset'
 import { SpatialDataDataset } from './spatialDataDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
 
 describe('spatial dataset detection', () => {
   it('detects Xenium from experiment.xenium', async () => {
@@ -1021,6 +1022,90 @@ describe('Icechunk repositories', () => {
 
     expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
     await expect((dataset as AnnDataH5adDataset).overview()).resolves.toHaveLength(6)
+  })
+
+  it('detects SpatialData in a zip, at its root or in a store folder', async () => {
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          'https://example.test/zips/v3.zarr.zip',
+          zipArchive([
+            {
+              name: 'v3.zarr/zarr.json',
+              data: json({
+                zarr_format: 3,
+                node_type: 'group',
+                attributes: { spatialdata_attrs: { version: '0.2' } },
+              }),
+            },
+          ]),
+        ],
+        [
+          'https://example.test/zips/v2.zip',
+          zipArchive([
+            { name: '.zgroup', data: json({ zarr_format: 2 }) },
+            { name: '.zattrs', data: json({ spatialdata_attrs: { version: '0.1' } }) },
+          ]),
+        ],
+        [
+          // No root attributes, as some writers leave them out.
+          'https://example.test/zips/bare.zarr.zip',
+          zipArchive([
+            { name: 'bare.zarr/.zgroup', data: json({ zarr_format: 2 }) },
+            { name: 'bare.zarr/tables/.zgroup', data: json({ zarr_format: 2 }) },
+            { name: 'bare.zarr/shapes/.zgroup', data: json({ zarr_format: 2 }) },
+          ]),
+        ],
+        [
+          'https://example.test/zips/image.zarr.zip',
+          zipArchive([
+            {
+              name: 'image.zarr/.zattrs',
+              data: json({ multiscales: [{ datasets: [{ path: '0' }] }] }),
+            },
+            { name: 'image.zarr/labels/.zgroup', data: json({ zarr_format: 2 }) },
+          ]),
+        ],
+      ]),
+    )
+
+    await expect(
+      detectSpatialDataset('https://example.test/zips/v3.zarr.zip', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      spatialDataUrl: 'https://example.test/zips/v3.zarr.zip',
+      checked: [
+        expect.objectContaining({ path: 'store.zip', ok: true }),
+        expect.objectContaining({ path: 'v3.zarr/zarr.json in the zip (SpatialData)' }),
+      ],
+    })
+    await expect(
+      detectSpatialDataset('https://example.test/zips/v2.zip', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      spatialDataUrl: 'https://example.test/zips/v2.zip',
+    })
+    await expect(
+      detectSpatialDataset('https://example.test/zips/bare.zarr.zip', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'spatialdata',
+      checked: [
+        expect.objectContaining({ path: 'store.zip' }),
+        expect.objectContaining({
+          path: 'bare.zarr/ in the zip (SpatialData shapes, tables)',
+        }),
+      ],
+    })
+    await expect(
+      detectSpatialDataset('https://example.test/zips/image.zarr.zip', { fetcher }),
+    ).rejects.toThrow('holds a Zarr store (image.zarr/.zattrs) that is not SpatialData')
+    await expect(
+      detectSpatialDataset('https://example.test/zips/missing.zarr.zip', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'unknown',
+      checked: [expect.objectContaining({ path: 'store.zip', ok: false, status: 404 })],
+    })
   })
 
   it('detects SpatialData and OME-Zarr images in Icechunk repositories', async () => {

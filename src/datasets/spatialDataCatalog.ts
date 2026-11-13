@@ -6,6 +6,8 @@ import {
   type SpatialDataCoordinateTransform,
 } from './spatialDataTransforms'
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
+import type { ZippedZarrStore } from '../zarr/zarrZipStore'
+import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import {
   consolidatedZarrStore,
   createZarrFetchStore,
@@ -139,12 +141,36 @@ export function isSpatialDataRootMetadata(value: unknown): boolean {
   return !SPATIALDATA_ELEMENT_ATTRIBUTE_KEYS.some((key) => key in attrs)
 }
 
+export interface OpenedSpatialDataStore {
+  readonly store: SpatialDataStore
+  readonly zarrFormat: 2 | 3
+  // Set for a zipped store, whose Parquet files (shapes, points) are read from
+  // the zip instead of by URL.
+  readonly zip?: ZippedZarrStore
+}
+
 // An Icechunk repository's snapshot lists every node's metadata, so it serves
 // as consolidated metadata.
 export async function openSpatialDataStore(
   url: string,
   options: { readonly fetcher?: typeof fetch } = {},
-): Promise<{ readonly store: SpatialDataStore; readonly zarrFormat: 2 | 3 }> {
+): Promise<OpenedSpatialDataStore> {
+  if (isZarrZipUrl(url)) {
+    const { openZippedZarrStore } = await import('../zarr/zarrZipStore')
+    const zip = await openZippedZarrStore(url, options)
+    const consolidated = await readConsolidatedZarrMetadata(zip.store)
+
+    if (consolidated === null) {
+      throw new SpatialDataConsolidatedMetadataError(url)
+    }
+
+    return {
+      store: spatialDataStore(zip.store, consolidated.knownMetadata),
+      zarrFormat: consolidated.zarrFormat,
+      zip,
+    }
+  }
+
   if (isIcechunkUrl(url)) {
     const { openIcechunkRepository } = await import('../zarr/icechunkStore')
     const repository = await openIcechunkRepository(url, options)

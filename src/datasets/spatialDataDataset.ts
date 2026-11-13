@@ -29,6 +29,7 @@ import {
   type AnnDataObsAccess,
   type H5adLoadProgressReporter,
 } from './h5adDataset'
+import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import {
   describeMissingChunks,
   openSpatialDataStore,
@@ -43,6 +44,7 @@ import {
 import {
   instanceIdString,
   readSpatialDataShapes,
+  ringArea,
   type SpatialDataShape,
   type SpatialDataShapesReader,
 } from './spatialDataShapes'
@@ -55,7 +57,6 @@ import {
   estimateUnitsFromVisiumSpots,
   formatSpatialDataUnits,
   overrideSpatialDataUnits,
-  polygonArea,
   UNKNOWN_SPATIALDATA_UNITS,
   type SpatialDataUnits,
 } from './spatialDataUnits'
@@ -127,6 +128,8 @@ export interface SpatialDataSummary {
 interface SpatialDataState {
   readonly store: SpatialDataStore
   readonly zarrFormat: 2 | 3
+  // Set for a zipped store; its Parquet files are read from the zip.
+  readonly zip?: ZippedZarrStore
   readonly catalog: SpatialDataCatalog
   readonly view: SpatialDataView
   readonly table: AnnDataH5adDataset | null
@@ -144,10 +147,14 @@ type RawPlacement =
   | { readonly kind: 'point'; readonly x: number; readonly y: number }
   | null
 
-interface BoundaryIndexEntry {
-  readonly id: string
-  readonly bbox: BBox
-  readonly element: SpatialElement
+// Cell outlines for the boundary layer as typed rings; elements are built
+// only for the cells a viewport request returns.
+interface BoundaryIndex {
+  readonly ids: readonly string[]
+  // Interleaved x, y in µm.
+  readonly rings: readonly Float32Array[]
+  // minX, minY, maxX, maxY per cell, in µm.
+  readonly bounds: Float64Array
 }
 
 const DEFAULT_SPATIALDATA_UNITS: UnitsDescriptor = {
@@ -178,11 +185,15 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private readonly openLabels: SpatialDataLabelsOpener
   private statePromise: Promise<SpatialDataState> | null = null
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
-  private boundaryIndexPromise: Promise<readonly BoundaryIndexEntry[]> | null = null
+  private boundaryIndexPromise: Promise<BoundaryIndex> | null = null
   private readonly labelReaders = new Map<string, Promise<SpatialDataLabelsReader>>()
   // Cell elements for cached label rings, so unchanged cells keep the same
   // objects across viewport requests.
   private readonly labelElementsByRing = new WeakMap<Float64Array, SpatialElement>()
+  // Shape elements of the last viewport request, reused by the next so cells
+  // still in view keep the same objects. Only the cells in view are kept:
+  // building every outline at once costs gigabytes for large segmentations.
+  private shapeElementsByRing = new Map<Float32Array, SpatialElement>()
   // Filled while the table resolves row coordinates; shapes are in µm.
   private readonly regionShapeByCellId = new Map<string, SpatialDataShape>()
   private readonly cellIdByInstanceId = new Map<string, string>()
@@ -318,13 +329,29 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return { elements: await this.labelElements(source.entry, bbox) }
     }
 
-    const index = await this.boundaryIndex()
+    const { ids, rings, bounds } = await this.boundaryIndex()
+    const previous = this.shapeElementsByRing
+    const next = new Map<Float32Array, SpatialElement>()
 
-    return {
-      elements: index
-        .filter((entry) => bboxesIntersect(entry.bbox, bbox))
-        .map((entry) => entry.element),
-    }
+    ids.forEach((id, index) => {
+      const ring = rings[index]
+      const offset = index * 4
+
+      if (
+        ring === undefined ||
+        (bounds[offset] ?? 0) > bbox.maxX ||
+        (bounds[offset + 1] ?? 0) > bbox.maxY ||
+        (bounds[offset + 2] ?? 0) < bbox.minX ||
+        (bounds[offset + 3] ?? 0) < bbox.minY
+      ) {
+        return
+      }
+
+      next.set(ring, previous.get(ring) ?? ringElement(id, ring))
+    })
+
+    this.shapeElementsByRing = next
+    return { elements: Array.from(next.values()) }
   }
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
@@ -461,7 +488,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   private async readState(): Promise<SpatialDataState> {
     this.onProgress?.('SpatialData metadata loading')
-    const { store, zarrFormat } = await openSpatialDataStore(
+    const { store, zarrFormat, zip } = await openSpatialDataStore(
       this.url,
       this.storeFetcher === undefined ? {} : { fetcher: this.storeFetcher },
     )
@@ -511,7 +538,15 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       this.resolvedUnits = staticUnits ?? UNKNOWN_SPATIALDATA_UNITS
     }
 
-    return { store, zarrFormat, catalog, view, table, staticUnits }
+    return {
+      store,
+      zarrFormat,
+      ...(zip === undefined ? {} : { zip }),
+      catalog,
+      view,
+      table,
+      staticUnits,
+    }
   }
 
   private describeTableError(
@@ -700,7 +735,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
           .slice(0, 2_000)
           .map((shape) =>
             shape.geometry.kind === 'polygon'
-              ? polygonArea(shape.geometry.rings[0] ?? [])
+              ? ringArea(shape.geometry.ring)
               : Number.NaN,
           ),
       )
@@ -719,7 +754,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
           ? [
               {
                 micrometersSquared: numericOrNaN(areas[row]),
-                unitsSquared: polygonArea(placement.shape.geometry.rings[0] ?? []),
+                unitsSquared: ringArea(placement.shape.geometry.ring),
               },
             ]
           : [],
@@ -834,8 +869,19 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     affine: Affine2D,
   ): Promise<readonly SpatialDataShape[]> {
     this.onProgress?.(`SpatialData shapes ${entry.element.name} loading`)
+    const path = `${entry.element.path}/shapes.parquet`
+    const { zip } = await this.state()
+    const file = zip?.file(path)
+
+    if (file === null) {
+      throw new Error(
+        `SpatialData shapes ${entry.element.name}: ${path} is missing from the zip.`,
+      )
+    }
+
     const shapes = await this.readShapes({
-      url: this.elementUrl(`${entry.element.path}/shapes.parquet`),
+      url: this.elementUrl(path),
+      ...(file === undefined ? {} : { file }),
       affine,
       fetcher: this.fetcher,
     })
@@ -963,7 +1009,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return entry === undefined ? null : { kind: 'shapes', entry }
   }
 
-  private boundaryIndex(): Promise<readonly BoundaryIndexEntry[]> {
+  private boundaryIndex(): Promise<BoundaryIndex> {
     if (this.boundaryIndexPromise === null) {
       this.boundaryIndexPromise = this.readBoundaryIndex().catch((error: unknown) => {
         this.boundaryIndexPromise = null
@@ -974,12 +1020,12 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return this.boundaryIndexPromise
   }
 
-  private async readBoundaryIndex(): Promise<readonly BoundaryIndexEntry[]> {
+  private async readBoundaryIndex(): Promise<BoundaryIndex> {
     const { view } = await this.state()
     const source = await this.boundarySource()
 
     if (source?.kind !== 'shapes') {
-      return []
+      return { ids: [], rings: [], bounds: new Float64Array(0) }
     }
 
     const boundary = source.entry
@@ -993,26 +1039,23 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
             scaleAffine(boundary.affine, micrometersPerUnit),
           ),
         )
-    const index: BoundaryIndexEntry[] = []
+    const ids: string[] = []
+    const rings: Float32Array[] = []
+    const bounds = new Float64Array(shapesByCellId.size * 4)
 
     for (const [cellId, shape] of shapesByCellId) {
       const ring = boundaryRing(shape)
 
-      if (ring.length < 3) {
+      if (ring.length < 6) {
         continue
       }
 
-      index.push({
-        id: cellId,
-        bbox: bboxForRing(ring),
-        element: {
-          id: cellId,
-          geometry: { kind: 'polygon', rings: [ring] },
-        },
-      })
+      writeRingBounds(ring, bounds, ids.length * 4)
+      ids.push(cellId)
+      rings.push(ring)
     }
 
-    return index
+    return { ids, rings, bounds: bounds.subarray(0, ids.length * 4) }
   }
 
   private companionShapesByCellId(
@@ -1111,7 +1154,7 @@ function scaleShape(shape: SpatialDataShape, scale: number): SpatialDataShape {
           }
         : {
             kind: 'polygon',
-            rings: shape.geometry.rings.map((ring) => ring.map(point)),
+            ring: shape.geometry.ring.map((value) => value * scale),
           },
   }
 }
@@ -1169,49 +1212,52 @@ function planarTransformFromAffine(affine: Affine2D): OmeZarrPlanarTransform {
   }
 }
 
-function boundaryRing(shape: SpatialDataShape): readonly DataPoint[] {
+function boundaryRing(shape: SpatialDataShape): Float32Array {
   if (shape.geometry.kind === 'polygon') {
-    return (shape.geometry.rings[0] ?? []).map((point) => dataPoint(point.x, point.y))
+    return shape.geometry.ring
   }
 
   const { center, radius } = shape.geometry
-  return Array.from({ length: CIRCLE_BOUNDARY_SEGMENTS }, (_value, index) => {
+  const ring = new Float32Array(CIRCLE_BOUNDARY_SEGMENTS * 2)
+
+  for (let index = 0; index < CIRCLE_BOUNDARY_SEGMENTS; index += 1) {
     const angle = (2 * Math.PI * index) / CIRCLE_BOUNDARY_SEGMENTS
-    return dataPoint(
-      center.x + radius * Math.cos(angle),
-      center.y + radius * Math.sin(angle),
-    )
-  })
+    ring[index * 2] = center.x + radius * Math.cos(angle)
+    ring[index * 2 + 1] = center.y + radius * Math.sin(angle)
+  }
+
+  return ring
 }
 
-function bboxForRing(ring: readonly DataPoint[]): BBox {
+function writeRingBounds(ring: Float32Array, bounds: Float64Array, offset: number): void {
   let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
   let maxY = Number.NEGATIVE_INFINITY
 
-  for (const point of ring) {
-    minX = Math.min(minX, point.x)
-    maxX = Math.max(maxX, point.x)
-    minY = Math.min(minY, point.y)
-    maxY = Math.max(maxY, point.y)
+  for (let index = 0; index < ring.length; index += 2) {
+    const x = ring[index] ?? 0
+    const y = ring[index + 1] ?? 0
+    minX = Math.min(minX, x)
+    minY = Math.min(minY, y)
+    maxX = Math.max(maxX, x)
+    maxY = Math.max(maxY, y)
   }
 
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
+  bounds[offset] = minX
+  bounds[offset + 1] = minY
+  bounds[offset + 2] = maxX
+  bounds[offset + 3] = maxY
 }
 
-function bboxesIntersect(left: BBox, right: BBox): boolean {
-  return (
-    left.minX <= right.maxX &&
-    left.maxX >= right.minX &&
-    left.minY <= right.maxY &&
-    left.maxY >= right.minY
-  )
+function ringElement(id: string, ring: Float32Array): SpatialElement {
+  const points: DataPoint[] = []
+
+  for (let index = 0; index < ring.length; index += 2) {
+    points.push(dataPoint(ring[index] ?? 0, ring[index + 1] ?? 0))
+  }
+
+  return { id, geometry: { kind: 'polygon', rings: [points] } }
 }
 
 function unionBboxes(boxes: readonly BBox[]): BBox {
