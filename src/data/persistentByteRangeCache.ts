@@ -1,5 +1,5 @@
 export const DEFAULT_BYTE_RANGE_CACHE_NAME = 'cellgeni-byte-range-cache'
-export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 1
+export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 2
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_BYTES = 256 * 1024 * 1024
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRIES = 20_000
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRY_BYTES = 8 * 1024 * 1024
@@ -8,7 +8,15 @@ export const PARQUET_FOOTER_CACHE_NAMESPACE = 'parquet-footer'
 export const TIFF_TILE_CACHE_NAMESPACE = 'tiff-tile'
 export const ZARR_ZIP_CACHE_NAMESPACE = 'zarr-zip'
 
-const BYTE_RANGE_STORE_NAME = 'byte-ranges'
+// Each range's bytes, its size and last access, and the cache's totals live in
+// separate stores, so a write can check the limits and pick the least recently
+// used ranges without reading any cached bytes.
+const BYTES_STORE_NAME = 'range-bytes'
+const ENTRIES_STORE_NAME = 'range-entries'
+const TOTALS_STORE_NAME = 'range-totals'
+const BYTE_RANGE_STORE_NAMES = [BYTES_STORE_NAME, ENTRIES_STORE_NAME, TOTALS_STORE_NAME]
+const LAST_ACCESSED_INDEX_NAME = 'lastAccessed'
+const TOTALS_KEY = 'totals'
 
 export interface ByteRangeCacheKey {
   readonly namespace: string
@@ -32,15 +40,20 @@ export interface IndexedDbByteRangeCacheOptions {
   readonly now?: () => number
 }
 
-interface ByteRangeRecord {
+interface ByteRangeBytesRecord {
   readonly id: string
-  readonly namespace: string
-  readonly url: string
-  readonly start: number
-  readonly end: number
+  readonly bytes: ArrayBuffer
+}
+
+interface ByteRangeEntryRecord {
+  readonly id: string
   readonly byteLength: number
   readonly lastAccessed: number
-  readonly bytes: ArrayBuffer
+}
+
+interface ByteRangeTotals {
+  readonly entries: number
+  readonly bytes: number
 }
 
 export interface FetchByteRangeWithCacheOptions {
@@ -178,9 +191,10 @@ class IndexedDbByteRangeCache implements PersistentByteRangeCache {
 
   async read(key: ByteRangeCacheKey): Promise<ArrayBuffer | null> {
     const db = await this.dbPromise
-    const transaction = db.transaction(BYTE_RANGE_STORE_NAME, 'readonly')
-    const record = await requestToPromise<ByteRangeRecord | undefined>(
-      transaction.objectStore(BYTE_RANGE_STORE_NAME).get(byteRangeCacheRecordId(key)),
+    const id = byteRangeCacheRecordId(key)
+    const transaction = db.transaction(BYTES_STORE_NAME, 'readonly')
+    const record = await requestToPromise<ByteRangeBytesRecord | undefined>(
+      transaction.objectStore(BYTES_STORE_NAME).get(id),
     )
     await transactionDone(transaction)
 
@@ -188,10 +202,12 @@ class IndexedDbByteRangeCache implements PersistentByteRangeCache {
       return null
     }
 
-    void this.touch(record).catch(noop)
+    void this.touch(id).catch(noop)
     return copyToArrayBuffer(record.bytes)
   }
 
+  // Stores the range and evicts the least recently used ones over the limits in
+  // one transaction, so tabs writing at the same time keep the totals right.
   async write(key: ByteRangeCacheKey, bytes: Uint8Array | ArrayBuffer): Promise<void> {
     const byteLength = bytes.byteLength
 
@@ -200,74 +216,78 @@ class IndexedDbByteRangeCache implements PersistentByteRangeCache {
     }
 
     const db = await this.dbPromise
-    const transaction = db.transaction(BYTE_RANGE_STORE_NAME, 'readwrite')
-    const store = transaction.objectStore(BYTE_RANGE_STORE_NAME)
-    const record: ByteRangeRecord = {
-      id: byteRangeCacheRecordId(key),
-      namespace: key.namespace,
-      url: key.url,
-      start: key.start,
-      end: key.end,
-      byteLength,
-      lastAccessed: this.now(),
-      bytes: copyToArrayBuffer(bytes),
-    }
+    const id = byteRangeCacheRecordId(key)
+    const transaction = db.transaction(BYTE_RANGE_STORE_NAMES, 'readwrite')
+    const entries = transaction.objectStore(ENTRIES_STORE_NAME)
+    const totalsStore = transaction.objectStore(TOTALS_STORE_NAME)
+    const bytesRecord: ByteRangeBytesRecord = { id, bytes: copyToArrayBuffer(bytes) }
+    const entry: ByteRangeEntryRecord = { id, byteLength, lastAccessed: this.now() }
 
-    store.put(record)
+    transaction.objectStore(BYTES_STORE_NAME).put(bytesRecord)
+    const [totals, replaced] = await Promise.all([
+      requestToPromise<ByteRangeTotals | undefined>(totalsStore.get(TOTALS_KEY)),
+      requestToPromise<ByteRangeEntryRecord | undefined>(entries.get(id)),
+    ])
+    entries.put(entry)
+    totalsStore.put(
+      await this.evictOverLimits(transaction, {
+        entries: (totals?.entries ?? 0) + (replaced === undefined ? 1 : 0),
+        bytes: (totals?.bytes ?? 0) - (replaced?.byteLength ?? 0) + byteLength,
+      }),
+      TOTALS_KEY,
+    )
     await transactionDone(transaction)
-    await this.evict(db)
   }
 
-  private async touch(record: ByteRangeRecord): Promise<void> {
+  private async touch(id: string): Promise<void> {
     const db = await this.dbPromise
-    const transaction = db.transaction(BYTE_RANGE_STORE_NAME, 'readwrite')
+    const transaction = db.transaction(ENTRIES_STORE_NAME, 'readwrite')
+    const lastAccessed = this.now()
+    const request = transaction.objectStore(ENTRIES_STORE_NAME).openCursor(id)
 
-    transaction.objectStore(BYTE_RANGE_STORE_NAME).put({
-      ...record,
-      lastAccessed: this.now(),
-    })
+    request.onsuccess = () => {
+      const cursor = request.result
+
+      // A range evicted since it was read stays evicted.
+      if (cursor !== null) {
+        cursor.update({ ...(cursor.value as ByteRangeEntryRecord), lastAccessed })
+      }
+    }
     await transactionDone(transaction)
   }
 
-  private async evict(db: IDBDatabase): Promise<void> {
-    const records = await readAllByteRangeRecords(db)
-    let totalBytes = 0
+  // Deletes ranges oldest access first until the totals are within the limits,
+  // reading only the small entry records, and returns the new totals.
+  private async evictOverLimits(
+    transaction: IDBTransaction,
+    totals: ByteRangeTotals,
+  ): Promise<ByteRangeTotals> {
+    let { entries, bytes } = totals
 
-    for (const record of records) {
-      totalBytes += record.byteLength
+    if (entries <= this.maxEntries && bytes <= this.maxBytes) {
+      return totals
     }
 
-    if (records.length <= this.maxEntries && totalBytes <= this.maxBytes) {
-      return
+    const bytesStore = transaction.objectStore(BYTES_STORE_NAME)
+    const request = transaction
+      .objectStore(ENTRIES_STORE_NAME)
+      .index(LAST_ACCESSED_INDEX_NAME)
+      .openCursor()
+    let cursor = await requestToPromise(request)
+
+    while (cursor !== null && (entries > this.maxEntries || bytes > this.maxBytes)) {
+      const entry = cursor.value as ByteRangeEntryRecord
+
+      bytesStore.delete(entry.id)
+      cursor.delete()
+      entries -= 1
+      bytes -= entry.byteLength
+      cursor.continue()
+      cursor = await requestToPromise(request)
     }
 
-    const oldestFirst = [...records].sort((a, b) => a.lastAccessed - b.lastAccessed)
-    const idsToDelete: string[] = []
-
-    for (const record of oldestFirst) {
-      if (
-        records.length - idsToDelete.length <= this.maxEntries &&
-        totalBytes <= this.maxBytes
-      ) {
-        break
-      }
-
-      idsToDelete.push(record.id)
-      totalBytes -= record.byteLength
-    }
-
-    if (idsToDelete.length === 0) {
-      return
-    }
-
-    const transaction = db.transaction(BYTE_RANGE_STORE_NAME, 'readwrite')
-    const store = transaction.objectStore(BYTE_RANGE_STORE_NAME)
-
-    for (const id of idsToDelete) {
-      store.delete(id)
-    }
-
-    await transactionDone(transaction)
+    // Every range was deleted, so the totals are zero whatever they said.
+    return cursor === null ? { entries: 0, bytes: 0 } : { entries, bytes }
   }
 }
 
@@ -331,36 +351,59 @@ async function openByteRangeDatabase(
 ): Promise<IDBDatabase> {
   return await new Promise((resolve, reject) => {
     const request = indexedDb.open(databaseName, version)
+    let blocked = false
 
     request.onupgradeneeded = () => {
       const db = request.result
-      const store = db.objectStoreNames.contains(BYTE_RANGE_STORE_NAME)
-        ? request.transaction?.objectStore(BYTE_RANGE_STORE_NAME)
-        : db.createObjectStore(BYTE_RANGE_STORE_NAME, { keyPath: 'id' })
 
-      if (store !== undefined && !store.indexNames.contains('lastAccessed')) {
-        store.createIndex('lastAccessed', 'lastAccessed')
+      // Version 1 kept each range's size and last access next to its bytes in
+      // one `byte-ranges` store. Its ranges are dropped, not migrated: their
+      // sizes could only be read with their bytes.
+      for (const name of Array.from(db.objectStoreNames)) {
+        if (!BYTE_RANGE_STORE_NAMES.includes(name)) {
+          db.deleteObjectStore(name)
+        }
+      }
+
+      if (!db.objectStoreNames.contains(BYTES_STORE_NAME)) {
+        db.createObjectStore(BYTES_STORE_NAME, { keyPath: 'id' })
+      }
+
+      if (!db.objectStoreNames.contains(ENTRIES_STORE_NAME)) {
+        db.createObjectStore(ENTRIES_STORE_NAME, { keyPath: 'id' }).createIndex(
+          LAST_ACCESSED_INDEX_NAME,
+          'lastAccessed',
+        )
+      }
+
+      if (!db.objectStoreNames.contains(TOTALS_STORE_NAME)) {
+        db.createObjectStore(TOTALS_STORE_NAME)
       }
     }
+    // A tab still open at an older version holds up the upgrade until it
+    // closes. Go without the cache rather than wait.
+    request.onblocked = () => {
+      blocked = true
+      reject(new Error(`${databaseName} is open at an older version in another tab.`))
+    }
     request.onsuccess = () => {
-      resolve(request.result)
+      const db = request.result
+
+      if (blocked) {
+        db.close()
+        return
+      }
+
+      // Let a newer version open in another tab upgrade the database.
+      db.onversionchange = () => {
+        db.close()
+      }
+      resolve(db)
     }
     request.onerror = () => {
       reject(request.error ?? new Error(`Unable to open ${databaseName}.`))
     }
   })
-}
-
-async function readAllByteRangeRecords(
-  db: IDBDatabase,
-): Promise<readonly ByteRangeRecord[]> {
-  const transaction = db.transaction(BYTE_RANGE_STORE_NAME, 'readonly')
-  const records = await requestToPromise<ByteRangeRecord[]>(
-    transaction.objectStore(BYTE_RANGE_STORE_NAME).getAll(),
-  )
-
-  await transactionDone(transaction)
-  return records
 }
 
 async function requestToPromise<T>(request: IDBRequest<T>): Promise<T> {

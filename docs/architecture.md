@@ -333,6 +333,16 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 | Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                      |
 | Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                   | `visiumHdDatasetReaders.ts`                  |
 
+The byte-range cache (database version 2) keeps each range's bytes, each
+range's size and last access, and the cache's totals in three object stores. A
+write stores the range and updates the totals in one transaction. Over a limit,
+the same transaction walks the access-time index from the oldest range and
+deletes ranges until the totals fit, so eviction never reads cached bytes. A
+read updates only the range's access time. Upgrading from version 1, which kept
+sizes next to the bytes, drops the cached ranges. While a tab of an older build
+holds the database open, the upgrade waits and the new tab reads without the
+cache; each connection closes when a newer version opens elsewhere.
+
 The byte-range cache keys do not include an ETag, so replacing a file in place
 at the same URL can serve stale bytes until site data is cleared.
 

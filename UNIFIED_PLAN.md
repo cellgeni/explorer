@@ -4065,7 +4065,7 @@ From a run of `npm test` and the repository:
 | CSV                 | papaparse                                       | Not adopted; not a dependency. CSV parsing is hand-written; `metrics_summary.csv` is not read           |
 | Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice              |
 | State sharing       | URL hash                                        | As planned                                                                                              |
-| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests                                                        |
+| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache             |
 | Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry)                                     |
 
 ---
@@ -4154,6 +4154,22 @@ Other gaps found in the review:
       size and footer are read once per dataset, so a later selection is one
       range request (about 300 KB for a 16 µm bin on the reference).
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
+- [x] Byte-range cache eviction read every cached range (2026-11-13). After
+      each write, `evict` (`src/data/persistentByteRangeCache.ts`) called
+      `getAll()` on the store, so the bytes of every cached range (up to 256 MB)
+      were deserialised on the main thread to add up their sizes. Database
+      version 2 keeps each range's size and last access in a store of its own,
+      indexed by access time, and the totals in one record: a write reads two
+      small records and, over a limit, deletes ranges oldest access first from
+      the index, in the same transaction. A read updates only the access time,
+      where it rewrote the bytes. Version 1 ranges are dropped on upgrade. CPU
+      profiles of the 460-plex zip loading until the gene search is ready
+      (unminified production builds, headless Chromium, local mirror, two runs
+      each): the cache module took 686–825 ms of main-thread time before, 624–745
+      ms of it in `request.onsuccess` and up to 62–75 ms in one busy stretch,
+      and 47–48 ms after, mostly copying the bytes it stores, with no more than
+      6 ms in any stretch. Both builds cached the same 255 ranges (26 MB), and a
+      second load read them from the cache.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Range reads have no timeout or retry. On 2026-11-13, 3 of 6 loads of the
       460-plex zip from `ftp.ebi.ac.uk` had one or two range requests that
