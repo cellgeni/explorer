@@ -37,8 +37,10 @@ the Visium platform once it is read; see
 300 MiB = 314,572,800 bytes):
 
 - **In-memory (`h5wasm`).** For files up to 300 MiB. The whole file is
-  downloaded with one plain `GET` (no byte ranges), written into the Emscripten
-  filesystem, and opened with `h5wasm.File`. If `Content-Length` is missing,
+  downloaded with one plain `GET` (no byte ranges), transferred to an H5 file
+  worker (`src/workers/h5File.worker.ts`), written into its Emscripten
+  filesystem, and opened with `h5wasm.File` there. The worker sends back the
+  file's groups, datasets and attributes, then each dataset as it is read. If `Content-Length` is missing,
   the body is streamed with a running byte count; going past 300 MiB cancels
   the download and switches to the reference backend.
 - **Kerchunk reference (`zarrita`).** For files over 300 MiB. The app fetches

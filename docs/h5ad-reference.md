@@ -23,8 +23,9 @@ Only for files over 300 MiB (314,572,800 bytes). The viewer checks the size
 with a `HEAD` request first (`readH5ad`, `src/datasets/h5adDataset.ts`):
 
 - **Up to 300 MiB:** the whole file is downloaded with one `GET` and opened
-  with `h5wasm`, the HDF5 library compiled to WebAssembly. The file sits in the
-  tab's memory, and nothing shows until the download finishes. A reference
+  with `h5wasm`, the HDF5 library compiled to WebAssembly, in a worker. The
+  file sits in the tab's memory, and nothing shows until the download
+  finishes. A reference
   next to such a file is not used.
 - **Over 300 MiB:** the file is not downloaded. The viewer fetches
   `<H5AD URL>.json`, or if there is none opens the `<H5AD URL>.icechunk`

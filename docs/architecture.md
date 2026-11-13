@@ -40,7 +40,7 @@ files. Parsing happens in the browser:
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
-| `src/workers/`                          | Tile decode pool, Visium HD matrix and Feature Slice workers                                                                                                                             |
+| `src/workers/`                          | Tile decode pool, H5 file worker, Visium HD matrix and Feature Slice workers                                                                                                             |
 | `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
 | `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                                         |
 | `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
@@ -353,10 +353,20 @@ their cards stayed on "Loading".
 | `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
 | `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
 | `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr image chunks into `ImageBitmap`s; trace SpatialData label chunks into outlines |
+| `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One whole downloaded HDF5 file each: H5AD, the Xenium H5 fallback, the standard Visium matrix  |
+
+An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
+Visium) or fetches the file itself (the Xenium H5 fallback), writes them into
+its own h5wasm file system, and answers reads by path; the Xenium H5
+fallback's cell rows are read inside it. An H5AD file's worker stays open for reads after
+load (embeddings, tissue images) and ends when the dataset is garbage
+collected; the Xenium matrix's stays open for the session, as the file did on
+the main thread; the standard Visium matrix's ends once it is read. Where
+there is no `Worker` (Vitest's jsdom), the same handler runs on the main
+thread.
 
 hyparquet, zarrita reads (Xenium matrix, H5AD references, SpatialData tables),
-h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast run on the main
-thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
+and auto-contrast run on the main thread. OME-Zarr chunk bytes are fetched on the main thread and decoded in the
 Zarr decode workers, which fall back to the main thread if they fail.
 
 ## Performance Budget

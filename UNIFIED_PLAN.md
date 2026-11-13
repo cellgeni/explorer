@@ -170,8 +170,8 @@ What the POC lacked, and what this plan set out to close:
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
   Known exceptions (2026-11): hyparquet reads, zarrita reads for the Xenium
-  matrix, H5AD references, and SpatialData tables, h5wasm for H5AD and the
-  Xenium H5 fallback, and auto-contrast run on the main thread. See
+  matrix, H5AD references, and SpatialData tables, and auto-contrast run on
+  the main thread. Since 2026-11-13 h5wasm runs only in workers. See
   [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
@@ -349,6 +349,17 @@ Later additions:
   that moves every half view.
 - **Tile scheduling (`bf6ebc8`).** When the view moves, morphology tiles still in
   view keep loading; only tiles that left the view are cancelled.
+- **H5 file workers (2026-11-13).** A whole HDF5 file (an H5AD up to 300 MiB,
+  the Xenium `cell_feature_matrix.h5` fallback, the standard Visium filtered
+  matrix) is opened with h5wasm in its own worker (`h5File.worker.ts`), which
+  answers reads by path. H5AD and Visium bytes are downloaded on the main
+  thread, as before, and transferred; the worker fetches the Xenium matrix
+  itself, so its 433 MB never reach the main thread. H5AD files send back their
+  groups, datasets and attributes once, and the reader then reads datasets as
+  before; the Xenium fallback's cell rows are read in the worker and come back
+  packed in typed arrays. One worker per file, because h5wasm's heap cannot
+  shrink: terminating it frees the file. An H5AD's worker ends when its
+  dataset is garbage collected (`FinalizationRegistry`).
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -1462,8 +1473,9 @@ continuous.
 - [x] 5. Gene panel and expression: selected genes, ROI summaries, and
      selected-cell profiles from dense, CSR, or CSC `/X`, with budgets and
      abortable requests.
-  - [ ] **Reopened (2026-11-08):** "worker reads". H5AD h5wasm reads run on the
-        main thread; see Remaining Hardening.
+  - [x] **Reopened (2026-11-08), fixed (2026-11-13):** "worker reads". H5AD
+        files up to 300 MiB open in an H5 file worker. Lazy Range reads stay
+        open under Remaining Hardening.
 - [x] 6. Platform adapter and lifecycle: reset, URL state, ROI, selection, and
      overlays per platform.
 - [x] 7 (partial). Diagnostics and structured errors for unsupported encodings,
@@ -3999,7 +4011,7 @@ From a run of `npm test` and the repository:
 | Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                          |
 | Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes |
 | Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, OME-Zarr images, SpatialData stores                  |
-| HDF5                | h5wasm, jsfive fallback                         | h5wasm (including lazy-range workers for Visium HD); jsfive deferred                                    |
+| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (lazy-range for Visium HD, whole-file H5 file workers otherwise); jsfive deferred     |
 | OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                        |
 | JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                       |
 | Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                         |
@@ -4055,7 +4067,13 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
 - [x] H5AD and SpatialData: offer numeric `obs` columns as `Metadata` colour
       tracks (`metadataTracks()` is called at load, 2026-11-09).
-- [ ] H5AD: read HDF5 in a worker (h5wasm runs on the main thread).
+- [x] H5AD: read HDF5 in a worker (2026-11-13). The downloaded file is
+      transferred to an H5 file worker, which also serves the Xenium H5
+      fallback and the standard Visium matrix; see
+      [4.5](#45-rendering--decision-two-canvases-decode-off-the-main-thread).
+      On the 215 MB CELLxGENE heart example the longest main-thread task while
+      the file opened went from 829 ms to 89 ms (dev build, Chromium); a
+      141 ms task joining the downloaded chunks remains on both.
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [x] Visium HD: low-res tissue image fallback (2026-11-12). Without a
@@ -4092,7 +4110,12 @@ Other gaps found in the review:
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Main-thread exceptions to the worker convention: hyparquet, zarrita
-      reads, h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast.
+      reads, and auto-contrast. h5wasm for H5AD, the Xenium H5 fallback and
+      the standard Visium matrix moved to H5 file workers (2026-11-13). On the
+      Xenium demo a Cell card's H5 fallback (worker fetch, open in 1.35 s,
+      first cell read in 1.2–1.3 s) left no main-thread task over 50 ms. A
+      first version that fetched on the main thread still left a 255 ms task
+      joining the body and a 720 ms one after it.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
