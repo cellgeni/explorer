@@ -24,6 +24,14 @@ vi.mock('@zarrita/storage', () => ({
 }))
 
 vi.mock('zarrita', () => zarrMock)
+// Whole-array reads go through the mocked zarr.get, so reads stay countable.
+vi.mock('../zarr/zarrWholeArray', () => ({
+  getWholeArray: (target: { readonly shape: readonly number[] }) =>
+    zarrMock.get(
+      target,
+      target.shape.map(() => null),
+    ),
+}))
 
 interface MockZarrNode {
   readonly kind?: string

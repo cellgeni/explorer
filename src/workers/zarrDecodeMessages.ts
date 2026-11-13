@@ -1,3 +1,5 @@
+import type * as zarr from 'zarrita'
+import type { TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
 
 // Zarr array metadata as stored (`.zarray` for v2, `zarr.json` for v3), so a
@@ -45,6 +47,15 @@ export interface ZarrRenderTileMessage {
   readonly render: ZarrTileRender
 }
 
+// Auto-contrast samples of a window of a chunk the worker holds.
+export interface ZarrSampleTileMessage {
+  readonly type: 'sample-tile'
+  readonly id: number
+  readonly cacheKey: string
+  readonly window: ZarrChunkWindow
+  readonly sampling: TileSampling
+}
+
 export interface ZarrTraceLabelsMessage {
   readonly type: 'trace-labels'
   readonly id: number
@@ -57,10 +68,41 @@ export interface ZarrTraceLabelsMessage {
   readonly levelWidth: number
 }
 
+type ZarrCodecLoader = typeof zarr.registry extends Map<string, infer Load> ? Load : never
+
+// An entry of zarrita's codec registry, and the chunk metadata zarrita
+// configures a codec with.
+export type ZarrCodecEntry = Awaited<ReturnType<ZarrCodecLoader>>
+export type ZarrCodecChunkMeta = Parameters<ZarrCodecEntry['fromConfig']>[1]
+
+// One codec step of a chunk that zarrita decodes for the main thread. `name`
+// is the codec's registry name, for example `numcodecs.blosc`.
+export interface ZarrCodecCall {
+  readonly name: string
+  readonly configuration: unknown
+  readonly meta: ZarrCodecChunkMeta
+}
+
+// What a string codec (`vlen-utf8`, `json2`) decodes a chunk to.
+export interface ZarrCodecChunk {
+  readonly data: unknown[]
+  readonly shape: number[]
+  readonly stride: number[]
+}
+
+export interface ZarrDecodeCodecMessage {
+  readonly type: 'decode-codec'
+  readonly id: number
+  readonly codec: ZarrCodecCall
+  readonly bytes: ArrayBuffer
+}
+
 export type ZarrDecodeRequest =
   | ZarrPutChunkMessage
   | ZarrRenderTileMessage
+  | ZarrSampleTileMessage
   | ZarrTraceLabelsMessage
+  | ZarrDecodeCodecMessage
 
 export type ZarrDecodeResponse =
   | {
@@ -72,7 +114,15 @@ export type ZarrDecodeResponse =
       readonly lo: number
       readonly hi: number
     }
+  | {
+      readonly type: 'samples'
+      readonly id: number
+      readonly samples: Float64Array
+      readonly pixelCount: number
+    }
   | { readonly type: 'labels'; readonly id: number; readonly trace: PackedLabelTrace }
+  | { readonly type: 'codec-bytes'; readonly id: number; readonly bytes: ArrayBuffer }
+  | ({ readonly type: 'codec-chunk'; readonly id: number } & ZarrCodecChunk)
   // The worker no longer holds the chunk; the caller resends it.
   | { readonly type: 'miss'; readonly id: number }
   | { readonly type: 'error'; readonly id: number; readonly error: string }

@@ -1,4 +1,9 @@
-import { asyncBufferFromUrl, parquetReadObjects } from 'hyparquet'
+import {
+  asyncBufferFromUrl,
+  parquetMetadataAsync,
+  parquetRead,
+  parquetSchema,
+} from 'hyparquet'
 import { asCellId } from './cellid'
 import { micrometers } from './coords'
 import {
@@ -42,17 +47,36 @@ export interface CellOverviewPoint {
   readonly metadata?: Readonly<Record<string, string | number | boolean>>
 }
 
-export interface HyparquetReadObjectsOptions {
+// The overview columns of cells.parquet, one entry per cell. The overview
+// worker sends these to the main thread: the typed arrays are transferred, and
+// only cell IDs and the distinct segmentation methods are cloned as strings.
+export interface CellsOverviewColumns {
+  readonly length: number
+  readonly cellIds: readonly CellId[] | null
+  readonly x: Float64Array
+  readonly y: Float64Array
+  readonly transcriptCounts: Float64Array
+  // NaN where a cell has no value; null when the file has no such column.
+  readonly cellAreas: Float64Array | null
+  readonly nucleusCounts: Float64Array | null
+  // Indices into `segmentationMethods`, or -1 where a cell has none.
+  readonly segmentationMethodIndices: Int32Array | null
+  readonly segmentationMethods: readonly string[]
+  // Optional columns the reader reported missing, for the caller's notices.
+  readonly missingColumns: readonly string[]
+}
+
+export interface HyparquetReadColumnsOptions {
   readonly file: AsyncBuffer
   readonly columns: readonly string[]
-  readonly rowFormat: 'object'
   readonly rowEnd?: number
   readonly compressors?: Compressors
 }
 
-export type HyparquetObjectReader = (
-  options: HyparquetReadObjectsOptions,
-) => Promise<readonly Record<string, unknown>[]>
+// Each requested column the file has, with one value per row from row 0.
+export type HyparquetColumnReader = (
+  options: HyparquetReadColumnsOptions,
+) => Promise<Readonly<Record<string, ArrayLike<unknown>>>>
 
 export class CellsParquetDecodeError extends Error {
   override readonly name = 'ParquetDecodeError'
@@ -66,95 +90,99 @@ export interface ReadCellsOverviewOptions {
   readonly loadCompressors?: () => Promise<Compressors>
   readonly includeCellIds?: boolean
   readonly fetcher?: typeof fetch
-  readonly readObjects?: HyparquetObjectReader
+  readonly readColumns?: HyparquetColumnReader
   readonly byteRangeCache?: PersistentByteRangeCache | null
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
 }
 
+export type ReadCellsOverviewColumnsOptions = Omit<ReadCellsOverviewOptions, 'onFallback'>
+
+// Reads on this thread. `readCellsOverviewInWorker` reads the same columns in
+// a worker.
 export async function readCellsOverview(
   options: ReadCellsOverviewOptions,
 ): Promise<readonly CellOverviewPoint[]> {
-  const file = options.file ?? (await fileFromUrl(options))
-  const readObjects = options.readObjects ?? readHyparquetObjects
-  const compressors =
-    options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
-  const columns =
-    options.includeCellIds === false ? CELL_OVERVIEW_POINT_COLUMNS : CELL_OVERVIEW_COLUMNS
-  const rows = await readCellsOverviewRows({
-    file,
-    columns,
-    rowFormat: 'object',
-    compressors,
-    ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
-    readObjects,
-    url: options.url,
-    onFallback: options.onFallback,
-  })
-
-  return rows.map(parseCellOverviewRow)
+  const columns = await readCellsOverviewColumns(options)
+  notifyMissingCellOverviewColumns(columns.missingColumns, options.onFallback)
+  return cellsOverviewFromColumns(columns)
 }
 
-async function readCellsOverviewRows(
-  options: HyparquetReadObjectsOptions & {
-    readonly readObjects: HyparquetObjectReader
-    readonly url: string | undefined
-    readonly onFallback: FallbackNotifier | undefined
-  },
-): Promise<readonly Record<string, unknown>[]> {
-  const missingOptionalColumns = new Set<string>()
+export async function readCellsOverviewColumns(
+  options: ReadCellsOverviewColumnsOptions,
+): Promise<CellsOverviewColumns> {
+  const file = options.file ?? (await fileFromUrl(options))
+  const readColumns = options.readColumns ?? readHyparquetColumns
+  const compressors =
+    options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
+  const columns: readonly string[] =
+    options.includeCellIds === false ? CELL_OVERVIEW_POINT_COLUMNS : CELL_OVERVIEW_COLUMNS
+  const missingColumns: string[] = []
 
   while (true) {
-    const columns = options.columns.filter(
-      (column) => !missingOptionalColumns.has(column),
-    )
+    const readableColumns = columns.filter((column) => !missingColumns.includes(column))
+    let values: Readonly<Record<string, ArrayLike<unknown>>>
 
     try {
-      return await readCellsOverviewRowsWithColumns(options, columns)
+      values = await readCellsOverviewValues(
+        {
+          file,
+          columns: readableColumns,
+          compressors,
+          ...(options.limit === undefined ? {} : { rowEnd: options.limit }),
+        },
+        readColumns,
+        options.url,
+      )
     } catch (error) {
       const missingColumn = readMissingOptionalCellOverviewColumn(error)
 
-      if (missingColumn === null || !columns.includes(missingColumn)) {
+      if (missingColumn === null || !readableColumns.includes(missingColumn)) {
         throw error
       }
 
-      missingOptionalColumns.add(missingColumn)
-      notifyFallback(options.onFallback, {
-        source: 'Dataset overview',
-        message: `cells.parquet is missing optional column ${missingColumn}; continuing without that cell metadata.`,
-        action:
-          'Overview rendering can continue, but controls that need that optional field may be unavailable.',
-        coalesceKey: `cells-parquet-optional-column:${missingColumn}`,
-      })
+      missingColumns.push(missingColumn)
+      continue
     }
+
+    return cellsOverviewColumnsFromValues(values, missingColumns)
   }
 }
 
-async function readCellsOverviewRowsWithColumns(
-  options: HyparquetReadObjectsOptions & {
-    readonly readObjects: HyparquetObjectReader
-    readonly url: string | undefined
-  },
-  columns: readonly string[],
-): Promise<readonly Record<string, unknown>[]> {
-  try {
-    return await options.readObjects({
-      file: options.file,
-      columns,
-      rowFormat: options.rowFormat,
-      ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
-      ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
+export function notifyMissingCellOverviewColumns(
+  missingColumns: readonly string[],
+  onFallback: FallbackNotifier | undefined,
+): void {
+  for (const missingColumn of missingColumns) {
+    notifyFallback(onFallback, {
+      source: 'Dataset overview',
+      message: `cells.parquet is missing optional column ${missingColumn}; continuing without that cell metadata.`,
+      action:
+        'Overview rendering can continue, but controls that need that optional field may be unavailable.',
+      coalesceKey: `cells-parquet-optional-column:${missingColumn}`,
     })
+  }
+}
+
+async function readCellsOverviewValues(
+  options: HyparquetReadColumnsOptions,
+  readColumns: HyparquetColumnReader,
+  url: string | undefined,
+): Promise<Readonly<Record<string, ArrayLike<unknown>>>> {
+  try {
+    return await readColumns(options)
   } catch (error) {
     if (isLowLevelParquetReadFailure(error)) {
-      throw createCellsParquetDecodeError(error, columns, options.url)
+      throw createCellsParquetDecodeError(error, options.columns, url)
     }
 
     throw error
   }
 }
 
-async function fileFromUrl(options: ReadCellsOverviewOptions): Promise<AsyncBuffer> {
+async function fileFromUrl(
+  options: ReadCellsOverviewColumnsOptions,
+): Promise<AsyncBuffer> {
   if (options.url === undefined) {
     throw new Error('readCellsOverview requires either url or file.')
   }
@@ -175,16 +203,139 @@ async function fileFromUrl(options: ReadCellsOverviewOptions): Promise<AsyncBuff
   }) as AsyncBuffer
 }
 
-async function readHyparquetObjects(
-  options: HyparquetReadObjectsOptions,
-): Promise<readonly Record<string, unknown>[]> {
-  return (await parquetReadObjects({
+// Decodes column chunks as they are, without building an object per row.
+async function readHyparquetColumns(
+  options: HyparquetReadColumnsOptions,
+): Promise<Readonly<Record<string, ArrayLike<unknown>>>> {
+  const metadata = await parquetMetadataAsync(options.file)
+  const fileColumns = new Set(
+    parquetSchema(metadata).children.map((child) => child.element.name),
+  )
+  const columns = options.columns.filter((column) => fileColumns.has(column))
+  const rowCount = Math.min(Number(metadata.num_rows), options.rowEnd ?? Infinity)
+  const chunks = new Map<string, ColumnChunk[]>(columns.map((column) => [column, []]))
+
+  await parquetRead({
     file: options.file,
-    columns: [...options.columns],
-    rowFormat: options.rowFormat,
+    metadata,
+    columns,
     ...(options.compressors === undefined ? {} : { compressors: options.compressors }),
     ...(options.rowEnd === undefined ? {} : { rowEnd: options.rowEnd }),
-  })) as readonly Record<string, unknown>[]
+    onChunk: ({ columnName, columnData, rowStart }) => {
+      chunks.get(columnName)?.push({ rowStart, values: columnData })
+    },
+  })
+
+  return Object.fromEntries(
+    columns.map((column) => [
+      column,
+      joinColumnChunks(chunks.get(column) ?? [], rowCount),
+    ]),
+  )
+}
+
+interface ColumnChunk {
+  readonly rowStart: number
+  readonly values: ArrayLike<unknown>
+}
+
+// Chunks arrive in any order and hold whole pages, so rows from `rowCount` on
+// are dropped.
+function joinColumnChunks(
+  chunks: readonly ColumnChunk[],
+  rowCount: number,
+): ArrayLike<unknown> {
+  const [first] = chunks
+
+  if (
+    chunks.length === 1 &&
+    first !== undefined &&
+    first.rowStart === 0 &&
+    first.values.length === rowCount
+  ) {
+    return first.values
+  }
+
+  const values = new Array<unknown>(rowCount)
+
+  for (const { rowStart, values: chunkValues } of chunks) {
+    const end = Math.min(chunkValues.length, rowCount - rowStart)
+
+    for (let index = 0; index < end; index += 1) {
+      values[rowStart + index] = chunkValues[index]
+    }
+  }
+
+  return values
+}
+
+// Checks every value, as `parseCellOverviewRow` does for a row.
+export function cellsOverviewColumnsFromValues(
+  values: Readonly<Record<string, ArrayLike<unknown>>>,
+  missingColumns: readonly string[] = [],
+): CellsOverviewColumns {
+  const length = Object.values(values).reduce(
+    (longest, column) => Math.max(longest, column.length),
+    0,
+  )
+  const segmentationMethods = segmentationMethodColumn(values.segmentation_method, length)
+
+  return {
+    length,
+    cellIds: values.cell_id === undefined ? null : cellIdColumn(values.cell_id, length),
+    x: requiredNumericColumn(values, 'x_centroid', length),
+    y: requiredNumericColumn(values, 'y_centroid', length),
+    transcriptCounts: requiredNumericColumn(values, 'transcript_counts', length),
+    cellAreas: optionalNumericColumn(values, 'cell_area', length),
+    nucleusCounts: optionalNumericColumn(values, 'nucleus_count', length),
+    segmentationMethodIndices: segmentationMethods?.indices ?? null,
+    segmentationMethods: segmentationMethods?.methods ?? [],
+    missingColumns,
+  }
+}
+
+export function cellsOverviewFromColumns(
+  columns: CellsOverviewColumns,
+): CellOverviewPoint[] {
+  const { cellIds, cellAreas, nucleusCounts, segmentationMethodIndices } = columns
+  const cells = new Array<CellOverviewPoint>(columns.length)
+
+  // Properties are assigned rather than spread, as this runs once per cell on
+  // the main thread.
+  for (let index = 0; index < columns.length; index += 1) {
+    const cell: { -readonly [Key in keyof CellOverviewPoint]: CellOverviewPoint[Key] } = {
+      position: {
+        x: micrometers(columns.x[index] ?? Number.NaN),
+        y: micrometers(columns.y[index] ?? Number.NaN),
+      },
+      transcriptCount: columns.transcriptCounts[index] ?? Number.NaN,
+    }
+    const cellId = cellIds?.[index]
+    const cellArea = cellAreas?.[index]
+    const nucleusCount = nucleusCounts?.[index]
+    const segmentationMethod =
+      columns.segmentationMethods[segmentationMethodIndices?.[index] ?? -1]
+
+    if (cellId !== undefined) {
+      cell.cellId = cellId
+    }
+
+    if (cellArea !== undefined && !Number.isNaN(cellArea)) {
+      cell.cellArea = cellArea
+    }
+
+    if (nucleusCount !== undefined && !Number.isNaN(nucleusCount)) {
+      cell.nucleusCount = nucleusCount
+    }
+
+    if (segmentationMethod !== undefined) {
+      cell.segmentationMethod = segmentationMethod
+    }
+
+    cells[index] = cell
+  }
+
+  return cells
 }
 
 export function parseCellOverviewRow(row: Record<string, unknown>): CellOverviewPoint {
@@ -212,9 +363,115 @@ async function loadDefaultCompressors(): Promise<Compressors> {
   return compressors
 }
 
-function readNumericValue(row: Record<string, unknown>, key: string): number {
-  const value = row[key]
+function cellIdColumn(column: ArrayLike<unknown>, length: number): CellId[] {
+  const cellIds = new Array<CellId>(length)
 
+  for (let index = 0; index < length; index += 1) {
+    const cellId = column[index]
+
+    if (typeof cellId !== 'string') {
+      throw new Error('Expected cells.parquet cell_id to be a string.')
+    }
+
+    cellIds[index] = asCellId(cellId)
+  }
+
+  return cellIds
+}
+
+function requiredNumericColumn(
+  values: Readonly<Record<string, ArrayLike<unknown>>>,
+  key: string,
+  length: number,
+): Float64Array {
+  const column = values[key]
+  const numbers = new Float64Array(length)
+
+  for (let index = 0; index < length; index += 1) {
+    const value = numericValue(column?.[index])
+
+    if (value === null) {
+      throw new Error(`Expected cells.parquet ${key} to be numeric.`)
+    }
+
+    numbers[index] = value
+  }
+
+  return numbers
+}
+
+function optionalNumericColumn(
+  values: Readonly<Record<string, ArrayLike<unknown>>>,
+  key: string,
+  length: number,
+): Float64Array | null {
+  const column = values[key]
+
+  if (column === undefined) {
+    return null
+  }
+
+  const numbers = new Float64Array(length)
+
+  for (let index = 0; index < length; index += 1) {
+    const value = column[index]
+
+    if (value === undefined || value === null) {
+      numbers[index] = Number.NaN
+      continue
+    }
+
+    const number = numericValue(value)
+
+    if (number === null) {
+      throw new Error(`Expected cells.parquet ${key} to be numeric.`)
+    }
+
+    numbers[index] = number
+  }
+
+  return numbers
+}
+
+function segmentationMethodColumn(
+  column: ArrayLike<unknown> | undefined,
+  length: number,
+): { readonly indices: Int32Array; readonly methods: readonly string[] } | null {
+  if (column === undefined) {
+    return null
+  }
+
+  const indices = new Int32Array(length)
+  const methods: string[] = []
+  const indexByMethod = new Map<string, number>()
+
+  for (let index = 0; index < length; index += 1) {
+    const method = column[index]
+
+    if (method === undefined || method === null) {
+      indices[index] = -1
+      continue
+    }
+
+    if (typeof method !== 'string') {
+      throw new Error('Expected cells.parquet segmentation_method to be a string.')
+    }
+
+    let methodIndex = indexByMethod.get(method)
+
+    if (methodIndex === undefined) {
+      methodIndex = methods.length
+      methods.push(method)
+      indexByMethod.set(method, methodIndex)
+    }
+
+    indices[index] = methodIndex
+  }
+
+  return { indices, methods }
+}
+
+function numericValue(value: unknown): number | null {
   if (typeof value === 'number') {
     return value
   }
@@ -223,7 +480,17 @@ function readNumericValue(row: Record<string, unknown>, key: string): number {
     return Number(value)
   }
 
-  throw new Error(`Expected cells.parquet ${key} to be numeric.`)
+  return null
+}
+
+function readNumericValue(row: Record<string, unknown>, key: string): number {
+  const value = numericValue(row[key])
+
+  if (value === null) {
+    throw new Error(`Expected cells.parquet ${key} to be numeric.`)
+  }
+
+  return value
 }
 
 function readOptionalNumericProperty(

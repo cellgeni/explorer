@@ -169,10 +169,13 @@ What the POC lacked, and what this plan set out to close:
   arrays, and `ImageBitmap`s live in modules or caches, referenced by ID.
 - **Decode and bulk parsing run in Web Workers.** The main thread schedules and
   draws. Transfer `ArrayBuffer`s and `ImageBitmap`s instead of copying them.
-  Known exceptions (2026-11): hyparquet reads, zarrita reads for the Xenium
-  matrix, H5AD references, and SpatialData tables, h5wasm for H5AD and the
-  Xenium H5 fallback, and auto-contrast run on the main thread. See
-  [Open Items](#12-open-items).
+  Known exceptions (2026-11): hyparquet reads other than the Xenium overview and
+  SpatialData shapes run on the main thread, and zarrita still fetches chunks
+  and assembles selections there. Since 2026-11-13 h5wasm runs only in workers,
+  the Xenium `cells.parquet` overview and SpatialData shapes are decoded in
+  workers of their own, auto-contrast decodes and samples its tiles in them,
+  and zarrita's decompressors and string codecs run in the Zarr decode
+  workers. See [Open Items](#12-open-items).
 - **Every error reaches the UI.** No silent `console.warn`. A failed fetch, a
   403, a decode error, or a corrupt Zarr must be shown to the user.
 - **Tests go in the same PR as the code.** A module without tests is not done.
@@ -283,8 +286,8 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   row-group skipping, and joins. It costs about 40 MB of WASM and seconds of
   start-up time.
 - hyparquet (about 10 KB, with `hyparquet-compressors` for ZSTD) reads
-  `cells.parquet` centroids for a fast first paint. DuckDB is imported
-  dynamically, only when a query needs it.
+  `cells.parquet` centroids for a fast first paint, in a worker since
+  2026-11-13. DuckDB is imported dynamically, only when a query needs it.
 - If hyparquet cannot decode the `cells.parquet` page encoding, the overview
   falls back to DuckDB.
 - Use the non-threaded MVP/EH DuckDB bundles. The cross-origin-isolated pthread
@@ -349,6 +352,56 @@ Later additions:
   that moves every half view.
 - **Tile scheduling (`bf6ebc8`).** When the view moves, morphology tiles still in
   view keep loading; only tiles that left the view are cancelled.
+- **H5 file workers (2026-11-13).** A whole HDF5 file (an H5AD up to 300 MiB,
+  the Xenium `cell_feature_matrix.h5` fallback, the standard Visium filtered
+  matrix) is opened with h5wasm in its own worker (`h5File.worker.ts`), which
+  answers reads by path. H5AD and Visium bytes are downloaded on the main
+  thread, as before, and transferred; the worker fetches the Xenium matrix
+  itself, so its 433 MB never reach the main thread. H5AD files send back their
+  groups, datasets and attributes once, and the reader then reads datasets as
+  before; the Xenium fallback's cell rows are read in the worker and come back
+  packed in typed arrays. One worker per file, because h5wasm's heap cannot
+  shrink: terminating it frees the file. An H5AD's worker ends when its
+  dataset is garbage collected (`FinalizationRegistry`).
+- **Cells overview worker (2026-11-13).** The Xenium `cells.parquet` overview
+  is fetched and decoded in a worker of its own (`cellsOverview.worker.ts`).
+  It reads hyparquet's column chunks instead of an object per row, and sends
+  the columns back as transferred typed arrays; cell IDs and the distinct
+  segmentation methods are cloned as strings. The main thread only builds the
+  overview cells from the columns. Decode errors keep their name across the
+  worker, so the DuckDB fallback still applies.
+- **Auto-contrast worker (2026-11-13).** Auto-contrast decodes and samples
+  tiles off the main thread and gets back only the sampled pixels. TIFF tile
+  bytes go to a tile decode worker started for the run and ended with it or
+  on abort; an OME-Zarr tile is sampled by the Zarr decode worker that holds
+  its chunk, often already decoded for drawing. Samples are taken by level
+  pixel index, as before, so results are unchanged. The main thread sorts at
+  most 250,000 samples as a `Float64Array` (about 18 ms, against 44 ms for the
+  `number[]` it used) and builds the histogram.
+- **Zarr codec workers (2026-11-13).** zarrita reads made on the main thread
+  (Xenium matrix and transcripts, H5AD references, SpatialData tables) run their
+  decompressors (`blosc`, `zstd`, `lz4`, `gzip`, `zlib`) and string codecs
+  (`vlen-utf8`, `json2`) in the Zarr decode workers. `main.tsx` points zarrita's
+  codec registry at worker versions (`workerZarrCodecs.ts`) that copy each chunk
+  to a worker and get the bytes back by transfer, or the strings by clone, so
+  one hook covers every store (HTTP, zip, references, Icechunk) without moving
+  reads or their caches into workers. zarrita still fetches chunks and assembles
+  selections on the main thread; whole arrays chunked only by row are assembled
+  a chunk at a time (`getWholeArray`) instead of with zarrita's row-by-row copy,
+  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. If a
+  worker fails, the chunk is decoded on the main thread.
+- **SpatialData shapes worker (2026-11-13).** Each `shapes.parquet` is decoded
+  in a worker of its own (`spatialDataShapes.worker.ts`). The worker fetches a
+  plain URL itself; a file inside a zipped store, or behind a custom fetcher,
+  is read on the main thread and handed over slice by slice, so the zip store
+  and its caches stay where they are. Shapes come back as columns
+  (`SpatialDataShapes`): ids, kinds, centroids, radii, ring areas, bounds, and
+  every outer ring in one `Float32Array`, all transferred. The main thread
+  keeps no object or typed array per shape: a table row first tries the shape
+  after the last one matched and builds an id `Map` only when that misses,
+  coordinates are scaled to µm when used, and outlines are built only for
+  cells in view. If the worker fails to start, the file is read on the main
+  thread.
 
 ### 4.6 Data-Source Abstraction — Capability-Based
 
@@ -824,6 +877,7 @@ Notes:
 - Auto-contrast samples the coarsest pyramid level, crops padded edge tiles,
   computes robust percentiles, and draws a histogram from the same samples. It
   runs automatically when an image finishes loading; the `Auto` buttons rerun it.
+  Since 2026-11-13 tiles are decoded and sampled in workers.
 - Grayscale intensity drives both channel colour and alpha, so enabled channels
   do not fill tiles with solid colour.
 
@@ -1462,8 +1516,9 @@ continuous.
 - [x] 5. Gene panel and expression: selected genes, ROI summaries, and
      selected-cell profiles from dense, CSR, or CSC `/X`, with budgets and
      abortable requests.
-  - [ ] **Reopened (2026-11-08):** "worker reads". H5AD h5wasm reads run on the
-        main thread; see Remaining Hardening.
+  - [x] **Reopened (2026-11-08), fixed (2026-11-13):** "worker reads". H5AD
+        files up to 300 MiB open in an H5 file worker. Lazy Range reads stay
+        open under Remaining Hardening.
 - [x] 6. Platform adapter and lifecycle: reset, URL state, ROI, selection, and
      overlays per platform.
 - [x] 7 (partial). Diagnostics and structured errors for unsupported encodings,
@@ -1698,8 +1753,11 @@ planned in advance.
 #### Known Gaps
 
 - [ ] `points` (transcripts), extra images, and extra tables are not shown.
-- [ ] Shapes are read whole, not by viewport, and parsed on the main thread
-      (about 12 s for the 598,222-cell zip after a 97 MB download).
+- [ ] Shapes are read whole, not by viewport: spatialdata-io writes one row
+      group with no per-shape bounding boxes, so a viewport-scoped read needs
+      a spatially sorted companion file. Parsing moved to a worker on
+      2026-11-13 (see
+      [4.5](#45-rendering--decision-two-canvases-decode-off-the-main-thread)).
 - [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
 - [x] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
       [Phase 7](#phase-7--anndata-h5ad)). Boolean `obs` columns were fixed on
@@ -3999,7 +4057,7 @@ From a run of `npm test` and the repository:
 | Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                          |
 | Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes |
 | Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, OME-Zarr images, SpatialData stores                  |
-| HDF5                | h5wasm, jsfive fallback                         | h5wasm (including lazy-range workers for Visium HD); jsfive deferred                                    |
+| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (lazy-range for Visium HD, whole-file H5 file workers otherwise); jsfive deferred     |
 | OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                        |
 | JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                       |
 | Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                         |
@@ -4055,7 +4113,13 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
 - [x] H5AD and SpatialData: offer numeric `obs` columns as `Metadata` colour
       tracks (`metadataTracks()` is called at load, 2026-11-09).
-- [ ] H5AD: read HDF5 in a worker (h5wasm runs on the main thread).
+- [x] H5AD: read HDF5 in a worker (2026-11-13). The downloaded file is
+      transferred to an H5 file worker, which also serves the Xenium H5
+      fallback and the standard Visium matrix; see
+      [4.5](#45-rendering--decision-two-canvases-decode-off-the-main-thread).
+      On the 215 MB CELLxGENE heart example the longest main-thread task while
+      the file opened went from 829 ms to 89 ms (dev build, Chromium); a
+      141 ms task joining the downloaded chunks remains on both.
 - [x] H5AD and SpatialData: read boolean `obs` columns on the reference backend
       (0/1 tracks, 2026-11-09).
 - [x] Visium HD: low-res tissue image fallback (2026-11-12). Without a
@@ -4091,8 +4155,54 @@ Other gaps found in the review:
       range request (about 300 KB for a 16 µm bin on the reference).
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
-- [ ] Main-thread exceptions to the worker convention: hyparquet, zarrita
-      reads, h5wasm for H5AD and the Xenium H5 fallback, and auto-contrast.
+- [ ] Main-thread exceptions to the worker convention: hyparquet reads other
+      than the Xenium overview and SpatialData shapes (Visium HD positions and
+      barcode mappings), and the fetching and assembly in zarrita reads.
+      h5wasm for H5AD, the Xenium H5 fallback and the standard Visium matrix
+      moved to H5 file workers (2026-11-13). On the Xenium demo a Cell card's H5
+      fallback (worker fetch, open in 1.35 s, first cell read in 1.2–1.3 s) left
+      no main-thread task over 50 ms. A first version that fetched on the main
+      thread still left a 255 ms task joining the body and a 720 ms one after
+      it. The Xenium `cells.parquet` overview moved to a cells overview worker
+      (2026-11-13). CPU profiles of the demo's load to the first overview draw
+      (production builds, headless Chromium, two runs each): hyparquet code took
+      1.63–1.67 s of main-thread time, in stretches of up to 861 ms, before the
+      change; after it, building the cells from the transferred columns takes
+      54–59 ms and nothing before the overview commit runs over 156 ms. Read in
+      the page (dev build), the columns took 66 ms to receive and 107–180 ms to
+      turn into cells, against 324–358 ms for the old per-row parse.
+      Auto-contrast moved to workers (2026-11-13). Profiles of the demo's load
+      until its four channels are auto-contrasted (same setup): the OpenJPEG
+      codec took 540–559 ms of main-thread time, in stretches of up to 634 ms,
+      before the change, and none after it; the auto-contrast module itself
+      takes 23–44 ms. Read in the page (dev build), one focus channel went from
+      a 140–165 ms task to none, about 40 ms slower end to end for starting the
+      worker. zarrita's codecs moved to the Zarr decode workers (2026-11-13).
+      CPU profiles (unminified production builds, headless Chromium, one or two
+      runs each): colouring the SpatialData Visium table by a gene spent 291–304
+      ms in blosc on the main thread before and none after; loading the
+      SpatialData Xenium table spent 227–231 ms decoding strings before and none
+      after; and on the Xenium demo, from load to a gene's colours, the codecs
+      (47–50 ms) and zarrita's copy of the cell IDs (one 124–127 ms task) left
+      the main thread, which now spends 10 ms in zarrita. On the heart H5AD
+      reference, served locally, zarrita's main-thread time while loading fell
+      from 90–113 ms to 47–51 ms, and a 94–98 ms task went. The table code that
+      uses the decoded arrays still runs on the main thread, for both H5AD
+      backends: the CSR scan for a gene (230–270 ms on the Visium table) and the
+      per-cell metadata (about 200 ms for 73,579 cells). SpatialData shapes
+      moved to a worker (2026-11-13). Profiles of the 598,222-cell 460-plex zip
+      loading until the gene search is ready, served from a local mirror of the
+      byte ranges the app reads (unminified production builds, headless
+      Chromium, two runs each): the SpatialData dataset code and hyparquet took
+      4.7–4.8 s of main-thread time, in stretches of up to 4.5 s, before the
+      change, and 116–126 ms after it; the loads finished in 15.4–15.8 s instead
+      of 20.2–20.3 s, with pixel-identical boundaries. Most of the old time was
+      per-shape objects, not the WKB parse (1.3 s in Node): with 600,000 shape
+      objects and rings on the heap, building the id `Map` took 1.5 s and
+      matching the table rows 1.1 s, against about 150 ms for the same `Map` in
+      an idle page. The table code still runs on the main thread: 5.6–5.9 s in
+      `h5adDataset` on this load, mostly counting distinct labels and building
+      per-cell metadata.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.
@@ -4146,10 +4256,11 @@ Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
       this on the viewport warm-up ("Preparing cell feature matrix"). CPU
       profiles over CDP on 2026-11-12 (headless Chromium with GPU, fresh and
       warm profiles; stalls of up to 1.8 s here) put it on the load instead:
-      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s), the
-      first render with the overview layer build (2.3–3.0 s), and the first
-      JPEG 2000 morphology decode (0.6–0.7 s). The warm-up's cell query runs in
-      DuckDB's worker. The H5 download (above) was not part of these: its
+      hyparquet decoding `cells.parquet` for the overview (0.4–0.6 s; in a
+      worker since 2026-11-13), the first render with the overview layer
+      build (2.3–3.0 s), and the first JPEG 2000 morphology decode
+      (0.6–0.7 s). The warm-up's cell query runs in DuckDB's worker. The H5
+      download (above) was not part of these: its
       1.3–1.7 s block came when the download ended, 63–70 s after load, and
       would land in the first 30 s only above about 20 MB/s. That block is
       gone with the fix.
@@ -4165,9 +4276,11 @@ Features:
       answers Range requests or the repository opens.
 - [ ] SpatialData: `points` (transcripts), extra images and tables, and
       viewport-scoped shape reads. Partly done: the info drawer picks one image
-      at a time, and the primary table is read. Points are not read, and shapes
-      are read whole on the main thread, then filtered to the viewport; a
-      598,222-cell zip spends about 12 s parsing them (2026-11-13).
+      at a time, and the primary table is read. Points are not read. Shapes
+      are read whole, in a worker since 2026-11-13, then filtered to the
+      viewport. spatialdata-io's `shapes.parquet` cannot be read by viewport:
+      the 460-plex `cell_boundaries` is one row group of 598,222 rows with no
+      per-shape bounding-box column.
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](#phase-12--10x-atera-output)).
 - [x] Standard Visium (spots) from the original Phase 6

@@ -52,7 +52,7 @@ All images implement `ImagePyramidLoader` (`src/data/imagePyramid.ts`):
 `url`, `units`, tile size, `numLevels`, image size, `channels`, plus
 `bestLevel`, `tilesForBbox`, `tilesForLevel`, `tileBounds`, and
 `tileSourceSize`. TIFF loaders add `fetchTileBytes`/`tileDecodeOptions`;
-Zarr loaders add `loadTile`/`loadTilePixels`.
+Zarr loaders add `loadTile`/`loadTilePixels`/`sampleTilePixels`.
 
 `openImagePyramid` (`src/data/morphologyImage.ts`) sends Zarr-looking URLs to
 `openOmeZarrImage` and everything else to `openTiff`.
@@ -352,6 +352,14 @@ on when it loads. Any other channel is auto-contrasted when it is first turned
 on, if it still has its pixel type's default window and no histogram; native
 RGB channels are left alone.
 
+Tiles are decoded and sampled off the main thread (`src/data/tileSamples.ts`
+picks the pixels). TIFF tile bytes go to a tile decode worker started for the
+run (`src/workers/tileSamplesCore.ts`), which ends with the run or on abort.
+OME-Zarr tiles are sampled by the Zarr decode worker that holds their chunk
+(`sampleTilePixels`). Only the samples come back; the main thread sorts them
+and builds the histogram. Where there is no `Worker`, or a Zarr decode worker
+fails, tiles are decoded and sampled on the main thread.
+
 ## Custom Image Layers
 
 `Custom image URL` → `Load Layer` in the Image section
@@ -371,7 +379,7 @@ RGB channels are left alone.
 | Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                             | `omeMetadata.ts`, `omeZarrLoader.ts`                           |
 | Default tile size          | 256                                                                                 | `loader.ts`, `omeZarrLoader.ts`                                |
 | Level threshold            | 1.5 screen px per source px                                                         | `loader.ts`, `omeZarrLoader.ts`                                |
-| Decode workers             | TIFF ≤ 4; OME-Zarr ≤ 3                                                              | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
+| Decode workers             | TIFF ≤ 4, plus 1 per auto-contrast run; OME-Zarr ≤ 3                                | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
 | Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
 | Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins                                    | `morphologyContrast.ts`                                        |
 | IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                            | `persistentByteRangeCache.ts`                                  |
@@ -383,10 +391,10 @@ RGB channels are left alone.
 | `src/datasets/imageOnlyDataset.ts`                                                                              | Image-only `SpatialDataset`                                            |
 | `src/data/imagePyramid.ts`                                                                                      | `ImagePyramidLoader` interface                                         |
 | `src/data/morphologyImage.ts`                                                                                   | Image opening, per-channel loaders, custom layers, Xenium image choice |
-| `src/data/morphologyContrast.ts`                                                                                | Auto-contrast                                                          |
+| `src/data/morphologyContrast.ts`, `tileSamples.ts`                                                              | Auto-contrast                                                          |
 | `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `svs.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts` | TIFF, QPTIFF, and SVS loading                                          |
 | `src/codecs/tiffTile.ts`, `jpeg.ts`, `jpeg2000.ts`                                                              | Tile decoding                                                          |
-| `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`                                | Decode workers                                                         |
+| `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`, `tileSamplesCore.ts`          | Decode workers                                                         |
 | `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                                    | OME-Zarr loading                                                       |
 | `src/workers/zarrDecode.worker.ts`, `zarrDecodePool.ts`, `zarrDecodeCore.ts`                                    | OME-Zarr chunk decoding and label tracing                              |
 | `src/components/MorphologyCanvas.tsx`, `src/rendering/morphologyCanvas.ts`, `morphologyTileScheduling.ts`       | Drawing and scheduling                                                 |

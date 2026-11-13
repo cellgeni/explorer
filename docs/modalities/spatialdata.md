@@ -132,8 +132,8 @@ coordinate system.
 | ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
 | `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                             |
 | `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita`                                            | Cells, genes, annotations, embeddings |
-| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` (`HEAD` + range reads, or the zip entry) | Cell positions and boundaries         |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita` + decode worker (codecs)                   | Cells, genes, annotations, embeddings |
+| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` in a worker (range reads, or zip slices) | Cell positions and boundaries         |
 | `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                                            | Morphology layer                      |
 | `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker                            | Cell outlines                         |
 
@@ -155,6 +155,8 @@ table annotates regions in the chosen coordinate system:
 
 - Each row's `instance_key` value (or obs name) and `region_key` value (or the
   single region) select a shape. The row is placed at the shape's centroid.
+  Tables usually list rows in shape order, so the shape after the last match
+  is tried first; an id `Map` is built only when that misses (`ShapeLookup`).
 - Rows annotating a labels region use their `obsm` spatial point mapped through
   the labels element's affine.
 - Rows that match nothing get `NaN` coordinates and are hidden. If no row is
@@ -165,8 +167,17 @@ table annotates regions in the chosen coordinate system:
 ## Shapes
 
 `readSpatialDataShapes` reads the whole `shapes.parquet` with
-`parquetReadObjects` and `hyparquet-compressors`. In a zipped store the file
-is the zip entry, passed as `file`.
+`parquetReadObjects` and `hyparquet-compressors`, in a shapes worker started
+by `readSpatialDataShapesInWorker` (`src/datasets/spatialDataShapesWorker.ts`).
+The worker fetches a plain URL itself. In a zipped store the file is the zip
+entry, read on the main thread and handed to the worker slice by slice; a
+custom fetcher is handled the same way. Without a `Worker`, or if the worker
+fails to start, the file is read on the main thread.
+
+The shapes come back as transferred columns (`SpatialDataShapes`): per shape
+an instance id, a kind (circle or polygon), centroid, radius, ring area, and
+bounds, plus every outer ring in one `Float32Array` with offsets. The main
+thread keeps no object or typed array per shape.
 
 - Geometry column: `geo.primary_column`, else `geometry`. hyparquet's GeoJSON
   decoding is replaced (`WKB_PARSERS`) so the WKB bytes are read straight into
@@ -176,9 +187,9 @@ is the zip entry, passed as `file`.
   start/step.
 - Points become circles with diameter from the `radius` column (default 1)
   times the affine scale.
-- Polygons keep only the outer ring of their largest polygon, as a
-  `Float32Array` of interleaved x, y. A 598,222-cell Xenium
-  `cell_boundaries` (about 15 million vertices) holds about 120 MB.
+- Polygons keep only the outer ring of their largest polygon, as interleaved
+  x, y in the shared ring buffer. A 598,222-cell Xenium `cell_boundaries`
+  (about 15 million vertices) holds about 120 MB.
 - Centroid: area-weighted centroid of the transformed outer ring.
 
 ### Boundaries
@@ -191,10 +202,10 @@ is the zip entry, passed as `file`.
   boundary candidate is drawn, matched to cells through the region instance
   ids. If no id matches, it falls back to the region geometry.
 
-`readBoundaryIndex` keeps every cell's ring and bounds in typed arrays;
-`elements(bbox)` is a linear bounds filter over them that builds polygon
-elements only for the cells it returns, reusing the previous request's
-elements for cells still in view.
+`readBoundaryIndex` keeps, per cell, the index of its shape in the shape
+columns and its bounds in µm; `elements(bbox)` is a linear bounds filter over
+them that builds polygon elements, scaled to µm, only for the cells it
+returns, reusing the previous request's elements for cells still in view.
 
 ## Image
 
@@ -244,7 +255,7 @@ off.
 | `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                                                                      |
 | `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                                                             |
 | `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                                                       |
-| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader                                                                                           |
+| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader and shape columns, run in a worker by `spatialDataShapesWorker.ts` (`src/workers/`)       |
 | `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                                                           |
 | `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                                                                      |
 | `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table                                            |
@@ -267,8 +278,10 @@ off.
 - Only one coordinate system and one image are shown at a time. They are
   chosen automatically; the `Coordinate system` and `Image` selects in View
   options override the choice and reload the store.
-- Shapes are read whole, not by viewport, and on the main thread: the
-  598,222-cell example spends about 12 s parsing after a 97 MB download.
+- Shapes are read whole, not by viewport. spatialdata-io writes
+  `shapes.parquet` as one row group with no per-shape bounding boxes (598,222
+  rows in the 460-plex example), so a range read cannot skip cells out of
+  view. The 97 MB download and decode run in a worker.
 - A zipped store needs consolidated metadata like any other. Deflated zip
   entries are read whole, so a compressed `shapes.parquet` is downloaded in
   full before any of it is parsed.

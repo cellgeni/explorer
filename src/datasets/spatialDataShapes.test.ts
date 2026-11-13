@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { FileMetaData } from 'hyparquet'
 import {
+  readSpatialDataShapes,
   ringArea,
+  SHAPE_CIRCLE,
+  shapeRing,
   shapesFromRows,
   shapesParquetLayout,
+  SpatialDataShapesBuilder,
+  spatialDataShapesTransferables,
+  type SpatialDataShapes,
   type SpatialDataShapesParquetLayout,
 } from './spatialDataShapes'
+import { IDENTITY_AFFINE } from './spatialDataTransforms'
+import { spatialDataShapesFixture } from '../test/spatialDataShapesFixtures'
 
 const DOUBLE_AFFINE = { a: 2, b: 0, c: 10, d: 0, e: 2, f: 20 }
 
@@ -78,19 +86,27 @@ describe('SpatialData shapes', () => {
       DOUBLE_AFFINE,
     )
 
-    expect(shapes).toHaveLength(2)
-    expect(shapes[0]).toEqual({
-      id: '7',
-      geometry: { kind: 'circle', center: { x: 12, y: 24 }, radius: 6 },
-      centroid: { x: 12, y: 24 },
-    })
-    expect(shapes[1]?.id).toBe('cell-b')
-    // The larger polygon's outer ring, as interleaved x, y.
-    expect(shapes[1]?.geometry).toEqual({
-      kind: 'polygon',
-      ring: Float32Array.of(10, 20, 18, 20, 18, 28, 10, 28, 10, 20),
-    })
-    expect(shapes[1]?.centroid).toEqual({ x: 14, y: 24 })
+    expect(listShapes(shapes)).toEqual([
+      {
+        id: '7',
+        kind: 'circle',
+        centroid: [12, 24],
+        radius: 6,
+        area: Number.NaN,
+        bounds: [6, 18, 18, 30],
+        ring: [],
+      },
+      {
+        id: 'cell-b',
+        kind: 'polygon',
+        centroid: [14, 24],
+        radius: 0,
+        area: 64,
+        bounds: [10, 20, 18, 28],
+        // The larger polygon's outer ring, as interleaved x, y.
+        ring: [10, 20, 18, 20, 18, 28, 10, 28, 10, 20],
+      },
+    ])
   })
 
   it('reads WKB points, polygon outer rings, and the largest polygon of a MultiPolygon', () => {
@@ -121,16 +137,99 @@ describe('SpatialData shapes', () => {
       DOUBLE_AFFINE,
     )
 
-    expect(shapes.map((shape) => shape.id)).toEqual(['point', 'polygon', 'multi'])
-    expect(shapes[0]?.centroid).toEqual({ x: 13, y: 16 })
-    expect(shapes[1]?.geometry).toEqual({
-      kind: 'polygon',
-      ring: Float32Array.of(10, 20, 14, 20, 14, 24, 10, 24, 10, 20),
-    })
-    expect(shapes[2]?.centroid).toEqual({ x: 13, y: 23 })
+    const list = listShapes(shapes)
+    expect(list.map((shape) => shape.id)).toEqual(['point', 'polygon', 'multi'])
+    expect(list[0]?.centroid).toEqual([13, 16])
+    expect(list[1]?.ring).toEqual([10, 20, 14, 20, 14, 24, 10, 24, 10, 20])
+    expect(list[2]?.centroid).toEqual([13, 23])
     expect(ringArea(Float32Array.of(0, 0, 3, 0, 3, 3, 0, 3))).toBe(9)
   })
+
+  it('reads a spatialdata-io shapes.parquet', async () => {
+    const polygons = await readSpatialDataShapes({
+      url: 'https://example.test/shapes.parquet',
+      file: spatialDataShapesFixture('cell_boundaries.parquet'),
+      affine: DOUBLE_AFFINE,
+    })
+    const list = listShapes(polygons)
+
+    expect(list.map((shape) => shape.id)).toEqual([
+      'aaaa-1',
+      'aaab-1',
+      'aaac-1',
+      'aaad-1',
+    ])
+    // The hole of aaab-1, the smaller polygon of aaac-1, and the z of aaad-1
+    // are dropped.
+    expect(list.map((shape) => shape.ring)).toEqual([
+      [10, 20, 14, 20, 14, 24, 10, 24, 10, 20],
+      [18, 20, 26, 20, 26, 28, 18, 28, 18, 20],
+      [34, 20, 40, 20, 40, 26, 34, 26, 34, 20],
+      [10, 40, 14, 40, 14, 44, 10, 44, 10, 40],
+    ])
+    expect(list.map((shape) => shape.area)).toEqual([16, 64, 36, 16])
+    expect(list[2]).toMatchObject({ centroid: [37, 23], bounds: [34, 20, 40, 26] })
+
+    const circles = await readSpatialDataShapes({
+      url: 'https://example.test/shapes.parquet',
+      file: spatialDataShapesFixture('cell_circles.parquet'),
+      affine: DOUBLE_AFFINE,
+    })
+
+    expect(
+      listShapes(circles).map(({ id, kind, centroid, radius }) => [
+        id,
+        kind,
+        centroid,
+        radius,
+      ]),
+    ).toEqual([
+      ['7', 'circle', [12, 22], 2],
+      ['8', 'circle', [22, 24], 4],
+      ['9', 'circle', [37, 23], 3],
+    ])
+  })
+
+  it('grows the ring buffer and transfers every column', () => {
+    const builder = new SpatialDataShapesBuilder()
+
+    for (let index = 0; index < 300; index += 1) {
+      builder.addPolygon(
+        String(index),
+        [index, 0, index + 1, 0, index, 1],
+        IDENTITY_AFFINE,
+      )
+    }
+
+    builder.addCircle('circle', 1, 2, 3)
+    builder.addPolygon('too-short', [0, 0, 1, 1])
+    const shapes = builder.build()
+
+    expect(shapes.ids).toHaveLength(301)
+    expect(Array.from(shapeRing(shapes, 299))).toEqual([299, 0, 300, 0, 299, 1])
+    expect(shapeRing(shapes, 300)).toHaveLength(0)
+    expect(shapes.kinds[300]).toBe(SHAPE_CIRCLE)
+    expect(shapes.coords).toHaveLength(300 * 6)
+    expect(shapes.coords.buffer.byteLength).toBe(300 * 6 * 4)
+
+    const buffers = spatialDataShapesTransferables(shapes)
+    expect(buffers).toHaveLength(7)
+    expect(new Set(buffers).size).toBe(7)
+  })
 })
+
+// The shapes as one record each, for readable expectations.
+function listShapes(shapes: SpatialDataShapes) {
+  return shapes.ids.map((id, index) => ({
+    id,
+    kind: shapes.kinds[index] === SHAPE_CIRCLE ? 'circle' : 'polygon',
+    centroid: Array.from(shapes.centroids.subarray(index * 2, index * 2 + 2)),
+    radius: shapes.radii[index],
+    area: shapes.areas[index],
+    bounds: Array.from(shapes.bounds.subarray(index * 4, index * 4 + 4)),
+    ring: Array.from(shapeRing(shapes, index)),
+  }))
+}
 
 function parquetMetadata(
   columns: readonly string[],

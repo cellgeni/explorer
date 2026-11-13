@@ -23,8 +23,9 @@ Only for files over 300 MiB (314,572,800 bytes). The viewer checks the size
 with a `HEAD` request first (`readH5ad`, `src/datasets/h5adDataset.ts`):
 
 - **Up to 300 MiB:** the whole file is downloaded with one `GET` and opened
-  with `h5wasm`, the HDF5 library compiled to WebAssembly. The file sits in the
-  tab's memory, and nothing shows until the download finishes. A reference
+  with `h5wasm`, the HDF5 library compiled to WebAssembly, in a worker. The
+  file sits in the tab's memory, and nothing shows until the download
+  finishes. A reference
   next to such a file is not used.
 - **Over 300 MiB:** the file is not downloaded. The viewer fetches
   `<H5AD URL>.json`, or if there is none opens the `<H5AD URL>.icechunk`
@@ -147,7 +148,9 @@ compressed). The viewer never reads it.
      `var`, `obsm`, `uns`, and `/X/indptr`), 6 at a time.
 4. Reads chunks as Range requests to the H5AD, at most 6 at a time
    (`H5AD_REFERENCE_FETCH_CONCURRENCY`, and the same limit for everything an
-   Icechunk repository reads), only when they are needed:
+   Icechunk repository reads), only when they are needed. The requests are
+   made on the main thread; the chunks are decompressed, and strings decoded,
+   in the Zarr decode workers ([Workers](./architecture.md#workers)):
 
 | When                                  | What is read                                                                                                                                                                     |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -8,7 +8,9 @@
 
 import { parseAnalysisEmbeddingCsv } from '../data/analysisEmbeddings'
 import { isListedAsMissing } from '../data/folderListing'
+import { h5TreeNodeAt, openH5WorkerFile } from '../data/h5WorkerFile'
 import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import type { H5TreeGroup } from '../workers/h5FileMessages'
 import {
   AnnDataH5adDataset,
   type AnnDataMemoryColumn,
@@ -435,52 +437,69 @@ async function fetchMatrixBytes(url: string, fetcher: typeof fetch): Promise<Uin
   return bytes
 }
 
-interface H5Node {
-  readonly attrs?: Readonly<Record<string, { readonly value: unknown }>>
-  readonly value?: unknown
-  keys?(): string[]
-  get?(path: string): unknown
-}
-
 // 10x feature-barcode HDF5: `/matrix` (Cell Ranger 3+ and every Space Ranger
 // version) or a per-genome group with `genes`/`gene_names` (Cell Ranger 2).
+// The file is opened and decoded in an H5 file worker.
 export async function readFeatureBarcodeMatrixH5(
   bytes: Uint8Array,
   label: string,
 ): Promise<FeatureBarcodeMatrix> {
-  const h5wasm = (await import('h5wasm')).default
-  const { FS } = await h5wasm.ready
-  const fileName = `/visium-matrix-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2)}.h5`
-
-  FS.writeFile(fileName, bytes)
-
-  const file = new h5wasm.File(fileName, 'r') as unknown as H5Node & {
-    close(): unknown
-  }
+  const file = await openH5WorkerFile(bytes, { tree: true })
 
   try {
+    const root = file.tree
+
+    if (root === null) {
+      throw new Error(`${label} could not be opened.`)
+    }
+
     const groupName =
-      file.get?.('matrix') !== null && file.get?.('matrix') !== undefined
+      h5TreeNodeAt(root, 'matrix') !== undefined
         ? 'matrix'
-        : file.keys?.().find((key) => h5Child(file, `${key}/barcodes`) !== undefined)
+        : root.children.find(
+            ([key]) => h5TreeNodeAt(root, `${key}/barcodes`) !== undefined,
+          )?.[0]
 
     if (groupName === undefined) {
       throw new Error(`${label} is not a 10x feature-barcode matrix (no /matrix group).`)
     }
 
-    const read = (path: string) => h5Child(file, `${groupName}/${path}`)?.value
-    const barcodes = stringValues(read('barcodes'), `${label} barcodes`)
+    const read = async (path: string): Promise<unknown> => {
+      const fullPath = `${groupName}/${path}`
+      return h5TreeNodeAt(root, fullPath)?.kind === 'dataset'
+        ? file.read(fullPath)
+        : undefined
+    }
+    const [
+      barcodeValues,
+      featureNameValues,
+      geneNameValues,
+      featureIdValues,
+      geneValues,
+      featureTypeValues,
+      data,
+      indexValues,
+      indptrValues,
+    ] = await Promise.all([
+      read('barcodes'),
+      read('features/name'),
+      read('gene_names'),
+      read('features/id'),
+      read('genes'),
+      read('features/feature_type'),
+      read('data'),
+      read('indices'),
+      read('indptr'),
+    ])
+    const barcodes = stringValues(barcodeValues, `${label} barcodes`)
     const featureNames = stringValues(
-      read('features/name') ?? read('gene_names'),
+      featureNameValues ?? geneNameValues,
       `${label} feature names`,
     )
-    const featureIds = optionalStringValues(read('features/id') ?? read('genes'))
-    const featureTypes = optionalStringValues(read('features/feature_type'))
-    const data = read('data')
-    const indices = numericValues(read('indices'), `${label} indices`)
-    const indptr = numericValues(read('indptr'), `${label} indptr`)
+    const featureIds = optionalStringValues(featureIdValues ?? geneValues)
+    const featureTypes = optionalStringValues(featureTypeValues)
+    const indices = numericValues(indexValues, `${label} indices`)
+    const indptr = numericValues(indptrValues, `${label} indptr`)
 
     if (indptr.length !== barcodes.length + 1) {
       throw new Error(`${label} indptr does not match its barcodes.`)
@@ -497,32 +516,21 @@ export async function readFeatureBarcodeMatrixH5(
           : Float32Array.from(numericValues(data, `${label} data`)),
       indices: Int32Array.from(indices),
       indptr: Float64Array.from(indptr),
-      ...optionalAttribute(file, 'library_ids', 'libraryId'),
-      ...optionalAttribute(file, 'chemistry_description', 'chemistry'),
-      ...optionalAttribute(file, 'software_version', 'softwareVersion'),
+      ...optionalAttribute(root, 'library_ids', 'libraryId'),
+      ...optionalAttribute(root, 'chemistry_description', 'chemistry'),
+      ...optionalAttribute(root, 'software_version', 'softwareVersion'),
     }
   } finally {
-    try {
-      file.close()
-    } catch {
-      // The read error is more useful than a cleanup failure.
-    }
-
-    FS.unlink(fileName)
+    file.close()
   }
 }
 
-function h5Child(node: H5Node, path: string): H5Node | undefined {
-  const child = node.get?.(path)
-  return child === null || child === undefined ? undefined : (child as H5Node)
-}
-
 function optionalAttribute<Key extends string>(
-  file: H5Node,
+  group: H5TreeGroup,
   name: string,
   key: Key,
 ): Partial<Record<Key, string>> {
-  const value = file.attrs?.[name]?.value
+  const value = group.attrs.find(([attrName]) => attrName === name)?.[1]
   const first =
     Array.isArray(value) || ArrayBuffer.isView(value)
       ? Array.from(value as ArrayLike<unknown>)[0]

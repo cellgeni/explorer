@@ -43,11 +43,13 @@ import {
 } from './spatialDataCatalog'
 import {
   instanceIdString,
-  readSpatialDataShapes,
-  ringArea,
-  type SpatialDataShape,
+  SHAPE_CIRCLE,
+  SHAPE_POLYGON,
+  shapeRing,
+  type SpatialDataShapes,
   type SpatialDataShapesReader,
 } from './spatialDataShapes'
+import { readSpatialDataShapesInWorker } from './spatialDataShapesWorker'
 import { applyAffine, composeAffine, type Affine2D } from './spatialDataTransforms'
 import { SpatialDataLabelsReader } from './spatialDataLabels'
 import {
@@ -143,16 +145,41 @@ type BoundarySource =
 
 // Per-row placement in coordinate-system units, before unit scaling.
 type RawPlacement =
-  | { readonly kind: 'shape'; readonly shape: SpatialDataShape }
+  | { readonly kind: 'shape'; readonly shapes: SpatialDataShapes; readonly index: number }
   | { readonly kind: 'point'; readonly x: number; readonly y: number }
   | null
 
-// Cell outlines for the boundary layer as typed rings; elements are built
-// only for the cells a viewport request returns.
+// A region element's shapes, matched to table rows by instance id.
+interface RegionShapes {
+  readonly shapes: SpatialDataShapes
+  readonly lookup: ShapeLookup
+  // Table cell id per shape, set when a row is placed on the shape.
+  readonly cellIds: (string | undefined)[]
+}
+
+// Table rows placed on region shapes, kept for the boundary layer.
+interface RegionRows {
+  readonly cellIds: readonly string[]
+  readonly placements: readonly RawPlacement[]
+  // µm per coordinate-system unit.
+  readonly scale: number
+}
+
+// Shapes drawn as cell boundaries, with the factor that takes their
+// coordinates to µm.
+interface ScaledShapes {
+  readonly shapes: SpatialDataShapes
+  readonly scale: number
+}
+
+// Cell outlines for the boundary layer; elements are built only for the
+// cells a viewport request returns.
 interface BoundaryIndex {
   readonly ids: readonly string[]
-  // Interleaved x, y in µm.
-  readonly rings: readonly Float32Array[]
+  // Cell i's outline is shape shapeIndexes[i] of sources[sourceIndexes[i]].
+  readonly sources: readonly ScaledShapes[]
+  readonly sourceIndexes: Uint16Array
+  readonly shapeIndexes: Uint32Array
   // minX, minY, maxX, maxY per cell, in µm.
   readonly bounds: Float64Array
 }
@@ -190,13 +217,18 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   // Cell elements for cached label rings, so unchanged cells keep the same
   // objects across viewport requests.
   private readonly labelElementsByRing = new WeakMap<Float64Array, SpatialElement>()
-  // Shape elements of the last viewport request, reused by the next so cells
-  // still in view keep the same objects. Only the cells in view are kept:
-  // building every outline at once costs gigabytes for large segmentations.
-  private shapeElementsByRing = new Map<Float32Array, SpatialElement>()
-  // Filled while the table resolves row coordinates; shapes are in µm.
-  private readonly regionShapeByCellId = new Map<string, SpatialDataShape>()
-  private readonly cellIdByInstanceId = new Map<string, string>()
+  // Shape elements of the last viewport request by boundary index cell,
+  // reused by the next so cells still in view keep the same objects. Only the
+  // cells in view are kept: building every outline at once costs gigabytes
+  // for large segmentations.
+  private shapeElements: {
+    readonly index: BoundaryIndex
+    readonly byCell: ReadonlyMap<number, SpatialElement>
+  } | null = null
+  // Filled while the table resolves row coordinates.
+  private regionShapes: ReadonlyMap<string, RegionShapes> = new Map()
+  private regionRows: RegionRows | null = null
+  private regionShapesArePolygons = false
   private readonly labelCellIdsByRegion = new Map<string, Map<number, string>>()
   private resolvedUnits: SpatialDataUnits | null = null
 
@@ -214,7 +246,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         ? {}
         : { micrometersPerUnit: options.micrometersPerUnit }),
     }
-    this.readShapes = options.readShapes ?? readSpatialDataShapes
+    this.readShapes = options.readShapes ?? readSpatialDataShapesInWorker
     this.openLabels =
       options.openLabels ??
       ((request) =>
@@ -329,29 +361,29 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return { elements: await this.labelElements(source.entry, bbox) }
     }
 
-    const { ids, rings, bounds } = await this.boundaryIndex()
-    const previous = this.shapeElementsByRing
-    const next = new Map<Float32Array, SpatialElement>()
+    const index = await this.boundaryIndex()
+    const { bounds } = index
+    const previous =
+      this.shapeElements?.index === index ? this.shapeElements.byCell : new Map()
+    const byCell = new Map<number, SpatialElement>()
 
-    ids.forEach((id, index) => {
-      const ring = rings[index]
-      const offset = index * 4
+    for (let cell = 0; cell < index.ids.length; cell += 1) {
+      const offset = cell * 4
 
       if (
-        ring === undefined ||
         (bounds[offset] ?? 0) > bbox.maxX ||
         (bounds[offset + 1] ?? 0) > bbox.maxY ||
         (bounds[offset + 2] ?? 0) < bbox.minX ||
         (bounds[offset + 3] ?? 0) < bbox.minY
       ) {
-        return
+        continue
       }
 
-      next.set(ring, previous.get(ring) ?? ringElement(id, ring))
-    })
+      byCell.set(cell, previous.get(cell) ?? boundaryElement(index, cell))
+    }
 
-    this.shapeElementsByRing = next
-    return { elements: Array.from(next.values()) }
+    this.shapeElements = { index, byCell }
+    return { elements: Array.from(byCell.values()) }
   }
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
@@ -629,14 +661,15 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         instances === null ? cellId : instanceIdString(instances[row] ?? null)
       const regionValue = regions?.[row]
       const region = typeof regionValue === 'string' ? regionValue : defaultRegion
-      const shape =
-        instanceId === null || region === undefined
-          ? undefined
-          : shapesByRegion.get(region)?.get(instanceId)
+      const regionShapes = region === undefined ? undefined : shapesByRegion.get(region)
+      const index =
+        instanceId === null || regionShapes === undefined
+          ? -1
+          : regionShapes.lookup.indexOf(instanceId)
 
-      if (shape !== undefined) {
-        this.cellIdByInstanceId.set(shape.id, cellId)
-        placements.push({ kind: 'shape', shape })
+      if (regionShapes !== undefined && index >= 0) {
+        regionShapes.cellIds[index] = cellId
+        placements.push({ kind: 'shape', shapes: regionShapes.shapes, index })
         return
       }
 
@@ -685,7 +718,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       UNKNOWN_SPATIALDATA_UNITS
     this.resolvedUnits = units
     const scale = units.micrometersPerUnit
-    const coordinates: DataPoint[] = placements.map((placement, row) => {
+    const coordinates: DataPoint[] = placements.map((placement) => {
       if (placement === null) {
         return UNPLACED_POINT
       }
@@ -694,10 +727,21 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         return dataPoint(placement.x * scale, placement.y * scale)
       }
 
-      const shape = scaleShape(placement.shape, scale)
-      this.regionShapeByCellId.set(obs.cellIds[row] ?? String(row), shape)
-      return dataPoint(shape.centroid.x, shape.centroid.y)
+      const { centroids } = placement.shapes
+      return dataPoint(
+        (centroids[placement.index * 2] ?? Number.NaN) * scale,
+        (centroids[placement.index * 2 + 1] ?? Number.NaN) * scale,
+      )
     })
+    this.regionShapes = shapesByRegion
+    this.regionRows = { cellIds: obs.cellIds, placements, scale }
+    this.regionShapesArePolygons =
+      placements.some((placement) => placement?.kind === 'shape') &&
+      placements.every(
+        (placement) =>
+          placement?.kind !== 'shape' ||
+          placement.shapes.kinds[placement.index] === SHAPE_POLYGON,
+      )
     const placedRows = coordinates.filter((point) => Number.isFinite(point.x)).length
     this.onProgress?.(
       `SpatialData placed ${placedRows.toLocaleString()} of ${coordinates.length.toLocaleString()} table rows in ${view.coordinateSystem}`,
@@ -719,25 +763,17 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     readonly view: SpatialDataView
     readonly obs: AnnDataObsAccess
     readonly placements: readonly RawPlacement[]
-    readonly shapesByRegion: ReadonlyMap<string, ReadonlyMap<string, SpatialDataShape>>
+    readonly shapesByRegion: ReadonlyMap<string, RegionShapes>
     readonly obsmPoints: readonly { readonly x: number; readonly y: number }[] | null
     readonly labelRowsByRegion: ReadonlyMap<string, ReadonlyMap<number, number>>
   }): Promise<SpatialDataUnits | null> {
     const { view, obs, placements } = context
 
     for (const entry of view.regionShapes) {
-      const shapes = Array.from(
-        context.shapesByRegion.get(entry.element.name)?.values() ?? [],
-      )
+      const areas = context.shapesByRegion.get(entry.element.name)?.shapes.areas
       const estimate = estimateUnitsFromVisiumHdBins(
         entry.element.name,
-        shapes
-          .slice(0, 2_000)
-          .map((shape) =>
-            shape.geometry.kind === 'polygon'
-              ? ringArea(shape.geometry.ring)
-              : Number.NaN,
-          ),
+        Array.from(areas?.subarray(0, 2_000) ?? []),
       )
 
       if (estimate !== null) {
@@ -750,11 +786,12 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
     if (areaColumn !== undefined && areas !== null) {
       const polygonPairs = placements.flatMap((placement, row) =>
-        placement?.kind === 'shape' && placement.shape.geometry.kind === 'polygon'
+        placement?.kind === 'shape' &&
+        placement.shapes.kinds[placement.index] === SHAPE_POLYGON
           ? [
               {
                 micrometersSquared: numericOrNaN(areas[row]),
-                unitsSquared: ringArea(placement.shape.geometry.ring),
+                unitsSquared: placement.shapes.areas[placement.index] ?? Number.NaN,
               },
             ]
           : [],
@@ -789,8 +826,14 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
     if (obs.columnNames.includes('array_row') && obs.columnNames.includes('array_col')) {
       const centers = placements.flatMap((placement) =>
-        placement?.kind === 'shape' && placement.shape.geometry.kind === 'circle'
-          ? [placement.shape.geometry.center]
+        placement?.kind === 'shape' &&
+        placement.shapes.kinds[placement.index] === SHAPE_CIRCLE
+          ? [
+              {
+                x: placement.shapes.centroids[placement.index * 2] ?? Number.NaN,
+                y: placement.shapes.centroids[placement.index * 2 + 1] ?? Number.NaN,
+              },
+            ]
           : [],
       )
       return estimateUnitsFromVisiumSpots(centers)
@@ -850,14 +893,16 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   private async loadRegionShapes(
     regions: readonly SpatialDataPlacedElement[],
-  ): Promise<ReadonlyMap<string, ReadonlyMap<string, SpatialDataShape>>> {
+  ): Promise<ReadonlyMap<string, RegionShapes>> {
     const entries = await Promise.all(
       regions.map(async (entry) => {
         const shapes = await this.readElementShapes(entry, entry.affine)
-        return [
-          entry.element.name,
-          new Map(shapes.map((shape) => [shape.id, shape])),
-        ] as const
+        const regionShapes: RegionShapes = {
+          shapes,
+          lookup: new ShapeLookup(shapes.ids),
+          cellIds: new Array<string | undefined>(shapes.ids.length),
+        }
+        return [entry.element.name, regionShapes] as const
       }),
     )
 
@@ -867,7 +912,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private async readElementShapes(
     entry: SpatialDataPlacedElement,
     affine: Affine2D,
-  ): Promise<readonly SpatialDataShape[]> {
+  ): Promise<SpatialDataShapes> {
     this.onProgress?.(`SpatialData shapes ${entry.element.name} loading`)
     const path = `${entry.element.path}/shapes.parquet`
     const { zip } = await this.state()
@@ -883,10 +928,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       url: this.elementUrl(path),
       ...(file === undefined ? {} : { file }),
       affine,
-      fetcher: this.fetcher,
+      ...(this.storeFetcher === undefined ? {} : { fetcher: this.storeFetcher }),
     })
     this.onProgress?.(
-      `SpatialData shapes ${entry.element.name} ready: ${shapes.length.toLocaleString()} geometries`,
+      `SpatialData shapes ${entry.element.name} ready: ${shapes.ids.length.toLocaleString()} geometries`,
     )
     return shapes
   }
@@ -997,12 +1042,8 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
     // Region circles (for example Xenium cell_circles) are replaced by a
     // polygon companion that shares their index when one is available.
-    const regionShapes = Array.from(this.regionShapeByCellId.values())
-    const regionsArePolygons =
-      regionShapes.length > 0 &&
-      regionShapes.every((shape) => shape.geometry.kind === 'polygon')
     const entry =
-      regionsArePolygons || view.boundaryCandidates.length === 0
+      this.regionShapesArePolygons || view.boundaryCandidates.length === 0
         ? view.regionShapes[0]
         : (view.boundaryCandidates[0] ?? view.regionShapes[0])
 
@@ -1025,55 +1066,83 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     const source = await this.boundarySource()
 
     if (source?.kind !== 'shapes') {
-      return { ids: [], rings: [], bounds: new Float64Array(0) }
+      return boundaryIndexOf([], [], [], [])
     }
 
     const boundary = source.entry
-    const isRegion = view.regionShapes.some((entry) => entry.element === boundary.element)
+
+    if (view.regionShapes.some((entry) => entry.element === boundary.element)) {
+      return this.regionBoundaryIndex()
+    }
+
     const { micrometersPerUnit } = await this.units()
-    const shapesByCellId = isRegion
-      ? this.regionShapeByCellId
-      : this.companionShapesByCellId(
-          await this.readElementShapes(
-            boundary,
-            scaleAffine(boundary.affine, micrometersPerUnit),
-          ),
-        )
-    const ids: string[] = []
-    const rings: Float32Array[] = []
-    const bounds = new Float64Array(shapesByCellId.size * 4)
-
-    for (const [cellId, shape] of shapesByCellId) {
-      const ring = boundaryRing(shape)
-
-      if (ring.length < 6) {
-        continue
-      }
-
-      writeRingBounds(ring, bounds, ids.length * 4)
-      ids.push(cellId)
-      rings.push(ring)
-    }
-
-    return { ids, rings, bounds: bounds.subarray(0, ids.length * 4) }
-  }
-
-  private companionShapesByCellId(
-    shapes: readonly SpatialDataShape[],
-  ): ReadonlyMap<string, SpatialDataShape> {
-    const byCellId = new Map<string, SpatialDataShape>()
-
-    for (const shape of shapes) {
-      const cellId = this.cellIdByInstanceId.get(shape.id)
-
-      if (cellId !== undefined) {
-        byCellId.set(cellId, shape)
-      }
-    }
+    const companion = await this.readElementShapes(
+      boundary,
+      scaleAffine(boundary.affine, micrometersPerUnit),
+    )
 
     // Fall back to region geometry when the companion does not share the
     // region index.
-    return byCellId.size === 0 ? this.regionShapeByCellId : byCellId
+    return this.companionBoundaryIndex(companion) ?? this.regionBoundaryIndex()
+  }
+
+  private regionBoundaryIndex(): BoundaryIndex {
+    const rows = this.regionRows
+    const ids: string[] = []
+    const sources: ScaledShapes[] = []
+    const sourceIndexes: number[] = []
+    const shapeIndexes: number[] = []
+
+    rows?.placements.forEach((placement, row) => {
+      if (placement?.kind !== 'shape') {
+        return
+      }
+
+      let source = sources.findIndex((entry) => entry.shapes === placement.shapes)
+
+      if (source < 0) {
+        source = sources.length
+        sources.push({ shapes: placement.shapes, scale: rows.scale })
+      }
+
+      ids.push(rows.cellIds[row] ?? String(row))
+      sourceIndexes.push(source)
+      shapeIndexes.push(placement.index)
+    })
+
+    return boundaryIndexOf(ids, sources, sourceIndexes, shapeIndexes)
+  }
+
+  // Companion shapes (already in µm) matched to table cells through the
+  // region shapes that share their index, or null when none match.
+  private companionBoundaryIndex(shapes: SpatialDataShapes): BoundaryIndex | null {
+    const regions = Array.from(this.regionShapes.values())
+    const ids: string[] = []
+    const shapeIndexes: number[] = []
+
+    regions.forEach((region) => {
+      region.lookup.rewind()
+    })
+    shapes.ids.forEach((instanceId, index) => {
+      for (const region of regions) {
+        const cellId = region.cellIds[region.lookup.indexOf(instanceId)]
+
+        if (cellId !== undefined) {
+          ids.push(cellId)
+          shapeIndexes.push(index)
+          return
+        }
+      }
+    })
+
+    return ids.length === 0
+      ? null
+      : boundaryIndexOf(
+          ids,
+          [{ shapes, scale: 1 }],
+          shapeIndexes.map(() => 0),
+          shapeIndexes,
+        )
   }
 
   private imageLoader(): Promise<ImagePyramidLoader | null> {
@@ -1132,33 +1201,6 @@ function scaleAffine(affine: Affine2D, scale: number): Affine2D {
     : composeAffine({ a: scale, b: 0, c: 0, d: 0, e: scale, f: 0 }, affine)
 }
 
-function scaleShape(shape: SpatialDataShape, scale: number): SpatialDataShape {
-  if (scale === 1) {
-    return shape
-  }
-
-  const point = (value: { readonly x: number; readonly y: number }) => ({
-    x: value.x * scale,
-    y: value.y * scale,
-  })
-
-  return {
-    id: shape.id,
-    centroid: point(shape.centroid),
-    geometry:
-      shape.geometry.kind === 'circle'
-        ? {
-            kind: 'circle',
-            center: point(shape.geometry.center),
-            radius: shape.geometry.radius * scale,
-          }
-        : {
-            kind: 'polygon',
-            ring: shape.geometry.ring.map((value) => value * scale),
-          },
-  }
-}
-
 // Integer label ids per table row: the instance column when it holds the
 // label values (the SpatialData convention), otherwise an integer obs column
 // named like `cell_labels`.
@@ -1212,52 +1254,109 @@ function planarTransformFromAffine(affine: Affine2D): OmeZarrPlanarTransform {
   }
 }
 
-function boundaryRing(shape: SpatialDataShape): Float32Array {
-  if (shape.geometry.kind === 'polygon') {
-    return shape.geometry.ring
+function boundaryIndexOf(
+  ids: readonly string[],
+  sources: readonly ScaledShapes[],
+  sourceIndexes: readonly number[],
+  shapeIndexes: readonly number[],
+): BoundaryIndex {
+  const bounds = new Float64Array(ids.length * 4)
+
+  shapeIndexes.forEach((shapeIndex, cell) => {
+    const source = sources[sourceIndexes[cell] ?? 0]
+
+    for (let corner = 0; corner < 4 && source !== undefined; corner += 1) {
+      bounds[cell * 4 + corner] =
+        (source.shapes.bounds[shapeIndex * 4 + corner] ?? 0) * source.scale
+    }
+  })
+
+  return {
+    ids,
+    sources,
+    sourceIndexes: Uint16Array.from(sourceIndexes),
+    shapeIndexes: Uint32Array.from(shapeIndexes),
+    bounds,
   }
-
-  const { center, radius } = shape.geometry
-  const ring = new Float32Array(CIRCLE_BOUNDARY_SEGMENTS * 2)
-
-  for (let index = 0; index < CIRCLE_BOUNDARY_SEGMENTS; index += 1) {
-    const angle = (2 * Math.PI * index) / CIRCLE_BOUNDARY_SEGMENTS
-    ring[index * 2] = center.x + radius * Math.cos(angle)
-    ring[index * 2 + 1] = center.y + radius * Math.sin(angle)
-  }
-
-  return ring
 }
 
-function writeRingBounds(ring: Float32Array, bounds: Float64Array, offset: number): void {
-  let minX = Number.POSITIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
+function boundaryElement(index: BoundaryIndex, cell: number): SpatialElement {
+  const source = index.sources[index.sourceIndexes[cell] ?? 0]
 
-  for (let index = 0; index < ring.length; index += 2) {
-    const x = ring[index] ?? 0
-    const y = ring[index + 1] ?? 0
-    minX = Math.min(minX, x)
-    minY = Math.min(minY, y)
-    maxX = Math.max(maxX, x)
-    maxY = Math.max(maxY, y)
+  return {
+    id: index.ids[cell] ?? String(cell),
+    geometry: {
+      kind: 'polygon',
+      rings: [
+        source === undefined ? [] : outlinePoints(source, index.shapeIndexes[cell] ?? 0),
+      ],
+    },
   }
-
-  bounds[offset] = minX
-  bounds[offset + 1] = minY
-  bounds[offset + 2] = maxX
-  bounds[offset + 3] = maxY
 }
 
-function ringElement(id: string, ring: Float32Array): SpatialElement {
+// A shape's outline in µm; circles become 32-segment polygons.
+function outlinePoints({ shapes, scale }: ScaledShapes, index: number): DataPoint[] {
   const points: DataPoint[] = []
 
-  for (let index = 0; index < ring.length; index += 2) {
-    points.push(dataPoint(ring[index] ?? 0, ring[index + 1] ?? 0))
+  if (shapes.kinds[index] === SHAPE_POLYGON) {
+    const ring = shapeRing(shapes, index)
+
+    for (let offset = 0; offset < ring.length; offset += 2) {
+      points.push(dataPoint((ring[offset] ?? 0) * scale, (ring[offset + 1] ?? 0) * scale))
+    }
+
+    return points
   }
 
-  return { id, geometry: { kind: 'polygon', rings: [points] } }
+  const x = (shapes.centroids[index * 2] ?? 0) * scale
+  const y = (shapes.centroids[index * 2 + 1] ?? 0) * scale
+  const radius = (shapes.radii[index] ?? 0) * scale
+
+  for (let segment = 0; segment < CIRCLE_BOUNDARY_SEGMENTS; segment += 1) {
+    const angle = (2 * Math.PI * segment) / CIRCLE_BOUNDARY_SEGMENTS
+    points.push(dataPoint(x + radius * Math.cos(angle), y + radius * Math.sin(angle)))
+  }
+
+  return points
+}
+
+// Finds shapes by instance id. Tables usually list rows in the order of their
+// shapes, so the shape after the last one found is tried first, and the id
+// index (a Map as large as the element) is built only when that misses.
+class ShapeLookup {
+  private next = 0
+  private byId: Map<string, number> | null = null
+
+  constructor(private readonly ids: readonly string[]) {}
+
+  // The shape's index, or -1.
+  indexOf(id: string): number {
+    let index = this.ids[this.next] === id ? this.next : -1
+
+    if (index < 0) {
+      this.byId ??= indexById(this.ids)
+      index = this.byId.get(id) ?? -1
+    }
+
+    if (index >= 0) {
+      this.next = index + 1
+    }
+
+    return index
+  }
+
+  // Starts the next lookups from the first shape again.
+  rewind(): void {
+    this.next = 0
+  }
+}
+
+function indexById(ids: readonly string[]): Map<string, number> {
+  const byId = new Map<string, number>()
+  ids.forEach((id, index) => {
+    byId.set(id, index)
+  })
+  return byId
 }
 
 function unionBboxes(boxes: readonly BBox[]): BBox {

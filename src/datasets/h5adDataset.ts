@@ -7,10 +7,12 @@ import {
 } from '../zarr/icechunkStore'
 import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
+import { getWholeArray } from '../zarr/zarrWholeArray'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
+import { openH5WorkerFile, type H5WorkerFile } from '../data/h5WorkerFile'
 import { createAsyncLimiter } from '../utils/asyncLimiter'
 import { slug } from '../utils/slug'
 import type {
@@ -18,6 +20,7 @@ import type {
   ContinuousCellMetadataValue,
 } from '../data/customAnnotations'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { H5TreeGroup } from '../workers/h5FileMessages'
 import {
   analysisEmbeddingLabel,
   type AnalysisEmbedding,
@@ -314,9 +317,18 @@ interface H5GroupLike extends H5EntityLike {
   get(path: string): unknown
 }
 
-interface H5adArraySource {
+type H5adArraySource = H5adZarrArraySource | H5adWorkerArraySource
+
+interface H5adZarrArraySource {
   readonly kind: 'zarr'
   readonly array: H5adZarrArray
+}
+
+// A dataset of an .h5ad file open in an H5 file worker.
+interface H5adWorkerArraySource {
+  readonly kind: 'h5-worker'
+  readonly file: H5WorkerFile
+  readonly path: string
 }
 
 type H5adZarrArray = zarr.Array<zarr.DataType, zarr.Readable>
@@ -1055,30 +1067,50 @@ async function readH5ad(
 
   reportH5adProgress(onProgress, 'H5AD file loaded; opening AnnData arrays')
 
-  const h5wasm = (await import('h5wasm')).default
-  const { FS } = await h5wasm.ready
-  const fileName = `/anndata-${hashString(url)}.h5ad`
+  // The worker stays open for reads after load (embeddings, tissue images)
+  // and ends when the dataset is no longer referenced.
+  const file = await openH5WorkerFile(bytes, { tree: true })
 
   try {
-    FS.unlink(fileName)
-  } catch {
-    // No previous virtual file exists for this H5AD URL.
-  }
-
-  FS.writeFile(fileName, bytes)
-
-  const file = new h5wasm.File(fileName, 'r') as H5GroupLike & { close(): unknown }
-
-  try {
-    return readH5adCacheFromGroup(url, file)
+    return await readH5adCacheFromGroup(url, hydrateH5WorkerGroup(file))
   } catch (error) {
-    try {
-      file.close()
-    } catch {
-      // The schema error is more useful than cleanup failure.
-    }
+    file.close()
     throw error
   }
+}
+
+function hydrateH5WorkerGroup(
+  file: H5WorkerFile,
+  group: H5TreeGroup | null = file.tree,
+  path = '',
+): HydratedH5adGroup {
+  if (group === null) {
+    throw new Error('The H5 file worker returned no tree for the H5AD file.')
+  }
+
+  const children = new Map<string, unknown>()
+
+  for (const [name, node] of group.children) {
+    const childPath = `${path}/${name}`
+
+    if (node.kind === 'group') {
+      children.set(name, hydrateH5WorkerGroup(file, node, childPath))
+      continue
+    }
+
+    const dataset: H5DatasetLike = {
+      attrs: h5AttrsFromRecord(Object.fromEntries(node.attrs)),
+      shape: node.shape,
+      value: undefined,
+      source: { kind: 'h5-worker', file, path: childPath },
+    }
+    children.set(name, dataset)
+  }
+
+  return new HydratedH5adGroup(
+    h5AttrsFromRecord(Object.fromEntries(group.attrs)),
+    children,
+  )
 }
 
 async function readH5adReferenceOrThrow(
@@ -3356,9 +3388,16 @@ async function readDatasetValue(dataset: H5DatasetLike): Promise<unknown> {
   }
 
   if (isZarrDataset(dataset)) {
+    const array = dataset.source.array
     return zarrChunkValue(
-      await zarr.get(dataset.source.array, fullArraySelection(dataset.source.array)),
+      array.shape.length >= 2
+        ? await getWholeArray(array)
+        : await zarr.get(array, fullArraySelection(array)),
     )
+  }
+
+  if (dataset.source?.kind === 'h5-worker') {
+    return dataset.source.file.read(dataset.source.path)
   }
 
   return dataset.value
@@ -3474,7 +3513,7 @@ function isDataset(value: unknown): value is H5DatasetLike {
 }
 
 function isZarrDataset(value: H5DatasetLike): value is H5DatasetLike & {
-  readonly source: H5adArraySource
+  readonly source: H5adZarrArraySource
 } {
   return value.source?.kind === 'zarr'
 }
@@ -3535,14 +3574,4 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
     error.name = 'AbortError'
     throw error
   }
-}
-
-function hashString(value: string): string {
-  let hash = 0
-
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (Math.imul(31, hash) + value.charCodeAt(index)) | 0
-  }
-
-  return (hash >>> 0).toString(16)
 }

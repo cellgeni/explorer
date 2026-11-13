@@ -3,12 +3,15 @@
 import type * as zarr from 'zarrita'
 import { labelWindow, traceLabelEdges } from '../datasets/spatialDataLabelTrace'
 import { numericPixelsToRgba } from '../zarr/omeZarrPixels'
-import { chunkWindow, decodeChunk } from './zarrDecodeCore'
+import { decodeZarrCodec } from './zarrCodecCore'
+import { chunkWindow, chunkWindowSamples, decodeChunk } from './zarrDecodeCore'
 import type {
   ZarrChunkSource,
+  ZarrDecodeCodecMessage,
   ZarrDecodeRequest,
   ZarrDecodeResponse,
   ZarrRenderTileMessage,
+  ZarrSampleTileMessage,
   ZarrTraceLabelsMessage,
 } from './zarrDecodeMessages'
 
@@ -34,6 +37,16 @@ workerScope.onmessage = (event: MessageEvent<ZarrDecodeRequest>) => {
 
   if (message.type === 'render-tile') {
     void renderTile(message)
+    return
+  }
+
+  if (message.type === 'sample-tile') {
+    void sampleTile(message)
+    return
+  }
+
+  if (message.type === 'decode-codec') {
+    void decodeCodec(message)
     return
   }
 
@@ -67,20 +80,33 @@ function putChunk(cacheKey: string, source: ZarrChunkSource, bytes: ArrayBuffer 
   )
 }
 
-async function renderTile(message: ZarrRenderTileMessage): Promise<void> {
-  const entry = chunks.get(message.cacheKey)
+// Marks a cached chunk most recently used and returns it. For a chunk the
+// worker does not hold, answers a miss and returns undefined.
+function cachedChunk(
+  cacheKey: string,
+  id: number,
+): Promise<zarr.Chunk<zarr.DataType>> | undefined {
+  const entry = chunks.get(cacheKey)
 
   if (entry === undefined) {
-    respond({ type: 'miss', id: message.id })
+    respond({ type: 'miss', id })
+    return undefined
+  }
+
+  chunks.delete(cacheKey)
+  chunks.set(cacheKey, entry)
+  return entry.promise
+}
+
+async function renderTile(message: ZarrRenderTileMessage): Promise<void> {
+  const cached = cachedChunk(message.cacheKey, message.id)
+
+  if (cached === undefined) {
     return
   }
 
-  // Refresh recency.
-  chunks.delete(message.cacheKey)
-  chunks.set(message.cacheKey, entry)
-
   try {
-    const chunk = await entry.promise
+    const chunk = await cached
     const pixels = chunkWindow(chunk, message.window)
     const rgba = numericPixelsToRgba(
       pixels,
@@ -106,6 +132,29 @@ async function renderTile(message: ZarrRenderTileMessage): Promise<void> {
         hi: rgba.hi,
       },
       [bitmap],
+    )
+  } catch (error) {
+    respond({ type: 'error', id: message.id, error: errorMessage(error) })
+  }
+}
+
+async function sampleTile(message: ZarrSampleTileMessage): Promise<void> {
+  const cached = cachedChunk(message.cacheKey, message.id)
+
+  if (cached === undefined) {
+    return
+  }
+
+  try {
+    const tile = chunkWindowSamples(await cached, message.window, message.sampling)
+    respond(
+      {
+        type: 'samples',
+        id: message.id,
+        samples: tile.samples,
+        pixelCount: tile.pixelCount,
+      },
+      [tile.samples.buffer],
     )
   } catch (error) {
     respond({ type: 'error', id: message.id, error: errorMessage(error) })
@@ -139,6 +188,15 @@ async function traceLabels(message: ZarrTraceLabelsMessage): Promise<void> {
       trace.bounds.buffer,
       trace.pixelCounts.buffer,
     ])
+  } catch (error) {
+    respond({ type: 'error', id: message.id, error: errorMessage(error) })
+  }
+}
+
+async function decodeCodec(message: ZarrDecodeCodecMessage): Promise<void> {
+  try {
+    const result = await decodeZarrCodec(message.id, message.codec, message.bytes)
+    respond(result.response, result.transfer)
   } catch (error) {
     respond({ type: 'error', id: message.id, error: errorMessage(error) })
   }

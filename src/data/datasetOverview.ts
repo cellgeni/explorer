@@ -1,4 +1,5 @@
-import { isCellsParquetDecodeError, readCellsOverview } from './hyparquetCells'
+import { readCellsOverviewInWorker } from './cellsOverviewWorker'
+import { isCellsParquetDecodeError } from './hyparquetCells'
 import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
@@ -31,7 +32,7 @@ export async function loadDatasetOverview(
   baseUrl: string,
   options: LoadDatasetOverviewOptions = {},
 ): Promise<readonly CellOverviewPoint[]> {
-  const readCells = options.readCells ?? readCellsOverview
+  const readCells = options.readCells ?? readCellsOverviewInWorker
   const validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
   const url = cellsParquetUrl(baseUrl)
   const limit =

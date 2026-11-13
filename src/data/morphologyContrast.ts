@@ -1,8 +1,10 @@
-import { decodeTiffTilePixels } from '../codecs/tiffTile'
 import type { DecodedJpeg2000 } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
+import { TileDecodeWorkerPool, type DecodeWorkerFactory } from '../workers/tileDecodePool'
+import { sampleTileBytes } from '../workers/tileSamplesCore'
 import type { ImagePixels, TileIndex } from './coords'
 import type { ImagePyramidTilePixels } from './imagePyramid'
+import { sampleDecodedTile, type TileSamples, type TileSampling } from './tileSamples'
 
 export interface ChannelAutoContrast {
   readonly min: number
@@ -39,6 +41,14 @@ export interface AutoContrastTileLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<ImagePyramidTilePixels>
+  // Samples a tile off the main thread; null when it cannot.
+  sampleTilePixels?(
+    level: number,
+    col: number,
+    row: number,
+    sampling: TileSampling,
+    signal?: AbortSignal,
+  ): Promise<TileSamples | null>
 }
 
 export interface ComputeChannelAutoContrastOptions {
@@ -46,7 +56,12 @@ export interface ComputeChannelAutoContrastOptions {
   readonly lowPercentile?: number
   readonly highPercentile?: number
   readonly maxSamples?: number
+  // Decodes tile bytes on this thread instead of in a worker.
   readonly decodeTile?: (bytes: Uint8Array) => Promise<DecodedJpeg2000>
+  // Starts the worker that decodes and samples tile bytes; a tile decode
+  // worker by default. Where there is no Worker, tiles are decoded on this
+  // thread.
+  readonly workerFactory?: DecodeWorkerFactory
 }
 
 const DEFAULT_LOW_PERCENTILE = 0.5
@@ -63,45 +78,41 @@ export async function computeChannelAutoContrast(
   const maxSamples = Math.max(1, options.maxSamples ?? DEFAULT_MAX_SAMPLES)
   const totalPixels = countVisiblePixels(loader, level, tiles)
   const sampleStride = Math.max(1, Math.ceil(totalPixels / maxSamples))
-  const decodeTile = options.decodeTile
-  const samples: number[] = []
+  const workers = new TileWorkers(options)
+  const tileSamples: Float64Array[] = []
+  let sampleCount = 0
   let pixelIndex = 0
 
-  for (const tile of tiles) {
+  try {
+    for (const tile of tiles) {
+      throwIfAborted(options.signal)
+
+      const sourceSize = loader.tileSourceSize(level, tile.col, tile.row)
+      const sampled = await sampleTile(loader, level, tile, workers, options, {
+        startIndex: pixelIndex,
+        stride: sampleStride,
+        width: sourceSize.width,
+        height: sourceSize.height,
+      })
+
+      tileSamples.push(sampled.samples)
+      sampleCount += sampled.samples.length
+      pixelIndex += sampled.pixelCount
+    }
+  } catch (cause) {
+    // Aborting ends the worker, which fails its request.
     throwIfAborted(options.signal)
-
-    const decoded =
-      loader.loadTilePixels === undefined
-        ? await decodeByteTile({
-            decodeTile,
-            loader,
-            level,
-            col: tile.col,
-            row: tile.row,
-            signal: options.signal,
-          })
-        : await loader.loadTilePixels(level, tile.col, tile.row, options.signal)
-    const sourceSize = loader.tileSourceSize(level, tile.col, tile.row)
-    const width = Math.min(sourceSize.width, decoded.width)
-    const height = Math.min(sourceSize.height, decoded.height)
-
-    collectTileSamples({
-      height,
-      pixelIndex,
-      pixels: decoded.pixels,
-      samples,
-      sampleStride,
-      sourceWidth: decoded.width,
-      width,
-    })
-    pixelIndex += width * height
+    throw cause
+  } finally {
+    workers.end()
   }
 
-  if (samples.length === 0) {
+  if (sampleCount === 0) {
     throw new Error('Unable to auto-contrast channel because no pixels were sampled.')
   }
 
-  samples.sort((a, b) => a - b)
+  const samples = joinSamples(tileSamples, sampleCount)
+  samples.sort()
 
   const low = percentile(samples, options.lowPercentile ?? DEFAULT_LOW_PERCENTILE)
   const high = percentile(samples, options.highPercentile ?? DEFAULT_HIGH_PERCENTILE)
@@ -115,36 +126,94 @@ export async function computeChannelAutoContrast(
   }
 }
 
-async function decodeByteTile(options: {
-  readonly decodeTile: ComputeChannelAutoContrastOptions['decodeTile']
-  readonly loader: AutoContrastTileLoader
-  readonly level: number
-  readonly col: number
-  readonly row: number
-  readonly signal: AbortSignal | undefined
-}): Promise<ImagePyramidTilePixels> {
-  if (options.loader.fetchTileBytes === undefined) {
+// The tile decode worker for one auto-contrast run, started on its first tile
+// bytes and ended with the run or on abort.
+class TileWorkers {
+  private pool: TileDecodeWorkerPool | null = null
+  private readonly workerFactory: DecodeWorkerFactory | undefined
+  private readonly signal: AbortSignal | undefined
+  private readonly onAbort = () => {
+    this.end()
+  }
+
+  constructor(options: ComputeChannelAutoContrastOptions) {
+    this.workerFactory = options.workerFactory
+    this.signal = options.signal
+  }
+
+  // Null where tiles are decoded on this thread.
+  get(): TileDecodeWorkerPool | null {
+    if (
+      this.pool === null &&
+      (this.workerFactory !== undefined || typeof Worker !== 'undefined')
+    ) {
+      this.pool = new TileDecodeWorkerPool({
+        size: 1,
+        ...(this.workerFactory === undefined
+          ? {}
+          : { workerFactory: this.workerFactory }),
+      })
+      this.signal?.addEventListener('abort', this.onAbort, { once: true })
+    }
+
+    return this.pool
+  }
+
+  end(): void {
+    this.signal?.removeEventListener('abort', this.onAbort)
+    this.pool?.terminate()
+    this.pool = null
+  }
+}
+
+async function sampleTile(
+  loader: AutoContrastTileLoader,
+  level: number,
+  tile: TileIndex,
+  workers: TileWorkers,
+  options: ComputeChannelAutoContrastOptions,
+  sampling: TileSampling,
+): Promise<TileSamples> {
+  const { signal } = options
+  const fromLoader = await loader.sampleTilePixels?.(
+    level,
+    tile.col,
+    tile.row,
+    sampling,
+    signal,
+  )
+
+  if (fromLoader !== undefined && fromLoader !== null) {
+    return fromLoader
+  }
+
+  if (loader.loadTilePixels !== undefined) {
+    const decoded = await loader.loadTilePixels(level, tile.col, tile.row, signal)
+    return sampleDecodedTile(decoded.pixels, decoded.width, decoded.height, sampling)
+  }
+
+  if (loader.fetchTileBytes === undefined) {
     throw new Error('Unable to auto-contrast channel without readable tile pixels.')
   }
 
-  const bytes = await options.loader.fetchTileBytes(
-    options.level,
-    options.col,
-    options.row,
-    options.signal,
-  )
+  const bytes = await loader.fetchTileBytes(level, tile.col, tile.row, signal)
 
-  // A tile the file leaves out has no pixels to sample.
-  if (bytes.byteLength === 0) {
-    return { pixels: new Uint8Array(0), width: 0, height: 0 }
+  if (options.decodeTile !== undefined) {
+    // A tile the file leaves out has no pixels to sample.
+    const decoded =
+      bytes.byteLength === 0
+        ? { pixels: new Uint8Array(0), width: 0, height: 0 }
+        : await options.decodeTile(bytes)
+    return sampleDecodedTile(decoded.pixels, decoded.width, decoded.height, sampling)
   }
 
-  return options.decodeTile === undefined
-    ? await decodeTiffTilePixels(
-        bytes,
-        options.loader.tileDecodeOptions?.(options.level, options.col, options.row),
-      )
-    : await options.decodeTile(bytes)
+  const decodeOptions: TiffTileDecodeMetadata =
+    loader.tileDecodeOptions?.(level, tile.col, tile.row) ?? {}
+  const pool = bytes.byteLength === 0 ? null : workers.get()
+
+  return pool === null
+    ? sampleTileBytes(bytes, decodeOptions, sampling)
+    : pool.sample(bytes, decodeOptions, sampling)
 }
 
 function countVisiblePixels(
@@ -162,38 +231,30 @@ function countVisiblePixels(
   return total
 }
 
-function collectTileSamples(options: {
-  readonly height: number
-  readonly pixelIndex: number
-  readonly pixels: ImagePyramidTilePixels['pixels']
-  readonly samples: number[]
-  readonly sampleStride: number
-  readonly sourceWidth: number
-  readonly width: number
-}): void {
-  let pixelIndex = options.pixelIndex
-
-  for (let y = 0; y < options.height; y += 1) {
-    const rowOffset = y * options.sourceWidth
-
-    for (let x = 0; x < options.width; x += 1) {
-      if (pixelIndex % options.sampleStride === 0) {
-        options.samples.push(options.pixels[rowOffset + x] ?? 0)
-      }
-
-      pixelIndex += 1
-    }
+function joinSamples(tileSamples: readonly Float64Array[], length: number): Float64Array {
+  if (tileSamples.length === 1 && tileSamples[0]?.length === length) {
+    return tileSamples[0]
   }
+
+  const samples = new Float64Array(length)
+  let offset = 0
+
+  for (const values of tileSamples) {
+    samples.set(values, offset)
+    offset += values.length
+  }
+
+  return samples
 }
 
-function percentile(sortedValues: readonly number[], percentileValue: number): number {
+function percentile(sortedValues: Float64Array, percentileValue: number): number {
   const clamped = Math.max(0, Math.min(100, percentileValue))
   const index = Math.round(((sortedValues.length - 1) * clamped) / 100)
   return sortedValues[index] ?? 0
 }
 
 function buildHistogram(
-  sortedValues: readonly number[],
+  sortedValues: Float64Array,
   min: number,
   max: number,
 ): ChannelHistogram {

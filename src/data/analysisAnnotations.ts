@@ -3,6 +3,7 @@ import * as zarr from 'zarrita'
 import { intToCellId } from './cellid'
 import type { CellId } from './cellid'
 import type { Annotation } from '../datasets/spatialDataset'
+import { getWholeArray } from '../zarr/zarrWholeArray'
 
 export interface AnalysisGroupingArrays {
   readonly groupingIndex?: number
@@ -193,7 +194,7 @@ async function readCellIdsByMatrixRow(matrixUrl: string): Promise<readonly CellI
   const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), {
     kind: 'array',
   })
-  const cellIdChunk = await zarr.get(cellIdArray, [null, null])
+  const cellIdChunk = await getWholeArray(cellIdArray)
   const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
   const rowCount = readShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
   const stride = cellIdArray.shape[1] ?? 2

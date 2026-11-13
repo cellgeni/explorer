@@ -1,6 +1,9 @@
 /// <reference lib="webworker" />
 
-import { gexFromFeatureBarcodeMatrixH5File, type H5FileLike } from '../data/gex'
+import {
+  gexFromFeatureBarcodeMatrixH5File,
+  type H5FileLike,
+} from '../data/featureBarcodeMatrixH5'
 import type {
   FeatureBarcodeMatrixWorkerRequest,
   FeatureBarcodeMatrixWorkerResponse,

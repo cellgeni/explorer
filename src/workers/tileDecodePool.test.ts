@@ -5,15 +5,15 @@ import type {
   DecodeWorkerLike,
   TileDecodeWorkerPoolOptions,
 } from './tileDecodePool'
-import type { TileDecodeRequest, TileDecodeResponse } from './tileDecodeMessages'
+import type { TileDecodeResponse, TileDecodeWorkerRequest } from './tileDecodeMessages'
 
 class FakeWorker implements DecodeWorkerLike {
   onmessage: ((event: MessageEvent<TileDecodeResponse>) => void) | null = null
   onerror: ((event: ErrorEvent) => void) | null = null
   readonly terminate = vi.fn()
-  readonly posted: TileDecodeRequest[] = []
+  readonly posted: TileDecodeWorkerRequest[] = []
 
-  postMessage(message: TileDecodeRequest): void {
+  postMessage(message: TileDecodeWorkerRequest): void {
     this.posted.push(message)
   }
 
@@ -50,7 +50,8 @@ describe('TileDecodeWorkerPool', () => {
       tileHeight: 1,
       tileWidth: 2,
     })
-    const request = workers[0]?.posted[0]
+    const posted = workers[0]?.posted[0]
+    const request = posted !== undefined && !('sampling' in posted) ? posted : undefined
 
     expect(request?.bitsPerSample).toEqual([8])
     expect(request?.compression).toBe(5)
@@ -100,6 +101,32 @@ describe('TileDecodeWorkerPool', () => {
     resolveLast(workers[0])
     resolveLast(workers[1])
     await Promise.all([second, third])
+  })
+
+  it('decodes a tile into auto-contrast samples', async () => {
+    const { pool, workers } = makePool({ size: 1 })
+    const sampling = { startIndex: 3, stride: 2, width: 2, height: 1 }
+    const promise = pool.sample(
+      new Uint8Array([1, 2]),
+      { compression: 1, bitsPerSample: [8], tileWidth: 2, tileHeight: 1 },
+      sampling,
+    )
+    const request = workers[0]?.posted[0]
+
+    expect(request).toMatchObject({ compression: 1, tileWidth: 2, sampling })
+    expect(request?.bytes.byteLength).toBe(2)
+
+    workers[0]?.resolve({
+      id: request?.id ?? -1,
+      ok: true,
+      samples: Float64Array.from([2]),
+      pixelCount: 2,
+    })
+
+    await expect(promise).resolves.toEqual({
+      samples: Float64Array.from([2]),
+      pixelCount: 2,
+    })
   })
 
   it('rejects pending work when the pool terminates', async () => {
