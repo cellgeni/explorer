@@ -11,7 +11,7 @@ records are in [`docs/plan/`](docs/plan/):
 | [Open items](docs/plan/open-items.md)            | Open work across the plan, and what was not pursued                                |
 | [Engineering record](docs/plan/engineering.md)   | Refactor record, dataset hosting, testing and CI, tech stack, risks                |
 | [History](docs/plan/history.md)                  | How the plan was assembled, the proof of concept, reconciliation notes, source map |
-| [Plan vs docs](docs/plan/plan-vs-docs.md)        | The 2026-11-08 comparison of the plan with `docs/`                                 |
+| [Plan vs docs](docs/plan/plan-vs-docs.md)        | The 2026-11-08 comparison of the plan with `docs/`, rechecked 2026-11-13           |
 
 Where records disagree, the later decision is kept and the earlier one is marked
 **Superseded**. The [reconciliation notes](docs/plan/history.md#reconciliation-notes)

@@ -185,8 +185,7 @@ returns the Xenium adapter. The adapter decides:
 
 - `capabilities`: cells (none for a plain image), the Magic Lens,
   annotations, geometric annotations, transcripts, the cell transcript z
-  histogram, the transcript gene-only filter, nucleus boundaries, Magic Lens
-  Min QV.
+  histogram, the transcript gene-only filter, and nucleus boundaries.
 - Whether features, boundaries, gene overlays, and Magic Lens can load, and
   whether a boundary request reads cell outlines (Xenium skips them while
   `Cell boundaries` is off).

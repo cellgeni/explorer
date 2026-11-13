@@ -276,8 +276,5 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 
 - `Clear Annotations`, or a metadata track's `x`, also drops the tracks read
   from `obs`; reload the dataset to get them back.
-- Imported CSV/JSON annotation and metadata files are parsed with `asCellId`
-  (`src/data/cellid.ts`), which only accepts Xenium-format IDs
-  (`/^[a-p]{8}-\d+$/`). Files keyed by H5AD obs names are rejected.
 - Diagnostics do not check the `.h5ad.json` reference.
 - The in-memory backend downloads the whole file before anything renders.
