@@ -3825,16 +3825,33 @@ Non-goals for this phase:
 
 #### Product Decisions
 
-- **DECISION: Sign with headers, not with presigned URLs.** A presigned URL
-  carries a credential-derived signature in the URL itself, and this app puts
-  dataset URLs into the location hash, `localStorage` recents, the diagnostics
-  dump, error messages and the DuckDB logger. Headers keep every one of those
-  paths safe by construction. The three sinks that cannot take a header each
-  have a header-compatible route (see
-  [What Must Be Signed](#what-must-be-signed)), so no part of the app needs a
-  minted URL. The cost is a CORS preflight per distinct URL; see
-  [17.1-F](#171-tier-a--readers-that-already-take-a-fetcher) and
-  [Risks](#risks-1).
+- **DECISION: Headers everywhere, except whole-object chunk reads, which use
+  query auth.** A presigned URL carries a credential-derived signature in the
+  URL itself, and this app puts _dataset_ URLs into the location hash,
+  `localStorage` recents, the diagnostics dump, error messages and the DuckDB
+  logger. Header signing keeps all of those safe by construction, and the three
+  sinks that cannot take a header each have a header-compatible route (see
+  [What Must Be Signed](#what-must-be-signed)).
+  - The exception is forced by CORS. A non-safelisted header makes a request
+    preflighted, and a preflight is cached per URL. Ranged reads (Parquet,
+    TIFF, HDF5, zipped Zarr) send `Range` and so are already preflighted today
+    — the playbook in [§8](#8-dataset-hosting-requirements) requires
+    `AllowedHeaders: Range` — and they send many ranges to one URL, so the
+    preflight amortises to nothing. A Zarr chunk `GET` is the opposite: no
+    `Range`, no custom header, so today it is a _simple_ request with no
+    preflight at all, and each chunk is a different URL. Adding an
+    `Authorization` header would turn every chunk into two round trips, with
+    nothing to amortise over.
+  - So `createZarrFetchStore` and the OME-Zarr and SpatialData chunk paths sign
+    with SigV4 **query** parameters instead. The leak argument does not reach
+    them: a chunk URL is minted per request, never entered by a user, never
+    stored, never shown and never put in a share link, recent or manifest. The
+    signed query is given the shortest expiry that covers one request.
+  - Everything else — detection, manifests, metadata, Parquet, TIFF, HDF5,
+    images, annotations — signs with headers.
+  - [17.1-F](#171-tier-a--readers-that-already-take-a-fetcher) measures both, so
+    the split is backed by a number rather than this reasoning. See
+    [Performance And Failure Modes](#performance-and-failure-modes).
 - **DECISION: One choke point.** `src/data/datasetFetch.ts` exports
   `datasetFetch`, a `typeof fetch` that looks up a connection for the request
   URL, signs when one matches, and otherwise delegates to `globalThis.fetch`.
@@ -3847,11 +3864,17 @@ Non-goals for this phase:
   Matching is most-specific-first on `origin + path prefix`; a URL that matches
   no connection is fetched unsigned, which is what keeps public datasets
   unchanged.
-- **DECISION: Credentials live in one module's closure.** Not in the Zustand
-  store (it is serialised into the share hash and visible to devtools), not in
-  React state, not in any object that is logged, structured-cloned to a worker,
-  or put in an error. The store holds only a connection _descriptor_: id, label,
-  endpoint, bucket, prefix, region, addressing style, and expiry.
+- **DECISION: Credentials stay out of anything serialised, logged or sent to a
+  worker.** The rule is about those sinks, not about Zustand. The viewer store
+  holds two fields, has no `persist` or `devtools` middleware, and the share
+  hash is built from an explicit field list in `useShareableUrlHash`, not from
+  the store — so putting a credential in the store would not leak it today.
+  What it would do is make a future `persist` write it to `localStorage`
+  silently, so the plan keeps the secret in one module's closure and the store
+  holds only a connection _descriptor_: id, label, endpoint, bucket, prefix,
+  region, addressing style, and expiry. Holding it in React state or the store
+  instead is a defensible choice; the hard rules are no serialisation, no
+  logging, no structured clone, and never in an error.
 - **DECISION: Signed responses are never written to the IndexedDB byte-range
   cache, nor to the browser's HTTP cache.** Credentials are session-scoped by
   the brief, so private bytes must not outlive the session on disk.
@@ -3913,9 +3936,13 @@ Two consequences are worth stating plainly:
   credential crosses into them. Only the two h5wasm workers fetch, and only in
   Tier C.
 - SigV4 needs HMAC-SHA256 **synchronously** inside a synchronous XHR, and
-  WebCrypto is async-only. Tier A and B therefore sign with async WebCrypto
-  (`crypto.subtle`, no dependency). Tier C needs a small synchronous SHA-256,
-  which is why it is a separate tier and a separate decision.
+  WebCrypto is async-only. Since Tier C needs a synchronous SHA-256 anyway, the
+  signer is synchronous for every tier rather than only for that one: signing
+  becomes a sub-millisecond pure function, no `await` is added in front of any
+  request, there is one implementation to test against the AWS vectors, and the
+  stampede in [Performance And Failure Modes](#performance-and-failure-modes)
+  cannot happen. The cost is a small pinned dependency instead of none; see
+  [17.0-A](#170-foundations).
 
 #### Connection Model
 
@@ -3948,6 +3975,61 @@ Resolution rules:
 - Clock skew breaks SigV4 beyond 15 minutes. The first signed response's `Date`
   header sets a per-connection offset, and `RequestTimeTooSkewed` is reported as
   a clock problem, not a credential problem.
+
+#### Performance And Failure Modes
+
+A review on 2026-11-13 looked for the ways signing could make the app slow or
+unusable rather than merely insecure. Four of these change the design above.
+
+- **Preflight on whole-object reads is the dominant cost.** Measured in request
+  count, not milliseconds: a Zarr chunk `GET` today is a simple request. Give it
+  an `Authorization` header and it becomes `OPTIONS` + `GET`, two round trips,
+  on a URL used once. A SpatialData label store or an OME-Zarr pyramid issues
+  hundreds to thousands of those for one view, and at the live-runner profile
+  (about 150 ms from `mp33.cog.sanger.ac.uk`, see
+  [§9](#9-testing-and-ci)) that is an added 150 ms per chunk with nothing to
+  amortise it over. Ranged reads are unaffected, because `Range` already makes
+  them preflighted and they reuse one URL. This is why chunk reads sign by
+  query instead of by header.
+- **A dead credential must fail fast, or it becomes a request storm.** Nothing
+  in the app treats an authorization failure as terminal today, and two places
+  amplify it: `zarrDecodePool.ts:62` retries a chunk twice, and
+  `useViewportDataWorkflow.ts:451` retries an expression load whenever the error
+  looks like `TypeError` or "failed to fetch" — which is exactly how the browser
+  reports a **blocked CORS preflight**. So a bucket whose CORS does not allow
+  `Authorization`, or a token that expired mid-session, would produce thousands
+  of doomed requests and thousands of errors instead of one message. The first
+  authorization failure on a connection therefore marks it dead;
+  `datasetFetch` then fails fast without touching the network, and the retry
+  predicates exclude authorization failures.
+- **One signing key, memoised, and watched over midnight.** The key is four
+  chained HMACs and is valid for one UTC date, region and service. Without
+  memoisation a view that starts 200 chunk fetches derives it 200 times; with a
+  naive cache every request starts failing with `SignatureDoesNotMatch` at
+  midnight UTC until the page is reloaded. Both are avoided by deriving through
+  the existing `sharedLoad` helper, keyed by date, and keeping at most two keys.
+- **Expiry is not a teardown.** Terminating the decode pools re-instantiates
+  OpenJPEG and the Zarr workers, which is fine on an explicit Disconnect and
+  disruptive in the middle of a session. Expiry stops new loads and marks the
+  connection dead; the teardown in
+  [17.4-A](#174-disconnect-expiry-and-state-hygiene) runs on Disconnect, or when
+  a reconnect supplies different credentials.
+- **The IndexedDB bypass costs less than it looks.** Within a session the
+  in-memory `tileCache` still serves TIFF tiles and DuckDB still has
+  `enable_http_metadata_cache`, so the bypass bites on revisits and reloads
+  only — and a reload needs a reconnect anyway, because credentials are
+  session-scoped. The loss is Parquet footers and TIFF tile ranges on a second
+  visit, which for an image-heavy private dataset is the difference between a
+  warm open and a cold one.
+- **DuckDB blocks its worker thread per preflight.** Its HTTP is synchronous
+  XHR, so each new file handle stalls that worker for the preflight as well as
+  the request. The separate clients for transcript scans and interactive
+  queries ([§4.3](#43-parquet-engine--decision-duckdb-wasm-primary-hyparquet-for-first-paint))
+  keep one stalled handle from blocking the other, and a file is opened once.
+- **Reading the error body on a `403` is now required**, because a signed `403`
+  has to be told apart from a missing key. Buckets that answer `403` for absent
+  objects do this on every negative metadata probe, so the body is read rather
+  than cancelled. The cost is a few KB per probe and it is not on a hot path.
 
 #### Credential Safety
 
@@ -3993,12 +4075,21 @@ the same status.
 #### 17.0 Foundations
 
 - [ ] **A. SigV4 signer** in `src/data/awsSigV4.ts`: canonical request, string to
-      sign, signing-key derivation over `crypto.subtle`, session token, clock
-      offset. Pure, no app types. (M)
+      sign, signing-key derivation, session token, clock offset. Pure,
+      synchronous, no app types. (M)
   - Tested against the published AWS `aws-sig-v4-test-suite` vectors plus a
     path-style and a session-token case.
-  - A `signedHeaders(request, connection, now)` function, so the same code
-    serves `fetch`, the geotiff client and (later) the XHR patch.
+  - Two entry points over one canonical-request builder:
+    `signedHeaders(request, connection, now)` for header signing, and
+    `signedQueryUrl(url, connection, now, expiresIn)` for the chunk reads in
+    [17.1-A](#171-tier-a--readers-that-already-take-a-fetcher).
+  - Synchronous, so it also serves the geotiff client and the Tier C XHR patch,
+    and adds no `await` to the request path. Decide between a pinned ~3 KB MIT
+    dependency (`js-sha256`, which duckdb-wasm already vendors internally) and
+    a vendored SHA-256 — the AWS vectors are the test either way.
+  - The signing key is memoised through `sharedLoad` keyed by date, region and
+    service, with at most two keys kept, so a burst of chunk fetches derives it
+    once and a UTC date rollover re-derives rather than failing.
 - [ ] **B. Connection registry** in `src/data/s3Connections.ts`: add, match,
       list, remove. Descriptors are returned by value; the secret stays in a
       closure and has no getter. (S)
@@ -4008,7 +4099,16 @@ the same status.
 - [ ] **C. `datasetFetch`** in `src/data/datasetFetch.ts`: sign when a connection
       matches, otherwise delegate. Accepts `Request` as well as a URL, because
       zarrita's `FetchStore` passes one. Never sets `credentials: 'include'`, so
-      no cookie is ever attached. (S)
+      no cookie is ever attached, and sends `cache: 'no-store'` on a signed
+      request. (S)
+- [ ] **F. Fail fast on a dead credential.** The first `InvalidAccessKeyId`,
+      `SignatureDoesNotMatch`, `ExpiredToken` or blocked preflight on a
+      connection marks it dead; `datasetFetch` then rejects without a network
+      request until the user reconnects. Exclude authorization failures from
+      the retry predicates at `zarrDecodePool.ts:62` and
+      `useViewportDataWorkflow.ts:451` — the latter currently retries anything
+      that looks like `TypeError`/"failed to fetch", which is how a blocked
+      preflight is reported. One message, not thousands. (M)
 - [ ] **D. Default it** in the 20 modules that read
       `options.fetcher ?? globalThis.fetch`, and in `datasetWarmup.ts` and the
       four `ZipFileStore.fromUrl` sites, which have no fetcher today. Pure
@@ -4019,7 +4119,10 @@ the same status.
 #### 17.1 Tier A — Readers That Already Take A Fetcher
 
 - [ ] **A. Zarr and zipped Zarr**: `createZarrFetchStore`, `zarrZipStore`,
-      `cachedZipStore`, `icechunkStore`. (S)
+      `cachedZipStore`, `icechunkStore`. Whole-object chunk `GET`s go through
+      `signedQueryUrl`, so they stay simple requests and are not preflighted;
+      the zip stores read ranges of one object and sign with headers like the
+      rest. (M)
 - [ ] **B. hyparquet**: pass the fetcher at all five `asyncBufferFromUrl` sites.
       (S)
 - [ ] **C. geotiff**: a `SignedTiffClient extends BaseClient` and a switch from
@@ -4031,12 +4134,13 @@ the same status.
 - [ ] **E. Detection and probes**: `rangeSupport`, `folderListing`,
       `datasetFactory`'s `HEAD` probes and `datasetDiagnostics` sign too, or the
       dataset is undetectable before any reader runs. (S)
-- [ ] **F. Measure the preflight cost.** Load the SpatialData labels store and
-      the Xenium demo from a private bucket under the live-runner profile
-      (CPU 6×, 150 ms latency) and compare request counts and wall-clock against
-      the same data public. If signed Zarr chunk reads are materially slower,
-      record the number here and open a follow-up for presigned chunk `GET`s —
-      the one place where a minted URL would be justified. (S)
+- [ ] **F. Measure header signing against query signing.** Load the SpatialData
+      labels store and the Xenium demo from a private bucket under the
+      live-runner profile (CPU 6×, 150 ms latency), three ways: public, signed
+      by header throughout, and signed by query for chunk reads. Record request
+      counts and wall-clock for each here. The split in the first product
+      decision stands or falls on this number; if headers turn out to cost
+      little, simplify by using them everywhere. (S)
 
 #### 17.2 Tier B — DuckDB
 
@@ -4053,9 +4157,11 @@ the same status.
       that drops anything matching a credential or an `Authorization` value, and
       keep it when `createDuckDbClient` is called without a logger. (S)
 - [ ] **D. Re-apply on change**: when a connection is replaced or its
-      credentials rotate, re-run the `SET` statements on every live client, and
-      drop `enable_http_metadata_cache` state for that host if the settings
-      changed. (S)
+      credentials rotate, re-run the `SET` statements on every live client.
+      Leave `enable_http_metadata_cache` alone — it holds file length and
+      `HEAD` metadata, which do not depend on the credential, and the only way
+      to clear it is to drop the connection, which would stall every query in
+      flight. (S)
 
 #### 17.3 Connection UI
 
@@ -4095,7 +4201,11 @@ the same status.
     the in-worker chunk cache in `zarrDecode.worker.ts` dropped.
 - [ ] **B. Expiry enforcement**: no new load starts with an expired credential,
       and an in-flight load that fails with `ExpiredToken` reports it as expiry
-      with a Reconnect action rather than a read error. (S)
+      with a Reconnect action rather than a read error. Expiry marks the
+      connection dead and stops new loads; it does **not** run the teardown in
+      A, because terminating the decode pools mid-session re-instantiates
+      OpenJPEG and the Zarr workers for no benefit. Teardown runs on
+      Disconnect, or when a reconnect supplies different credentials. (S)
 - [ ] **C. Leak test**: one test that connects, loads a fixture, then asserts the
       secret, the token and `Authorization` appear in none of the share hash,
       recents, diagnostics dump, structured errors or IndexedDB. (S)
@@ -4183,22 +4293,24 @@ fallback and the Visium HD matrix stay public-only until this ships.
 
 #### Risks
 
-| Risk                                                                | Effect                                                                   | Mitigation                                                                                                                   |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| CORS preflight per distinct URL                                     | Zarr chunk reads roughly double their request count                      | Measure in 17.1-F before claiming support; `MaxAgeSeconds`; presigned chunk `GET`s as a scoped fallback if the number is bad |
-| A reader silently drops the fetcher                                 | Part of a private dataset fails, or worse, loads unsigned from elsewhere | The fake-S3 integration suite rejects unsigned requests, so a dropped fetcher fails a test rather than a user                |
-| duckdb-wasm's signer disagrees with ours on path-style or endpoints | Parquet fails while Zarr works, on RGW/MinIO only                        | One helper derives both; a unit test asserts the two produce the same canonical host and path for every endpoint shape       |
-| Credential reaches a log, a URL or disk                             | Secret leaks past the page session                                       | Closure-only storage, redacting DuckDB logger, cache bypass, and the 17.4-C leak test                                        |
-| Browser clock skew                                                  | Every request fails with an opaque `403`                                 | Offset from the response `Date`, and `RequestTimeTooSkewed` reported as a clock problem                                      |
-| Short-lived credentials expire mid-session                          | A long load dies halfway with a confusing error                          | Countdown, 5-minute warning, expiry-aware errors with a Reconnect action                                                     |
-| Tier C's XHR patch breaks h5wasm on public datasets                 | A regression in the most-used fallback path                              | The patch installs only when a signing key is present; existing public H5 tests stay as the guard                            |
-| S3-compatible gateways differ (RGW, MinIO, GCS XML)                 | "S3-compatible" is claimed and then fails for a user                     | The support matrix starts Unverified and only a passing live test moves a row                                                |
+| Risk                                                                | Effect                                                                         | Mitigation                                                                                                                      |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| CORS preflight per distinct URL                                     | Zarr chunk reads would double their round trips, with nothing to amortise over | Chunk reads sign by query, so they stay simple requests; ranged reads already preflight and reuse one URL; 17.1-F measures both |
+| A dead credential produces a request storm                          | Thousands of doomed requests and errors instead of one message                 | 17.0-F fails fast on the first authorization failure and takes authorization errors out of the two retry predicates             |
+| Signing-key stampede, or a UTC date rollover                        | 200 derivations for one view; every signature fails at midnight until reload   | Memoise through `sharedLoad` keyed by date, keep two keys, re-derive on rollover (17.0-A)                                       |
+| A reader silently drops the fetcher                                 | Part of a private dataset fails, or worse, loads unsigned from elsewhere       | The fake-S3 integration suite rejects unsigned requests, so a dropped fetcher fails a test rather than a user                   |
+| duckdb-wasm's signer disagrees with ours on path-style or endpoints | Parquet fails while Zarr works, on RGW/MinIO only                              | One helper derives both; a unit test asserts the two produce the same canonical host and path for every endpoint shape          |
+| Credential reaches a log, a URL or disk                             | Secret leaks past the page session                                             | Closure-only storage, redacting DuckDB logger, cache bypass, and the 17.4-C leak test                                           |
+| Browser clock skew                                                  | Every request fails with an opaque `403`                                       | Offset from the response `Date`, and `RequestTimeTooSkewed` reported as a clock problem                                         |
+| Short-lived credentials expire mid-session                          | A long load dies halfway with a confusing error                                | Countdown, 5-minute warning, expiry-aware errors with a Reconnect action                                                        |
+| Tier C's XHR patch breaks h5wasm on public datasets                 | A regression in the most-used fallback path                                    | The patch installs only when a signing key is present; existing public H5 tests stay as the guard                               |
+| S3-compatible gateways differ (RGW, MinIO, GCS XML)                 | "S3-compatible" is claimed and then fails for a user                           | The support matrix starts Unverified and only a passing live test moves a row                                                   |
 
 #### Order And Size
 
 | Milestone                | Contents           | Size            | Gives                                                 |
 | ------------------------ | ------------------ | --------------- | ----------------------------------------------------- |
-| N1 — Signing seam        | 17.0 A–E           | about 1.5 weeks | Signed reads, no UI; provable by the fake-S3 suite    |
+| N1 — Signing seam        | 17.0 A–F           | about 2 weeks   | Signed reads, no UI; provable by the fake-S3 suite    |
 | N2 — Tier A readers      | 17.1 A–F           | about 1.5 weeks | SpatialData, OME-Zarr, images, reference H5AD         |
 | N3 — DuckDB              | 17.2 A–D           | about 1 week    | Xenium, Atera, Visium HD                              |
 | N4 — UI and teardown     | 17.3 A–E, 17.4 A–C | about 2 weeks   | A usable feature, and a disconnect that really clears |
@@ -4211,7 +4323,7 @@ fallback and the Visium HD matrix stay public-only until this ships.
 - **Do not ship N1–N3 to users without N4.** Without
   `clearConnectionScopedState()`, a Disconnect leaves private data in a dozen
   caches, which is worse than not offering Disconnect.
-- **Effort:** about 7 weeks for one developer for N1–N5, plus 1 for N6.
+- **Effort:** about 7.5 weeks for one developer for N1–N5, plus 1 for N6.
 
 #### Known Gaps
 
@@ -4510,8 +4622,8 @@ Sequencing:
       (2026-11-12).
 - [ ] Private datasets,
       [Phase 17](#phase-17--private-datasets-on-s3-and-s3-compatible-stores):
-      31 tasks in six milestones (N1–N5 about 7 weeks, N6 deferred). Nothing
-      started. Every row of its support matrix is Unverified until a live test
+      32 tasks in six milestones (N1–N5 about 7.5 weeks, N6 deferred).
+      Nothing started. Every row of its support matrix is Unverified until a live test
       passes.
 
 Reopened by the 2026-11-08 review (marked done before, found incomplete):
