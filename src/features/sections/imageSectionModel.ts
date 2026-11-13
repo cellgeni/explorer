@@ -12,7 +12,7 @@ import type {
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 
 // The dataset image: opacity, z plane, channels and custom image layers
-// (UNIFIED_PLAN.md, 15.2-A). Opacities are 0–1; the controls show percent.
+// (plan 15.2-A). Opacities are 0–1; the controls show percent.
 export interface ImageSectionModel {
   readonly opacity: number
   readonly onOpacityPercentChange: (percent: number) => void

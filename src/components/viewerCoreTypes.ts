@@ -94,7 +94,7 @@ export interface ViewerCoreProps {
   readonly roiMode?: RoiDrawMode
   readonly roiBbox?: BBox | null
   readonly roiSelection?: RoiSelection | null
-  // Saved selections to outline (UNIFIED_PLAN.md, 15.4-A). The active one
+  // Saved selections to outline (plan 15.4-A). The active one
   // gives roiSelection its colour; the rest are drawn dashed.
   readonly selectionOutlines?: readonly ViewerSelectionOutline[]
   readonly magicLensActive?: boolean
@@ -104,7 +104,7 @@ export interface ViewerCoreProps {
   readonly initialViewStateOverride?: InitialViewStateOverride
   readonly viewResetKey?: string | number
   readonly focusRequest?: ViewerFocusRequest | null
-  // The zoom −, + and Fit buttons (UNIFIED_PLAN.md, 15.2-E).
+  // The zoom −, + and Fit buttons (plan 15.2-E).
   readonly navigationControls?: boolean
   // The minimap at the bottom right (15.4-D).
   readonly minimap?: boolean

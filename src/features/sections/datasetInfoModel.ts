@@ -27,7 +27,7 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
-// and diagnostics (UNIFIED_PLAN.md, 15.2-A): the info drawer, the dataset
+// and diagnostics (plan 15.2-A): the info drawer, the dataset
 // menu, Share and Settings.
 export interface DatasetInfoModel {
   // What is open, for the info drawer's Dataset section (15.2-F). Empty

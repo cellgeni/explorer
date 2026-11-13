@@ -49,7 +49,7 @@ interface ShellLayoutProps {
   readonly children: ReactNode
 }
 
-// The shell (UNIFIED_PLAN.md, 15.2): the top bar, the canvas with ⓘ's
+// The shell (plan 15.2): the top bar, the canvas with ⓘ's
 // dataset info drawer and the cards over it, the Embedding panel at its top
 // right, and the layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).

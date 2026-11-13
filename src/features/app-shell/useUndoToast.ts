@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useEffectEvent, useRef, useState } from 'react'
 import { isTextEntryTarget } from './activeToolModel'
 
-// Undo for actions that remove something (UNIFIED_PLAN.md, 15.3-C): a toast
+// Undo for actions that remove something (plan 15.3-C): a toast
 // offers Undo for 8 s, while the pointer or focus is not on it.
 
 export const UNDO_TIMEOUT_MS = 8_000

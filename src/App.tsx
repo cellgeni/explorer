@@ -662,7 +662,7 @@ export function App({ dependencies }: AppProps = {}) {
     () => panelsForLink(shellPanels, defaultPanelIds) ?? defaultPanelIds,
     [defaultPanelIds, shellPanels],
   )
-  // The start screen (UNIFIED_PLAN.md, 15.3-A) shows until a load starts,
+  // The start screen (plan 15.3-A) shows until a load starts,
   // unless the link names a dataset, and again when a load fails with
   // nothing else open.
   const [datasetLoadStarted, setDatasetLoadStarted] = useState(false)
@@ -1240,7 +1240,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setSpatialFocusRequest],
   )
-  // The cards' Go To buttons (UNIFIED_PLAN.md, 15.2-E).
+  // The cards' Go To buttons (plan 15.2-E).
   const zoomToBbox = useCallback(
     (bbox: BBox) => {
       spatialFocusRequestIdRef.current += 1
@@ -3419,7 +3419,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
-  // The section models (UNIFIED_PLAN.md, 15.2-A): the layer panel, info
+  // The section models (plan 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
   const datasetInfo = useDatasetInfoModel({
     activeErrors,
@@ -3733,7 +3733,7 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedKind: setSelectedEmbeddingKind,
   })
 
-  // The cards (UNIFIED_PLAN.md, 15.2-D): Selection, Cell, Transcript and
+  // The cards (plan 15.2-D): Selection, Cell, Transcript and
   // Magic Lens.
   const elementPlural = platformAdapter.labels.embeddingElementPlural
   const selectionLensInput = {

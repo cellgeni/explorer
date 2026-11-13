@@ -28,7 +28,7 @@ interface ViewerMinimapProps {
   readonly onNavigate: (target: readonly [number, number]) => void
 }
 
-// The minimap (UNIFIED_PLAN.md, 15.4-D). It sits beside the deck.gl canvas,
+// The minimap (plan 15.4-D). It sits beside the deck.gl canvas,
 // never inside it. The image is the coarsest pyramid level, drawn by its own
 // MorphologyCanvas with a small tile cache; Visium's tissue image is the flat
 // image; otherwise the dots show where the cells are.

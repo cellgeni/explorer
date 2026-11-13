@@ -1,6 +1,6 @@
 import type { DatasetProbeResult } from './datasetFactory'
 
-// Why detection found no dataset it can read (UNIFIED_PLAN.md, 15.1-E):
+// Why detection found no dataset it can read (plan 15.1-E):
 // - not-found: every file answered 404, or 403 as buckets that deny listing
 //   do for missing files, or was missing from the folder listing;
 // - access-denied: the host asked for credentials (401);

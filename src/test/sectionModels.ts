@@ -37,7 +37,7 @@ import { DEFAULT_EXAMPLES_INDEX_URL } from '../features/start/examplesIndex'
 import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
 import { toolOptions } from '../features/shell/topBarModel'
 
-// Section models for block and panel tests (UNIFIED_PLAN.md, 15.2-A):
+// Section models for block and panel tests (plan 15.2-A):
 // an idle dataset with every callback a mock, plus the given overrides.
 
 export function testImageSectionModel(

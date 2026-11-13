@@ -66,8 +66,8 @@ export function manifestObservationColorMode(defaults: {
 }
 
 // Debug mode shows developer details: the deck.gl layer and budget lines, the
-// zoom number (UNIFIED_PLAN.md, D6). Turn it
-// on with ?debug=1 (or #debug=1) in the address.
+// zoom number (plan 15, D6). Turn it on with ?debug=1 (or #debug=1) in the
+// address.
 export function readDebugModeFromLocation(): boolean {
   if (typeof window === 'undefined') {
     return false

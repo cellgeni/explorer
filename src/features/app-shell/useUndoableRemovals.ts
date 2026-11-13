@@ -7,7 +7,7 @@ import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { AppendDebugEvent } from './appRuntimeModel'
 import type { UndoOffer } from './useUndoToast'
 
-// The removals that offer Undo (UNIFIED_PLAN.md, 15.3-C): removing a
+// The removals that offer Undo (plan 15.3-C): removing a
 // class, a metadata track or every annotation, removing a shape or clearing
 // them all. Deleting a selection offers its own (useSelectionList, 15.4-A). Each takes a snapshot first, and
 // Undo puts it back only if nothing it covers has changed since, so Undo

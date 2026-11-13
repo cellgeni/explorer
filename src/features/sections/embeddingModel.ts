@@ -11,7 +11,7 @@ import {
 } from '../analysis/analysisEmbeddingModel'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 
-// UMAP or t-SNE beside the tissue (UNIFIED_PLAN.md, 15.2-G): the floating
+// UMAP or t-SNE beside the tissue (plan 15.2-G): the floating
 // Embedding panel.
 export interface EmbeddingModel {
   // "Idle", "Loading", "2 embeddings".

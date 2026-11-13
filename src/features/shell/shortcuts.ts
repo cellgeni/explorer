@@ -1,6 +1,6 @@
 import type { ActiveTool } from '../app-shell/activeToolModel'
 
-// Keyboard shortcuts (UNIFIED_PLAN.md, 15.2-B). The key handlers and the
+// Keyboard shortcuts (plan 15.2-B). The key handlers and the
 // Help list (15.3-B) both read this table, so they cannot disagree.
 
 export interface Shortcut {

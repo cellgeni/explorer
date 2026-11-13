@@ -1,4 +1,4 @@
-// What the canvas legend shows (UNIFIED_PLAN.md, 15.1-C). App builds the
+// What the canvas legend shows (plan 15.1-C). App builds the
 // sections from its colour state; ViewerLegend only draws them.
 
 export interface ContinuousLegendSection {

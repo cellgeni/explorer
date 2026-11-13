@@ -19,7 +19,7 @@ import { useTranscriptControlsWorkflow } from '../transcripts/useTranscriptContr
 import type { TranscriptGeneLegendModel } from '../transcripts/useTranscriptGeneLegend'
 
 // Transcript display, gene filter, appearance and filters, the exact-point
-// budget, and the hovered or pinned transcript (UNIFIED_PLAN.md, 15.2-A).
+// budget, and the hovered or pinned transcript (plan 15.2-A).
 export interface TranscriptsSectionModel {
   readonly loadEnabled: boolean
   // The header chip.

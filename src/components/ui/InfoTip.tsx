@@ -8,9 +8,9 @@ export interface InfoTipProps {
   readonly children: string
 }
 
-// A small ⓘ beside a control's label that explains a term (UNIFIED_PLAN.md,
-// 15.3-B). The explanation shows on hover, on keyboard focus and on a tap,
-// and describes the button for screen readers.
+// A small ⓘ beside a control's label that explains a term (plan 15.3-B). The
+// explanation shows on hover, on keyboard focus and on a tap, and describes
+// the button for screen readers.
 export function InfoTip({ title, children }: InfoTipProps) {
   return (
     <Tooltip title={children} align="start" wide>

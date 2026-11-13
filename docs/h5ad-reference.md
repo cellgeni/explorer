@@ -349,7 +349,7 @@ the download, and it reads a large part of the file anyway.
 
 The viewer could do the same walk itself with an HDF5 reader over Range
 requests ("Move remote HDF5 reads to a worker-backed lazy Range path" in
-[UNIFIED_PLAN.md](../UNIFIED_PLAN.md), not done). It would face the same
+[Phase 7](plan/phases/07-h5ad.md), not done). It would face the same
 chain of dependent reads before showing anything, on every load for every
 user. A reference turns that into a one-off step.
 

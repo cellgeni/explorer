@@ -1,5 +1,5 @@
 // Where tests find each group of controls. Area names follow the Phase 15
-// layout (UNIFIED_PLAN.md, "Where Each Control Goes"); each maps to the part of
+// layout (plan 15, "Where Each Control Goes"); each maps to the part of
 // the shell that holds those controls. Unit and E2E tests open controls only
 // through openControls(), so a layout change edits this table and the two
 // helpers, not the tests.

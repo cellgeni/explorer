@@ -3,7 +3,7 @@ import { DEFAULT_EXAMPLES_INDEX_URL } from './examplesIndex'
 import type { RecentDataset } from './recentDatasets'
 import type { ExamplesState } from './useExamplesIndex'
 
-// Datasets to open with one click (UNIFIED_PLAN.md, 15.3-A): the example
+// Datasets to open with one click (plan 15.3-A): the example
 // gallery and recent datasets, on the start screen and in the dataset menu.
 export interface DatasetLibraryModel {
   readonly examples: ExamplesState

@@ -3,7 +3,7 @@ import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 
 // Viewer settings and the measure tool: Settings and the Measure tool's
-// popover (UNIFIED_PLAN.md, 15.2-A).
+// popover (plan 15.2-A).
 export interface ViewSettingsModel {
   readonly showHoverTooltips: boolean
   readonly onShowHoverTooltipsChange: (enabled: boolean) => void

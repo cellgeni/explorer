@@ -3,7 +3,7 @@ import { isTextEntryTarget, type ActiveTool } from '../app-shell/activeToolModel
 import { isFitKey, toolForShortcutKey } from './shortcuts'
 
 // Picks a tool from its letter anywhere on the page except while typing
-// (UNIFIED_PLAN.md, 15.2-B). Disabled tools ignore their key. F fits the
+// (plan 15.2-B). Disabled tools ignore their key. F fits the
 // view (15.2-E).
 export function useToolShortcuts(
   enabled: boolean,

@@ -9,7 +9,7 @@ import {
 } from '../roi/selectionListModel'
 import type { SelectionListModel } from './annotationsSectionModel'
 
-// Saved selections in the Annotations section (UNIFIED_PLAN.md, 15.4-A):
+// Saved selections in the Annotations section (plan 15.4-A):
 // colour, visibility, name, Go To, rename and delete. Choosing a name shows
 // that selection in the Selection card and reruns its queries.
 export function SelectionListPanel({

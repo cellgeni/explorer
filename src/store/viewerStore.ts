@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
 // The Xenium demo, which the start screen offers when the examples cannot be
-// read (UNIFIED_PLAN.md, 15.3-A). The address box starts empty.
+// read (plan 15.3-A). The address box starts empty.
 export const DEMO_DATASET_URL =
   'https://mp33.cog.sanger.ac.uk/public/xenium/output-XETG00155__0033412__Sob23-BRA-0-FFPE-2-s30__20240829__110328'
 

@@ -16,7 +16,7 @@ export interface CardProps {
   readonly className?: string | undefined
 }
 
-// A floating result card, such as Selection or Cell (UNIFIED_PLAN.md, 15.2-D).
+// A floating result card, such as Selection or Cell (plan 15.2-D).
 export function Card({
   title,
   children,

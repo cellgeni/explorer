@@ -6,7 +6,7 @@ import {
 } from '../rendering/overviewCellIndex'
 import { gridCellIntersectsBbox, isRenderLodGridCell } from './viewerGridCellIndex'
 
-// Enter on the canvas (UNIFIED_PLAN.md, 15.5-D) opens what is at the centre
+// Enter on the canvas (plan 15.5-D) opens what is at the centre
 // of the view, which a crosshair marks while the canvas has keyboard focus,
 // so a Cell or Bin card can be opened without a pointer.
 

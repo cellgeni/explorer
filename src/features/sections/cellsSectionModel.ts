@@ -19,7 +19,7 @@ import type {
 import { useGeneControlsWorkflow } from '../genes/useGeneControlsWorkflow'
 
 // Cells, spots or bins: how they are drawn, which genes are selected, and
-// what colours them (UNIFIED_PLAN.md, 15.2-A): the Cells section.
+// what colours them (plan 15.2-A): the Cells section.
 export interface CellsSectionModel {
   readonly appearance: CellAppearanceModel
   readonly genes: GeneSelectionModel

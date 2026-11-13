@@ -1,7 +1,8 @@
 # Unified Plan vs Current Docs
 
-This compares [`UNIFIED_PLAN.md`](./UNIFIED_PLAN.md) with `docs/` (and the root
-`README.md`) at commit `096ef46`, 2026-11-08.
+This compares `UNIFIED_PLAN.md` with `docs/` (and the root `README.md`) at
+commit `096ef46`, 2026-11-08. `UNIFIED_PLAN.md` was the single-file plan; since
+2026-11-13 it is [`PLAN.md`](../../PLAN.md) and the files in `docs/plan/`.
 
 The two sets serve different purposes. `docs/README.md` says the planning files
 "describe intent and history", while the docs "describe current behaviour".
@@ -117,20 +118,20 @@ Partial contradictions (the plan oversells what shipped):
 Planned items with no implementation in the docs. The docs either say "not
 read" or say nothing.
 
-| Plan item                                         | Plan status           | Docs                                                                                                               |
-| ------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Standard Visium spots (`VisiumDataset`, `circle`) | Done 2026-11-10       | [visium.md](./docs/modalities/visium.md): Space Ranger folders and `.h5ad` with `uns/spatial` as platform `visium` |
-| Visium HD annotations from `analysis/`            | Not recorded          | "`annotations()` rejects"; the adapter turns annotations off                                                       |
-| Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13       | [xenium.md](./docs/modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                |
-| `metrics_summary.csv` QC display (papaparse)      | No outcome            | "Not read". **Code:** papaparse is not a dependency                                                                |
-| Z-stack plane selector                            | Done 2026-11-09       | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                            |
-| H5AD `/layers/*`, `/raw/X`                        | Open                  | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                        |
-| Transcript estimate from native Zarr counts       | Open                  | Still the sum of overview `transcript_counts` (consistent)                                                         |
-| CI (GitHub Actions), deploy previews              | No outcome            | Not mentioned. **Code:** no `.github/` directory                                                                   |
-| Golden Xenium fixture bundle                      | No outcome            | Not mentioned; E2E uses hosted datasets                                                                            |
-| Coverage reporter and thresholds                  | Open                  | Not mentioned. **Code:** `vitest.config.ts` has no coverage settings                                               |
-| DuckDB ExternalFileCache, property tests          | No outcome            | Not mentioned                                                                                                      |
-| Viv `XRLayer`, jsfive                             | Superseded / Deferred | Not mentioned; consistent with the plan                                                                            |
+| Plan item                                         | Plan status           | Docs                                                                                                           |
+| ------------------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Standard Visium spots (`VisiumDataset`, `circle`) | Done 2026-11-10       | [visium.md](../modalities/visium.md): Space Ranger folders and `.h5ad` with `uns/spatial` as platform `visium` |
+| Visium HD annotations from `analysis/`            | Not recorded          | "`annotations()` rejects"; the adapter turns annotations off                                                   |
+| Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13       | [xenium.md](../modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                |
+| `metrics_summary.csv` QC display (papaparse)      | No outcome            | "Not read". **Code:** papaparse is not a dependency                                                            |
+| Z-stack plane selector                            | Done 2026-11-09       | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                        |
+| H5AD `/layers/*`, `/raw/X`                        | Open                  | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                    |
+| Transcript estimate from native Zarr counts       | Open                  | Still the sum of overview `transcript_counts` (consistent)                                                     |
+| CI (GitHub Actions), deploy previews              | No outcome            | Not mentioned. **Code:** no `.github/` directory                                                               |
+| Golden Xenium fixture bundle                      | No outcome            | Not mentioned; E2E uses hosted datasets                                                                        |
+| Coverage reporter and thresholds                  | Open                  | Not mentioned. **Code:** `vitest.config.ts` has no coverage settings                                           |
+| DuckDB ExternalFileCache, property tests          | No outcome            | Not mentioned                                                                                                  |
+| Viv `XRLayer`, jsfive                             | Superseded / Deferred | Not mentioned; consistent with the plan                                                                        |
 
 ---
 

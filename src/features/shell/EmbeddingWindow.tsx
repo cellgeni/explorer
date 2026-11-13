@@ -33,7 +33,7 @@ function clampPanelSize(size: PanelSize, maxSize: PanelSize): PanelSize {
   }
 }
 
-// The embedding beside the tissue (UNIFIED_PLAN.md, 15.2-G, F23): a panel at
+// The embedding beside the tissue (plan 15.2-G, F23): a panel at
 // the top right of the canvas, opened from Cells › Show Embedding. The grip
 // at its bottom left resizes it, by pointer or arrow keys, and says the new
 // size. It stays mounted while closed, so it keeps its size. Opening moves
