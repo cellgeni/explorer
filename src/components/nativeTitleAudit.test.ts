@@ -13,7 +13,7 @@ const INTERACTIVE_TAGS = new Set([
 ])
 const PRIMITIVES_DIRECTORY = join('src', 'components', 'ui')
 // Components in the primitives directory, which each take a required title
-// (UNIFIED_PLAN.md, 15.0-B). Icons have none.
+// (plan 15.0-B). Icons have none.
 const PRIMITIVE_TAGS = primitiveComponentNames()
 
 describe('native browser tooltips', () => {

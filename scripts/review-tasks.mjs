@@ -1,4 +1,4 @@
-// The eight review tasks (UNIFIED_PLAN.md, 15.5-E), live, headless with the GPU.
+// The eight review tasks (plan 15.5-E), live, headless with the GPU.
 // Needs `npm run dev` on port 5173 and network access to both datasets.
 // node scripts/review-tasks.mjs <xenium|visium> <width> <outDir>
 import { chromium } from '@playwright/test'

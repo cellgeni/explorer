@@ -2,7 +2,7 @@ import { Button, CloseIcon, IconButton } from '../../components/ui'
 import type { UndoToastStore } from './useUndoToast'
 
 // "Removed graphclust: Cluster 3. Undo" for 8 s after a removal
-// (UNIFIED_PLAN.md, 15.3-C). Hovering or focusing it keeps it.
+// (plan 15.3-C). Hovering or focusing it keeps it.
 export function UndoToast({ store }: { readonly store: UndoToastStore }) {
   const { offer } = store
   if (offer === null) return null

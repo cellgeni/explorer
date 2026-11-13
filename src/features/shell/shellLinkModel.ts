@@ -4,7 +4,7 @@ import type { LayerVisibility } from '../app-shell/useAppDomainState'
 import type { LayerSectionId } from './layerPanelModel'
 import { TOOL_ORDER } from './shortcuts'
 
-// The shell's part of a share link (UNIFIED_PLAN.md, 15.2-H, D7):
+// The shell's part of a share link (plan 15.2-H, D7):
 // `panel=` lists the open layer sections, `info` (the info drawer) and
 // `embedding`; `tool=` the active tool; `card=` a card to restore; `hidden=`
 // the hidden layers. Each is left out at its default.

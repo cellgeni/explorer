@@ -15,7 +15,7 @@ interface InfoDrawerProps {
   readonly onClose: () => void
 }
 
-// ⓘ's dataset info drawer (UNIFIED_PLAN.md, 15.2-F): what is open, the
+// ⓘ's dataset info drawer (plan 15.2-F): what is open, the
 // manifest's About, the view options that have no layer section, opening
 // another dataset, and Diagnostics with the issues, notes and log. Its
 // sections render only while it is open, so the open-dataset form is not in

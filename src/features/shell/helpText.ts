@@ -1,4 +1,4 @@
-// What the info tips beside some controls say (UNIFIED_PLAN.md, 15.3-B):
+// What the info tips beside some controls say (plan 15.3-B):
 // terms the review found users could not work out from the label alone.
 // The UI reference has the details.
 

@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import type { AxesModel } from './viewerAxesModel'
 
-// µm axes (UNIFIED_PLAN.md, 15.4-E): rulers along the top and left edges of
+// µm axes (plan 15.4-E): rulers along the top and left edges of
 // the canvas. They only label it; the coordinate readout says the same to
 // screen readers.
 export const ViewerAxes = memo(function ViewerAxes({

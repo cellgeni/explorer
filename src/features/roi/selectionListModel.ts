@@ -2,7 +2,7 @@ import type { ViewerSelectionOutline } from '../../components/viewerCoreTypes'
 import type { RoiSelection } from '../../data/roiSelection'
 import { defaultRoiName } from './roiModel'
 
-// Saved selections (UNIFIED_PLAN.md, 15.4-A). Each box or lasso drawn on a
+// Saved selections (plan 15.4-A). Each box or lasso drawn on a
 // dataset with cells, spots or bins is kept with a name, a colour and a
 // visibility. Drawing adds one and makes it active; the Selection card shows
 // the active one, and the Annotations section lists them all.

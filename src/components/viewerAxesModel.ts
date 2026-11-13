@@ -10,7 +10,7 @@ import {
   type ViewerDistanceUnit,
 } from './viewerMeasurements'
 
-// µm axes (UNIFIED_PLAN.md, 15.4-E): rulers along the top and left edges of
+// µm axes (plan 15.4-E): rulers along the top and left edges of
 // the canvas with the data coordinates, in the scale bar's unit. The bottom
 // edge holds the legend, the readout and the zoom buttons.
 

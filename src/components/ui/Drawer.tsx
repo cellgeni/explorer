@@ -15,7 +15,7 @@ export interface DrawerProps {
 }
 
 // A panel that slides over the canvas from one side, such as the dataset info
-// drawer (UNIFIED_PLAN.md, 15.2-F). It is not modal: the canvas stays usable.
+// drawer (plan 15.2-F). It is not modal: the canvas stays usable.
 // It stays mounted while closed, so its sections keep their state. Opening
 // moves focus into it; Escape inside it or Close returns focus to where it was.
 export function Drawer({

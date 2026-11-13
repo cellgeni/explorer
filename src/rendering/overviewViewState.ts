@@ -90,7 +90,7 @@ function extentCenter(extent: DeckExtent): [number, number, number] {
   return [(extent.minX + extent.maxX) / 2, (extent.minY + extent.maxY) / 2, 0]
 }
 
-// Fit to view (UNIFIED_PLAN.md, F18): the whole extent, centred in the real
+// Fit to view (plan 15, F18): the whole extent, centred in the real
 // canvas.
 export function fitExtentViewState(
   extent: DeckExtent | null,

@@ -26,7 +26,7 @@ import type { VisiumHdRoiState, VisiumHdRoiSummary } from '../roi/visiumHdRoiMod
 import type { RoiReferenceState } from '../roi/roiEnrichmentModel'
 import type { TranscriptCapabilityState } from '../transcripts/transcriptLayerModel'
 
-// The cards (UNIFIED_PLAN.md, 15.2-D) stack at the top left of the canvas in
+// The cards (plan 15.2-D) stack at the top left of the canvas in
 // this order. Each is null while there is nothing to show, and closing one
 // clears what it shows.
 export interface CardStackModel {

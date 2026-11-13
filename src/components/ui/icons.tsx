@@ -24,7 +24,7 @@ export function ChevronRightIcon() {
   )
 }
 
-// Tool and top bar icons (UNIFIED_PLAN.md, 15.2-B).
+// Tool and top bar icons (plan 15.2-B).
 
 export function PanIcon() {
   return (
@@ -105,7 +105,7 @@ export function SettingsIcon() {
   )
 }
 
-// Canvas navigation (UNIFIED_PLAN.md, 15.2-E).
+// Canvas navigation (plan 15.2-E).
 
 export function PlusIcon() {
   return (
@@ -131,7 +131,7 @@ export function FitIcon() {
   )
 }
 
-// Selection rows (UNIFIED_PLAN.md, 15.4-A).
+// Selection rows (plan 15.4-A).
 
 export function PencilIcon() {
   return (

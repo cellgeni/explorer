@@ -23,7 +23,7 @@ export interface ShareableState {
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
   // An old link's control tab, which the shell maps onto panels, card and
-  // tool (UNIFIED_PLAN.md, 15.2-H).
+  // tool (plan 15.2-H).
   readonly activeTab?: string
   // Open layer sections, the info drawer and the Embedding panel: `panel=`.
   readonly panels?: readonly string[]

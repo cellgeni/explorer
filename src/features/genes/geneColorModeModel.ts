@@ -1,6 +1,6 @@
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 
-// The colour mode after the gene list changes (UNIFIED_PLAN.md, D2). Adding
+// The colour mode after the gene list changes (plan 15, D2). Adding
 // genes from the gene controls colours cells by expression, and removing the
 // last gene goes back to the mode used before. Other changes, such as adding a
 // transcript feature, keep the mode.

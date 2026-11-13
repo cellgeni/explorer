@@ -24,7 +24,7 @@ import type {
   TranscriptCardModel,
 } from './cardModels'
 
-// The cards (UNIFIED_PLAN.md, 15.2-D), top left over the canvas: Selection,
+// The cards (plan 15.2-D), top left over the canvas: Selection,
 // Cell (Spot, Bin), Transcript and Magic Lens.
 export function CardStack({ cards }: { readonly cards: CardStackModel }) {
   const { selection, cell, transcript, magicLens } = cards

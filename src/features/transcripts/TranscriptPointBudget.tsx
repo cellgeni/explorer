@@ -13,7 +13,7 @@ interface TranscriptPointBudgetProps {
   readonly onLimitChange: (limit: number) => void
 }
 
-// The exact point budget as a meter (UNIFIED_PLAN.md, 15.1-J): this view's
+// The exact point budget as a meter (plan 15.1-J): this view's
 // transcripts against the budget, which Edit Max changes. Auto shows exact
 // points while the meter is not full.
 export function TranscriptPointBudget({

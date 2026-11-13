@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-// WCAG 2.2 AA for the dark theme (UNIFIED_PLAN.md, 15.1-K): 4.5:1 for text
+// WCAG 2.2 AA for the dark theme (plan 15.1-K): 4.5:1 for text
 // and 3:1 for the parts that identify a control. Read from tokens.css, so a
 // token change that breaks contrast fails here.
 

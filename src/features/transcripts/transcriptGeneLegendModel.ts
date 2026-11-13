@@ -4,7 +4,7 @@ import type {
   TranscriptPoint,
 } from '../../data/transcriptOverlay'
 
-// The transcript gene legend (UNIFIED_PLAN.md, 15.4-C): with points coloured
+// The transcript gene legend (plan 15.4-C): with points coloured
 // by gene, each gene shown gets a swatch, an eye and its count, in the
 // Transcripts section and the canvas legend. Colours can be edited.
 

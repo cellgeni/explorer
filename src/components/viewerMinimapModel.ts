@@ -4,7 +4,7 @@ import type { OverviewViewState } from '../rendering/deckLayerTypes'
 import { fitExtentViewState, type DeckExtent } from '../rendering/overviewViewState'
 import { rawDataPointToScreen, type ScreenPoint } from './viewerMeasurements'
 
-// The minimap (UNIFIED_PLAN.md, 15.4-D): the whole dataset at the bottom
+// The minimap (plan 15.4-D): the whole dataset at the bottom
 // right of the canvas, with the view drawn on it. Click or drag to move the
 // view there.
 

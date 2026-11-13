@@ -1,7 +1,8 @@
-# Unified Plan vs Current Docs
+# Plan vs Docs (2026-11-08)
 
-This compares [`UNIFIED_PLAN.md`](./UNIFIED_PLAN.md) with `docs/` (and the root
-`README.md`) at commit `096ef46`, 2026-11-08.
+This compares `UNIFIED_PLAN.md` with `docs/` (and the root `README.md`) at
+commit `096ef46`, 2026-11-08. `UNIFIED_PLAN.md` was the single-file plan; since
+2026-11-13 it is [`PLAN.md`](../../PLAN.md) and the files in `docs/plan/`.
 
 The two sets serve different purposes. `docs/README.md` says the planning files
 "describe intent and history", while the docs "describe current behaviour".
@@ -22,8 +23,37 @@ This review is now a record. Its findings were acted on the same day:
 | [1](#1-in-the-docs-not-in-the-plan)       | Folded into `UNIFIED_PLAN.md`: Phase 8 closed, Phase 9 (OME-Zarr) and Phase 10 (SpatialData) added, November expression and rendering work recorded under the optimization pass, unrecorded Visium HD work added to Phase 6 |
 | [2](#2-plan-says-done-docs-say-otherwise) | The eight items are marked **Reopened** in the plan and listed in its Open Items. The code was not changed                                                                                                                  |
 | [3](#3-in-the-plan-not-in-the-docs)       | Already open in the plan; outcomes added (for example, papaparse not adopted)                                                                                                                                               |
-| [4](#4-same-topic-different-values)       | Current values recorded in the plan; Appendix A rows 23–30 note what they superseded                                                                                                                                        |
+| [4](#4-same-topic-different-values)       | Current values recorded in the plan; rows 23–30 of the [reconciliation notes](history.md#reconciliation-notes) note what they superseded                                                                                    |
 | [5](#5-inconsistencies-inside-docs)       | All six fixed in `docs/`, plus a seventh found while fixing them (SpatialData diagnostics)                                                                                                                                  |
+
+## Status (2026-11-13)
+
+Rechecked against the plan and `docs/` when the plan was split. The findings
+below are as found on 2026-11-08. The plan status column in
+[section 3](#3-in-the-plan-not-in-the-docs) and the follow-ups are kept current.
+
+- **Section 2, the eight contradictions: all fixed in code.** Numeric and
+  boolean `obs` tracks (2026-11-09) and HDF5 reads in a worker (2026-11-13) are
+  recorded in [Phase 7](phases/07-h5ad.md#closed-open-items); the Visium HD
+  low-res image fallback and diagnostics (2026-11-12) in
+  [Phase 6](phases/06-visium-hd.md#closed-open-items); the Xenium diagnostics
+  (2026-11-12) and the Magic Lens `Min QV` control, removed in 15.5-C, in
+  [Phase 5](phases/05-production-polish.md#closed-open-items); and the Xenium
+  image fallback (2026-11-12) in
+  [Phase 2](phases/02-robust-io-caching.md#closed-open-items).
+- **Section 2, the partial contradictions.** Fixed on 2026-11-12:
+  barcode-mapping reads are shared loads, imported annotations accept any
+  platform's cell IDs, and a failed GeoJSON import gives its reason. Partly
+  fixed: h5wasm, auto-contrast and zarrita's codecs moved to workers (see
+  [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13)). Still
+  open in [Open Items](open-items.md): segmentation GeoJSON is re-streamed for
+  each viewport, Xenium loads through free functions instead of
+  `XeniumDataset`, the remaining main-thread work, and byte-range cache keys
+  without the `ETag`.
+- **Section 4** is a snapshot; the plan records the current values. One has
+  changed since: the diagnostics dump is now `<platform>-diagnostics.json`.
+- **Section 5.** The recheck found two more places where `docs/` disagreed with
+  the code, items 8 and 9, both fixed.
 
 ## Summary
 
@@ -33,13 +63,13 @@ This review is now a record. Its findings were acted on the same day:
 2. **The plan marks eight items done that the docs say are missing or partial.**
    The largest: H5AD numeric `obs` colour tracks, H5AD HDF5 reads in a worker,
    Visium HD low-res image fallback, the Magic Lens QV filter, and diagnostics
-   coverage.
+   coverage. (All eight were fixed by 2026-11-13.)
 3. **Key numbers changed.** Expression LOD, overview point rendering, and
    boundary limits all work differently now than the plan describes.
 4. **Some plan items never shipped and the docs do not mention them.**
    `metrics_summary.csv` QC, CI, and the golden fixture bundle. (Standard
-   Visium spots were in this list; they shipped on 2026-11-10. Xenium nucleus
-   boundaries shipped on 2026-11-13.)
+   Visium spots were in this list; they shipped on 2026-11-10. CI shipped on
+   2026-11-09, and Xenium nucleus boundaries on 2026-11-13.)
 5. **The docs disagreed with themselves in six places**, including two stale
    statements about where OME-Zarr decoding runs. All are fixed. See
    [section 5](#5-inconsistencies-inside-docs).
@@ -117,20 +147,20 @@ Partial contradictions (the plan oversells what shipped):
 Planned items with no implementation in the docs. The docs either say "not
 read" or say nothing.
 
-| Plan item                                         | Plan status           | Docs                                                                                                               |
-| ------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Standard Visium spots (`VisiumDataset`, `circle`) | Done 2026-11-10       | [visium.md](./docs/modalities/visium.md): Space Ranger folders and `.h5ad` with `uns/spatial` as platform `visium` |
-| Visium HD annotations from `analysis/`            | Not recorded          | "`annotations()` rejects"; the adapter turns annotations off                                                       |
-| Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13       | [xenium.md](./docs/modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                |
-| `metrics_summary.csv` QC display (papaparse)      | No outcome            | "Not read". **Code:** papaparse is not a dependency                                                                |
-| Z-stack plane selector                            | Done 2026-11-09       | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                            |
-| H5AD `/layers/*`, `/raw/X`                        | Open                  | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                        |
-| Transcript estimate from native Zarr counts       | Open                  | Still the sum of overview `transcript_counts` (consistent)                                                         |
-| CI (GitHub Actions), deploy previews              | No outcome            | Not mentioned. **Code:** no `.github/` directory                                                                   |
-| Golden Xenium fixture bundle                      | No outcome            | Not mentioned; E2E uses hosted datasets                                                                            |
-| Coverage reporter and thresholds                  | Open                  | Not mentioned. **Code:** `vitest.config.ts` has no coverage settings                                               |
-| DuckDB ExternalFileCache, property tests          | No outcome            | Not mentioned                                                                                                      |
-| Viv `XRLayer`, jsfive                             | Superseded / Deferred | Not mentioned; consistent with the plan                                                                            |
+| Plan item                                         | Plan status                       | Docs                                                                                                            |
+| ------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Standard Visium spots (`VisiumDataset`, `circle`) | Done 2026-11-10                   | [visium.md](../modalities/visium.md): Space Ranger folders and `.h5ad` with `uns/spatial` as platform `visium`  |
+| Visium HD annotations from `analysis/`            | Not recorded                      | "`annotations()` rejects"; the adapter turns annotations off                                                    |
+| Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13                   | [xenium.md](../modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                 |
+| `metrics_summary.csv` QC display (papaparse)      | No outcome                        | "Not read". **Code:** papaparse is not a dependency                                                             |
+| Z-stack plane selector                            | Done 2026-11-09                   | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                         |
+| H5AD `/layers/*`, `/raw/X`                        | Open                              | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                     |
+| Transcript estimate from native Zarr counts       | Done 2026-11-12                   | [xenium.md](../modalities/xenium.md): level-0 tile counts in the viewport; the overview sum only without a Zarr |
+| CI (GitHub Actions), deploy previews              | CI done 2026-11-09; previews open | `README.md` and `architecture.md`: CI runs on every pull request; previews not mentioned                        |
+| Golden Xenium fixture bundle                      | No outcome                        | Not mentioned; E2E uses hosted datasets                                                                         |
+| Coverage reporter and thresholds                  | Done 2026-11-12                   | `README.md` and `architecture.md`: `npm run test:coverage`, reported in CI without blocking                     |
+| DuckDB ExternalFileCache, property tests          | Done 2026-11-12                   | Not mentioned (the cache is DuckDB's default, left on)                                                          |
+| Viv `XRLayer`, jsfive                             | Superseded / Deferred             | Not mentioned; consistent with the plan                                                                         |
 
 ---
 
@@ -202,12 +232,21 @@ Found while comparing; unrelated to the plan.
    dataset hosts need CORS but not `CORP`.
 6. **Planning records pointer.** _Fixed._ `docs/README.md` "Planning Records"
    named `PLAN.md`, `UPDATED_PLAN.md`, and `OPTIMIZATIONS.md`; it now points to
-   `UNIFIED_PLAN.md`.
+   `UNIFIED_PLAN.md`. Since 2026-11-13 it points to `PLAN.md` and `plan/`.
 7. **SpatialData diagnostics** (found while fixing the others). Known
    Limitations said diagnostics "do not check the image or table arrays", but
    since `10e3470` Diagnose Dataset sends a `HEAD` for every table chunk and
    checks one image chunk (`datasetDiagnostics.ts`). _Fixed_ in the limitation
    and the source-files table.
+8. **Annotation import IDs** (found on 2026-11-13). The Known Limitations of
+   `modalities/h5ad.md` and `modalities/spatialdata.md` said imported CSV/JSON
+   files accept only Xenium-format cell IDs. Since 2026-11-12 (`306e8ff`)
+   `src/data/customAnnotations.ts` reads them with `asAnyCellId`, which takes
+   any non-empty ID, as `ui-reference.md` says. _Fixed:_ both limitations
+   removed.
+9. **Magic Lens `Min QV` capability** (found on 2026-11-13). `architecture.md`
+   Feature Gating listed it among the adapter's capabilities; 15.5-C removed
+   it. _Fixed:_ removed from the list.
 
 ---
 
@@ -215,12 +254,12 @@ Found while comparing; unrelated to the plan.
 
 1. _Done._ `UNIFIED_PLAN.md` replaces the three source files: they were
    deleted, `PLAN.md` was removed from `.prettierignore`, and `README.md` and
-   `docs/README.md` link to the unified plan.
+   `docs/README.md` link to the unified plan. Since 2026-11-13 the plan is
+   `PLAN.md` and `docs/plan/`, and both READMEs link there.
 2. _Done._ The plan records shipped work: Phase 8 closed, Phases 9 and 10
    added, and the November LOD and rendering changes recorded.
-3. _Half done._ The eight contradictions in
-   [section 2](#2-plan-says-done-docs-say-otherwise) are reopened in the plan.
-   Fixing the code is still open; H5AD metadata tracks and Xenium diagnostics
-   are the most visible to users.
+3. _Done._ The eight contradictions in
+   [section 2](#2-plan-says-done-docs-say-otherwise) were reopened in the plan
+   and fixed in code by 2026-11-13; see [Status](#status-2026-11-13).
 4. _Done._ All documentation inconsistencies in
    [section 5](#5-inconsistencies-inside-docs) are fixed.

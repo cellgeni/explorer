@@ -285,7 +285,5 @@ off.
 - A zipped store needs consolidated metadata like any other. Deflated zip
   entries are read whole, so a compressed `shapes.parquet` is downloaded in
   full before any of it is parsed.
-- Imported CSV/JSON annotations must use Xenium-format cell IDs, so they do
-  not match SpatialData obs names.
 - Diagnostics send a `HEAD` for every table chunk but check only the first
   chunk of the image's coarsest level, not every image chunk.

@@ -11,7 +11,7 @@ interface DatasetLoadToastProps {
 }
 
 // Says that a new dataset failed to load and the open one stays
-// (UNIFIED_PLAN.md, 15.1-F). The Issues card has the details.
+// (plan 15.1-F). The Issues card has the details.
 export function DatasetLoadToast({
   failedUrl,
   error,

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Page } from '@playwright/test'
 
-// Where the start screen reads its example gallery (UNIFIED_PLAN.md, 15.3-A).
+// Where the start screen reads its example gallery (plan 15.3-A).
 export const EXAMPLES_INDEX_URL =
   'https://raw.githubusercontent.com/cellgeni/explorer/main/examples/index.json'
 

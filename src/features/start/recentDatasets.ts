@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 
-// Recently opened datasets (UNIFIED_PLAN.md, 15.3-A), newest first, kept in
+// Recently opened datasets (plan 15.3-A), newest first, kept in
 // this browser's localStorage. Storage can be missing or refuse, which only
 // means the list is not remembered.
 

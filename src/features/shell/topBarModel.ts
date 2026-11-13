@@ -5,7 +5,7 @@ import type { MagicLensScope } from '../roi/magicLensModel'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 import { TOOL_LABELS, TOOL_ORDER, TOOL_SHORTCUT_KEYS } from './shortcuts'
 
-// The top bar (UNIFIED_PLAN.md, 15.2-B): the dataset name, a
+// The top bar (plan 15.2-B): the dataset name, a
 // summary chip, the tools, and Share, Help and Settings.
 export interface TopBarModel {
   // Null before a dataset is ready.

@@ -1,9 +1,10 @@
 # Profiling
 
 How to measure where the main thread spends its time while the viewer loads a
-dataset, and how to compare two builds. The measurements in
-[`UNIFIED_PLAN.md`](../UNIFIED_PLAN.md) (for example the worker moves under
-the main-thread Open Item) were made this way.
+dataset, and how to compare two builds. The measurements in the plan (for
+example the
+[worker moves](plan/phases/optimization-pass.md#worker-moves-2026-11-13) in
+the optimization pass) were made this way.
 
 ## Profile A Build
 

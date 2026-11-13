@@ -1,4 +1,4 @@
-// Interface primitives (UNIFIED_PLAN.md, Phase 15.0-B). Each takes a required
+// Interface primitives (plan 15.0-B). Each takes a required
 // title, and nativeTitleAudit.test.ts checks every use. Styles: ui.css.
 export { Button, IconButton, type ButtonProps, type ButtonVariant } from './Button'
 export { Card, type CardProps } from './Card'

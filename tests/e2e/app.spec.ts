@@ -540,7 +540,7 @@ async function tabTo(page: Page, target: Locator, limit = 150): Promise<void> {
   throw new Error(`Tab never reached ${target.toString()}`)
 }
 
-// Review tasks 1-5 (UNIFIED_PLAN.md, 15.5-D) with the keyboard alone: open a
+// Review tasks 1-5 (plan 15.5-D) with the keyboard alone: open a
 // dataset, colour cells by a gene, show clusters and hide one, open a cell,
 // and select a region and read its genes.
 test('runs the first five review tasks with the keyboard alone @smoke', async ({

@@ -1,5 +1,5 @@
 // Links into the documentation on GitHub, which renders the Markdown and
-// follows `main` like the example index (UNIFIED_PLAN.md, 15.3).
+// follows `main` like the example index (plan 15.3).
 export const DOCS_BASE_URL = 'https://github.com/cellgeni/explorer/blob/main/docs/'
 
 export const USER_GUIDE_URL = `${DOCS_BASE_URL}user-guide.md`

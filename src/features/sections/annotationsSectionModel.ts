@@ -11,7 +11,7 @@ import type { SavedSelection } from '../roi/selectionListModel'
 import type { SelectionList } from '../roi/useSelectionList'
 
 // Annotation sets and their labels, metadata tracks, selections and GeoJSON
-// shapes (UNIFIED_PLAN.md, 15.2-A). The sets and tracks are in the Cells
+// shapes (plan 15.2-A). The sets and tracks are in the Cells
 // section's Clusters (D4); selections (15.4-A) and shapes are in the
 // Annotations section.
 export interface AnnotationsSectionModel {

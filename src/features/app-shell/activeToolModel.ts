@@ -1,7 +1,7 @@
 import type { SetStateAction } from 'react'
 import type { RoiDrawMode } from '../../components/ViewerCore'
 
-// One canvas tool at a time (UNIFIED_PLAN.md, D8). Pan is the default; Esc
+// One canvas tool at a time (plan 15, D8). Pan is the default; Esc
 // and finishing a shape return to it.
 export type ActiveTool = 'pan' | 'box' | 'lasso' | 'measure' | 'magic-lens'
 

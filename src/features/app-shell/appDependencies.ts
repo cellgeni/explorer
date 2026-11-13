@@ -64,7 +64,7 @@ import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
 
-// The start screen's example gallery (UNIFIED_PLAN.md, 15.3-A).
+// The start screen's example gallery (plan 15.3-A).
 export type ExamplesIndexLoader = (
   url: string,
   options?: { readonly signal?: AbortSignal },

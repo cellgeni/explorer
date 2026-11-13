@@ -185,8 +185,7 @@ returns the Xenium adapter. The adapter decides:
 
 - `capabilities`: cells (none for a plain image), the Magic Lens,
   annotations, geometric annotations, transcripts, the cell transcript z
-  histogram, the transcript gene-only filter, nucleus boundaries, Magic Lens
-  Min QV.
+  histogram, the transcript gene-only filter, and nucleus boundaries.
 - Whether features, boundaries, gene overlays, and Magic Lens can load, and
   whether a boundary request reads cell outlines (Xenium skips them while
   `Cell boundaries` is off).
@@ -233,8 +232,9 @@ lets tests replace them.
 ## Section Models
 
 The layer panel, info drawer, top bar and Embedding panel take section
-models instead of separate props (UNIFIED_PLAN.md, 15.2-A). `App.tsx` builds
-seven, one hook each, in `src/features/sections/`:
+models instead of separate props
+([plan 15.2-A](plan/phases/15-interface-redesign.md#152-shell-re-layout)).
+`App.tsx` builds seven, one hook each, in `src/features/sections/`:
 
 | Model                     | Hook                         | Holds                                                                                                            |
 | ------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |

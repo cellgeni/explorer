@@ -5,7 +5,7 @@ import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import { rawDataPointToScreen } from './viewerMeasurements'
 
 // The selected cell, spot or bin as App describes it, in world coordinates
-// (UNIFIED_PLAN.md, 15.1-D). Points and spots get a ring; bins and cells
+// (plan 15.1-D). Points and spots get a ring; bins and cells
 // with a boundary get their outline.
 export type ViewerSelectionHighlight =
   | {

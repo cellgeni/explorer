@@ -77,7 +77,7 @@ export interface LayerSheetProps {
   readonly summary?: string | undefined
 }
 
-// The layer panel (UNIFIED_PLAN.md, 15.2-C): Image, Cells (Spots or Bins),
+// The layer panel (plan 15.2-C): Image, Cells (Spots or Bins),
 // Transcripts and Annotations. Sections stay mounted while closed, and so do
 // they while the panel is collapsed, so a gene search survives.
 export function LayerPanel({

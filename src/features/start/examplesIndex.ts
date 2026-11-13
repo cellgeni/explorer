@@ -1,6 +1,6 @@
 import { DEMO_DATASET_URL } from '../../store/viewerStore'
 
-// The example gallery (UNIFIED_PLAN.md, 15.3-A, D9). The index is read from
+// The example gallery (plan 15.3-A, D9). The index is read from
 // GitHub at runtime, so new examples appear without a release; a build can
 // point it elsewhere with VITE_EXAMPLES_INDEX_URL.
 

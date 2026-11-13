@@ -13,7 +13,7 @@ import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 
-// The layer panel (UNIFIED_PLAN.md, 15.2-C): one accordion
+// The layer panel (plan 15.2-C): one accordion
 // section per layer, each header with a visibility checkbox, the name and a
 // one-line state.
 export type LayerSectionId = 'image' | 'cells' | 'transcripts' | 'annotations'

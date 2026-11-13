@@ -18,7 +18,7 @@ import {
   type TranscriptLayerState,
 } from './transcriptLayerModel'
 
-// The Transcripts section's gene list (UNIFIED_PLAN.md, 15.4-C).
+// The Transcripts section's gene list (plan 15.4-C).
 export interface TranscriptGeneLegendModel {
   // Points coloured by gene are on screen, so the list applies.
   readonly active: boolean

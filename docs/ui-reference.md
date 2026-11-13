@@ -10,8 +10,9 @@ Platform names used below: **Xenium**, **Atera**, **Visium**, **Visium HD**,
 
 ## Layout
 
-The layout follows 10x Explorer (UNIFIED_PLAN.md, Phase 15.2, D1): a top bar,
-the canvas, and the layer panel docked on the right.
+The layout follows 10x Explorer
+([plan 15, D1](plan/phases/15-interface-redesign.md#product-decisions)): a top
+bar, the canvas, and the layer panel docked on the right.
 
 ```text
 <main class="app-shell">                       src/App.tsx

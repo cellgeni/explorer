@@ -47,9 +47,8 @@ for (const example of examples) {
   })
 }
 
-// The start screen reads the gallery from GitHub at runtime (UNIFIED_PLAN.md,
-// 15.3-A, D9); smoke tests answer that request locally, so this one checks
-// the real index.
+// The start screen reads the gallery from GitHub at runtime (plan 15.3-A, D9);
+// smoke tests answer that request locally, so this one checks the real index.
 test('lists the examples from GitHub on the start screen @live', async ({ page }) => {
   await page.goto('/')
 

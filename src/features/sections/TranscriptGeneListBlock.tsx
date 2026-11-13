@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import { Button } from '../../components/ui'
 import type { TranscriptGeneLegendModel } from '../transcripts/useTranscriptGeneLegend'
 
-// The genes coloured on the canvas (UNIFIED_PLAN.md, 15.4-C): each with its
+// The genes coloured on the canvas (plan 15.4-C): each with its
 // swatch (editable), an eye and its count of points in view, as in 10x
 // Explorer. The canvas legend shows the same list.
 export function TranscriptGeneList({

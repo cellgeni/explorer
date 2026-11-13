@@ -20,7 +20,7 @@ interface StartScreenProps {
   readonly error: StructuredLoadError | null
 }
 
-// What the canvas shows before a dataset is open (UNIFIED_PLAN.md, 15.3-A):
+// What the canvas shows before a dataset is open (plan 15.3-A):
 // the address field, recent datasets, and the example gallery. A link that
 // names a dataset skips it.
 export function StartScreen({ open, library, error }: StartScreenProps) {

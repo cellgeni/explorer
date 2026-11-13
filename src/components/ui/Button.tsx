@@ -17,7 +17,7 @@ export interface ButtonProps extends NativeButtonProps {
   readonly className?: string | undefined
 }
 
-// A text button. Names stay in Title Case (UNIFIED_PLAN.md, D5).
+// A text button. Names stay in Title Case (plan 15, D5).
 export function Button({
   title,
   children,

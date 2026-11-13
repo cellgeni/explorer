@@ -3,7 +3,7 @@ import type { RoiGeneStats } from '../../data/roiGeneStats'
 import { roiSelectionContains, type RoiSelection } from '../../data/roiSelection'
 import type { RoiLoadErrorSummary } from './roiModel'
 
-// Enriched genes (UNIFIED_PLAN.md, 15.4-B). The Selection card ranks the
+// Enriched genes (plan 15.4-B). The Selection card ranks the
 // genes in a selection by the log2 fold change of their mean expression
 // inside it over a reference sample from the rest of the tissue. The method
 // note is in docs/ui-reference.md (Selection › Genes).
