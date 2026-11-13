@@ -1,6 +1,8 @@
 import { micrometers } from '../data/coords'
-import { datasetFileUrlFor } from '../data/datasetFiles'
+import { datasetFileLabelFor, datasetFileUrlFor } from '../data/datasetFiles'
+import { assertHttpRangeSupport } from '../data/rangeSupport'
 import {
+  isMissingParquetColumnError,
   readXeniumBoundaryElements,
   readXeniumCellIdsForSelection,
   readXeniumCellTranscriptZDistributionForCellId,
@@ -9,6 +11,7 @@ import {
   readXeniumExtent,
   readXeniumGeneExpression,
   readXeniumMatrixForCells,
+  readXeniumNucleusBoundaryElements,
   readXeniumTranscriptsForCellId,
   readXeniumTranscriptsForSelection,
   readXeniumTranscriptsForViewport,
@@ -35,12 +38,15 @@ import type {
   GeneExpressionStageTimingHandler,
 } from '../data/geneExpressionTiming'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { DatasetRangeValidator } from '../data/datasetOverview'
 import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
   ImageSource,
+  SegmentationInfo,
   SpatialDataset,
+  SpatialElement,
 } from './spatialDataset'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
 
@@ -81,6 +87,9 @@ export interface XeniumDatasetOptions {
     matrixUrl: string,
     options?: AnalysisAnnotationQueryOptions,
   ) => Promise<readonly Annotation[]>
+  // Checks nucleus_boundaries.parquet answers Range requests before it is
+  // queried, so a missing file is named in the error.
+  readonly validateRangeSupport?: DatasetRangeValidator
 }
 
 export interface DuckDbClientLike {
@@ -241,8 +250,11 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     matrixUrl: string,
     options?: AnalysisAnnotationQueryOptions,
   ) => Promise<readonly Annotation[]>
+  private readonly validateRangeSupport: DatasetRangeValidator
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
+  // Cleared when nucleus_boundaries.parquet has no label_id column.
+  private nucleusLabelIds = true
 
   constructor(options: XeniumDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -264,6 +276,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
           ? selectedGeneRowsFromCellFeatureMatrixZarrLazy
           : null
     this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquetLazy
+    this.validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
     this.overviewReader =
       options.overviewReader ??
       (async (url, limit) => {
@@ -316,6 +329,37 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       },
       bbox,
     )
+  }
+
+  async segmentationElements(
+    kind: 'cell' | 'nucleus',
+    bbox: BBox,
+  ): Promise<readonly SpatialElement[]> {
+    if (kind === 'cell') {
+      return (await this.elements(bbox)).elements
+    }
+
+    await this.validateRangeSupport(this.urlFor('nucleusBoundaries'), {
+      label: datasetFileLabelFor(this.baseUrl, 'nucleusBoundaries'),
+    })
+    const conn = await this.conn()
+    const urls = {
+      cells: this.urlFor('cells'),
+      nucleusBoundaries: this.urlFor('nucleusBoundaries'),
+    }
+
+    try {
+      return await readXeniumNucleusBoundaryElements(conn, urls, bbox, {
+        labelIds: this.nucleusLabelIds,
+      })
+    } catch (error) {
+      if (!this.nucleusLabelIds || !isMissingParquetColumnError(error, 'label_id')) {
+        throw error
+      }
+
+      this.nucleusLabelIds = false
+      return readXeniumNucleusBoundaryElements(conn, urls, bbox, { labelIds: false })
+    }
   }
 
   matrix(ids: readonly CellId[]): Promise<GexResult> {
@@ -510,7 +554,27 @@ export class XeniumDataset implements SpatialDataset<CellId> {
         pyramidImage: true,
         multiChannel: false,
       },
+      segmentations: this.segmentations(),
     }
+  }
+
+  private segmentations(): readonly SegmentationInfo[] {
+    return [
+      {
+        id: 'cell',
+        kind: 'cell',
+        label: 'Cell boundaries',
+        sourceKind: 'parquet',
+        path: datasetFileLabelFor(this.baseUrl, 'cellBoundaries'),
+      },
+      {
+        id: 'nucleus',
+        kind: 'nucleus',
+        label: 'Nucleus boundaries',
+        sourceKind: 'parquet',
+        path: datasetFileLabelFor(this.baseUrl, 'nucleusBoundaries'),
+      },
+    ]
   }
 
   private async conn(): Promise<XeniumDuckDbConnection> {

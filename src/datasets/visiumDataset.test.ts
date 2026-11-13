@@ -1,5 +1,6 @@
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { overviewCellMetadata } from '../data/cellMetadata'
 import { micrometers } from '../data/coords'
 import { createVisiumDataset, type VisiumFileUrls } from './visiumDataset'
 import { VISIUM_SPOT_AREA_SQUARE_MICROMETERS } from './visiumFormat'
@@ -196,7 +197,7 @@ describe('createVisiumDataset', () => {
     expect(first?.position.x).toBeCloseTo((SPOTS[0]?.x ?? 0) * MICROMETERS_PER_PIXEL)
     expect(first?.position.y).toBeCloseTo((SPOTS[0]?.y ?? 0) * MICROMETERS_PER_PIXEL)
     expect(first?.cellArea).toBeCloseTo(VISIUM_SPOT_AREA_SQUARE_MICROMETERS)
-    expect(first?.metadata).toMatchObject({
+    expect(first === undefined ? undefined : overviewCellMetadata(first)).toMatchObject({
       graphclust: '1',
       in_tissue: 1,
       array_row: 0,

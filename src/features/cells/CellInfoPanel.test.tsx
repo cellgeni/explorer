@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { CellInfoPanel } from './CellInfoPanel'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 
@@ -109,6 +109,25 @@ describe('CellInfoPanel', () => {
     expect(screen.queryByText('Eccentricity')).not.toBeInTheDocument()
     expect(screen.queryByText('Transcripts')).not.toBeInTheDocument()
     expect(screen.getByText('Gene expression')).toBeInTheDocument()
+  })
+
+  it('reads metadata the source builds on demand', () => {
+    const readMetadata = vi.fn(() => ({ cell_type: 'Astrocyte', n_genes: 812 }))
+
+    render(
+      <CellInfoPanel
+        cell={cellDatum({ readMetadata })}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        transcriptDistributionVisible={false}
+        variant="observations"
+      />,
+    )
+
+    expect(screen.getByText('cell_type')).toBeInTheDocument()
+    expect(screen.getByText('Astrocyte')).toBeInTheDocument()
+    expect(screen.getByText('812')).toBeInTheDocument()
+    expect(readMetadata).toHaveBeenCalled()
   })
 })
 

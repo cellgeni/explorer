@@ -28,6 +28,11 @@ const ATERA_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_LOAD_TIMEOUT_MS = 120_000
 const XENIUM_TRANSCRIPT_TIMEOUT_MS = 120_000
 const XENIUM_ROI_TIMEOUT_MS = 120_000
+// A cold nucleus query reads about 15 MB of nucleus_boundaries.parquet.
+const XENIUM_BOUNDARY_TIMEOUT_MS = 120_000
+// Brain tissue in the Xenium demo at zoom 2.5: about 600 cells in view at
+// 1280 × 720, and about 4,300 nuclei in the padded boundary request.
+const XENIUM_TISSUE_VIEW = '1303,-1920,0,2.5'
 const VISIUM_HD_LOAD_TIMEOUT_MS = 90_000
 const VISIUM_HD_BIN_PROFILE_TIMEOUT_MS = 120_000
 // The cell assignment reads the footer of barcode_mappings.parquet (704 KB)
@@ -1256,6 +1261,29 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
 
   // The Cell card shows only once a cell is clicked.
   await expect(page.getByRole('region', { name: 'Cell', exact: true })).toHaveCount(0)
+})
+
+test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({
+  page,
+}) => {
+  test.setTimeout(300_000)
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&view=${encodeURIComponent(XENIUM_TISSUE_VIEW)}&cellBounds=0&nucleusBounds=1`,
+  )
+  const cellsPanel = await openControls(page, 'cell-appearance')
+  await expect(cellsPanel.getByLabel('Cell boundaries')).not.toBeChecked()
+  await expect(cellsPanel.getByLabel('Nucleus boundaries')).toBeChecked()
+
+  // With cell outlines hidden only nucleus_boundaries.parquet is queried.
+  await expectLogEntry(
+    page,
+    /Boundaries ready: 0 cells in [0-9] ms, [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    { timeout: XENIUM_BOUNDARY_TIMEOUT_MS },
+  )
+  const log = page.getByRole('region', { name: 'Activity log' })
+  await expect(log.getByText('Boundary load failed')).toHaveCount(0)
+  await expect(page.locator('.viewport-message-error')).toHaveCount(0)
 })
 
 test('loads the Visium HD reference dataset with tissue image and 16 um bins @live', async ({

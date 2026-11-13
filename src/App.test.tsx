@@ -2816,6 +2816,116 @@ describe('App', () => {
     ).not.toBeNull()
   })
 
+  it('draws Xenium nuclei and reads no cell outlines while they are hidden', async () => {
+    const viewport = installAppViewportFixture()
+    const cellId = intToCellId(1, 1)
+    const square = (min: number, max: number) => ({
+      kind: 'polygon' as const,
+      rings: [
+        [
+          { x: micrometers(min), y: micrometers(min) },
+          { x: micrometers(max), y: micrometers(min) },
+          { x: micrometers(max), y: micrometers(max) },
+        ],
+      ],
+    })
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId,
+        position: { x: micrometers(0), y: micrometers(0) },
+        transcriptCount: 8,
+        cellArea: 22,
+      },
+    ])
+    const loadBoundaryElements: ReturnType<typeof vi.fn<BoundaryElementsLoader>> = vi.fn(
+      async () => ({ elements: [{ id: cellId, geometry: square(-4, 4) }] }),
+    )
+    const nucleusElements: readonly SpatialElement[] = [
+      { id: cellId, geometry: square(-2, 0) },
+      { id: `${cellId}#nucleus-2`, geometry: square(0, 2) },
+    ]
+    const xeniumDataset = {
+      meta: vi.fn(async () => ({
+        capabilities: { cellBoundaries: true },
+        segmentations: [
+          {
+            id: 'cell',
+            kind: 'cell' as const,
+            label: 'Cell boundaries',
+            sourceKind: 'parquet' as const,
+            path: 'cell_boundaries.parquet',
+          },
+          {
+            id: 'nucleus',
+            kind: 'nucleus' as const,
+            label: 'Nucleus boundaries',
+            sourceKind: 'parquet' as const,
+            path: 'nucleus_boundaries.parquet',
+          },
+        ],
+      })),
+      segmentationElements: vi.fn(async () => nucleusElements),
+    }
+    const getSpatialDataset = createSpatialDatasetLoaderMock(xeniumDataset)
+
+    try {
+      render(
+        <TestApp
+          getSpatialDataset={getSpatialDataset}
+          loadBoundaryElements={loadBoundaryElements}
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={vi.fn(async () => [])}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
+      expect(xeniumDataset.segmentationElements).not.toHaveBeenCalled()
+      openControls('cell-appearance')
+      expect(screen.getByLabelText('Nucleus boundaries')).not.toBeChecked()
+
+      fireEvent.click(screen.getByLabelText('Nucleus boundaries'))
+      await waitFor(() => {
+        expect(xeniumDataset.segmentationElements).toHaveBeenCalledWith(
+          'nucleus',
+          expect.objectContaining({
+            minX: expect.any(Number) as number,
+            maxX: expect.any(Number) as number,
+          }),
+        )
+        expect(
+          screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toHaveAttribute('data-count', '2')
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
+
+      const cellLoadCount = loadBoundaryElements.mock.calls.length
+      const nucleusLoadCount = xeniumDataset.segmentationElements.mock.calls.length
+      fireEvent.click(screen.getByLabelText('Cell boundaries'))
+      await waitFor(() => {
+        expect(xeniumDataset.segmentationElements.mock.calls.length).toBeGreaterThan(
+          nucleusLoadCount,
+        )
+        expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
+        expect(
+          screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
+        ).toHaveAttribute('data-count', '2')
+      })
+      expect(loadBoundaryElements).toHaveBeenCalledTimes(cellLoadCount)
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('lets the user configure the boundary polygon visible-cell limit', () => {
     render(<TestApp />)
 

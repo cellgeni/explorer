@@ -20,7 +20,7 @@ import {
 } from '../data/roiSelection'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
 import type { CellId } from '../data/cellid'
-import type { ElementBatch } from './spatialDataset'
+import type { ElementBatch, SpatialElement } from './spatialDataset'
 import type {
   CellTranscriptZDistributionQueryOptions,
   DatasetCell,
@@ -83,48 +83,16 @@ export async function readXeniumBoundaryElements(
   },
   bbox: BBox,
 ): Promise<ElementBatch<CellId>> {
-  const margin = Math.max(
-    (bbox.maxX - bbox.minX) * 0.05,
-    BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS,
-  )
-  const centroidX0 = bbox.minX - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidX1 = bbox.maxX + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidY0 = bbox.minY - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidY1 = bbox.maxY + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const vertexX0 = bbox.minX - margin
-  const vertexX1 = bbox.maxX + margin
-  const vertexY0 = bbox.minY - margin
-  const vertexY1 = bbox.maxY + margin
-  // Vertices are FLOAT, so their bounds are cast for row-group pruning (see
-  // betweenSql). Centroids are DOUBLE.
-  const stmt = await conn.prepare(`
-WITH viewport_cells AS (
-  SELECT cell_id FROM read_parquet( ? )
-  WHERE x_centroid BETWEEN ? AND ?
-    AND y_centroid BETWEEN ? AND ?
-)
-SELECT b.cell_id, b.vertex_x AS x, b.vertex_y AS y
-FROM read_parquet( ? ) AS b
-WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
-  AND ${betweenSql('b.vertex_y', 'FLOAT')}
-  AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
-ORDER BY b.cell_id, b.file_row_number
-`)
-  const result = await stmt.query(
+  const rows = await queryXeniumBoundaryVertices(
+    conn,
     urls.cells,
-    centroidX0,
-    centroidX1,
-    centroidY0,
-    centroidY1,
     urls.cellBoundaries,
-    vertexX0,
-    vertexX1,
-    vertexY0,
-    vertexY1,
+    bbox,
+    { labelIds: false },
   )
   const verticesByCell = new Map<CellId, DataPoint[]>()
 
-  for (const row of result.toArray()) {
+  for (const row of rows) {
     const parsed = parseBoundaryRow(row)
     const vertices = verticesByCell.get(parsed.cellId) ?? []
     vertices.push(parsed.point)
@@ -142,6 +110,120 @@ ORDER BY b.cell_id, b.file_row_number
         },
       })),
   }
+}
+
+// Nuclei of the cells in the box, from nucleus_boundaries.parquet. A cell can
+// have several nuclei, told apart by label_id: the first keeps the cell ID and
+// later ones get `<cell_id>#nucleus-N`, as on Atera. Without label IDs (files
+// that lack the column) each cell's vertices form one nucleus.
+export async function readXeniumNucleusBoundaryElements(
+  conn: XeniumDuckDbConnection,
+  urls: {
+    readonly cells: string
+    readonly nucleusBoundaries: string
+  },
+  bbox: BBox,
+  options: { readonly labelIds: boolean },
+): Promise<readonly SpatialElement[]> {
+  const rows = await queryXeniumBoundaryVertices(
+    conn,
+    urls.cells,
+    urls.nucleusBoundaries,
+    bbox,
+    options,
+  )
+  const nuclei = new Map<string, { readonly id: string; readonly points: DataPoint[] }>()
+  const nucleusCountByCell = new Map<CellId, number>()
+
+  for (const row of rows) {
+    const parsed = parseBoundaryRow(row)
+    const key = options.labelIds
+      ? `${parsed.cellId}\n${String(row.label_id)}`
+      : parsed.cellId
+    let nucleus = nuclei.get(key)
+
+    if (nucleus === undefined) {
+      const occurrence = (nucleusCountByCell.get(parsed.cellId) ?? 0) + 1
+      nucleusCountByCell.set(parsed.cellId, occurrence)
+      nucleus = {
+        id: occurrence === 1 ? parsed.cellId : `${parsed.cellId}#nucleus-${occurrence}`,
+        points: [],
+      }
+      nuclei.set(key, nucleus)
+    }
+
+    nucleus.points.push(parsed.point)
+  }
+
+  return [...nuclei.values()]
+    .filter(({ points }) => points.length >= 3)
+    .map(({ id, points }) => ({
+      id,
+      geometry: {
+        kind: 'polygon',
+        rings: [points],
+      },
+      metadata: { segmentation: { kind: 'nucleus' } },
+    }))
+}
+
+// DuckDB names the column in its error when a file lacks it.
+export function isMissingParquetColumnError(error: unknown, column: string): boolean {
+  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
+  return message.includes('column') && message.includes(column.toLowerCase())
+}
+
+// Vertex rows of the cells whose centroids fall in the box, from a
+// cell_boundaries.parquet-shaped file, in file order per cell.
+async function queryXeniumBoundaryVertices(
+  conn: XeniumDuckDbConnection,
+  cellsUrl: string,
+  boundariesUrl: string,
+  bbox: BBox,
+  options: { readonly labelIds: boolean },
+): Promise<readonly Record<string, unknown>[]> {
+  const margin = Math.max(
+    (bbox.maxX - bbox.minX) * 0.05,
+    BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS,
+  )
+  const centroidX0 = bbox.minX - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+  const centroidX1 = bbox.maxX + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+  const centroidY0 = bbox.minY - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+  const centroidY1 = bbox.maxY + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
+  const vertexX0 = bbox.minX - margin
+  const vertexX1 = bbox.maxX + margin
+  const vertexY0 = bbox.minY - margin
+  const vertexY1 = bbox.maxY + margin
+  const labelColumn = options.labelIds ? ', b.label_id' : ''
+  // Vertices are FLOAT, so their bounds are cast for row-group pruning (see
+  // betweenSql). Centroids are DOUBLE.
+  const stmt = await conn.prepare(`
+WITH viewport_cells AS (
+  SELECT cell_id FROM read_parquet( ? )
+  WHERE x_centroid BETWEEN ? AND ?
+    AND y_centroid BETWEEN ? AND ?
+)
+SELECT b.cell_id${labelColumn}, b.vertex_x AS x, b.vertex_y AS y
+FROM read_parquet( ? ) AS b
+WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
+  AND ${betweenSql('b.vertex_y', 'FLOAT')}
+  AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
+ORDER BY b.cell_id${labelColumn}, b.file_row_number
+`)
+  const result = await stmt.query(
+    cellsUrl,
+    centroidX0,
+    centroidX1,
+    centroidY0,
+    centroidY1,
+    boundariesUrl,
+    vertexX0,
+    vertexX1,
+    vertexY0,
+    vertexY1,
+  )
+
+  return result.toArray()
 }
 
 export async function readXeniumMatrixForCells(

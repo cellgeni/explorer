@@ -161,6 +161,150 @@ describe('XeniumDataset', () => {
     expect(conn.preparedSql[0]).toContain('y_centroid BETWEEN ? AND ?')
   })
 
+  it('lists cell and nucleus outlines read from Parquet', async () => {
+    const conn = new FakeConnection([[{ minX: 1, maxX: 20, minY: 2, maxY: 30 }]])
+
+    await expect(makeDataset(conn).meta()).resolves.toMatchObject({
+      segmentations: [
+        { kind: 'cell', sourceKind: 'parquet', path: 'cell_boundaries.parquet' },
+        { kind: 'nucleus', sourceKind: 'parquet', path: 'nucleus_boundaries.parquet' },
+      ],
+    })
+  })
+
+  it('splits nucleus vertices by cell and label and numbers extra nuclei', async () => {
+    const conn = new FakeConnection([
+      [
+        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 0, y: 0 },
+        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 2, y: 0 },
+        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 2, y: 2 },
+        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 4, y: 4 },
+        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 6, y: 4 },
+        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 6, y: 6 },
+        { cell_id: 'bbbbbbbb-1', label_id: 9n, x: 9, y: 9 },
+        { cell_id: 'cccccccc-1', label_id: 10n, x: 1, y: 8 },
+        { cell_id: 'cccccccc-1', label_id: 10n, x: 3, y: 8 },
+        { cell_id: 'cccccccc-1', label_id: 10n, x: 3, y: 9 },
+      ],
+    ])
+    const validateRangeSupport = vi.fn(async () => undefined)
+    const dataset = makeDataset(conn, { validateRangeSupport })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    const elements = await dataset.segmentationElements('nucleus', bbox)
+
+    expect(elements.map((element) => element.id)).toEqual([
+      'aaaaaaaa-1',
+      'aaaaaaaa-1#nucleus-2',
+      'cccccccc-1',
+    ])
+    expect(elements[1]).toEqual({
+      id: 'aaaaaaaa-1#nucleus-2',
+      geometry: {
+        kind: 'polygon',
+        rings: [
+          [
+            { x: micrometers(4), y: micrometers(4) },
+            { x: micrometers(6), y: micrometers(4) },
+            { x: micrometers(6), y: micrometers(6) },
+          ],
+        ],
+      },
+      metadata: { segmentation: { kind: 'nucleus' } },
+    })
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/nucleus_boundaries.parquet',
+      { label: 'nucleus_boundaries.parquet' },
+    )
+    expect(conn.statements[0]?.params).toEqual([
+      'https://example.test/xenium/cells.parquet',
+      micrometers(-75),
+      micrometers(85),
+      micrometers(-75),
+      micrometers(85),
+      'https://example.test/xenium/nucleus_boundaries.parquet',
+      micrometers(-150),
+      micrometers(160),
+      micrometers(-150),
+      micrometers(160),
+    ])
+    expect(conn.preparedSql[0]).toContain('SELECT b.cell_id, b.label_id,')
+    expect(conn.preparedSql[0]).toContain(
+      'ORDER BY b.cell_id, b.label_id, b.file_row_number',
+    )
+    expect(conn.preparedSql[0]).toContain(
+      'b.vertex_x BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
+    )
+  })
+
+  it('groups nuclei by cell when the file has no label_id column', async () => {
+    const preparedSql: string[] = []
+    const rows = [
+      { cell_id: 'aaaaaaaa-1', x: 0, y: 0 },
+      { cell_id: 'aaaaaaaa-1', x: 2, y: 0 },
+      { cell_id: 'aaaaaaaa-1', x: 2, y: 2 },
+    ]
+    const conn: XeniumDuckDbConnection = {
+      async prepare(sql) {
+        preparedSql.push(sql)
+
+        return {
+          async query() {
+            if (sql.includes('label_id')) {
+              throw new Error(
+                'Binder Error: Table "b" does not have a column named "label_id"',
+              )
+            }
+
+            return new FakeTable(rows)
+          },
+        }
+      },
+    }
+    const dataset = makeDataset(conn, { validateRangeSupport: async () => undefined })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toMatchObject([
+      { id: 'aaaaaaaa-1' },
+    ])
+    await expect(dataset.segmentationElements('nucleus', bbox)).resolves.toHaveLength(1)
+    // The second request goes straight to the query without label_id.
+    expect(preparedSql.map((sql) => sql.includes('label_id'))).toEqual([
+      true,
+      false,
+      false,
+    ])
+  })
+
+  it('names a missing nucleus file before querying it', async () => {
+    const conn = new FakeConnection([])
+    const dataset = makeDataset(conn, {
+      validateRangeSupport: async () => {
+        throw new Error('nucleus_boundaries.parquet was not found.')
+      },
+    })
+
+    await expect(
+      dataset.segmentationElements('nucleus', {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(0),
+        maxY: micrometers(10),
+      }),
+    ).rejects.toThrow('nucleus_boundaries.parquet was not found.')
+    expect(conn.preparedSql).toEqual([])
+  })
+
   it('delegates matrix, transcripts, and pyramid image loading', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([[{ cell_id: cellId }]])

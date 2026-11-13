@@ -39,6 +39,7 @@ instance. Those functions share `XeniumDataset` instances from
 | `experiment.xenium`                                                                | Yes, without a dataset manifest | Detection; `readXeniumExperimentMetadata`; `loadMorphologyImageCandidatesFromManifest`              | fetch + JSON                                          | Pixel size (`pixel_size`, `pixel_size_um`, …); morphology image paths (`*_filepath(s)` keys)                                                                         | Detection, `meta()` units, image choice                                          |
 | `cells.parquet`                                                                    | Yes                             | `readCellsOverviewInWorker` (`cellsOverviewWorker.ts`); DuckDB in `xeniumDatasetReaders.ts`         | `hyparquet`; DuckDB-WASM                              | `cell_id`, `x_centroid`, `y_centroid`, `transcript_counts`, `cell_area`, optional `nucleus_count`, `segmentation_method`; `file_row_number` for matrix rows          | First paint, viewport cell sets, ROI cells, transcript estimates                 |
 | `cell_boundaries.parquet`                                                          | Optional                        | `readXeniumBoundaryElements`                                                                        | DuckDB-WASM                                           | `cell_id`, `vertex_x`, `vertex_y`                                                                                                                                    | Cell polygons, selected-cell shape metrics                                       |
+| `nucleus_boundaries.parquet`                                                       | Optional                        | `readXeniumNucleusBoundaryElements`                                                                 | DuckDB-WASM                                           | `cell_id`, `vertex_x`, `vertex_y`, `label_id`                                                                                                                        | Nucleus polygons                                                                 |
 | `cell_feature_matrix.zarr.zip`                                                     | For expression                  | `src/data/gex.ts` (`gexFromCellFeatureMatrixZarrSelectedGenes`, `gexFromCellFeatureMatrixZarrRows`) | `zarrita` + `ZipFileStore` over a cached range reader | `cell_features` attrs (`feature_keys`, `feature_types`), `cell_id`, CSC `csc/{indptr,indices,data}`, feature-major `indptr/indices/data`                             | Gene overlay, ROI genes, cell details, Magic Lens, annotation row→cell mapping   |
 | `cell_feature_matrix.h5`                                                           | Fallback                        | `gexFromCellFeatureMatrixH5`                                                                        | `h5wasm` in a worker (whole file)                     | `/matrix/{barcodes,features/name,features/feature_type,indptr,indices,data}`                                                                                         | ROI genes, cell details, Magic Lens when Zarr has no CSC arrays                  |
 | `transcripts.zarr.zip`                                                             | Optional                        | `src/data/transcriptZarr.ts`                                                                        | `zarrita` + `ZipFileStore`                            | Root `gene_names`, `codeword_gene_names`, `fov_names`; `grids` attrs and `grids/<level>/<tile>` arrays (`location`, `gene_identity`, `id`, `quality_score`, `valid`) | Density squares, exact points, selected-cell z distribution, gene-panel fallback |
@@ -49,8 +50,8 @@ instance. Those functions share `XeniumDataset` instances from
 | Morphology OME-TIFF from `experiment.xenium` or the dataset manifest               | Optional                        | `loadMorphologyImage` (`src/data/morphologyImage.ts`) → `openTiff`                                  | `geotiff` + range tile reads                          | OME-XML, SubIFD pyramid, tiles                                                                                                                                       | Image layer, channels, viewer µm/px                                              |
 | `.zchunkstore` sidecar                                                             | Optional                        | `loadZchunkStorePyramidOptions` (`src/tiff/zchunkStore.ts`)                                         | fetch + JSON                                          | Precomputed tile offsets                                                                                                                                             | Faster TIFF open                                                                 |
 
-Not read: `nucleus_boundaries.parquet`, `analysis/clustering/*` CSVs,
-`metrics_summary.csv`, `cells.zarr.zip`, and `aux_outputs/`.
+Not read: `analysis/clustering/*` CSVs, `metrics_summary.csv`,
+`cells.zarr.zip`, and `aux_outputs/`.
 
 XOA does not write `.zchunkstore` sidecars, and none is needed. One can save a
 few requests when opening the focus images; see
@@ -70,7 +71,8 @@ few requests when opening the focus images; see
 ## Load Sequence
 
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`) sets
-the platform to `xenium` (cell boundaries on by default), then:
+the platform to `xenium` (cell boundaries on and nucleus boundaries off by
+default), then:
 
 1. Starts, without waiting:
    - dataset warmup (`warmDatasetForRoi`, `src/data/datasetWarmup.ts`): range
@@ -110,6 +112,42 @@ the cast took a cold Cell-card boundary query from 103 requests, 96 MB of the
 109 MB file and 25.1 s to 38 requests, 35 MB and 7.1 s. Queries on
 `transcripts.parquet` cast their `x_location` and `y_location` bounds the same
 way. `cells.parquet` centroids are DOUBLE and are compared as they are.
+
+### Nucleus Boundaries
+
+`Nucleus boundaries` reads `nucleus_boundaries.parquet` under the same load
+rule, bbox, and margins as cell outlines, through
+`XeniumDataset.segmentationElements('nucleus', bbox)` and
+`readXeniumNucleusBoundaryElements`. The file has the same columns as
+`cell_boundaries.parquet`, plus `label_id`, which tells apart the nuclei of
+one cell (about 3.5% of the demo's cells have more than one). Rows are
+grouped by `cell_id` and `label_id`. A cell's first nucleus keeps the cell
+ID, and later ones are `<cell_id>#nucleus-N`. A file without `label_id` is
+read again without it, and each cell's vertices form one nucleus. The file is
+Range-probed before the first query, so a missing file shows a boundary error
+that names it.
+
+Nuclei are drawn as a blue, non-pickable layer. Both outline types use the
+viewport boundary `XeniumDataset`, whose DuckDB instance runs one query at a
+time. So `Cell boundaries` off skips the cell query
+(`cellBoundaryLoadingEnabled` in `platformAdapter.ts`), and switching either
+checkbox requests both outline types again. The repeat reads come from
+DuckDB's file cache.
+
+Measured on the demo on 2026-11-13 in headless Chromium with Metal WebGL, at
+a 1280 × 800 view of about 4,300 cells and nuclei:
+
+| Case              | Cells                      | Nuclei                       |
+| ----------------- | -------------------------- | ---------------------------- |
+| Cells only, cold  | 9.9 s (20 requests, 16 MB) | —                            |
+| Nuclei added      | 0.45 s (cached)            | 4.0 s (19 requests, 15 MB)   |
+| Cells turned off  | Not queried                | 0.46 s (cached)              |
+| Nuclei only, cold | Not queried                | 13.0 s                       |
+| Both, cold        | 12.9 s                     | 17.2 s (waits for the cells) |
+
+The cold times include starting DuckDB and reading `cells.parquet` for the
+centroid filter. A cold nucleus query reads 15 MB of the 99.6 MB file, since
+the FLOAT-cast vertex bounds prune row groups.
 
 ### Selected-Gene Expression
 
@@ -255,6 +293,7 @@ not passed to the readers, so it does not change the result.
 | `src/data/datasetOverview.ts`, `hyparquetCells.ts`, `duckdbCells.ts`                | First-paint overview                                           |
 | `src/data/cellsOverviewWorker.ts`, `src/workers/cellsOverview*.ts`                  | Overview read in a worker                                      |
 | `src/data/datasetBoundaries.ts`, `src/rendering/boundaryViewport.ts`                | Viewport boundary loading                                      |
+| `src/features/app-shell/platformAdapter.ts`                                         | Nucleus loader routing; cell query skipped while hidden        |
 | `src/data/geneExpression.ts`, `geneExpressionLod.ts`, `gex.ts`                      | Expression LOD and matrix readers                              |
 | `src/data/transcriptOverlay.ts`, `transcriptZarr.ts`                                | Transcript capabilities, density, exact points                 |
 | `src/data/cellTranscripts.ts`                                                       | Selected-cell z distribution                                   |
@@ -270,6 +309,8 @@ not passed to the readers, so it does not change the result.
 
 ## Known Limitations
 
+- Cell and nucleus outlines are drawn together, once both queries finish.
+  With both on, cold, the cells wait about 4 s for the nuclei on the demo.
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
 - The morphology image is the first `experiment.xenium` path the folder's
