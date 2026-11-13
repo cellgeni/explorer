@@ -95,3 +95,17 @@ The app works around this in two ways:
   missing" rather than as a CORS or Range problem.
 
 If you control the host, send CORS headers on every response instead.
+
+## Hosts That Stall Range Requests
+
+`ftp.ebi.ac.uk` sometimes leaves a range request unanswered for about a
+minute while other requests for the same file, sent at the same moment,
+finish in under a second. On 2026-11-13, 3 of 6 loads of a 24 GB zipped
+SpatialData store from the BioImage Archive had one or two requests that took
+55–90 s, and each held up the whole load.
+
+The viewer has no timeout or retry for a single range request, so a load waits
+for a stalled one and looks stuck on "Loading". If a load from such a host
+stops making progress, reload the page. For datasets you open often, or for
+timing measurements, copy them to a host with steadier range responses, or
+mirror them locally (see [Profiling](./profiling.md#serve-data-locally)).

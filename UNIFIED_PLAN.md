@@ -4155,6 +4155,12 @@ Other gaps found in the review:
       range request (about 300 KB for a 16 µm bin on the reference).
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
 - [ ] Byte-range cache keys omit the `ETag`.
+- [ ] Range reads have no timeout or retry. On 2026-11-13, 3 of 6 loads of the
+      460-plex zip from `ftp.ebi.ac.uk` had one or two range requests that
+      took 55–90 s while the requests sent with them finished in under a
+      second, and the load waited for them. Zip entries, hyparquet and Zarr
+      chunk reads would need a per-request timeout with a retry (see
+      [s3-cors-playbook.md](./docs/s3-cors-playbook.md#hosts-that-stall-range-requests)).
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
       than the Xenium overview and SpatialData shapes (Visium HD positions and
       barcode mappings), and the fetching and assembly in zarrita reads.

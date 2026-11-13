@@ -58,6 +58,9 @@ UPDATE_AXE_BASELINE=1 npx playwright test --grep "axe baseline"
 The Vite dev and preview servers are configured with cross-origin isolation
 headers needed by the browser-side WASM and decoding paths.
 
+To measure main-thread work and load times, or to serve datasets locally with
+byte ranges, see [Profiling](docs/profiling.md).
+
 ## Releases
 
 To cut a release, open Releases > Draft a new release, create a new `vX.Y.Z`
