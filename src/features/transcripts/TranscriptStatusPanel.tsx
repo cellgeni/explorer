@@ -88,7 +88,8 @@ export function TranscriptStatusPanel({
 
       {layerState.status === 'waiting' ||
       layerState.status === 'aggregate' ||
-      layerState.status === 'unavailable' ? (
+      layerState.status === 'unavailable' ||
+      (layerState.status === 'loading' && layerState.message !== undefined) ? (
         <p className="transcript-status-message">{layerState.message}</p>
       ) : null}
       {layerState.status === 'error' ? (

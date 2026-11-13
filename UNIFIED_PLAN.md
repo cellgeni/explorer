@@ -1167,8 +1167,11 @@ windowed level-of-detail system, not one point layer over
       show a clear fallback state.
 - [x] The exact tier renders every visible matching transcript when within
       budget, with record-level hover.
-- [x] Exact mode never samples silently. Over budget or timeout, the UI explains
-      why and how to reach exact rendering.
+- [x] Exact mode never samples silently. Over budget, the UI explains why and
+      how to reach exact rendering. Until 2026-11-13 a load past 12 s was also
+      aborted; it now keeps going, says it is slow, and can be cancelled from
+      the loading list. The nightly Atera live test failed on the abort at
+      about 150 ms from the host.
 - [x] Aggregate bins are stable across pans and LOD thresholds.
 - [x] Transcript work is abortable and does not block ROI lookup, ROI export,
       Magic Lens, or selected-cell detail.
