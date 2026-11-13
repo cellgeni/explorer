@@ -31,6 +31,7 @@ import {
   readTimestamp,
   startLatestRequest,
   type DebugLogAppendOptions,
+  type LatestRequest,
 } from '../app-shell/appRuntimeModel'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import {
@@ -156,6 +157,26 @@ interface UseTranscriptWorkflowResult {
 interface ExactLoadProgress {
   readonly requestId: number
   readonly fraction: number
+}
+
+// For the layer effect's cleanup. A rerun with the key already in
+// transcriptViewportKeyRef returns early, so when the cleanup stops a read
+// that is still running (a new viewport object for the same view, or a
+// dependency the key leaves out), it clears the key and the rerun starts the
+// read again. A read that finished, was cancelled (15.3-D) or was replaced is
+// no longer in transcriptAbortRef, so its key stays.
+function releaseRunningRequestKey(
+  request: LatestRequest,
+  requestKey: string,
+  abortRef: MutableRef<AbortController | null>,
+  viewportKeyRef: MutableRef<string | null>,
+): void {
+  if (
+    abortRef.current === request.abortController &&
+    viewportKeyRef.current === requestKey
+  ) {
+    viewportKeyRef.current = null
+  }
 }
 
 export function useTranscriptWorkflow({
@@ -694,6 +715,12 @@ export function useTranscriptWorkflow({
         })
 
       return () => {
+        releaseRunningRequestKey(
+          request,
+          requestKey,
+          transcriptAbortRef,
+          transcriptViewportKeyRef,
+        )
         request.abortController.abort()
         request.complete()
       }
@@ -975,6 +1002,12 @@ export function useTranscriptWorkflow({
     }, 220)
 
     return () => {
+      releaseRunningRequestKey(
+        request,
+        requestKey,
+        transcriptAbortRef,
+        transcriptViewportKeyRef,
+      )
       window.clearTimeout(startTimeout)
       if (exactQueryTimeout !== null) {
         window.clearTimeout(exactQueryTimeout)
