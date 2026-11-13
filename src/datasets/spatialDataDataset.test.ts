@@ -7,6 +7,7 @@ import {
   SpatialDataShapesBuilder,
   type SpatialDataShapesReader,
 } from './spatialDataShapes'
+import { withCellMetadata } from '../test/cellMetadataFixtures'
 import { byteRangeFetcher, zipArchive, type ZipFixtureFile } from '../test/zipFixtures'
 
 const STORE_URL = 'https://example.test/sample.sdata.zarr'
@@ -46,7 +47,10 @@ describe('SpatialDataDataset', () => {
     // cell-c annotates an instance missing from the shapes element.
     expect(overview.map((cell) => cell.cellId)).toEqual(['cell-a', 'cell-b'])
     expect(overview[0]?.position).toEqual({ x: 1, y: 1 })
-    expect(overview[1]?.metadata).toEqual({ region: 'cells', cell_id: 11 })
+    expect(withCellMetadata(overview)[1]?.metadata).toEqual({
+      region: 'cells',
+      cell_id: 11,
+    })
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1'])
     await expect(dataset.geneAliases()).resolves.toEqual(new Map())
 
@@ -362,7 +366,10 @@ describe('SpatialDataDataset incomplete stores', () => {
     const overview = await dataset.overview()
     // cell-c's masked instance id is not matched to a shape.
     expect(overview.map((cell) => cell.cellId)).toEqual(['cell-a', 'cell-b'])
-    expect(overview[1]?.metadata).toEqual({ region: 'cells', cell_id: '11' })
+    expect(withCellMetadata(overview)[1]?.metadata).toEqual({
+      region: 'cells',
+      cell_id: '11',
+    })
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1'])
   })
 
@@ -415,6 +422,42 @@ describe('SpatialDataDataset long tables', () => {
     await expect(dataset.metadataTracks()).resolves.toContainEqual(
       expect.objectContaining({ label: 'cell_id', min: 0, max: rows - 1 }),
     )
+  })
+
+  it('builds the overview once, and per-cell metadata only when asked', async () => {
+    const rows = 150_000
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(longTableFixture(rows)),
+      readShapes: vi.fn(async () => {
+        const shapes = new SpatialDataShapesBuilder()
+
+        for (let index = 0; index < rows; index += 1) {
+          shapes.addCircle(String(index), index, 0, 1)
+        }
+
+        return shapes.build()
+      }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await dataset.summary()
+    const overview = await dataset.overview()
+
+    expect(overview).toHaveLength(rows)
+    expect(await dataset.overview()).toBe(overview)
+    expect(overview[7]?.metadata).toBeUndefined()
+    expect(overview[7]?.readMetadata?.()).toEqual({
+      cell_id: 7,
+      barcode: 'b7',
+      batch: 'b2',
+    })
+    // Distinct values stop being counted past 10,000, so a column of cell
+    // barcodes reads as 10,001 groups.
+    await expect(dataset.annotationGroups()).resolves.toEqual([
+      expect.objectContaining({ label: 'barcode', groupCount: 10_001 }),
+      expect.objectContaining({ label: 'batch', groupCount: 2 }),
+    ])
   })
 })
 
@@ -625,11 +668,14 @@ function longTableFixture(rows: number): ReadonlyMap<string, Uint8Array> {
     'tables/table/obs/.zgroup': { zarr_format: 2 },
     'tables/table/obs/.zattrs': {
       _index: '_index',
-      'column-order': ['cell_id'],
+      'column-order': ['cell_id', 'barcode', 'batch'],
       'encoding-type': 'dataframe',
     },
     'tables/table/obs/_index/.zarray': arrayMeta([rows], '|S7'),
     'tables/table/obs/cell_id/.zarray': arrayMeta([rows], '<i8'),
+    // Plain string columns: one value per cell, and two values in all.
+    'tables/table/obs/barcode/.zarray': arrayMeta([rows], '|S7'),
+    'tables/table/obs/batch/.zarray': arrayMeta([rows], '|S2'),
     'tables/table/var/.zgroup': { zarr_format: 2 },
     'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
     'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
@@ -658,6 +704,20 @@ function longTableFixture(rows: number): ReadonlyMap<string, Uint8Array> {
     [
       '/tables/table/obs/cell_id/0',
       bytes(BigInt64Array.from({ length: rows }, (_value, index) => BigInt(index))),
+    ],
+    [
+      '/tables/table/obs/barcode/0',
+      fixedStrings(
+        Array.from({ length: rows }, (_value, index) => `b${index.toString()}`),
+        7,
+      ),
+    ],
+    [
+      '/tables/table/obs/batch/0',
+      fixedStrings(
+        Array.from({ length: rows }, (_value, index) => (index % 2 === 0 ? 'b1' : 'b2')),
+        2,
+      ),
     ],
     ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
     ['/tables/table/X/data/0', bytes(new Float32Array([1]))],

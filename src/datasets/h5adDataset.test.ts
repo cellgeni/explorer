@@ -7,6 +7,7 @@ import {
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
 import { AnnDataH5adDataset } from './h5adDataset'
+import { withCellMetadata } from '../test/cellMetadataFixtures'
 
 describe('AnnDataH5adDataset', () => {
   it('loads H5AD points, obs annotations, metadata tracks, and dense expression', async () => {
@@ -32,7 +33,7 @@ describe('AnnDataH5adDataset', () => {
       },
     })
 
-    const overview = await dataset.overview()
+    const overview = withCellMetadata(await dataset.overview())
 
     expect(overview).toHaveLength(4)
     expect(overview[0]).toMatchObject({
@@ -232,7 +233,7 @@ describe('AnnDataH5adDataset', () => {
       fetcher: h5adFetcher(bytes),
     })
 
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },
@@ -395,7 +396,7 @@ describe('AnnDataH5adDataset', () => {
       ])
       await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'var-1', 'Gapdh'])
 
-      const overview = await dataset.overview()
+      const overview = withCellMetadata(await dataset.overview())
       expect(overview.map(({ cellId, metadata }) => ({ cellId, metadata }))).toEqual([
         {
           cellId: 'cell-a',
@@ -498,7 +499,7 @@ describe('AnnDataH5adDataset', () => {
       }),
     })
 
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         metadata: { cluster: 'B', score: 0.5, 'Cancer Epithelial': 0.25 },
@@ -539,7 +540,7 @@ describe('AnnDataH5adDataset', () => {
     expect(readBody).not.toHaveBeenCalled()
 
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh'])
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },
@@ -707,7 +708,7 @@ describe('AnnDataH5adDataset', () => {
       },
     })
     await expect(dataset.genePanel()).resolves.toEqual(['Actb', 'Gad1', 'Gapdh', 'Sst'])
-    await expect(dataset.overview()).resolves.toContainEqual(
+    expect(withCellMetadata(await dataset.overview())).toContainEqual(
       expect.objectContaining({
         cellId: 'cell-b',
         position: { x: micrometers(10), y: micrometers(0) },

@@ -164,6 +164,9 @@ except the index and `__*` entries:
 - Numeric datasets become continuous tracks (skipped if no value is finite).
   Boolean datasets count as numeric (0/1) on every backend.
 - String datasets become categorical tracks; empty strings are missing.
+  Their distinct values are counted only up to 10,000: a column with more,
+  such as cell IDs or barcodes, reports 10,001 and is listed under "More
+  columns" with the other columns of more than 500 categories.
 - `nullable-string-array` groups become categorical tracks and
   `nullable-integer`/`nullable-boolean` groups continuous ones (booleans as
   0/1); masked values are missing.
@@ -209,11 +212,16 @@ values with gaps up to 262,144 values (`csrZarrRowBatches`).
 
 | Call                 | Result                                                                                   |
 | -------------------- | ---------------------------------------------------------------------------------------- |
-| `overview()`         | One point per finite coordinate row, with categorical and numeric obs values as metadata |
+| `overview()`         | One point per finite coordinate row; its obs values are read when the Cell card shows it |
 | `genePanel()`        | Gene names from `/var`                                                                   |
 | `annotationGroups()` | One `analysis:<column>` option per categorical obs column                                |
 | `embeddingOptions()` | obsm keys usable as embeddings; the first one is selected                                |
 | `metadataTracks()`   | One `h5ad:<column>` `Metadata` track per continuous obs column, without per-cell values  |
+
+`overview()` is built once for each placement (a Visium library or off-tissue
+choice places the rows again) and returned to every caller. Its points carry
+`readMetadata` instead of a metadata object: building an object per cell with
+every obs column took 0.6–1.4 s per call on a 598,222-cell table.
 
 H5AD has no morphology image and no boundary polygons, so cell boundaries are
 switched off and `meta()` reports all capabilities as `false`. `elements()`

@@ -296,8 +296,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return staticUnits
     }
 
+    // Reading the table places its rows, which resolves the units.
     if (table !== null) {
-      await table.overview()
+      await table.cellIds()
     }
 
     return this.resolvedUnits ?? UNKNOWN_SPATIALDATA_UNITS
@@ -1030,7 +1031,8 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return null
     }
 
-    await table.overview()
+    // Placing the table's rows records which labels and shapes they use.
+    await table.cellIds()
 
     if (view.regionShapes.length === 0) {
       const entry = view.regionLabels.find(

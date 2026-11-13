@@ -4154,6 +4154,12 @@ Other gaps found in the review:
       size and footer are read once per dataset, so a later selection is one
       range request (about 300 KB for a 16 µm bin on the reference).
 - [ ] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport.
+- [ ] Byte-range cache eviction reads every cached range. After each write,
+      `evict` (`src/data/persistentByteRangeCache.ts`) calls `getAll()` on the
+      store, so the bytes of every cached range (up to 256 MB) are deserialised
+      on the main thread to add up their sizes; found 2026-11-13, 650–950 ms of
+      `request.onsuccess` while the 460-plex zip loads. Sizes and access times
+      alone, from an index or a separate store, would do.
 - [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Range reads have no timeout or retry. On 2026-11-13, 3 of 6 loads of the
       460-plex zip from `ftp.ebi.ac.uk` had one or two range requests that
@@ -4206,9 +4212,22 @@ Other gaps found in the review:
       per-shape objects, not the WKB parse (1.3 s in Node): with 600,000 shape
       objects and rings on the heap, building the id `Map` took 1.5 s and
       matching the table rows 1.1 s, against about 150 ms for the same `Map` in
-      an idle page. The table code still runs on the main thread: 5.6–5.9 s in
-      `h5adDataset` on this load, mostly counting distinct labels and building
-      per-cell metadata.
+      an idle page. The AnnData table code then took 5.9–6.4 s of the same load
+      (2026-11-13, profiled with GPU rendering so that drawing could not overlap
+      it): 2.6–2.7 s counting the distinct values of the `cell_id` and
+      `segmentation_method` string columns, and building a metadata object per
+      cell for every caller of `overview()`, which ran five times (0.6–1.4 s
+      each, timed in the page). The same work in an idle page takes about 100
+      ms: large `Set`, `Map` and object builds are 10–25 times slower during the
+      load. Now the count stops past 10,000 distinct values, `overview()` is
+      built once per placement with each cell's metadata read when the Cell card
+      shows it, SpatialData waits for the table read rather than for
+      `overview()`, and Atera reads its two overview columns by row.
+      `h5adDataset` takes 0.71 s, the longest busy stretch fell from about 4.0 s
+      to 0.43–0.51 s, and the load reached the gene search in 5.9–6.3 s instead
+      of 12.8–13.5 s, with the same Cell card and annotation sets. Still on the
+      main thread: expanding categorical codes into labels (about 250 ms here),
+      and the CSR scan for a gene.
 - [ ] Xenium still loads through free functions in `src/data/` instead of one
       `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
       `meta()` reads the manifest.

@@ -19,6 +19,7 @@ import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
 } from '../data/customAnnotations'
+import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import {
@@ -227,6 +228,7 @@ interface H5adVisiumLayout {
 interface H5adCategoricalTrack {
   readonly id: string
   readonly label: string
+  // For a plain string column, counted only up to DISTINCT_LABEL_COUNT_LIMIT.
   readonly categoryCount: number
   readonly values: readonly (string | null)[]
 }
@@ -372,6 +374,9 @@ const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
 const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
 const CSR_ZARR_BATCH_MAX_VALUES = 4_000_000
 const CSR_ZARR_BATCH_MAX_GAP_VALUES = 262_144
+// String obs columns with more distinct values than this are counted as this
+// plus one. The annotation list sets apart columns of more than 500.
+const DISTINCT_LABEL_COUNT_LIMIT = 10_000
 
 export class H5adFileSizeLimitExceededError extends Error {
   readonly url: string
@@ -451,6 +456,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private cachePromise: Promise<H5adCache> | null = null
   private visiumView: AnnDataVisiumView = {}
   private spotElementsPromise: Promise<readonly VisiumSpotEntry[]> | null = null
+  // The overview built from a cache, kept while that cache is current:
+  // building it again for every caller cost 0.6–1.4 s each on a 598,222-cell
+  // table.
+  private overviewPoints: {
+    readonly cache: H5adCache
+    readonly points: readonly CellOverviewPoint[]
+  } | null = null
   // Per library and image kind.
   private readonly tissueImageUrls = new Map<string, Promise<string>>()
 
@@ -525,6 +537,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.visiumView = view
       this.cachePromise = null
       this.spotElementsPromise = null
+      this.overviewPoints = null
     }
 
     return this
@@ -541,8 +554,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
     const cache = await this.cache()
-    const spotArea = visiumSpotArea(cache)
 
+    if (this.overviewPoints?.cache === cache) {
+      return this.overviewPoints.points
+    }
+
+    const spotArea = visiumSpotArea(cache)
     const points: CellOverviewPoint[] = []
 
     cache.cellIds.forEach((cellId, index) => {
@@ -557,10 +574,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         position,
         transcriptCount: 0,
         ...(spotArea === undefined ? {} : { cellArea: spotArea }),
-        metadata: h5adCellMetadata(cache, index),
+        // Read from the obs columns when shown: an object per cell holding
+        // every column took seconds on large tables.
+        readMetadata: () => h5adCellMetadata(cache, index),
       })
     })
 
+    this.overviewPoints = { cache, points }
     return points
   }
 
@@ -760,6 +780,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async cellIds(): Promise<readonly string[]> {
     const cache = await this.cache()
     return cache.cellIds
+  }
+
+  // A numeric obs column by row, or null when the table has none by that
+  // name.
+  async numericObsColumn(key: string): Promise<readonly number[] | null> {
+    const cache = await this.cache()
+    return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
   }
 
   async cells(
@@ -3198,10 +3225,7 @@ function h5adCellsInBbox(
   return cells
 }
 
-function h5adCellMetadata(
-  cache: H5adCache,
-  row: number,
-): Readonly<Record<string, string | number | boolean>> {
+function h5adCellMetadata(cache: H5adCache, row: number): CellMetadata {
   const metadata: Record<string, string | number | boolean> = {}
 
   for (const track of cache.categoricalTracks) {
@@ -3231,12 +3255,23 @@ function h5adMetadataTrackId(track: H5adContinuousTrack): string {
   return `h5ad:${slug(track.id)}`
 }
 
-function countUniqueLabels(labels: readonly string[]): number {
+// Distinct non-empty labels, counted up to `limit`; a column with more
+// reports limit + 1. Counting stops there because such a column identifies
+// cells (cell IDs, barcodes) rather than grouping them, and a Set of every
+// value cost 1.7 s for 598,222 cell IDs during a load.
+function countUniqueLabels(
+  labels: readonly string[],
+  limit = DISTINCT_LABEL_COUNT_LIMIT,
+): number {
   const values = new Set<string>()
 
   for (const label of labels) {
     if (label.length > 0) {
       values.add(label)
+
+      if (values.size > limit) {
+        break
+      }
     }
   }
 

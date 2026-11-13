@@ -264,6 +264,7 @@ export function overviewCellsToLayerData(
         ? {}
         : { segmentationMethod: cell.segmentationMethod }),
       ...(cell.metadata === undefined ? {} : { metadata: cell.metadata }),
+      ...(cell.readMetadata === undefined ? {} : { readMetadata: cell.readMetadata }),
     }
   })
 }

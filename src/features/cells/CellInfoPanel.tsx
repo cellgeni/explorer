@@ -5,6 +5,7 @@ import {
   type CellTranscriptZBin,
   type CellTranscriptZDistribution,
 } from '../../data/cellTranscripts'
+import { overviewCellMetadata } from '../../data/cellMetadata'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   type CellDetailState,
@@ -48,8 +49,8 @@ export function CellInfoPanel({
         : summarizeCellShape(cell, null)
       : readyState.shape
   const expression = readyState?.expression ?? null
-  const metadataEntries =
-    cell?.metadata === undefined ? [] : Object.entries(cell.metadata)
+  const metadata = cell === null ? undefined : overviewCellMetadata(cell)
+  const metadataEntries = metadata === undefined ? [] : Object.entries(metadata)
 
   if (cell === null) {
     return <p className="cell-info-empty">No cell selected</p>
