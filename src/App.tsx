@@ -258,6 +258,7 @@ const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
+const loadNoBoundaryElements: BoundaryElementsLoader = async () => ({ elements: [] })
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -1943,7 +1944,9 @@ export function App({ dependencies }: AppProps = {}) {
       selectedGenes,
     },
     loaders: {
-      boundaryElements: loadActiveBoundaryElements,
+      boundaryElements: platformAdapter.cellBoundaryLoadingEnabled(showCellBoundaries)
+        ? loadActiveBoundaryElements
+        : loadNoBoundaryElements,
       ...(platformAdapter.capabilities.nucleusBoundaries && showNucleusBoundaries
         ? { nucleusBoundaryElements: loadActiveNucleusBoundaryElements }
         : {}),

@@ -187,13 +187,16 @@ returns the Xenium adapter. The adapter decides:
   annotations, geometric annotations, transcripts, the cell transcript z
   histogram, the transcript gene-only filter, nucleus boundaries, Magic Lens
   Min QV.
-- Whether features, boundaries, gene overlays, and Magic Lens can load.
+- Whether features, boundaries, gene overlays, and Magic Lens can load, and
+  whether a boundary request reads cell outlines (Xenium skips them while
+  `Cell boundaries` is off).
 - Whether an ROI can be drawn.
 - Point size scaling and "cells" vs "bins" labels.
 
 The `loadPlatform*` functions in the same file route readers by platform:
-boundaries, nucleus boundaries, and selected-gene expression go to the dataset
-for every platform but Xenium, and transcript capabilities, aggregates, and
+boundaries and selected-gene expression go to the dataset for every platform
+but Xenium, nucleus boundaries go to the dataset's `segmentationElements` on
+Xenium, Atera, and Visium HD, and transcript capabilities, aggregates, and
 viewports go to `AteraDataset` for Atera (see
 [Atera](./modalities/atera.md#transcripts)) and to the Xenium readers
 otherwise.

@@ -186,6 +186,10 @@
           "$ref": "#/$defs/path",
           "description": "Default cell_boundaries.parquet."
         },
+        "nucleusBoundaries": {
+          "$ref": "#/$defs/path",
+          "description": "Default nucleus_boundaries.parquet."
+        },
         "transcripts": {
           "$ref": "#/$defs/path",
           "description": "Default transcripts.parquet."

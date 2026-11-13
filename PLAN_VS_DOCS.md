@@ -37,9 +37,9 @@ This review is now a record. Its findings were acted on the same day:
 3. **Key numbers changed.** Expression LOD, overview point rendering, and
    boundary limits all work differently now than the plan describes.
 4. **Some plan items never shipped and the docs do not mention them.**
-   Xenium nucleus boundaries, `metrics_summary.csv` QC, CI, and the golden
-   fixture bundle. (Standard Visium spots were in this list; they shipped on
-   2026-11-10.)
+   `metrics_summary.csv` QC, CI, and the golden fixture bundle. (Standard
+   Visium spots were in this list; they shipped on 2026-11-10. Xenium nucleus
+   boundaries shipped on 2026-11-13.)
 5. **The docs disagreed with themselves in six places**, including two stale
    statements about where OME-Zarr decoding runs. All are fixed. See
    [section 5](#5-inconsistencies-inside-docs).
@@ -121,7 +121,7 @@ read" or say nothing.
 | ------------------------------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Standard Visium spots (`VisiumDataset`, `circle`) | Done 2026-11-10       | [visium.md](./docs/modalities/visium.md): Space Ranger folders and `.h5ad` with `uns/spatial` as platform `visium` |
 | Visium HD annotations from `analysis/`            | Not recorded          | "`annotations()` rejects"; the adapter turns annotations off                                                       |
-| Xenium `nucleus_boundaries.parquet` overlay       | No outcome            | "Not read"; nucleus boundaries are Visium HD only                                                                  |
+| Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13       | [xenium.md](./docs/modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                |
 | `metrics_summary.csv` QC display (papaparse)      | No outcome            | "Not read". **Code:** papaparse is not a dependency                                                                |
 | Z-stack plane selector                            | Done 2026-11-09       | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                            |
 | H5AD `/layers/*`, `/raw/X`                        | Open                  | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                        |

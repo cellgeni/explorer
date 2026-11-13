@@ -52,6 +52,7 @@ with `cell_features/csc/*` arrays. Older XOA output falls back to
 Optional but supported Xenium files include:
 
 - `cell_boundaries.parquet`
+- `nucleus_boundaries.parquet` for the `Nucleus boundaries` overlay
 - `transcripts.parquet` for exact transcript metadata such as transcript ID,
   cell ID, QV, nucleus overlap, gene/control status, exact fallback reads, ROI
   transcript export, and selected-cell transcript z-axis distributions
@@ -70,8 +71,8 @@ Optional but supported Xenium files include:
   which save a few requests when opening them. XOA does not write them and
   they are not needed; see [TIFF tile-offset sidecars](./zchunkstore.md)
 
-Not read: `nucleus_boundaries.parquet`, `analysis/clustering/*` CSVs,
-`metrics_summary.csv`, and `cells.zarr.zip`.
+Not read: `analysis/clustering/*` CSVs, `metrics_summary.csv`, and
+`cells.zarr.zip`.
 
 Expect Range validation for optional workflows too, including
 `transcripts.parquet`, `transcripts.zarr.zip`, `cell_feature_matrix.zarr.zip`,

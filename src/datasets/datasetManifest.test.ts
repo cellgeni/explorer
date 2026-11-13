@@ -213,7 +213,7 @@ describe('parseDatasetManifest', () => {
     })
 
     expect(message).toContain('unknown field "files.cell"')
-    expect(message).toContain('cells, cellBoundaries, transcripts')
+    expect(message).toContain('cells, cellBoundaries, nucleusBoundaries, transcripts')
     expect(parseError({ version: 1, platform: 'xenium', colour: 'red' })).toContain(
       'unknown field "colour"',
     )
