@@ -52,6 +52,13 @@
   [dataset manifest](./dataset-manifest.md), which names the platform and
   files.
 
+## Developing
+
+- [Profiling](./profiling.md): CPU profiles of the built app loading a
+  dataset (`scripts/profile-load.mjs`), comparing two builds, and serving
+  data locally with byte ranges, including a sparse mirror of a remote file
+  (`scripts/range-server.mjs`).
+
 ## Design Decisions
 
 - [Cell-feature matrix compatibility](./cell-feature-matrix-compatibility.md):
