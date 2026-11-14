@@ -183,8 +183,8 @@ matrices.
 - `files` maps each standard file to another relative path or http(s) URL;
   files left out keep their standard names. H5AD, SpatialData, and image
   manifests must name their one source file.
-- `options`: Visium HD `binSize`; SpatialData `coordinateSystem`, `image`,
-  `micrometersPerUnit`.
+- `options`: Visium HD `binSize`; SpatialData `table`, `coordinateSystem`,
+  `image`, `micrometersPerUnit`.
 - `defaults`: genes, cell colour, gene scale and score, boundary toggles, image
   channels, three opacities, and the transcript overlay. A shared link's own
   fields take precedence.

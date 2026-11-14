@@ -338,8 +338,9 @@ Incomplete uploads: Zarr reads a missing chunk as the array fill value, so a
 partly uploaded store can load with empty columns. The app logs table chunks
 read that way, fails with `Store objects missing or unreadable` when a string
 array or a required array cannot be read, and skips optional `obs` columns
-whose chunks return `403`. `Diagnose Dataset` checks every table chunk and one
-image chunk.
+whose chunks return `403`. `Diagnose Dataset` checks every table chunk, one
+chunk of the image and of each labels region in the view the app loads, and
+the `shapes.parquet` files drawn as cells.
 
 ## Host Your Own Image-Only Data
 

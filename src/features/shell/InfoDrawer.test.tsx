@@ -29,6 +29,7 @@ describe('InfoDrawer', () => {
         spatialData: {
           state: {
             status: 'ready',
+            tables: [],
             coordinateSystem: 'global',
             coordinateSystems: ['global'],
             images: [],
@@ -59,6 +60,44 @@ describe('InfoDrawer', () => {
       target: { value: '200' },
     })
     expect(info.open.onBoundaryCellLimitChange).toHaveBeenCalledWith(200)
+  })
+
+  it('picks a SpatialData table and keeps a chosen table across view changes', () => {
+    const onSelectionChange = vi.fn()
+    const info = testDatasetInfoModel({
+      viewOptions: {
+        spatialData: {
+          state: {
+            status: 'ready',
+            table: 'square_016um',
+            tables: ['square_002um', 'square_008um', 'square_016um'],
+            coordinateSystem: 'global',
+            coordinateSystems: ['global', 'aligned'],
+            images: [],
+            units: { micrometersPerUnit: 0.27, source: 'declared', detail: '' },
+            selection: { table: 'square_016um', image: 'hires' },
+          },
+          onSelectionChange,
+        },
+      },
+    })
+    render(<InfoDrawer info={info} open onClose={vi.fn()} />)
+    const view = screen.getByRole('region', { name: 'SpatialData view' })
+
+    expect(within(view).getByLabelText('Table')).toHaveValue('square_016um')
+    // A table decides the coordinate system, so the rest is chosen again.
+    fireEvent.change(within(view).getByLabelText('Table'), {
+      target: { value: 'square_008um' },
+    })
+    expect(onSelectionChange).toHaveBeenLastCalledWith({ table: 'square_008um' })
+
+    fireEvent.change(within(view).getByLabelText('Coordinate system'), {
+      target: { value: 'aligned' },
+    })
+    expect(onSelectionChange).toHaveBeenLastCalledWith({
+      table: 'square_016um',
+      coordinateSystem: 'aligned',
+    })
   })
 
   it('lists issues and, in debug mode, the layer stack under Diagnostics', () => {

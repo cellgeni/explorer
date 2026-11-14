@@ -131,13 +131,21 @@ export function estimateUnitsFromVisiumSpots(
       )
 }
 
+// Side length of a Visium HD bin element or table named like `square_008um`
+// (spatialdata-io names the tables so, and the shapes `<sample>_square_008um`).
+export function visiumHdBinMicrometers(name: string): number | undefined {
+  const match = /square_(\d{3})um/i.exec(name)
+  const side = match === null ? Number.NaN : Number(match[1])
+
+  return Number.isFinite(side) && side > 0 ? side : undefined
+}
+
 // Visium HD bins named like `square_008um` have a known side length.
 export function estimateUnitsFromVisiumHdBins(
   elementName: string,
   binAreasInUnits: readonly number[],
 ): SpatialDataUnits | null {
-  const match = /square_(\d{3})um/i.exec(elementName)
-  const side = match === null ? Number.NaN : Number(match[1])
+  const side = visiumHdBinMicrometers(elementName) ?? Number.NaN
   const areas = binAreasInUnits.filter((area) => Number.isFinite(area) && area > 0)
 
   if (!Number.isFinite(side) || side <= 0 || areas.length < MIN_ESTIMATE_SAMPLES) {

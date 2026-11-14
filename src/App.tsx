@@ -3070,6 +3070,7 @@ export function App({ dependencies }: AppProps = {}) {
       setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
       appendDebugEvent(
         `SpatialData view change: ${[
+          selection.table === undefined ? null : `table ${selection.table}`,
           selection.coordinateSystem === undefined
             ? null
             : `coordinate system ${selection.coordinateSystem}`,

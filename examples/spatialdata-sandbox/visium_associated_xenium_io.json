@@ -1,0 +1,17 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "spatialdata",
+  "name": "Human breast cancer (Visium CytAssist, SpatialData)",
+  "description": "Visium CytAssist section of FFPE human breast cancer over its H&E, read from a SpatialData Zarr store: 4,992 spots with whole-transcriptome expression (18,085 genes), from the study that pairs Visium with Xenium and single-cell data on serial sections.",
+  "source": {
+    "repository": "SpatialData sandbox",
+    "accession": "visium_associated_xenium_io",
+    "url": "https://spatialdata.scverse.org/en/stable/tutorials/notebooks/datasets/README.html",
+    "license": "CC BY 4.0",
+    "citation": "Janesick A et al. (2023) High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nature Communications. doi:10.1038/s41467-023-43458-x"
+  },
+  "files": {
+    "store": "https://webatlasdataprod.cog.sanger.ac.uk/public/visium_associated_xenium_io/a5652917-ebb4-4d4c-ba90-6e8845c6f370.sdata.zarr"
+  }
+}

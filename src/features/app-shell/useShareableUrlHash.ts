@@ -19,6 +19,7 @@ interface ShareableDatasetHashOptions {
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
   readonly spatialDataSelection?: {
+    readonly spatialDataTable?: string
     readonly spatialDataCoordinateSystem?: string
     readonly spatialDataImage?: string
     readonly spatialDataMicrometersPerUnit?: number
@@ -125,6 +126,7 @@ export function useShareableUrlHash({
     datasetUrl,
     hiddenAnnotationIds,
   } = dataset
+  const spatialDataTable = dataset.spatialDataSelection?.spatialDataTable
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
   const spatialDataImage = dataset.spatialDataSelection?.spatialDataImage
@@ -246,6 +248,7 @@ export function useShareableUrlHash({
           transcriptPointSize,
           magicLensScope,
           magicLensRadiusMicrometers,
+          ...(spatialDataTable === undefined ? {} : { spatialDataTable }),
           ...(spatialDataCoordinateSystem === undefined
             ? {}
             : { spatialDataCoordinateSystem }),
@@ -315,6 +318,7 @@ export function useShareableUrlHash({
     shareableViewState,
     shouldLoadMorphology,
     showTranscriptOverlay,
+    spatialDataTable,
     spatialDataCoordinateSystem,
     spatialDataImage,
     spatialDataMicrometersPerUnit,

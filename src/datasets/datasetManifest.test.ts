@@ -253,11 +253,21 @@ describe('parseDatasetManifest', () => {
         version: 1,
         platform: 'spatialdata',
         files: { store: 'sample.zarr' },
-        options: { coordinateSystem: 'global', image: 'he', micrometersPerUnit: 0.2125 },
+        options: {
+          table: 'table_nuclei',
+          coordinateSystem: 'global',
+          image: 'he',
+          micrometersPerUnit: 0.2125,
+        },
       }),
     ).toMatchObject({
       files: { store: { url: 'https://example.test/runs/sample-1/sample.zarr' } },
-      options: { coordinateSystem: 'global', image: 'he', micrometersPerUnit: 0.2125 },
+      options: {
+        table: 'table_nuclei',
+        coordinateSystem: 'global',
+        image: 'he',
+        micrometersPerUnit: 0.2125,
+      },
     })
     expect(
       parseError({

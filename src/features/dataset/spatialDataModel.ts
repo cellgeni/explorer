@@ -8,6 +8,8 @@ export type SpatialDataControlState =
   | { readonly status: 'idle' }
   | {
       readonly status: 'ready' | 'loading'
+      readonly table?: string
+      readonly tables: readonly string[]
       readonly coordinateSystem: string
       readonly coordinateSystems: readonly string[]
       readonly image?: string
@@ -24,6 +26,8 @@ export function spatialDataControlReady(
 ): SpatialDataControlState {
   return {
     status: 'ready',
+    ...(summary.table === undefined ? {} : { table: summary.table }),
+    tables: summary.tables,
     coordinateSystem: summary.coordinateSystem,
     coordinateSystems: summary.coordinateSystems,
     ...(summary.image === undefined ? {} : { image: summary.image }),
@@ -42,11 +46,13 @@ export function spatialDataControlLoading(
 
 // Selection fields restored from or written to the shareable URL hash.
 export function spatialDataSelectionFromShareable(state: {
+  readonly spatialDataTable?: string
   readonly spatialDataCoordinateSystem?: string
   readonly spatialDataImage?: string
   readonly spatialDataMicrometersPerUnit?: number
 }): SpatialDataSelection {
   return {
+    ...(state.spatialDataTable === undefined ? {} : { table: state.spatialDataTable }),
     ...(state.spatialDataCoordinateSystem === undefined
       ? {}
       : { coordinateSystem: state.spatialDataCoordinateSystem }),
@@ -58,6 +64,7 @@ export function spatialDataSelectionFromShareable(state: {
 }
 
 export function spatialDataSelectionToShareable(state: SpatialDataControlState): {
+  readonly spatialDataTable?: string
   readonly spatialDataCoordinateSystem?: string
   readonly spatialDataImage?: string
   readonly spatialDataMicrometersPerUnit?: number
@@ -66,9 +73,10 @@ export function spatialDataSelectionToShareable(state: SpatialDataControlState):
     return {}
   }
 
-  const { coordinateSystem, image, micrometersPerUnit } = state.selection
+  const { table, coordinateSystem, image, micrometersPerUnit } = state.selection
 
   return {
+    ...(table === undefined ? {} : { spatialDataTable: table }),
     ...(coordinateSystem === undefined
       ? {}
       : { spatialDataCoordinateSystem: coordinateSystem }),

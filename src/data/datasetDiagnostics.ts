@@ -10,6 +10,7 @@ import { morphologyImagePathsFromExperiment } from './morphologyImage'
 import { assertHttpRangeSupport } from './rangeSupport'
 import {
   detectSpatialDataset,
+  spatialDataSelectionFor,
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
@@ -28,6 +29,7 @@ import {
   readSpatialDataCatalog,
   selectSpatialDataView,
   type SpatialDataCatalog,
+  type SpatialDataElement,
   type SpatialDataStore,
   type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
@@ -740,7 +742,9 @@ async function runSpatialDataDiagnostics(
     store = opened.store
     zip = opened.zip
     catalog = await readSpatialDataCatalog(store, opened.zarrFormat)
-    view = selectSpatialDataView(catalog)
+    // The coordinate system and image the viewer loads, so the checks cover
+    // the elements on screen.
+    view = selectSpatialDataView(catalog, spatialDataSelectionFor(detection.baseUrl))
   } catch (cause) {
     return [
       diagnosticCheck({
@@ -798,20 +802,38 @@ async function runSpatialDataDiagnostics(
   }
 
   if (view.image !== undefined) {
-    checks.push(await checkSpatialDataImageChunk(url, store, view, probe))
+    checks.push(await checkSpatialDataRasterChunk(url, store, view.image.element, probe))
+  }
+
+  // Outlines of a labels region are traced from its chunks.
+  for (const entry of view.regionLabels) {
+    checks.push(await checkSpatialDataRasterChunk(url, store, entry.element, probe))
+  }
+
+  const checkShapes = async (element: SpatialDataElement, required: boolean) => {
+    const file = {
+      id: `spatialdata-shapes-${element.name}`,
+      label: `SpatialData shapes ${element.name}`,
+      path: `${element.path}/shapes.parquet`,
+    }
+
+    return zip === undefined
+      ? checkRangeFile(url, file, required, options)
+      : checkZipParquetFile(url, zip, file, required)
   }
 
   for (const entry of view.regionShapes) {
-    const file = {
-      id: `spatialdata-shapes-${entry.element.name}`,
-      label: `SpatialData shapes ${entry.element.name}`,
-      path: `${entry.element.path}/shapes.parquet`,
-    }
-    checks.push(
-      zip === undefined
-        ? await checkRangeFile(url, file, true, options)
-        : await checkZipParquetFile(url, zip, file),
-    )
+    checks.push(await checkShapes(entry.element, true))
+  }
+
+  // Region circles (for example Xenium cell_circles) are drawn as the first
+  // polygon companion (cell_boundaries) instead. Region polygons are drawn
+  // themselves, so the companion is optional.
+  const companion =
+    view.regionShapes.length > 0 ? view.boundaryCandidates[0]?.element : undefined
+
+  if (companion !== undefined) {
+    checks.push(await checkShapes(companion, false))
   }
 
   return checks
@@ -893,16 +915,17 @@ async function checkSpatialDataTableChunks(
   })
 }
 
-async function checkSpatialDataImageChunk(
+// The first chunk of an image's or labels element's coarsest level.
+async function checkSpatialDataRasterChunk(
   url: string,
   store: SpatialDataStore,
-  view: SpatialDataView,
+  element: SpatialDataElement,
   probe: ChunkProber,
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
-  const element = view.image?.element
+  const isImage = element.kind === 'images'
   const multiscales =
-    element?.attrs.multiscales ?? recordValue(element?.attrs.ome)?.multiscales
+    element.attrs.multiscales ?? recordValue(element.attrs.ome)?.multiscales
   const datasets = Array.isArray(multiscales)
     ? recordValue(multiscales[0])?.datasets
     : undefined
@@ -910,23 +933,22 @@ async function checkSpatialDataImageChunk(
     ? recordValue(datasets.at(-1))?.path
     : undefined
   const levelPath =
-    element === undefined || typeof coarsest !== 'string'
-      ? undefined
-      : `${element.path}/${coarsest}`
+    typeof coarsest === 'string' ? `${element.path}/${coarsest}` : undefined
   const metadata =
     levelPath === undefined ? null : await readZarrArrayMetadata(store, levelPath)
   const chunkKey =
     metadata === null ? undefined : zarrChunkKeys(metadata, { limit: 1 })[0]
-  const label = `SpatialData image ${element?.name ?? ''}`
+  const id = isImage ? 'spatialdata-image-chunk' : `spatialdata-labels-${element.name}`
+  const label = `SpatialData ${isImage ? 'image' : 'labels'} ${element.name}`
 
   if (levelPath === undefined || chunkKey === undefined) {
     return diagnosticCheck({
-      id: 'spatialdata-image-chunk',
+      id,
       label,
       url,
       required: false,
       status: 'warning',
-      message: 'Image multiscale metadata could not be read.',
+      message: `${isImage ? 'Image' : 'Labels'} multiscale metadata could not be read.`,
       startedAt,
     })
   }
@@ -935,7 +957,7 @@ async function checkSpatialDataImageChunk(
   const ok = chunk?.status === 200 || chunk?.status === 206
 
   return diagnosticCheck({
-    id: 'spatialdata-image-chunk',
+    id,
     label,
     url: datasetFileUrl(url, `${levelPath}/${chunkKey}`),
     required: false,
@@ -965,28 +987,29 @@ async function checkZipParquetFile(
   url: string,
   zip: ZippedZarrStore,
   file: { readonly id: string; readonly label: string; readonly path: string },
+  required: boolean,
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
   const fileUrl = datasetFileUrl(url, file.path)
   const entry = zip.entry(file.path)
-  const check = (status: 'pass' | 'fail', message: string) =>
+  const check = (ok: boolean, message: string) =>
     diagnosticCheck({
       id: file.id,
       label: file.label,
       url: fileUrl,
-      required: true,
-      status,
+      required,
+      status: ok ? 'pass' : required ? 'fail' : 'warning',
       message,
       startedAt,
     })
 
   if (entry === undefined) {
-    return check('fail', `${file.path} is missing from the zip`)
+    return check(false, `${file.path} is missing from the zip`)
   }
 
   if (entry.compressed) {
     return check(
-      'pass',
+      true,
       `In the zip, compressed: read whole (${(entry.size / (1024 * 1024)).toFixed(1)} MB) when loaded`,
     )
   }
@@ -996,10 +1019,10 @@ async function checkZipParquetFile(
     const magic = footer === undefined ? '' : new TextDecoder().decode(footer)
 
     return magic === 'PAR1'
-      ? check('pass', 'In the zip, stored: byte-range readable')
-      : check('fail', `${file.path} in the zip is not a Parquet file`)
+      ? check(true, 'In the zip, stored: byte-range readable')
+      : check(false, `${file.path} in the zip is not a Parquet file`)
   } catch (cause) {
-    return check('fail', errorMessage(cause))
+    return check(false, errorMessage(cause))
   }
 }
 

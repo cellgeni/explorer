@@ -197,6 +197,7 @@ export interface SpatialDataDatasetManifest extends DatasetManifestBase {
   readonly platform: 'spatialdata'
   readonly files: { readonly store: DatasetManifestFile }
   readonly options: {
+    readonly table?: string
     readonly coordinateSystem?: string
     readonly image?: string
     readonly micrometersPerUnit?: number
@@ -439,6 +440,7 @@ export function parseDatasetManifest(
 
   checkKeys(files, ['store'], 'files.', fail)
   const parsedOptions: {
+    table?: string
     coordinateSystem?: string
     image?: string
     micrometersPerUnit?: number
@@ -447,12 +449,17 @@ export function parseDatasetManifest(
   if (options !== undefined) {
     checkKeys(
       options,
-      ['coordinateSystem', 'image', 'micrometersPerUnit'],
+      ['table', 'coordinateSystem', 'image', 'micrometersPerUnit'],
       'options.',
       fail,
     )
+    const table = optionalString(options, 'table', 'options.', fail)
     const coordinateSystem = optionalString(options, 'coordinateSystem', 'options.', fail)
     const image = optionalString(options, 'image', 'options.', fail)
+
+    if (table !== undefined) {
+      parsedOptions.table = table
+    }
 
     if (coordinateSystem !== undefined) {
       parsedOptions.coordinateSystem = coordinateSystem

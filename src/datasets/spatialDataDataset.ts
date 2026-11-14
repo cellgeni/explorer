@@ -101,6 +101,7 @@ export type SpatialDataLabelsOpener = (
 
 // Which coordinate system, image, and unit scale a store is shown with.
 export interface SpatialDataSelection {
+  readonly table?: string
   readonly coordinateSystem?: string
   readonly image?: string
   readonly micrometersPerUnit?: number
@@ -121,6 +122,7 @@ export interface SpatialDataSummary {
   readonly image?: string
   readonly images: readonly string[]
   readonly table?: string
+  readonly tables: readonly string[]
   readonly regions: readonly string[]
   readonly boundaries?: string
   readonly skippedElements: readonly string[]
@@ -238,6 +240,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     this.storeFetcher = options.fetcher
     this.onProgress = options.onProgress
     this.selection = {
+      ...(options.table === undefined ? {} : { table: options.table }),
       ...(options.coordinateSystem === undefined
         ? {}
         : { coordinateSystem: options.coordinateSystem }),
@@ -277,6 +280,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       ...(view.image === undefined ? {} : { image: view.image.element.name }),
       images: view.images.map((entry) => entry.element.name),
       ...(view.table === undefined ? {} : { table: view.table.name }),
+      tables: view.tables.map((table) => table.name),
       regions: [...view.regionShapes, ...view.regionLabels].map(
         (entry) => entry.element.name,
       ),
@@ -307,7 +311,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   async meta(): Promise<DatasetMeta> {
     const { table } = await this.state()
     const [loader, tableMeta, boundaries] = await Promise.all([
-      this.imageLoader(),
+      // Boundary loading reads meta() first, so an image that cannot be
+      // opened counts as none here instead of blocking outlines. Its error
+      // still reaches the morphology layer through image().
+      this.imageLoader().catch(() => null),
       table === null ? null : table.meta(),
       this.boundarySource(),
     ])
@@ -527,6 +534,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     )
     const catalog = await readSpatialDataCatalog(store, zarrFormat)
     const view = selectSpatialDataView(catalog, {
+      ...(this.selection.table === undefined ? {} : { table: this.selection.table }),
       ...(this.selection.coordinateSystem === undefined
         ? {}
         : { coordinateSystem: this.selection.coordinateSystem }),

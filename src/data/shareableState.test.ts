@@ -131,6 +131,24 @@ describe('shareableState', () => {
     expect(parseShareableState('#voff=0').visiumOffTissue).toBe(false)
   })
 
+  it('round-trips the SpatialData table, coordinate system, image, and scale', () => {
+    const hash = formatShareableState({
+      spatialDataTable: 'square_008um',
+      spatialDataCoordinateSystem: 'global',
+      spatialDataImage: 'hires_image',
+      spatialDataMicrometersPerUnit: 0.2737,
+    })
+
+    expect(hash).toContain('sdTable=square_008um')
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      spatialDataTable: 'square_008um',
+      spatialDataCoordinateSystem: 'global',
+      spatialDataImage: 'hires_image',
+      spatialDataMicrometersPerUnit: 0.2737,
+    })
+  })
+
   it('round-trips the first z plane and ignores invalid ones', () => {
     expect(parseShareableState(formatShareableState({ morphologyZPlane: 0 }))).toEqual({
       linkVersion: 2,

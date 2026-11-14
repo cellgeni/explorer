@@ -96,6 +96,22 @@
         "license": "CC BY 4.0",
         "citation": "Durand M et al. (2019) Human lymphoid organ cDC2 and macrophages play complementary roles in T follicular helper responses. J Exp Med 216(7):1561-1581. doi:10.1084/jem.20181994"
       }
+    },
+    {
+      "id": "spatialdata-sandbox/visium_associated_xenium_io",
+      "path": "spatialdata-sandbox/visium_associated_xenium_io.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+      "platform": "spatialdata",
+      "name": "Human breast cancer (Visium CytAssist, SpatialData)",
+      "description": "Visium CytAssist section of FFPE human breast cancer over its H&E, read from a SpatialData Zarr store: 4,992 spots with whole-transcriptome expression (18,085 genes), from the study that pairs Visium with Xenium and single-cell data on serial sections.",
+      "source": {
+        "repository": "SpatialData sandbox",
+        "accession": "visium_associated_xenium_io",
+        "url": "https://spatialdata.scverse.org/en/stable/tutorials/notebooks/datasets/README.html",
+        "license": "CC BY 4.0",
+        "citation": "Janesick A et al. (2023) High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nature Communications. doi:10.1038/s41467-023-43458-x"
+      }
     }
   ]
 }
