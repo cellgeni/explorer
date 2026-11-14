@@ -19,6 +19,9 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
   such as `sample.zarr.zip`.
 - Direct OME-TIFF, TIFF, QPTIFF, SVS, OME-Zarr, or validated NDPI image URLs.
+  An OME-Zarr written by bioformats2raw (as in the BioImage Archive) opens
+  its first image series, and a z-stack opens on the plane its OMERO
+  rendering settings name (`defaultZ`), or the first plane.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
 Loading another dataset keeps the current one open until the new one is
