@@ -58,7 +58,11 @@ the first six channels on; turn others on in the Image section. Each is
 auto-contrasted the first time it is turned on.
 
 OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
-Only the first time point and z plane of an OME-Zarr image are shown.
+A z-stack with a channel axis opens on the plane its OMERO rendering settings
+name (`omero.rdefs.defaultZ`), or the middle plane, and `Z plane` shows
+another; the depth is shown when the `z` axis declares a length unit. Each
+channel and plane opens as a `#c=N&z=M` loader. Only one time point is shown:
+`omero.rdefs.defaultT`, or the first.
 
 ## Platform Behavior
 

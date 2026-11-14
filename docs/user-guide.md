@@ -20,8 +20,9 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   such as `sample.zarr.zip`.
 - Direct OME-TIFF, TIFF, QPTIFF, SVS, OME-Zarr, or validated NDPI image URLs.
   An OME-Zarr written by bioformats2raw (as in the BioImage Archive) opens
-  its first image series, and a z-stack opens on the plane its OMERO
-  rendering settings name (`defaultZ`), or the first plane.
+  its first image series. An OME-Zarr z-stack opens on the plane its OMERO
+  rendering settings name (`defaultZ`), or the middle plane; `#z=N` on the
+  image URL opens plane N, as `#c=N` opens channel N.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
 Loading another dataset keeps the current one open until the new one is
@@ -102,8 +103,10 @@ returns to the previous dataset, or to the start screen.
 The layer panel's Image section controls dataset image opacity, image
 channels, and custom image layers. Hover tooltips and the coordinate unit are
 in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
-z-stack (such as Xenium `morphology.ome.tif` or Atera `morphology_3d/`),
-`Z plane` picks the plane shown; it opens at the middle plane. Xenium, H5AD,
+or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, Atera
+`morphology_3d/`, or a BioImage Archive OME-Zarr), `Z plane` picks the plane
+shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
+rendering settings name. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
 `nucleus_boundaries.parquet` and Atera nuclei, and Visium HD exposes cell and
