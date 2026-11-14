@@ -12,7 +12,16 @@
       "description": "Manifest format version."
     },
     "platform": {
-      "enum": ["xenium", "atera", "visium", "visium-hd", "h5ad", "spatialdata", "image"],
+      "enum": [
+        "xenium",
+        "atera",
+        "visium",
+        "visium-hd",
+        "merscope",
+        "h5ad",
+        "spatialdata",
+        "image"
+      ],
       "description": "How to read the dataset."
     },
     "name": {
@@ -69,6 +78,15 @@
         "properties": {
           "files": { "$ref": "#/$defs/visiumHdFiles" },
           "options": { "$ref": "#/$defs/visiumHdOptions" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "platform": { "const": "merscope" } } },
+      "then": {
+        "properties": {
+          "files": { "$ref": "#/$defs/merscopeFiles" },
+          "options": { "type": "object", "maxProperties": 0 }
         }
       }
     },
@@ -265,6 +283,25 @@
         "morphologyZchunkstore": {
           "$ref": "#/$defs/path",
           "description": "`.zchunkstore` tile-offset sidecar covering every morphology_2d channel file. Replaces the default lookup next to each TIFF (`<file>.zchunkstore`)."
+        }
+      },
+      "additionalProperties": false
+    },
+    "merscopeFiles": {
+      "type": "object",
+      "description": "Vizgen MERSCOPE region files that are not at their instrument names, such as vpt re-segmentation outputs or GEO's prefixed, gzipped files. Files named here must exist; omitted files use the instrument name.",
+      "properties": {
+        "cellByGene": {
+          "$ref": "#/$defs/path",
+          "description": "Cell-by-gene counts CSV, gzip allowed. Default cell_by_gene.csv. Read whole, up to 300 MB."
+        },
+        "cellMetadata": {
+          "$ref": "#/$defs/path",
+          "description": "Cell metadata CSV with center_x and center_y in micrometres, gzip allowed. Default cell_metadata.csv. Read whole, up to 300 MB."
+        },
+        "cellBoundaries": {
+          "$ref": "#/$defs/path",
+          "description": "Cell boundary GeoParquet with EntityID and ZIndex columns, gzip allowed. Default cell_boundaries.parquet; vpt writes <method>_micron_space.parquet. Read whole."
         }
       },
       "additionalProperties": false

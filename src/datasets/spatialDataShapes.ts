@@ -1,6 +1,7 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
 import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
+import { readMaybeGzipBytes } from '../data/readMaybeGzipText'
 import {
   affineScale,
   applyAffine,
@@ -34,9 +35,24 @@ export interface SpatialDataShapes {
   // keeps a 600,000-cell segmentation (about 25 vertices a cell) near 120 MB.
   readonly ringOffsets: Uint32Array
   readonly coords: Float32Array
+  // The plane kept when the file has one row per plane (`planeColumn`).
+  readonly plane?: number
 }
 
-export interface ReadSpatialDataShapesOptions {
+// How a shapes file other than a SpatialData element is read.
+export interface SpatialDataShapesReadLayout {
+  // Instance IDs come from this column instead of the pandas index (MERSCOPE
+  // `EntityID`).
+  readonly idColumn?: string
+  // Rows are one per z plane, numbered in this column; only the middle plane
+  // present is kept (MERSCOPE `ZIndex`).
+  readonly planeColumn?: string
+  // Fetches the file in one request, inflated when its bytes are gzip,
+  // instead of reading ranges: for files read whole anyway.
+  readonly wholeFile?: boolean
+}
+
+export interface ReadSpatialDataShapesOptions extends SpatialDataShapesReadLayout {
   readonly url: string
   // The file's bytes when they are not fetched from `url`, as for a zipped
   // store.
@@ -69,16 +85,18 @@ const WKB_PARSERS: ParquetParsers = {
 export const readSpatialDataShapes: SpatialDataShapesReader = async (options) => {
   const file =
     options.file ??
-    (await asyncBufferFromUrl({
-      url: options.url,
-      ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
-      ...(options.signal === undefined
-        ? {}
-        : { requestInit: { signal: options.signal } }),
-    }))
+    (options.wholeFile === true
+      ? await fetchWholeFile(options)
+      : await asyncBufferFromUrl({
+          url: options.url,
+          ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+          ...(options.signal === undefined
+            ? {}
+            : { requestInit: { signal: options.signal } }),
+        }))
   const metadata = await parquetMetadataAsync(file)
   const compressors = options.compressors ?? (await loadDefaultCompressors())
-  const layout = shapesParquetLayout(metadata)
+  const layout = shapesParquetLayout(metadata, options)
   const rows = await parquetReadObjects({
     file: file as AsyncBuffer,
     metadata,
@@ -90,10 +108,32 @@ export const readSpatialDataShapes: SpatialDataShapesReader = async (options) =>
   return shapesFromRows(rows, layout, options.affine)
 }
 
+// The whole file as one buffer, which hyparquet reads like ranges.
+async function fetchWholeFile(
+  options: ReadSpatialDataShapesOptions,
+): Promise<AsyncBuffer> {
+  const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const response = await fetcher(
+    options.url,
+    options.signal === undefined ? {} : { signal: options.signal },
+  )
+
+  if (!response.ok) {
+    throw new Error(`Shapes file returned HTTP ${response.status}: ${options.url}`)
+  }
+
+  const bytes = await readMaybeGzipBytes(response)
+
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? (bytes.buffer as ArrayBuffer)
+    : (bytes.slice().buffer as ArrayBuffer)
+}
+
 export interface SpatialDataShapesParquetLayout {
   readonly columns: string[]
   readonly geometryColumn: string
   readonly radiusColumn?: string
+  readonly planeColumn?: string
   readonly index:
     | { readonly kind: 'column'; readonly column: string }
     | { readonly kind: 'range'; readonly start: number; readonly step: number }
@@ -101,6 +141,7 @@ export interface SpatialDataShapesParquetLayout {
 
 export function shapesParquetLayout(
   metadata: FileMetaData,
+  readLayout: SpatialDataShapesReadLayout = {},
 ): SpatialDataShapesParquetLayout {
   const columnNames = new Set(metadata.schema.slice(1).map((element) => element.name))
   const keyValues = new Map(
@@ -117,7 +158,15 @@ export function shapesParquetLayout(
     )
   }
 
+  if (readLayout.idColumn !== undefined && !columnNames.has(readLayout.idColumn)) {
+    throw new Error(`Shapes parquet does not contain a ${readLayout.idColumn} column.`)
+  }
+
   const radiusColumn = columnNames.has('radius') ? 'radius' : undefined
+  const planeColumn =
+    readLayout.planeColumn !== undefined && columnNames.has(readLayout.planeColumn)
+      ? readLayout.planeColumn
+      : undefined
   const indexEntry = Array.isArray(pandas?.index_columns)
     ? pandas.index_columns[0]
     : undefined
@@ -126,24 +175,28 @@ export function shapesParquetLayout(
       ? (indexEntry as Record<string, unknown>)
       : null
   const index: SpatialDataShapesParquetLayout['index'] =
-    typeof indexEntry === 'string' && columnNames.has(indexEntry)
-      ? { kind: 'column', column: indexEntry }
-      : indexRecord?.kind === 'range'
-        ? {
-            kind: 'range',
-            start: typeof indexRecord.start === 'number' ? indexRecord.start : 0,
-            step: typeof indexRecord.step === 'number' ? indexRecord.step : 1,
-          }
-        : { kind: 'range', start: 0, step: 1 }
+    readLayout.idColumn !== undefined
+      ? { kind: 'column', column: readLayout.idColumn }
+      : typeof indexEntry === 'string' && columnNames.has(indexEntry)
+        ? { kind: 'column', column: indexEntry }
+        : indexRecord?.kind === 'range'
+          ? {
+              kind: 'range',
+              start: typeof indexRecord.start === 'number' ? indexRecord.start : 0,
+              step: typeof indexRecord.step === 'number' ? indexRecord.step : 1,
+            }
+          : { kind: 'range', start: 0, step: 1 }
 
   return {
     columns: [
       geometryColumn,
       ...(radiusColumn === undefined ? [] : [radiusColumn]),
+      ...(planeColumn === undefined ? [] : [planeColumn]),
       ...(index.kind === 'column' ? [index.column] : []),
     ],
     geometryColumn,
     ...(radiusColumn === undefined ? {} : { radiusColumn }),
+    ...(planeColumn === undefined ? {} : { planeColumn }),
     index,
   }
 }
@@ -155,8 +208,18 @@ export function shapesFromRows(
 ): SpatialDataShapes {
   const radiusScale = affineScale(affine)
   const shapes = new SpatialDataShapesBuilder()
+  const plane =
+    layout.planeColumn === undefined ? undefined : middlePlane(rows, layout.planeColumn)
 
   rows.forEach((row, rowIndex) => {
+    if (
+      plane !== undefined &&
+      layout.planeColumn !== undefined &&
+      finiteNumber(row[layout.planeColumn]) !== plane
+    ) {
+      return
+    }
+
     const id =
       layout.index.kind === 'column'
         ? instanceIdString(row[layout.index.column])
@@ -191,7 +254,28 @@ export function shapesFromRows(
     )
   })
 
-  return shapes.build()
+  const built = shapes.build()
+  return plane === undefined ? built : { ...built, plane }
+}
+
+// The middle of the planes present, the lower one of an even count; rows
+// without a plane are not counted.
+function middlePlane(
+  rows: readonly Record<string, unknown>[],
+  column: string,
+): number | undefined {
+  const planes = new Set<number>()
+
+  for (const row of rows) {
+    const plane = finiteNumber(row[column])
+
+    if (plane !== undefined) {
+      planes.add(plane)
+    }
+  }
+
+  const sorted = Array.from(planes).sort((left, right) => left - right)
+  return sorted[Math.floor((sorted.length - 1) / 2)]
 }
 
 export class SpatialDataShapesBuilder {

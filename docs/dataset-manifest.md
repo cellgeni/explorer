@@ -11,7 +11,8 @@ dataset. It tells the viewer:
   SpatialData image or the Visium HD bin size.
 
 A manifest also makes public data loadable where it is published: for example
-a [GEO Visium sample](#standard-visium), whose files have GEO names.
+a [GEO Visium sample](#standard-visium), whose files have GEO names, or a
+[MERSCOPE re-segmentation](#merscope), whose files have vpt names.
 
 Without a manifest, the viewer reads the standard file names described in
 [Host your own data](./host-your-own-data.md). A manifest only needs the
@@ -195,6 +196,41 @@ which allows browser reads:
 ```
 
 See [Standard Visium](./modalities/visium.md).
+
+### MERSCOPE
+
+A Vizgen MERSCOPE region. All entries are optional; `options` must be empty.
+Files the manifest names must answer `HEAD`, or detection stops with an error
+naming the field. Files it leaves out are probed at the instrument's names; a
+missing boundary file is skipped. Every file is read whole, so no byte-range
+support is needed, and gzipped copies work whatever their names.
+
+| Key              | Standard name             | Notes                                                                                 |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------------------- |
+| `cellByGene`     | `cell_by_gene.csv`        | Up to 300 MB. vpt writes `<method>_cell_by_gene.csv`                                  |
+| `cellMetadata`   | `cell_metadata.csv`       | Up to 300 MB, with `center_x` and `center_y`. vpt writes `<method>_cell_metadata.csv` |
+| `cellBoundaries` | `cell_boundaries.parquet` | GeoParquet with `EntityID` and `ZIndex`. vpt writes `<method>_micron_space.parquet`   |
+
+A vpt re-segmentation sits next to the instrument's files, so a manifest
+picks it:
+
+```json
+{
+  "version": 1,
+  "platform": "merscope",
+  "name": "D082 region 0 (Baysor)",
+  "root": "https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/376/S-BIAD2376/Files/nsatlas/merfish/202311011251_D082--5-8--11012023_VMSC02301/region_0",
+  "files": {
+    "cellByGene": "baysor_cell_by_gene.csv",
+    "cellMetadata": "baysor_cell_metadata.csv",
+    "cellBoundaries": "baysor_micron_space.parquet"
+  }
+}
+```
+
+GEO deposits name every file `<sample>_<name>.gz`, for example
+`GSM9427137_EFE_r1_cell_by_gene.csv.gz`. See
+[MERSCOPE](./modalities/merscope.md).
 
 ### Visium HD
 

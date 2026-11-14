@@ -992,6 +992,90 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   )
 })
 
+// A MERSCOPE region folder as the instrument writes it: three cells with
+// 19-digit IDs, three genes and two Blank columns, and boundaries with one row
+// per cell per z plane (src/test/fixtures/merscope). Other paths answer 404,
+// so detection falls through to MERSCOPE.
+async function routeMerscopeFixture(page: Page, folder = '/merscope-smoke') {
+  const fixtures = 'src/test/fixtures/merscope'
+  const files: Record<string, { body: Buffer; type: string }> = {
+    'cell_by_gene.csv': {
+      type: 'text/csv',
+      body: await readFile(`${fixtures}/cell_by_gene.csv`),
+    },
+    'cell_metadata.csv': {
+      type: 'text/csv',
+      body: await readFile(`${fixtures}/cell_metadata.csv`),
+    },
+    'cell_boundaries.parquet': {
+      type: 'application/octet-stream',
+      body: await readFile(`${fixtures}/cell_boundaries.parquet`),
+    },
+  }
+
+  await page.route(`**${folder}/**`, async (route) => {
+    const path = new URL(route.request().url()).pathname.slice(folder.length + 1)
+    const file = files[path]
+
+    if (file === undefined) {
+      await route.fulfill({ status: 404 })
+      return
+    }
+
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Content-Length': String(file.body.byteLength),
+      'Content-Type': file.type,
+    }
+    await route.fulfill(
+      route.request().method() === 'HEAD'
+        ? { status: 200, headers }
+        : { status: 200, headers, body: file.body },
+    )
+  })
+}
+
+test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', async ({
+  page,
+}) => {
+  await routeMerscopeFixture(page)
+  await page.goto('/')
+
+  const datasetUrl = new URL('/merscope-smoke/', page.url()).toString()
+  await openControls(page, 'open-dataset')
+  await page.getByLabel('Dataset or image URL').fill(datasetUrl)
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expectLogEntry(page, /MERSCOPE ready: 3 cells, 3 genes/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(page, /2 Blank columns summed into blank_count/)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'MERSCOPE · 3 cells' }),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Layers' })
+      .getByRole('button', { name: /^Transcripts/ }),
+  ).toHaveCount(0)
+
+  const cellsPanel = await openControls(page, 'cell-appearance')
+  await expect(cellsPanel.getByLabel('Cell boundaries', { exact: true })).toBeChecked()
+  await expectLogEntry(page, /MERSCOPE cell boundaries ready: 3 cells at z plane 3/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  const genesPanel = await openControls(page, 'genes')
+  await genesPanel.getByLabel('Gene selection').fill('GENE_B')
+  await genesPanel.getByRole('button', { name: 'GENE_B', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression all cells: 1 positive cell across 3 slide cells/,
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+  await expect(genesPanel.getByRole('button', { name: 'Blank-0' })).toHaveCount(0)
+})
+
 test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live', async ({
   page,
 }) => {

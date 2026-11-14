@@ -37,7 +37,7 @@ for (const example of examples) {
 
     await expectLogEntry(
       page,
-      /(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD|Visium) ready: /,
+      /(?:Dataset|Atera|H5AD|SpatialData|Image|Visium HD|Visium|MERSCOPE) ready: /,
       { timeout: EXAMPLE_LOAD_TIMEOUT_MS },
     )
     await expect(page.getByRole('region', { name: 'About this dataset' })).toContainText(

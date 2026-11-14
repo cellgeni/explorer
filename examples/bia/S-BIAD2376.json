@@ -1,0 +1,23 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "merscope",
+  "name": "Human skin (MERSCOPE)",
+  "description": "MERFISH of normal adult human skin on a 499-gene panel: 3,003 cells segmented with Baysor, with their outlines, from a spatial census of skin across 15 anatomic sites; opens on COL1A1 (dermal fibroblasts).",
+  "source": {
+    "repository": "BioImage Archive",
+    "accession": "S-BIAD2376",
+    "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2376",
+    "license": "CC BY 4.0",
+    "citation": "Restrepo P et al. (2026) A single-cell spatial census of human skin anatomy. Nature Genetics. doi:10.1038/s41588-026-02552-8"
+  },
+  "root": "https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/376/S-BIAD2376/Files/nsatlas/merfish/202311011251_D082--5-8--11012023_VMSC02301/region_0",
+  "files": {
+    "cellByGene": "baysor_cell_by_gene.csv",
+    "cellMetadata": "baysor_cell_metadata.csv",
+    "cellBoundaries": "baysor_micron_space.parquet"
+  },
+  "defaults": {
+    "genes": ["COL1A1"]
+  }
+}

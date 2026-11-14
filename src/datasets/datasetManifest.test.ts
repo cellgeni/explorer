@@ -137,6 +137,42 @@ describe('parseDatasetManifest', () => {
     ).toContain('options')
   })
 
+  it('resolves renamed MERSCOPE files, such as GEO prefixed or vpt outputs', () => {
+    const manifest = parse({
+      version: 1,
+      platform: 'merscope',
+      root: 'https://ftp.example.test/geo/GSM9/suppl/',
+      files: {
+        cellByGene: 'GSM9_EFE_r1_cell_by_gene.csv.gz',
+        cellMetadata: 'GSM9_EFE_r1_cell_metadata.csv.gz',
+        cellBoundaries: 'GSM9_EFE_r1_cell_boundaries.parquet.gz',
+      },
+    })
+
+    expect(manifest).toMatchObject({
+      platform: 'merscope',
+      files: {
+        cellByGene: {
+          path: 'GSM9_EFE_r1_cell_by_gene.csv.gz',
+          url: 'https://ftp.example.test/geo/GSM9/suppl/GSM9_EFE_r1_cell_by_gene.csv.gz',
+        },
+        cellBoundaries: {
+          url: 'https://ftp.example.test/geo/GSM9/suppl/GSM9_EFE_r1_cell_boundaries.parquet.gz',
+        },
+      },
+    })
+    expect(
+      parseError({
+        version: 1,
+        platform: 'merscope',
+        files: { transcripts: 'detected_transcripts.csv' },
+      }),
+    ).toContain('files.transcripts')
+    expect(
+      parseError({ version: 1, platform: 'merscope', options: { zIndex: 3 } }),
+    ).toContain('options')
+  })
+
   it('resolves a .zchunkstore sidecar for the TIFF image', () => {
     const xenium = parse({
       version: 1,
@@ -200,7 +236,7 @@ describe('parseDatasetManifest', () => {
       '"version" 2 is not supported',
     )
     expect(parseError({ version: 1, platform: 'merfish' })).toContain(
-      '"platform" must be one of "xenium", "atera", "visium", "visium-hd", "h5ad", "spatialdata", "image"',
+      '"platform" must be one of "xenium", "atera", "visium", "visium-hd", "merscope", "h5ad", "spatialdata", "image"',
     )
     expect(parseError([])).toBe('explorer.json: expected a JSON object.')
   })

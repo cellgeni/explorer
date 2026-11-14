@@ -52,8 +52,9 @@ export function spatialDataShapesHandler(
       return
     }
 
-    const { source, affine } = request
+    const { source, affine, layout } = request
     readSpatialDataShapes({
+      ...layout,
       url: source.url,
       ...(source.kind === 'slices' ? { file: slices(source.byteLength) } : {}),
       affine,

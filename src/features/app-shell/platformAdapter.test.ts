@@ -19,6 +19,7 @@ import {
   activeVisiumHdRoiStateForPlatform,
   appPlatformAdapterFor,
   isAnnDataPlatform,
+  PLATFORM_NAMES,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
   loadPlatformGeneExpression,
@@ -522,6 +523,42 @@ describe('platformAdapter', () => {
         selection.bbox,
       ),
     ).resolves.toEqual({ elements })
+    expect(dataset.elements).toHaveBeenCalledWith(selection.bbox)
+    expect(loadBoundaryElements).not.toHaveBeenCalled()
+  })
+
+  it('reads MERSCOPE through AnnData workflows with boundaries only while shown', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'merscope')
+    const dataset = {
+      meta: vi.fn(async () => ({ capabilities: { cellBoundaries: true } })),
+      elements: vi.fn(async () => ({ elements: [] })),
+    }
+    const loadBoundaryElements = vi.fn()
+
+    expect(adapter.kind).toBe('merscope')
+    expect(PLATFORM_NAMES[adapter.kind]).toBe('MERSCOPE')
+    expect(isAnnDataPlatform(adapter)).toBe(true)
+    expect(adapter.capabilities).toMatchObject({
+      annotations: true,
+      nucleusBoundaries: false,
+      transcripts: false,
+    })
+    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.boundaryOverlayRequestKey(true, false)).toBe('enabled:no-nucleus')
+    expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
+    expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
+      loadEnabled: false,
+      unavailableReason: 'Unavailable for MERSCOPE',
+    })
+    await loadPlatformBoundaryElements(
+      adapter,
+      {
+        getSpatialDataset: vi.fn(async () => dataset) as unknown as SpatialDatasetLoader,
+        loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+      },
+      readyLoadState.url,
+      selection.bbox,
+    )
     expect(dataset.elements).toHaveBeenCalledWith(selection.bbox)
     expect(loadBoundaryElements).not.toHaveBeenCalled()
   })

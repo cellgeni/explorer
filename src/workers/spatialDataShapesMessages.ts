@@ -1,4 +1,7 @@
-import type { SpatialDataShapes } from '../datasets/spatialDataShapes'
+import type {
+  SpatialDataShapes,
+  SpatialDataShapesReadLayout,
+} from '../datasets/spatialDataShapes'
 import type { Affine2D } from '../datasets/spatialDataTransforms'
 
 // A SpatialData shapes worker reads one shapes.parquet and exits: it decodes
@@ -16,6 +19,7 @@ export type SpatialDataShapesWorkerRequest =
       readonly type: 'read'
       readonly source: SpatialDataShapesSource
       readonly affine: Affine2D
+      readonly layout?: SpatialDataShapesReadLayout
     }
   | { readonly type: 'slice'; readonly id: number; readonly bytes: ArrayBuffer }
   | { readonly type: 'slice-error'; readonly id: number; readonly error: string }

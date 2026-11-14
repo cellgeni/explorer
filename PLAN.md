@@ -50,6 +50,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 15](docs/plan/phases/15-interface-redesign.md)                                     | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12) |
 | [Phase 16](docs/plan/phases/16-svs.md)                                                    | SVS (Aperio) images                                      | Done (2026-11-13)                                            |
 | [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                            |
+| [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | 18-A basic support done (2026-11-14); 18-B images planned    |
 
 ## Purpose And Scope
 
@@ -74,6 +75,7 @@ request:
 | OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
 | SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
 | Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)                           |
+| MERSCOPE       | Vizgen region folder (CSV tables, boundary GeoParquet)         | Phase 18                     | Cells and boundaries done (2026-11-14)      |
 
 ### Reference Datasets
 
@@ -87,6 +89,7 @@ request:
 | Atera                 | `https://mp33.cog.sanger.ac.uk/public/test/50170325_WSI_KID_04_region1/50170325_WSI_KID_04_region1`                                              | Human WTA kidney; 93,864 cells × 24,674 features (18,050 genes); 4 morphology channels; 667 M transcripts                     |
 | Visium (H5AD)         | `https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/60d5175f-f477-48b2-8396-ad76be2c3310.h5ad`    | CELLxGENE Census copy of GEO GSM6592057 (Visium v1); 8.9 MB; 370 spots under tissue of 4,992; 0.3236 µm/px from the spot grid |
 | Visium (Space Ranger) | `https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/` through a manifest ([example](docs/dataset-manifest.md#standard-visium)) | The same sample's GEO files, gzipped; same spots and scale as the H5AD                                                        |
+| MERSCOPE (vpt Baysor) | `examples/bia/S-BIAD2376.json` (BIA S-BIAD2376 D082 region 0)                                                                                    | 3,003 cells × 499 genes; boundaries 0.8 MB; CC BY 4.0                                                                         |
 
 The SpatialData stores are for manual testing; there is no E2E coverage for them
 yet. Two zipped SpatialData stores on the BioImage Archive are also used:

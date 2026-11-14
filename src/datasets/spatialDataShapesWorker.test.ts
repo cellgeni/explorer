@@ -15,6 +15,7 @@ import {
   spatialDataShapesFixtureBytes,
 } from '../test/spatialDataShapesFixtures'
 import { asyncBufferFromBytes, rangeFetcher } from '../test/xeniumCellsFixtures'
+import { merscopeFixtureBytes } from '../test/merscopeFixtures'
 
 const URL = 'https://example.test/sample.zarr/shapes/cell_boundaries/shapes.parquet'
 const AFFINE = { ...IDENTITY_AFFINE, a: 2, e: 2 }
@@ -59,6 +60,27 @@ describe('spatialDataShapesWorkerReader', () => {
     expect(shapes.ids).toEqual(['7', '8', '9'])
     expect(worker.requests).toEqual([
       { type: 'read', source: { kind: 'url', url: URL }, affine: AFFINE },
+    ])
+  })
+
+  it('passes a read layout to the worker, which fetches the file whole', async () => {
+    vi.stubGlobal(
+      'fetch',
+      rangeFetcher(merscopeFixtureBytes('cell_boundaries.parquet.gz')),
+    )
+    const worker = new FakeWorker()
+    const layout = { idColumn: 'EntityID', planeColumn: 'ZIndex', wholeFile: true }
+
+    const shapes = await spatialDataShapesWorkerReader(() => worker)({
+      ...layout,
+      url: URL,
+      affine: AFFINE,
+    })
+
+    expect(shapes.ids).toHaveLength(4)
+    expect(shapes.plane).toBe(3)
+    expect(worker.requests).toEqual([
+      { type: 'read', source: { kind: 'url', url: URL }, affine: AFFINE, layout },
     ])
   })
 
