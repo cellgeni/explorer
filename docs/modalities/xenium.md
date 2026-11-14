@@ -28,9 +28,13 @@ Unlike the other platforms, the Xenium load path in `useDatasetLifecycle`
 calls free functions in `src/data/` (`loadDatasetOverview`, `loadGenePanel`,
 `loadMorphologyImage`, …) rather than going through one `SpatialDataset`
 instance. Those functions share `XeniumDataset` instances from
-`src/data/xeniumDatasetCache.ts` (`cachedXeniumDataset`,
-`cachedXeniumTranscriptDataset`). Viewport boundaries use the factory's
-`cachedSpatialDataset` instance.
+`src/data/xeniumDatasetCache.ts`: `cachedXeniumDataset` for gene expression,
+ROI cells and gene statistics, annotations and warm-up, and
+`cachedXeniumTranscriptDataset` for transcripts. Viewport boundaries use the
+factory's `cachedSpatialDataset` instance. Each instance has its own DuckDB
+client, which runs one query at a time, so the split keeps one kind of query
+from waiting behind another (see
+[4.6](../plan/decisions.md#46-data-source-abstraction--capability-based)).
 
 ## Files Read
 
@@ -64,7 +68,9 @@ few requests when opening the focus images; see
 - The viewer's slide extent is the bounding box of the overview cells.
 - The viewer's µm/px comes from the morphology image's OME-XML
   `PhysicalSizeX` (default 0.2125). `XeniumDataset.meta()` reads the pixel size
-  from `experiment.xenium` instead, but only the boundary loader uses it.
+  from `experiment.xenium` instead, but nothing reads the units it returns:
+  the outline loaders call `meta()` only for the platform, capabilities and
+  segmentations.
 - Cell IDs must match `/^[a-p]{8}-\d+$/` (`asCellId`, `src/data/cellid.ts`);
   integer cell IDs from very old output are rejected.
 
@@ -275,9 +281,9 @@ not passed to the readers, so it does not change the result.
 - In-memory: range-probe results, Zarr matrix metadata and `cell_id` index,
   H5 matrices, transcript Zarr metadata, and `XeniumDataset` instances.
 - DuckDB-WASM runs in a worker per client; each `XeniumDataset` creates its own
-  client. The H5 fallback's file is fetched, opened and read in an H5 file
-  worker, and the overview's `cells.parquet` columns in a cells overview
-  worker. zarrita reads (matrix, transcripts, analysis) run on the main
+  client at its first query and keeps it until the page is reloaded. The H5
+  fallback's file is fetched, opened and read in an H5 file worker, and the
+  overview's `cells.parquet` columns in a cells overview worker. zarrita reads (matrix, transcripts, analysis) run on the main
   thread, with their chunks decompressed in the Zarr decode workers.
 
 ## Source Files
