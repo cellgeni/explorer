@@ -281,6 +281,14 @@ export function parseDatasetManifest(
     return fail('expected a JSON object.')
   }
 
+  // A collection (datasetCollection.ts) lists datasets instead of describing
+  // one, and is opened with `collection=`.
+  if ('datasets' in json && !('platform' in json)) {
+    return fail(
+      'this is a dataset collection; open it with collection= in the address instead of dataset=.',
+    )
+  }
+
   checkKeys(json, DATASET_MANIFEST_TOP_LEVEL_KEYS, '', fail)
 
   if (json.version !== DATASET_MANIFEST_VERSION) {
@@ -585,9 +593,14 @@ export const DATASET_MANIFEST_DEFAULT_KEYS = [
   ...DEFAULT_OPACITY_KEYS,
 ] as const
 
-type Fail = (message: string) => never
+// The field checks below are shared with the collection parser
+// (datasetCollection.ts), so both formats report errors the same way.
+export type Fail = (message: string) => never
 
-function parseSource(value: unknown, fail: Fail): DatasetManifestSource | undefined {
+export function parseSource(
+  value: unknown,
+  fail: Fail,
+): DatasetManifestSource | undefined {
   if (value === undefined) {
     return undefined
   }
@@ -615,7 +628,10 @@ function parseSource(value: unknown, fail: Fail): DatasetManifestSource | undefi
   return source
 }
 
-function parseDefaults(value: unknown, fail: Fail): DatasetManifestDefaults | undefined {
+export function parseDefaults(
+  value: unknown,
+  fail: Fail,
+): DatasetManifestDefaults | undefined {
   if (value === undefined) {
     return undefined
   }
@@ -782,7 +798,7 @@ function rejectOptions(
   }
 }
 
-function checkKeys(
+export function checkKeys(
   record: Readonly<Record<string, unknown>>,
   allowed: readonly string[],
   prefix: string,
@@ -799,7 +815,7 @@ function checkKeys(
   }
 }
 
-function optionalString(
+export function optionalString(
   record: Readonly<Record<string, unknown>>,
   key: string,
   prefix: string,
@@ -818,7 +834,7 @@ function optionalString(
   return value.trim()
 }
 
-function optionalPath(
+export function optionalPath(
   record: Readonly<Record<string, unknown>>,
   key: string,
   prefix: string,
@@ -864,7 +880,7 @@ function resolve(baseUrl: string, path: string): string {
   return new URL(path, `${trimTrailingSlashes(baseUrl)}/`).toString()
 }
 
-function parentUrl(url: string): string {
+export function parentUrl(url: string): string {
   const parsed = new URL(url)
   parsed.hash = ''
   parsed.search = ''
@@ -872,7 +888,7 @@ function parentUrl(url: string): string {
   return trimTrailingSlashes(parsed.toString())
 }
 
-function trimTrailingSlashes(url: string): string {
+export function trimTrailingSlashes(url: string): string {
   return url.replace(/\/+$/, '')
 }
 

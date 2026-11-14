@@ -18,6 +18,9 @@
 - [Dataset manifest](./dataset-manifest.md): an optional `explorer.json` that
   declares the platform, points to renamed or moved files, and sets what the
   viewer shows on first load.
+- [Dataset collections](./dataset-collections.md): a JSON file listing
+  datasets to browse together, such as a study's sections, opened with
+  `?collection=`.
 - [S3/CORS hosting playbook](./s3-cors-playbook.md): CORS, byte-range, and
   caching rules for dataset buckets.
 - [Image-only and GeoJSON](./image-only-and-geojson.md): direct image URLs and

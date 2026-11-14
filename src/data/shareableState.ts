@@ -13,6 +13,8 @@ export interface ShareableViewState {
 export interface ShareableState {
   // The link's xv; links without one are version 1.
   readonly linkVersion?: number
+  // The dataset collection the dataset was opened from: `collection=`.
+  readonly collectionUrl?: string
   readonly datasetUrl?: string
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
@@ -95,6 +97,7 @@ export function parseShareableState(hash: string): ShareableState {
   const params = new URLSearchParams(rawHash)
   const state: MutableShareableState = {}
   const linkVersion = parsePositiveInteger(params.get('xv'))
+  const collectionUrl = readString(params, 'collection')
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readCsv(params, 'groups')
@@ -151,6 +154,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (linkVersion !== undefined) {
     state.linkVersion = linkVersion
+  }
+
+  if (collectionUrl !== undefined) {
+    state.collectionUrl = collectionUrl
   }
 
   if (datasetUrl !== undefined) {
@@ -368,6 +375,10 @@ export function formatShareableState(state: ShareableState): string {
   const params = new URLSearchParams()
 
   params.set('xv', HASH_VERSION)
+
+  if (state.collectionUrl !== undefined && state.collectionUrl.trim() !== '') {
+    params.set('collection', state.collectionUrl.trim())
+  }
 
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())

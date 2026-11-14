@@ -5,12 +5,14 @@ import { micrometers } from '../../data/coords'
 import { useShareableUrlHash } from './useShareableUrlHash'
 
 function ShareableUrlHashProbe({
+  collectionUrl,
   datasetUrl = 'https://example.test/output',
   hiddenAnnotationIds,
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
   onShareUrl,
 }: {
+  readonly collectionUrl?: string
   readonly datasetUrl?: string
   readonly hiddenAnnotationIds?: readonly string[]
   readonly selectedGenes?: readonly string[]
@@ -23,6 +25,7 @@ function ShareableUrlHashProbe({
       annotationUrl: 'https://example.test/annotations/manual.csv',
       customImageOpacities: [0.35],
       customImageUrls: ['https://example.test/images/he.ome.tif'],
+      collectionUrl,
       datasetUrl,
       hiddenAnnotationIds,
     },
@@ -211,6 +214,43 @@ describe('useShareableUrlHash', () => {
       vi.advanceTimersByTime(160)
     })
     expect(window.history.length).toBe(startLength + 2)
+  })
+
+  it('writes the collection, and drops a query string copy once it has', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?collection=https%3A%2F%2Fexample.test%2Fc.json&debug=1',
+    )
+    const latest: { shareUrl?: () => string } = {}
+    const { rerender } = render(
+      <ShareableUrlHashProbe
+        collectionUrl="https://example.test/c.json"
+        datasetUrl="https://example.test/a"
+        onShareUrl={(next) => {
+          latest.shareUrl = next
+        }}
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.search).toBe('?debug=1')
+    expect(window.location.hash).toMatch(
+      /^#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&dataset=/,
+    )
+    expect(latest.shareUrl?.()).toBe(
+      `${window.location.origin}/?debug=1${window.location.hash}`,
+    )
+
+    // Closing the collection leaves it out, and a reload keeps it closed.
+    rerender(<ShareableUrlHashProbe datasetUrl="https://example.test/a" />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.href).not.toContain('collection=')
   })
 
   it('keeps the entry for the dataset a link opened', () => {

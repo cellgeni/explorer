@@ -79,6 +79,7 @@ export function appTestDependencies({
   loadBoundaryElements,
   loadCellTranscriptDistribution,
   loadCustomMorphologyLayer,
+  loadCollection,
   loadDatasetOverview,
   loadExamplesIndex,
   loadGeneExpression,
@@ -107,6 +108,12 @@ export function appTestDependencies({
   if (loadDatasetOverview !== undefined) dataset.loadDatasetOverview = loadDatasetOverview
   // Never GitHub: no examples unless a test gives some.
   dataset.loadExamplesIndex = loadExamplesIndex ?? (async () => [])
+  // Never the network: a test that opens a collection gives it.
+  dataset.loadCollection =
+    loadCollection ??
+    (async (url) => {
+      throw new Error(`No test collection for ${url}.`)
+    })
   if (loadGenePanel !== undefined) dataset.loadGenePanel = loadGenePanel
   if (detectSpatialDataset !== undefined)
     dataset.detectSpatialDataset = detectSpatialDataset

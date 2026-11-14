@@ -14,8 +14,17 @@
   grid-template-columns: minmax(0, 1fr) 40px;
 }
 
+/* The canvas, with the collection bar under it when a collection is open. */
+.shell-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .shell-canvas {
   position: relative;
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: hidden;

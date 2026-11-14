@@ -54,6 +54,13 @@ import {
 } from './features/app-shell/useUndoableRemovals'
 import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
+import { CollectionBar } from './features/collection/CollectionBar'
+import {
+  collectionSwitchOpening,
+  type CollectionDatasetOpening,
+} from './features/collection/collectionModel'
+import { useDatasetCollection } from './features/collection/useDatasetCollection'
+import { collectionEntryFor } from './datasets/datasetCollection'
 import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
 import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
 import { useRecentDatasets } from './features/start/recentDatasets'
@@ -297,6 +304,7 @@ export function App({ dependencies }: AppProps = {}) {
     dataset: {
       detectSpatialDataset,
       getSpatialDataset,
+      loadCollection,
       loadDatasetOverview,
       loadExamplesIndex,
       loadGenePanel,
@@ -652,7 +660,40 @@ export function App({ dependencies }: AppProps = {}) {
   const isLoading =
     loadState.status === 'loading' || pendingDatasetLoadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
-  const loadedDatasetName = datasetDisplayName(loadedDatasetUrl, datasetAbout?.name)
+  const linkNamesDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
+  // Set below, where the functions that open datasets are defined.
+  const openCollectionDatasetRef = useRef<
+    ((url: string, opening: CollectionDatasetOpening) => void) | null
+  >(null)
+  const datasetCollection = useDatasetCollection({
+    initialUrl: initialShareableState.collectionUrl,
+    linkOpensDataset: linkNamesDataset,
+    loadCollection,
+    loadedDatasetUrl,
+    onOpenDataset: (url, opening) => {
+      openCollectionDatasetRef.current?.(url, opening)
+    },
+  })
+  const collectionEntry =
+    datasetCollection.state.status === 'ready'
+      ? collectionEntryFor(datasetCollection.state.collection, loadedDatasetUrl)
+      : undefined
+  const loadedDatasetName = datasetDisplayName(
+    loadedDatasetUrl,
+    datasetAbout?.name ?? collectionEntry?.name,
+  )
+  // A link's view is for the dataset it names. Once another dataset loads,
+  // datasets open fitted to their extent again.
+  const [linkViewApplies, setLinkViewApplies] = useState(
+    initialShareableState.viewState !== undefined,
+  )
+  if (
+    linkViewApplies &&
+    loadedDatasetUrl !== null &&
+    loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()
+  ) {
+    setLinkViewApplies(false)
+  }
   useEffect(() => {
     document.title = documentTitle(loadedDatasetName)
   }, [loadedDatasetName])
@@ -667,11 +708,14 @@ export function App({ dependencies }: AppProps = {}) {
     [defaultPanelIds, shellPanels],
   )
   // The start screen (plan 15.3-A) shows until a load starts,
-  // unless the link names a dataset, and again when a load fails with
-  // nothing else open.
+  // unless the link names a dataset or a collection that opens one, and again
+  // when a load fails with nothing else open.
   const [datasetLoadStarted, setDatasetLoadStarted] = useState(false)
   if (!datasetLoadStarted && loadState.status !== 'idle') setDatasetLoadStarted(true)
-  const linkOpensDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
+  const linkOpensDataset =
+    linkNamesDataset ||
+    datasetCollection.state.status === 'loading' ||
+    datasetCollection.state.status === 'ready'
   const showStartScreen =
     loadState.status === 'error' ||
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
@@ -3271,6 +3315,9 @@ export function App({ dependencies }: AppProps = {}) {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
       customImageUrls,
+      ...(datasetCollection.state.status === 'idle'
+        ? {}
+        : { collectionUrl: datasetCollection.state.url }),
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
@@ -3494,6 +3541,22 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setDatasetUrl, shouldLoadMorphology],
   )
+  // A dataset of the open collection, restoring what its opening carries the
+  // way a shared link's state is restored.
+  const handleOpenCollectionDataset = useCallback(
+    (url: string, opening: CollectionDatasetOpening) => {
+      for (const ignored of opening.ignored) {
+        appendDebugEvent(`The collection's ${ignored}, so the viewer default is used.`)
+      }
+
+      initialShareableStateRef.current = { ...opening.linkState, datasetUrl: url }
+      handleOpenDataset(url)
+    },
+    [appendDebugEvent, handleOpenDataset],
+  )
+  useEffect(() => {
+    openCollectionDatasetRef.current = handleOpenCollectionDataset
+  })
   const datasetLibrary = useMemo(
     (): DatasetLibraryModel => ({
       examples: examplesIndex.state,
@@ -3962,7 +4025,7 @@ export function App({ dependencies }: AppProps = {}) {
         }
         onMagicLensMove={handleMagicLensMove}
         onMagicLensLeave={handleMagicLensLeave}
-        {...(initialShareableState.viewState === undefined
+        {...(initialShareableState.viewState === undefined || !linkViewApplies
           ? {}
           : { initialViewStateOverride: initialShareableState.viewState })}
         {...(loadState.status === 'error'
@@ -4029,6 +4092,26 @@ export function App({ dependencies }: AppProps = {}) {
         embedding={platformAdapter.capabilities.cells ? embedding : null}
         panels={shellPanels}
         onPanelsChange={setShellPanels}
+        collection={
+          datasetCollection.state.status === 'idle' ? null : (
+            <CollectionBar
+              state={datasetCollection.state}
+              loadedUrl={loadedDatasetUrl}
+              pendingUrl={isLoading ? datasetUrl : null}
+              onSelect={(entry) => {
+                handleOpenCollectionDataset(
+                  entry.url,
+                  collectionSwitchOpening({
+                    selectedGenes,
+                    observationColorMode,
+                    geneExpressionScoreMode,
+                  }),
+                )
+              }}
+              onClose={datasetCollection.close}
+            />
+          )
+        }
       >
         {viewerRegion}
       </ShellLayout>
