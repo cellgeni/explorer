@@ -1,5 +1,9 @@
 import { openTiff, tiffImageSelectionUrl } from '../tiff/loader'
-import { omeZarrImageRootUrl, openOmeZarrImage } from '../zarr/omeZarrLoader'
+import {
+  omeZarrImageRootUrl,
+  omeZarrPlaneSelectionUrl,
+  openOmeZarrImage,
+} from '../zarr/omeZarrLoader'
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import {
@@ -16,7 +20,7 @@ import type {
   ImagePyramidChannelInfo,
   ImagePyramidLoader,
   ImagePyramidOpener,
-  ImagePyramidPlaneRef,
+  ImagePyramidTiffPlaneRef,
   OpenImagePyramidOptions,
 } from './imagePyramid'
 
@@ -48,7 +52,8 @@ export interface LoadMorphologyImageOptions {
   readonly candidates?: readonly string[]
   readonly onFallback?: FallbackNotifier
   readonly signal?: AbortSignal
-  // Z plane to open a z-stack at; the middle plane by default.
+  // Z plane to open a z-stack at; the image's default plane (the middle one
+  // unless it names another) by default.
   readonly zPlane?: number
 }
 
@@ -60,7 +65,7 @@ export interface LoadCustomMorphologyLayerOptions {
 }
 
 // Z planes whose channel loaders a z-stack keeps, so stepping back to a recent
-// plane does not reopen its TIFF directories.
+// plane does not reopen its TIFF directories or Zarr metadata.
 const CACHED_Z_PLANES = 8
 
 const MORPHOLOGY_IMAGE_PATH_KEY_GROUPS = [
@@ -413,7 +418,7 @@ async function createMorphologyImage(
   }
 
   return openPlane(
-    options.zPlane ?? defaultMorphologyZPlane(zStack.sizeZ),
+    options.zPlane ?? zStack.defaultZPlane ?? defaultMorphologyZPlane(zStack.sizeZ),
     options.signal,
   )
 }
@@ -437,6 +442,7 @@ async function loadMorphologyChannelLoaders(
         options.imageUrl,
         channel,
         options.zPlane,
+        options.loader.zStack?.defaultZPlane,
       )
       let loader = loaderByUrl.get(channelUrl)
 
@@ -519,12 +525,23 @@ function morphologyChannelImageUrl(
   imageUrl: string,
   channel: ImagePyramidChannelInfo,
   zPlane: number | undefined,
+  defaultZPlane: number | undefined,
 ): string {
+  const plane = zPlane === undefined ? undefined : channel.zPlanes?.[zPlane]
+
+  if (plane !== undefined && 'zIndex' in plane) {
+    const channelUrl = channel.sourceUrl ?? imageUrl
+
+    // The channel's own URL reads the image's default plane, so channel 0
+    // keeps the image URL's loader there.
+    return plane.zIndex === defaultZPlane
+      ? channelUrl
+      : omeZarrPlaneSelectionUrl(channelUrl, plane.zIndex)
+  }
+
   if (channel.sourceUrl !== undefined) {
     return channel.sourceUrl
   }
-
-  const plane = zPlane === undefined ? undefined : channel.zPlanes?.[zPlane]
 
   if (plane !== undefined) {
     return tiffPlaneImageUrl(imageUrl, plane)
@@ -551,7 +568,7 @@ function morphologyChannelImageUrl(
   return imageUrl
 }
 
-function tiffPlaneImageUrl(imageUrl: string, plane: ImagePyramidPlaneRef): string {
+function tiffPlaneImageUrl(imageUrl: string, plane: ImagePyramidTiffPlaneRef): string {
   const fileUrl =
     plane.fileName === undefined ? imageUrl : new URL(plane.fileName, imageUrl).toString()
 

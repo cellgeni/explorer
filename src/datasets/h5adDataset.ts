@@ -2299,11 +2299,18 @@ function readObsmEmbeddingOptions(
   return embeddings.sort(compareH5adEmbeddings)
 }
 
+// AnnData names embeddings `X_<name>` (scanpy, CELLxGENE); other writers use
+// bare `spatial`, `umap`, `tsne` or `pca`. Other obsm matrices hold per-cell
+// values, such as cell2location's cell-type abundances, not coordinates.
 function isObsmEmbeddingDataset(
   key: string,
   dataset: H5DatasetLike,
   cellCount: number,
 ): boolean {
+  if (!/^X_/i.test(key) && !/^(?:spatial|umap|tsne|pca)$/i.test(key)) {
+    return false
+  }
+
   const shape = dataset.shape
 
   if (shape === null || shape.length !== 2) {

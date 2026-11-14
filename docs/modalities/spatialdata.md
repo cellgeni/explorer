@@ -217,7 +217,8 @@ returns, reusing the previous request's elements for cells still in view.
 The chosen image element is opened with `openOmeZarrImageWithOptions` using
 the store and a planar transform from the element's affine. Per-level dataset
 scales are kept; the affine supplies the base scale and origin. Extra channels
-open as `#c=N` loaders through `openChannelLoader`.
+open as `#c=N` loaders through `openChannelLoader`, and other planes of a
+z-stack as `#z=N` loaders.
 
 Native RGB images (exactly three channels with no omero metadata, or channels
 labelled/coloured red, green, blue) keep their 0–255 window: the lifecycle

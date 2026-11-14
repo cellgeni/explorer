@@ -271,6 +271,26 @@ describe('AnnDataH5adDataset', () => {
     ])
   })
 
+  it('lists only obsm matrices named as embeddings', async () => {
+    const twoColumns = [0, 0, 1, 0, 0, 1, 1, 1]
+    const bytes = await createTinyH5ad('dense', {
+      extraObsm: {
+        UMAP: twoColumns,
+        // cell2location cell-type abundances and scvi-tools covariates.
+        means_cell_abundance_w_sf: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+        _scvi_extra_categorical_covs: twoColumns,
+      },
+    })
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/cell2location.h5ad',
+      fetcher: h5adFetcher(bytes),
+    })
+
+    await expect(
+      dataset.embeddingOptions().then((options) => options.map((option) => option.kind)),
+    ).resolves.toEqual(['X_pca', 'X_spatial', 'UMAP'])
+  })
+
   it.each<CategoricalEncoding>(['group', 'dataframe-categories'])(
     'lists genes by a categorical feature_name (%s) and keeps the index as an alias',
     async (categoricalEncoding) => {
@@ -934,6 +954,8 @@ interface TinyH5adOptions {
   // Codes of the categorical obs `cluster` column (categories A and B); -1
   // marks a missing label.
   readonly clusterCodes?: readonly number[]
+  // More obsm matrices, by name, with as many columns as their values allow.
+  readonly extraObsm?: Readonly<Record<string, readonly number[]>>
 }
 
 interface CategoricalFeatureNames {
@@ -1078,6 +1100,14 @@ async function createTinyH5ad(
     data: new Float32Array([1, 0, 9, 0, 1, 8, -1, 0, 7, 0, -1, 6]),
     shape: [4, 3],
   })
+
+  for (const [name, values] of Object.entries(options.extraObsm ?? {})) {
+    obsm.create_dataset({
+      name,
+      data: new Float32Array(values),
+      shape: [4, values.length / 4],
+    })
+  }
 
   if (matrixKind === 'dense') {
     file.create_dataset({
