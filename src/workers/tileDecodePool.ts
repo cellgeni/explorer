@@ -1,3 +1,4 @@
+import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type {
@@ -6,6 +7,7 @@ import type {
   TileDecodeSuccess,
   TileDecodeWorkerRequest,
   TileSamplesSuccess,
+  TileStripBandSuccess,
   WorkerDecodedTile,
 } from './tileDecodeMessages'
 
@@ -28,8 +30,13 @@ export interface TileDecodeWorkerPoolOptions {
   readonly workerFactory?: DecodeWorkerFactory
 }
 
+type TileDecodeWorkerSuccess =
+  | TileDecodeSuccess
+  | TileSamplesSuccess
+  | TileStripBandSuccess
+
 interface PendingDecode {
-  readonly resolve: (response: TileDecodeSuccess | TileSamplesSuccess) => void
+  readonly resolve: (response: TileDecodeWorkerSuccess) => void
   readonly reject: (error: Error) => void
   readonly workerIndex: number
 }
@@ -90,6 +97,24 @@ export class TileDecodeWorkerPool {
     return { samples: response.samples, pixelCount: response.pixelCount }
   }
 
+  // Decodes a band of TIFF strips (see decodeTiffStripBand).
+  async decodeStripBand(
+    bytes: Uint8Array,
+    options: TiffStripBandDecodeOptions,
+  ): Promise<Uint8Array<ArrayBuffer>> {
+    const response = await this.post(bytes, (id, payload) => ({
+      id,
+      bytes: payload,
+      ...options,
+    }))
+
+    if (!('band' in response)) {
+      throw new Error('Tile decode worker did not return a strip band.')
+    }
+
+    return new Uint8Array(response.band)
+  }
+
   terminate(): void {
     this.rejectAll(new Error('Tile decode worker pool terminated.'))
 
@@ -104,7 +129,7 @@ export class TileDecodeWorkerPool {
   private post(
     bytes: Uint8Array,
     request: (id: number, payload: ArrayBuffer) => TileDecodeWorkerRequest,
-  ): Promise<TileDecodeSuccess | TileSamplesSuccess> {
+  ): Promise<TileDecodeWorkerSuccess> {
     const id = this.nextRequestId
     this.nextRequestId += 1
     const workerIndex = this.workerIndexForNextRequest()
@@ -209,6 +234,18 @@ export class TileDecodeWorkerPool {
       (this.inFlightByWorker[workerIndex] ?? 0) - 1,
     )
   }
+}
+
+let sharedStripPool: TileDecodeWorkerPool | null | undefined
+
+// Shared pool for TIFF strip bands, or null where workers are unavailable
+// (for example in tests), in which case callers decode on the main thread.
+export function sharedStripDecodePool(): TileDecodeWorkerPool | null {
+  if (sharedStripPool === undefined) {
+    sharedStripPool = typeof Worker === 'undefined' ? null : new TileDecodeWorkerPool()
+  }
+
+  return sharedStripPool
 }
 
 export function createWorkerTileDecoder(

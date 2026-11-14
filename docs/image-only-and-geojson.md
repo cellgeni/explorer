@@ -22,7 +22,9 @@ A Zarr root whose attributes contain `spatialdata_attrs` loads as
 
 TIFF requirements:
 
-- Tiled, not stripped. Stripped TIFFs open but no tiles load.
+- Tiled or stripped. A stripped image is read in bands of whole rows, so
+  tiled images load faster, and compressed strips that decode to more than
+  256 MiB each are refused.
 - Pyramid levels stored as `SubIFDs` of the base image. Pyramids stored as
   extra top-level IFDs are ignored, so only full resolution is shown.
 - 8- or 16-bit samples with 1, 3, or 4 samples per pixel.

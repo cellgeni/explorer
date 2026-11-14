@@ -51,7 +51,10 @@ describe('TileDecodeWorkerPool', () => {
       tileWidth: 2,
     })
     const posted = workers[0]?.posted[0]
-    const request = posted !== undefined && !('sampling' in posted) ? posted : undefined
+    const request =
+      posted !== undefined && !('sampling' in posted) && !('stripRows' in posted)
+        ? posted
+        : undefined
 
     expect(request?.bitsPerSample).toEqual([8])
     expect(request?.compression).toBe(5)
@@ -127,6 +130,30 @@ describe('TileDecodeWorkerPool', () => {
       samples: Float64Array.from([2]),
       pixelCount: 2,
     })
+  })
+
+  it('decodes a band of TIFF strips into sample bytes', async () => {
+    const { pool, workers } = makePool({ size: 1 })
+    const options = {
+      compression: 8,
+      width: 2,
+      rowBytes: 2,
+      stripRows: [1, 1],
+      stripByteLengths: [3, 4],
+    }
+    const promise = pool.decodeStripBand(new Uint8Array(7), options)
+    const request = workers[0]?.posted[0]
+
+    expect(request).toMatchObject(options)
+    expect(request?.bytes.byteLength).toBe(7)
+
+    workers[0]?.resolve({
+      id: request?.id ?? -1,
+      ok: true,
+      band: Uint8Array.from([1, 2, 3, 4]).buffer,
+    })
+
+    await expect(promise).resolves.toEqual(Uint8Array.from([1, 2, 3, 4]))
   })
 
   it('rejects pending work when the pool terminates', async () => {

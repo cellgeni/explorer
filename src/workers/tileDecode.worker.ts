@@ -2,11 +2,13 @@
 
 import { decodeJpegTileBitmap } from '../codecs/jpeg'
 import { normaliseToRgba } from '../codecs/jpeg2000'
+import { decodeTiffStripBand } from '../codecs/tiffStrips'
 import { decodeTiffTilePixels, TIFF_COMPRESSION_JPEG } from '../codecs/tiffTile'
 import type {
   TileDecodeRequest,
   TileDecodeResponse,
   TileDecodeWorkerRequest,
+  TileStripBandRequest,
   WorkerDecodedTile,
 } from './tileDecodeMessages'
 import { handleTileSamplesRequest } from './tileSamplesCore'
@@ -23,7 +25,29 @@ workerScope.onmessage = (event: MessageEvent<TileDecodeWorkerRequest>) => {
     return
   }
 
+  if ('stripRows' in request) {
+    void decodeStripBand(request)
+    return
+  }
+
   void decodeTile(request)
+}
+
+async function decodeStripBand(request: TileStripBandRequest): Promise<void> {
+  try {
+    const band = await decodeTiffStripBand(new Uint8Array(request.bytes), request)
+    const response: TileDecodeResponse = { id: request.id, ok: true, band: band.buffer }
+
+    workerScope.postMessage(response, [band.buffer])
+  } catch (cause) {
+    const response: TileDecodeResponse = {
+      id: request.id,
+      ok: false,
+      error: cause instanceof Error ? cause.message : String(cause),
+    }
+
+    workerScope.postMessage(response)
+  }
 }
 
 async function decodeTile(request: TileDecodeRequest): Promise<void> {

@@ -1,4 +1,5 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
+import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileSampling } from '../data/tileSamples'
 
@@ -18,11 +19,21 @@ export interface TileSamplesRequest extends TiffTileDecodeMetadata {
   readonly sampling: TileSampling
 }
 
-export type TileDecodeWorkerRequest = TileDecodeRequest | TileSamplesRequest
+// Decodes a band of TIFF strips and returns its sample bytes.
+export interface TileStripBandRequest extends TiffStripBandDecodeOptions {
+  readonly id: number
+  readonly bytes: ArrayBuffer
+}
+
+export type TileDecodeWorkerRequest =
+  | TileDecodeRequest
+  | TileSamplesRequest
+  | TileStripBandRequest
 
 export type TileDecodeResponse =
   | TileDecodeSuccess
   | TileSamplesSuccess
+  | TileStripBandSuccess
   | TileDecodeFailure
 
 export interface TileDecodeSuccess {
@@ -40,6 +51,12 @@ export interface TileSamplesSuccess {
   readonly ok: true
   readonly samples: Float64Array
   readonly pixelCount: number
+}
+
+export interface TileStripBandSuccess {
+  readonly id: number
+  readonly ok: true
+  readonly band: ArrayBuffer
 }
 
 export interface TileDecodeFailure {

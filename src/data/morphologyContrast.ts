@@ -68,13 +68,16 @@ const DEFAULT_LOW_PERCENTILE = 0.5
 const DEFAULT_HIGH_PERCENTILE = 99.8
 const DEFAULT_MAX_SAMPLES = 250_000
 const DEFAULT_HISTOGRAM_BINS = 32
+// Tiles read from the smallest level, spread over it, so an image without a
+// pyramid is not read whole.
+const MAX_AUTO_CONTRAST_TILES = 64
 
 export async function computeChannelAutoContrast(
   loader: AutoContrastTileLoader,
   options: ComputeChannelAutoContrastOptions = {},
 ): Promise<ChannelAutoContrast> {
   const level = Math.max(0, loader.numLevels - 1)
-  const tiles = loader.tilesForLevel(level)
+  const tiles = spreadTiles(loader.tilesForLevel(level), MAX_AUTO_CONTRAST_TILES)
   const maxSamples = Math.max(1, options.maxSamples ?? DEFAULT_MAX_SAMPLES)
   const totalPixels = countVisiblePixels(loader, level, tiles)
   const sampleStride = Math.max(1, Math.ceil(totalPixels / maxSamples))
@@ -124,6 +127,48 @@ export async function computeChannelAutoContrast(
     ...contrast,
     histogram: buildHistogram(samples, contrast.min, contrast.max),
   }
+}
+
+// At most `maxTiles` of `tiles`, from evenly spaced rows and evenly spaced
+// within each row. Few rows keep a stripped image's reads to few bands.
+export function spreadTiles(
+  tiles: readonly TileIndex[],
+  maxTiles: number,
+): readonly TileIndex[] {
+  if (tiles.length <= maxTiles) {
+    return tiles
+  }
+
+  const rows = new Map<number, TileIndex[]>()
+
+  for (const tile of tiles) {
+    const row = rows.get(tile.row)
+
+    if (row === undefined) {
+      rows.set(tile.row, [tile])
+    } else {
+      row.push(tile)
+    }
+  }
+
+  const rowKeys = [...rows.keys()].sort((left, right) => left - right)
+  const rowCount = Math.min(rowKeys.length, Math.ceil(Math.sqrt(maxTiles)))
+  const perRow = Math.max(1, Math.floor(maxTiles / rowCount))
+
+  return evenlySpaced(rowKeys, rowCount).flatMap((row) =>
+    evenlySpaced(rows.get(row) ?? [], perRow),
+  )
+}
+
+function evenlySpaced<T>(items: readonly T[], count: number): readonly T[] {
+  if (items.length <= count) {
+    return items
+  }
+
+  return Array.from(
+    { length: count },
+    (_unused, index) => items[Math.floor(((index + 0.5) * items.length) / count)],
+  ).filter((item) => item !== undefined)
 }
 
 // The tile decode worker for one auto-contrast run, started on its first tile
