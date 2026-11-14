@@ -1,0 +1,20 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "image",
+  "name": "Human tonsil, PhenoCycler 19-plex",
+  "description": "Akoya PhenoCycler-Fusion scan of two FFPE human tonsil sections, stained with fresh (top) and lyophilized (bottom) antibodies, with 18 markers and DAPI, read directly from a 13 GB QPTIFF; opens on CD3 (T cells), CD20 (B cells), and Ki-67 (dividing cells).",
+  "source": {
+    "repository": "BioImage Archive",
+    "accession": "S-BIAD2491",
+    "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2491",
+    "license": "CC BY 4.0",
+    "citation": "Lee JL et al. (2025) Large-scale quantitative assessment of tissue preparation and staining conditions for robust multiplexed imaging of FFPE tissue samples. BioImage Archive. doi:10.6019/S-BIAD2491"
+  },
+  "files": {
+    "image": "https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/491/S-BIAD2491/Files/LyophilizationTest_FigS2/100124_fresh_lyo_Pap_noOT2_Slide1.er.qptiff"
+  },
+  "defaults": {
+    "channels": ["DAPI", "CD3", "CD20", "Ki-67"]
+  }
+}
