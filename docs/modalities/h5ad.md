@@ -200,11 +200,18 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 
 `readMatrix` classifies `/X`:
 
-| `/X` shape                            | Layout (h5wasm / reference) | How one cell's genes are read                                       |
-| ------------------------------------- | --------------------------- | ------------------------------------------------------------------- |
-| Dataset `n_obs × n_vars`              | `dense` / `dense-zarr`      | Row lookup / `zarr.get(values, [row, null])`                        |
-| Group, `encoding-type` = `csc_matrix` | `csc` / `csc-zarr`          | One `indptr` span per requested gene                                |
-| Group, any other encoding             | `csr` / `csr-zarr`          | `indptr` slice per row; Zarr rows are batched into contiguous reads |
+| `/X` shape                            | Layout (h5wasm / reference) | How one cell's genes are read                                                                                             |
+| ------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Dataset `n_obs × n_vars`              | `dense` / `dense-zarr`      | Row lookup / each chunk holding a requested cell and gene, read once for all requested cells (`denseZarrCellsFromChunks`) |
+| Group, `encoding-type` = `csc_matrix` | `csc` / `csc-zarr`          | One `indptr` span per requested gene                                                                                      |
+| Group, any other encoding             | `csr` / `csr-zarr`          | `indptr` slice per row; Zarr rows are batched into contiguous reads                                                       |
+
+On the reference backend, an all-gene read of a dense `/X` (selected-cell
+profile, ROI gene stats) is refused when the chunks holding one cell's genes
+decode to more than 256 MiB (`denseCellProfileMaxBytes`). zarr's default
+chunks for a 125,955 × 12,963 float32 `/X` put a cell in 98 MiB; `/X` chunked
+by gene, `[n_obs, 10]` as Vitessce recommends, puts every cell in all of `/X`.
+Selected genes read only their own chunks either way.
 
 Sparse groups need a `shape` attribute and `data`, `indices`, `indptr`
 datasets. `indptr` is always read in full. On the reference backend `data` and
@@ -270,6 +277,7 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 | -------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `H5adReferenceFileUnavailableError`          | File is over 300 MiB and `<url>.json` is missing or not readable                       |
 | `H5adAllGeneCscMatrixUnsupportedError`       | All-gene read (selected-cell profile, ROI gene stats) on a reference-backed CSC matrix |
+| `H5adDenseCellProfileOverBudgetError`        | All-gene read on a dense Zarr `/X` whose chunks put one cell in over 256 MiB of values |
 | "Expected H5AD /obs/... to contain strings." | An obs dataset is neither numeric nor string                                           |
 
 ## Known Limitations

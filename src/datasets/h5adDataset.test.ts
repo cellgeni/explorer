@@ -6,7 +6,7 @@ import {
   icechunkFixtureFetcher,
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
-import { AnnDataH5adDataset } from './h5adDataset'
+import { AnnDataH5adDataset, type AnnDataH5adDatasetOptions } from './h5adDataset'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
 
 describe('AnnDataH5adDataset', () => {
@@ -635,33 +635,7 @@ describe('AnnDataH5adDataset', () => {
   })
 
   it('reads selected genes of dense reference-backed matrices by column', async () => {
-    const chunks = new RemoteH5adReferenceChunks()
-    const referenceSpec = createTinyH5adReferenceSpec(
-      (value) => chunks.ref(value),
-      'dense',
-    )
-    const fetcher = h5adRemoteReferenceFetcher(
-      350 * 1024 * 1024,
-      referenceSpec,
-      chunks.bytes(),
-      () => {
-        throw new Error('body should not be read')
-      },
-    )
-    const rangeRequests: string[] = []
-    const dataset = new AnnDataH5adDataset({
-      url: 'https://example.test/reference-dense.h5ad',
-      fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const request = input instanceof Request ? input : new Request(input, init)
-        const range = request.headers.get('Range')
-
-        if (range !== null) {
-          rangeRequests.push(range)
-        }
-
-        return fetcher(request)
-      }) as typeof fetch,
-    })
+    const { dataset, rangeRequests } = denseReferenceDataset()
 
     await expect(dataset.matrix(['cell-b'])).resolves.toMatchObject({
       cells: new Map([['cell-b', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }]]),
@@ -686,6 +660,119 @@ describe('AnnDataH5adDataset', () => {
     ])
     // One read per row chunk, not one per cell.
     expect(rangeRequests).toHaveLength(2)
+  })
+
+  it('reads all-gene profiles from a dense matrix chunked by gene once per chunk', async () => {
+    // Every chunk holds all four cells and one gene.
+    const { dataset, rangeRequests } = denseReferenceDataset({ chunks: [4, 1] })
+    await dataset.meta()
+    rangeRequests.length = 0
+
+    const profiles = await dataset.matrix(['cell-a', 'cell-b', 'cell-d'])
+
+    expect(profiles.cells).toEqual(
+      new Map([
+        ['cell-a', { geneNames: ['Actb', 'Gapdh'], counts: [1, 5] }],
+        ['cell-b', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }],
+        ['cell-d', { geneNames: ['Actb', 'Gapdh'], counts: [7, 8] }],
+      ]),
+    )
+    // One read per chunk for the three cells, not one per cell and chunk.
+    expect(rangeRequests).toHaveLength(3)
+    expect(new Set(rangeRequests).size).toBe(3)
+  })
+
+  it('reads each dense chunk once for the cells and genes it holds', async () => {
+    // Two by two chunks, stored column-major; the second chunk column is half
+    // padding past the third gene.
+    const { dataset, rangeRequests } = denseReferenceDataset({
+      chunks: [2, 2],
+      order: 'F',
+    })
+    await dataset.meta()
+    rangeRequests.length = 0
+
+    const profiles = await dataset.matrix(['cell-d', 'cell-a', 'cell-b'])
+
+    expect(profiles.cells).toEqual(
+      new Map([
+        ['cell-d', { geneNames: ['Actb', 'Gapdh'], counts: [7, 8] }],
+        ['cell-a', { geneNames: ['Actb', 'Gapdh'], counts: [1, 5] }],
+        ['cell-b', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }],
+      ]),
+    )
+    expect(rangeRequests).toHaveLength(4)
+    rangeRequests.length = 0
+
+    const expression = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gad1', 'Actb'],
+    )
+
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 1],
+      ['cell-b', 5],
+      ['cell-c', 4],
+      ['cell-d', 7],
+    ])
+    // Both genes are in the first chunk column: one read per row chunk.
+    expect(rangeRequests).toHaveLength(2)
+  })
+
+  it('refuses all-gene profiles when one cell is in too many dense chunk bytes', async () => {
+    // A cell's genes are in three 16-byte chunks.
+    const { dataset, rangeRequests } = denseReferenceDataset(
+      { chunks: [4, 1] },
+      { denseCellProfileMaxBytes: 47 },
+    )
+    await dataset.meta()
+    rangeRequests.length = 0
+
+    await expect(dataset.matrix(['cell-b'])).rejects.toMatchObject({
+      name: 'H5adDenseCellProfileOverBudgetError',
+      message:
+        "AnnData dense /X is chunked by gene, in chunks of 4 cells x 1 gene, so one cell's profile would read 3 chunks holding 48 B of values, over the 47 B limit.",
+      rowCount: 4,
+      geneCount: 3,
+      chunkShape: [4, 1],
+      chunkCount: 3,
+      byteLength: 48,
+      maxBytes: 47,
+      chunkedByGene: true,
+    })
+    expect(rangeRequests).toEqual([])
+
+    const expression = await dataset.geneExpression(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(20),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      ['Gad1'],
+    )
+
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 0],
+      ['cell-b', 3],
+      ['cell-c', 4],
+      ['cell-d', 0],
+    ])
+    expect(rangeRequests).toHaveLength(1)
+
+    const { dataset: withinBudget } = denseReferenceDataset(
+      { chunks: [4, 1] },
+      { denseCellProfileMaxBytes: 48 },
+    )
+
+    await expect(withinBudget.matrix(['cell-b'])).resolves.toMatchObject({
+      cells: new Map([['cell-b', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }]]),
+    })
   })
 
   it('warns when oversized H5AD files do not have a companion reference', async () => {
@@ -1090,6 +1177,45 @@ function h5adReferenceFetcher(
   }) as typeof fetch
 }
 
+// An oversized H5AD read through a reference with a dense /X, and the Range
+// headers of the chunk reads it makes.
+function denseReferenceDataset(
+  denseChunking?: TinyDenseChunking,
+  options: Pick<AnnDataH5adDatasetOptions, 'denseCellProfileMaxBytes'> = {},
+): { readonly dataset: AnnDataH5adDataset; readonly rangeRequests: string[] } {
+  const chunks = new RemoteH5adReferenceChunks()
+  const referenceSpec = createTinyH5adReferenceSpec(
+    (value) => chunks.ref(value),
+    'dense',
+    denseChunking === undefined ? {} : { denseChunking },
+  )
+  const fetcher = h5adRemoteReferenceFetcher(
+    350 * 1024 * 1024,
+    referenceSpec,
+    chunks.bytes(),
+    () => {
+      throw new Error('body should not be read')
+    },
+  )
+  const rangeRequests: string[] = []
+  const dataset = new AnnDataH5adDataset({
+    url: 'https://example.test/reference-dense.h5ad',
+    fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const range = request.headers.get('Range')
+
+      if (range !== null) {
+        rangeRequests.push(range)
+      }
+
+      return fetcher(request)
+    }) as typeof fetch,
+    ...options,
+  })
+
+  return { dataset, rangeRequests }
+}
+
 function h5adRemoteReferenceFetcher(
   byteLength: number,
   referenceSpec: Record<string, unknown>,
@@ -1149,10 +1275,17 @@ function h5adRemoteReferenceFetcher(
 
 type ChunkRefFactory = (value: ArrayBufferView) => string | [string, number, number]
 
+interface TinyDenseChunking {
+  readonly chunks: readonly [number, number]
+  readonly order?: 'C' | 'F'
+}
+
 function createTinyH5adReferenceSpec(
   chunkRef: ChunkRefFactory = bytesRef,
   matrixKind: MatrixKind = 'csr',
-  options: Pick<TinyH5adOptions, 'featureNames' | 'nullableStrings'> = {},
+  options: Pick<TinyH5adOptions, 'featureNames' | 'nullableStrings'> & {
+    readonly denseChunking?: TinyDenseChunking
+  } = {},
 ): Record<string, unknown> {
   const { featureNames } = options
 
@@ -1197,7 +1330,7 @@ function createTinyH5adReferenceSpec(
       'obsm/X_umap/.zarray': zarrArrayRef([4, 2], [4, 2], '<f4'),
       'obsm/X_umap/0.0': chunkRef(new Float32Array([0, 0, 10, 0, 0, 10, 10, 10])),
       ...(matrixKind === 'dense'
-        ? tinyDenseMatrixRefs(chunkRef)
+        ? tinyDenseMatrixRefs(chunkRef, options.denseChunking)
         : tinySparseMatrixRefs(chunkRef, matrixKind)),
     },
   }
@@ -1274,12 +1407,43 @@ function tinyCategoricalVarRefs(
 }
 
 // Two row chunks of the 4 x 3 matrix.
-function tinyDenseMatrixRefs(chunkRef: ChunkRefFactory): Record<string, unknown> {
-  return {
-    'X/.zarray': zarrArrayRef([4, 3], [2, 3], '<f4'),
-    'X/0.0': chunkRef(new Float32Array([1, 0, 5, 2, 3, 0])),
-    'X/1.0': chunkRef(new Float32Array([0, 4, 6, 7, 0, 8])),
+const TINY_DENSE_X = [
+  [1, 0, 5],
+  [2, 3, 0],
+  [0, 4, 6],
+  [7, 0, 8],
+] as const
+// Fills the part of an edge chunk past /X, so reading it shows up.
+const TINY_DENSE_X_PADDING = 99
+
+function tinyDenseMatrixRefs(
+  chunkRef: ChunkRefFactory,
+  { chunks: [chunkRows, chunkCols], order = 'C' }: TinyDenseChunking = { chunks: [2, 3] },
+): Record<string, unknown> {
+  const rows = TINY_DENSE_X.length
+  const cols = TINY_DENSE_X[0].length
+  const refs: Record<string, unknown> = {
+    'X/.zarray': zarrArrayRef([rows, cols], [chunkRows, chunkCols], '<f4', order),
   }
+
+  for (let rowChunk = 0; rowChunk * chunkRows < rows; rowChunk += 1) {
+    for (let colChunk = 0; colChunk * chunkCols < cols; colChunk += 1) {
+      const values = new Float32Array(chunkRows * chunkCols)
+
+      for (let row = 0; row < chunkRows; row += 1) {
+        for (let col = 0; col < chunkCols; col += 1) {
+          const value: number | undefined =
+            TINY_DENSE_X[rowChunk * chunkRows + row]?.[colChunk * chunkCols + col]
+          values[order === 'C' ? row * chunkCols + col : col * chunkRows + row] =
+            value ?? TINY_DENSE_X_PADDING
+        }
+      }
+
+      refs[`X/${rowChunk}.${colChunk}`] = chunkRef(values)
+    }
+  }
+
+  return refs
 }
 
 function tinySparseMatrixRefs(
@@ -1331,6 +1495,7 @@ function zarrArrayRef(
   shape: readonly number[],
   chunks: readonly number[],
   dtype: string,
+  order: 'C' | 'F' = 'C',
 ): string {
   return jsonRef({
     zarr_format: 2,
@@ -1339,7 +1504,7 @@ function zarrArrayRef(
     dtype,
     compressor: null,
     fill_value: null,
-    order: 'C',
+    order,
     filters: null,
   })
 }

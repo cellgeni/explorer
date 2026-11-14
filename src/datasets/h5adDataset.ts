@@ -14,6 +14,7 @@ import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
 import { openH5WorkerFile, type H5WorkerFile } from '../data/h5WorkerFile'
 import { createAsyncLimiter } from '../utils/asyncLimiter'
+import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { slug } from '../utils/slug'
 import type {
   ContinuousCellMetadataTrack,
@@ -77,6 +78,9 @@ export interface AnnDataH5adDatasetOptions {
   // Visium tissue images hosted as files next to the table. They replace
   // `uns/spatial/<library>/images`.
   readonly visiumImageUrls?: Readonly<Partial<Record<VisiumImageKind, string>>>
+  // The most decoded chunk bytes one cell's all-gene profile may read from a
+  // dense Zarr /X. Defaults to DENSE_ZARR_CELL_PROFILE_MAX_BYTES.
+  readonly denseCellProfileMaxBytes?: number
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
@@ -385,6 +389,10 @@ const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
 const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
 const CSR_ZARR_BATCH_MAX_VALUES = 4_000_000
 const CSR_ZARR_BATCH_MAX_GAP_VALUES = 262_144
+// zarr's default chunks for a 125,955 x 12,963 float32 /X are 1,969 x 406, so
+// one cell's genes are in 32 chunks holding 98 MiB of values. Chunked by gene
+// as 125,955 x 10, one cell's genes are in all 1,297 chunks: 6.1 GiB.
+const DENSE_ZARR_CELL_PROFILE_MAX_BYTES = 256 * 1024 * 1024
 // String obs columns with more distinct values than this are counted as this
 // plus one. The annotation list sets apart columns of more than 500.
 const DISTINCT_LABEL_COUNT_LIMIT = 10_000
@@ -451,6 +459,53 @@ export class H5adAllGeneCscMatrixUnsupportedError extends Error {
   }
 }
 
+// An all-gene read (selected-cell profile, ROI gene stats) of a dense Zarr /X
+// whose chunks put one cell's genes in more bytes than the budget, such as /X
+// chunked by gene: chunks of every cell by a few genes.
+export class H5adDenseCellProfileOverBudgetError extends Error {
+  readonly rowCount: number
+  readonly geneCount: number
+  readonly chunkShape: readonly [number, number]
+  // The chunks one cell's genes are in, and their decoded bytes.
+  readonly chunkCount: number
+  readonly byteLength: number
+  readonly maxBytes: number
+  // More chunks across the genes than across the cells.
+  readonly chunkedByGene: boolean
+
+  constructor(options: {
+    readonly rowCount: number
+    readonly geneCount: number
+    readonly chunkShape: readonly [number, number]
+    readonly chunkCount: number
+    readonly byteLength: number
+    readonly maxBytes: number
+  }) {
+    const [chunkRows, chunkCols] = options.chunkShape
+    const chunkedByGene =
+      Math.ceil(options.geneCount / chunkCols) > Math.ceil(options.rowCount / chunkRows)
+    super(
+      `AnnData dense /X is ${chunkedByGene ? 'chunked by gene, in' : 'stored in'} chunks of ${countLabel(
+        chunkRows,
+        'cell',
+      )} x ${countLabel(chunkCols, 'gene')}, so one cell's profile would read ${countLabel(
+        options.chunkCount,
+        'chunk',
+      )} holding ${formatByteCount(options.byteLength)} of values, over the ${formatByteCount(
+        options.maxBytes,
+      )} limit.`,
+    )
+    this.name = 'H5adDenseCellProfileOverBudgetError'
+    this.rowCount = options.rowCount
+    this.geneCount = options.geneCount
+    this.chunkShape = options.chunkShape
+    this.chunkCount = options.chunkCount
+    this.byteLength = options.byteLength
+    this.maxBytes = options.maxBytes
+    this.chunkedByGene = chunkedByGene
+  }
+}
+
 export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
   private readonly fetcher: typeof fetch
@@ -462,6 +517,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly icechunkFetcher: typeof fetch | undefined
   private readonly icechunk: boolean
   private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
+  private readonly denseCellProfileMaxBytes: number
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
   private cachePromise: Promise<H5adCache> | null = null
@@ -486,6 +542,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.icechunk = options.icechunk === true
     this.icechunkFetcher = options.fetcher
     this.visiumImageUrls = options.visiumImageUrls ?? {}
+    this.denseCellProfileMaxBytes =
+      options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -597,7 +655,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   async matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>> {
     const cache = await this.cache()
-    return h5adMatrixForCells(cache, ids, cache.geneNames)
+    return h5adMatrixForCells(cache, ids, cache.geneNames, this.denseCellProfileMaxBytes)
   }
 
   async geneExpression(
@@ -615,6 +673,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       cache,
       selectedCells.map((cell) => cell.id),
       genes,
+      this.denseCellProfileMaxBytes,
     )
     // A sample keeps every cell with expression and every Nth cell without.
     const sampleStride = normalizeSampleStride(options.sampleStride)
@@ -2552,6 +2611,10 @@ function throwIfH5adFileTooLarge(url: string, byteLength: number): void {
   }
 }
 
+function countLabel(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`
+}
+
 function formatByteCount(byteLength: number): string {
   if (byteLength >= 1024 * 1024 * 1024) {
     return `${(byteLength / (1024 * 1024 * 1024)).toFixed(1)} GB`
@@ -2792,6 +2855,7 @@ async function h5adMatrixForCells(
   cache: H5adCache,
   ids: readonly SpatialElementId[],
   genes: readonly string[],
+  denseCellProfileMaxBytes: number,
 ): Promise<GexResult<SpatialElementId>> {
   const rowByCellId = new Map<string, number>()
   const colByGeneName = new Map<string, number>()
@@ -2838,6 +2902,7 @@ async function h5adMatrixForCells(
     requestedCols,
     cache.geneNames,
     includeZeroCounts,
+    denseCellProfileMaxBytes,
   )
 
   return {
@@ -2852,6 +2917,7 @@ async function h5adMatrixCellsForRows(
   requestedCols: readonly number[],
   geneNames: readonly string[],
   includeZeroCounts: boolean,
+  denseCellProfileMaxBytes: number,
 ): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
   const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
   const allGenesRequested = requestedCols.length === matrix.cols
@@ -2869,39 +2935,15 @@ async function h5adMatrixCellsForRows(
     return cells
   }
 
-  if (
-    matrix.kind === 'dense-zarr' &&
-    !allGenesRequested &&
-    rows.length > requestedCols.length
-  ) {
-    return denseZarrCellsFromColumns(
-      matrix,
-      rows,
-      requestedCols,
-      geneNames,
-      includeZeroCounts,
-    )
-  }
-
   if (matrix.kind === 'dense-zarr') {
-    for (const { id, row } of rows) {
-      cells.set(
-        id,
-        denseRowCell(
-          readNumericArray(
-            zarrChunkValue(await zarr.get(matrix.values, [row, null])),
-            matrix.values.path,
-          ),
-          0,
-          matrix.cols,
-          requestedCols,
-          geneNames,
-          { includeZeroCounts },
-        ),
-      )
+    if (allGenesRequested) {
+      throwIfDenseCellProfileOverBudget(matrix, denseCellProfileMaxBytes)
     }
 
-    return cells
+    return denseZarrCellsFromChunks(matrix, rows, requestedCols, geneNames, {
+      allGenesRequested,
+      includeZeroCounts,
+    })
   }
 
   if (matrix.kind === 'csr') {
@@ -3028,45 +3070,142 @@ function csrZarrRowBatches(
   return batches
 }
 
-// Reads each requested column once, which touches every row chunk once
-// instead of once per requested row.
-async function denseZarrCellsFromColumns(
+// Refuses an all-gene read when the chunks that hold one cell's genes decode
+// to more than `maxBytes`.
+function throwIfDenseCellProfileOverBudget(
+  matrix: Extract<H5adMatrix, { readonly kind: 'dense-zarr' }>,
+  maxBytes: number,
+): void {
+  const chunkShape = denseZarrChunkShape(matrix)
+  const [chunkRows, chunkCols] = chunkShape
+  const chunkCount = Math.ceil(matrix.cols / chunkCols)
+  const byteLength =
+    chunkCount * chunkRows * chunkCols * zarrDataTypeByteSize(matrix.values.dtype)
+
+  if (byteLength > maxBytes) {
+    throw new H5adDenseCellProfileOverBudgetError({
+      rowCount: matrix.rows,
+      geneCount: matrix.cols,
+      chunkShape,
+      chunkCount,
+      byteLength,
+      maxBytes,
+    })
+  }
+}
+
+function denseZarrChunkShape(
+  matrix: Extract<H5adMatrix, { readonly kind: 'dense-zarr' }>,
+): [number, number] {
+  const [chunkRows = matrix.rows, chunkCols = matrix.cols] = matrix.values.chunks
+  return [Math.max(1, chunkRows), Math.max(1, chunkCols)]
+}
+
+// Bytes per value: 'float32' is 4, 'bool' and 'uint8' are 1.
+function zarrDataTypeByteSize(dataType: string): number {
+  const bits = /(\d+)$/.exec(dataType)?.[1]
+  return bits === undefined
+    ? dataType === 'bool'
+      ? 1
+      : 8
+    : Math.max(1, Number(bits) / 8)
+}
+
+// Reads each chunk that holds a requested row and column once, for all the
+// requested rows together, and keeps only their values: rows that share a
+// chunk share its read, and only the chunks being read are held decoded.
+async function denseZarrCellsFromChunks(
   matrix: Extract<H5adMatrix, { readonly kind: 'dense-zarr' }>,
   rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
   requestedCols: readonly number[],
   geneNames: readonly string[],
-  includeZeroCounts: boolean,
+  options: { readonly allGenesRequested: boolean; readonly includeZeroCounts: boolean },
 ): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
-  const columns = new Map<number, NumericArrayLike>()
+  const array = matrix.values
+  const [chunkRows, chunkCols] = denseZarrChunkShape(matrix)
+  // Non-zero values by column, so a cell's all-gene profile keeps only its
+  // detected genes.
+  const countsByCell = new Map<SpatialElementId, Map<number, number>>()
+  const targets = rows.map(({ id, row }) => {
+    const counts = countsByCell.get(id) ?? new Map<number, number>()
+    countsByCell.set(id, counts)
+    return { row, counts }
+  })
+  const rowsByChunk = groupByChunk(targets, ({ row }) => row, chunkRows)
+  const colsByChunk = groupByChunk(requestedCols, (col) => col, chunkCols)
+  const chunkReads = Array.from(rowsByChunk).flatMap(([rowChunk, chunkRowTargets]) =>
+    Array.from(colsByChunk, ([colChunk, chunkColTargets]) => ({
+      rowChunk,
+      colChunk,
+      chunkRowTargets,
+      chunkColTargets,
+    })),
+  )
 
-  for (const col of requestedCols) {
-    columns.set(
-      col,
-      readNumericArray(
-        zarrChunkValue(await zarr.get(matrix.values, [null, col])),
-        matrix.values.path,
-      ),
-    )
-  }
+  await mapWithConcurrency(
+    chunkReads,
+    H5AD_REFERENCE_FETCH_CONCURRENCY,
+    async ({ rowChunk, colChunk, chunkRowTargets, chunkColTargets }) => {
+      const chunk = await array.getChunk([rowChunk, colChunk])
+      const values = readNumericArray(zarrChunkValue(chunk), array.path)
+      const [rowStride = chunkCols, colStride = 1] = chunk.stride
+
+      for (const { row, counts } of chunkRowTargets) {
+        const rowOffset = (row - rowChunk * chunkRows) * rowStride
+
+        for (const col of chunkColTargets) {
+          const value = numericValue(
+            values,
+            rowOffset + (col - colChunk * chunkCols) * colStride,
+          )
+
+          if (value !== 0) {
+            counts.set(col, value)
+          }
+        }
+      }
+    },
+  )
 
   const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
 
-  for (const { id, row } of rows) {
-    const countsByColumn = new Map<number, number>()
-
-    for (const [col, values] of columns) {
-      countsByColumn.set(col, numericValue(values, row))
-    }
-
+  for (const [id, counts] of countsByCell) {
+    // A cell's detected genes, in column order, rather than every gene.
+    const outputCols =
+      options.allGenesRequested && !options.includeZeroCounts
+        ? Array.from(counts.keys()).sort((left, right) => left - right)
+        : requestedCols
     cells.set(
       id,
-      cellFromCountsByColumn(countsByColumn, requestedCols, geneNames, {
-        includeZeroCounts,
+      cellFromCountsByColumn(counts, outputCols, geneNames, {
+        includeZeroCounts: options.includeZeroCounts,
       }),
     )
   }
 
   return cells
+}
+
+// Items by the index of the chunk that holds them.
+function groupByChunk<Item>(
+  items: readonly Item[],
+  index: (item: Item) => number,
+  chunkSize: number,
+): ReadonlyMap<number, readonly Item[]> {
+  const groups = new Map<number, Item[]>()
+
+  for (const item of items) {
+    const chunk = Math.floor(index(item) / chunkSize)
+    const group = groups.get(chunk)
+
+    if (group === undefined) {
+      groups.set(chunk, [item])
+    } else {
+      group.push(item)
+    }
+  }
+
+  return groups
 }
 
 async function h5adMatrixCellsFromColumns(

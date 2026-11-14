@@ -159,7 +159,9 @@ export function CellInfoPanel({
           <small>
             {expression === null
               ? loadingState === null
-                ? 'Waiting'
+                ? errorState === null
+                  ? 'Waiting'
+                  : 'Unavailable'
                 : 'Loading'
               : `${expression.totalCount.toLocaleString()} counts`}
           </small>

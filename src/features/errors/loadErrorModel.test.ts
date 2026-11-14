@@ -265,6 +265,33 @@ describe('loadErrorModel', () => {
       action:
         'Use selected-gene expression for this H5AD, or provide a row-major CSR/dense matrix reference for full selected-cell profiles.',
     })
+    const denseChunkedByGene = new Error(
+      "AnnData dense /X is chunked by gene, in chunks of 125,955 cells x 10 genes, so one cell's profile would read 1,297 chunks holding 6.1 GB of values, over the 256.0 MB limit.",
+    )
+    denseChunkedByGene.name = 'H5adDenseCellProfileOverBudgetError'
+
+    expect(createStructuredLoadError('Cell details', denseChunkedByGene)).toMatchObject({
+      code: 'size-limit',
+      title: 'Expression matrix chunked by gene',
+      message: denseChunkedByGene.message,
+      detail: 'H5adDenseCellProfileOverBudgetError',
+      action:
+        'Colour cells by selected genes instead: each gene reads only its own chunks. For cell profiles and ROI genes, rewrite /X in chunks of a few cells by every gene, such as adata.write_zarr(path, chunks=(1000, adata.n_vars)).',
+    })
+    // Recognised by its message too, as when it crosses a worker.
+    expect(
+      createStructuredLoadError(
+        'ROI genes',
+        new Error(
+          "AnnData dense /X is stored in chunks of 50,000 cells x 20,000 genes, so one cell's profile would read 1 chunk holding 3.7 GB of values, over the 256.0 MB limit.",
+        ),
+      ),
+    ).toMatchObject({
+      code: 'size-limit',
+      title: 'Expression matrix chunks too large',
+      action:
+        'For cell profiles and ROI genes, rewrite /X in chunks of a few cells by every gene, such as adata.write_zarr(path, chunks=(1000, adata.n_vars)).',
+    })
     expect(
       createStructuredLoadError(
         'Morphology image',
