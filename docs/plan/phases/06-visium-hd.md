@@ -274,9 +274,14 @@ Other gaps found in the review:
   - Live reference, local GPU build, three pans of three Shift+arrow presses
     after enabling cell and nucleus boundaries: before, every pan re-read both
     files and took 56–99 s; after, each file is fetched once and the pans took
-    9–21 ms. The first load is unchanged at about 70 s, which is Chromium's
-    download of the two files from the Sanger host (`curl` takes about 9 s
-    for the cell file). With the two files served locally, the old
+    9–21 ms. The first load was about 70 s in both, with boundaries enabled
+    right after opening. That is network time, not parsing: Chromium alone
+    fetches both files in about 13 s, as `curl` does, and once the dataset's
+    other downloads have finished the first boundary load takes 12.6 s.
+    Enabled right after opening, it shares the connection with the 37.6 MB
+    16 µm hires image and the bin positions, and the host's speed varied
+    between 4 and 9 MB/s, so it took 21–70 s across runs. With the two files
+    served locally, the old
     main-thread parse left long tasks of 0, 613 and 645 ms (up to 547 ms in
     one) in three first loads; the worker left one 103–105 ms task each time.
   - The live boundary test now pans after the first load and checks that each
