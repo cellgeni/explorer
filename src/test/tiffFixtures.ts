@@ -3,16 +3,21 @@ import { vi } from 'vitest'
 export interface TestTiffImage {
   readonly width: number
   readonly height: number
-  // Tiled when set; otherwise one strip.
+  // Tiled when set; otherwise strips of `rowsPerStrip` rows (one strip when
+  // that is unset too).
   readonly tile?: number
+  readonly rowsPerStrip?: number
   readonly subfileType: number
   readonly description: string
   readonly samplesPerPixel?: number
-  // Every 16-bit sample of tile N holds value(N).
+  // Every 16-bit sample of tile (or strip) N holds value(N).
   readonly value: (tileIndex: number) => number
   // Stores these bytes as tile N instead of samples from `value`; an empty
-  // array writes a zero-length tile.
+  // array writes a zero-length tile. Separated sample planes store every
+  // tile of plane 0, then of plane 1, and so on.
   readonly tileBytes?: (tileIndex: number) => readonly number[]
+  readonly planarConfiguration?: number
+  readonly predictor?: number
   readonly compression?: number
   readonly photometric?: number
   readonly bitsPerSample?: number
@@ -60,9 +65,11 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
     const samplesPerPixel = image.samplesPerPixel ?? 1
     const bitsPerSample = image.bitsPerSample ?? 16
     const tileWidth = image.tile ?? image.width
-    const tileHeight = image.tile ?? image.height
+    const tileHeight = image.tile ?? image.rowsPerStrip ?? image.height
     const tileCount =
-      Math.ceil(image.width / tileWidth) * Math.ceil(image.height / tileHeight)
+      Math.ceil(image.width / tileWidth) *
+      Math.ceil(image.height / tileHeight) *
+      (image.planarConfiguration === 2 ? samplesPerPixel : 1)
     const offsets: number[] = []
     const byteCounts: number[] = []
 
@@ -84,7 +91,7 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
       image.tile === undefined
         ? [
             [273, LONG, offsets],
-            [278, LONG, [image.height]],
+            [278, LONG, [tileHeight]],
             [279, LONG, byteCounts],
           ]
         : [
@@ -103,8 +110,11 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
       [270, ASCII, image.description],
       [277, SHORT, [samplesPerPixel]],
       [282, RATIONAL, [20_000, 1]],
-      [284, SHORT, [1]],
+      [284, SHORT, [image.planarConfiguration ?? 1]],
       [296, SHORT, [3]],
+      ...(image.predictor === undefined
+        ? []
+        : [[317, SHORT, [image.predictor]] as const]),
       ...(image.jpegTables === undefined
         ? []
         : [[347, UNDEFINED, image.jpegTables] as const]),

@@ -352,10 +352,14 @@ Enter a direct image URL in `Dataset or image URL`. Supported URL forms are:
 - `.ome.zarr`, `.zarr`, `zarr.json`, and `.zattrs`
 - `.ndpi`, read with the same TIFF loader
 
-OME-TIFF and TIFF assets must be tiled (not stripped), with pyramid levels
-stored as `SubIFDs`. QPTIFF and SVS files can be hosted unchanged. OME-Zarr sources must expose OME multiscales metadata.
-Most NDPI files are stripped or use top-level IFD pyramids; convert them to
-pyramidal OME-TIFF before hosting. See
+OME-TIFF and TIFF assets should be tiled, with pyramid levels stored as
+`SubIFDs`. Stripped TIFFs open too, but they are read in bands of whole rows,
+and without a pyramid every band is read to show the whole image. QPTIFF and
+SVS files can be hosted unchanged. OME-Zarr sources must expose OME
+multiscales metadata.
+Most NDPI files store each level as one JPEG strip, too large to decode in
+the browser, and their pyramid as top-level IFDs; convert them to pyramidal
+OME-TIFF before hosting. See
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 
 Image-only sources do not need transcriptomics files. The app disables genes,

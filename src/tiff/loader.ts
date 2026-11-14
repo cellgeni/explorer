@@ -31,12 +31,27 @@ import {
   svsChannelInfo,
   svsLayout,
 } from './svs'
+import {
+  compressedStripBand,
+  STRIP_TILE_SIZE,
+  StripBandCache,
+  stripBandRead,
+  stripBandsForRows,
+  stripPieceBytes,
+  stripTileBytes,
+  tiffStripLevel,
+  uncompressedStripBand,
+} from './strips'
+import { decodeTiffStripBand } from '../codecs/tiffStrips'
+import { sharedStripDecodePool } from '../workers/tileDecodePool'
 import { abortable } from '../utils/abortable'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
 import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from '../data/coords'
 import type { TileSourceSize } from './tileCache'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
+import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
+import type { TiffStripLevel, TiffStripTags } from './strips'
 import type { OmeTiffZStack, TiffChannelInfo } from './omeMetadata'
 import type { OpenImagePyramidOptions } from '../data/imagePyramid'
 import type { QptiffIfdSummary } from './qptiff'
@@ -91,6 +106,9 @@ export interface TiffPyramidLoaderOptions {
   // Reads a tile together with the tiles stored next to it in the file that
   // lie near it in the image (see readAdjacentTileRun).
   readonly readAdjacentTiles?: boolean
+  // Levels stored in strips, whose tiles are cut from bands of rows instead
+  // of read from the tile index.
+  readonly stripLevels?: ReadonlyMap<number, TiffStripLevel>
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
 }
@@ -114,6 +132,10 @@ const PREFETCHED_TILE_LIMIT = 512
 // IFD N after IFD M reads only the IFDs between them.
 const OPEN_TIFF_FILE_LIMIT = 4
 const openTiffFiles = new Map<string, Promise<GeoTIFF>>()
+
+// Bands of stripped levels, shared by every loader so that the planes and
+// channels of one image share one memory limit.
+const stripBands = new StripBandCache()
 
 function openTiffFile(sourceUrl: string): Promise<GeoTIFF> {
   let file = openTiffFiles.get(sourceUrl)
@@ -151,6 +173,7 @@ function forgetTiffFile(sourceUrl: string, file: Promise<GeoTIFF>): void {
 // Tests open different fake files at one URL.
 export function clearOpenTiffFiles(): void {
   openTiffFiles.clear()
+  stripBands.clear()
 }
 
 export async function openTiff(
@@ -236,8 +259,6 @@ async function openTiffImage(
   const firstDirectory = firstImage.getFileDirectory()
   const imageWidth = imagePixels(firstImage.getWidth())
   const imageHeight = imagePixels(firstImage.getHeight())
-  const tileWidth = imagePixels(firstImage.getTileWidth() || 256)
-  const tileHeight = imagePixels(firstImage.getTileHeight() || 256)
 
   if (
     zchunkStoreOptions !== null &&
@@ -282,38 +303,64 @@ async function openTiffImage(
   }
   const chunkIndex = new Map<string, TiffChunkIndexEntry>()
   const levelMeta = new Map<number, TiffLevelMeta>()
-
-  await indexLevel({
-    chunkIndex,
-    directory: firstDirectory,
-    height: imageHeight,
-    level: 0,
-    levelMeta,
-    ...(indexPlanarConfiguration === undefined
-      ? {}
-      : { planarConfiguration: indexPlanarConfiguration }),
-    ...(indexSamplesPerPixel === undefined
-      ? {}
-      : { samplesPerPixel: indexSamplesPerPixel }),
-    tileHeight,
-    tileWidth,
-    width: imageWidth,
-    fullWidth: imageWidth,
-    fullHeight: imageHeight,
-  })
-
+  const stripLevels = new Map<number, TiffStripLevel>()
   const subIfds = await readNumberArrayTag(firstDirectory, 'SubIFDs')
+  const levelDirectories = [
+    firstDirectory,
+    ...(await Promise.all(subIfds.map((offset) => parseFileDirectoryAt(tiff, offset)))),
+  ]
+  const levelStripTags = await Promise.all(levelDirectories.map(readStripTags))
+  // Tiled levels keep their tiles; stripped levels are cut into tiles of
+  // the same size.
+  const tileSize =
+    levelStripTags[0] === undefined
+      ? {
+          tileWidth: imagePixels(firstImage.getTileWidth() || 256),
+          tileHeight: imagePixels(firstImage.getTileHeight() || 256),
+        }
+      : await stripImageTileSize(levelDirectories, levelStripTags)
+  const { tileWidth, tileHeight } = tileSize
+
   await Promise.all(
-    subIfds.map(async (offset, index) => {
-      const directory = await parseFileDirectoryAt(tiff, offset)
-      const level = index + 1
-      const width = imagePixels(await readRequiredNumberTag(directory, 'ImageWidth'))
-      const height = imagePixels(await readRequiredNumberTag(directory, 'ImageLength'))
+    levelDirectories.map(async (directory, level) => {
+      const width =
+        level === 0
+          ? imageWidth
+          : imagePixels(await readRequiredNumberTag(directory, 'ImageWidth'))
+      const height =
+        level === 0
+          ? imageHeight
+          : imagePixels(await readRequiredNumberTag(directory, 'ImageLength'))
+      const stripTags = levelStripTags[level]
+      const levelSize = {
+        width,
+        height,
+        tileWidth,
+        tileHeight,
+        fullWidth: imageWidth,
+        fullHeight: imageHeight,
+      }
+
+      if (stripTags !== undefined) {
+        stripLevels.set(
+          level,
+          tiffStripLevel({
+            level,
+            width,
+            height,
+            tags: stripTags,
+            decodeMetadata,
+            tileHeight,
+          }),
+        )
+        levelMeta.set(level, tiffLevelMeta(levelSize))
+        return
+      }
 
       await indexLevel({
+        ...levelSize,
         chunkIndex,
         directory,
-        height,
         level,
         levelMeta,
         ...(indexPlanarConfiguration === undefined
@@ -322,11 +369,6 @@ async function openTiffImage(
         ...(indexSamplesPerPixel === undefined
           ? {}
           : { samplesPerPixel: indexSamplesPerPixel }),
-        tileHeight,
-        tileWidth,
-        width,
-        fullWidth: imageWidth,
-        fullHeight: imageHeight,
       })
     }),
   )
@@ -337,15 +379,65 @@ async function openTiffImage(
     ...decodeMetadata,
     chunkIndex,
     levelMeta,
+    ...(stripLevels.size === 0 ? {} : { stripLevels }),
     units,
     tileWidth,
     tileHeight,
-    numLevels: 1 + subIfds.length,
+    numLevels: levelDirectories.length,
     imageWidth,
     imageHeight,
     channels: omeMetadata.channels,
     ...(omeMetadata.zStack === undefined ? {} : { zStack: omeMetadata.zStack }),
   })
+}
+
+// The strip tags of a stripped IFD; undefined for a tiled one.
+async function readStripTags(
+  directory: TiffDirectoryValueLoader,
+): Promise<TiffStripTags | undefined> {
+  if ((await readOptionalNumberTag(directory, 'TileWidth')) !== undefined) {
+    return undefined
+  }
+
+  const offsets = await readNumberArrayTag(directory, 'StripOffsets')
+
+  if (offsets.length === 0) {
+    return undefined
+  }
+
+  const [byteCounts, rowsPerStrip] = await Promise.all([
+    readNumberArrayTag(directory, 'StripByteCounts'),
+    readOptionalNumberTag(directory, 'RowsPerStrip'),
+  ])
+
+  return { offsets, byteCounts, ...(rowsPerStrip === undefined ? {} : { rowsPerStrip }) }
+}
+
+// A stripped full-resolution level takes the tile size of the first tiled
+// pyramid level, if any.
+async function stripImageTileSize(
+  directories: readonly TiffDirectoryValueLoader[],
+  stripTags: readonly (TiffStripTags | undefined)[],
+): Promise<{ readonly tileWidth: ImagePixels; readonly tileHeight: ImagePixels }> {
+  for (const [index, directory] of directories.entries()) {
+    if (stripTags[index] !== undefined) {
+      continue
+    }
+
+    const [tileWidth, tileHeight] = await Promise.all([
+      readOptionalNumberTag(directory, 'TileWidth'),
+      readOptionalNumberTag(directory, 'TileLength'),
+    ])
+
+    if (tileWidth !== undefined && tileHeight !== undefined) {
+      return { tileWidth: imagePixels(tileWidth), tileHeight: imagePixels(tileHeight) }
+    }
+  }
+
+  return {
+    tileWidth: imagePixels(STRIP_TILE_SIZE),
+    tileHeight: imagePixels(STRIP_TILE_SIZE),
+  }
 }
 
 // QPTIFF and SVS keep every pyramid level (and QPTIFF every channel) in
@@ -928,6 +1020,7 @@ export class TiffPyramidLoader {
     | ((level: number) => Promise<TiffChunkIndex>)
     | undefined
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
+  private readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
   private readonly byteRangeCache: PersistentByteRangeCache | null
@@ -973,6 +1066,7 @@ export class TiffPyramidLoader {
     }
     this.levelDecodeMetadata = options.levelDecodeMetadata ?? []
     this.readAdjacentTiles = options.readAdjacentTiles === true
+    this.stripLevels = options.stripLevels ?? new Map()
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.byteRangeCache =
       options.byteRangeCache === undefined
@@ -1077,8 +1171,10 @@ export class TiffPyramidLoader {
         ? undefined
         : this.planarSampleByteLengths(level, col, row)
 
+    // Without a level, the full-resolution level's tags.
     return {
-      ...((level === undefined ? undefined : this.levelDecodeMetadata[level]) ??
+      ...(this.stripLevels.get(level ?? 0)?.tileDecode ??
+        (level === undefined ? undefined : this.levelDecodeMetadata[level]) ??
         this.decodeMetadata),
       tileWidth: this.tileWidth,
       tileHeight: this.tileHeight,
@@ -1092,6 +1188,12 @@ export class TiffPyramidLoader {
     row: number,
     signal?: AbortSignal,
   ): Promise<Uint8Array> {
+    const stripLevel = this.stripLevels.get(level)
+
+    if (stripLevel !== undefined) {
+      return this.fetchStripTileBytes(level, stripLevel, col, row, signal)
+    }
+
     const chunks = await this.chunkIndex(level)
     const chunk = chunks.get(tiffChunkKey(level, row, col))
 
@@ -1130,6 +1232,70 @@ export class TiffPyramidLoader {
       chunk,
       signal,
       this.readAdjacentTiles ? { level, row, col, chunks } : undefined,
+    )
+  }
+
+  // A stripped level's tile, cut from the bands of rows across it.
+  private async fetchStripTileBytes(
+    level: number,
+    stripLevel: TiffStripLevel,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    const size = this.tileSourceSize(level, col, row)
+    const window = {
+      left: col * this.tileWidth,
+      top: row * this.tileHeight,
+      width: size.width,
+      height: size.height,
+    }
+    const bands = await Promise.all(
+      stripBandsForRows(stripLevel, window.top, window.top + window.height).map(
+        async (index) => ({
+          index,
+          bytes: await stripBands.get(
+            `${this.url}|${level}:${index}`,
+            (bandSignal) => this.readStripBand(stripLevel, index, bandSignal),
+            signal,
+          ),
+        }),
+      ),
+    )
+
+    return stripTileBytes(stripLevel, bands, window, this.tileWidth, this.tileHeight)
+  }
+
+  private async readStripBand(
+    stripLevel: TiffStripLevel,
+    band: number,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    const read = stripBandRead(stripLevel, band)
+    const runBytes = await Promise.all(
+      read.runs.map((run) =>
+        fetchByteRangeWithCache({
+          cache: this.byteRangeCache,
+          namespace: TIFF_TILE_CACHE_NAMESPACE,
+          url: this.sourceUrl,
+          start: run.start,
+          end: run.end,
+          signal,
+          fetchRange: (rangeSignal) => this.fetchRange(run.start, run.end, rangeSignal),
+        }),
+      ),
+    )
+    const pieces = stripPieceBytes(read, runBytes)
+
+    if (!stripLevel.compressed) {
+      return uncompressedStripBand(stripLevel, read, pieces)
+    }
+
+    const compressed = compressedStripBand(stripLevel, pieces, read)
+
+    return abortable(
+      decodeStripBandOffMainThread(compressed.bytes, compressed.options),
+      signal,
     )
   }
 
@@ -1335,6 +1501,19 @@ export class TiffPyramidLoader {
 
     return meta
   }
+}
+
+// Compressed bands decode in a shared worker pool, or on this thread where
+// there are no workers.
+function decodeStripBandOffMainThread(
+  bytes: Uint8Array,
+  options: TiffStripBandDecodeOptions,
+): Promise<Uint8Array> {
+  const pool = sharedStripDecodePool()
+
+  return pool === null
+    ? decodeTiffStripBand(bytes, options)
+    : pool.decodeStripBand(bytes, options)
 }
 
 interface AdjacentTileContext {

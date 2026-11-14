@@ -84,7 +84,9 @@ Zarr loaders add `loadTile`/`loadTilePixels`/`sampleTilePixels`.
    See [TIFF tile-offset sidecars](../zchunkstore.md) for the format and how
    to generate one.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
-   Tile offsets come from `TileOffsets`/`TileByteCounts`.
+   Tile offsets come from `TileOffsets`/`TileByteCounts`; a stripped level
+   (`StripOffsets`, no `TileWidth`) is cut into tiles instead (see
+   [Stripped TIFFs](#stripped-tiffs)).
 
 The parsed file (header and IFD chain) is shared by loaders of the same file,
 for the 4 most recently opened files, so opening another channel IFD or z plane
@@ -116,13 +118,45 @@ over (press `Auto` to fit the new plane). Each plane is read like a 2D image,
 so each needs its own `SubIFDs` pyramid; a `.zchunkstore` for a single-channel
 stack lists planes on its channel axis.
 
+### Stripped TIFFs
+
+A stripped level stores `RowsPerStrip` whole rows per strip, so a strip
+cannot be read for part of a row (`src/tiff/strips.ts`). The loader shows it
+as tiles of the size of the image's tiled levels, or 256 × 256 when no level
+is tiled, cut from bands: runs of whole rows read once and shared by every
+tile across them.
+
+- **Bands.** A band aims for 8 MiB (at most 1,024 rows), so its read fits the
+  byte-range cache. Uncompressed rows are read as they are needed, so a band
+  can be part of a strip, even of a file stored as one strip; very wide images
+  get bands of under one tile row. A compressed band holds whole strips, at
+  least one.
+- **Reads.** A band's strips, or rows of strips, that lie within 4 KiB of each
+  other in the file are read in one request: one per band for most files, one
+  per band and plane for separated (`PlanarConfiguration` 2) samples.
+- **Decoding.** Compressed bands are decoded in a shared tile decode worker
+  pool (`decodeTiffStripBand`, `src/codecs/tiffStrips.ts`). Tiles cut from
+  bands are uncompressed samples, so they draw like uncompressed tiles.
+- **Memory.** Decoded bands are kept for their tiles up to 256 MiB across all
+  loaders, least recently used first. A band read is cancelled once every
+  tile waiting on it is.
+- **Limits.** 8- or 16-bit samples only. A level whose compressed strips
+  decode to more than 256 MiB each fails to open with a message to save it
+  tiled; an 8,192 × 8,192 16-bit image saved as one LZW strip (128 MiB)
+  still opens.
+- **No pyramid.** Most stripped files have no reduced levels. Zoomed out, the
+  view then needs every band of the image, and the tile budget loads the
+  tiles nearest the centre first, so a large image's edges stay empty until
+  zoomed in.
+
 ### Requirements
 
-- **Tiled, with SubIFD pyramids.** Pyramids stored as additional top-level
-  IFDs are not read (QPTIFF and SVS excepted), so such files render at full
-  resolution only. Stripped TIFFs (`StripOffsets`) are not indexed: the file opens but no
-  tiles load. Most NDPI files fall in one of these cases; convert them to
-  pyramidal OME-TIFF.
+- **SubIFD pyramids.** Pyramids stored as additional top-level IFDs are not
+  read (QPTIFF and SVS excepted), so such files render at full resolution
+  only. Stripped levels are read (see [Stripped TIFFs](#stripped-tiffs)),
+  but tiled pyramids load faster. Most NDPI files store their pyramid as
+  top-level IFDs and each level as one JPEG strip, too large to decode;
+  convert them to pyramidal OME-TIFF.
 - **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
 
@@ -236,15 +270,21 @@ tifffile (`imagecodecs`) decodes.
 
 `decodeTiffTilePixels` (`src/codecs/tiffTile.ts`):
 
-| Compression                                                           | Decoder                                                                                                   |
-| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| 33003/33004/33005/34712 (JPEG 2000), or no Compression tag            | OpenJPEG WASM (`@cornerstonejs/codec-openjpeg`, `src/codecs/jpeg2000.ts`)                                 |
-| 1 (none)                                                              | Copy                                                                                                      |
-| 5 (LZW, predictor 1)                                                  | Built-in decoder                                                                                          |
-| 7 (JPEG), 8-bit RGB                                                   | The browser's decoder (`createImageBitmap`) in the decode worker (`src/codecs/jpeg.ts`); `geotiff` if not |
-| Other (LZW with predictor, JPEG, Deflate, PackBits, LERC, Zstd, WebP) | `geotiff` `getDecoder`                                                                                    |
+| Compression                                                | Decoder                                                                                                   |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 33003/33004/33005/34712 (JPEG 2000), or no Compression tag | OpenJPEG WASM (`@cornerstonejs/codec-openjpeg`, `src/codecs/jpeg2000.ts`)                                 |
+| 1 (none)                                                   | Copy                                                                                                      |
+| 5 (LZW, predictor 1 or 2)                                  | Built-in decoder                                                                                          |
+| 7 (JPEG), 8-bit RGB                                        | The browser's decoder (`createImageBitmap`) in the decode worker (`src/codecs/jpeg.ts`); `geotiff` if not |
+| Other (JPEG, Deflate, PackBits, LERC, Zstd, WebP)          | `geotiff` `getDecoder`                                                                                    |
 
 JPEG-XR is not supported.
+
+**LZW.** `geotiff`'s LZW decoder has room for codes up to 4,092. tifffile
+(`imagecodecs`) uses codes up to 4,094 before a clear code, and on those
+`geotiff` loops until the decode worker, and with it the tab, runs out of
+memory. The built-in decoder handles every 12-bit code and undoes horizontal
+differencing (Predictor 2) itself, in the file's byte order.
 
 **JPEG colour.** A three-component JPEG tile holds RGB or YCbCr. An Adobe or
 JFIF marker in the tile or `JPEGTables` decides; otherwise `Photometric`
@@ -346,9 +386,11 @@ transform.
 
 `computeChannelAutoContrast` (`src/data/morphologyContrast.ts`) samples up to
 250,000 values from the coarsest level and sets the window to the 0.5 and
-99.8 percentiles, with a 32-bin histogram for the Image section. It runs after
-an image loads and when a channel's `Auto` button is pressed. Native RGB
-channels (H&E slides, RGB OME-TIFF and SpatialData images) are not
+99.8 percentiles, with a 32-bin histogram for the Image section. It reads at
+most 64 of the level's tiles, from 8 evenly spaced rows (more per row when
+there are fewer rows), so an image without a pyramid is not read whole. It
+runs after an image loads and when a channel's `Auto` button is pressed.
+Native RGB channels (H&E slides, RGB OME-TIFF and SpatialData images) are not
 auto-contrasted when the image loads: they are drawn without a window, and
 the coarsest level of an SVS slide can be over a hundred tiles.
 
@@ -386,7 +428,8 @@ fails, tiles are decoded and sampled on the main thread.
 | Level threshold            | 1.5 screen px per source px                                                         | `loader.ts`, `omeZarrLoader.ts`                                |
 | Decode workers             | TIFF ≤ 4, plus 1 per auto-contrast run; OME-Zarr ≤ 3                                | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
 | Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
-| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples, 32 bins                                    | `morphologyContrast.ts`                                        |
+| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples from ≤ 64 tiles, 32 bins                    | `morphologyContrast.ts`                                        |
+| Stripped levels            | 256 px tiles; 8 MiB / 1,024-row bands; 256 MiB of bands; strips ≤ 256 MiB decoded   | `strips.ts`                                                    |
 | IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                            | `persistentByteRangeCache.ts`                                  |
 
 ## Source Files
@@ -398,7 +441,8 @@ fails, tiles are decoded and sampled on the main thread.
 | `src/data/morphologyImage.ts`                                                                                   | Image opening, per-channel loaders, custom layers, Xenium image choice |
 | `src/data/morphologyContrast.ts`, `tileSamples.ts`                                                              | Auto-contrast                                                          |
 | `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `svs.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts` | TIFF, QPTIFF, and SVS loading                                          |
-| `src/codecs/tiffTile.ts`, `jpeg.ts`, `jpeg2000.ts`                                                              | Tile decoding                                                          |
+| `src/tiff/strips.ts`                                                                                            | Stripped levels: bands, reads, and tiles cut from them                 |
+| `src/codecs/tiffTile.ts`, `tiffStrips.ts`, `jpeg.ts`, `jpeg2000.ts`                                             | Tile and strip decoding                                                |
 | `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`, `tileSamplesCore.ts`          | Decode workers                                                         |
 | `src/zarr/omeZarrLoader.ts`, `zarrStores.ts`                                                                    | OME-Zarr loading                                                       |
 | `src/workers/zarrDecode.worker.ts`, `zarrDecodePool.ts`, `zarrDecodeCore.ts`                                    | OME-Zarr chunk decoding and label tracing                              |
@@ -408,8 +452,10 @@ fails, tiles are decoded and sampled on the main thread.
 
 ## Known Limitations
 
-- Top-level-IFD pyramids (other than QPTIFF and SVS) and stripped TIFFs are
-  not supported.
+- Top-level-IFD pyramids (other than QPTIFF and SVS) are not supported.
+- Stripped TIFFs without reduced levels read every band of the image to show
+  it whole, and compressed strips that decode to more than 256 MiB each are
+  refused.
 - TIFFs without a `.zchunkstore` make one extra request per candidate sidecar
   URL before reading the TIFF's own offsets.
 - A `.zchunkstore` is checked only against the TIFF's level 0 width, height,

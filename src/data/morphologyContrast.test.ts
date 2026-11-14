@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { imagePixels } from './coords'
-import { computeChannelAutoContrast } from './morphologyContrast'
+import { computeChannelAutoContrast, spreadTiles } from './morphologyContrast'
 import type { DecodedJpeg2000 } from '../codecs/jpeg2000'
 import type {
   TileDecodeResponse,
@@ -152,6 +152,36 @@ describe('computeChannelAutoContrast', () => {
       max: 20,
       min: 5,
     })
+  })
+})
+
+describe('spreadTiles', () => {
+  const grid = (cols: number, rows: number) =>
+    Array.from({ length: rows }, (_unused, row) =>
+      Array.from({ length: cols }, (_unusedCol, col) => ({ col, row })),
+    ).flat()
+
+  it('keeps every tile of a small level', () => {
+    expect(spreadTiles(grid(8, 8), 64)).toHaveLength(64)
+  })
+
+  it('takes evenly spaced tiles from evenly spaced rows of a large level', () => {
+    const tiles = spreadTiles(grid(20, 20), 64)
+
+    expect(tiles).toHaveLength(64)
+    expect(new Set(tiles.map((tile) => tile.row))).toEqual(
+      new Set([1, 3, 6, 8, 11, 13, 16, 18]),
+    )
+    expect(tiles.slice(0, 8).map((tile) => tile.col)).toEqual([
+      1, 3, 6, 8, 11, 13, 16, 18,
+    ])
+  })
+
+  it('takes more of each row when there are few rows', () => {
+    const tiles = spreadTiles(grid(156, 2), 64)
+
+    expect(tiles).toHaveLength(64)
+    expect(tiles.filter((tile) => tile.row === 0)).toHaveLength(32)
   })
 })
 

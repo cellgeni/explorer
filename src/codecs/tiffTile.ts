@@ -5,6 +5,7 @@ import type { DecodedJpeg2000, Jpeg2000Pixels } from './jpeg2000'
 
 export const TIFF_COMPRESSION_NONE = 1
 export const TIFF_COMPRESSION_LZW = 5
+const TIFF_PREDICTOR_HORIZONTAL = 2
 
 export const TIFF_COMPRESSION_JPEG = 7
 export const TIFF_COMPRESSION_DEFLATE = 8
@@ -62,6 +63,36 @@ async function decodeGeotiffCompressedTile(
   bytes: Uint8Array,
   metadata: TiffTileDecodeMetadata,
 ): Promise<DecodedJpeg2000> {
+  const tileWidth = positiveInteger(metadata.tileWidth, 'tile width')
+  const tileHeight = positiveInteger(metadata.tileHeight, 'tile height')
+  const bitsPerSample =
+    metadata.bitsPerSample === undefined || metadata.bitsPerSample.length === 0
+      ? [8]
+      : [...metadata.bitsPerSample]
+  const samplesPerPixel = metadata.samplesPerPixel ?? bitsPerSample.length
+  const pixels = pixelsFromDecodedBuffer(await decodeTiffChunkSamples(bytes, metadata), {
+    bitsPerSample,
+    littleEndian: metadata.littleEndian ?? true,
+    samplesPerPixel,
+    tileHeight,
+    tileWidth,
+  })
+
+  return {
+    pixels,
+    width: tileWidth,
+    height: tileHeight,
+    samplesPerPixel,
+  }
+}
+
+// The sample bytes of one tile or strip (`tileWidth` by `tileHeight`
+// pixels), decompressed but in the file's byte order. JPEG YCbCr comes back
+// as RGB.
+export async function decodeTiffChunkSamples(
+  bytes: Uint8Array,
+  metadata: TiffTileDecodeMetadata,
+): Promise<ArrayBufferLike> {
   const compression = metadata.compression ?? TIFF_COMPRESSION_NONE
   const tileWidth = positiveInteger(metadata.tileWidth, 'tile width')
   const tileHeight = positiveInteger(metadata.tileHeight, 'tile height')
@@ -85,13 +116,26 @@ async function decodeGeotiffCompressedTile(
     )
   }
 
+  // geotiff's LZW decoder has room for codes up to 4092 and loops until it
+  // runs out of memory on higher ones, which tifffile (imagecodecs) writes,
+  // so LZW is decoded here.
   const decodedBuffer =
     compression === TIFF_COMPRESSION_NONE
       ? copyToArrayBuffer(bytes)
-      : compression === TIFF_COMPRESSION_LZW && predictor === 1
-        ? decompressTiffLzw(
-            bytes,
-            decodedByteLength(tileWidth, tileHeight, bitsPerSample, samplesPerPixel),
+      : compression === TIFF_COMPRESSION_LZW &&
+          (predictor === 1 || predictor === TIFF_PREDICTOR_HORIZONTAL)
+        ? undoPredictor(
+            decompressTiffLzw(
+              bytes,
+              decodedByteLength(tileWidth, tileHeight, bitsPerSample, samplesPerPixel),
+            ),
+            {
+              predictor,
+              width: tileWidth,
+              bitsPerSample: bitsPerSample[0] ?? 8,
+              samplesPerPixel,
+              littleEndian: metadata.littleEndian ?? true,
+            },
           )
         : await decodeWithGeotiff(bytes, {
             bitsPerSample,
@@ -106,18 +150,10 @@ async function decodeGeotiffCompressedTile(
             tileWidth,
           })
 
-  const pixels = pixelsFromDecodedBuffer(decodedBuffer, {
-    bitsPerSample,
-    littleEndian: metadata.littleEndian ?? true,
-    samplesPerPixel,
-    tileHeight,
-    tileWidth,
-  })
-
   // geotiff's JPEG decoder returns the stream's components unconverted.
   if (
     compression === TIFF_COMPRESSION_JPEG &&
-    pixels instanceof Uint8Array &&
+    (bitsPerSample[0] ?? 8) <= 8 &&
     jpegTileColorSpace({
       bytes,
       ...(metadata.jpegTables === undefined ? {} : { tables: metadata.jpegTables }),
@@ -126,15 +162,10 @@ async function decodeGeotiffCompressedTile(
         : { photometric: metadata.photometric }),
     }) === 'ycbcr'
   ) {
-    convertYCbCrToRgb(pixels)
+    convertYCbCrToRgb(new Uint8Array(decodedBuffer))
   }
 
-  return {
-    pixels,
-    width: tileWidth,
-    height: tileHeight,
-    samplesPerPixel,
-  }
+  return decodedBuffer
 }
 
 async function decodePlanarSeparatedTile(
@@ -391,6 +422,65 @@ function decodedByteLength(
   const bytesPerSample = Math.ceil(bits / 8)
 
   return tileWidth * tileHeight * bytesPerSample * samplesPerPixel
+}
+
+// Undoes horizontal differencing (Predictor 2) in place: each sample after a
+// row's first pixel is stored as the difference from the sample one pixel to
+// its left.
+function undoPredictor(
+  buffer: ArrayBuffer,
+  options: {
+    readonly predictor: number
+    readonly width: number
+    readonly bitsPerSample: number
+    readonly samplesPerPixel: number
+    readonly littleEndian: boolean
+  },
+): ArrayBuffer {
+  if (options.predictor !== TIFF_PREDICTOR_HORIZONTAL) {
+    return buffer
+  }
+
+  const { samplesPerPixel: stride, bitsPerSample } = options
+  const rowSamples = options.width * stride
+
+  if (bitsPerSample === 8) {
+    const samples = new Uint8Array(buffer)
+
+    for (let rowStart = 0; rowStart < samples.length; rowStart += rowSamples) {
+      const rowEnd = Math.min(samples.length, rowStart + rowSamples)
+
+      for (let index = rowStart + stride; index < rowEnd; index += 1) {
+        samples[index] = (samples[index] ?? 0) + (samples[index - stride] ?? 0)
+      }
+    }
+
+    return buffer
+  }
+
+  if (bitsPerSample !== 16) {
+    throw new Error(
+      `Unsupported TIFF predictor bit depth ${bitsPerSample}. Only 8-bit and 16-bit samples are supported.`,
+    )
+  }
+
+  const view = new DataView(buffer)
+  const sampleCount = Math.floor(buffer.byteLength / 2)
+
+  for (let rowStart = 0; rowStart < sampleCount; rowStart += rowSamples) {
+    const rowEnd = Math.min(sampleCount, rowStart + rowSamples)
+
+    for (let index = rowStart + stride; index < rowEnd; index += 1) {
+      view.setUint16(
+        index * 2,
+        view.getUint16(index * 2, options.littleEndian) +
+          view.getUint16((index - stride) * 2, options.littleEndian),
+        options.littleEndian,
+      )
+    }
+  }
+
+  return buffer
 }
 
 function decompressTiffLzw(bytes: Uint8Array, expectedByteLength: number): ArrayBuffer {
