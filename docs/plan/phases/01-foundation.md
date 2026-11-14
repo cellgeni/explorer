@@ -43,3 +43,18 @@ Notes:
 Definition of done: feature parity with the POC; 60 fps pan/zoom with the image
 on; zero `any` in the data layer; deck.gl pinned; `cellid`, `coords`, and `gex`
 unit-tested; runs against the demo dataset.
+
+## Closed Open Items
+
+Moved from [Open Items](../open-items.md) on 2026-11-14.
+
+Other gaps found in the review:
+
+- [x] Xenium still loads through free functions in `src/data/` instead of one
+      `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
+      `meta()` reads the manifest. Closed without a code change: the
+      instances stay split by purpose, and both points are recorded as
+      amendments to
+      [4.6](../decisions.md#46-data-source-abstraction--capability-based).
+      Checking this found that dataset instances are never released, now an
+      open item.
