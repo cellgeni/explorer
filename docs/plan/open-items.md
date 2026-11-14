@@ -90,8 +90,8 @@ Found by the [15.5-E](phases/15-interface-redesign.md#155-close-out) re-run (202
 
 Features:
 
-- [ ] `t`/`z` selection for OME-Zarr, and a `Z plane` control for custom image
-      layers (OME-TIFF dataset images have one).
+- [ ] `t` selection for OME-Zarr, and a `Z plane` control for custom image
+      layers (OME-TIFF and OME-Zarr dataset images have one).
 - [ ] H5AD: worker-backed lazy Range reads, `/layers/*` and `/raw/X`, and richer
       schema diagnostics. Partly done: lazy Range reads work through
       kerchunk and Icechunk companions (`6971ceb`, `b71ffc8`), on the main

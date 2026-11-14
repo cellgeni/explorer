@@ -155,7 +155,7 @@ read" or say nothing.
 | Visium HD annotations from `analysis/`            | Not recorded                      | "`annotations()` rejects"; the adapter turns annotations off                                                    |
 | Xenium `nucleus_boundaries.parquet` overlay       | Done 2026-11-13                   | [xenium.md](../modalities/xenium.md#nucleus-boundaries): read through DuckDB like cell outlines                 |
 | `metrics_summary.csv` QC display (papaparse)      | No outcome                        | "Not read". **Code:** papaparse is not a dependency                                                             |
-| Z-stack plane selector                            | Done 2026-11-09                   | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr shows `z = 0` only                                         |
+| Z-stack plane selector                            | Done 2026-11-09                   | `Layers` → `Z plane` for OME-TIFF z-stacks; OME-Zarr z-stacks too (2026-11-14), opening on `defaultZ`           |
 | H5AD `/layers/*`, `/raw/X`                        | Open                              | "`/uns`, `/layers`, `/raw`, `/varm`, and `/obsp` are not read" (consistent)                                     |
 | Transcript estimate from native Zarr counts       | Done 2026-11-12                   | [xenium.md](../modalities/xenium.md): level-0 tile counts in the viewport; the overview sum only without a Zarr |
 | CI (GitHub Actions), deploy previews              | CI done 2026-11-09; previews open | `README.md` and `architecture.md`: CI runs on every pull request; previews not mentioned                        |

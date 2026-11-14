@@ -9,11 +9,20 @@ export interface ImagePyramidChannelContrast {
   readonly max: number
 }
 
-// Where one plane of a TIFF image is stored: an IFD of the image file, or of
-// `fileName` beside it.
-export interface ImagePyramidPlaneRef {
+// Where one plane of a z-stack is stored: in a TIFF image, or on an OME-Zarr
+// image's z axis.
+export type ImagePyramidPlaneRef = ImagePyramidTiffPlaneRef | ImagePyramidZarrPlaneRef
+
+// An IFD of the TIFF image file, or of `fileName` beside it.
+export interface ImagePyramidTiffPlaneRef {
   readonly ifdIndex: number
   readonly fileName?: string
+}
+
+// An index on the OME-Zarr image's z axis, which the channel's URL selects
+// with a `z` hash parameter.
+export interface ImagePyramidZarrPlaneRef {
+  readonly zIndex: number
 }
 
 export interface ImagePyramidChannelInfo {
@@ -35,6 +44,9 @@ export interface ImagePyramidChannelInfo {
 export interface ImagePyramidZStack {
   readonly sizeZ: number
   readonly micrometersPerPlane?: number
+  // The plane the loader itself reads, which the z-stack opens on unless
+  // another is asked for. Unset, it opens on the middle plane.
+  readonly defaultZPlane?: number
 }
 
 export type ImagePyramidPixelArray =

@@ -13,6 +13,7 @@ import type {
   ImagePyramidLoader,
   ImagePyramidTilePixels,
   ImagePyramidTileRenderOptions,
+  ImagePyramidZStack,
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { Array as ZarrArray, DataType } from 'zarrita'
@@ -83,6 +84,7 @@ export interface OmeZarrPlanarTransform {
 interface OmeZarrImageSelection {
   readonly sourceUrl: string
   readonly channelIndex?: number
+  readonly zIndex?: number
 }
 
 interface OmeZarrAxis {
@@ -135,7 +137,10 @@ interface OmeZarrLoaderOptions {
   readonly yAxis: number
   readonly channelAxis?: number
   readonly selectedChannelIndex?: number
+  // Index read on each axis other than x, y and channel, at level 0.
+  readonly planeIndices: readonly number[]
   readonly channels: readonly ImagePyramidChannelInfo[]
+  readonly zStack?: ImagePyramidZStack
   readonly units: UnitsDescriptor
   readonly origin?: { readonly x: number; readonly y: number }
   readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
@@ -156,10 +161,11 @@ export async function openOmeZarrImageWithOptions(
   const selection = parseOmeZarrImageSelection(url)
   const sourceUrl = omeZarrImageRootUrl(selection.sourceUrl)
   const location = options.location ?? (await openImageStore(sourceUrl, options))
-  const group = await zarr.open(location, {
+  const rootGroup = await zarr.open(location, {
     kind: 'group',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  const group = await bioformats2rawImageGroup(rootGroup, options.signal)
   const declaredMultiscale = firstOmeZarrMultiscale(group.attrs)
   const planarTransform = options.planarTransform
   const multiscale: OmeZarrMultiscaleMetadata =
@@ -185,6 +191,7 @@ export async function openOmeZarrImageWithOptions(
   const xAxis = findRequiredAxis(axes, 'x')
   const yAxis = findRequiredAxis(axes, 'y')
   const channelAxis = findOptionalChannelAxis(axes)
+  const zAxis = findOptionalZAxis(axes)
   const levels = await Promise.all(
     multiscale.datasets.map(async (dataset) => {
       const array =
@@ -224,12 +231,42 @@ export async function openOmeZarrImageWithOptions(
     origin: 'top-left',
     imageYAxis: 'down',
   }
+  const planeIndices = initialPlaneIndices({
+    axes,
+    shape: firstArray.shape,
+    attrs: group.attrs,
+    zAxis,
+    ...(selection.zIndex === undefined ? {} : { selectedZIndex: selection.zIndex }),
+  })
+  const sizeZ = zAxis === undefined ? 1 : (firstArray.shape[zAxis] ?? 1)
   const channels = buildOmeZarrChannels({
     array: firstArray,
     attrs: group.attrs,
     channelAxis,
-    sourceUrl: selection.sourceUrl,
+    // Channel loaders read the plane this URL selects.
+    sourceUrl:
+      selection.zIndex === undefined
+        ? selection.sourceUrl
+        : omeZarrPlaneSelectionUrl(selection.sourceUrl, selection.zIndex),
+    ...(sizeZ > 1 ? { sizeZ } : {}),
   })
+  const micrometersPerPlane =
+    zAxis === undefined
+      ? undefined
+      : micrometersPerPlaneForAxis({
+          axis: zAxis,
+          axes,
+          dataset: firstDataset,
+          multiscale,
+        })
+  const zStack: ImagePyramidZStack | undefined =
+    zAxis === undefined || sizeZ <= 1 || channels.length === 0
+      ? undefined
+      : {
+          sizeZ,
+          ...(micrometersPerPlane === undefined ? {} : { micrometersPerPlane }),
+          defaultZPlane: planeIndices[zAxis] ?? 0,
+        }
 
   return new OmeZarrImagePyramidLoader({
     url,
@@ -242,7 +279,9 @@ export async function openOmeZarrImageWithOptions(
     ...(selection.channelIndex === undefined
       ? {}
       : { selectedChannelIndex: selection.channelIndex }),
+    planeIndices,
     channels,
+    ...(zStack === undefined ? {} : { zStack }),
     units,
     ...(planarTransform === undefined
       ? {}
@@ -296,12 +335,21 @@ export function omeZarrImageRootUrl(url: string): string {
 }
 
 export function omeZarrChannelSelectionUrl(url: string, channelIndex: number): string {
+  return withHashParameter(url, 'c', channelIndex)
+}
+
+// The image read at index `zIndex` of its z axis.
+export function omeZarrPlaneSelectionUrl(url: string, zIndex: number): string {
+  return withHashParameter(url, 'z', zIndex)
+}
+
+function withHashParameter(url: string, name: string, value: number): string {
   const parsedUrl = new URL(url)
   const params = new URLSearchParams(
     parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash,
   )
 
-  params.set('c', channelIndex.toString())
+  params.set(name, value.toString())
   parsedUrl.hash = params.toString()
   return parsedUrl.toString()
 }
@@ -315,12 +363,14 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   readonly imageWidth: ImagePixels
   readonly imageHeight: ImagePixels
   readonly channels: readonly ImagePyramidChannelInfo[]
+  readonly zStack?: ImagePyramidZStack
   private readonly levels: readonly OmeZarrLevelMeta[]
   private readonly axes: readonly OmeZarrAxis[]
   private readonly xAxis: number
   private readonly yAxis: number
   private readonly channelAxis: number | undefined
   private readonly selectedChannelIndex: number | undefined
+  private readonly planeIndices: readonly number[]
   private readonly originX: number
   private readonly originY: number
   private readonly sourceKey: string
@@ -341,7 +391,13 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.yAxis = options.yAxis
     this.channelAxis = options.channelAxis
     this.selectedChannelIndex = options.selectedChannelIndex
+    this.planeIndices = options.planeIndices
     this.channels = options.channels
+
+    if (options.zStack !== undefined) {
+      this.zStack = options.zStack
+    }
+
     this.units = options.units
     this.tileWidth = firstLevel.tileWidth
     this.tileHeight = firstLevel.tileHeight
@@ -795,7 +851,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
         continue
       }
 
-      projection.push(0)
+      projection.push(this.planeIndexAt(meta, axis))
     }
 
     return {
@@ -806,6 +862,18 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       width,
       height,
     }
+  }
+
+  // The level-0 plane index on `axis` at a level, which may be downsampled
+  // along it.
+  private planeIndexAt(meta: OmeZarrLevelMeta, axis: number): number {
+    const index = this.planeIndices[axis] ?? 0
+    const baseSize = this.levelMetaFor(0).array.shape[axis] ?? 1
+    const size = meta.array.shape[axis] ?? 1
+
+    return size === baseSize
+      ? index
+      : Math.min(size - 1, Math.floor((index * size) / baseSize))
   }
 
   private levelMetaFor(level: number): OmeZarrLevelMeta {
@@ -823,20 +891,64 @@ function parseOmeZarrImageSelection(url: string): OmeZarrImageSelection {
   const parsedUrl = new URL(url)
   const hash = parsedUrl.hash.startsWith('#') ? parsedUrl.hash.slice(1) : parsedUrl.hash
   const params = new URLSearchParams(hash)
-  const rawChannelIndex = params.get('c') ?? params.get('channel')
+  const channelIndex = hashParameterIndex(params.get('c') ?? params.get('channel'))
+  const zIndex = hashParameterIndex(params.get('z'))
   parsedUrl.hash = ''
 
-  if (rawChannelIndex === null) {
-    return { sourceUrl: parsedUrl.toString() }
+  return {
+    sourceUrl: parsedUrl.toString(),
+    ...(channelIndex === undefined ? {} : { channelIndex }),
+    ...(zIndex === undefined ? {} : { zIndex }),
+  }
+}
+
+function hashParameterIndex(value: string | null): number | undefined {
+  if (value === null || value.trim() === '') {
+    return undefined
   }
 
-  const channelIndex = Number(rawChannelIndex)
+  const index = Number(value)
+  return Number.isInteger(index) && index >= 0 ? index : undefined
+}
 
-  if (!Number.isInteger(channelIndex) || channelIndex < 0) {
-    return { sourceUrl: parsedUrl.toString() }
+// bioformats2raw writes each image series to its own group under a root that
+// carries only `bioformats2raw.layout`. The `OME` group's `series` attribute
+// lists the series paths; without it they are 0, 1, ... The first series is
+// opened.
+async function bioformats2rawImageGroup(
+  root: zarr.Group<zarr.Readable>,
+  signal: AbortSignal | undefined,
+): Promise<zarr.Group<zarr.Readable>> {
+  const metadataRoot = objectRecord(root.attrs.ome) ?? root.attrs
+
+  if (
+    metadataRoot.multiscales !== undefined ||
+    metadataRoot['bioformats2raw.layout'] === undefined
+  ) {
+    return root
   }
 
-  return { sourceUrl: parsedUrl.toString(), channelIndex }
+  const openOptions = {
+    kind: 'group',
+    ...(signal === undefined ? {} : { signal }),
+  } as const
+  let seriesPath = '0'
+
+  try {
+    const omeGroup = await zarr.open(root.resolve('OME'), openOptions)
+    const series = (objectRecord(omeGroup.attrs.ome) ?? omeGroup.attrs).series
+
+    if (Array.isArray(series) && typeof series[0] === 'string' && series[0] !== '') {
+      seriesPath = series[0]
+    }
+  } catch (error) {
+    if (signal?.aborted === true) {
+      throw error
+    }
+    // Without a readable OME group, the first series is at 0.
+  }
+
+  return zarr.open(root.resolve(seriesPath), openOptions)
 }
 
 function firstOmeZarrMultiscale(
@@ -949,6 +1061,43 @@ function normalizeAxis(axis: unknown, index: number): OmeZarrAxis {
   }
 }
 
+// The index read on each axis other than x and y. On z: the plane the URL
+// selects, else the one OMERO rendering settings open on
+// (`omero.rdefs.defaultZ`), else the middle plane, as for other z-stacks. On t:
+// `omero.rdefs.defaultT`, else 0. bioformats2raw sets defaultZ to the middle of
+// a z-stack, whose first plane can be nearly empty.
+function initialPlaneIndices(options: {
+  readonly axes: readonly OmeZarrAxis[]
+  readonly shape: readonly number[]
+  readonly attrs: Readonly<Record<string, unknown>>
+  readonly zAxis: number | undefined
+  readonly selectedZIndex?: number
+}): readonly number[] {
+  const { attrs } = options
+  const omero = objectRecord(attrs.omero) ?? objectRecord(objectRecord(attrs.ome)?.omero)
+  const rdefs = objectRecord(omero?.rdefs)
+
+  return options.axes.map((axis, index) => {
+    const size = options.shape[index] ?? 1
+    const preferred =
+      index === options.zAxis
+        ? [options.selectedZIndex, rdefs?.defaultZ, Math.floor((size - 1) / 2)]
+        : axis.name.toLowerCase() === 't' || axis.type === 'time'
+          ? [rdefs?.defaultT]
+          : []
+
+    return (
+      preferred.find(
+        (value): value is number =>
+          typeof value === 'number' &&
+          Number.isInteger(value) &&
+          value >= 0 &&
+          value < size,
+      ) ?? 0
+    )
+  })
+}
+
 function findRequiredAxis(axes: readonly OmeZarrAxis[], name: 'x' | 'y'): number {
   const index = axes.findIndex((axis) => axis.name.toLowerCase() === name)
 
@@ -957,6 +1106,12 @@ function findRequiredAxis(axes: readonly OmeZarrAxis[], name: 'x' | 'y'): number
   }
 
   throw new Error(`Not a supported OME-Zarr image: missing ${name} spatial axis.`)
+}
+
+function findOptionalZAxis(axes: readonly OmeZarrAxis[]): number | undefined {
+  const index = axes.findIndex((axis) => axis.name.toLowerCase() === 'z')
+
+  return index >= 0 ? index : undefined
 }
 
 function findOptionalChannelAxis(axes: readonly OmeZarrAxis[]): number | undefined {
@@ -1060,10 +1215,35 @@ function scaleForAxis(
   return scale
 }
 
+// Micrometers between planes along `axis`, when the axis declares a length
+// unit. bioformats2raw writes a z scale of 1 without a unit when the physical
+// plane spacing is unknown.
+function micrometersPerPlaneForAxis(options: {
+  readonly axis: number
+  readonly axes: readonly OmeZarrAxis[]
+  readonly dataset: OmeZarrDatasetMetadata
+  readonly multiscale: OmeZarrMultiscaleMetadata
+}): number | undefined {
+  const unitMultiplier = micrometersPerLengthUnit(options.axes[options.axis]?.unit)
+
+  if (unitMultiplier === undefined) {
+    return undefined
+  }
+
+  const value =
+    scaleForAxis(options.axis, options.multiscale.coordinateTransformations) *
+    scaleForAxis(options.axis, options.dataset.coordinateTransformations) *
+    unitMultiplier
+
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
 function micrometerMultiplierForUnit(unit: string | undefined): number {
+  return micrometersPerLengthUnit(unit) ?? 1
+}
+
+function micrometersPerLengthUnit(unit: string | undefined): number | undefined {
   switch (unit?.toLowerCase()) {
-    case undefined:
-    case '':
     case 'micrometer':
     case 'micrometers':
     case 'micrometre':
@@ -1090,7 +1270,7 @@ function micrometerMultiplierForUnit(unit: string | undefined): number {
     case 'm':
       return 1_000_000
     default:
-      return 1
+      return undefined
   }
 }
 
@@ -1099,6 +1279,8 @@ function buildOmeZarrChannels(options: {
   readonly attrs: Readonly<Record<string, unknown>>
   readonly channelAxis: number | undefined
   readonly sourceUrl: string
+  // Plane count of a z-stack, whose channels list their planes.
+  readonly sizeZ?: number
 }): readonly ImagePyramidChannelInfo[] {
   if (options.channelAxis === undefined) {
     return []
@@ -1122,6 +1304,10 @@ function buildOmeZarrChannels(options: {
     options.array.dtype,
   )
   const dtypeContrast = contrastForDataType(options.array.dtype)
+  const zPlanes =
+    options.sizeZ === undefined
+      ? undefined
+      : Array.from({ length: options.sizeZ }, (_value, zIndex) => ({ zIndex }))
 
   return Array.from({ length: channelCount }, (_value, index) => {
     const omeroChannel = omeroChannels[index] as OmeZarrOmeroChannel | undefined
@@ -1144,6 +1330,7 @@ function buildOmeZarrChannels(options: {
       ...(index === 0
         ? {}
         : { sourceUrl: omeZarrChannelSelectionUrl(options.sourceUrl, index) }),
+      ...(zPlanes === undefined ? {} : { zPlanes }),
       ...(nativeRgb ? { alphaFromIntensity: false } : {}),
     }
   })
