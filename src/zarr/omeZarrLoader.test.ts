@@ -454,6 +454,91 @@ describe('OME-Zarr image loader', () => {
     )
   })
 
+  it('opens the first series of a bioformats2raw layout', async () => {
+    const rootPath = '/images/converted.zarr'
+    const layoutFiles = new Map([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [`${rootPath}/.zattrs`, jsonBytes({ 'bioformats2raw.layout': 3 })],
+    ])
+    const withSeries = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#c=1`,
+      {
+        fetcher: fetcherForFiles(
+          new Map([
+            ...layoutFiles,
+            [`${rootPath}/OME/.zgroup`, jsonBytes({ zarr_format: 2 })],
+            [`${rootPath}/OME/.zattrs`, jsonBytes({ series: ['1'] })],
+            ...legacyV2OmeZarrFiles(`${rootPath}/1`),
+          ]),
+        ),
+      },
+    )
+
+    expect(withSeries.imageWidth).toBe(4)
+    expect(withSeries.channels).toHaveLength(3)
+    await expect(withSeries.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([10, 20, 30, 40]),
+    })
+
+    // Without an OME group, the first series is at 0.
+    const withoutOmeGroup = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#c=1`,
+      {
+        fetcher: fetcherForFiles(
+          new Map([...layoutFiles, ...legacyV2OmeZarrFiles(`${rootPath}/0`)]),
+          { missingStatus: 403 },
+        ),
+      },
+    )
+
+    await expect(withoutOmeGroup.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([10, 20, 30, 40]),
+    })
+  })
+
+  it('reads the z-plane that omero rendering settings name as default', async () => {
+    const rootPath = '/images/stack.ome.zarr'
+    const files = (omero?: unknown) =>
+      new Map([
+        [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+        [
+          `${rootPath}/.zattrs`,
+          jsonBytes({
+            ...(omero === undefined ? {} : { omero }),
+            multiscales: [
+              {
+                axes: [
+                  { name: 'c', type: 'channel' },
+                  { name: 'z', type: 'space' },
+                  { name: 'y', type: 'space' },
+                  { name: 'x', type: 'space' },
+                ],
+                datasets: [{ path: '0' }],
+              },
+            ],
+          }),
+        ],
+        [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([1, 3, 2, 2], [1, 1, 2, 2]))],
+        [`${rootPath}/0/0.0.0.0`, new Uint8Array([1, 1, 1, 1])],
+        [`${rootPath}/0/0.2.0.0`, new Uint8Array([5, 6, 7, 8])],
+      ])
+    const open = (omero?: unknown) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(files(omero)),
+      })
+
+    await expect(
+      (await open({ rdefs: { defaultZ: 2 } })).loadTilePixels(0, 0, 0),
+    ).resolves.toMatchObject({ pixels: new Uint8Array([5, 6, 7, 8]) })
+    // Without rendering settings, or with an out-of-range plane, z = 0 is read.
+    await expect((await open()).loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([1, 1, 1, 1]),
+    })
+    await expect(
+      (await open({ rdefs: { defaultZ: 3 } })).loadTilePixels(0, 0, 0),
+    ).resolves.toMatchObject({ pixels: new Uint8Array([1, 1, 1, 1]) })
+  })
+
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {
     await expect(
       openOmeZarrImageWithOptions('https://example.test/generic.zarr', {

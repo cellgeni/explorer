@@ -135,6 +135,8 @@ interface OmeZarrLoaderOptions {
   readonly yAxis: number
   readonly channelAxis?: number
   readonly selectedChannelIndex?: number
+  // Index read on each axis other than x, y and channel.
+  readonly planeIndices: readonly number[]
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly units: UnitsDescriptor
   readonly origin?: { readonly x: number; readonly y: number }
@@ -156,10 +158,11 @@ export async function openOmeZarrImageWithOptions(
   const selection = parseOmeZarrImageSelection(url)
   const sourceUrl = omeZarrImageRootUrl(selection.sourceUrl)
   const location = options.location ?? (await openImageStore(sourceUrl, options))
-  const group = await zarr.open(location, {
+  const rootGroup = await zarr.open(location, {
     kind: 'group',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  const group = await bioformats2rawImageGroup(rootGroup, options.signal)
   const declaredMultiscale = firstOmeZarrMultiscale(group.attrs)
   const planarTransform = options.planarTransform
   const multiscale: OmeZarrMultiscaleMetadata =
@@ -242,6 +245,7 @@ export async function openOmeZarrImageWithOptions(
     ...(selection.channelIndex === undefined
       ? {}
       : { selectedChannelIndex: selection.channelIndex }),
+    planeIndices: defaultPlaneIndices(axes, firstArray.shape, group.attrs),
     channels,
     units,
     ...(planarTransform === undefined
@@ -321,6 +325,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly yAxis: number
   private readonly channelAxis: number | undefined
   private readonly selectedChannelIndex: number | undefined
+  private readonly planeIndices: readonly number[]
   private readonly originX: number
   private readonly originY: number
   private readonly sourceKey: string
@@ -341,6 +346,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.yAxis = options.yAxis
     this.channelAxis = options.channelAxis
     this.selectedChannelIndex = options.selectedChannelIndex
+    this.planeIndices = options.planeIndices
     this.channels = options.channels
     this.units = options.units
     this.tileWidth = firstLevel.tileWidth
@@ -795,7 +801,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
         continue
       }
 
-      projection.push(0)
+      projection.push(this.planeIndices[axis] ?? 0)
     }
 
     return {
@@ -837,6 +843,46 @@ function parseOmeZarrImageSelection(url: string): OmeZarrImageSelection {
   }
 
   return { sourceUrl: parsedUrl.toString(), channelIndex }
+}
+
+// bioformats2raw writes each image series to its own group under a root that
+// carries only `bioformats2raw.layout`. The `OME` group's `series` attribute
+// lists the series paths; without it they are 0, 1, ... The first series is
+// opened.
+async function bioformats2rawImageGroup(
+  root: zarr.Group<zarr.Readable>,
+  signal: AbortSignal | undefined,
+): Promise<zarr.Group<zarr.Readable>> {
+  const metadataRoot = objectRecord(root.attrs.ome) ?? root.attrs
+
+  if (
+    metadataRoot.multiscales !== undefined ||
+    metadataRoot['bioformats2raw.layout'] === undefined
+  ) {
+    return root
+  }
+
+  const openOptions = {
+    kind: 'group',
+    ...(signal === undefined ? {} : { signal }),
+  } as const
+  let seriesPath = '0'
+
+  try {
+    const omeGroup = await zarr.open(root.resolve('OME'), openOptions)
+    const series = (objectRecord(omeGroup.attrs.ome) ?? omeGroup.attrs).series
+
+    if (Array.isArray(series) && typeof series[0] === 'string' && series[0] !== '') {
+      seriesPath = series[0]
+    }
+  } catch (error) {
+    if (signal?.aborted === true) {
+      throw error
+    }
+    // Without a readable OME group, the first series is at 0.
+  }
+
+  return zarr.open(root.resolve(seriesPath), openOptions)
 }
 
 function firstOmeZarrMultiscale(
@@ -947,6 +993,35 @@ function normalizeAxis(axis: unknown, index: number): OmeZarrAxis {
     ...(type === undefined ? {} : { type }),
     ...(unit === undefined ? {} : { unit }),
   }
+}
+
+// The plane OMERO rendering settings open on (`omero.rdefs.defaultZ` and
+// `defaultT`), else 0. bioformats2raw sets defaultZ to the middle of a z-stack,
+// whose first plane can be nearly empty.
+function defaultPlaneIndices(
+  axes: readonly OmeZarrAxis[],
+  shape: readonly number[],
+  attrs: Readonly<Record<string, unknown>>,
+): readonly number[] {
+  const omero = objectRecord(attrs.omero) ?? objectRecord(objectRecord(attrs.ome)?.omero)
+  const rdefs = objectRecord(omero?.rdefs)
+
+  return axes.map((axis, index) => {
+    const name = axis.name.toLowerCase()
+    const preferred =
+      name === 'z'
+        ? rdefs?.defaultZ
+        : name === 't' || axis.type === 'time'
+          ? rdefs?.defaultT
+          : undefined
+
+    return typeof preferred === 'number' &&
+      Number.isInteger(preferred) &&
+      preferred >= 0 &&
+      preferred < (shape[index] ?? 1)
+      ? preferred
+      : 0
+  })
 }
 
 function findRequiredAxis(axes: readonly OmeZarrAxis[], name: 'x' | 'y'): number {
