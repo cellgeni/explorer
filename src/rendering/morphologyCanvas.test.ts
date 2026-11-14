@@ -5,6 +5,7 @@ import {
   drawFlatImage,
   morphologyViewportBbox,
   selectCenteredTiles,
+  tileSmoothingQuality,
 } from './morphologyCanvas'
 import type { ReadyTile } from '../tiff/tileCache'
 import type { OverviewViewState } from './deckLayers'
@@ -129,6 +130,49 @@ describe('morphology canvas projection', () => {
       expect.any(Number),
       expect.any(Number),
     )
+  })
+
+  it('filters tiles drawn at under half their size through mipmaps', () => {
+    const qualities: ImageSmoothingQuality[] = []
+    const context = {
+      clearRect: vi.fn(),
+      imageSmoothingQuality: 'low',
+      drawImage: vi.fn(function (this: CanvasRenderingContext2D) {
+        qualities.push(this.imageSmoothingQuality)
+      }),
+    } as unknown as CanvasRenderingContext2D
+    // A single-level image's 256 px tile in the minimap (about 7 px), then
+    // one at the main view's scale.
+    const tile = (maxX: number): ReadyTile => ({
+      id: `0:0:${maxX}`,
+      level: 0,
+      image: {} as ImageBitmap,
+      bounds: {
+        minX: micrometers(0),
+        maxX: micrometers(maxX),
+        minY: micrometers(0),
+        maxY: micrometers(maxX),
+      },
+      sourceWidth: imagePixels(256),
+      sourceHeight: imagePixels(256),
+    })
+
+    drawMorphologyTiles(context, [tile(7), tile(200)], viewState, {
+      width: 200,
+      height: 100,
+    })
+
+    expect(qualities).toEqual(['high', 'low'])
+  })
+
+  it('counts device pixels when choosing tile smoothing', () => {
+    const tile = { sourceWidth: imagePixels(256), sourceHeight: imagePixels(256) }
+
+    expect(tileSmoothingQuality(tile, { width: 256, height: 256 })).toBe('low')
+    expect(tileSmoothingQuality(tile, { width: 129, height: 129 })).toBe('low')
+    expect(tileSmoothingQuality(tile, { width: 256, height: 127 })).toBe('high')
+    expect(tileSmoothingQuality(tile, { width: 65, height: 65 }, 2)).toBe('low')
+    expect(tileSmoothingQuality(tile, { width: 63, height: 63 }, 2)).toBe('high')
   })
 
   it('draws flat downsampled images in full-resolution micrometer coordinates', () => {

@@ -333,9 +333,14 @@ transform.
 - **Drawing.** While tiles load, the nearest ready level fills in. Multiple
   channels are composited additively (`lighter`) with per-channel alpha.
   Tile edges are snapped to whole pixels, so neighbouring tiles meet without
-  a seam of background between them.
+  a seam of background between them. A tile drawn at under half its size in
+  device pixels (a single-level image zoomed out, or in the minimap) uses
+  `imageSmoothingQuality = 'high'`, which filters through mipmaps; with the
+  default filter, thin lines drop out.
 - **Contrast.** Changing a channel's window or colour starts a new tile cache,
-  so tiles are decoded again.
+  so tiles are decoded again. An image without channels (a plain TIFF) has no
+  window: its cache takes the first decoded tile's, and other tiles wait for
+  that decode instead of each stretching its own contrast.
 
 ### Auto-Contrast
 

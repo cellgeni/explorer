@@ -84,6 +84,8 @@ export class TileCache {
   private readonly onEvict: (evictedTileCount: number) => void
   private readonly initialDisplayWindow: DisplayWindow | undefined
   private displayWindow: DisplayWindow | undefined
+  // The decode that will set the display window, while there is none.
+  private windowDecode: Promise<void> | undefined
   private readonly color: readonly [number, number, number] | undefined
   private readonly alphaFromIntensity: boolean | undefined
 
@@ -200,23 +202,24 @@ export class TileCache {
   ): Promise<TileCacheEntry> {
     try {
       throwIfAborted(signal)
+      const loadTile = loader.loadTile?.bind(loader)
       const decoded =
-        loader.loadTile === undefined
+        loadTile === undefined
           ? await this.decodeFetchedTile(loader, level, col, row, signal)
-          : await loader.loadTile(
-              level,
-              col,
-              row,
-              this.decodeOptions(loader, level, col, row),
-              signal,
+          : await this.decodeInDisplayWindow(signal, () =>
+              loadTile(
+                level,
+                col,
+                row,
+                this.decodeOptions(loader, level, col, row),
+                signal,
+              ),
             )
 
       if (signal?.aborted) {
         decoded.bitmap.close()
         throw abortError(signal)
       }
-
-      this.displayWindow ??= { lo: decoded.lo, hi: decoded.hi }
 
       if (!this.isCurrentLoading(key, signal)) {
         decoded.bitmap.close()
@@ -337,7 +340,44 @@ export class TileCache {
 
     const bytes = await loader.fetchTileBytes(level, col, row, signal)
     throwIfAborted(signal)
-    return this.decodeTile(bytes, this.decodeOptions(loader, level, col, row))
+    return this.decodeInDisplayWindow(signal, () =>
+      this.decodeTile(bytes, this.decodeOptions(loader, level, col, row)),
+    )
+  }
+
+  // A cache made without a display window takes the first decoded tile's.
+  // Until then, tiles wait to decode one at a time: decoded together, each
+  // would stretch its own contrast, and a single-level image draws those first
+  // tiles again at every zoom.
+  private async decodeInDisplayWindow(
+    signal: AbortSignal | undefined,
+    decode: () => Promise<ImagePyramidDecodedTile>,
+  ): Promise<ImagePyramidDecodedTile> {
+    while (this.displayWindow === undefined && this.windowDecode !== undefined) {
+      await this.windowDecode
+      throwIfAborted(signal)
+    }
+
+    if (this.displayWindow !== undefined) {
+      return decode()
+    }
+
+    let settle = noop
+    const windowDecode = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    this.windowDecode = windowDecode
+
+    try {
+      const decoded = await decode()
+      this.displayWindow ??= { lo: decoded.lo, hi: decoded.hi }
+      return decoded
+    } finally {
+      if (this.windowDecode === windowDecode) {
+        this.windowDecode = undefined
+      }
+      settle()
+    }
   }
 }
 

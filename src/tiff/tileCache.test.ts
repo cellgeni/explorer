@@ -153,6 +153,108 @@ describe('TileCache', () => {
     }
   })
 
+  it('decodes tiles requested together in the first decoded tile window', async () => {
+    const source = new FakeTileSource()
+    const decodes: {
+      readonly options: unknown
+      readonly finish: (window: { lo: number; hi: number }) => void
+    }[] = []
+    const decodeTile = vi.fn(
+      (_bytes: Uint8Array, options?: unknown) =>
+        new Promise<{
+          bitmap: ImageBitmap
+          width: number
+          height: number
+          lo: number
+          hi: number
+        }>((resolve) => {
+          decodes.push({
+            options,
+            finish: (window) => {
+              resolve({
+                bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+                width: 2,
+                height: 1,
+                ...window,
+              })
+            },
+          })
+        }),
+    )
+    const cache = new TileCache({ decodeTile })
+
+    // A single-level image's first view: the tiles load together, and stay
+    // in the cache for every later zoom.
+    const requests = [
+      cache.request(source, 0, 0, 0),
+      cache.request(source, 0, 1, 0),
+      cache.request(source, 0, 0, 1),
+    ]
+    await vi.waitFor(() => {
+      expect(source.fetches).toHaveLength(3)
+    })
+
+    expect(decodes).toHaveLength(1)
+    expect(decodes[0]?.options).not.toHaveProperty('displayWindow')
+
+    decodes[0]?.finish({ lo: 0, hi: 60_000 })
+    await vi.waitFor(() => {
+      expect(decodes).toHaveLength(3)
+    })
+    for (const decode of decodes.slice(1)) {
+      // Without the first tile's window, each would stretch its own (a tile
+      // without the image's bright lines drew twice as bright).
+      expect(decode.options).toMatchObject({ displayWindow: { lo: 0, hi: 60_000 } })
+      decode.finish({ lo: 0, hi: 60_000 })
+    }
+
+    await expect(Promise.all(requests)).resolves.toEqual([
+      expect.objectContaining({ state: 'ready' }),
+      expect.objectContaining({ state: 'ready' }),
+      expect.objectContaining({ state: 'ready' }),
+    ])
+  })
+
+  it('lets the next tile set the window when the first decode fails', async () => {
+    const source = new FakeTileSource()
+    const options: unknown[] = []
+    let failFirst: (error: Error) => void = () => {}
+    const decodeTile = vi.fn((_bytes: Uint8Array, decodeOptions?: unknown) => {
+      options.push(decodeOptions)
+
+      if (options.length === 1) {
+        return new Promise<never>((_resolve, reject) => {
+          failFirst = reject
+        })
+      }
+
+      return Promise.resolve({
+        bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+        width: 2,
+        height: 1,
+        lo: 10,
+        hi: 20,
+      })
+    })
+    const cache = new TileCache({ decodeTile })
+
+    const first = cache.request(source, 0, 0, 0)
+    const second = cache.request(source, 0, 1, 0)
+    const third = cache.request(source, 0, 2, 0)
+    await vi.waitFor(() => {
+      expect(source.fetches).toHaveLength(3)
+    })
+    expect(options).toHaveLength(1)
+
+    failFirst(new Error('decode failed'))
+
+    await expect(first).resolves.toMatchObject({ state: 'error' })
+    await expect(second).resolves.toMatchObject({ state: 'ready' })
+    await expect(third).resolves.toMatchObject({ state: 'ready' })
+    expect(options[1]).not.toHaveProperty('displayWindow')
+    expect(options[2]).toMatchObject({ displayWindow: { lo: 10, hi: 20 } })
+  })
+
   it('filters ready tiles by active pyramid level', async () => {
     const source = new FakeTileSource()
     const lowLevelBitmap = { close: vi.fn() } as unknown as ImageBitmap

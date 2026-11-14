@@ -4,6 +4,8 @@ import type { TileIndex } from '../data/coords'
 import type { ReadyTile } from '../tiff/tileCache'
 import type { OverviewViewState } from './deckLayers'
 
+const MAX_UNFILTERED_TILE_SHRINK = 2
+
 export interface CssViewportSize {
   readonly width: number
   readonly height: number
@@ -191,6 +193,11 @@ function drawReadyTile(
     return
   }
 
+  context.imageSmoothingQuality = tileSmoothingQuality(
+    tile,
+    target,
+    globalThis.devicePixelRatio || 1,
+  )
   context.drawImage(
     tile.image,
     0,
@@ -202,6 +209,24 @@ function drawReadyTile(
     target.width,
     target.height,
   )
+}
+
+// Default smoothing samples a few source pixels per device pixel, so a tile
+// shrunk more than 2x loses whatever falls between them: the minimap of a
+// single-level image kept 2 of 11 grid lines and read as a zoomed-in crop.
+// 'high' filters through mipmaps instead. Tiles drawn larger keep the
+// default filter. The target is in CSS pixels.
+export function tileSmoothingQuality(
+  tile: Pick<ReadyTile, 'sourceWidth' | 'sourceHeight'>,
+  target: { readonly width: number; readonly height: number },
+  pixelRatio = 1,
+): ImageSmoothingQuality {
+  const maxShrink = MAX_UNFILTERED_TILE_SHRINK * pixelRatio
+
+  return target.width * maxShrink < tile.sourceWidth ||
+    target.height * maxShrink < tile.sourceHeight
+    ? 'high'
+    : 'low'
 }
 
 function tileTargetRect(
