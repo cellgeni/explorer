@@ -79,7 +79,9 @@ A [dataset collection](./dataset-collections.md) lists datasets to browse
 together, such as the sections of one study. Open one with
 `?collection=<url>` in the address. The viewer opens its first dataset and
 lists the others in a bar under the canvas, grouped by time point, donor or
-whatever the collection groups them by. Choosing one opens it in place and
+whatever the collection groups them by. Each has a preview of its cells
+coloured by the selected genes, all on one scale, so you can see where a
+gene is high before opening anything. Choosing one opens it in place and
 keeps the selected genes and the cell colouring, so you can step through
 sections with the same gene. `Share` copies a link with the collection and
 the open dataset. Close the bar with its ×, or by opening a dataset that is

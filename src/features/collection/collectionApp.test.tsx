@@ -57,7 +57,18 @@ function h5adDataset() {
     metadataTracks: vi.fn(async () => []),
     embeddingOptions: vi.fn(async () => []),
     embeddings: vi.fn(async () => []),
-    geneExpression: vi.fn(async () => ({ elements: [], maxCount: 0 })),
+    // Each selected gene counts 1 in the first cell.
+    geneExpression: vi.fn(async (_bbox: unknown, genes: readonly string[]) => ({
+      genes,
+      maxCount: genes.length,
+      elements: [
+        {
+          id: 'cell-a',
+          position: { x: micrometers(0), y: micrometers(0) },
+          count: genes.length,
+        },
+      ],
+    })),
   }
 }
 
@@ -72,10 +83,16 @@ describe('App with a dataset collection', () => {
   beforeEach(() => {
     window.sessionStorage.clear()
     useViewerStore.setState(initialViewerState)
+    // Previews ask a plain .h5ad for its size; never the network.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { headers: { 'content-length': '1000' } })),
+    )
   })
 
   afterEach(() => {
     window.history.replaceState(null, '', '/')
+    vi.unstubAllGlobals()
   })
 
   it('opens the first dataset with the defaults and keeps the genes when switching', async () => {
@@ -103,10 +120,23 @@ describe('App with a dataset collection', () => {
     expect(useViewerStore.getState().datasetUrl).toBe(SHAM_A)
     expect(await screen.findByRole('button', { name: 'Remove Aqp4' })).toBeInTheDocument()
 
+    // Each dataset is previewed with the selected gene.
+    expect(
+      await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
+        'max 1',
+      ),
+    ).toBeInTheDocument()
+
     // The user adds a gene, then steps to the next section.
     openControls('genes')
     fireEvent.click(screen.getByRole('button', { name: 'Gfap' }))
     expect(await screen.findByRole('button', { name: 'Remove Gfap' })).toBeInTheDocument()
+    // The previews follow: both genes count in the first cell.
+    expect(
+      await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
+        'max 2',
+      ),
+    ).toBeInTheDocument()
     fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))
 
     expect(await within(bar).findByRole('button', { name: '1 dpi A' })).toHaveAttribute(

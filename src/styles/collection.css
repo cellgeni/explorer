@@ -22,6 +22,12 @@
   line-height: 1.3;
 }
 
+/* With previews the heading keeps room for the scale. */
+.collection-bar.has-previews .collection-bar-heading {
+  flex: 0 0 auto;
+  width: 136px;
+}
+
 .collection-bar-kicker {
   color: var(--text-3);
   font-size: var(--font-caption);
@@ -129,5 +135,137 @@
 @media (max-width: 860px) {
   .collection-bar-heading {
     display: none;
+  }
+}
+
+/* Previews: each dataset as its cells, coloured by the selected genes. */
+
+.collection-bar-scale {
+  display: grid;
+  gap: 2px;
+  margin-top: var(--space-1);
+  color: var(--text-2);
+  font-size: var(--font-caption);
+}
+
+.collection-bar-scale-genes {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-bar-scale-range {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.collection-bar-scale-ramp {
+  flex: 1 1 auto;
+  min-width: 24px;
+  max-width: 56px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+
+.collection-bar.has-previews .collection-bar-dataset {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--space-1);
+  /* As wide as the preview, so a long name shortens rather than the score. */
+  width: calc(112px + 2 * var(--space-1) + 2px);
+  max-width: none;
+  min-height: 0;
+  padding: var(--space-1);
+  border-radius: var(--radius-2);
+  text-align: left;
+}
+
+.collection-bar-preview {
+  position: relative;
+  display: block;
+  grid-column: 1 / -1;
+  width: 112px;
+  height: 64px;
+  overflow: hidden;
+  border-radius: var(--radius-1);
+  background: var(--canvas);
+}
+
+.collection-bar-preview canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.collection-bar-preview[data-loading]::after {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  background: var(--accent);
+  animation: collection-preview-loading 1.2s ease-in-out infinite;
+  content: '';
+}
+
+.collection-bar-preview-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-1);
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  text-align: center;
+  white-space: normal;
+}
+
+.collection-bar-dataset-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.collection-bar-dataset-max {
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.collection-bar-dataset[aria-current='true'] .collection-bar-dataset-max {
+  color: inherit;
+}
+
+.collection-bar-toggle {
+  flex: 0 0 auto;
+}
+
+.collection-bar-toggle[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+@keyframes collection-preview-loading {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+
+  50% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  51% {
+    transform-origin: right;
+  }
+
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
   }
 }

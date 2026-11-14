@@ -298,6 +298,8 @@ export type {
 
 // Shapes passed while the Annotations section hides them (15.2-C).
 const NO_GEOMETRY_LAYERS: readonly GeometricAnnotationDatum[] = []
+// Previews show the tissue only unless cells are coloured by genes.
+const NO_PREVIEW_GENES: readonly string[] = []
 
 export function App({ dependencies }: AppProps = {}) {
   const {
@@ -3557,6 +3559,15 @@ export function App({ dependencies }: AppProps = {}) {
   useEffect(() => {
     openCollectionDatasetRef.current = handleOpenCollectionDataset
   })
+  const collectionPreviewLoaders = useMemo(
+    () => ({
+      detectSpatialDataset,
+      getSpatialDataset,
+      loadDatasetOverview,
+      loadGeneExpression,
+    }),
+    [detectSpatialDataset, getSpatialDataset, loadDatasetOverview, loadGeneExpression],
+  )
   const datasetLibrary = useMemo(
     (): DatasetLibraryModel => ({
       examples: examplesIndex.state,
@@ -4109,6 +4120,16 @@ export function App({ dependencies }: AppProps = {}) {
                 )
               }}
               onClose={datasetCollection.close}
+              previews={{
+                loaders: collectionPreviewLoaders,
+                genes:
+                  observationColorMode === 'gene-expression'
+                    ? selectedGenes
+                    : NO_PREVIEW_GENES,
+                scoreMode: geneExpressionScoreMode,
+                colorScale: geneExpressionColorScale,
+                paused: isLoading,
+              }}
             />
           )
         }

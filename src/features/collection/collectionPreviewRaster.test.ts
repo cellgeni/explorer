@@ -1,0 +1,91 @@
+import { describe, expect, it } from 'vitest'
+import { geneExpressionColor } from '../../rendering/deckLayerColors'
+import { previewBounds, type PreviewCells } from './collectionPreviewData'
+import { rasterizePreview, type PreviewRasterOptions } from './collectionPreviewRaster'
+
+const OPTIONS: PreviewRasterOptions = {
+  width: 10,
+  height: 10,
+  pointSize: 1,
+  padding: 0,
+  colorScale: 'plasma',
+  scaleMax: 4,
+}
+
+function cells(points: readonly (readonly [number, number])[]): PreviewCells {
+  const positions = new Float32Array(points.flat())
+  const bounds = previewBounds(positions)
+  if (bounds === null) throw new Error('Expected cells.')
+  return { positions, bounds }
+}
+
+function pixel(pixels: Uint8ClampedArray, x: number, y: number): number[] {
+  const offset = (y * OPTIONS.width + x) * 4
+  return [...pixels.slice(offset, offset + 4)]
+}
+
+describe('rasterizePreview', () => {
+  // Corners of a 9 by 9 square, which fills the 10 px preview.
+  const square = cells([
+    [0, 0],
+    [9, 0],
+    [0, 9],
+    [9, 9],
+  ])
+
+  it('draws every cell in grey, with y growing downwards', () => {
+    const pixels = rasterizePreview(square, null, OPTIONS)
+
+    expect(pixel(pixels, 0, 0)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 9, 9)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 5, 5)).toEqual([0, 0, 0, 0])
+  })
+
+  it('colours scored cells on the shared scale, keeping the highest per pixel', () => {
+    const pixels = rasterizePreview(
+      square,
+      {
+        // Two cells on the top left pixel, and a zero score at the bottom right.
+        positions: new Float32Array([0, 0, 0, 0, 9, 9]),
+        scores: new Float32Array([1, 4, 0]),
+        maxScore: 4,
+      },
+      OPTIONS,
+    )
+    const full = geneExpressionColor('plasma', 1)
+
+    expect(pixel(pixels, 0, 0)).toEqual([full[0], full[1], full[2], 245])
+    expect(pixel(pixels, 9, 9)).toEqual([92, 88, 76, 200])
+
+    const quarter = rasterizePreview(
+      square,
+      { positions: new Float32Array([0, 0]), scores: new Float32Array([1]), maxScore: 1 },
+      OPTIONS,
+    )
+    const half = geneExpressionColor('plasma', 0.5)
+    // sqrt(1 / 4): the same response as the main view.
+    expect(pixel(quarter, 0, 0).slice(0, 3)).toEqual([half[0], half[1], half[2]])
+  })
+
+  it('keeps the aspect ratio and centres the cells', () => {
+    const wide = cells([
+      [0, 0],
+      [9, 3],
+    ])
+    const pixels = rasterizePreview(wide, null, OPTIONS)
+    const drawn = [...Array(10).keys()].flatMap((y) =>
+      [...Array(10).keys()]
+        .filter((x) => (pixel(pixels, x, y)[3] ?? 0) > 0)
+        .map((x) => [x, y]),
+    )
+
+    expect(drawn).toEqual([
+      [0, 3],
+      [9, 6],
+    ])
+  })
+
+  it('leaves a preview without room empty', () => {
+    expect(rasterizePreview(square, null, { ...OPTIONS, width: 0 })).toHaveLength(0)
+  })
+})

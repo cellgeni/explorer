@@ -4,11 +4,14 @@ import {
   render,
   renderHook,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { micrometers } from '../../data/coords'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
-import { CollectionBar } from './CollectionBar'
+import { CollectionBar, type CollectionBarPreviews } from './CollectionBar'
+import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { useDatasetCollection } from './useDatasetCollection'
 
 const COLLECTION_URL = 'https://example.test/injury/collection.json'
@@ -27,6 +30,7 @@ const COLLECTION = parseDatasetCollection(
   COLLECTION_URL,
 )
 const SHAM_A = 'https://example.test/injury/sham-a.zarr'
+const SHAM_B = 'https://example.test/injury/sham-b.zarr'
 const DPI_A = 'https://example.test/injury/1dpi-a.zarr'
 
 describe('CollectionBar', () => {
@@ -104,6 +108,150 @@ describe('CollectionBar', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Close Collection' }))
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('CollectionBar previews', () => {
+  // Sham A has two cells and scores 3; Sham B scores 8; 1 dpi A is an image.
+  function previewLoaders(): CollectionPreviewLoaders {
+    const scoreByUrl: Record<string, number> = { [SHAM_A]: 3, [SHAM_B]: 8 }
+
+    return {
+      detectSpatialDataset: vi.fn(async (baseUrl: string) =>
+        baseUrl === DPI_A
+          ? { platform: 'image' as const, baseUrl, imageUrl: baseUrl, checked: [] }
+          : {
+              platform: 'h5ad' as const,
+              baseUrl,
+              h5adUrl: baseUrl,
+              source: 'zarr' as const,
+              checked: [],
+            },
+      ),
+      getSpatialDataset: vi.fn(async (url: string) => ({
+        overview: async () => [
+          { position: { x: micrometers(0), y: micrometers(0) }, transcriptCount: 0 },
+          { position: { x: micrometers(5), y: micrometers(5) }, transcriptCount: 0 },
+        ],
+        geneExpression: async (_bbox: unknown, genes: readonly string[]) => ({
+          genes,
+          maxCount: scoreByUrl[url] ?? 0,
+          elements: [
+            {
+              id: 'a',
+              position: { x: micrometers(0), y: micrometers(0) },
+              count: scoreByUrl[url] ?? 0,
+            },
+          ],
+        }),
+      })) as unknown as CollectionPreviewLoaders['getSpatialDataset'],
+      loadDatasetOverview: vi.fn(),
+      loadGeneExpression: vi.fn(),
+    }
+  }
+
+  function renderBar(previews: CollectionBarPreviews) {
+    return render(
+      <CollectionBar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        previews={previews}
+      />,
+    )
+  }
+
+  it('previews each dataset on one scale for the selected genes', async () => {
+    const loaders = previewLoaders()
+    renderBar({
+      loaders,
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      paused: false,
+    })
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    const shamA = within(bar).getByRole('button', { name: 'Sham A' })
+
+    expect(await within(shamA).findByText('max 3')).toBeInTheDocument()
+    expect(
+      await within(within(bar).getByRole('button', { name: 'Sham B' })).findByText(
+        'max 8',
+      ),
+    ).toBeInTheDocument()
+    expect(shamA).toHaveAttribute('title', 'Sham A is open; highest score 3')
+    expect(
+      await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
+        'No cells to preview',
+      ),
+    ).toBeInTheDocument()
+
+    const scale = bar.querySelector('.collection-bar-scale')
+    expect(scale).toHaveTextContent('Aqp4')
+    await waitFor(() => {
+      expect(scale).toHaveTextContent('08')
+    })
+  })
+
+  it('shows the tissue only without genes, and names only when turned off', async () => {
+    const loaders = previewLoaders()
+    renderBar({
+      loaders,
+      genes: [],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      paused: false,
+    })
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+
+    await waitFor(() => {
+      expect(loaders.getSpatialDataset).toHaveBeenCalledTimes(3)
+    })
+    expect(bar.querySelector('.collection-bar-scale')).toBe(null)
+    expect(within(bar).queryByText(/^max /)).toBe(null)
+
+    const toggle = within(bar).getByRole('button', { name: 'Previews' })
+    expect(toggle).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(toggle)
+
+    expect(toggle).toHaveAttribute('aria-pressed', 'false')
+    expect(bar.querySelector('canvas')).toBe(null)
+    expect(within(bar).getByRole('button', { name: 'Sham B' })).toHaveTextContent(
+      /^Sham B$/,
+    )
+  })
+
+  it('waits while the main view loads a dataset', async () => {
+    const loaders = previewLoaders()
+    const { rerender } = renderBar({
+      loaders,
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      paused: true,
+    })
+    await act(async () => {})
+    expect(loaders.detectSpatialDataset).not.toHaveBeenCalled()
+
+    rerender(
+      <CollectionBar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        previews={{
+          loaders,
+          genes: ['Aqp4'],
+          scoreMode: 'sum',
+          colorScale: 'plasma',
+          paused: false,
+        }}
+      />,
+    )
+    expect(await screen.findByText('max 3')).toBeInTheDocument()
   })
 })
 

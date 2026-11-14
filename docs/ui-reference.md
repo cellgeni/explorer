@@ -91,12 +91,24 @@ and shows `CollectionBar` (`src/features/collection/CollectionBar.tsx`) under
 the canvas, a `nav` named "Collection":
 
 - On the left, "Collection", the collection's `name` (or its file name) and
-  the number of datasets. Hidden under 860 px.
+  the number of datasets. With genes selected, the gene (or "N genes") and
+  the previews' shared scale, from 0 to the highest score read so far.
+  Hidden under 860 px.
 - A button per dataset, in groups labelled with their `group`, in one row
-  that scrolls sideways. The open dataset is highlighted (`aria-current`)
-  and the one loading has a dashed border (`aria-busy`). Choosing another
-  opens it, keeping the selected genes, the `Cell color` mode (gene
-  expression, transcript count or cell area) and `Combine genes`.
+  that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
+  label and its highest score (`max 92`); the button's name is the label.
+  The open dataset is highlighted (`aria-current`) and the one loading has
+  a dashed border (`aria-busy`). Choosing another opens it, keeping the
+  selected genes, the `Cell color` mode (gene expression, transcript count
+  or cell area) and `Combine genes`.
+- A preview draws every cell in grey and the cells scoring above zero in the
+  `Gene scale`, the highest score per pixel, when `Cell color` is gene
+  expression. A line runs along its foot while it is read. Instead of a
+  preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
+  MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
+  failed" with the reason as its tooltip.
+- `Previews` (pressed by default) turns the previews off, leaving the
+  labels.
 - `Close Collection` (×) removes the bar and `collection=` from the address;
   the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
@@ -107,6 +119,13 @@ the canvas, a `nav` named "Collection":
 reads the collection, opens its first dataset when the link names none, and
 closes the collection when a dataset outside it loads. The top bar shows the
 entry's `name` when the dataset has no manifest name.
+
+Previews are read by `CollectionPreviewStore`
+(`src/features/collection/collectionPreviewStore.ts`): the cards in view and
+240 px beyond, found with an `IntersectionObserver`, four datasets at a
+time, none while the main view loads. `openPreviewSource`
+(`collectionPreviewData.ts`) reads positions and scores with the main view's
+loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
 
 ## Top Bar
 

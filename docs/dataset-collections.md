@@ -112,6 +112,41 @@ for a shared link.
 Each switch adds a browser history entry, so Back returns to the previous
 dataset of the collection.
 
+## Previews
+
+Each dataset in the bar has a preview: its cells in grey, so the tissue
+shows, and the cells that score above zero for the selected genes in the
+gene colour scale, using the same `Combine genes` mode as the main view.
+Where several cells share a pixel, the highest score shows, as the main view
+draws the highest-scoring cells on top. Without genes, or when cells are
+coloured by something else, previews show the tissue only.
+
+- **One scale.** Every preview uses the same scale, from 0 to the highest
+  score among the previews read so far. The bar's left side shows the gene
+  and that maximum, and each preview its own highest score (`max 92`). The
+  scale can rise as more previews are read.
+- **What is read.** A preview reads every cell's position once per dataset,
+  then the selected genes' scores whenever the selection changes. Positions
+  come from the same readers as the main view, so a previewed dataset
+  opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
+- **When.** Only previews in view, and those just beyond the bar's ends, are
+  read, four datasets at a time. None start while the main view loads a
+  dataset. `Previews` in the bar turns them off and lists names only.
+- **No preview.** Image-only and Visium HD datasets show "No cells to
+  preview". A plain `.h5ad` over 64 MB shows its size instead: the viewer
+  reads such a file whole, which only opening it should do.
+
+How much a preview reads depends on how each dataset stores its expression
+matrix. A matrix chunked by gene, such as an AnnData Zarr `X` written in
+blocks of a few genes, gives one gene for all cells in one small read. A
+sparse matrix stored cell by cell has to be read whole for one gene, which
+is only practical for small datasets.
+
+For SPCOX, a dataset's first preview reads about 1 MB in 55 requests, mostly
+its cell table, and the eight previews in view fill about 5 s after the
+first dataset opens. A new gene then reads 100 to 500 KB per section, about
+2.7 s for the eight.
+
 ## The Address
 
 The address keeps `collection=` next to `dataset=`, so a copied link reopens
@@ -140,7 +175,10 @@ errors as you type.
 
 ## Known Limitations
 
-- Datasets are shown one at a time. There are no thumbnails, side-by-side
-  embedding and spatial views, or shared annotation colours yet.
+- Datasets are shown one at a time. There are no side-by-side embedding and
+  spatial views or shared annotation colours yet, and previews show genes,
+  not annotations.
+- Previews are listed in the collection's order; they cannot be sorted by
+  expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
