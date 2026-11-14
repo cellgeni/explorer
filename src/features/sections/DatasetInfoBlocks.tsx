@@ -517,6 +517,8 @@ function SpatialDataDatasetControls({
     unitDraft.trim() !== '' && Number.isFinite(parsedDraft) && parsedDraft > 0
   const { micrometersPerUnit: _override, ...withoutOverride } = state.selection
   void _override
+  const tableSelection =
+    state.selection.table === undefined ? {} : { table: state.selection.table }
 
   return (
     <section
@@ -528,6 +530,26 @@ function SpatialDataDatasetControls({
         <strong>SpatialData</strong>
       </div>
       <label className="visium-bin-control">
+        <span>Table</span>
+        <select
+          title="SpatialData table to read cells and genes from"
+          value={state.table ?? ''}
+          disabled={disabled || state.tables.length < 2}
+          onChange={(event) => {
+            // A table's regions decide the coordinate system, and with it the
+            // image and units, so those are chosen again.
+            onSelectionChange({ table: event.currentTarget.value })
+          }}
+        >
+          {state.tables.length === 0 ? <option value="">None</option> : null}
+          {state.tables.map((table) => (
+            <option key={table} value={table}>
+              {table}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="visium-bin-control">
         <span>Coordinate system</span>
         <select
           title="SpatialData coordinate system to show"
@@ -535,7 +557,10 @@ function SpatialDataDatasetControls({
           disabled={disabled || state.coordinateSystems.length < 2}
           onChange={(event) => {
             // Images and units belong to a coordinate system.
-            onSelectionChange({ coordinateSystem: event.currentTarget.value })
+            onSelectionChange({
+              ...tableSelection,
+              coordinateSystem: event.currentTarget.value,
+            })
           }}
         >
           {state.coordinateSystems.map((system) => (

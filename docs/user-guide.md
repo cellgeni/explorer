@@ -302,8 +302,8 @@ expects.
 
 ## SpatialData
 
-SpatialData stores combine an AnnData table, shapes, labels, and images. The
-app picks one coordinate system and image and logs them, together with any
+SpatialData stores combine AnnData tables, shapes, labels, and images. The
+app picks one table, coordinate system, and image and logs them, together with any
 elements it does not show, in the activity log. Table rows render as cells
 placed on their annotated shapes or labels. Circles and polygons appear as cell
 boundaries; labels (segmentation masks) are traced into cell outlines when you
@@ -311,7 +311,8 @@ zoom in below `Boundary limit`.
 
 The info drawer's View options section shows the SpatialData view controls:
 
-- `Coordinate system` and `Image` switch the view and reload the dataset.
+- `Table`, `Coordinate system`, and `Image` switch the view and reload the
+  dataset. A store with Visium HD bin tables opens on the coarsest bins.
 - `µm per unit` shows the scale used for distances, scale bars, and areas, and
   where it came from (declared by the store, estimated, or set by you). Enter a
   value and press `Set` to override it, or `Auto` to go back. When the scale is

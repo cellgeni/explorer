@@ -14,6 +14,7 @@ const SUMMARY: SpatialDataSummary = {
   image: 'morphology_focus',
   images: ['morphology_focus', 'he_image'],
   table: 'table',
+  tables: ['table', 'table_nuclei'],
   regions: ['cell_boundaries'],
   boundaries: 'cell_boundaries',
   skippedElements: ['points'],
@@ -26,6 +27,8 @@ describe('spatialDataModel', () => {
 
     expect(spatialDataControlReady(SUMMARY, selection)).toEqual({
       status: 'ready',
+      table: 'table',
+      tables: ['table', 'table_nuclei'],
       coordinateSystem: 'global',
       coordinateSystems: ['global', 'aligned'],
       image: 'morphology_focus',
@@ -35,12 +38,13 @@ describe('spatialDataModel', () => {
     })
   })
 
-  it('leaves the image out when the summary has none', () => {
+  it('leaves the image and table out when the summary has none', () => {
     const state = spatialDataControlReady(
       {
         coordinateSystem: 'global',
         coordinateSystems: ['global'],
         images: [],
+        tables: [],
         regions: ['cell_boundaries'],
         skippedElements: [],
         units: SUMMARY.units,
@@ -49,7 +53,8 @@ describe('spatialDataModel', () => {
     )
 
     expect(state).not.toHaveProperty('image')
-    expect(state).toMatchObject({ status: 'ready', images: [] })
+    expect(state).not.toHaveProperty('table')
+    expect(state).toMatchObject({ status: 'ready', images: [], tables: [] })
   })
 
   it('marks a ready state as loading with the new selection', () => {
@@ -72,11 +77,17 @@ describe('spatialDataModel', () => {
   it('reads a selection from shareable fields, leaving out the unset ones', () => {
     expect(
       spatialDataSelectionFromShareable({
+        spatialDataTable: 'table_nuclei',
         spatialDataCoordinateSystem: 'aligned',
         spatialDataImage: 'he_image',
         spatialDataMicrometersPerUnit: 0.5,
       }),
-    ).toEqual({ coordinateSystem: 'aligned', image: 'he_image', micrometersPerUnit: 0.5 })
+    ).toEqual({
+      table: 'table_nuclei',
+      coordinateSystem: 'aligned',
+      image: 'he_image',
+      micrometersPerUnit: 0.5,
+    })
 
     const partial = spatialDataSelectionFromShareable({ spatialDataImage: 'he_image' })
     expect(partial).toEqual({ image: 'he_image' })
@@ -100,7 +111,9 @@ describe('spatialDataModel', () => {
     {},
     { spatialDataCoordinateSystem: 'aligned' },
     { spatialDataMicrometersPerUnit: 0 },
+    { spatialDataTable: 'table_nuclei' },
     {
+      spatialDataTable: 'table',
       spatialDataCoordinateSystem: 'global',
       spatialDataImage: 'morphology_focus',
       spatialDataMicrometersPerUnit: 1.5,

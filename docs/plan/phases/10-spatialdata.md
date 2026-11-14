@@ -58,14 +58,19 @@ planned in advance.
 Checked against the code on 2026-11-14. Ordered roughly by how soon they
 matter on real stores.
 
-- [ ] The table cannot be chosen. The first table, by name, that annotates a
+- [x] The table cannot be chosen. The first table, by name, that annotates a
       shapes element wins, else one that annotates labels, else the first
       (`primaryTable`); there is no `sdTable`. spatialdata-io names Visium HD
       tables `square_002um`, `square_008um`, and `square_016um`, so a Visium
       HD store opens on the 2 µm bins and reads all their shapes (found by
       reading the code; no Visium HD store was tried). In STHELAR only
       `table_cells` is reachable, not `table_nuclei`, `table_scvi`, or
-      `table_combined`.
+      `table_combined`. Since 2026-11-14 a `Table` select in View options
+      picks the table (`sdTable`, manifest `options.table`), unselected tables
+      are listed as skipped elements, and among Visium HD bin tables only the
+      coarsest is a default. Switching was checked on STHELAR bone marrow
+      (`table_nuclei`: 541 genes on `nucleus_boundaries`, reloaded in 15 s);
+      the Visium HD default is covered by a unit test only.
 - [ ] Images whose affine swaps, flips, rotates, or shears the axes are
       skipped (`isAxisAlignedAffine`) and named only in the activity log's
       skipped elements. STHELAR's `he` image (x/y swap and flip) is never
@@ -103,6 +108,11 @@ matter on real stores.
       are drawn themselves).
 - [ ] Diagnostics check only the first chunk of the coarsest level of the
       image and of each labels region.
-- [ ] No E2E coverage: `examples/index.json` has no SpatialData entry, so the
+- [x] No E2E coverage: `examples/index.json` has no SpatialData entry, so the
       nightly examples test never loads one. The reference stores in
       [1](../../../PLAN.md#reference-datasets) are used for manual testing.
+      Since 2026-11-14 the gallery has the SpatialData sandbox's
+      `visium_associated_xenium_io` (Visium CytAssist breast cancer, mirrored
+      on the WebAtlas bucket), which the nightly run loads (2.6 s locally). It
+      covers a Zarr v2 store with circle shapes only: zipped, Zarr v3,
+      Icechunk, and labels-annotated stores are still tested by hand.

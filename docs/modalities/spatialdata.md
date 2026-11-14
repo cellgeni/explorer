@@ -49,8 +49,8 @@ error, since only SpatialData is read from zips.
 
 A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
-`options` (`coordinateSystem`, `image`, `micrometersPerUnit`) are the starting
-selection: `spatialDataSelectionFor` returns them until a choice in the info
+`options` (`table`, `coordinateSystem`, `image`, `micrometersPerUnit`) are the
+starting selection: `spatialDataSelectionFor` returns them until a choice in the info
 drawer's View options replaces them.
 
 ## Store Access
@@ -90,10 +90,15 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
 
 `selectSpatialDataView` then chooses what to show:
 
-1. **Table** (`primaryTable`): the first table whose `region` names a shapes
-   element, else one that names a labels element, else the first table. Other
-   tables are ignored. `region`, `region_key`, and `instance_key` come from
-   `spatialdata_attrs`.
+1. **Table** (`primaryTable`): the first table by name whose `region` names a
+   shapes element, else one that names a labels element, else the first table.
+   Among Visium HD bin tables (named or annotating `square_NNNum`, as
+   spatialdata-io writes them), only the coarsest bin counts, so a Visium HD
+   store opens on `square_016um` rather than its millions of 2 µm bins. The
+   `Table` select in the info drawer's View options overrides it (`sdTable` in
+   the shareable URL); one table is read at a time, and the others are listed
+   among the skipped elements. `region`, `region_key`, and `instance_key` come
+   from `spatialdata_attrs`.
 2. **Coordinate system** (`bestCoordinateSystem`): candidates are ranked by
    number of the table's region elements placed in the system, then whether it
    holds an image, then total elements, then whether it is named `global`, then
@@ -279,9 +284,11 @@ off.
 - Only one coordinate system and one image are shown at a time. They are
   chosen automatically; the `Coordinate system` and `Image` selects in View
   options override the choice and reload the store.
-- The table cannot be chosen: the first by name that annotates shapes wins.
-  spatialdata-io names Visium HD tables `square_002um`, `square_008um`, and
-  `square_016um`, so a Visium HD store opens on its 2 µm bins.
+- Only one table is read at a time. Every table is offered in the `Table`
+  select, including tables that annotate no region (such as STHELAR's
+  `features_*` embeddings). Those place rows from `obsm` as an H5AD would, so
+  they fail to load when `obsm` has none of the
+  [coordinate keys](./h5ad.md#coordinates-obsm).
 - Images placed with a rotated, sheared, flipped, or axis-swapping affine are
   skipped, for example the H&E in the STHELAR stores. They are listed only
   among the skipped elements in the activity log.

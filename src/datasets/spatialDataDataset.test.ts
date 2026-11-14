@@ -33,6 +33,7 @@ describe('SpatialDataDataset', () => {
       image: 'he',
       images: ['he'],
       table: 'table',
+      tables: ['table'],
       regions: ['cells'],
       boundaries: 'cells',
       skippedElements: [],

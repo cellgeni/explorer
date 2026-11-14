@@ -99,6 +99,67 @@ describe('SpatialData catalog', () => {
     expect(view.regionShapes[0]?.affine).toMatchObject({ a: 0.1, e: 0.1 })
   })
 
+  it('opens Visium HD stores on the coarsest bins and honours an explicit table', () => {
+    const bins = ['002', '008', '016']
+    const catalog: SpatialDataCatalog = {
+      zarrFormat: 3,
+      nodes: [],
+      elements: [
+        ...bins.map((bin) =>
+          element('shapes', `sample_square_${bin}um`, [['global', {}]]),
+        ),
+        ...bins.map((bin) => element('tables', `square_${bin}um`, [])),
+      ],
+      tables: bins.map((bin) => ({
+        name: `square_${bin}um`,
+        path: `tables/square_${bin}um`,
+        regions: [`sample_square_${bin}um`],
+      })),
+    }
+    const regions = (view: ReturnType<typeof selectSpatialDataView>) =>
+      view.regionShapes.map((entry) => entry.element.name)
+
+    const coarsest = selectSpatialDataView(catalog)
+    expect(coarsest.table?.name).toBe('square_016um')
+    expect(coarsest.tables.map((table) => table.name)).toEqual([
+      'square_002um',
+      'square_008um',
+      'square_016um',
+    ])
+    expect(regions(coarsest)).toEqual(['sample_square_016um'])
+    expect(
+      coarsest.skippedElements.map((entry) => `${entry.kind}/${entry.name}`),
+    ).toEqual([
+      'shapes/sample_square_002um',
+      'shapes/sample_square_008um',
+      'tables/square_002um',
+      'tables/square_008um',
+    ])
+
+    const chosen = selectSpatialDataView(catalog, { table: 'square_008um' })
+    expect(chosen.table?.name).toBe('square_008um')
+    expect(regions(chosen)).toEqual(['sample_square_008um'])
+
+    // A table that is not in the store (an old link) falls back to the default.
+    expect(selectSpatialDataView(catalog, { table: 'gone' }).table?.name).toBe(
+      'square_016um',
+    )
+  })
+
+  it('keeps the first table by name when no table holds Visium HD bins', () => {
+    // As in the STHELAR stores; readSpatialDataCatalog sorts tables by name.
+    const catalog: SpatialDataCatalog = {
+      ...catalogFixture([element('shapes', 'cell_boundaries', [['global', {}]])]),
+      tables: ['table_cells', 'table_nuclei', 'table_scvi'].map((name) => ({
+        name,
+        path: `tables/${name}`,
+        regions: ['cell_boundaries'],
+      })),
+    }
+
+    expect(selectSpatialDataView(catalog).table?.name).toBe('table_cells')
+  })
+
   it('serves consolidated metadata without probing missing metadata keys', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input instanceof Request ? input.url : String(input))

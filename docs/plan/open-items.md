@@ -94,13 +94,12 @@ Features:
       kerchunk and Icechunk companions (`6971ceb`, `b71ffc8`), on the main
       thread. Only `/X` is read, and diagnostics check only that the file
       answers Range requests or the repository opens.
-- [ ] SpatialData: a table choice, images that are not axis-aligned, `points`
-      (transcripts), nucleus boundaries, and viewport-scoped shape reads
-      (see [Phase 10](phases/10-spatialdata.md#known-gaps)). Partly done: the
-      info drawer picks one image at a time, and the primary table is read.
-      The table is picked by name, so a Visium HD store would open on its
-      2 µm bins. Images with a flipped or swapped axis (STHELAR's H&E) are
-      skipped. Points are not read. Shapes are read whole, in a worker since
+- [ ] SpatialData: images that are not axis-aligned, `points` (transcripts),
+      nucleus boundaries, and viewport-scoped shape reads (see
+      [Phase 10](phases/10-spatialdata.md#known-gaps)). Partly done: the info
+      drawer picks one table and one image at a time (a Visium HD store opens
+      on its coarsest bins). Images with a flipped or swapped axis (STHELAR's
+      H&E) are skipped. Points are not read. Shapes are read whole, in a worker since
       2026-11-13, then filtered to the viewport. spatialdata-io's
       `shapes.parquet` cannot be read by viewport: the 460-plex
       `cell_boundaries` is one row group of 598,222 rows with no per-shape
@@ -149,9 +148,10 @@ Testing:
       no coordinate fallback as cells do. Enter at the crosshair works. Not
       root-caused; found 2026-11-12.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
-      nightly examples test loads an OME-Zarr and a QPTIFF. Nothing loads
-      SpatialData in a browser (`examples/index.json` has no SpatialData
-      entry), and no smoke test covers these sources.
+      nightly examples test loads an OME-Zarr, a QPTIFF, and a SpatialData
+      store (Zarr v2 with circle shapes). No smoke test covers these sources,
+      and zipped, Zarr v3, Icechunk, and labels-annotated SpatialData stores
+      are tested by hand.
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
       `main`. Checked 2026-11-12: Pages deployed from Actions serves one site
       with no per-PR paths, so a preview URL needs the Pages source switched

@@ -382,8 +382,13 @@
     },
     "spatialDataOptions": {
       "type": "object",
-      "description": "Starting view for the info drawer's View options. Changing the coordinate system there clears the image and units.",
+      "description": "Starting view for the info drawer's View options. Changing the table there clears the coordinate system, image, and units; changing the coordinate system clears the image and units.",
       "properties": {
+        "table": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Table element name, without the tables/ prefix."
+        },
         "coordinateSystem": { "type": "string", "minLength": 1 },
         "image": {
           "type": "string",

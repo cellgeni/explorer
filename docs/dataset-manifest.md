@@ -227,13 +227,16 @@ probed as usual.
 | Platform      | Key                  | Value                                                                                 |
 | ------------- | -------------------- | ------------------------------------------------------------------------------------- |
 | `visium-hd`   | `binSize`            | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set |
+| `spatialdata` | `table`              | Table element name, without `tables/`                                                 |
 | `spatialdata` | `coordinateSystem`   | Coordinate system to show                                                             |
 | `spatialdata` | `image`              | Image element name, without `images/`                                                 |
 | `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value            |
 
 The SpatialData options are the starting view; the View options controls in
-the info drawer start from them. Changing the coordinate system clears the
-image and units, because both belong to one coordinate system. Changing the
+the info drawer start from them. Changing the table clears the coordinate
+system, image, and units, because the table's regions decide the coordinate
+system. Changing the coordinate system clears the image and units, because
+both belong to one coordinate system. Changing the
 image keeps the units, and `Auto` returns to the declared or estimated scale.
 Other platforms take no options.
 

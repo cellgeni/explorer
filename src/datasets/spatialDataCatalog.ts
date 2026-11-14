@@ -6,6 +6,7 @@ import {
   type SpatialDataCoordinateTransform,
 } from './spatialDataTransforms'
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
+import { visiumHdBinMicrometers } from './spatialDataUnits'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import {
@@ -57,6 +58,8 @@ export interface SpatialDataView {
   // Images that can be shown in this coordinate system, finest first.
   readonly images: readonly SpatialDataPlacedElement[]
   readonly table?: SpatialDataTableInfo
+  // Every table in the store, in catalog order; one is read at a time.
+  readonly tables: readonly SpatialDataTableInfo[]
   // Shapes elements annotated by the table; their geometry places each row.
   readonly regionShapes: readonly SpatialDataPlacedElement[]
   // Labels elements annotated by the table; rows fall back to obsm coordinates.
@@ -256,13 +259,19 @@ export async function readSpatialDataCatalog(
 
 export function selectSpatialDataView(
   catalog: SpatialDataCatalog,
-  options: { readonly coordinateSystem?: string; readonly image?: string } = {},
+  options: {
+    readonly coordinateSystem?: string
+    readonly image?: string
+    readonly table?: string
+  } = {},
 ): SpatialDataView {
   const spatialElements = catalog.elements.filter((element) => element.kind !== 'tables')
   const elementsByName = new Map(
     spatialElements.map((element) => [element.name, element]),
   )
-  const table = primaryTable(catalog.tables, elementsByName)
+  const table =
+    catalog.tables.find((candidate) => candidate.name === options.table) ??
+    primaryTable(catalog.tables, elementsByName)
   const regionElements = (table?.regions ?? [])
     .map((region) => elementsByName.get(region))
     .filter((element): element is SpatialDataElement => element !== undefined)
@@ -322,24 +331,47 @@ export function selectSpatialDataView(
     ...(image === undefined ? {} : { image }),
     images,
     ...(table === undefined ? {} : { table }),
+    tables: catalog.tables,
     regionShapes,
     regionLabels,
     boundaryCandidates,
-    skippedElements: spatialElements.filter((element) => !usedElements.has(element)),
+    skippedElements: catalog.elements.filter((element) =>
+      element.kind === 'tables'
+        ? element.name !== table?.name
+        : !usedElements.has(element),
+    ),
   }
 }
 
+// The first table by name that annotates shapes, else labels, else the first.
+// Of Visium HD bin tables (`square_002um`, `square_008um`, ...), only the
+// coarsest is a candidate: a full capture has millions of 2 µm bins, and
+// every shape is read before the first frame.
 function primaryTable(
   tables: readonly SpatialDataTableInfo[],
   elementsByName: ReadonlyMap<string, SpatialDataElement>,
 ): SpatialDataTableInfo | undefined {
   const annotatesKind = (table: SpatialDataTableInfo, kind: SpatialDataElementKind) =>
     table.regions.some((region) => elementsByName.get(region)?.kind === kind)
+  const binOf = (table: SpatialDataTableInfo) =>
+    [table.name, ...table.regions]
+      .map(visiumHdBinMicrometers)
+      .find((side) => side !== undefined)
+  let coarsestBin = 0
+
+  for (const table of tables) {
+    coarsestBin = Math.max(coarsestBin, binOf(table) ?? 0)
+  }
+
+  const candidates = tables.filter((table) => {
+    const bin = binOf(table)
+    return bin === undefined || bin === coarsestBin
+  })
 
   return (
-    tables.find((table) => annotatesKind(table, 'shapes')) ??
-    tables.find((table) => annotatesKind(table, 'labels')) ??
-    tables[0]
+    candidates.find((table) => annotatesKind(table, 'shapes')) ??
+    candidates.find((table) => annotatesKind(table, 'labels')) ??
+    candidates[0]
   )
 }
 
