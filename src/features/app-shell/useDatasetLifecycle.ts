@@ -201,6 +201,8 @@ import {
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
+import { MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES } from '../../datasets/merscopeFormat'
+import type { MerscopeSummary } from '../../datasets/merscopeDataset'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -239,6 +241,10 @@ interface H5adLifecycleDataset {
 
 interface SpatialDataSummaryDataset {
   summary(): Promise<SpatialDataSummary>
+}
+
+interface MerscopeSummaryDataset {
+  summary(): Promise<MerscopeSummary>
 }
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
@@ -1187,7 +1193,7 @@ export function useDatasetLifecycle({
 
         const loadAnnDataOverview = async (
           dataset: unknown,
-          label: 'H5AD' | 'Visium' | 'SpatialData' | 'Atera',
+          label: 'H5AD' | 'Visium' | 'SpatialData' | 'Atera' | 'MERSCOPE',
         ): Promise<boolean> => {
           if (!isH5adLifecycleDataset(dataset)) {
             throw new Error(`Detected ${label} dataset does not expose AnnData readers.`)
@@ -1519,6 +1525,90 @@ export function useDatasetLifecycle({
               ? {}
               : { channelSelection: restoreState.morphologyEnabledChannelIds },
           )
+          return
+        }
+
+        if (detection.platform === 'merscope') {
+          const { cellBoundaries, cellBoundariesByteLength } = detection.files
+          // Boundaries are read whole, so a large file waits until they are
+          // turned on. A size the host did not send counts as small.
+          const boundariesTooLarge =
+            cellBoundariesByteLength !== undefined &&
+            cellBoundariesByteLength > MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES
+          whenCommitted(() => {
+            setDatasetPlatform('merscope')
+            setShowCellBoundaries(
+              restoreState.showCellBoundaries ??
+                (cellBoundaries !== undefined && !boundariesTooLarge),
+            )
+            setShowNucleusBoundaries(false)
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            setGenePanelState(genePanelLoadStarted(requestedUrl))
+          })
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            onH5adLoadProgress: appendDebugEvent,
+          })
+
+          if (!(await loadAnnDataOverview(dataset, 'MERSCOPE'))) {
+            return
+          }
+
+          if (!isMerscopeSummaryDataset(dataset)) {
+            return
+          }
+
+          const summary = await dataset.summary()
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          appendDebugEvent(
+            `MERSCOPE table: ${summary.cellCount.toLocaleString()} cells, ${summary.geneCount.toLocaleString()} genes${
+              summary.blankColumnCount > 0
+                ? `; ${summary.blankColumnCount.toLocaleString()} Blank columns summed into blank_count`
+                : ''
+            }${
+              summary.emptyColumns.length > 0
+                ? `; empty columns left out: ${summary.emptyColumns.join(', ')}`
+                : ''
+            }; boundaries ${
+              summary.cellBoundaries === null
+                ? 'not found'
+                : `${summary.cellBoundaries.fileName}${
+                    summary.cellBoundaries.byteLength === undefined
+                      ? ''
+                      : ` (${formatMegabytes(summary.cellBoundaries.byteLength)})`
+                  }`
+            }`,
+          )
+
+          const unmatched = summary.countsOnlyCells + summary.metadataOnlyCells
+
+          if (unmatched > 0) {
+            notifyFallbackWhenCommitted({
+              source: 'Dataset overview',
+              message: `${unmatched.toLocaleString()} MERSCOPE cells are in only one of the two cell tables and are not shown.`,
+              detail: `${summary.countsOnlyCells.toLocaleString()} only in the cell-by-gene counts, ${summary.metadataOnlyCells.toLocaleString()} only in the cell metadata.`,
+              coalesceKey: `merscope-unmatched:${requestedUrl}`,
+            })
+          }
+
+          if (
+            boundariesTooLarge &&
+            summary.cellBoundaries !== null &&
+            restoreState.showCellBoundaries === undefined
+          ) {
+            notifyFallbackWhenCommitted({
+              source: 'Cell boundaries',
+              message: `${summary.cellBoundaries.fileName} is ${formatMegabytes(
+                cellBoundariesByteLength,
+              )} and is read whole, so cell boundaries start off.`,
+              action: 'Turn on Cell boundaries to download it.',
+              coalesceKey: `merscope-boundaries-size:${requestedUrl}`,
+            })
+          }
+
           return
         }
 
@@ -2037,6 +2127,14 @@ function isSpatialDataSummaryDataset(
   dataset: unknown,
 ): dataset is SpatialDataSummaryDataset {
   return hasFunction(dataset, 'summary')
+}
+
+function isMerscopeSummaryDataset(dataset: unknown): dataset is MerscopeSummaryDataset {
+  return hasFunction(dataset, 'summary')
+}
+
+function formatMegabytes(byteLength: number): string {
+  return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function hasFunction<T extends string>(

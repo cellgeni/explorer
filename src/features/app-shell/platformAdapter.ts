@@ -30,6 +30,7 @@ export type AppPlatformKind =
   | 'atera'
   | 'visium'
   | 'visium-hd'
+  | 'merscope'
   | 'h5ad'
   | 'spatialdata'
   | 'image'
@@ -40,6 +41,7 @@ export const PLATFORM_NAMES: Readonly<Record<AppPlatformKind, string>> = {
   atera: 'Atera',
   visium: 'Visium',
   'visium-hd': 'Visium HD',
+  merscope: 'MERSCOPE',
   h5ad: 'H5AD',
   spatialdata: 'SpatialData',
   image: 'Image',
@@ -289,6 +291,39 @@ const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
+// MERSCOPE cells, genes, and annotations come from an AnnData table built
+// from cell_by_gene.csv and cell_metadata.csv. Boundaries are read whole from
+// one Parquet file when first shown; transcripts and images are not read.
+const MERSCOPE_PLATFORM_ADAPTER: AppPlatformAdapter = {
+  kind: 'merscope',
+  labels: { embeddingElementPlural: 'cells' },
+  capabilities: {
+    cells: true,
+    magicLens: true,
+    annotations: true,
+    geometricAnnotations: true,
+    nucleusBoundaries: false,
+    transcripts: false,
+    cellTranscriptDistribution: false,
+    transcriptGeneOnlyFilter: false,
+  },
+  pointSizeFullViewScale: 1,
+  trueSizePoints: false,
+  featureLoadEnabled: (loadState) => loadState.status === 'ready',
+  effectiveTranscriptOverlay: () => false,
+  boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
+  cellBoundaryLoadingEnabled: () => true,
+  boundaryOverlayRequestKey: (showCellBoundaries) =>
+    `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
+  geneExpressionOverlayEnabled: () => true,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
+  magicLensAvailability: () => ({
+    loadEnabled: false,
+    unavailableReason: 'Unavailable for MERSCOPE',
+  }),
+  canDrawRoi: ({ loadState }) => loadState.status === 'ready',
+}
+
 const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'spatialdata',
   labels: { embeddingElementPlural: 'cells' },
@@ -376,6 +411,10 @@ export function appPlatformAdapterFor(
     return ATERA_PLATFORM_ADAPTER
   }
 
+  if (loadState.status === 'ready' && datasetPlatform === 'merscope') {
+    return MERSCOPE_PLATFORM_ADAPTER
+  }
+
   return XENIUM_PLATFORM_ADAPTER
 }
 
@@ -387,15 +426,16 @@ export function isH5adPlatform(adapter: AppPlatformAdapter): boolean {
   return adapter.kind === 'h5ad'
 }
 
-// H5AD, Visium, SpatialData, and Atera read cells, genes, annotations,
-// embeddings, and ROI queries from an AnnData table exposed by the spatial
-// dataset.
+// H5AD, Visium, SpatialData, Atera, and MERSCOPE read cells, genes,
+// annotations, embeddings, and ROI queries from an AnnData table exposed by
+// the spatial dataset.
 export function isAnnDataPlatform(adapter: AppPlatformAdapter): boolean {
   return (
     adapter.kind === 'h5ad' ||
     adapter.kind === 'visium' ||
     adapter.kind === 'spatialdata' ||
-    adapter.kind === 'atera'
+    adapter.kind === 'atera' ||
+    adapter.kind === 'merscope'
   )
 }
 
@@ -567,7 +607,8 @@ export async function loadPlatformBoundaryElements(
     adapter.kind !== 'visium-hd' &&
     adapter.kind !== 'visium' &&
     adapter.kind !== 'spatialdata' &&
-    adapter.kind !== 'atera'
+    adapter.kind !== 'atera' &&
+    adapter.kind !== 'merscope'
   ) {
     return dependencies.loadBoundaryElements(baseUrl, bbox, options)
   }

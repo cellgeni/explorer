@@ -837,24 +837,24 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
 
 From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 
-| Feature                                        | Xenium                  | Atera            | Visium        | Visium HD         | H5AD             | SpatialData      | Image            |
-| ---------------------------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Cells section                                  | ✓                       | ✓                | Spots         | Bins              | ✓                | ✓                | —                |
-| Transcripts section                            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                |
-| All-feature transcripts                        | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                |
-| ROI transcript export                          | ✓                       | —                | —             | —                 | —                | —                | —                |
-| Magic Lens                                     | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | —                |
-| Cell card                                      | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | —                |
-| Cell-id annotations                            | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | —                |
-| GeoJSON shapes                                 | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                |
-| Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                |
-| Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | New shape        |
-| Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                |
-| SpatialData view options                       | —                       | —                | —             | —                 | —                | ✓                | —                |
-| Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                |
-| Boundary limit                                 | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                |
-| Morphology checkbox label                      | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image |
+| Feature                                        | Xenium                  | Atera            | Visium        | Visium HD         | MERSCOPE         | H5AD             | SpatialData      | Image            |
+| ---------------------------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- | ---------------- |
+| Cells section                                  | ✓                       | ✓                | Spots         | Bins              | ✓                | ✓                | ✓                | —                |
+| Transcripts section                            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                | —                |
+| All-feature transcripts                        | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                | —                |
+| ROI transcript export                          | ✓                       | —                | —             | —                 | —                | —                | —                | —                |
+| Magic Lens                                     | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | Unavailable      | —                |
+| Cell card                                      | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
+| Cell-id annotations                            | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓                | —                |
+| GeoJSON shapes                                 | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
+| Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
+| Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
+| Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
+| SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
+| Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |
+| Boundary limit                                 | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                | ✓                |
+| Morphology checkbox label                      | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image | Morphology image |
 
 ## Shareable URL
 

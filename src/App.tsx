@@ -76,6 +76,7 @@ import {
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
+  PLATFORM_NAMES,
   platformAnalysisEmbeddingOptions,
   platformActiveBoundaryCell,
   platformBoundarySurfaceReserved,
@@ -1831,8 +1832,8 @@ export function App({ dependencies }: AppProps = {}) {
       return Promise.reject(
         new Error(
           `${
-            platformAdapter.kind === 'atera'
-              ? 'Atera'
+            platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
+              ? PLATFORM_NAMES[platformAdapter.kind]
               : platformAdapter.kind === 'visium'
                 ? 'Visium'
                 : 'H5AD and SpatialData'
@@ -3872,8 +3873,8 @@ export function App({ dependencies }: AppProps = {}) {
               ? 'Visium'
               : platformAdapter.kind === 'spatialdata'
                 ? 'SpatialData'
-                : platformAdapter.kind === 'atera'
-                  ? 'Atera'
+                : platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
+                  ? PLATFORM_NAMES[platformAdapter.kind]
                   : 'Xenium'
         }
         gridCells={viewerGridCells}

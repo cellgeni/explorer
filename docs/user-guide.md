@@ -14,6 +14,8 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - Xenium output folders containing `experiment.xenium`.
 - Standard Visium (55 µm spots) Space Ranger `outs/` folders.
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
+- Vizgen MERSCOPE region folders containing `cell_by_gene.csv` and
+  `cell_metadata.csv`; re-segmentations and GEO deposits through a manifest.
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
   squidpy, or CELLxGENE.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
@@ -49,7 +51,8 @@ true Xenium cell polygons are requested for the current viewport.
 The app detects the source platform before loading. Platform-specific controls
 appear only when the active source supports them. For example, image-only
 sources have no Cells or Transcripts section, Magic Lens or cell cards, while
-Visium, Visium HD, H5AD, and SpatialData have no Transcripts section.
+Visium, Visium HD, MERSCOPE, H5AD, and SpatialData have no Transcripts
+section.
 
 ### Examples And Recent Datasets
 
@@ -126,7 +129,7 @@ current viewport exact when the region is small enough, and samples the same
 way above that. Visium HD uses coarser bins when zoomed out. The default gene
 scale is Plasma.
 
-For H5AD and SpatialData, categorical and string `obs` columns load as
+For H5AD, SpatialData, and MERSCOPE, categorical and string `obs` columns load as
 annotation sets, and numeric `obs` values appear in the Cell card for the
 selected cell. Numeric `obs` columns are also listed as `Cell color` →
 `Metadata` tracks as soon as the dataset loads; a track's values are read when
@@ -134,7 +137,7 @@ you first colour by it.
 
 Imported CSV/JSON annotations and metadata tracks (Cells › Clusters) use the
 dataset's own cell IDs: Xenium IDs such as `aaabbbcc-1`, H5AD obs names and
-Visium barcodes, or SpatialData instance IDs. If none of the imported cells
+Visium barcodes, SpatialData instance IDs, or MERSCOPE `EntityID` values. If none of the imported cells
 are on the map, the import fails and says so; if some are not, a note under
 the import controls says how many.
 

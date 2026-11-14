@@ -33,6 +33,7 @@ import {
   type SpatialDataStore,
   type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
+import { MERSCOPE_CSV_MAX_BYTES } from '../datasets/merscopeFormat'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
@@ -269,6 +270,18 @@ export async function runDatasetDiagnostics(
 
   if (detection.platform === 'visium') {
     checks.push(...(await runVisiumDiagnostics(detection, options)))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
+  if (detection.platform === 'merscope') {
+    checks.push(...(await runMerscopeDiagnostics(detection, options)))
 
     return {
       baseUrl,
@@ -1208,6 +1221,83 @@ async function runVisiumDiagnostics(
 }
 
 // HEAD, reporting the size; fails a file over `maxBytes`.
+// MERSCOPE files are read whole, so no Range support is needed; HEAD checks
+// avoid downloading them. Transcripts and images are listed when present, as
+// the viewer does not read them yet.
+async function runMerscopeDiagnostics(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'merscope' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<readonly DatasetDiagnosticCheck[]> {
+  const { baseUrl, files } = detection
+  const [cellByGene, cellMetadata, cellBoundaries, ...unread] = await Promise.all([
+    checkHeadFile(
+      baseUrl,
+      {
+        id: 'merscope-cell-by-gene',
+        label: 'MERSCOPE cell-by-gene counts',
+        path: files.cellByGene,
+      },
+      true,
+      options,
+      MERSCOPE_CSV_MAX_BYTES,
+    ),
+    checkHeadFile(
+      baseUrl,
+      {
+        id: 'merscope-cell-metadata',
+        label: 'MERSCOPE cell metadata',
+        path: files.cellMetadata,
+      },
+      true,
+      options,
+      MERSCOPE_CSV_MAX_BYTES,
+    ),
+    files.cellBoundaries === undefined
+      ? Promise.resolve(
+          diagnosticCheck({
+            id: 'merscope-cell-boundaries',
+            label: 'MERSCOPE cell boundaries',
+            url: baseUrl,
+            required: false,
+            status: 'warning',
+            message: 'Not found',
+            startedAt: Date.now(),
+          }),
+        )
+      : checkHeadFile(
+          baseUrl,
+          {
+            id: 'merscope-cell-boundaries',
+            label: 'MERSCOPE cell boundaries',
+            path: files.cellBoundaries,
+          },
+          false,
+          options,
+        ),
+    ...[
+      {
+        id: 'merscope-transcripts',
+        label: 'MERSCOPE transcripts',
+        path: 'detected_transcripts.csv',
+      },
+      {
+        id: 'merscope-images',
+        label: 'MERSCOPE mosaic images',
+        path: 'images/manifest.json',
+      },
+    ].map((file) => checkHeadFile(baseUrl, file, false, options)),
+  ])
+
+  return [
+    cellByGene,
+    cellMetadata,
+    cellBoundaries,
+    ...unread
+      .filter((check) => check.status === 'pass')
+      .map((check) => ({ ...check, message: `${check.message}; not shown yet` })),
+  ]
+}
+
 async function checkHeadFile(
   baseUrl: string,
   file: { readonly id: string; readonly label: string; readonly path: string },
@@ -1829,7 +1919,9 @@ function detectionDiagnosticCheck(
               ? 'Detected SpatialData'
               : detection.platform === 'atera'
                 ? 'Detected Atera'
-                : 'Detected Xenium',
+                : detection.platform === 'merscope'
+                  ? 'Detected MERSCOPE'
+                  : 'Detected Xenium',
     startedAt,
   })
 }

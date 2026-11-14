@@ -620,6 +620,54 @@ describe('runDatasetDiagnostics', () => {
     expect(requests.filter((request) => request.method === 'HEAD')).toHaveLength(1)
   })
 
+  it('checks MERSCOPE tables and boundaries, and lists files not read yet', async () => {
+    const detection: SpatialDatasetDetection = {
+      platform: 'merscope',
+      baseUrl: 'https://example.test/region_0',
+      files: {
+        cellByGene: 'cell_by_gene.csv',
+        cellMetadata: 'cell_metadata.csv',
+        cellBoundaries: 'cell_boundaries.parquet',
+      },
+      checked: [],
+    }
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = String(input)
+
+      if (url.endsWith('images/manifest.json')) {
+        return new Response(null, { status: 404 })
+      }
+
+      return new Response(null, {
+        headers: {
+          'Content-Length': url.endsWith('cell_metadata.csv') ? '400000000' : '1048576',
+        },
+      })
+    })
+
+    const report = await runDatasetDiagnostics(detection.baseUrl, {
+      fetcher,
+      detectDataset: async () => detection,
+    })
+
+    expect(
+      report.checks
+        .filter((check) => check.id.startsWith('merscope-'))
+        .map((check) => [check.id, check.status, check.message]),
+    ).toEqual([
+      ['merscope-cell-by-gene', 'pass', 'Readable (1.0 MB)'],
+      [
+        'merscope-cell-metadata',
+        'fail',
+        '381.5 MB is above the 300 MB browser load limit',
+      ],
+      ['merscope-cell-boundaries', 'pass', 'Readable (1.0 MB)'],
+      ['merscope-transcripts', 'pass', 'Readable (1.0 MB); not shown yet'],
+    ])
+    expect(report.checks[0]).toMatchObject({ message: 'Detected MERSCOPE' })
+    expect(fetcher.mock.calls.every(([, init]) => init?.method === 'HEAD')).toBe(true)
+  })
+
   it('checks Visium HD binned outputs instead of Xenium files', async () => {
     const detection: SpatialDatasetDetection = {
       platform: 'visium-hd',

@@ -85,6 +85,7 @@ match:
 | 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                             | `atera`                                                            |
 | 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                   | `spatialdata` or `image`                                           |
 | 6     | `spatial/tissue_positions.csv` (or `…_list.csv`), `spatial/scalefactors_json.json`, `filtered_feature_bc_matrix.h5`  | `visium`                                                           |
+| 6b    | `cell_by_gene.csv` and `cell_metadata.csv` (probed alongside 6, with `cell_boundaries.parquet`)                      | `merscope`                                                         |
 | 7     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
 | —     | Nothing matched                                                                                                      | `unknown` → "Unsupported spatial dataset layout."                  |
 
@@ -119,6 +120,7 @@ platform's code is a separate chunk:
 | `atera`       | `AteraDataset` (`src/datasets/ateraDataset.ts`)                                   | [Atera](./modalities/atera.md)             |
 | `visium`      | `AnnDataH5adDataset` from `createVisiumDataset` (`src/datasets/visiumDataset.ts`) | [Standard Visium](./modalities/visium.md)  |
 | `visium-hd`   | `VisiumHdDataset` (`src/datasets/visiumHdDataset.ts`)                             | [Visium HD](./modalities/visium-hd.md)     |
+| `merscope`    | `MerscopeDataset` (`src/datasets/merscopeDataset.ts`)                             | [MERSCOPE](./modalities/merscope.md)       |
 | `h5ad`        | `AnnDataH5adDataset` (`src/datasets/h5adDataset.ts`)                              | [H5AD](./modalities/h5ad.md)               |
 | `spatialdata` | `SpatialDataDataset` (`src/datasets/spatialDataDataset.ts`)                       | [SpatialData](./modalities/spatialdata.md) |
 | `image`       | `ImageOnlyDataset` (`src/datasets/imageOnlyDataset.ts`)                           | [Image sources](./modalities/image.md)     |
@@ -171,6 +173,7 @@ commits:
 | Visium      | `visiumSummary()`, then the same as H5AD                                | Tissue image                                            |
 | SpatialData | Same as H5AD, plus `summary()` for the log                              | Image                                                   |
 | Atera       | Same as H5AD                                                            | Morphology image                                        |
+| MERSCOPE    | Same as H5AD (both cell tables read in a worker), then `summary()`      | —                                                       |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
 
 Each load gets its own `AbortSignal`. A newer load aborts a pending one, and

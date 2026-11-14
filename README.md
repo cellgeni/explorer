@@ -2,7 +2,8 @@
 
 Browser-based explorer for hosted spatial-omics and image data. The app loads
 10x Xenium and Atera output folders, standard Visium (55 µm spots) and Visium
-HD Space Ranger output folders, direct AnnData `.h5ad` files (including Visium
+HD Space Ranger output folders, Vizgen MERSCOPE region folders, direct AnnData
+`.h5ad` files (including Visium
 AnnData with `uns/spatial`), SpatialData Zarr stores, and image-only
 OME-TIFF/TIFF/QPTIFF/SVS/OME-Zarr URLs from object storage.
 It renders spatial cells, spots, bins, image pyramids, morphology channels, expression
@@ -86,8 +87,8 @@ served over HTTP; opening `index.html` from disk does not work. See
   outputs, annotations, ROI queries, diagnostics, range checks, telemetry, and
   shareable state.
 - `src/datasets/` defines the spatial dataset interface and platform
-  implementations for Xenium, Atera, standard Visium, Visium HD, H5AD,
-  SpatialData, and image-only sources.
+  implementations for Xenium, Atera, standard Visium, Visium HD, MERSCOPE,
+  H5AD, SpatialData, and image-only sources.
 - `src/features/` contains domain UI and workflow modules for the app shell,
   genes, transcripts, annotations, ROI, morphology, cells, diagnostics, and
   platform-specific behavior.
@@ -114,6 +115,11 @@ Enter a source in the `Dataset or image URL` field:
   the hires or lowres tissue PNG; or a `.h5ad` with the scanpy/CELLxGENE
   `uns/spatial/<library>` layout. A dataset manifest loads GEO samples, whose
   files are renamed and gzipped, in place.
+- MERSCOPE: Vizgen region folder with `cell_by_gene.csv` and
+  `cell_metadata.csv` (each read whole, up to 300 MB), plus
+  `cell_boundaries.parquet` for cell outlines. A dataset manifest loads vpt
+  re-segmentations and GEO deposits in place. Images and transcripts are not
+  read yet.
 - Visium HD: Space Ranger `outs/` folder with at least one
   `binned_outputs/square_*um` tier containing positions, scalefactors, and a
   filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
@@ -161,7 +167,8 @@ The full index is in [docs/README.md](docs/README.md).
   platform gating, coordinates, caching, workers, and error handling.
 - Modality read paths: [Xenium](docs/modalities/xenium.md),
   [Atera](docs/modalities/atera.md), [standard Visium](docs/modalities/visium.md),
-  [Visium HD](docs/modalities/visium-hd.md), [H5AD](docs/modalities/h5ad.md),
+  [Visium HD](docs/modalities/visium-hd.md), [MERSCOPE](docs/modalities/merscope.md),
+  [H5AD](docs/modalities/h5ad.md),
   [SpatialData](docs/modalities/spatialdata.md), and
   [image sources](docs/modalities/image.md). Each lists the files read, the
   libraries used, the source modules involved, and known limitations.
@@ -169,7 +176,7 @@ The full index is in [docs/README.md](docs/README.md).
   download a release zip or build the Vite app, upload it to AWS S3 or Ceph
   RGW-style storage, configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional files
-  for Xenium, Atera, standard Visium, Visium HD, H5AD, SpatialData, and
+  for Xenium, Atera, standard Visium, Visium HD, MERSCOPE, H5AD, SpatialData, and
   image-only sources, plus HTTP
   requirements
   and quick validation commands.

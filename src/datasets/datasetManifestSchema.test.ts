@@ -15,6 +15,7 @@ import {
   XENIUM_MANIFEST_OPTIONAL_FILES,
 } from './datasetManifest'
 import { ATERA_FILE_DEFAULTS, ATERA_OPTIONAL_FILES } from './ateraFormat'
+import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { VISIUM_FILE_DEFAULTS, VISIUM_OPTIONAL_FILES } from './visiumFormat'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
@@ -67,6 +68,9 @@ describe('dataset manifest JSON Schema', () => {
     )
     expect(keys(definition('visiumFiles'))).toEqual(
       [...Object.keys(VISIUM_FILE_DEFAULTS), ...VISIUM_OPTIONAL_FILES].sort(),
+    )
+    expect(keys(definition('merscopeFiles'))).toEqual(
+      Object.keys(MERSCOPE_FILE_DEFAULTS).sort(),
     )
     expect(keys(definition('visiumHdFiles'))).toEqual(
       [
