@@ -55,16 +55,54 @@ planned in advance.
 
 ## Known Gaps
 
-- [ ] `points` (transcripts), extra images, and extra tables are not shown.
+Checked against the code on 2026-11-14. Ordered roughly by how soon they
+matter on real stores.
+
+- [ ] The table cannot be chosen. The first table, by name, that annotates a
+      shapes element wins, else one that annotates labels, else the first
+      (`primaryTable`); there is no `sdTable`. spatialdata-io names Visium HD
+      tables `square_002um`, `square_008um`, and `square_016um`, so a Visium
+      HD store opens on the 2 µm bins and reads all their shapes (found by
+      reading the code; no Visium HD store was tried). In STHELAR only
+      `table_cells` is reachable, not `table_nuclei`, `table_scvi`, or
+      `table_combined`.
+- [ ] Images whose affine swaps, flips, rotates, or shears the axes are
+      skipped (`isAxisAlignedAffine`) and named only in the activity log's
+      skipped elements. STHELAR's `he` image (x/y swap and flip) is never
+      shown.
+- [ ] `points` (transcripts) are not read. The 460-plex store holds 8.8 GB of
+      transcripts in about 190 Parquet parts; whether their row groups carry
+      x/y statistics that would allow viewport reads has not been checked.
+- [ ] `nucleus_boundaries` shapes are not drawn:
+      `SPATIALDATA_PLATFORM_ADAPTER` has `nucleusBoundaries: false`, although
+      Xenium nuclei are drawn since
+      [Phase 17](17-xenium-nucleus-boundaries.md).
 - [ ] Shapes are read whole, not by viewport: spatialdata-io writes one row
       group with no per-shape bounding boxes, so a viewport-scoped read needs
       a spatially sorted companion file. Parsing moved to a worker on
       2026-11-13 (see
       [4.5](../decisions.md#45-rendering--decision-two-canvases-decode-off-the-main-thread)).
-- [ ] `meta()` waits for the image, so a broken image also blocks boundaries.
+- [ ] Labels are drawn only as traced outlines, not as a raster layer.
+- [ ] Only `z = 0` and `t = 0` of images and labels are shown (shared with the
+      OME-Zarr `t`/`z` item in [Open Items](../open-items.md)).
+- [ ] Polygons keep only the outer ring of their largest part: holes and the
+      other parts of a MultiPolygon are dropped. Fine for cells, wrong for
+      tissue or region annotations.
+- [x] `meta()` waits for the image, so a broken image also blocks boundaries.
+      Since 2026-11-14 `meta()` treats an image that fails to open as no
+      image; the error still reaches the morphology layer through `image()`.
 - [x] Imported CSV/JSON annotations must use Xenium cell IDs (shared with
       [Phase 7](07-h5ad.md)). Boolean `obs` columns were fixed on
       2026-11-09; imports accept any cell ID since 2026-11-12.
-- [ ] Diagnostics check only one image chunk.
-- [ ] No E2E coverage; the reference stores in
+- [x] Diagnostics check the default view, not the `sdCs` / `sdImage`
+      selection, and skip labels and the polygon shapes drawn in place of
+      region circles (`cell_boundaries` for `cell_circles`). Since 2026-11-14
+      they use the selection the dataset loads with (`spatialDataSelectionFor`),
+      check one chunk of each labels region (optional), and range-check the
+      outline companion's `shapes.parquet` (optional, since region polygons
+      are drawn themselves).
+- [ ] Diagnostics check only the first chunk of the coarsest level of the
+      image and of each labels region.
+- [ ] No E2E coverage: `examples/index.json` has no SpatialData entry, so the
+      nightly examples test never loads one. The reference stores in
       [1](../../../PLAN.md#reference-datasets) are used for manual testing.

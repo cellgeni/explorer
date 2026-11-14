@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDiagnostics'
-import type { SpatialDatasetDetection } from '../datasets/datasetFactory'
+import {
+  setSpatialDataSelection,
+  type SpatialDatasetDetection,
+} from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
@@ -237,6 +240,122 @@ describe('runDatasetDiagnostics', () => {
       `${storeUrl}/shapes/spots/shapes.parquet`,
       expect.objectContaining({ label: 'SpatialData shapes spots' }),
     )
+  })
+
+  it('checks the selected SpatialData image, labels regions, and the outline companion', async () => {
+    const storeUrl = 'https://example.test/selected.sdata.zarr'
+    const cyx = [{ name: 'c' }, { name: 'y' }, { name: 'x' }]
+    const yx = [{ name: 'y' }, { name: 'x' }]
+    const array = (shape: number[], chunks: number[]) => ({
+      zarr_format: 2,
+      shape,
+      chunks,
+      dtype: '<u2',
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+    })
+    const raster = (axes: { name: string }[], scale: number[]) => ({
+      multiscales: [
+        {
+          axes,
+          datasets: [{ path: '0' }],
+          coordinateTransformations: [
+            {
+              type: 'scale',
+              scale,
+              input: { axes },
+              output: { name: 'global', axes },
+            },
+          ],
+        },
+      ],
+    })
+    const shapes = {
+      coordinateTransformations: [
+        { type: 'identity', input: { axes: ['x', 'y'] }, output: { name: 'global' } },
+      ],
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = input instanceof Request ? input.url : String(input)
+
+      if (url.endsWith('/zmetadata')) {
+        return Response.json({
+          zarr_consolidated_format: 1,
+          metadata: {
+            '.zgroup': { zarr_format: 2 },
+            // he has the finer scale, so it is the default image.
+            'images/he/.zgroup': { zarr_format: 2 },
+            'images/he/.zattrs': raster(cyx, [1, 0.5, 0.5]),
+            'images/he/0/.zarray': array([3, 4, 4], [1, 2, 2]),
+            'images/dapi/.zgroup': { zarr_format: 2 },
+            'images/dapi/.zattrs': raster(cyx, [1, 1, 1]),
+            'images/dapi/0/.zarray': array([1, 4, 4], [1, 2, 2]),
+            'labels/cell_labels/.zgroup': { zarr_format: 2 },
+            'labels/cell_labels/.zattrs': raster(yx, [1, 1]),
+            'labels/cell_labels/0/.zarray': array([4, 4], [2, 2]),
+            'shapes/cell_circles/.zgroup': { zarr_format: 2 },
+            'shapes/cell_circles/.zattrs': shapes,
+            'shapes/cell_boundaries/.zgroup': { zarr_format: 2 },
+            'shapes/cell_boundaries/.zattrs': shapes,
+            'tables/table/.zgroup': { zarr_format: 2 },
+            'tables/table/.zattrs': {
+              region: ['cell_circles', 'cell_labels'],
+              instance_key: 'cell_id',
+            },
+          },
+        })
+      }
+
+      return new Response(null, { status: url.includes('/labels/') ? 404 : 200 })
+    }) as unknown as typeof fetch
+    const rangeValidator = vi.fn(async (url: string) => {
+      if (url.includes('cell_boundaries')) {
+        throw new Error('cell_boundaries/shapes.parquet returned HTTP 404')
+      }
+    })
+
+    setSpatialDataSelection(storeUrl, { image: 'dapi' })
+
+    try {
+      const report = await runDatasetDiagnostics(storeUrl, {
+        detectDataset: vi.fn(async () => ({
+          platform: 'spatialdata' as const,
+          baseUrl: storeUrl,
+          spatialDataUrl: storeUrl,
+          checked: [],
+        })),
+        fetcher,
+        rangeValidator,
+      })
+
+      expect(
+        report.checks.map((check) => [check.id, check.status, check.required]),
+      ).toEqual([
+        ['dataset-layout', 'pass', true],
+        ['spatialdata-metadata', 'pass', true],
+        ['spatialdata-table-chunks', 'pass', true],
+        ['spatialdata-image-chunk', 'pass', false],
+        ['spatialdata-labels-cell_labels', 'warning', false],
+        ['spatialdata-shapes-cell_circles', 'pass', true],
+        ['spatialdata-shapes-cell_boundaries', 'warning', false],
+      ])
+      expect(report.checks[1]?.message).toBe(
+        'Coordinate system global; image dapi; table table',
+      )
+      expect(report.checks[3]).toMatchObject({
+        label: 'SpatialData image dapi',
+        url: `${storeUrl}/images/dapi/0/0/0/0`,
+      })
+      expect(report.checks[4]).toMatchObject({
+        label: 'SpatialData labels cell_labels',
+        url: `${storeUrl}/labels/cell_labels/0/0/0`,
+      })
+    } finally {
+      setSpatialDataSelection(storeUrl, undefined)
+    }
   })
 
   it('checks Atera files at the paths experiment.spatial lists', async () => {

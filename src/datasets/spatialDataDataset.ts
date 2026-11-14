@@ -307,7 +307,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   async meta(): Promise<DatasetMeta> {
     const { table } = await this.state()
     const [loader, tableMeta, boundaries] = await Promise.all([
-      this.imageLoader(),
+      // Boundary loading reads meta() first, so an image that cannot be
+      // opened counts as none here instead of blocking outlines. Its error
+      // still reaches the morphology layer through image().
+      this.imageLoader().catch(() => null),
       table === null ? null : table.meta(),
       this.boundarySource(),
     ])

@@ -230,8 +230,9 @@ start with their first six channels on.
   declare `unit`, for example full-resolution pixels for Visium.
 - `extent` is the union of the table points' bounding box and the image.
 - `capabilities.cellBoundaries` is true when there is a table and at least one
-  region shapes or labels element. `meta()` waits for the image to open, so a broken
-  image also blocks boundary loading.
+  region shapes or labels element. Boundary loading reads `meta()` first, and
+  `meta()` treats an image that fails to open as no image, so a broken image
+  does not block outlines; its error is shown by the morphology layer.
 
 ## Load Sequence
 
@@ -263,7 +264,7 @@ off.
 | `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                                                               |
 | `src/zarr/zarrZipStore.ts`              | Zipped stores: central directory, store root, Parquet entries                                                            |
 | `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                                                            |
-| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, table presence and every table chunk, one image chunk, region `shapes.parquet` range checks |
+| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, every table chunk, one chunk of the image and of each labels region, drawn `shapes.parquet` |
 
 ## Known Limitations
 
@@ -274,10 +275,19 @@ off.
   spatialdata's `blobs` example (labels, image, table).
 - `points` (transcripts), additional images, and additional tables are not
   shown. Labels elements are shown only as traced cell outlines, not as a
-  raster layer.
+  raster layer. `nucleus_boundaries` shapes are not drawn.
 - Only one coordinate system and one image are shown at a time. They are
   chosen automatically; the `Coordinate system` and `Image` selects in View
   options override the choice and reload the store.
+- The table cannot be chosen: the first by name that annotates shapes wins.
+  spatialdata-io names Visium HD tables `square_002um`, `square_008um`, and
+  `square_016um`, so a Visium HD store opens on its 2 µm bins.
+- Images placed with a rotated, sheared, flipped, or axis-swapping affine are
+  skipped, for example the H&E in the STHELAR stores. They are listed only
+  among the skipped elements in the activity log.
+- Only `z = 0` and `t = 0` of images and labels are read.
+- Polygon holes, and every part of a MultiPolygon but the largest, are
+  dropped.
 - Shapes are read whole, not by viewport. spatialdata-io writes
   `shapes.parquet` as one row group with no per-shape bounding boxes (598,222
   rows in the 460-plex example), so a range read cannot skip cells out of
@@ -286,4 +296,5 @@ off.
   entries are read whole, so a compressed `shapes.parquet` is downloaded in
   full before any of it is parsed.
 - Diagnostics send a `HEAD` for every table chunk but check only the first
-  chunk of the image's coarsest level, not every image chunk.
+  chunk of the coarsest level of the image and of each labels region, not
+  every chunk.

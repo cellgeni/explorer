@@ -111,6 +111,30 @@ describe('SpatialDataDataset', () => {
     )
   })
 
+  it('loads boundaries when the image cannot be opened', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture()),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: vi.fn(async () => {
+        throw new Error('OME-Zarr image has invalid width.')
+      }),
+    })
+
+    await expect(dataset.meta()).resolves.toMatchObject({
+      capabilities: { cellBoundaries: true, pyramidImage: false },
+      extent: { minX: 1, minY: 1, maxX: 5, maxY: 1 },
+    })
+    const elements = await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    })
+    expect(elements.elements.map((element) => element.id)).toEqual(['cell-a', 'cell-b'])
+    await expect(dataset.image()).rejects.toThrow('OME-Zarr image has invalid width.')
+  })
+
   it('matches rows to shapes stored in another order and outlines region circles', async () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
