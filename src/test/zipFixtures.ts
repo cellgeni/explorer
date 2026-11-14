@@ -17,7 +17,17 @@ export interface ByteRangeRequest {
 // writers' do, so a reader must take the data offset from the local header.
 const LOCAL_EXTRA_FIELD = Uint8Array.of(0xfe, 0xca, 0x00, 0x00)
 
-export function zipArchive(files: readonly ZipFixtureFile[]): Uint8Array {
+export interface ZipArchiveOptions {
+  // Writes sizes and offsets in ZIP64 extra fields and ZIP64 end records,
+  // with the 32-bit fields saturated, as writers of archives over 4 GB do.
+  readonly zip64?: boolean
+}
+
+export function zipArchive(
+  files: readonly ZipFixtureFile[],
+  options: ZipArchiveOptions = {},
+): Uint8Array {
+  const zip64 = options.zip64 === true
   const encoder = new TextEncoder()
   const localParts: Uint8Array[] = []
   const centralParts: Uint8Array[] = []
@@ -42,18 +52,28 @@ export function zipArchive(files: readonly ZipFixtureFile[]): Uint8Array {
     local.set(nameBytes, 30)
     local.set(LOCAL_EXTRA_FIELD, 30 + nameBytes.length)
 
-    const central = new Uint8Array(46 + nameBytes.length)
+    const central = new Uint8Array(46 + nameBytes.length + (zip64 ? 28 : 0))
     const centralView = new DataView(central.buffer)
     centralView.setUint32(0, 0x02014b50, true)
     centralView.setUint16(4, 20, true)
     centralView.setUint16(6, 20, true)
     centralView.setUint16(10, method, true)
     centralView.setUint32(16, crc, true)
-    centralView.setUint32(20, body.length, true)
-    centralView.setUint32(24, file.data.length, true)
+    centralView.setUint32(20, zip64 ? 0xffffffff : body.length, true)
+    centralView.setUint32(24, zip64 ? 0xffffffff : file.data.length, true)
     centralView.setUint16(28, nameBytes.length, true)
-    centralView.setUint32(42, offset, true)
+    centralView.setUint32(42, zip64 ? 0xffffffff : offset, true)
     central.set(nameBytes, 46)
+
+    if (zip64) {
+      const extra = 46 + nameBytes.length
+      centralView.setUint16(30, 28, true)
+      centralView.setUint16(extra, 0x0001, true)
+      centralView.setUint16(extra + 2, 24, true)
+      centralView.setBigUint64(extra + 4, BigInt(file.data.length), true)
+      centralView.setBigUint64(extra + 12, BigInt(body.length), true)
+      centralView.setBigUint64(extra + 20, BigInt(offset), true)
+    }
 
     localParts.push(local, body)
     centralParts.push(central)
@@ -64,12 +84,30 @@ export function zipArchive(files: readonly ZipFixtureFile[]): Uint8Array {
   const end = new Uint8Array(22)
   const endView = new DataView(end.buffer)
   endView.setUint32(0, 0x06054b50, true)
-  endView.setUint16(8, files.length, true)
-  endView.setUint16(10, files.length, true)
-  endView.setUint32(12, centralSize, true)
-  endView.setUint32(16, offset, true)
+  endView.setUint16(8, zip64 ? 0xffff : files.length, true)
+  endView.setUint16(10, zip64 ? 0xffff : files.length, true)
+  endView.setUint32(12, zip64 ? 0xffffffff : centralSize, true)
+  endView.setUint32(16, zip64 ? 0xffffffff : offset, true)
 
-  return concat([...localParts, ...centralParts, end])
+  if (!zip64) {
+    return concat([...localParts, ...centralParts, end])
+  }
+
+  const record = new Uint8Array(56)
+  const recordView = new DataView(record.buffer)
+  recordView.setUint32(0, 0x06064b50, true)
+  recordView.setBigUint64(4, 44n, true)
+  recordView.setBigUint64(24, BigInt(files.length), true)
+  recordView.setBigUint64(32, BigInt(files.length), true)
+  recordView.setBigUint64(40, BigInt(centralSize), true)
+  recordView.setBigUint64(48, BigInt(offset), true)
+  const locator = new Uint8Array(20)
+  const locatorView = new DataView(locator.buffer)
+  locatorView.setUint32(0, 0x07064b50, true)
+  locatorView.setBigUint64(8, BigInt(offset + centralSize), true)
+  locatorView.setUint32(16, 1, true)
+
+  return concat([...localParts, ...centralParts, record, locator, end])
 }
 
 // Serves files by absolute URL with HEAD and single-range GET support; other

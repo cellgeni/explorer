@@ -145,6 +145,33 @@ grid; without them it is estimated from spot spacing.
 
 See [Standard Visium](./modalities/visium.md) for how each file is read.
 
+## Host Your Own MERSCOPE Data
+
+Host one MERSCOPE region folder (`region_0/` and so on) with:
+
+- `cell_by_gene.csv` (up to 300 MB; it is read whole)
+- `cell_metadata.csv` (up to 300 MB), with `center_x` and `center_y` in
+  micrometres
+
+Detection needs both to answer `HEAD`. Recommended:
+
+- `cell_boundaries.parquet` for cell outlines. It is read whole: files up to
+  100 MB load with the dataset, larger ones when `Cell boundaries` is turned
+  on.
+- The run's `.vzg` for the image. It is read by byte range (central
+  directory, then one stain and plane's pyramid, read whole), so the host
+  must answer `Range` with `206`. Name it in the manifest (`files.vzg`) unless
+  the folder's index page lists it.
+
+The viewer does not read `detected_transcripts.csv` or the `images/` mosaics,
+so they can be left out. The tables and boundaries are read with a plain
+`GET`. A vpt re-segmentation
+(`cellpose_*` or `baysor_*` files) or a GEO deposit (prefixed, gzipped files)
+needs a [dataset manifest](./dataset-manifest.md#merscope) that names its
+files.
+
+See [MERSCOPE](./modalities/merscope.md) for how each file is read.
+
 ## Host Your Own Visium HD Data
 
 Host the Space Ranger output directory, usually the `outs/` folder. The app

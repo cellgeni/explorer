@@ -44,6 +44,7 @@
   | Atera       | Atera Onboard Analysis output folder               | `experiment.spatial`                                   | [atera.md](./modalities/atera.md)             |
   | Visium      | Space Ranger `outs/` folder, or Visium `.h5ad`     | Positions, scale factors, and matrix; or `uns/spatial` | [visium.md](./modalities/visium.md)           |
   | Visium HD   | Space Ranger `outs/` folder                        | `binned_outputs/square_*um` tiers                      | [visium-hd.md](./modalities/visium-hd.md)     |
+  | MERSCOPE    | Vizgen MERSCOPE region folder                      | `cell_by_gene.csv` and `cell_metadata.csv`             | [merscope.md](./modalities/merscope.md)       |
   | H5AD        | `.h5ad` file URL                                   | URL suffix                                             | [h5ad.md](./modalities/h5ad.md)               |
   | SpatialData | Zarr store root                                    | `spatialdata_attrs` in root metadata                   | [spatialdata.md](./modalities/spatialdata.md) |
   | Image       | OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr URL | URL suffix or Zarr metadata                            | [image.md](./modalities/image.md)             |

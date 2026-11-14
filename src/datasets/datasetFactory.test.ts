@@ -19,6 +19,7 @@ import { AteraDataset } from './ateraDataset'
 import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
+import { MerscopeDataset } from './merscopeDataset'
 import { SpatialDataDataset } from './spatialDataDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
 import {
@@ -894,6 +895,178 @@ describe('standard Visium manifests', () => {
         detectSpatialDataset(baseUrl, { fetcher: missingImage }),
       ).rejects.toThrow(
         /"files.hiresImage" \(.*GSM1_tissue_hires_image.png\) is not readable \(HTTP 404\)/,
+      )
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+})
+
+describe('MERSCOPE output', () => {
+  it('detects a region folder from its two cell tables', async () => {
+    const fetcher = fetcherForResponses({
+      '/region_0/cell_by_gene.csv': () => new Response(null),
+      '/region_0/cell_metadata.csv': () => new Response(null),
+      '/region_0/cell_boundaries.parquet': () =>
+        new Response(null, { headers: { 'Content-Length': '535000000' } }),
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/region_0/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'merscope',
+      baseUrl: 'https://example.test/region_0',
+      files: {
+        cellByGene: 'cell_by_gene.csv',
+        cellMetadata: 'cell_metadata.csv',
+        cellBoundaries: 'cell_boundaries.parquet',
+        cellBoundariesByteLength: 535000000,
+      },
+    })
+
+    const dataset = await createSpatialDataset('https://example.test/region_0', {
+      fetcher,
+    })
+    expect(dataset).toBeInstanceOf(MerscopeDataset)
+    expect(dataset).toMatchObject({
+      files: {
+        cellByGene: 'https://example.test/region_0/cell_by_gene.csv',
+        cellBoundaries: 'https://example.test/region_0/cell_boundaries.parquet',
+      },
+      cellBoundariesByteLength: 535000000,
+    })
+  })
+
+  it('needs both cell tables, and treats boundaries as optional', async () => {
+    await expect(
+      detectSpatialDataset('https://example.test/region_0', {
+        fetcher: fetcherForOkPaths(['/region_0/cell_by_gene.csv']),
+      }),
+    ).resolves.toMatchObject({ platform: 'unknown' })
+
+    const detection = await detectSpatialDataset('https://example.test/region_0', {
+      fetcher: fetcherForOkPaths([
+        '/region_0/cell_by_gene.csv',
+        '/region_0/cell_metadata.csv',
+      ]),
+    })
+    expect(detection).toMatchObject({ platform: 'merscope' })
+    expect(
+      detection.platform === 'merscope' ? detection.files.cellBoundaries : null,
+    ).toBe(undefined)
+  })
+
+  it('finds the run .vzg in the folder listing or the manifest', async () => {
+    const vzg = '202402231759_Batch26_VMSC04501_region_0.vzg'
+    const listing = () =>
+      new Response(
+        `<html><head><title>Index of /region_0</title></head><body>${[
+          'cell_by_gene.csv',
+          'cell_metadata.csv',
+          vzg,
+          'images/',
+        ]
+          .map((name) => `<a href="${name}">${name}</a>`)
+          .join('')}</body></html>`,
+      )
+
+    try {
+      await expect(
+        detectSpatialDataset('https://example.test/region_0', {
+          fetcher: fetcherForResponses({
+            '/region_0/': listing,
+            '/region_0/cell_by_gene.csv': () => new Response(null),
+            '/region_0/cell_metadata.csv': () => new Response(null),
+          }),
+        }),
+      ).resolves.toMatchObject({
+        platform: 'merscope',
+        files: { vzg },
+      })
+    } finally {
+      clearFolderListings()
+    }
+
+    const manifestUrl = 'https://example.test/run/explorer.json'
+    const responses = {
+      '/run/explorer.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'merscope',
+          files: { vzg: 'https://other.example.test/run.vzg' },
+        }),
+      '/run/cell_by_gene.csv': () => new Response(null),
+      '/run/cell_metadata.csv': () => new Response(null),
+      '/run.vzg': () => new Response(null),
+    }
+
+    try {
+      await expect(
+        detectSpatialDataset(manifestUrl, { fetcher: fetcherForResponses(responses) }),
+      ).resolves.toMatchObject({
+        files: { vzg: 'https://other.example.test/run.vzg' },
+      })
+      const { '/run.vzg': _missing, ...withoutVzg } = responses
+      void _missing
+      await expect(
+        detectSpatialDataset(manifestUrl, { fetcher: fetcherForResponses(withoutVzg) }),
+      ).rejects.toThrow(/"files.vzg" \(.*run.vzg\) is not readable \(HTTP 404\)/)
+    } finally {
+      setDatasetManifest(manifestUrl, undefined)
+    }
+  })
+
+  it('reads vpt and GEO file names from a manifest', async () => {
+    const baseUrl = 'https://example.test/D082/explorer.json'
+    const manifest = {
+      version: 1,
+      platform: 'merscope',
+      root: 'region_0/',
+      files: {
+        cellByGene: 'baysor_cell_by_gene.csv',
+        cellMetadata: 'baysor_cell_metadata.csv',
+        cellBoundaries: 'baysor_micron_space.parquet',
+      },
+    }
+    const responses = {
+      '/D082/explorer.json': () => Response.json(manifest),
+      '/D082/region_0/baysor_cell_by_gene.csv': () => new Response(null),
+      '/D082/region_0/baysor_cell_metadata.csv': () => new Response(null),
+      '/D082/region_0/baysor_micron_space.parquet': () =>
+        new Response(null, { headers: { 'Content-Length': '797415' } }),
+    }
+
+    try {
+      await expect(
+        detectSpatialDataset(baseUrl, { fetcher: fetcherForResponses(responses) }),
+      ).resolves.toMatchObject({
+        platform: 'merscope',
+        files: {
+          cellByGene: 'baysor_cell_by_gene.csv',
+          cellMetadata: 'baysor_cell_metadata.csv',
+          cellBoundaries: 'baysor_micron_space.parquet',
+          cellBoundariesByteLength: 797415,
+        },
+      })
+      expect(datasetFileUrl(baseUrl, 'baysor_cell_by_gene.csv')).toBe(
+        'https://example.test/D082/region_0/baysor_cell_by_gene.csv',
+      )
+
+      const noBoundaries = Object.fromEntries(
+        Object.entries(responses).filter(([path]) => !path.endsWith('.parquet')),
+      )
+      await expect(
+        detectSpatialDataset(baseUrl, { fetcher: fetcherForResponses(noBoundaries) }),
+      ).rejects.toThrow(
+        /"files.cellBoundaries" \(.*baysor_micron_space.parquet\) is not readable \(HTTP 404\)/,
+      )
+
+      const unnamed = fetcherForResponses({
+        '/D082/explorer.json': () =>
+          Response.json({ version: 1, platform: 'merscope', root: 'region_0/' }),
+      })
+      await expect(detectSpatialDataset(baseUrl, { fetcher: unnamed })).rejects.toThrow(
+        'no cell_by_gene.csv under https://example.test/D082/region_0. Name the file in "files.cellByGene".',
       )
     } finally {
       setDatasetManifest(baseUrl, undefined)

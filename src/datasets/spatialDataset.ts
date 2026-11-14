@@ -15,6 +15,7 @@ export type Platform =
   | 'atera'
   | 'visium'
   | 'visium-hd'
+  | 'merscope'
   | 'h5ad'
   | 'spatialdata'
   | 'image'

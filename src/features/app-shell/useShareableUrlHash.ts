@@ -29,6 +29,9 @@ interface ShareableDatasetHashOptions {
     readonly visiumLibrary?: string
     readonly visiumOffTissue?: boolean
   }
+  readonly merscopeSelection?: {
+    readonly merscopeImage?: string
+  }
 }
 
 interface ShareableViewHashOptions {
@@ -135,6 +138,7 @@ export function useShareableUrlHash({
   const visiumImage = dataset.visiumSelection?.visiumImage
   const visiumLibrary = dataset.visiumSelection?.visiumLibrary
   const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
+  const merscopeImage = dataset.merscopeSelection?.merscopeImage
   const { activeRoiSelection, card, hiddenLayers, panels, shareableViewState, tool } =
     view
   const {
@@ -259,6 +263,7 @@ export function useShareableUrlHash({
           ...(visiumImage === undefined ? {} : { visiumImage }),
           ...(visiumLibrary === undefined ? {} : { visiumLibrary }),
           ...(visiumOffTissue === undefined ? {} : { visiumOffTissue }),
+          ...(merscopeImage === undefined ? {} : { merscopeImage }),
         },
         datasetDefaults,
       ),
@@ -325,6 +330,7 @@ export function useShareableUrlHash({
     visiumImage,
     visiumLibrary,
     visiumOffTissue,
+    merscopeImage,
     transcriptDensityColorScale,
     transcriptDetailMode,
     transcriptExactPointLimit,

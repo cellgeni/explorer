@@ -4,6 +4,7 @@ import {
   setDatasetManifest,
 } from '../data/datasetFiles'
 import {
+  folderListingFor,
   folderListingMissing,
   readFolderListing,
   setFolderListing,
@@ -26,6 +27,7 @@ import {
   parseDatasetManifest,
   resolveManifestPath,
   type DatasetManifest,
+  type MerscopeDatasetManifest,
   type VisiumDatasetManifest,
   type VisiumHdDatasetManifest,
   type VisiumHdManifestSegmentedOutput,
@@ -37,6 +39,7 @@ import {
   VISIUM_OPTIONAL_FILES,
   type VisiumAnalysisFileKey,
 } from './visiumFormat'
+import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
 import type { CellId } from '../data/cellid'
@@ -94,6 +97,13 @@ export type SpatialDatasetDetection =
       readonly checked: readonly DatasetProbeResult[]
     }
   | {
+      readonly platform: 'merscope'
+      readonly baseUrl: string
+      readonly files: MerscopeDetectedFiles
+      readonly manifest?: DatasetManifest
+      readonly checked: readonly DatasetProbeResult[]
+    }
+  | {
       readonly platform: 'visium-hd'
       readonly baseUrl: string
       readonly bins: readonly VisiumHdBinDescriptor[]
@@ -120,12 +130,26 @@ export interface VisiumDetectedFiles {
   readonly analysis?: Readonly<Partial<Record<VisiumAnalysisFileKey, string>>>
 }
 
+// MERSCOPE files, as paths relative to the dataset (or manifest) root or
+// absolute URLs.
+export interface MerscopeDetectedFiles {
+  readonly cellByGene: string
+  readonly cellMetadata: string
+  readonly cellBoundaries?: string
+  // From the boundary probe's Content-Length, when the host sent one.
+  readonly cellBoundariesByteLength?: number
+  // The MERSCOPE Vizualizer zip, which holds the image pyramids.
+  readonly vzg?: string
+}
+
 export interface DatasetProbeResult {
   readonly path: string
   readonly url: string
   readonly ok: boolean
   readonly status?: number
   readonly error?: string
+  // The HEAD response's Content-Length, when asked for and present.
+  readonly byteLength?: number
 }
 
 export interface DetectSpatialDatasetOptions {
@@ -433,13 +457,29 @@ async function detectSpatialDatasetLayout(
     }
   }
 
-  const visiumFiles = await probeVisiumOutputs(normalizedBaseUrl, options, checked)
+  // Standard Visium and MERSCOPE are probed together, after the Xenium,
+  // Atera, and Zarr probes, so those datasets make no extra requests.
+  const [visiumFiles, merscopeProbes] = await Promise.all([
+    probeVisiumOutputs(normalizedBaseUrl, options, checked),
+    probeMerscopeOutputs(normalizedBaseUrl, options),
+  ])
 
   if (visiumFiles !== null) {
     return {
       platform: 'visium',
       baseUrl: normalizedBaseUrl,
       files: visiumFiles,
+      checked,
+    }
+  }
+
+  checked.push(...merscopeProbes.probes)
+
+  if (merscopeProbes.files !== null) {
+    return {
+      platform: 'merscope',
+      baseUrl: normalizedBaseUrl,
+      files: merscopeProbes.files,
       checked,
     }
   }
@@ -775,6 +815,10 @@ async function detectFromManifest(
     return detectVisiumFromManifest(baseUrl, manifest, options, checked)
   }
 
+  if (manifest.platform === 'merscope') {
+    return detectMerscopeFromManifest(baseUrl, manifest, options, checked)
+  }
+
   return detectVisiumHdFromManifest(baseUrl, manifest, options, checked)
 }
 
@@ -918,6 +962,137 @@ async function detectVisiumFromManifest(
     manifest,
     checked,
   }
+}
+
+// MERSCOPE output: cell_by_gene.csv and cell_metadata.csv are required; the
+// boundary file is optional.
+async function probeMerscopeOutputs(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<{
+  readonly files: MerscopeDetectedFiles | null
+  readonly probes: readonly DatasetProbeResult[]
+}> {
+  const [cellByGene, cellMetadata, cellBoundaries] = await Promise.all([
+    probeDatasetPath(rootUrl, MERSCOPE_FILE_DEFAULTS.cellByGene, options),
+    probeDatasetPath(rootUrl, MERSCOPE_FILE_DEFAULTS.cellMetadata, options),
+    probeDirectDatasetUrl(
+      joinUrl(rootUrl, MERSCOPE_FILE_DEFAULTS.cellBoundaries),
+      MERSCOPE_FILE_DEFAULTS.cellBoundaries,
+      options,
+      { byteLength: true },
+    ),
+  ])
+
+  return {
+    files:
+      cellByGene.ok && cellMetadata.ok
+        ? {
+            cellByGene: cellByGene.path,
+            cellMetadata: cellMetadata.path,
+            ...merscopeBoundaryFile(cellBoundaries),
+            ...listedVzgFile(rootUrl),
+          }
+        : null,
+    probes: [cellByGene, cellMetadata, cellBoundaries],
+  }
+}
+
+// Files the manifest names must exist; the others fall back to the
+// instrument's names, and missing boundaries are left out.
+async function detectMerscopeFromManifest(
+  baseUrl: string,
+  manifest: MerscopeDatasetManifest,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const { files, rootUrl } = manifest
+  const probe = async (role: keyof typeof MERSCOPE_FILE_DEFAULTS) => {
+    const named = files[role]?.path
+    const path = named ?? MERSCOPE_FILE_DEFAULTS[role]
+    const result = await probeDirectDatasetUrl(
+      resolveManifestPath(rootUrl, path),
+      path,
+      options,
+      { byteLength: role === 'cellBoundaries' },
+    )
+    checked.push(result)
+
+    if (!result.ok && named !== undefined) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.${role}" (${result.url}) is not readable (${probeFailure(result)}).`,
+      )
+    }
+
+    return result
+  }
+  const [cellByGene, cellMetadata, cellBoundaries] = await Promise.all([
+    probe('cellByGene'),
+    probe('cellMetadata'),
+    probe('cellBoundaries'),
+  ])
+  const namedVzg = files.vzg
+
+  if (namedVzg !== undefined) {
+    const result = await probeDirectDatasetUrl(namedVzg.url, namedVzg.path, options)
+    checked.push(result)
+
+    if (!result.ok) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.vzg" (${result.url}) is not readable (${probeFailure(result)}).`,
+      )
+    }
+  }
+
+  for (const [role, result] of [
+    ['cellByGene', cellByGene],
+    ['cellMetadata', cellMetadata],
+  ] as const) {
+    if (!result.ok) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `no ${MERSCOPE_FILE_DEFAULTS[role]} under ${rootUrl}. Name the file in "files.${role}".`,
+      )
+    }
+  }
+
+  return {
+    platform: 'merscope',
+    baseUrl,
+    files: {
+      cellByGene: cellByGene.path,
+      cellMetadata: cellMetadata.path,
+      ...merscopeBoundaryFile(cellBoundaries),
+      ...(namedVzg === undefined ? listedVzgFile(rootUrl) : { vzg: namedVzg.path }),
+    },
+    manifest,
+    checked,
+  }
+}
+
+// The run's .vzg, when the folder's index page lists exactly one. Its name
+// carries the run and region, so it cannot be probed for.
+function listedVzgFile(rootUrl: string): Pick<MerscopeDetectedFiles, 'vzg'> {
+  const names = Array.from(folderListingFor(rootUrl)?.names ?? []).filter((name) =>
+    /\.vzg$/i.test(name),
+  )
+
+  return names.length === 1 && names[0] !== undefined ? { vzg: names[0] } : {}
+}
+
+function merscopeBoundaryFile(
+  probe: DatasetProbeResult,
+): Pick<MerscopeDetectedFiles, 'cellBoundaries' | 'cellBoundariesByteLength'> {
+  return probe.ok
+    ? {
+        cellBoundaries: probe.path,
+        ...(probe.byteLength === undefined
+          ? {}
+          : { cellBoundariesByteLength: probe.byteLength }),
+      }
+    : {}
 }
 
 // Bin and segmented-output paths stay relative to the manifest root (or
@@ -1192,6 +1367,31 @@ export async function createSpatialDataset(
     })
   }
 
+  if (detection.platform === 'merscope') {
+    const { MerscopeDataset } = await import('./merscopeDataset')
+    const { files } = detection
+    const fileUrl = (path: string) => datasetFileUrl(detection.baseUrl, path)
+
+    return new MerscopeDataset({
+      baseUrl: detection.baseUrl,
+      files: {
+        cellByGene: fileUrl(files.cellByGene),
+        cellMetadata: fileUrl(files.cellMetadata),
+        ...(files.cellBoundaries === undefined
+          ? {}
+          : { cellBoundaries: fileUrl(files.cellBoundaries) }),
+        ...(files.vzg === undefined ? {} : { vzg: fileUrl(files.vzg) }),
+      },
+      ...(files.cellBoundariesByteLength === undefined
+        ? {}
+        : { cellBoundariesByteLength: files.cellBoundariesByteLength }),
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onProgress: options.onH5adLoadProgress }),
+    })
+  }
+
   if (detection.platform === 'visium-hd') {
     const { VisiumHdDataset } = await import('./visiumHdDataset')
     const manifest =
@@ -1272,6 +1472,8 @@ async function probeDirectDatasetUrl(
   url: string,
   path: string,
   options: DetectSpatialDatasetOptions,
+  // Records the response's Content-Length.
+  { byteLength: withByteLength = false }: { readonly byteLength?: boolean } = {},
 ): Promise<DatasetProbeResult> {
   if (folderListingMissing(url) !== undefined) {
     return { path, url, ok: false, error: NOT_LISTED }
@@ -1286,12 +1488,16 @@ async function probeDirectDatasetUrl(
       DATASET_PROBE_TIMEOUT_MS,
     )
     noteReadableResponse(url, response.status)
+    const byteLength = Number(response.headers.get('Content-Length') ?? Number.NaN)
 
     return {
       path,
       url,
       ok: response.ok,
       status: response.status,
+      ...(withByteLength && response.ok && Number.isFinite(byteLength) && byteLength > 0
+        ? { byteLength }
+        : {}),
     }
   } catch (cause) {
     return {

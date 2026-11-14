@@ -1,8 +1,14 @@
 export async function readMaybeGzipText(response: Response): Promise<string> {
+  return new TextDecoder().decode(await readMaybeGzipBytes(response))
+}
+
+// The response body, inflated when its bytes start with the gzip magic
+// number, whatever the URL's suffix.
+export async function readMaybeGzipBytes(response: Response): Promise<Uint8Array> {
   const bytes = new Uint8Array(await response.arrayBuffer())
 
   if (!hasGzipHeader(bytes)) {
-    return new TextDecoder().decode(bytes)
+    return bytes
   }
 
   if (typeof DecompressionStream !== 'function') {
@@ -12,10 +18,12 @@ export async function readMaybeGzipText(response: Response): Promise<string> {
   const body = new Response(bytes).body
 
   if (body === null) {
-    return ''
+    return new Uint8Array(0)
   }
 
-  return new Response(body.pipeThrough(new DecompressionStream('gzip'))).text()
+  return new Uint8Array(
+    await new Response(body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer(),
+  )
 }
 
 function hasGzipHeader(bytes: Uint8Array): boolean {

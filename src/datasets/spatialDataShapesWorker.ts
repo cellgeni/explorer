@@ -28,14 +28,19 @@ export interface SpatialDataShapesWorkerLike {
 export type SpatialDataShapesWorkerFactory = () => SpatialDataShapesWorkerLike
 
 // Reads on this thread where there is no Worker (Vitest's jsdom), when
-// compressors are given, and when the worker fails to run.
+// compressors are given, for a whole-file read with a custom fetcher, and
+// when the worker fails to run.
 export function spatialDataShapesWorkerReader(
   workerFactory: SpatialDataShapesWorkerFactory | null = typeof Worker === 'undefined'
     ? null
     : createDefaultSpatialDataShapesWorker,
 ): SpatialDataShapesReader {
   return async (options) => {
-    if (workerFactory === null || options.compressors !== undefined) {
+    if (
+      workerFactory === null ||
+      options.compressors !== undefined ||
+      (options.wholeFile === true && options.fetcher !== undefined)
+    ) {
       return readSpatialDataShapes(options)
     }
 
@@ -144,7 +149,19 @@ function readInWorker(
     signal?.addEventListener('abort', handleAbort, { once: true })
 
     try {
-      worker.postMessage({ type: 'read', source, affine: options.affine })
+      const layout = {
+        ...(options.idColumn === undefined ? {} : { idColumn: options.idColumn }),
+        ...(options.planeColumn === undefined
+          ? {}
+          : { planeColumn: options.planeColumn }),
+        ...(options.wholeFile === undefined ? {} : { wholeFile: options.wholeFile }),
+      }
+      worker.postMessage({
+        type: 'read',
+        source,
+        affine: options.affine,
+        ...(Object.keys(layout).length === 0 ? {} : { layout }),
+      })
     } catch (cause) {
       finish()
       reject(cause instanceof Error ? cause : new Error(String(cause)))

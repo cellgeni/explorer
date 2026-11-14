@@ -12,6 +12,7 @@ import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
+import { formatMerscopeImageSize } from '../dataset/merscopeImageModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
@@ -472,6 +473,79 @@ export function VisiumTissueImageSelect({
         onImageChange(value === '' ? null : value)
       }}
     />
+  )
+}
+
+type MerscopeViewModel = DatasetViewOptionsModel['merscope']
+
+// The MERSCOPE stain and z plane, for the Image section. Each is a separate
+// pyramid in the .vzg, read whole, so its size is shown.
+export function MerscopeImageSelect({
+  merscope,
+}: {
+  readonly merscope: MerscopeViewModel
+}) {
+  const { disabled, onImageChange, state } = merscope
+
+  if (state.status === 'idle') {
+    return null
+  }
+
+  const { options, choice } = state
+  const stain = options.stains.find((option) => option.stain === choice?.stain)
+
+  return (
+    <div className="merscope-image-controls">
+      <Select<string>
+        className="ui-field--inline"
+        label="Stain"
+        title="MERSCOPE stain to show"
+        value={choice?.stain ?? ''}
+        disabled={disabled}
+        options={[
+          { value: '', label: 'None' },
+          ...options.stains.map((option) => ({
+            value: option.stain,
+            label: option.stain,
+          })),
+        ]}
+        onChange={(value) => {
+          const next = options.stains.find((option) => option.stain === value)
+
+          if (next === undefined) {
+            onImageChange(null)
+            return
+          }
+
+          // Keep the plane when the stain has it, else its middle plane.
+          const planes = next.planes.map((plane) => plane.z)
+          const z =
+            choice !== null && planes.includes(choice.z)
+              ? choice.z
+              : (planes[Math.floor((planes.length - 1) / 2)] ?? 0)
+          onImageChange({ stain: next.stain, z })
+        }}
+      />
+      {stain === undefined || choice === null ? null : (
+        <Select<string>
+          className="ui-field--inline"
+          label="Plane"
+          title="MERSCOPE z plane to show"
+          value={String(choice.z)}
+          disabled={disabled}
+          options={stain.planes.map((plane) => ({
+            value: String(plane.z),
+            label: `z${plane.z} (${formatMerscopeImageSize(plane.byteLength)})`,
+          }))}
+          onChange={(value) => {
+            onImageChange({ stain: stain.stain, z: Number(value) })
+          }}
+        />
+      )}
+      <p className="merscope-image-note" title={options.fileName}>
+        Each stain and plane is read whole from the .vzg.
+      </p>
+    </div>
   )
 }
 

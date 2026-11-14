@@ -11,6 +11,8 @@ import {
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
 import { visiumSelectionToShareable } from './features/dataset/visiumModel'
+import { merscopeImageSelectionToShareable } from './features/dataset/merscopeImageModel'
+import { useMerscopeImageWorkflow } from './features/app-shell/useMerscopeImageWorkflow'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import {
@@ -76,6 +78,7 @@ import {
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
+  PLATFORM_NAMES,
   platformAnalysisEmbeddingOptions,
   platformActiveBoundaryCell,
   platformBoundarySurfaceReserved,
@@ -551,6 +554,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     spatialData: { setSpatialDataControlState, spatialDataControlState },
     visium: { setVisiumControlState, visiumControlState },
+    merscope: { merscopeImageState, setMerscopeImageState },
     visiumHd: {
       gridCellAssignmentState,
       overviewCells,
@@ -1831,8 +1835,8 @@ export function App({ dependencies }: AppProps = {}) {
       return Promise.reject(
         new Error(
           `${
-            platformAdapter.kind === 'atera'
-              ? 'Atera'
+            platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
+              ? PLATFORM_NAMES[platformAdapter.kind]
               : platformAdapter.kind === 'visium'
                 ? 'Visium'
                 : 'H5AD and SpatialData'
@@ -3029,6 +3033,7 @@ export function App({ dependencies }: AppProps = {}) {
       setVisiumHdControlState,
       setSpatialDataControlState,
       setVisiumControlState,
+      setMerscopeImageState,
       setViewportCellCount,
     },
   })
@@ -3103,6 +3108,15 @@ export function App({ dependencies }: AppProps = {}) {
     shouldLoadMorphology,
     startDatasetLoadRef,
     visiumControlState,
+  })
+  const { handleMerscopeImageChange } = useMerscopeImageWorkflow({
+    appendDebugEvent,
+    datasetUrl: loadState.status === 'idle' ? null : loadState.url,
+    initialShareableStateRef,
+    merscopeImageState,
+    setMerscopeImageState,
+    shouldLoadMorphology,
+    startDatasetLoadRef,
   })
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
     callbacks: {
@@ -3267,6 +3281,7 @@ export function App({ dependencies }: AppProps = {}) {
       hiddenAnnotationIds: sharedHiddenAnnotationIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
+      merscopeSelection: merscopeImageSelectionToShareable(merscopeImageState),
     },
     genes: {
       geneExpressionColorScale,
@@ -3468,6 +3483,8 @@ export function App({ dependencies }: AppProps = {}) {
     spatialDataControlState,
     visiumControlState,
     visiumHdControlState,
+    merscopeImageState,
+    handleMerscopeImageChange,
   })
   // An example or recent dataset opens in place, like Load Dataset.
   const handleOpenDataset = useCallback(
@@ -3872,8 +3889,8 @@ export function App({ dependencies }: AppProps = {}) {
               ? 'Visium'
               : platformAdapter.kind === 'spatialdata'
                 ? 'SpatialData'
-                : platformAdapter.kind === 'atera'
-                  ? 'Atera'
+                : platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
+                  ? PLATFORM_NAMES[platformAdapter.kind]
                   : 'Xenium'
         }
         gridCells={viewerGridCells}

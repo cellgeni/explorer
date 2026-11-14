@@ -175,14 +175,15 @@ are kept as `hiddenClasses=`.
 
 ### Image
 
-| Control                           | Type                                                   | Range / default                   | Notes                                                                     |
-| --------------------------------- | ------------------------------------------------------ | --------------------------------- | ------------------------------------------------------------------------- |
-| `Dataset image opacity`           | Slider 0–100%, step 5                                  | 100%                              | With channel controls present, opacity is applied per channel             |
-| `Z plane`                         | Slider over the planes; shows "plane / count · depth"  | Middle plane or `defaultZ`        | When the dataset image is an OME-TIFF or OME-Zarr z-stack                 |
-| `Tissue image`                    | Select: High-res, Low-res, None                        | High-res if present, else Low-res | Visium. Lists the images the dataset can place; switches in place; `vimg` |
-| Image channels                    | `MorphologyChannelControls`                            | See below                         | When the image has channels                                               |
-| `Custom image URL` + `Load Layer` | URL form                                               |                                   | Once a dataset is ready                                                   |
-| Custom layer rows                 | Name, channel count, `x` remove, opacity slider (100%) |                                   | Per loaded custom layer                                                   |
+| Control                           | Type                                                                       | Range / default                                         | Notes                                                                                  |
+| --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `Dataset image opacity`           | Slider 0–100%, step 5                                                      | 100%                                                    | With channel controls present, opacity is applied per channel                          |
+| `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                              | When the dataset image is an OME-TIFF or OME-Zarr z-stack                              |
+| `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                       | Visium. Lists the images the dataset can place; switches in place; `vimg`              |
+| `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg` |
+| Image channels                    | `MorphologyChannelControls`                                                | See below                                               | When the image has channels                                                            |
+| `Custom image URL` + `Load Layer` | URL form                                                                   |                                                         | Once a dataset is ready                                                                |
+| Custom layer rows                 | Name, channel count, `x` remove, opacity slider (100%)                     |                                                         | Per loaded custom layer                                                                |
 
 #### Image Channel Controls
 
@@ -837,24 +838,24 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
 
 From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 
-| Feature                                        | Xenium                  | Atera            | Visium        | Visium HD         | H5AD             | SpatialData      | Image            |
-| ---------------------------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- |
-| Cells section                                  | ✓                       | ✓                | Spots         | Bins              | ✓                | ✓                | —                |
-| Transcripts section                            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                |
-| All-feature transcripts                        | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                |
-| ROI transcript export                          | ✓                       | —                | —             | —                 | —                | —                | —                |
-| Magic Lens                                     | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | —                |
-| Cell card                                      | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | —                |
-| Cell-id annotations                            | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | —                |
-| GeoJSON shapes                                 | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                |
-| Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                |
-| Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | New shape        |
-| Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                |
-| SpatialData view options                       | —                       | —                | —             | —                 | —                | ✓                | —                |
-| Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                |
-| Boundary limit                                 | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                |
-| Morphology checkbox label                      | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image |
+| Feature                                        | Xenium                  | Atera            | Visium        | Visium HD         | MERSCOPE         | H5AD             | SpatialData      | Image            |
+| ---------------------------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- | ---------------- |
+| Cells section                                  | ✓                       | ✓                | Spots         | Bins              | ✓                | ✓                | ✓                | —                |
+| Transcripts section                            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                | —                |
+| All-feature transcripts                        | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                | —                |
+| ROI transcript export                          | ✓                       | —                | —             | —                 | —                | —                | —                | —                |
+| Magic Lens                                     | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | Unavailable      | —                |
+| Cell card                                      | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
+| Cell-id annotations                            | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓                | —                |
+| GeoJSON shapes                                 | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
+| Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
+| Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
+| Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
+| SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
+| Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |
+| Boundary limit                                 | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                | ✓                |
+| Morphology checkbox label                      | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image | Morphology image |
 
 ## Shareable URL
 
@@ -903,6 +904,7 @@ the page reloads that entry's link, with its view and settings.
 | `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls. `txFilter` is the chosen `Feature filter`, not the All features shown while no gene is selected, so such a link leaves it out                                                                                                                                                                                     |
 | `lensScope`, `lensRadius`                                                                                 | Magic Lens controls (`lens=1` in older links turns the lens on; their `lensQv` is ignored)                                                                                                                                                                                                                                             |
 | `sdTable`, `sdCs`, `sdImage`, `sdUm`                                                                      | SpatialData table, coordinate system, image, and µm-per-unit override                                                                                                                                                                                                                                                                  |
+| `mimg`                                                                                                    | MERSCOPE `.vzg` image as `<stain>_z<plane>`, or `none`                                                                                                                                                                                                                                                                                 |
 | `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                                                                                                                                                                  |
 
 A link with `dataset` skips the [start screen](#start-screen).

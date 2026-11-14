@@ -131,6 +131,17 @@ describe('shareableState', () => {
     expect(parseShareableState('#voff=0').visiumOffTissue).toBe(false)
   })
 
+  it('round-trips the MERSCOPE stain and plane', () => {
+    const hash = formatShareableState({ merscopeImage: 'Cellbound1_z3' })
+
+    expect(hash).toContain('mimg=Cellbound1_z3')
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      merscopeImage: 'Cellbound1_z3',
+    })
+    expect(parseShareableState('#mimg=none').merscopeImage).toBe('none')
+  })
+
   it('round-trips the SpatialData table, coordinate system, image, and scale', () => {
     const hash = formatShareableState({
       spatialDataTable: 'square_008um',

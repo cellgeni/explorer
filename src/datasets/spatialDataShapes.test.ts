@@ -14,6 +14,8 @@ import {
 } from './spatialDataShapes'
 import { IDENTITY_AFFINE } from './spatialDataTransforms'
 import { spatialDataShapesFixture } from '../test/spatialDataShapesFixtures'
+import { merscopeFixtureBytes } from '../test/merscopeFixtures'
+import { asyncBufferFromBytes, rangeFetcher } from '../test/xeniumCellsFixtures'
 
 const DOUBLE_AFFINE = { a: 2, b: 0, c: 10, d: 0, e: 2, f: 20 }
 
@@ -219,6 +221,51 @@ describe('SpatialData shapes', () => {
 })
 
 // The shapes as one record each, for readable expectations.
+// src/test/fixtures/merscope: one row per cell per z plane, 8 µm squares at
+// plane 3 and 4 µm squares elsewhere.
+describe('MERSCOPE boundaries', () => {
+  const merscopeLayout = { idColumn: 'EntityID', planeColumn: 'ZIndex' } as const
+
+  it('reads IDs from a named column and keeps the middle plane', async () => {
+    const shapes = await readSpatialDataShapes({
+      ...merscopeLayout,
+      url: 'https://example.test/cell_boundaries.parquet',
+      file: asyncBufferFromBytes(merscopeFixtureBytes('cell_boundaries.parquet')),
+      affine: IDENTITY_AFFINE,
+    })
+    const list = listShapes(shapes)
+
+    expect(shapes.plane).toBe(3)
+    // int64 IDs above 2^53 stay exact.
+    expect(list.map((shape) => shape.id)).toEqual([
+      '1577590100000000000',
+      '1577590100000000001',
+      '1577590100000000002',
+      '1577590100000000099',
+    ])
+    expect(list[0]?.bounds).toEqual([1006, 2006, 1014, 2014])
+  })
+
+  it('fetches a gzipped file whole', async () => {
+    const shapes = await readSpatialDataShapes({
+      ...merscopeLayout,
+      url: 'https://example.test/cell_boundaries.parquet.gz',
+      wholeFile: true,
+      fetcher: rangeFetcher(merscopeFixtureBytes('cell_boundaries.parquet.gz')),
+      affine: IDENTITY_AFFINE,
+    })
+
+    expect(shapes.ids).toHaveLength(4)
+    expect(shapes.plane).toBe(3)
+  })
+
+  it('needs the named ID column', () => {
+    expect(() =>
+      shapesParquetLayout(parquetMetadata(['geometry', 'ZIndex'], {}), merscopeLayout),
+    ).toThrow('Shapes parquet does not contain a EntityID column.')
+  })
+})
+
 function listShapes(shapes: SpatialDataShapes) {
   return shapes.ids.map((id, index) => ({
     id,

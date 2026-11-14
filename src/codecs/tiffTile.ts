@@ -1,5 +1,6 @@
 import { getDecoder } from 'geotiff'
 import { convertYCbCrToRgb, jpegTileColorSpace } from './jpeg'
+import { decodeSequentialJpeg } from './jpegSequential'
 import { decodeJpeg2000 } from './jpeg2000'
 import type { DecodedJpeg2000, Jpeg2000Pixels } from './jpeg2000'
 
@@ -137,18 +138,24 @@ export async function decodeTiffChunkSamples(
               littleEndian: metadata.littleEndian ?? true,
             },
           )
-        : await decodeWithGeotiff(bytes, {
-            bitsPerSample,
-            compression,
-            ...(metadata.jpegTables === undefined
-              ? {}
-              : { jpegTables: metadata.jpegTables }),
-            planarConfiguration,
-            predictor,
-            samplesPerPixel,
-            tileHeight,
-            tileWidth,
-          })
+        : compression === TIFF_COMPRESSION_JPEG && (bitsPerSample[0] ?? 8) > 8
+          ? decodeHighBitDepthJpeg(bytes, metadata, {
+              samplesPerPixel,
+              tileHeight,
+              tileWidth,
+            })
+          : await decodeWithGeotiff(bytes, {
+              bitsPerSample,
+              compression,
+              ...(metadata.jpegTables === undefined
+                ? {}
+                : { jpegTables: metadata.jpegTables }),
+              planarConfiguration,
+              predictor,
+              samplesPerPixel,
+              tileHeight,
+              tileWidth,
+            })
 
   // geotiff's JPEG decoder returns the stream's components unconverted.
   if (
@@ -166,6 +173,47 @@ export async function decodeTiffChunkSamples(
   }
 
   return decodedBuffer
+}
+
+// 12-bit JPEG tiles (MERSCOPE `.vzg` pyramids), which geotiff's decoder
+// clips to 8 bits, as 16-bit samples in the file's byte order.
+function decodeHighBitDepthJpeg(
+  bytes: Uint8Array,
+  metadata: TiffTileDecodeMetadata,
+  size: {
+    readonly samplesPerPixel: number
+    readonly tileHeight: number
+    readonly tileWidth: number
+  },
+): ArrayBuffer {
+  const image = decodeSequentialJpeg(bytes, metadata.jpegTables)
+  const { samplesPerPixel, tileHeight, tileWidth } = size
+
+  if (image.components !== samplesPerPixel) {
+    throw new Error(
+      `The JPEG tile has ${image.components} components; the TIFF says ${samplesPerPixel} samples per pixel.`,
+    )
+  }
+
+  const output = new ArrayBuffer(tileWidth * tileHeight * samplesPerPixel * 2)
+  const view = new DataView(output)
+  const littleEndian = metadata.littleEndian ?? true
+  const width = Math.min(image.width, tileWidth)
+  const height = Math.min(image.height, tileHeight)
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      for (let sample = 0; sample < samplesPerPixel; sample += 1) {
+        view.setUint16(
+          ((y * tileWidth + x) * samplesPerPixel + sample) * 2,
+          image.data[(y * image.width + x) * samplesPerPixel + sample] ?? 0,
+          littleEndian,
+        )
+      }
+    }
+  }
+
+  return output
 }
 
 async function decodePlanarSeparatedTile(

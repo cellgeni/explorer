@@ -23,6 +23,8 @@ import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { VisiumControlState } from '../dataset/visiumModel'
+import type { MerscopeImageControlState } from '../dataset/merscopeImageModel'
+import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 
@@ -146,6 +148,11 @@ export interface DatasetViewOptionsModel {
     readonly disabled: boolean
     readonly onSelectionChange: (selection: SpatialDataSelection) => void
   }
+  readonly merscope: {
+    readonly state: MerscopeImageControlState
+    readonly disabled: boolean
+    readonly onImageChange: (choice: MerscopeImageChoice | null) => void
+  }
 }
 
 export interface DatasetDiagnosticsModel {
@@ -206,6 +213,8 @@ export interface DatasetInfoModelInput {
   readonly spatialDataControlState: SpatialDataControlState
   readonly visiumControlState: VisiumControlState
   readonly visiumHdControlState: VisiumHdControlState
+  readonly merscopeImageState: MerscopeImageControlState
+  readonly handleMerscopeImageChange: (choice: MerscopeImageChoice | null) => void
 }
 
 export function useDatasetInfoModel({
@@ -240,6 +249,8 @@ export function useDatasetInfoModel({
   spatialDataControlState,
   visiumControlState,
   visiumHdControlState,
+  merscopeImageState,
+  handleMerscopeImageChange,
 }: DatasetInfoModelInput): DatasetInfoModel {
   return {
     facts: datasetFactsInput === null ? [] : datasetFacts(datasetFactsInput),
@@ -300,6 +311,11 @@ export function useDatasetInfoModel({
         state: spatialDataControlState,
         disabled: isLoading || spatialDataControlState.status === 'loading',
         onSelectionChange: handleSpatialDataSelectionChange,
+      },
+      merscope: {
+        state: merscopeImageState,
+        disabled: isLoading || merscopeImageState.status === 'loading',
+        onImageChange: handleMerscopeImageChange,
       },
     },
     diagnostics: {

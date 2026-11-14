@@ -345,7 +345,8 @@ h2 {
   opacity: 0.46;
 }
 
-.visium-hd-note {
+.visium-hd-note,
+.merscope-image-note {
   margin: 0;
   color: var(--text-3);
   font-size: var(--font-control);
@@ -449,4 +450,9 @@ h2 {
 
 .analysis-section {
   padding-top: 0;
+}
+
+.merscope-image-controls {
+  display: grid;
+  gap: 5px;
 }
