@@ -24,6 +24,8 @@ import type {
 } from './visiumHdDataset'
 import type { VisiumHdBarcodeMapping } from './visiumHdBarcodeMappings'
 import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
+import { visiumHdSegmentationIndexFromElements } from './visiumHdSegmentationIndex'
+import type { ReadVisiumHdSegmentationIndexOptions } from './visiumHdSegmentationIndexWorker'
 
 const fakeFile: AsyncBuffer = {
   byteLength: 8,
@@ -598,18 +600,20 @@ describe('Visium HD dataset readers', () => {
         ],
       },
     }
-    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
-    const segmentationReader = vi.fn(async (_baseUrl, options) => {
-      segmentationOptions.push(options)
-      return [insideElement, outsideElement]
-    })
+    const segmentationOptions: ReadVisiumHdSegmentationIndexOptions[] = []
+    const segmentationIndexReader = vi.fn(
+      async (_baseUrl: string, options: ReadVisiumHdSegmentationIndexOptions) => {
+        segmentationOptions.push(options)
+        return visiumHdSegmentationIndexFromElements([insideElement, outsideElement])
+      },
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
       segmentedOutputs: {
         cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
       },
-      segmentationReader,
+      segmentationIndexReader,
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
@@ -627,15 +631,13 @@ describe('Visium HD dataset readers', () => {
     expect(meta.capabilities.cellBoundaries).toBe(true)
     expect(batch.elements).toEqual([insideElement])
     expect(secondBatch.elements).toEqual([insideElement])
-    expect(segmentationReader).toHaveBeenCalledTimes(1)
-    expect(segmentationReader).toHaveBeenCalledWith(
+    expect(segmentationIndexReader).toHaveBeenCalledTimes(1)
+    expect(segmentationIndexReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       expect.objectContaining({
         path: 'segmented_outputs/cell_segmentations.geojson',
         scalefactors,
         kind: 'cell',
-        bbox,
-        streamGeojson: true,
       }),
     )
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
@@ -666,7 +668,9 @@ describe('Visium HD dataset readers', () => {
         ],
       },
     }
-    const segmentationReader = vi.fn(async () => [annotatedElement])
+    const segmentationIndexReader = vi.fn(async () =>
+      visiumHdSegmentationIndexFromElements([annotatedElement]),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
@@ -674,7 +678,7 @@ describe('Visium HD dataset readers', () => {
         graphclustAnnotatedCellSegmentationsGeojsonPath:
           'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
       },
-      segmentationReader,
+      segmentationIndexReader,
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
@@ -687,7 +691,7 @@ describe('Visium HD dataset readers', () => {
     })
 
     expect(batch.elements).toEqual([annotatedElement])
-    expect(segmentationReader).toHaveBeenCalledWith(
+    expect(segmentationIndexReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       expect.objectContaining({
         path: 'segmented_outputs/graphclust_annotated_cell_segmentations.geojson',
@@ -774,11 +778,13 @@ describe('Visium HD dataset readers', () => {
         ],
       },
     }
-    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
-    const segmentationReader = vi.fn(async (_baseUrl, options) => {
-      segmentationOptions.push(options)
-      return [insideElement, outsideElement]
-    })
+    const segmentationOptions: ReadVisiumHdSegmentationIndexOptions[] = []
+    const segmentationIndexReader = vi.fn(
+      async (_baseUrl: string, options: ReadVisiumHdSegmentationIndexOptions) => {
+        segmentationOptions.push(options)
+        return visiumHdSegmentationIndexFromElements([insideElement, outsideElement])
+      },
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
@@ -786,7 +792,7 @@ describe('Visium HD dataset readers', () => {
         nucleusSegmentationsGeojsonPath:
           'segmented_outputs/nucleus_segmentations.geojson',
       },
-      segmentationReader,
+      segmentationIndexReader,
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
@@ -804,38 +810,43 @@ describe('Visium HD dataset readers', () => {
       insideElement,
     ])
 
-    expect(segmentationReader).toHaveBeenCalledTimes(1)
-    expect(segmentationReader).toHaveBeenCalledWith(
+    expect(segmentationIndexReader).toHaveBeenCalledTimes(1)
+    expect(segmentationIndexReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       expect.objectContaining({
         path: 'segmented_outputs/nucleus_segmentations.geojson',
         scalefactors,
         kind: 'nucleus',
-        bbox,
-        streamGeojson: true,
       }),
     )
     expect(segmentationOptions[0]).not.toHaveProperty('maxFullFileBytes')
   })
 
-  it('scopes Visium HD GeoJSON segmentation caching by viewport bbox', async () => {
+  it('reads Visium HD segmentation GeoJSON once and selects each viewport from it', async () => {
     const positions = parseVisiumHdTissuePositionRows([
       visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
       visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
       visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
     ])
-    const segmentationOptions: ReadVisiumHdSegmentationElementsOptions[] = []
-    const segmentationReader = vi.fn(async (_baseUrl, options) => {
-      segmentationOptions.push(options)
-      return []
-    })
+    const firstCell = squareCellElement('cellid_000000001-1', 100, 200)
+    const secondCell = squareCellElement('cellid_000000002-1', 200, 300)
+    let resolveIndex: () => void = () => {}
+    const segmentationIndexReader = vi.fn(
+      () =>
+        new Promise<ReturnType<typeof visiumHdSegmentationIndexFromElements>>(
+          (resolve) => {
+            resolveIndex = () =>
+              resolve(visiumHdSegmentationIndexFromElements([firstCell, secondCell]))
+          },
+        ),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16],
       segmentedOutputs: {
         cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
       },
-      segmentationReader,
+      segmentationIndexReader,
       tissuePositionsReader: async () => positions,
       scalefactorsReader: async () => scalefactors,
     })
@@ -851,20 +862,58 @@ describe('Visium HD dataset readers', () => {
       minY: micrometers(290),
       maxY: micrometers(310),
     }
+    const bothBbox = { ...firstBbox, maxX: secondBbox.maxX, maxY: secondBbox.maxY }
 
-    await dataset.elements(firstBbox)
-    await dataset.elements({ ...firstBbox })
-    await dataset.elements(secondBbox)
+    // Viewports requested while the file is read wait for the same read.
+    const pending = Promise.all([
+      dataset.elements(firstBbox),
+      dataset.segmentationElements('cell', secondBbox),
+    ])
+    await vi.waitFor(() => expect(segmentationIndexReader).toHaveBeenCalledTimes(1))
+    resolveIndex()
+    const [first, second] = await pending
+    const firstAgain = await dataset.elements(firstBbox)
+    const both = await dataset.elements(bothBbox)
 
-    expect(segmentationReader).toHaveBeenCalledTimes(2)
-    expect(segmentationOptions.map((options) => options.bbox)).toEqual([
-      firstBbox,
-      secondBbox,
+    expect(first.elements).toEqual([firstCell])
+    expect(second).toEqual([secondCell])
+    expect(both.elements).toEqual([firstCell, secondCell])
+    // A polygon still in view keeps its element.
+    expect(both.elements[0]).toBe(firstAgain.elements[0])
+    expect(segmentationIndexReader).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads Visium HD segmentation GeoJSON again after a failed read', async () => {
+    const positions = parseVisiumHdTissuePositionRows([
+      visiumPositionRow('BC-0', 1, 0, 0, 400, 200),
+      visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
+      visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
     ])
-    expect(segmentationOptions.map((options) => options.streamGeojson)).toEqual([
-      true,
-      true,
-    ])
+    const cell = squareCellElement('cellid_000000001-1', 100, 200)
+    const segmentationIndexReader = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('HTTP 503'))
+      .mockResolvedValue(visiumHdSegmentationIndexFromElements([cell]))
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin16],
+      segmentedOutputs: {
+        cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+      },
+      segmentationIndexReader,
+      tissuePositionsReader: async () => positions,
+      scalefactorsReader: async () => scalefactors,
+    })
+    const bbox = {
+      minX: micrometers(90),
+      maxX: micrometers(110),
+      minY: micrometers(190),
+      maxY: micrometers(210),
+    }
+
+    await expect(dataset.elements(bbox)).rejects.toThrow('HTTP 503')
+    await expect(dataset.elements(bbox)).resolves.toMatchObject({ elements: [cell] })
+    expect(segmentationIndexReader).toHaveBeenCalledTimes(2)
   })
 
   it('falls back to Visium HD nucleus instance-mask TIFF when nucleus GeoJSON is absent', async () => {
@@ -1561,5 +1610,22 @@ function visiumPositionRow(
     array_col: arrayCol,
     pxl_row_in_fullres: fullresRow,
     pxl_col_in_fullres: fullresCol,
+  }
+}
+
+// A 10 µm square cell centred on (x, y).
+function squareCellElement(id: string, x: number, y: number) {
+  return {
+    id,
+    geometry: {
+      kind: 'polygon' as const,
+      rings: [
+        [
+          { x: micrometers(x - 5), y: micrometers(y - 5) },
+          { x: micrometers(x + 5), y: micrometers(y - 5) },
+          { x: micrometers(x + 5), y: micrometers(y + 5) },
+        ],
+      ],
+    },
   }
 }

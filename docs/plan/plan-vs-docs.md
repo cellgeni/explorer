@@ -45,10 +45,11 @@ below are as found on 2026-11-08. The plan status column in
   barcode-mapping reads are shared loads, imported annotations accept any
   platform's cell IDs, and a failed GeoJSON import gives its reason. Partly
   fixed: h5wasm, auto-contrast and zarrita's codecs moved to workers (see
-  [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13)). Still
-  open in [Open Items](open-items.md): segmentation GeoJSON is re-streamed for
-  each viewport, the remaining main-thread work, and byte-range cache keys
-  without the `ETag`. Xenium loading through free functions instead of one
+  [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13)).
+  Segmentation GeoJSON is read once per file since 2026-11-14 (see
+  [Phase 6](phases/06-visium-hd.md#closed-open-items)). Still open in
+  [Open Items](open-items.md): the remaining main-thread work and byte-range
+  cache keys without the `ETag`. Xenium loading through free functions instead of one
   `XeniumDataset` was closed without a code change on 2026-11-14 and recorded
   as amendments to
   [4.6](decisions.md#46-data-source-abstraction--capability-based).
