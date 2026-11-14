@@ -956,6 +956,66 @@ describe('MERSCOPE output', () => {
     ).toBe(undefined)
   })
 
+  it('finds the run .vzg in the folder listing or the manifest', async () => {
+    const vzg = '202402231759_Batch26_VMSC04501_region_0.vzg'
+    const listing = () =>
+      new Response(
+        `<html><head><title>Index of /region_0</title></head><body>${[
+          'cell_by_gene.csv',
+          'cell_metadata.csv',
+          vzg,
+          'images/',
+        ]
+          .map((name) => `<a href="${name}">${name}</a>`)
+          .join('')}</body></html>`,
+      )
+
+    try {
+      await expect(
+        detectSpatialDataset('https://example.test/region_0', {
+          fetcher: fetcherForResponses({
+            '/region_0/': listing,
+            '/region_0/cell_by_gene.csv': () => new Response(null),
+            '/region_0/cell_metadata.csv': () => new Response(null),
+          }),
+        }),
+      ).resolves.toMatchObject({
+        platform: 'merscope',
+        files: { vzg },
+      })
+    } finally {
+      clearFolderListings()
+    }
+
+    const manifestUrl = 'https://example.test/run/explorer.json'
+    const responses = {
+      '/run/explorer.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'merscope',
+          files: { vzg: 'https://other.example.test/run.vzg' },
+        }),
+      '/run/cell_by_gene.csv': () => new Response(null),
+      '/run/cell_metadata.csv': () => new Response(null),
+      '/run.vzg': () => new Response(null),
+    }
+
+    try {
+      await expect(
+        detectSpatialDataset(manifestUrl, { fetcher: fetcherForResponses(responses) }),
+      ).resolves.toMatchObject({
+        files: { vzg: 'https://other.example.test/run.vzg' },
+      })
+      const { '/run.vzg': _missing, ...withoutVzg } = responses
+      void _missing
+      await expect(
+        detectSpatialDataset(manifestUrl, { fetcher: fetcherForResponses(withoutVzg) }),
+      ).rejects.toThrow(/"files.vzg" \(.*run.vzg\) is not readable \(HTTP 404\)/)
+    } finally {
+      setDatasetManifest(manifestUrl, undefined)
+    }
+  })
+
   it('reads vpt and GEO file names from a manifest', async () => {
     const baseUrl = 'https://example.test/D082/explorer.json'
     const manifest = {

@@ -1,7 +1,7 @@
 # Phase 18 — Vizgen MERSCOPE Output
 
-Planned 2026-11-14. 18-A (basic support) implemented 2026-11-14; 18-B (image)
-not started. Requested: basic support for MERFISH and MERSCOPE data, with
+Planned 2026-11-14. 18-A (basic support) and 18-B (image from the `.vzg`)
+implemented 2026-11-14. Requested: basic support for MERFISH and MERSCOPE data, with
 public datasets to test and show. This file records the output layout as
 checked against public deposits, the test datasets, and the scope. How the
 viewer reads it is in [MERSCOPE](../../modalities/merscope.md).
@@ -42,12 +42,16 @@ Facts that shape the readers:
   stain and plane, so the edges stay empty until zoomed in.
 - **The `.vzg` holds a usable pyramid.** `pyrmosaic_<stain>_z<k>.tif` is a
   BigTIFF whose top-level IFDs are the levels, from full resolution down (8
-  levels, 384 px tiles, 32 px at the two smallest), in 30–46 MB per stain and
-  plane. Checked on an unzipped copy in S-BIAD3825: level 0 is 20,728 ×
-  20,765, the size `pictures/manifest.json` gives for the mosaic. Two
-  obstacles: the zip entry is deflated, so it must be fetched and inflated
-  whole; and the tiles are 12-bit JPEG (SOF1, `BitsPerSample` 12), which
-  browsers cannot decode and geotiff's JPEG decoder clips to 8 bits.
+  levels, 384 px tiles, 32 px at the two smallest). Level 0 is the full
+  mosaic: 20,728 × 20,765 in S-BIAD3825 (30–46 MB per stain and plane), and
+  49,469 × 37,959 in Ctrl173, where an entry is 61–317 MB (DAPI 317 MB, BFP
+  63 MB; level 0's tiles are the first 254 MB of the DAPI entry, the small
+  levels come last). Two obstacles: the zip entry is deflated (Huffman blocks
+  that save about 1.5 %, so not seekable), so it must be fetched and inflated
+  whole; and the tiles are 12-bit JPEG (SOF1, 8-bit quantization tables, no
+  restart markers, no JPEGTables), which browsers cannot decode and geotiff's
+  JPEG decoder clips to 8 bits. EBI served the Ctrl173 `.vzg` at about
+  3 MB/s on 2026-11-14.
 - **Image placement.** The mosaic origin is at `bbox_microns[0..1]`
   (= −translation / scale), not at 0 µm; cell coordinates are stage µm.
 
@@ -157,16 +161,19 @@ EBI range requests took 7–10 s each on 2026-11-14.
   prefixes, Zenodo URLs and vpt names need.
 - **D9.** The image comes from the `.vzg` pyramid, not the raw mosaics, in a
   second stage (18-B). Read the zip's central directory from its tail, fetch
-  one `pictures/pyrmosaic_<stain>_z<k>.tif` entry (30–46 MB) and inflate it
-  in a worker (`DecompressionStream('deflate-raw')`), then open it with the
-  top-level-IFD pyramid code that QPTIFF and SVS use. Tiles need a 12-bit
-  JPEG decoder that keeps 16-bit samples. The image is placed at the
-  transform's origin, which the TIFF loader does not support yet (OME-Zarr
-  images already take an origin). An unzipped `pyrmosaic` file, as in
-  S-BIAD3825, is read by range directly. One stain and plane at a time:
-  DAPI at the middle plane first. Once the loader takes an origin, a raw
-  mosaic named in a manifest `image` also opens through the stripped-TIFF
-  reader, for detail views of deposits without a `.vzg`.
+  one `pictures/pyrmosaic_<stain>_z<k>.tif` entry and inflate it in a worker
+  (`DecompressionStream('deflate-raw')`), then open it from memory as a page
+  pyramid (the top-level-IFD code QPTIFF and SVS use). Tiles decode with a
+  built-in 12-bit JPEG decoder that keeps 16-bit samples. The image is placed
+  at the transform's origin. One stain and plane at a time, chosen in the
+  Image section and kept in the link (`mimg`); a change reloads the dataset,
+  as a Visium library change does. As entries reach 317 MB, the default
+  (DAPI at the middle plane) loads with the dataset only up to 100 MB, as for
+  boundaries; a larger one waits to be chosen, with a notice. The `.vzg` is
+  found in the folder listing or named by the manifest (`files.vzg`). An
+  unzipped `pyrmosaic` file, as in S-BIAD3825, opens by URL as a page
+  pyramid at the data origin. Raw mosaics named in a manifest `image` are
+  not wired up (see Later).
 - **D10.** No transcripts in this phase: `detected_transcripts.csv` has no
   spatial order and reaches 35 GB. The `.vzg` binary gene arrays are not
   read.
@@ -208,18 +215,28 @@ EBI range requests took 7–10 s each on 2026-11-14.
 
 ### 18-B Image From The `.vzg`
 
-- [ ] K. 12-bit JPEG tile decoding (SOF1) in the tile decode workers, with
-      16-bit output. Either extend a pdf.js-style baseline decoder (level
-      shift 2048, clamp 4095, `Uint16Array` output) or add a WASM libjpeg
-      12-bit build; measure both on Ctrl173 tiles.
-- [ ] L. Zip entry reader: central directory (ZIP64), local header, ranged
-      fetch of one entry, inflate in a worker, an in-memory range source for
-      the TIFF reader; progress and abort.
-- [ ] M. Pyramid from top-level IFDs for `pyrmosaic` files (recognized by
-      `Software` `tifffile.py` and the shrinking IFD chain), channels named by
-      stain from `pictures/manifest.json`, units 0.108 µm/px.
-- [ ] N. Image origin in the TIFF loader, from the transform; stain and plane
-      picker in the Image section.
+- [x] K. 12-bit JPEG tile decoding: `src/codecs/jpegSequential.ts`, a
+      baseline and extended sequential Huffman decoder (8 and 12 bit,
+      JPEGTables, restart markers) with a floating-point IDCT, used for JPEG
+      tiles over 8 bits in the tile decode workers. Within one level of
+      libjpeg-turbo on a Ctrl173 DAPI tile (mean 0.03); about 5 ms per 384 px
+      tile. No WASM build was needed.
+- [x] L. Zip entry reader: `src/data/zipArchive.ts` (ZIP64 central
+      directory from the tail, one ranged request per entry streamed through
+      `DecompressionStream`) and `zipEntry.worker.ts` (progress, abort). The
+      TIFF loader opens a file in memory (`bytes`: geotiff
+      `fromArrayBuffer`, tiles sliced by `memoryRangeFetcher`, no byte-range
+      cache). unzipit, which the zipped-Zarr reader uses, inflates on the
+      main thread and caches ranges in IndexedDB, so it was not reused.
+- [x] M. Page pyramids: a non-OME TIFF without SubIFDs whose IFD 1 is tiled
+      like IFD 0 but smaller is read as levels (`isPagePyramid`,
+      `readPagePyramidFile`, `svsLayout`), without relying on `Software`.
+      The channel is named after the stain; µm/px comes from the transform.
+      The two 32 px-tile levels are left out (one tile size per loader).
+- [x] N. Image origin in the TIFF loader (`origin`, as OME-Zarr has), from
+      the transform; Stain and Plane selects in the Image section with each
+      plane's size, the `mimg` link value, and `.vzg` diagnostics. Checked
+      on Ctrl173 with BFP z3 (63 MB): tables in 27 s, image 22 s later.
 
 ## Later
 
@@ -228,7 +245,10 @@ EBI range requests took 7–10 s each on 2026-11-14.
 - Boundaries: a script that keeps one z plane and writes spatially sorted row
   groups, so the viewer can read by viewport.
 - Raw mosaics for deposits without a `.vzg`: a conversion script to a
-  pyramidal OME-TIFF or OME-Zarr, used through a manifest `image`.
+  pyramidal OME-TIFF or OME-Zarr, used through a manifest `image`; or the
+  stripped-TIFF reader for detail views, now that the loader takes an origin.
+- Images: keep inflated pyramids in the Cache API so a reload does not
+  download them again; several stains at once as channels, opened lazily.
 - vpt variants found from the folder listing (`cellpose_*`, `baysor_*`)
   without a manifest; older per-FOV HDF5 boundaries
   (`cell_boundaries/feature_data_<fov>.hdf5`).

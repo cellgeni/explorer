@@ -11,7 +11,12 @@ import {
   ATERA_OPTIONAL_FILES,
   type AteraFileRole,
 } from './ateraFormat'
-import { MERSCOPE_FILE_DEFAULTS, type MerscopeFileRole } from './merscopeFormat'
+import {
+  MERSCOPE_FILE_DEFAULTS,
+  MERSCOPE_OPTIONAL_FILES,
+  type MerscopeFileRole,
+  type MerscopeOptionalFile,
+} from './merscopeFormat'
 import {
   VISIUM_FILE_DEFAULTS,
   VISIUM_OPTIONAL_FILES,
@@ -194,7 +199,9 @@ export interface VisiumHdDatasetManifest extends DatasetManifestBase {
 // names; vpt re-segmentation and GEO deposits name theirs.
 export interface MerscopeDatasetManifest extends DatasetManifestBase {
   readonly platform: 'merscope'
-  readonly files: Readonly<Partial<Record<MerscopeFileRole, DatasetManifestFile>>>
+  readonly files: Readonly<
+    Partial<Record<MerscopeFileRole | MerscopeOptionalFile, DatasetManifestFile>>
+  >
 }
 
 export interface H5adDatasetManifest extends DatasetManifestBase {
@@ -372,7 +379,12 @@ export function parseDatasetManifest(
 
   if (platform === 'merscope') {
     rejectOptions(options, platform, fail)
-    checkKeys(files, Object.keys(MERSCOPE_FILE_DEFAULTS), 'files.', fail)
+    checkKeys(
+      files,
+      [...Object.keys(MERSCOPE_FILE_DEFAULTS), ...MERSCOPE_OPTIONAL_FILES],
+      'files.',
+      fail,
+    )
     const entries: Partial<Record<string, DatasetManifestFile>> = {}
 
     for (const key of Object.keys(files)) {

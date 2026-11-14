@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   MerscopeFormatError,
+  merscopeMiddlePlane,
   merscopeTable,
+  parseMerscopeImageManifest,
+  parseMerscopeTransform,
   merscopeTableTransferables,
   parseMerscopeCellByGene,
   parseMerscopeCellMetadata,
@@ -182,5 +185,59 @@ describe('MERSCOPE table', () => {
         parseMerscopeCellMetadata(csv('EntityID,center_x,center_y', '42,1,1')),
       ),
     ).toThrow('None of the cell_by_gene.csv cell IDs are in cell_metadata.csv.')
+  })
+})
+
+// Values from the S-BIAD3359 Ctrl173 .vzg.
+describe('MERSCOPE image placement', () => {
+  it('reads the mosaic size, placement, stains, and planes from the manifest', () => {
+    const manifest = parseMerscopeImageManifest({
+      microns_per_pixel: 0.108,
+      mosaic_width_pixels: 49469,
+      mosaic_height_pixels: 37959,
+      bbox_microns: [3320.6436, 7322.66136, 8663.15628, 11422.08],
+      mosaic_files: [
+        { stain: 'DAPI', z: 3, file_name: 'mosaic_DAPI_z3.tif' },
+        { stain: 'PolyT', z: 0, file_name: 'mosaic_PolyT_z0.tif' },
+        { stain: 'DAPI', z: 0, file_name: 'mosaic_DAPI_z0.tif' },
+        { stain: '', z: 1 },
+      ],
+    })
+
+    expect(manifest).toEqual({
+      placement: { originX: 3320.6436, originY: 7322.66136, micronsPerPixel: 0.108 },
+      width: 49469,
+      height: 37959,
+      stains: [
+        { stain: 'DAPI', planes: [0, 3] },
+        { stain: 'PolyT', planes: [0] },
+      ],
+    })
+    expect(() => parseMerscopeImageManifest({ microns_per_pixel: 0.108 })).toThrow(
+      MerscopeFormatError,
+    )
+  })
+
+  it('inverts the micron-to-mosaic transform', () => {
+    const placement = parseMerscopeTransform(
+      [
+        '9.259500503540039062e+00 0.000000000000000000e+00 -3.074750195312500000e+04',
+        '0.000000000000000000e+00 9.259605407714843750e+00 -6.780495312500000000e+04',
+        '0.000000000000000000e+00 0.000000000000000000e+00 1.000000000000000000e+00',
+      ].join('\n'),
+    )
+
+    expect(placement.originX).toBeCloseTo(3320.6436, 3)
+    expect(placement.originY).toBeCloseTo(7322.6613, 3)
+    expect(placement.micronsPerPixel).toBeCloseTo(0.108, 5)
+    expect(() => parseMerscopeTransform('1 0.5 0 0 1 0 0 0 1')).toThrow(
+      'not a scale and translation',
+    )
+  })
+
+  it('starts on the middle plane', () => {
+    expect(merscopeMiddlePlane([0, 1, 2, 3, 4, 5, 6])).toBe(3)
+    expect(merscopeMiddlePlane([3])).toBe(3)
+    expect(merscopeMiddlePlane([])).toBeUndefined()
   })
 })

@@ -4,8 +4,9 @@
 // tracks, ROI, and expression use the AnnData read paths. This class adds the
 // cell boundaries, from `cell_boundaries.parquet` or a vpt
 // `<method>_micron_space.parquet`, and the overview's transcript counts.
-// Coordinates are stage micrometres as written. Images and transcripts are
-// not read yet.
+// Coordinates are stage micrometres as written. The image comes from the
+// `.vzg` zip, one stain and z plane at a time: each is a deflated pyramid of
+// up to a few hundred MB, read whole. Transcripts are not read.
 
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type {
@@ -23,7 +24,12 @@ import type {
 } from '../data/datasetAnnotations'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import type { FallbackNotifier } from '../data/fallbackNotice'
+import type { ImagePyramidOpener } from '../data/imagePyramid'
 import type { RoiSelectionInput } from '../data/roiSelection'
+import { readZipDirectory, readZipEntry, type ZipDirectory } from '../data/zipArchive'
+import { readZipEntryInWorker, type ZipEntryReader } from '../data/zipEntryWorker'
+import { openTiff } from '../tiff/loader'
 import {
   AnnDataH5adDataset,
   type AnnDataMemoryTable,
@@ -34,6 +40,13 @@ import {
   MERSCOPE_BOUNDARY_PLANE_COLUMN,
   MERSCOPE_TOTAL_COUNTS_COLUMN,
   MERSCOPE_TRANSCRIPT_COUNT_COLUMN,
+  MERSCOPE_VZG_IMAGE_MANIFEST,
+  MERSCOPE_VZG_TRANSFORM,
+  merscopeMiddlePlane,
+  merscopeVzgPyramidEntry,
+  parseMerscopeImageManifest,
+  parseMerscopeTransform,
+  type MerscopeImagePlacement,
   type MerscopeTable,
 } from './merscopeFormat'
 import { fileName, type MerscopeTableReader } from './merscopeTableReader'
@@ -64,6 +77,32 @@ export interface MerscopeFileUrls {
   readonly cellByGene: string
   readonly cellMetadata: string
   readonly cellBoundaries?: string
+  readonly vzg?: string
+}
+
+// A stain at one z plane.
+export interface MerscopeImageChoice {
+  readonly stain: string
+  readonly z: number
+}
+
+// The images the `.vzg` holds, with each pyramid's size in the zip.
+export interface MerscopeImageOptions {
+  readonly fileName: string
+  readonly stains: readonly {
+    readonly stain: string
+    readonly planes: readonly { readonly z: number; readonly byteLength: number }[]
+  }[]
+  // DAPI at the middle plane, else the first stain's middle plane.
+  readonly defaultChoice: MerscopeImageChoice
+  readonly placement: MerscopeImagePlacement
+}
+
+export interface MerscopeImageReadOptions {
+  readonly signal?: AbortSignal
+  // Compressed bytes received and the pyramid's size in the zip.
+  readonly onProgress?: (received: number, total: number) => void
+  readonly onFallback?: FallbackNotifier
 }
 
 export interface MerscopeDatasetOptions {
@@ -76,6 +115,8 @@ export interface MerscopeDatasetOptions {
   // Replaced in tests.
   readonly readTable?: MerscopeTableReader
   readonly readShapes?: SpatialDataShapesReader
+  readonly readZipEntry?: ZipEntryReader
+  readonly openImage?: ImagePyramidOpener
 }
 
 // What the load found, for the debug log and notices.
@@ -123,7 +164,19 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
   private readonly fetcher: typeof fetch | undefined
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly readShapes: SpatialDataShapesReader
+  private readonly readEntry: ZipEntryReader
+  private readonly openImage: ImagePyramidOpener
   private readonly table: AnnDataH5adDataset
+  private vzgPromise: Promise<{
+    readonly directory: ZipDirectory
+    readonly options: MerscopeImageOptions
+  } | null> | null = null
+  // The last pyramid read, so reloading the dataset for the same image does
+  // not download it again. One is kept: each is up to a few hundred MB.
+  private lastPyramid: {
+    readonly entry: string
+    readonly bytes: Promise<Uint8Array<ArrayBuffer>>
+  } | null = null
   // Filled when the table is read.
   private loaded: MerscopeTable | null = null
   private overviewPromise: Promise<MerscopeOverview> | null = null
@@ -142,6 +195,8 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     this.fetcher = options.fetcher
     this.onProgress = options.onProgress
     this.readShapes = options.readShapes ?? readSpatialDataShapesInWorker
+    this.readEntry = options.readZipEntry ?? readZipEntryInWorker
+    this.openImage = options.openImage ?? openTiff
     const readTable = options.readTable ?? readMerscopeTableInWorker
 
     this.table = new AnnDataH5adDataset({
@@ -177,7 +232,7 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
       capabilities: {
         transcripts: false,
         cellBoundaries: boundaries !== undefined,
-        pyramidImage: false,
+        pyramidImage: this.files.vzg !== undefined,
         multiChannel: false,
       },
       ...(boundaries === undefined
@@ -346,8 +401,152 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     return cells.map((cell) => withTranscriptCount(cell, overview, cell.id))
   }
 
+  // The default image (see imageOptions). The lifecycle asks for a stain and
+  // plane with imageSource instead, so it can show the download's progress.
   async image(): Promise<ImageSource | null> {
-    return null
+    const options = await this.imageOptions()
+    return options === null ? null : this.imageSource(options.defaultChoice)
+  }
+
+  // The stains and planes the `.vzg` holds, or null without one. Reads the
+  // zip's directory, image manifest, and transform.
+  async imageOptions(): Promise<MerscopeImageOptions | null> {
+    return (await this.vzg())?.options ?? null
+  }
+
+  // One stain at one plane: its pyramid is read whole from the zip and
+  // placed at the mosaic's stage position.
+  async imageSource(
+    choice: MerscopeImageChoice,
+    options: MerscopeImageReadOptions = {},
+  ): Promise<ImageSource> {
+    const vzg = await this.vzg()
+    const url = this.files.vzg
+
+    if (vzg === null || url === undefined) {
+      throw new Error('This MERSCOPE dataset has no .vzg image file.')
+    }
+
+    const entryName = merscopeVzgPyramidEntry(choice.stain, choice.z)
+    const entry = vzg.directory.entries.get(entryName)
+
+    if (entry === undefined) {
+      throw new Error(`${fileName(url)} has no ${entryName}.`)
+    }
+
+    if (this.lastPyramid?.entry !== entryName) {
+      const bytes = this.readEntry(url, entry, {
+        ...(this.fetcher === undefined ? {} : { fetcher: this.fetcher }),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+        ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
+      })
+      this.lastPyramid = { entry: entryName, bytes }
+      bytes.catch(() => {
+        if (this.lastPyramid?.bytes === bytes) {
+          this.lastPyramid = null
+        }
+      })
+    }
+
+    const bytes = await this.lastPyramid.bytes
+    const { placement } = vzg.options
+    const imageUrl = `${url}/${entryName}`
+    const openOptions = {
+      bytes,
+      origin: { x: placement.originX, y: placement.originY },
+      micrometersPerPixel: placement.micronsPerPixel,
+      channelName: choice.stain,
+    }
+    const loader = await this.openImage(
+      imageUrl,
+      options.signal,
+      options.onFallback,
+      openOptions,
+    )
+
+    return {
+      kind: 'pyramid',
+      loader,
+      openChannelLoader: (channelUrl, signal, onFallback) =>
+        this.openImage(channelUrl, signal, onFallback, openOptions),
+    }
+  }
+
+  private vzg(): Promise<{
+    readonly directory: ZipDirectory
+    readonly options: MerscopeImageOptions
+  } | null> {
+    if (this.vzgPromise === null) {
+      this.vzgPromise = this.readVzg().catch((error: unknown) => {
+        this.vzgPromise = null
+        throw error
+      })
+    }
+
+    return this.vzgPromise
+  }
+
+  private async readVzg(): Promise<{
+    readonly directory: ZipDirectory
+    readonly options: MerscopeImageOptions
+  } | null> {
+    const url = this.files.vzg
+
+    if (url === undefined) {
+      return null
+    }
+
+    const fetchOptions = this.fetcher === undefined ? {} : { fetcher: this.fetcher }
+    const directory = await readZipDirectory(url, fetchOptions)
+    const manifestEntry = directory.entries.get(MERSCOPE_VZG_IMAGE_MANIFEST)
+
+    if (manifestEntry === undefined) {
+      throw new Error(`${fileName(url)} has no ${MERSCOPE_VZG_IMAGE_MANIFEST}.`)
+    }
+
+    const transformEntry = directory.entries.get(MERSCOPE_VZG_TRANSFORM)
+    const [manifestBytes, transformBytes] = await Promise.all([
+      readZipEntry(url, manifestEntry, fetchOptions),
+      transformEntry === undefined
+        ? Promise.resolve(null)
+        : readZipEntry(url, transformEntry, fetchOptions),
+    ])
+    const manifest = parseMerscopeImageManifest(
+      JSON.parse(new TextDecoder().decode(manifestBytes)),
+    )
+    // The transform is exact; the manifest's bounding box is rounded.
+    const placement =
+      transformBytes === null
+        ? manifest.placement
+        : parseMerscopeTransform(new TextDecoder().decode(transformBytes))
+    const stains = manifest.stains.flatMap(({ stain, planes }) => {
+      const present = planes.flatMap((z) => {
+        const entry = directory.entries.get(merscopeVzgPyramidEntry(stain, z))
+        return entry === undefined ? [] : [{ z, byteLength: entry.compressedSize }]
+      })
+
+      return present.length === 0 ? [] : [{ stain, planes: present }]
+    })
+    const first = stains.find((option) => option.stain === 'DAPI') ?? stains[0]
+    const z = merscopeMiddlePlane(first?.planes.map((plane) => plane.z) ?? [])
+
+    if (first === undefined || z === undefined) {
+      throw new Error(`${fileName(url)} holds no image pyramids.`)
+    }
+
+    this.onProgress?.(
+      `MERSCOPE ${fileName(url)}: ${stains.length.toLocaleString()} stains, ${placement.micronsPerPixel} µm per pixel`,
+    )
+
+    return {
+      directory,
+      options: {
+        fileName: fileName(url),
+        stains,
+        defaultChoice: { stain: first.stain, z },
+        placement,
+      },
+    }
   }
 
   private overviewIndex(): Promise<MerscopeOverview> {

@@ -212,6 +212,12 @@ export function testDatasetInfoModel(
         onSelectionChange: vi.fn(),
         ...overrides.viewOptions?.spatialData,
       },
+      merscope: {
+        state: { status: 'idle' },
+        disabled: false,
+        onImageChange: vi.fn(),
+        ...overrides.viewOptions?.merscope,
+      },
     },
     diagnostics: {
       state: { status: 'idle' },

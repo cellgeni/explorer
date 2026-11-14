@@ -202,14 +202,16 @@ See [Standard Visium](./modalities/visium.md).
 A Vizgen MERSCOPE region. All entries are optional; `options` must be empty.
 Files the manifest names must answer `HEAD`, or detection stops with an error
 naming the field. Files it leaves out are probed at the instrument's names; a
-missing boundary file is skipped. Every file is read whole, so no byte-range
-support is needed, and gzipped copies work whatever their names.
+missing boundary file is skipped. The tables and boundaries are read whole, so
+they need no byte-range support, and gzipped copies work whatever their names;
+the `.vzg` is read by byte range.
 
-| Key              | Standard name             | Notes                                                                                 |
-| ---------------- | ------------------------- | ------------------------------------------------------------------------------------- |
-| `cellByGene`     | `cell_by_gene.csv`        | Up to 300 MB. vpt writes `<method>_cell_by_gene.csv`                                  |
-| `cellMetadata`   | `cell_metadata.csv`       | Up to 300 MB, with `center_x` and `center_y`. vpt writes `<method>_cell_metadata.csv` |
-| `cellBoundaries` | `cell_boundaries.parquet` | GeoParquet with `EntityID` and `ZIndex`. vpt writes `<method>_micron_space.parquet`   |
+| Key              | Standard name                                | Notes                                                                                 |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `cellByGene`     | `cell_by_gene.csv`                           | Up to 300 MB. vpt writes `<method>_cell_by_gene.csv`                                  |
+| `cellMetadata`   | `cell_metadata.csv`                          | Up to 300 MB, with `center_x` and `center_y`. vpt writes `<method>_cell_metadata.csv` |
+| `cellBoundaries` | `cell_boundaries.parquet`                    | GeoParquet with `EntityID` and `ZIndex`. vpt writes `<method>_micron_space.parquet`   |
+| `vzg`            | The one `.vzg` the folder's index page lists | The run's Vizualizer zip, read by byte range for the image                            |
 
 A vpt re-segmentation sits next to the instrument's files, so a manifest
 picks it:

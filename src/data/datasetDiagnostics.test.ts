@@ -662,6 +662,11 @@ describe('runDatasetDiagnostics', () => {
         '381.5 MB is above the 300 MB browser load limit',
       ],
       ['merscope-cell-boundaries', 'pass', 'Readable (1.0 MB)'],
+      [
+        'merscope-vzg',
+        'warning',
+        'Not found; name it in the manifest (files.vzg) to show images',
+      ],
       ['merscope-transcripts', 'pass', 'Readable (1.0 MB); not shown yet'],
     ])
     expect(report.checks[0]).toMatchObject({ message: 'Detected MERSCOPE' })

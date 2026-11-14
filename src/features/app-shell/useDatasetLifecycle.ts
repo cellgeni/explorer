@@ -202,7 +202,20 @@ import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES } from '../../datasets/merscopeFormat'
-import type { MerscopeSummary } from '../../datasets/merscopeDataset'
+import type {
+  MerscopeImageChoice,
+  MerscopeImageOptions,
+  MerscopeImageReadOptions,
+  MerscopeSummary,
+} from '../../datasets/merscopeDataset'
+import {
+  formatMerscopeImageSize,
+  IDLE_MERSCOPE_IMAGE_STATE,
+  merscopeImageByteLength,
+  merscopeImageControlReady,
+  merscopeImageForLoad,
+  type MerscopeImageControlState,
+} from '../dataset/merscopeImageModel'
 import {
   createStructuredLoadError,
   readErrorMessage,
@@ -245,6 +258,14 @@ interface SpatialDataSummaryDataset {
 
 interface MerscopeSummaryDataset {
   summary(): Promise<MerscopeSummary>
+}
+
+interface MerscopeImageDataset {
+  imageOptions(): Promise<MerscopeImageOptions | null>
+  imageSource(
+    choice: MerscopeImageChoice,
+    options?: MerscopeImageReadOptions,
+  ): Promise<ImageSource>
 }
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
@@ -423,6 +444,7 @@ interface UseDatasetLifecycleSetters {
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
   readonly setSpatialDataControlState: Setter<SpatialDataControlState>
   readonly setVisiumControlState: Setter<VisiumControlState>
+  readonly setMerscopeImageState: Setter<MerscopeImageControlState>
   readonly setViewportCellCount: Setter<number | null>
 }
 
@@ -593,6 +615,7 @@ export function useDatasetLifecycle({
     setVisiumHdControlState,
     setSpatialDataControlState,
     setVisiumControlState,
+    setMerscopeImageState,
     setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
@@ -992,6 +1015,7 @@ export function useDatasetLifecycle({
           setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
           setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
           setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
+          setMerscopeImageState(IDLE_MERSCOPE_IMAGE_STATE)
           setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
           setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
           cellFeatureMatrixCapabilityKeyRef.current = null
@@ -1609,6 +1633,88 @@ export function useDatasetLifecycle({
             })
           }
 
+          if (!isMerscopeImageDataset(dataset)) {
+            return
+          }
+
+          const imageOptions = await dataset.imageOptions().catch((error: unknown) => {
+            if (isAbortError(error)) {
+              throw error
+            }
+
+            notifyFallbackWhenCommitted({
+              source: 'Morphology image',
+              message: `The MERSCOPE .vzg image file could not be read: ${readErrorMessage(error)}`,
+              action: 'Cells and boundaries are shown without an image.',
+              coalesceKey: `merscope-vzg:${requestedUrl}`,
+            })
+            return null
+          })
+
+          if (!isCurrentDatasetLoad() || imageOptions === null) {
+            return
+          }
+
+          // One stain and plane at a time, each read whole from the .vzg. A
+          // large default waits to be chosen in the Image section.
+          const { choice, deferred } = loadImage
+            ? merscopeImageForLoad(imageOptions, restoreState.merscopeImage)
+            : { choice: null, deferred: false }
+          whenCommitted(() => {
+            setMerscopeImageState(merscopeImageControlReady(imageOptions, choice))
+          })
+
+          if (deferred) {
+            const { stain, z } = imageOptions.defaultChoice
+            notifyFallbackWhenCommitted({
+              source: 'Morphology image',
+              message: `The ${stain} z${z} image is ${formatMerscopeImageSize(
+                merscopeImageByteLength(imageOptions, imageOptions.defaultChoice) ?? 0,
+              )} in ${imageOptions.fileName} and is read whole, so it is not loaded yet.`,
+              action: 'Choose a stain in the Image section to load it.',
+              coalesceKey: `merscope-image-size:${requestedUrl}`,
+            })
+          }
+
+          if (choice === null) {
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            return
+          }
+
+          const label = `${choice.stain} z${choice.z}`
+          const total = merscopeImageByteLength(imageOptions, choice) ?? 0
+          setMorphologyState(morphologyLoadStarted(requestedUrl))
+          appendDebugEvent(
+            `MERSCOPE ${label} image loading from ${imageOptions.fileName} (${formatMerscopeImageSize(total)})`,
+          )
+          loadMorphologyInBackground(async () => {
+            const imageSource = await dataset.imageSource(choice, {
+              signal,
+              onFallback: notifyFallbackWhenCommitted,
+              onProgress: (received, size) => {
+                appendDebugEvent(
+                  `MERSCOPE ${label} image: ${formatMerscopeImageSize(received)} of ${formatMerscopeImageSize(size)}`,
+                  { coalesceKey: `merscope-image-progress:${requestedUrl}` },
+                )
+              },
+            })
+
+            if (imageSource.kind !== 'pyramid') {
+              return null
+            }
+
+            return morphologyImageFromPyramidLoader(
+              imageSource.loader.url,
+              imageSource.loader,
+              {
+                onFallback: notifyFallbackWhenCommitted,
+                signal,
+                ...(imageSource.openChannelLoader === undefined
+                  ? {}
+                  : { openImage: imageSource.openChannelLoader }),
+              },
+            )
+          })
           return
         }
 
@@ -1990,6 +2096,7 @@ export function useDatasetLifecycle({
     setVisiumHdControlState(IDLE_VISIUM_HD_CONTROL_STATE)
     setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
     setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
+    setMerscopeImageState(IDLE_MERSCOPE_IMAGE_STATE)
     setSpatialGridCells([])
     setFlatMorphologyImage(null)
     initialShareableStateRef.current = null
@@ -2131,6 +2238,10 @@ function isSpatialDataSummaryDataset(
 
 function isMerscopeSummaryDataset(dataset: unknown): dataset is MerscopeSummaryDataset {
   return hasFunction(dataset, 'summary')
+}
+
+function isMerscopeImageDataset(dataset: unknown): dataset is MerscopeImageDataset {
+  return hasFunction(dataset, 'imageOptions') && hasFunction(dataset, 'imageSource')
 }
 
 function formatMegabytes(byteLength: number): string {

@@ -94,6 +94,7 @@ export function svsLayout(ifds: readonly SvsIfdSummary[]): readonly number[] {
 export function svsChannelInfo(
   samplesPerPixel: number,
   bitsPerSample: number | undefined,
+  channelName = 'Channel 1',
 ): TiffChannelInfo {
   if (samplesPerPixel >= 3) {
     return {
@@ -108,14 +109,16 @@ export function svsChannelInfo(
     }
   }
 
-  const name = 'Channel 1'
+  const name = channelName
+  const bits = Math.min(16, Math.max(8, bitsPerSample ?? 8))
 
   return {
     id: 'Channel:0',
     index: 0,
     name,
     color: defaultChannelColor({ index: 0, name }),
-    contrast: { min: 0, max: (bitsPerSample ?? 8) <= 8 ? 255 : 65_535 },
+    // 12-bit samples (MERSCOPE) end at 4095.
+    contrast: { min: 0, max: 2 ** bits - 1 },
     ifdIndex: 0,
   }
 }

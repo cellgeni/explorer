@@ -76,6 +76,9 @@ export interface ShareableState {
   readonly visiumImage?: string
   readonly visiumLibrary?: string
   readonly visiumOffTissue?: boolean
+  // MERSCOPE: the .vzg stain and z plane shown, as `<stain>_z<plane>`, or
+  // `none`.
+  readonly merscopeImage?: string
 }
 
 type MutableShareableState = {
@@ -142,6 +145,7 @@ export function parseShareableState(hash: string): ShareableState {
   const spatialDataImage = readString(params, 'sdImage')
   const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
   const visiumImage = readString(params, 'vimg')
+  const merscopeImage = readString(params, 'mimg')
   const visiumLibrary = readString(params, 'vlib')
   const visiumOffTissue = parseBoolean(params.get('voff'))
 
@@ -345,6 +349,10 @@ export function parseShareableState(hash: string): ShareableState {
     state.visiumImage = visiumImage
   }
 
+  if (merscopeImage !== undefined) {
+    state.merscopeImage = merscopeImage
+  }
+
   if (visiumLibrary !== undefined) {
     state.visiumLibrary = visiumLibrary
   }
@@ -544,6 +552,7 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'vimg', state.visiumImage)
+  setOptionalString(params, 'mimg', state.merscopeImage)
   setOptionalString(params, 'vlib', state.visiumLibrary)
 
   if (state.visiumOffTissue !== undefined) {

@@ -16,6 +16,8 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Vizgen MERSCOPE region folders containing `cell_by_gene.csv` and
   `cell_metadata.csv`; re-segmentations and GEO deposits through a manifest.
+  The image comes from the run's `.vzg`: pick the stain and z plane in the
+  Image section. Each is a separate download, shown with its size.
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
   squidpy, or CELLxGENE.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store

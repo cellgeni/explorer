@@ -191,6 +191,7 @@ function Probe({
       visiumHdBinRequestIdRef: refs.visiumHdBinRequestIdRef,
     },
     setters: {
+      setMerscopeImageState: noopSetter,
       setAnalysisEmbeddingState: noopSetter,
       setAnnotationColors: noopSetter,
       setAnnotationGroupState: noopSetter,

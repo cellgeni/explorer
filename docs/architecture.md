@@ -173,7 +173,7 @@ commits:
 | Visium      | `visiumSummary()`, then the same as H5AD                                | Tissue image                                            |
 | SpatialData | Same as H5AD, plus `summary()` for the log                              | Image                                                   |
 | Atera       | Same as H5AD                                                            | Morphology image                                        |
-| MERSCOPE    | Same as H5AD (both cell tables read in a worker), then `summary()`      | —                                                       |
+| MERSCOPE    | Same as H5AD (both cell tables read in a worker), then `summary()`      | `.vzg` image, one stain and plane                       |
 | Image       | `meta()`, `image()`, per-channel loaders                                | Auto-contrast                                           |
 
 Each load gets its own `AbortSignal`. A newer load aborts a pending one, and

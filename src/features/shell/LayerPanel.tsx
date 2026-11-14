@@ -21,6 +21,7 @@ import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import {
   VisiumHdBinControls,
   VisiumOffTissueToggle,
+  MerscopeImageSelect,
   VisiumTissueImageSelect,
 } from '../sections/DatasetInfoBlocks'
 import type { DatasetViewOptionsModel } from '../sections/datasetInfoModel'
@@ -281,6 +282,7 @@ function ImageSection({
         <ImageZPlaneControl image={image} />
       </div>
       <VisiumTissueImageSelect visium={viewOptions.visium} />
+      <MerscopeImageSelect merscope={viewOptions.merscope} />
       <ImageChannelControls image={image} />
       <CustomImageLayers layers={image.customLayers} />
     </>

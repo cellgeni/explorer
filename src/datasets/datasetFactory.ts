@@ -4,6 +4,7 @@ import {
   setDatasetManifest,
 } from '../data/datasetFiles'
 import {
+  folderListingFor,
   folderListingMissing,
   readFolderListing,
   setFolderListing,
@@ -137,6 +138,8 @@ export interface MerscopeDetectedFiles {
   readonly cellBoundaries?: string
   // From the boundary probe's Content-Length, when the host sent one.
   readonly cellBoundariesByteLength?: number
+  // The MERSCOPE Vizualizer zip, which holds the image pyramids.
+  readonly vzg?: string
 }
 
 export interface DatasetProbeResult {
@@ -988,6 +991,7 @@ async function probeMerscopeOutputs(
             cellByGene: cellByGene.path,
             cellMetadata: cellMetadata.path,
             ...merscopeBoundaryFile(cellBoundaries),
+            ...listedVzgFile(rootUrl),
           }
         : null,
     probes: [cellByGene, cellMetadata, cellBoundaries],
@@ -1028,6 +1032,19 @@ async function detectMerscopeFromManifest(
     probe('cellMetadata'),
     probe('cellBoundaries'),
   ])
+  const namedVzg = files.vzg
+
+  if (namedVzg !== undefined) {
+    const result = await probeDirectDatasetUrl(namedVzg.url, namedVzg.path, options)
+    checked.push(result)
+
+    if (!result.ok) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.vzg" (${result.url}) is not readable (${probeFailure(result)}).`,
+      )
+    }
+  }
 
   for (const [role, result] of [
     ['cellByGene', cellByGene],
@@ -1048,10 +1065,21 @@ async function detectMerscopeFromManifest(
       cellByGene: cellByGene.path,
       cellMetadata: cellMetadata.path,
       ...merscopeBoundaryFile(cellBoundaries),
+      ...(namedVzg === undefined ? listedVzgFile(rootUrl) : { vzg: namedVzg.path }),
     },
     manifest,
     checked,
   }
+}
+
+// The run's .vzg, when the folder's index page lists exactly one. Its name
+// carries the run and region, so it cannot be probed for.
+function listedVzgFile(rootUrl: string): Pick<MerscopeDetectedFiles, 'vzg'> {
+  const names = Array.from(folderListingFor(rootUrl)?.names ?? []).filter((name) =>
+    /\.vzg$/i.test(name),
+  )
+
+  return names.length === 1 && names[0] !== undefined ? { vzg: names[0] } : {}
 }
 
 function merscopeBoundaryFile(
@@ -1352,6 +1380,7 @@ export async function createSpatialDataset(
         ...(files.cellBoundaries === undefined
           ? {}
           : { cellBoundaries: fileUrl(files.cellBoundaries) }),
+        ...(files.vzg === undefined ? {} : { vzg: fileUrl(files.vzg) }),
       },
       ...(files.cellBoundariesByteLength === undefined
         ? {}

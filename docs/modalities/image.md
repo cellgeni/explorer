@@ -151,14 +151,40 @@ tile across them.
 
 ### Requirements
 
-- **SubIFD pyramids.** Pyramids stored as additional top-level IFDs are not
-  read (QPTIFF and SVS excepted), so such files render at full resolution
-  only. Stripped levels are read (see [Stripped TIFFs](#stripped-tiffs)),
-  but tiled pyramids load faster. Most NDPI files store their pyramid as
-  top-level IFDs and each level as one JPEG strip, too large to decode;
-  convert them to pyramidal OME-TIFF.
+- **SubIFD pyramids.** OME-TIFF pyramids are read from SubIFDs. Pyramids
+  stored as additional top-level IFDs are read for QPTIFF, SVS, and
+  [page pyramids](#page-pyramids); other such files render at full
+  resolution only. Stripped levels are read (see
+  [Stripped TIFFs](#stripped-tiffs)), but tiled pyramids load faster. Most
+  NDPI files store their pyramid as top-level IFDs and each level as one JPEG
+  strip, too large to decode; convert them to pyramidal OME-TIFF.
 - **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
+
+### Page Pyramids
+
+A non-OME TIFF without SubIFDs whose IFD 1 is tiled with IFD 0's tile size
+and sample count, but smaller, is read as a pyramid of pages (`isPagePyramid`
+and `readPagePyramidFile` in `src/tiff/loader.ts`): IFD 0 at full resolution
+and each later tiled IFD that shrinks as the next level, the layout SVS uses
+(`svsLayout`). tifffile writes the MERSCOPE `.vzg` pyramids this way. Levels
+whose tile size differs from IFD 0's are left out (the two smallest MERSCOPE
+levels use 32 px tiles). The pixel size comes from `XResolution`, or from
+the opener; MERSCOPE passes 0.108 µm from the run's transform.
+
+### In-Memory Files And Placement
+
+`OpenImagePyramidOptions` (`src/data/imagePyramid.ts`) lets a dataset open a
+TIFF it already holds and place it:
+
+- `bytes`: the whole file in memory, such as an entry inflated from a zip.
+  geotiff reads the IFDs from the buffer (`fromArrayBuffer`), tiles are
+  sliced from it (`memoryRangeFetcher`), and the byte-range cache and
+  `.zchunkstore` probe are skipped.
+- `origin`: the image's top-left corner in data micrometres. `tilesForBbox`
+  subtracts it and `tileBounds` adds it, as the OME-Zarr loader does with a
+  SpatialData translation.
+- `micrometersPerPixel` and `channelName` replace the file's.
 
 ### OME-XML
 
@@ -276,9 +302,18 @@ tifffile (`imagecodecs`) decodes.
 | 1 (none)                                                   | Copy                                                                                                      |
 | 5 (LZW, predictor 1 or 2)                                  | Built-in decoder                                                                                          |
 | 7 (JPEG), 8-bit RGB                                        | The browser's decoder (`createImageBitmap`) in the decode worker (`src/codecs/jpeg.ts`); `geotiff` if not |
+| 7 (JPEG), more than 8 bits per sample                      | Built-in sequential decoder (`src/codecs/jpegSequential.ts`), 16-bit samples                              |
 | Other (JPEG, Deflate, PackBits, LERC, Zstd, WebP)          | `geotiff` `getDecoder`                                                                                    |
 
 JPEG-XR is not supported.
+
+**12-bit JPEG.** geotiff's JPEG decoder clips samples to 8 bits, and browsers
+decode only 8-bit JPEG. Tiles with `BitsPerSample` above 8 (MERSCOPE `.vzg`
+pyramids: SOF1, 12-bit) go to a built-in baseline and extended sequential
+Huffman decoder with a floating-point IDCT, which returns 16-bit samples
+within one level of libjpeg-turbo's and decodes a 384 px tile in about 5 ms.
+Progressive, lossless, and arithmetic-coded JPEG are refused. The channel's
+default window is 0 to 4,095.
 
 **LZW.** `geotiff`'s LZW decoder has room for codes up to 4,092. tifffile
 (`imagecodecs`) uses codes up to 4,094 before a clear code, and on those

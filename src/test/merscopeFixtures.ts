@@ -8,6 +8,8 @@ export type MerscopeFixture =
   | 'cell_metadata.csv'
   | 'cell_boundaries.parquet'
   | 'cell_boundaries.parquet.gz'
+  | 'region_0.vzg'
+  | 'pyrmosaic_reference.json'
 
 export function merscopeFixtureBytes(name: MerscopeFixture): Uint8Array {
   return new Uint8Array(

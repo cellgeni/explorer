@@ -1221,15 +1221,16 @@ async function runVisiumDiagnostics(
 }
 
 // HEAD, reporting the size; fails a file over `maxBytes`.
-// MERSCOPE files are read whole, so no Range support is needed; HEAD checks
-// avoid downloading them. Transcripts and images are listed when present, as
-// the viewer does not read them yet.
+// MERSCOPE tables and boundaries are read whole, so they need no Range
+// support; HEAD checks avoid downloading them. The .vzg is read by range.
+// Transcripts and the raw mosaics are listed when present, as the viewer
+// does not read them yet.
 async function runMerscopeDiagnostics(
   detection: Extract<SpatialDatasetDetection, { readonly platform: 'merscope' }>,
   options: DatasetDiagnosticsOptions,
 ): Promise<readonly DatasetDiagnosticCheck[]> {
   const { baseUrl, files } = detection
-  const [cellByGene, cellMetadata, cellBoundaries, ...unread] = await Promise.all([
+  const [cellByGene, cellMetadata, cellBoundaries, vzg, ...unread] = await Promise.all([
     checkHeadFile(
       baseUrl,
       {
@@ -1274,6 +1275,25 @@ async function runMerscopeDiagnostics(
           false,
           options,
         ),
+    files.vzg === undefined
+      ? Promise.resolve(
+          diagnosticCheck({
+            id: 'merscope-vzg',
+            label: 'MERSCOPE .vzg images',
+            url: baseUrl,
+            required: false,
+            status: 'warning',
+            message: 'Not found; name it in the manifest (files.vzg) to show images',
+            startedAt: Date.now(),
+          }),
+        )
+      : checkDirectRangeFile(
+          datasetFileUrl(baseUrl, files.vzg),
+          'merscope-vzg',
+          'MERSCOPE .vzg images',
+          false,
+          options,
+        ),
     ...[
       {
         id: 'merscope-transcripts',
@@ -1292,6 +1312,7 @@ async function runMerscopeDiagnostics(
     cellByGene,
     cellMetadata,
     cellBoundaries,
+    vzg,
     ...unread
       .filter((check) => check.status === 'pass')
       .map((check) => ({ ...check, message: `${check.message}; not shown yet` })),

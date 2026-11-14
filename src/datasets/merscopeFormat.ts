@@ -20,6 +20,12 @@ export const MERSCOPE_FILE_DEFAULTS = {
 
 export type MerscopeFileRole = keyof typeof MERSCOPE_FILE_DEFAULTS
 
+// Files without a standard name: the `.vzg` is named after the run and
+// region, so it is found in the folder listing or named by a manifest.
+export const MERSCOPE_OPTIONAL_FILES = ['vzg'] as const
+
+export type MerscopeOptionalFile = (typeof MERSCOPE_OPTIONAL_FILES)[number]
+
 // Each CSV is read whole into memory; the same limit as the Visium matrix.
 export const MERSCOPE_CSV_MAX_BYTES = 300 * 1024 * 1024
 
@@ -27,6 +33,11 @@ export const MERSCOPE_CSV_MAX_BYTES = 300 * 1024 * 1024
 // whole file is read to draw any of them. Larger files start with cell
 // boundaries off and are read when they are turned on.
 export const MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES = 100 * 1024 * 1024
+
+// A `.vzg` image pyramid is a deflated zip entry, read whole. The default
+// image loads with the dataset when its entry is at most this size; larger
+// ones (a large region's DAPI is over 300 MB) wait to be chosen.
+export const MERSCOPE_IMAGE_AUTOLOAD_MAX_BYTES = 100 * 1024 * 1024
 
 // Boundary columns: the cell ID, and the z plane of each row.
 export const MERSCOPE_BOUNDARY_ID_COLUMN = 'EntityID'
@@ -51,6 +62,122 @@ const CATEGORICAL_COLUMNS = new Set(['fov'])
 export const MERSCOPE_TOTAL_COUNTS_COLUMN = 'total_counts'
 export const MERSCOPE_BLANK_COUNT_COLUMN = 'blank_count'
 export const MERSCOPE_TRANSCRIPT_COUNT_COLUMN = 'transcript_count'
+
+// The `.vzg` (MERSCOPE Vizualizer) zip holds an image pyramid per stain and
+// z plane, with the mosaic's placement.
+export const MERSCOPE_VZG_IMAGE_MANIFEST = 'pictures/manifest.json'
+export const MERSCOPE_VZG_TRANSFORM = 'pictures/micron_to_mosaic_pixel_transform.csv'
+
+// The pyramid entry for a stain and plane.
+export function merscopeVzgPyramidEntry(stain: string, z: number): string {
+  return `pictures/pyrmosaic_${stain}_z${z}.tif`
+}
+
+// Where the mosaic sits: its top-left corner in stage micrometres and its
+// pixel size.
+export interface MerscopeImagePlacement {
+  readonly originX: number
+  readonly originY: number
+  readonly micronsPerPixel: number
+}
+
+export interface MerscopeImageManifest {
+  readonly placement: MerscopeImagePlacement
+  readonly width: number
+  readonly height: number
+  // Stains in file order, each with its planes in ascending order.
+  readonly stains: readonly {
+    readonly stain: string
+    readonly planes: readonly number[]
+  }[]
+}
+
+// Parses `images/manifest.json` or the `.vzg`'s `pictures/manifest.json`.
+export function parseMerscopeImageManifest(json: unknown): MerscopeImageManifest {
+  const record =
+    typeof json === 'object' && json !== null ? (json as Record<string, unknown>) : {}
+  const micronsPerPixel = Number(record.microns_per_pixel)
+  const width = Number(record.mosaic_width_pixels)
+  const height = Number(record.mosaic_height_pixels)
+  const bbox = Array.isArray(record.bbox_microns) ? record.bbox_microns.map(Number) : []
+  const originX = bbox[0] ?? Number.NaN
+  const originY = bbox[1] ?? Number.NaN
+
+  if (
+    !(micronsPerPixel > 0) ||
+    !(width > 0) ||
+    !(height > 0) ||
+    !Number.isFinite(originX) ||
+    !Number.isFinite(originY)
+  ) {
+    throw new MerscopeFormatError(
+      'The image manifest needs microns_per_pixel, mosaic_width_pixels, mosaic_height_pixels, and bbox_microns.',
+    )
+  }
+
+  const planesByStain = new Map<string, Set<number>>()
+  const files = Array.isArray(record.mosaic_files) ? record.mosaic_files : []
+
+  for (const file of files) {
+    const entry =
+      typeof file === 'object' && file !== null ? (file as Record<string, unknown>) : {}
+    const z = Number(entry.z)
+
+    if (
+      typeof entry.stain === 'string' &&
+      entry.stain.length > 0 &&
+      Number.isInteger(z)
+    ) {
+      const planes = planesByStain.get(entry.stain) ?? new Set<number>()
+      planes.add(z)
+      planesByStain.set(entry.stain, planes)
+    }
+  }
+
+  return {
+    placement: { originX, originY, micronsPerPixel },
+    width,
+    height,
+    stains: Array.from(planesByStain, ([stain, planes]) => ({
+      stain,
+      planes: Array.from(planes).sort((left, right) => left - right),
+    })),
+  }
+}
+
+// Parses `micron_to_mosaic_pixel_transform.csv`: a 3 × 3 affine, space
+// separated, taking stage µm to mosaic pixels. Placement is its inverse.
+export function parseMerscopeTransform(text: string): MerscopeImagePlacement {
+  const values = text.trim().split(/\s+/).map(Number)
+  const [scaleX, shearX, translateX, shearY, scaleY, translateY] = values
+
+  if (
+    values.length < 6 ||
+    values.some((value) => !Number.isFinite(value)) ||
+    !(scaleX !== undefined && scaleX > 0) ||
+    !(scaleY !== undefined && scaleY > 0) ||
+    shearX !== 0 ||
+    shearY !== 0 ||
+    translateX === undefined ||
+    translateY === undefined
+  ) {
+    throw new MerscopeFormatError(
+      'The micron-to-mosaic transform is not a scale and translation.',
+    )
+  }
+
+  return {
+    originX: -translateX / scaleX,
+    originY: -translateY / scaleY,
+    micronsPerPixel: 2 / (scaleX + scaleY),
+  }
+}
+
+// The plane shown first: the middle of the planes present, the lower one of
+// an even count, as for boundaries.
+export function merscopeMiddlePlane(planes: readonly number[]): number | undefined {
+  return planes[Math.floor((planes.length - 1) / 2)]
+}
 
 export class MerscopeFormatError extends Error {
   constructor(message: string) {

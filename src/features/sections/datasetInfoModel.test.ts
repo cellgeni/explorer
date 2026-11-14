@@ -47,6 +47,8 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     spatialDataControlState: { status: 'idle' },
     visiumControlState: { status: 'idle' },
     visiumHdControlState: { status: 'idle' },
+    merscopeImageState: { status: 'idle' },
+    handleMerscopeImageChange: vi.fn(),
     ...overrides,
   }
 }

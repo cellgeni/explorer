@@ -10,19 +10,33 @@ as the instrument writes it.
   outlines are 8 µm squares, the other planes 4 µm, and one outline belongs
   to no cell in the tables.
 - cell_boundaries.parquet.gz: the same file gzipped, as GEO serves it.
+- region_0.vzg: a ZIP64 zip, every entry deflated, laid out as the
+  MERSCOPE Vizualizer file: pictures/manifest.json (stains DAPI and PolyT,
+  planes 0-6), pictures/micron_to_mosaic_pixel_transform.csv (0.5 µm per
+  pixel, origin 1000, 2000 µm), and pictures/pyrmosaic_DAPI_z3.tif, a
+  200 x 160 12-bit JPEG BigTIFF whose three levels are pages, as tifffile
+  writes the real ones. pyrmosaic_reference.json holds the image's samples
+  at level 0 as tifffile decodes them.
 
 Usage (from the repository root):
-    uv run --no-project --python 3.12 --with "pyarrow>=15" \\
+    uv run --no-project --python 3.12 --with "pyarrow>=15" --with numpy \\
+        --with tifffile --with imagecodecs \\
         python src/test/fixtures/merscope/make_fixtures.py
+    npx prettier --write src/test/fixtures/merscope/*.json
 """
 
 import gzip
+import io
 import json
 import struct
+import zipfile
+import zlib
 from pathlib import Path
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import tifffile
 
 HERE = Path(__file__).resolve().parent
 
@@ -128,6 +142,66 @@ def write_boundaries():
     )
 
 
+def pyramid_tiff():
+    y, x = np.mgrid[0:160, 0:200]
+    image = (2000 + 1500 * np.sin(x / 9.0) * np.cos(y / 11.0)).clip(0, 4095)
+    image = image.astype(np.uint16)
+    buffer = io.BytesIO()
+    with tifffile.TiffWriter(buffer, bigtiff=True) as tif:
+        level = image
+        for _ in range(3):
+            tif.write(
+                level,
+                tile=(32, 32),
+                compression="jpeg",
+                compressionargs={"level": 92},
+                bitspersample=12,
+                metadata=None,
+            )
+            level = level[::2, ::2]
+    data = buffer.getvalue()
+    decoded = tifffile.TiffFile(io.BytesIO(data)).pages[0].asarray()
+    return data, decoded
+
+
+def write_vzg():
+    manifest = {
+        "microns_per_pixel": 0.5,
+        "mosaic_width_pixels": 200,
+        "mosaic_height_pixels": 160,
+        "bbox_microns": [1000.0, 2000.0, 1100.0, 2080.0],
+        "mosaic_files": [
+            {"stain": stain, "z": z, "file_name": f"mosaic_{stain}_z{z}.tif"}
+            for z in range(7)
+            for stain in ("DAPI", "PolyT")
+        ],
+    }
+    transform = "2 0 -2000\n0 2 -4000\n0 0 1\n"
+    tiff, decoded = pyramid_tiff()
+    path = HERE / "region_0.vzg"
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for name, data in (
+            ("pictures/manifest.json", json.dumps(manifest).encode()),
+            ("pictures/micron_to_mosaic_pixel_transform.csv", transform.encode()),
+            ("pictures/pyrmosaic_DAPI_z3.tif", tiff),
+        ):
+            info = zipfile.ZipInfo(name, date_time=(2024, 1, 1, 0, 0, 0))
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with archive.open(info, "w", force_zip64=True) as entry:
+                entry.write(data)
+    (HERE / "pyrmosaic_reference.json").write_text(
+        json.dumps(
+            {
+                "levels": [[160, 200], [80, 100], [40, 50]],
+                "sum": int(decoded.astype(np.int64).sum()),
+                "firstRow": decoded[0, :32].tolist(),
+            }
+        )
+        + "\n"
+    )
+
+
 if __name__ == "__main__":
     write_csvs()
     write_boundaries()
+    write_vzg()

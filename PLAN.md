@@ -26,31 +26,31 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 
 ## Status At A Glance
 
-| Track                                                                                     | Scope                                                    | Status                                                       |
-| ----------------------------------------------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ |
-| [Phase 1](docs/plan/phases/01-foundation.md)                                              | Foundation and migration                                 | Done                                                         |
-| [Phase 2](docs/plan/phases/02-robust-io-caching.md)                                       | Robust I/O, caching, S3 hardening                        | Done; image-path fallback fixed 2026-11-12                   |
-| [Phase 3](docs/plan/phases/03-multi-channel-imaging.md)                                   | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09           |
-| [Analysis slice (before Phase 4)](docs/plan/phases/analysis-slice.md)                     | Gene selection, expression highlighting, cell info       | Done                                                         |
-| [Phase 4](docs/plan/phases/04-genes-annotations.md)                                       | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                  |
-| [Phase 5](docs/plan/phases/05-production-polish.md)                                       | Production polish                                        | Done; reopened diagnostics fixed 2026-11-12                  |
-| [Feature-fix pass](docs/plan/phases/feature-fix-pass.md)                                  | Correctness before optimization                          | Ongoing; individual fixes recorded                           |
-| [Optimization pass](docs/plan/phases/optimization-pass.md)                                | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done            |
-| [Phase 5.1](docs/plan/phases/05.1-transcripts.md)                                         | Transcript visualization with LOD                        | Done                                                         |
-| [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; low-res fallback and diagnostics fixed 2026-11-12  |
-| [Structural refactor](docs/plan/engineering.md#application-structure-and-refactor-record) | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                     |
-| [Phase 7](docs/plan/phases/07-h5ad.md)                                                    | AnnData H5AD                                             | MVP done; hardening open                                     |
-| [Phase 8](docs/plan/phases/08-image-only-geojson.md)                                      | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                            |
-| [Phase 9](docs/plan/phases/09-ome-zarr.md)                                                | OME-Zarr image pyramids                                  | Done (2026-07-10)                                            |
-| [Phase 10](docs/plan/phases/10-spatialdata.md)                                            | SpatialData stores                                       | Done (2026-11-06)                                            |
-| [Phase 11](docs/plan/phases/11-dataset-manifest.md)                                       | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                            |
-| [Phase 12](docs/plan/phases/12-atera.md)                                                  | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)            |
-| [Phase 13](docs/plan/phases/13-qptiff.md)                                                 | QPTIFF images                                            | Done (2026-11-09)                                            |
-| [Phase 14](docs/plan/phases/14-standard-visium.md)                                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                            |
-| [Phase 15](docs/plan/phases/15-interface-redesign.md)                                     | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12) |
-| [Phase 16](docs/plan/phases/16-svs.md)                                                    | SVS (Aperio) images                                      | Done (2026-11-13)                                            |
-| [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                            |
-| [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | 18-A basic support done (2026-11-14); 18-B images planned    |
+| Track                                                                                     | Scope                                                    | Status                                                           |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------- |
+| [Phase 1](docs/plan/phases/01-foundation.md)                                              | Foundation and migration                                 | Done                                                             |
+| [Phase 2](docs/plan/phases/02-robust-io-caching.md)                                       | Robust I/O, caching, S3 hardening                        | Done; image-path fallback fixed 2026-11-12                       |
+| [Phase 3](docs/plan/phases/03-multi-channel-imaging.md)                                   | Multi-channel imaging                                    | Done. JPEG XR **Dropped**; Z-stack done 2026-11-09               |
+| [Analysis slice (before Phase 4)](docs/plan/phases/analysis-slice.md)                     | Gene selection, expression highlighting, cell info       | Done                                                             |
+| [Phase 4](docs/plan/phases/04-genes-annotations.md)                                       | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                      |
+| [Phase 5](docs/plan/phases/05-production-polish.md)                                       | Production polish                                        | Done; reopened diagnostics fixed 2026-11-12                      |
+| [Feature-fix pass](docs/plan/phases/feature-fix-pass.md)                                  | Correctness before optimization                          | Ongoing; individual fixes recorded                               |
+| [Optimization pass](docs/plan/phases/optimization-pass.md)                                | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
+| [Phase 5.1](docs/plan/phases/05.1-transcripts.md)                                         | Transcript visualization with LOD                        | Done                                                             |
+| [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; low-res fallback and diagnostics fixed 2026-11-12      |
+| [Structural refactor](docs/plan/engineering.md#application-structure-and-refactor-record) | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
+| [Phase 7](docs/plan/phases/07-h5ad.md)                                                    | AnnData H5AD                                             | MVP done; hardening open                                         |
+| [Phase 8](docs/plan/phases/08-image-only-geojson.md)                                      | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
+| [Phase 9](docs/plan/phases/09-ome-zarr.md)                                                | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                |
+| [Phase 10](docs/plan/phases/10-spatialdata.md)                                            | SpatialData stores                                       | Done (2026-11-06)                                                |
+| [Phase 11](docs/plan/phases/11-dataset-manifest.md)                                       | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
+| [Phase 12](docs/plan/phases/12-atera.md)                                                  | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
+| [Phase 13](docs/plan/phases/13-qptiff.md)                                                 | QPTIFF images                                            | Done (2026-11-09)                                                |
+| [Phase 14](docs/plan/phases/14-standard-visium.md)                                        | Standard Visium spots (original Phase 6 `VisiumDataset`) | Done (2026-11-10)                                                |
+| [Phase 15](docs/plan/phases/15-interface-redesign.md)                                     | Interface redesign: layout, dark theme, legend, colours  | Done: M1–M5 (2026-11-11) and the 15.5 close-out (2026-11-12)     |
+| [Phase 16](docs/plan/phases/16-svs.md)                                                    | SVS (Aperio) images                                      | Done (2026-11-13)                                                |
+| [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                                |
+| [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | Done: 18-A tables and boundaries, 18-B `.vzg` image (2026-11-14) |
 
 ## Purpose And Scope
 
@@ -75,7 +75,7 @@ request:
 | OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
 | SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
 | Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)                           |
-| MERSCOPE       | Vizgen region folder (CSV tables, boundary GeoParquet)         | Phase 18                     | Cells and boundaries done (2026-11-14)      |
+| MERSCOPE       | Vizgen region folder (CSV tables, boundary GeoParquet, `.vzg`) | Phase 18                     | Done (2026-11-14)                           |
 
 ### Reference Datasets
 

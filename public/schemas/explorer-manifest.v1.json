@@ -302,6 +302,10 @@
         "cellBoundaries": {
           "$ref": "#/$defs/path",
           "description": "Cell boundary GeoParquet with EntityID and ZIndex columns, gzip allowed. Default cell_boundaries.parquet; vpt writes <method>_micron_space.parquet. Read whole."
+        },
+        "vzg": {
+          "$ref": "#/$defs/path",
+          "description": "The MERSCOPE Vizualizer .vzg zip, whose image pyramids are shown one stain and z plane at a time. Default: the one .vzg the folder's index page lists. Needs byte-range support."
         }
       },
       "additionalProperties": false

@@ -1,4 +1,4 @@
-import { fromUrl } from 'geotiff'
+import { fromArrayBuffer, fromUrl } from 'geotiff'
 import type {
   BlockedSourceOptions,
   GeoTIFF,
@@ -111,6 +111,8 @@ export interface TiffPyramidLoaderOptions {
   readonly stripLevels?: ReadonlyMap<number, TiffStripLevel>
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
+  // The image's top-left corner in data micrometres; 0, 0 by default.
+  readonly origin?: { readonly x: number; readonly y: number }
 }
 export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
@@ -184,6 +186,12 @@ export async function openTiff(
 ): Promise<TiffPyramidLoader> {
   const selection = parseTiffImageSelection(url)
 
+  // A file already in memory, such as a zip entry, is read without requests.
+  if (options.bytes !== undefined) {
+    const tiff = await fromArrayBuffer(wholeArrayBuffer(options.bytes))
+    return openTiffImage(url, selection, tiff, signal, onFallback, options)
+  }
+
   if (isQptiffUrl(selection.sourceUrl)) {
     return openTopLevelPyramid(url, selection, signal, onFallback, options, QPTIFF_FORMAT)
   }
@@ -230,6 +238,21 @@ async function openTiffImage(
     return openTopLevelPyramid(url, selection, signal, onFallback, options, SVS_FORMAT)
   }
 
+  if (
+    selection.ifdIndex === undefined &&
+    (await isPagePyramid(tiff, metadataDirectory, description))
+  ) {
+    return openTopLevelPyramid(
+      url,
+      selection,
+      signal,
+      onFallback,
+      options,
+      PAGE_PYRAMID_FORMAT,
+      tiff,
+    )
+  }
+
   const omeMetadata = parseOmeTiffMetadata(description)
   const channelIndex =
     selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
@@ -243,18 +266,21 @@ async function openTiffImage(
         decodeMetadata: await readTileDecodeMetadata(tiff, image.getFileDirectory()),
       }
     })(),
-    loadZchunkStorePyramidOptions(selection.sourceUrl, {
-      ...(signal === undefined ? {} : { signal }),
-      channelIndex,
-      zchunkStoreUrl: options.zchunkStoreUrl,
-      multiFile: isMultiFileOmeTiff(selection.sourceUrl, omeMetadata.channels),
-    }).catch((cause: unknown) => {
-      if (isAbortError(cause)) {
-        throw cause
-      }
+    // A file in memory has its tile offsets at hand.
+    options.bytes !== undefined
+      ? Promise.resolve(null)
+      : loadZchunkStorePyramidOptions(selection.sourceUrl, {
+          ...(signal === undefined ? {} : { signal }),
+          channelIndex,
+          zchunkStoreUrl: options.zchunkStoreUrl,
+          multiFile: isMultiFileOmeTiff(selection.sourceUrl, omeMetadata.channels),
+        }).catch((cause: unknown) => {
+          if (isAbortError(cause)) {
+            throw cause
+          }
 
-      return UNREADABLE_ZCHUNK_STORE
-    }),
+          return UNREADABLE_ZCHUNK_STORE
+        }),
   ])
   const firstDirectory = firstImage.getFileDirectory()
   const imageWidth = imagePixels(firstImage.getWidth())
@@ -270,9 +296,12 @@ async function openTiffImage(
       sourceUrl: selection.sourceUrl,
       ...decodeMetadata,
       ...zchunkStoreOptions,
+      ...loaderSourceOptions(options),
       units: {
         ...zchunkStoreOptions.units,
-        micrometersPerPixel: micrometers(omeMetadata.micrometersPerPixel),
+        micrometersPerPixel: micrometers(
+          options.micrometersPerPixel ?? omeMetadata.micrometersPerPixel,
+        ),
       },
       channels: omeMetadata.channels,
       ...(omeMetadata.zStack === undefined ? {} : { zStack: omeMetadata.zStack }),
@@ -297,7 +326,9 @@ async function openTiffImage(
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
-    micrometersPerPixel: micrometers(omeMetadata.micrometersPerPixel),
+    micrometersPerPixel: micrometers(
+      options.micrometersPerPixel ?? omeMetadata.micrometersPerPixel,
+    ),
     origin: 'top-left',
     imageYAxis: 'down',
   }
@@ -377,6 +408,7 @@ async function openTiffImage(
     url,
     sourceUrl: selection.sourceUrl,
     ...decodeMetadata,
+    ...loaderSourceOptions(options),
     chunkIndex,
     levelMeta,
     ...(stripLevels.size === 0 ? {} : { stripLevels }),
@@ -467,7 +499,12 @@ interface TopLevelPyramidFormat {
   // Names the format in messages ("the QPTIFF", "a QPTIFF").
   readonly name: string
   readonly withArticle: string
-  readonly read: (sourceUrl: string) => Promise<TopLevelPyramidFile>
+  // How the file is read over HTTP.
+  readonly sourceOptions: BlockedRemoteSourceOptions
+  readonly read: (
+    tiff: GeoTIFF,
+    options: OpenImagePyramidOptions,
+  ) => Promise<TopLevelPyramidFile>
   readonly readAdjacentTiles: boolean
 }
 
@@ -477,12 +514,8 @@ const QPTIFF_FORMAT: TopLevelPyramidFormat = {
   name: 'QPTIFF',
   withArticle: 'a QPTIFF',
   readAdjacentTiles: false,
-  read: (sourceUrl) =>
-    readQptiffFile(sourceUrl, {
-      allowFullFile: false,
-      blockSize: 1024 * 1024,
-      cacheSize: 16,
-    }),
+  sourceOptions: { allowFullFile: false, blockSize: 1024 * 1024, cacheSize: 16 },
+  read: (tiff, options) => readQptiffFile(tiff, options),
 }
 
 // Aperio writes each IFD after its image data, with the IFD's tag data
@@ -494,12 +527,18 @@ const SVS_FORMAT: TopLevelPyramidFormat = {
   name: 'SVS',
   withArticle: 'an SVS',
   readAdjacentTiles: true,
-  read: (sourceUrl) =>
-    readSvsFile(sourceUrl, {
-      allowFullFile: false,
-      blockSize: 64 * 1024,
-      cacheSize: 64,
-    }),
+  sourceOptions: { allowFullFile: false, blockSize: 64 * 1024, cacheSize: 64 },
+  read: (tiff, options) => readSvsFile(tiff, options),
+}
+
+// A pyramid written as pages (see isPagePyramid). tifffile writes each IFD
+// after its level's tiles, so the IFDs are spread through the file.
+const PAGE_PYRAMID_FORMAT: TopLevelPyramidFormat = {
+  name: 'TIFF page pyramid',
+  withArticle: 'a TIFF page pyramid',
+  readAdjacentTiles: false,
+  sourceOptions: { allowFullFile: false, blockSize: 64 * 1024, cacheSize: 64 },
+  read: (tiff, options) => readPagePyramidFile(tiff, options),
 }
 
 // fromUrl hands the block options to its BlockedSource, though its type
@@ -513,6 +552,8 @@ async function openTopLevelPyramid(
   onFallback: FallbackNotifier | undefined,
   options: OpenImagePyramidOptions,
   format: TopLevelPyramidFormat,
+  // The file when the caller has already opened it.
+  openedTiff?: GeoTIFF,
 ): Promise<TiffPyramidLoader> {
   if (options.zchunkStoreUrl !== undefined) {
     notifyFallback(onFallback, {
@@ -523,7 +564,17 @@ async function openTopLevelPyramid(
     })
   }
 
-  const file = await abortable(topLevelPyramidFile(selection.sourceUrl, format), signal)
+  const file = await abortable(
+    topLevelPyramidFile(selection.sourceUrl, async () => {
+      const tiff =
+        openedTiff ??
+        (options.bytes === undefined
+          ? await fromUrl(selection.sourceUrl, format.sourceOptions)
+          : await fromArrayBuffer(wholeArrayBuffer(options.bytes)))
+      return format.read(tiff, options)
+    }),
+    signal,
+  )
   const baseline = file.levels[0] ?? []
   const channel =
     selection.ifdIndex === undefined ? 0 : baseline.indexOf(selection.ifdIndex)
@@ -554,6 +605,7 @@ async function openTopLevelPyramid(
     url,
     sourceUrl: selection.sourceUrl,
     ...decodeMetadata,
+    ...loaderSourceOptions(options),
     levelDecodeMetadata,
     readAdjacentTiles: format.readAdjacentTiles,
     // A level's tile offsets are read when its first tile is fetched, so
@@ -565,7 +617,9 @@ async function openTopLevelPyramid(
     units: {
       dataUnit: 'micrometer',
       imageUnit: 'pixel',
-      micrometersPerPixel: micrometers(file.micrometersPerPixel),
+      micrometersPerPixel: micrometers(
+        options.micrometersPerPixel ?? file.micrometersPerPixel,
+      ),
       origin: 'top-left',
       imageYAxis: 'down',
     },
@@ -580,14 +634,14 @@ async function openTopLevelPyramid(
 
 function topLevelPyramidFile(
   sourceUrl: string,
-  format: TopLevelPyramidFormat,
+  read: () => Promise<TopLevelPyramidFile>,
 ): Promise<TopLevelPyramidFile> {
   const cached = topLevelPyramidFiles.get(sourceUrl)
 
   // Map order is insertion order; re-inserting marks the file most recent.
   topLevelPyramidFiles.delete(sourceUrl)
 
-  const file = cached ?? format.read(sourceUrl)
+  const file = cached ?? read()
   topLevelPyramidFiles.set(sourceUrl, file)
 
   if (cached === undefined) {
@@ -610,10 +664,10 @@ function topLevelPyramidFile(
 }
 
 async function readQptiffFile(
-  sourceUrl: string,
-  sourceOptions: BlockedRemoteSourceOptions,
+  tiff: GeoTIFF,
+  options: OpenImagePyramidOptions,
 ): Promise<TopLevelPyramidFile> {
-  const tiff = await fromUrl(sourceUrl, sourceOptions)
+  void options
   const directories = await readIfdChain(tiff)
   const summaries = await Promise.all(
     directories.map((directory, index) => summarizeQptiffIfd(directory, index)),
@@ -651,10 +705,10 @@ async function readQptiffFile(
 }
 
 async function readSvsFile(
-  sourceUrl: string,
-  sourceOptions: BlockedRemoteSourceOptions,
+  tiff: GeoTIFF,
+  options: OpenImagePyramidOptions,
 ): Promise<TopLevelPyramidFile> {
-  const tiff = await fromUrl(sourceUrl, sourceOptions)
+  void options
   // The label and macro follow the last level, so the walk stops at the
   // label rather than reading the macro IFD too.
   const directories = await readIfdChain(
@@ -696,6 +750,111 @@ async function readSvsFile(
       parseSvsDescription(description).micrometersPerPixel ??
       qptiffMicrometersPerPixel(xResolution, resolutionUnit),
   })
+}
+
+// Pages that shrink: the first tiled page at full resolution, then each
+// tiled page of the same tile size and sample count that is smaller. The
+// pyramid levels beyond the shared tile size are left out (svsLayout).
+async function readPagePyramidFile(
+  tiff: GeoTIFF,
+  options: OpenImagePyramidOptions,
+): Promise<TopLevelPyramidFile> {
+  const directories = await readIfdChain(tiff)
+  const summaries = await Promise.all(
+    directories.map((directory, index) => summarizeIfdShape(directory, index)),
+  )
+  const levelIfds = svsLayout(summaries)
+  const first = summaries[0]
+  const firstDirectory = directories[0]
+
+  if (first === undefined || firstDirectory === undefined || levelIfds.length === 0) {
+    throw new Error('The TIFF page pyramid is not tiled, so it cannot be read by tile.')
+  }
+
+  const [bitsPerSample, xResolution, resolutionUnit] = await Promise.all([
+    readNumberArrayTag(firstDirectory, 'BitsPerSample'),
+    readOptionalRationalTag(firstDirectory, 'XResolution'),
+    readOptionalNumberTag(firstDirectory, 'ResolutionUnit'),
+  ])
+
+  return topLevelPyramid({
+    tiff,
+    directories,
+    summaries,
+    levels: levelIfds.map((index) => [index]),
+    channels: [
+      svsChannelInfo(first.samplesPerPixel, bitsPerSample[0], options.channelName),
+    ],
+    micrometersPerPixel: qptiffMicrometersPerPixel(xResolution, resolutionUnit),
+  })
+}
+
+// A pyramid stored as pages rather than SubIFDs, as tifffile writes the
+// MERSCOPE `.vzg` pyramids: IFD 0 tiled, without SubIFDs, and IFD 1 tiled
+// with the same tile size and sample count but smaller. OME-TIFFs keep
+// channels and planes in their pages, so they are left alone.
+async function isPagePyramid(
+  tiff: GeoTIFF,
+  firstDirectory: ImageFileDirectory,
+  description: string | undefined,
+): Promise<boolean> {
+  if (
+    description?.includes('<OME') === true ||
+    !(firstDirectory.nextIFDByteOffset > 0) ||
+    (await readNumberArrayTag(firstDirectory, 'SubIFDs')).length > 0
+  ) {
+    return false
+  }
+
+  const [first, second] = await Promise.all([
+    summarizeIfdShape(firstDirectory, 0),
+    tiff.getImage(1).then((image) => summarizeIfdShape(image.getFileDirectory(), 1)),
+  ])
+
+  return (
+    first.tileWidth !== undefined &&
+    second.tileWidth === first.tileWidth &&
+    second.tileHeight === first.tileHeight &&
+    second.samplesPerPixel === first.samplesPerPixel &&
+    second.width < first.width &&
+    second.height < first.height
+  )
+}
+
+// Placement and byte source that the caller gives the opener.
+function loaderSourceOptions(
+  options: OpenImagePyramidOptions,
+): Pick<TiffPyramidLoaderOptions, 'origin' | 'fetcher' | 'byteRangeCache'> {
+  return {
+    ...(options.origin === undefined ? {} : { origin: options.origin }),
+    ...(options.bytes === undefined
+      ? {}
+      : { fetcher: memoryRangeFetcher(options.bytes), byteRangeCache: null }),
+  }
+}
+
+// Answers the loader's Range requests from a file in memory.
+export function memoryRangeFetcher(bytes: Uint8Array): typeof fetch {
+  return (async (...[, init]: Parameters<typeof fetch>) => {
+    const match = /^bytes=(\d+)-(\d+)$/.exec(
+      new Headers(init?.headers).get('Range') ?? '',
+    )
+
+    if (match === null) {
+      return new Response(null, { status: 416 })
+    }
+
+    const start = Number(match[1])
+    const end = Math.min(Number(match[2]) + 1, bytes.length)
+    return new Response(bytes.slice(start, end), { status: 206 })
+  }) as typeof fetch
+}
+
+// geotiff reads the buffer from offset 0 to its end.
+function wholeArrayBuffer(bytes: Uint8Array<ArrayBuffer>): ArrayBuffer {
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? bytes.buffer
+    : bytes.slice().buffer
 }
 
 function topLevelPyramid(options: {
@@ -1024,6 +1183,9 @@ export class TiffPyramidLoader {
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
   private readonly byteRangeCache: PersistentByteRangeCache | null
+  // The image's top-left corner in data micrometres.
+  private readonly originX: number
+  private readonly originY: number
 
   constructor(options: TiffPyramidLoaderOptions) {
     this.url = options.url
@@ -1072,6 +1234,8 @@ export class TiffPyramidLoader {
       options.byteRangeCache === undefined
         ? defaultPersistentByteRangeCache()
         : options.byteRangeCache
+    this.originX = options.origin?.x ?? 0
+    this.originY = options.origin?.y ?? 0
   }
 
   bestLevel(deckScale: number): number {
@@ -1095,21 +1259,22 @@ export class TiffPyramidLoader {
     const scale = this.levelScaleFor(meta)
     const levelScaleX = this.units.micrometersPerPixel * scale.x
     const levelScaleY = this.units.micrometersPerPixel * scale.y
-    const col0 = Math.max(
-      0,
-      Math.floor(Math.max(0, bbox.minX / levelScaleX) / this.tileWidth),
-    )
+    const minX = bbox.minX - this.originX
+    const maxX = bbox.maxX - this.originX
+    const minY = bbox.minY - this.originY
+    const maxY = bbox.maxY - this.originY
+    const col0 = Math.max(0, Math.floor(Math.max(0, minX / levelScaleX) / this.tileWidth))
     const col1 = Math.min(
       meta.nCols - 1,
-      Math.floor(Math.max(0, bbox.maxX / levelScaleX - 1e-9) / this.tileWidth),
+      Math.floor(Math.max(0, maxX / levelScaleX - 1e-9) / this.tileWidth),
     )
     const row0 = Math.max(
       0,
-      Math.floor(Math.max(0, bbox.minY / levelScaleY) / this.tileHeight),
+      Math.floor(Math.max(0, minY / levelScaleY) / this.tileHeight),
     )
     const row1 = Math.min(
       meta.nRows - 1,
-      Math.floor(Math.max(0, bbox.maxY / levelScaleY - 1e-9) / this.tileHeight),
+      Math.floor(Math.max(0, maxY / levelScaleY - 1e-9) / this.tileHeight),
     )
     const tiles: TileIndex[] = []
 
@@ -1146,10 +1311,10 @@ export class TiffPyramidLoader {
     const imageHeightMicrometers = this.imageHeight * this.units.micrometersPerPixel
 
     return {
-      minX: micrometers(Math.max(0, left)),
-      maxX: micrometers(Math.min(imageWidthMicrometers, right)),
-      minY: micrometers(Math.max(0, bottom)),
-      maxY: micrometers(Math.min(imageHeightMicrometers, top)),
+      minX: micrometers(this.originX + Math.max(0, left)),
+      maxX: micrometers(this.originX + Math.min(imageWidthMicrometers, right)),
+      minY: micrometers(this.originY + Math.max(0, bottom)),
+      maxY: micrometers(this.originY + Math.min(imageHeightMicrometers, top)),
     }
   }
 

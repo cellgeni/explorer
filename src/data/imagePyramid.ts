@@ -127,6 +127,17 @@ export interface OpenImagePyramidOptions {
   // `.zchunkstore` sidecar named by the dataset manifest, tried instead of the
   // locations derived from the TIFF URL. Only TIFF images use it.
   readonly zchunkStoreUrl?: string
+  // The image's top-left corner in data micrometres, for an image that does
+  // not start at the data origin (MERSCOPE mosaics sit at stage
+  // coordinates). TIFF images only.
+  readonly origin?: { readonly x: number; readonly y: number }
+  // Replaces the pixel size the file states. TIFF images only.
+  readonly micrometersPerPixel?: number
+  // The whole TIFF already in memory, such as an entry inflated from a zip;
+  // it is read without requests, and the URL only names it.
+  readonly bytes?: Uint8Array<ArrayBuffer>
+  // Replaces the name of a single-channel image's channel.
+  readonly channelName?: string
 }
 
 // Opens an image pyramid: the generic opener (`openImagePyramid`), a TIFF-only

@@ -996,9 +996,32 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
 // 19-digit IDs, three genes and two Blank columns, and boundaries with one row
 // per cell per z plane (src/test/fixtures/merscope). Other paths answer 404,
 // so detection falls through to MERSCOPE.
-async function routeMerscopeFixture(page: Page, folder = '/merscope-smoke') {
+async function routeMerscopeFixture(
+  page: Page,
+  folder = '/merscope-smoke',
+  options: { readonly vzg?: boolean } = {},
+) {
   const fixtures = 'src/test/fixtures/merscope'
   const files: Record<string, { body: Buffer; type: string }> = {
+    ...(options.vzg === true
+      ? {
+          // The .vzg's name carries the run, so a manifest names it.
+          'explorer.json': {
+            type: 'application/json',
+            body: Buffer.from(
+              JSON.stringify({
+                version: 1,
+                platform: 'merscope',
+                files: { vzg: 'region_0.vzg' },
+              }),
+            ),
+          },
+          'region_0.vzg': {
+            type: 'application/zip',
+            body: await readFile(`${fixtures}/region_0.vzg`),
+          },
+        }
+      : {}),
     'cell_by_gene.csv': {
       type: 'text/csv',
       body: await readFile(`${fixtures}/cell_by_gene.csv`),
@@ -1027,6 +1050,19 @@ async function routeMerscopeFixture(page: Page, folder = '/merscope-smoke') {
       'Content-Length': String(file.body.byteLength),
       'Content-Type': file.type,
     }
+    const range = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()['range'] ?? '')
+
+    if (range !== null && route.request().method() !== 'HEAD') {
+      const start = Number(range[1])
+      const end = Math.min(Number(range[2]) + 1, file.body.byteLength)
+      await route.fulfill({
+        status: 206,
+        headers: { ...headers, 'Content-Length': String(end - start) },
+        body: file.body.subarray(start, end),
+      })
+      return
+    }
+
     await route.fulfill(
       route.request().method() === 'HEAD'
         ? { status: 200, headers }
@@ -1034,6 +1070,31 @@ async function routeMerscopeFixture(page: Page, folder = '/merscope-smoke') {
     )
   })
 }
+
+test('shows a MERSCOPE .vzg stain and switches it off @smoke', async ({ page }) => {
+  await routeMerscopeFixture(page, '/merscope-vzg', { vzg: true })
+  await page.goto('/')
+
+  const datasetUrl = new URL('/merscope-vzg/', page.url()).toString()
+  await openControls(page, 'open-dataset')
+  await page.getByLabel('Dataset or image URL').fill(datasetUrl)
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+
+  await expectLogEntry(page, /MERSCOPE ready: 3 cells/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expectLogEntry(page, /Morphology image ready/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+  const image = await openControls(page, 'image')
+  await expect(image.getByTitle('MERSCOPE stain to show')).toHaveValue('DAPI')
+  await expect(image.getByTitle('MERSCOPE z plane to show')).toContainText('z3 (19 KB)')
+  await expect(image.getByLabel('Image channels')).toContainText('DAPI')
+
+  await image.getByTitle('MERSCOPE stain to show').selectOption('')
+  await expectLogEntry(page, /MERSCOPE image change: none/)
+  await expect(page).toHaveURL(/mimg=none/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expect(
+    (await openControls(page, 'image')).getByTitle('MERSCOPE stain to show'),
+  ).toHaveValue('', { timeout: H5AD_LOAD_TIMEOUT_MS })
+})
 
 test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', async ({
   page,

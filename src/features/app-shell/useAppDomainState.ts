@@ -147,6 +147,10 @@ import {
   IDLE_VISIUM_CONTROL_STATE,
   type VisiumControlState,
 } from '../dataset/visiumModel'
+import {
+  IDLE_MERSCOPE_IMAGE_STATE,
+  type MerscopeImageControlState,
+} from '../dataset/merscopeImageModel'
 
 const NO_MANIFEST_DEFAULTS: ShareableState = {}
 export interface UseAppDomainStateOptions {
@@ -496,6 +500,9 @@ export function useAppDomainState({
   const [visiumControlState, setVisiumControlState] = useState<VisiumControlState>(
     IDLE_VISIUM_CONTROL_STATE,
   )
+  const [merscopeImageState, setMerscopeImageState] = useState<MerscopeImageControlState>(
+    IDLE_MERSCOPE_IMAGE_STATE,
+  )
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
   >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
@@ -732,6 +739,10 @@ export function useAppDomainState({
     visium: {
       setVisiumControlState,
       visiumControlState,
+    },
+    merscope: {
+      merscopeImageState,
+      setMerscopeImageState,
     },
     visiumHd: {
       gridCellAssignmentState,

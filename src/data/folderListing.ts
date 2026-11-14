@@ -112,6 +112,11 @@ export function setFolderListing(
   }
 }
 
+// The registered listing of a folder, if its index page was read.
+export function folderListingFor(folderUrl: string): FolderListing | undefined {
+  return folderListings.get(withTrailingSlash(folderUrl))
+}
+
 export function clearFolderListings(): void {
   folderListings.clear()
 }

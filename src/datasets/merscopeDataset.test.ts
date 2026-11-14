@@ -275,4 +275,58 @@ describe('MerscopeDataset', () => {
     expect(await merscope.elements(bbox(0, 0, 5000, 5000))).toEqual({ elements: [] })
     expect((await merscope.summary()).cellBoundaries).toBeNull()
   })
+
+  it('lists the .vzg images and reads one stain at one plane, placed on the stage', async () => {
+    const requests: string[] = []
+    const fetcher = fixtureFetcher()
+    const merscope = dataset({
+      files: { vzg: `${ROOT}/region_0.vzg` },
+      fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        requests.push(new Headers(init?.headers).get('Range') ?? init?.method ?? 'GET')
+        return fetcher(input, init)
+      }) as typeof fetch,
+    })
+
+    expect((await merscope.meta()).capabilities.pyramidImage).toBe(true)
+    const options = await merscope.imageOptions()
+    // PolyT is in the manifest but has no pyramid in the zip.
+    expect(options).toMatchObject({
+      fileName: 'region_0.vzg',
+      stains: [{ stain: 'DAPI', planes: [{ z: 3 }] }],
+      defaultChoice: { stain: 'DAPI', z: 3 },
+      placement: { originX: 1000, originY: 2000, micronsPerPixel: 0.5 },
+    })
+
+    const progress: number[] = []
+    const source = await merscope.imageSource(
+      { stain: 'DAPI', z: 3 },
+      { onProgress: (received) => progress.push(received) },
+    )
+    expect(source.kind).toBe('pyramid')
+    const loader = source.kind === 'pyramid' ? source.loader : null
+    expect(loader?.tileBounds(0, 0, 0)).toEqual({
+      minX: 1000,
+      maxX: 1016,
+      minY: 2000,
+      maxY: 2016,
+    })
+    expect(loader?.channels[0]?.name).toBe('DAPI')
+    expect(progress.at(-1)).toBe(options?.stains[0]?.planes[0]?.byteLength)
+
+    // The same image again is not read again.
+    const reads = requests.length
+    await merscope.imageSource({ stain: 'DAPI', z: 3 })
+    expect(requests).toHaveLength(reads)
+    await expect(merscope.imageSource({ stain: 'PolyT', z: 3 })).rejects.toThrow(
+      'region_0.vzg has no pictures/pyrmosaic_PolyT_z3.tif.',
+    )
+  })
+
+  it('has no image without a .vzg', async () => {
+    const merscope = dataset()
+
+    expect((await merscope.meta()).capabilities.pyramidImage).toBe(false)
+    expect(await merscope.imageOptions()).toBeNull()
+    expect(await merscope.image()).toBeNull()
+  })
 })
