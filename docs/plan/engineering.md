@@ -190,8 +190,13 @@ From a run of `npm test` and the repository:
       job (CI #126 and #138, 2026-11-13): it showed transcripts before the
       viewer reported its fitted view, so one 1 s wait held the 180 ms report
       and the renders after it. It now waits for the Exact points meter, then
-      the density read. The checks that wait for `loadGeneExpression` (CI
-      #128) have the same shape.
+      the density read. The three checks that wait for `loadGeneExpression`
+      (CI #128) had the same shape; since 2026-11-14 they wait for the meter,
+      mounted while Transcripts is closed, before they pick a gene. The App
+      tests still read the demo dataset's morphology image from
+      `mp33.cog.sanger.ac.uk` by default, and decode its JPEG 2000 tiles on the
+      test thread, carrying on after the test's App unmounts; locally that
+      held one of those waits for up to 0.9 s.
 - [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
       Done 2026-11-12; see [Closed Open Items](#closed-open-items).

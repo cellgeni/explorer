@@ -3539,6 +3539,8 @@ describe('App', () => {
 
       openControls('genes')
       expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
+      // All 6,000 cells are in view, with 8 transcripts each.
+      await waitForViewReport('48,000')
       fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
         target: { value: 'exact-region' },
       })
@@ -3607,6 +3609,8 @@ describe('App', () => {
 
       openControls('genes')
       expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
+      // All 50,001 cells are in view, with 8 transcripts each.
+      await waitForViewReport('400,008')
       fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
 
       await waitFor(() => {
@@ -3674,6 +3678,8 @@ describe('App', () => {
 
       openControls('genes')
       expect(await screen.findByText(/ · 1 gene$/)).toBeInTheDocument()
+      // All 50,001 cells are in view, with 8 transcripts each.
+      await waitForViewReport('400,008')
       fireEvent.change(screen.getByRole('combobox', { name: 'Expression detail' }), {
         target: { value: 'all-cells' },
       })
@@ -6279,6 +6285,19 @@ ${cd16Negative},CD16- NK cells`,
     expect(screen.getByLabelText('Saved gene sets')).toHaveTextContent('Interneuron set')
   })
 })
+
+// Gene expression loads start from the viewer's report of its fitted view,
+// which ViewerCore sends 180 ms after the fit. A gene picked before the report
+// leaves one 1 s wait to hold the rest of that delay and the renders after it.
+// The Exact points meter (Transcripts, mounted while closed) counts the
+// transcripts in the reported view, and reads 0 until the report.
+async function waitForViewReport(transcriptsInView: string): Promise<void> {
+  await waitFor(() => {
+    expect(
+      screen.getByRole('meter', { name: 'Exact points', hidden: true }),
+    ).toHaveAttribute('aria-valuetext', `${transcriptsInView} of 100,000 points`)
+  })
+}
 
 function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {
   return {
