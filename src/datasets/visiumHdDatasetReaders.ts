@@ -14,6 +14,14 @@ import {
   type VisiumHdSegmentationKind,
 } from './visiumHdSegmentationModel'
 import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
+import {
+  selectVisiumHdSegmentationIndexElements,
+  type VisiumHdSegmentationIndex,
+} from './visiumHdSegmentationIndex'
+import type {
+  ReadVisiumHdSegmentationIndexOptions,
+  VisiumHdSegmentationIndexReader,
+} from './visiumHdSegmentationIndexWorker'
 import type {
   ReadVisiumHdBarcodeMappingsOptions,
   VisiumHdBarcodeMapping,
@@ -131,6 +139,7 @@ export interface VisiumHdDatasetReaderControllerOptions {
   readonly barcodeMappingsForCellReader?: VisiumHdBarcodeMappingsForCellReader
   readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
   readonly segmentationReader?: VisiumHdSegmentationReader
+  readonly segmentationIndexReader?: VisiumHdSegmentationIndexReader
   readonly featureMatrixReader?: VisiumHdFeatureMatrixReader
   readonly featureSliceH5Path?: string
   readonly featureSliceReader?: VisiumHdFeatureSliceReader
@@ -208,6 +217,15 @@ const readVisiumHdSegmentationElementsLazy = async (
   return readVisiumHdSegmentationElements(baseUrl, options)
 }
 
+const readVisiumHdSegmentationIndexLazy = async (
+  baseUrl: string,
+  options: ReadVisiumHdSegmentationIndexOptions,
+): Promise<VisiumHdSegmentationIndex> => {
+  const { readVisiumHdSegmentationIndexInWorker } =
+    await import('./visiumHdSegmentationIndexWorker')
+  return readVisiumHdSegmentationIndexInWorker(baseUrl, options)
+}
+
 const gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy = async (
   url: string,
   ids: readonly SpatialElementId[],
@@ -241,6 +259,7 @@ export class VisiumHdDatasetReaderController {
   private readonly barcodeMappingsForCellReader: VisiumHdBarcodeMappingsForCellReader
   private readonly segmentedOutputs: VisiumHdSegmentedOutputPaths | undefined
   private readonly segmentationReader: VisiumHdSegmentationReader
+  private readonly segmentationIndexReader: VisiumHdSegmentationIndexReader
   private readonly featureMatrixReader: VisiumHdFeatureMatrixReader
   private readonly featureSliceH5Path: string
   private readonly featureSliceReader: VisiumHdFeatureSliceReader
@@ -273,9 +292,21 @@ export class VisiumHdDatasetReaderController {
   >()
   // barcode_mappings.parquet's size and footer, read once for all bin reads.
   private readonly barcodeMappingSources: VisiumHdBarcodeMappingsSourceCache = new Map()
-  private readonly segmentationPromises = new Map<
+  // Segmentation GeoJSON is read once per file into an index that every
+  // viewport selects from. The read is not tied to a request's signal, so
+  // panning while it runs does not start it again.
+  private readonly segmentationIndexPromises = new Map<
     string,
-    Promise<readonly SpatialElement[]>
+    Promise<VisiumHdSegmentationIndex>
+  >()
+  // The last viewport's elements per index, reused by the next request so
+  // polygons still in view keep the same objects.
+  private readonly segmentationSelections = new Map<
+    string,
+    {
+      readonly index: VisiumHdSegmentationIndex
+      readonly elements: ReadonlyMap<number, SpatialElement>
+    }
   >()
 
   constructor(options: VisiumHdDatasetReaderControllerOptions) {
@@ -298,6 +329,8 @@ export class VisiumHdDatasetReaderController {
     this.segmentedOutputs = options.segmentedOutputs
     this.segmentationReader =
       options.segmentationReader ?? readVisiumHdSegmentationElementsLazy
+    this.segmentationIndexReader =
+      options.segmentationIndexReader ?? readVisiumHdSegmentationIndexLazy
     this.featureMatrixReader =
       options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
@@ -702,48 +735,48 @@ export class VisiumHdDatasetReaderController {
       return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
     }
 
-    const elements = await this.segmentedElementsForPath(
-      source.path,
-      kind,
-      scalefactors,
+    const key = segmentationIndexKey(source.path, kind, scalefactors)
+    const index = await this.segmentationIndex(key, source.path, kind, scalefactors)
+    const previous = this.segmentationSelections.get(key)
+    const elements = selectVisiumHdSegmentationIndexElements(
+      index,
       bbox,
+      previous?.index === index ? previous.elements : undefined,
     )
-    return filterVisiumHdSegmentationElementsByBbox(elements, bbox)
+
+    this.segmentationSelections.set(key, { index, elements })
+    return Array.from(elements.values())
   }
 
-  private segmentedElementsForPath(
+  private segmentationIndex(
+    key: string,
     path: string,
     kind: VisiumHdSegmentationKind,
     scalefactors: VisiumHdScalefactors,
-    bbox?: BBox,
-  ): Promise<readonly SpatialElement[]> {
-    const cacheKey = `${path}\n${kind}\n${scalefactors.micronsPerPixel}\n${segmentationBboxCacheKey(
-      bbox,
-    )}`
-    const existing = this.segmentationPromises.get(cacheKey)
+  ): Promise<VisiumHdSegmentationIndex> {
+    const existing = this.segmentationIndexPromises.get(key)
 
     if (existing !== undefined) {
       return existing
     }
 
-    const promise = this.segmentationReader(this.baseUrl, {
+    const promise = this.segmentationIndexReader(this.baseUrl, {
       path,
       scalefactors,
       kind,
       fetcher: this.fetcher,
-      ...(bbox === undefined ? {} : { bbox, streamGeojson: true }),
       ...(this.maxInteractiveSegmentationGeojsonBytes === undefined
         ? {}
         : { maxFullFileBytes: this.maxInteractiveSegmentationGeojsonBytes }),
     }).catch((error: unknown) => {
-      if (this.segmentationPromises.get(cacheKey) === promise) {
-        this.segmentationPromises.delete(cacheKey)
+      if (this.segmentationIndexPromises.get(key) === promise) {
+        this.segmentationIndexPromises.delete(key)
       }
 
       throw error
     })
 
-    this.segmentationPromises.set(cacheKey, promise)
+    this.segmentationIndexPromises.set(key, promise)
     return promise
   }
 
@@ -909,12 +942,12 @@ function overviewExtent(overview: VisiumHdBinnedOverview): BBox {
   }
 }
 
-function segmentationBboxCacheKey(bbox: BBox | undefined): string {
-  if (bbox === undefined) {
-    return 'full'
-  }
-
-  return [bbox.minX, bbox.minY, bbox.maxX, bbox.maxY].join(',')
+function segmentationIndexKey(
+  path: string,
+  kind: VisiumHdSegmentationKind,
+  scalefactors: VisiumHdScalefactors,
+): string {
+  return `${path}\n${kind}\n${scalefactors.micronsPerPixel}`
 }
 
 function selectGridCellsInBbox(

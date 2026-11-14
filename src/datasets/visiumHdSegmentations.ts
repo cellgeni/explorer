@@ -5,6 +5,10 @@ import type {
   SpatialElement,
   SpatialElementMetadata,
 } from './spatialDataset'
+import {
+  VisiumHdSegmentationIndexBuilder,
+  type VisiumHdSegmentationIndex,
+} from './visiumHdSegmentationIndex'
 
 export interface VisiumHdSegmentedOutputPaths {
   readonly scalefactorsPath?: string
@@ -29,7 +33,6 @@ export interface ReadVisiumHdSegmentationElementsOptions {
   readonly kind?: VisiumHdSegmentationKind
   readonly bbox?: BBox
   readonly maxFullFileBytes?: number
-  readonly streamGeojson?: boolean
   readonly fetcher?: typeof fetch
   readonly maskRasterReader?: VisiumHdNucleusInstanceMaskRasterReader
   readonly signal?: AbortSignal
@@ -39,6 +42,19 @@ export interface ParseVisiumHdSegmentationGeojsonOptions {
   readonly scalefactors: VisiumHdSegmentationScalefactors
   readonly kind?: VisiumHdSegmentationKind
   readonly bbox?: BBox
+}
+
+export interface VisiumHdSegmentationIndexParserOptions {
+  readonly scalefactors: VisiumHdSegmentationScalefactors
+  readonly kind: VisiumHdSegmentationKind
+}
+
+export interface VisiumHdSegmentationIndexParser {
+  // Parses the next bytes of the file.
+  push(bytes: Uint8Array): void
+  // Parses what is left and returns the index. Throws when the file ended
+  // before its features array closed.
+  finish(): VisiumHdSegmentationIndex
 }
 
 export interface VisiumHdNucleusInstanceMaskRaster {
@@ -110,10 +126,14 @@ interface NucleusMaskWindow {
 
 interface StreamedGeojsonFeatureScanner {
   buffer: string
-  elements: SpatialElement[]
   featureIndex: number
   mode: 'find-features' | 'read-features' | 'done'
 }
+
+type StreamedGeojsonFeatureHandler = (
+  feature: Record<string, unknown>,
+  featureIndex: number,
+) => void
 
 interface JsonStringToken {
   readonly value: string
@@ -254,10 +274,6 @@ export async function readVisiumHdSegmentationElements(
     )
   }
 
-  if (options.streamGeojson === true && response.body !== null) {
-    return parseVisiumHdSegmentationGeojsonStream(response.body, options)
-  }
-
   const geojson = (await response.json()) as unknown
   throwIfAborted(options.signal)
 
@@ -332,45 +348,44 @@ export function parseVisiumHdSegmentationGeojson(
     : filterVisiumHdSegmentationElementsByBbox(elements, options.bbox)
 }
 
-async function parseVisiumHdSegmentationGeojsonStream(
-  stream: ReadableStream<Uint8Array>,
-  options: ParseVisiumHdSegmentationGeojsonOptions & { readonly signal?: AbortSignal },
-): Promise<readonly SpatialElement[]> {
+// Builds a segmentation index from GeoJSON bytes that arrive in pieces. Each
+// feature is parsed on its own, so the file is never held as one JSON value.
+export function createVisiumHdSegmentationIndexParser(
+  options: VisiumHdSegmentationIndexParserOptions,
+): VisiumHdSegmentationIndexParser {
   assertPositiveMicronsPerPixel(options.scalefactors.micronsPerPixel)
-  const reader = stream.getReader()
   const decoder = new TextDecoder()
+  const builder = new VisiumHdSegmentationIndexBuilder()
   const scanner: StreamedGeojsonFeatureScanner = {
     buffer: '',
-    elements: [],
     featureIndex: 0,
     mode: 'find-features',
   }
-
-  try {
-    while (true) {
-      throwIfAborted(options.signal)
-      const { done, value } = await reader.read()
-
-      if (done) {
-        break
-      }
-
-      scanner.buffer += decoder.decode(value, { stream: true })
-      drainStreamedGeojsonFeatureScanner(scanner, options)
-
-      if (scanner.mode === 'done') {
-        await reader.cancel().catch(() => undefined)
-        return scanner.elements
-      }
+  const addFeature: StreamedGeojsonFeatureHandler = (feature, featureIndex) => {
+    for (const element of segmentationFeatureToElements(feature, featureIndex, options)) {
+      builder.add(element)
     }
-  } finally {
-    reader.releaseLock()
   }
 
-  scanner.buffer += decoder.decode()
-  drainStreamedGeojsonFeatureScanner(scanner, options)
-  assertStreamedGeojsonFeatureScannerComplete(scanner)
-  return scanner.elements
+  return {
+    push(bytes) {
+      if (scanner.mode === 'done') {
+        return
+      }
+
+      scanner.buffer += decoder.decode(bytes, { stream: true })
+      drainStreamedGeojsonFeatureScanner(scanner, addFeature)
+    },
+    finish() {
+      if (scanner.mode !== 'done') {
+        scanner.buffer += decoder.decode()
+        drainStreamedGeojsonFeatureScanner(scanner, addFeature)
+      }
+
+      assertStreamedGeojsonFeatureScannerComplete(scanner)
+      return builder.finish()
+    },
+  }
 }
 
 export function parseVisiumHdNucleusInstanceMaskRaster(
@@ -613,7 +628,7 @@ function isRasterArray(value: unknown): value is ArrayLike<number | bigint> {
   return Array.isArray(value) || ArrayBuffer.isView(value)
 }
 
-async function assertSegmentationGeojsonWithinBudget(
+export async function assertSegmentationGeojsonWithinBudget(
   url: string,
   maxBytes: number,
   fetcher: typeof fetch,
@@ -894,7 +909,7 @@ function formatVisiumHdNucleusInstanceMaskId(label: number): string {
 
 function drainStreamedGeojsonFeatureScanner(
   scanner: StreamedGeojsonFeatureScanner,
-  options: ParseVisiumHdSegmentationGeojsonOptions,
+  onFeature: StreamedGeojsonFeatureHandler,
 ): void {
   if (scanner.mode === 'find-features') {
     const featuresStart = findGeojsonFeaturesArrayStart(scanner.buffer)
@@ -907,24 +922,28 @@ function drainStreamedGeojsonFeatureScanner(
     scanner.mode = 'read-features'
   }
 
-  while (scanner.mode === 'read-features') {
-    const valueStart = skipJsonWhitespace(scanner.buffer, 0)
+  // Features are read from a cursor, and the buffer is cut once at the end.
+  const { buffer } = scanner
+  let cursor = 0
 
-    if (valueStart >= scanner.buffer.length) {
-      scanner.buffer = ''
-      return
+  while (scanner.mode === 'read-features') {
+    const valueStart = skipJsonWhitespace(buffer, cursor)
+
+    if (valueStart >= buffer.length) {
+      cursor = valueStart
+      break
     }
 
-    const nextChar = scanner.buffer[valueStart]
+    const nextChar = buffer[valueStart]
 
     if (nextChar === ']') {
-      scanner.buffer = scanner.buffer.slice(valueStart + 1)
+      cursor = valueStart + 1
       scanner.mode = 'done'
-      return
+      break
     }
 
     if (nextChar === ',') {
-      scanner.buffer = scanner.buffer.slice(valueStart + 1)
+      cursor = valueStart + 1
       continue
     }
 
@@ -934,30 +953,23 @@ function drainStreamedGeojsonFeatureScanner(
       )
     }
 
-    const valueEnd = findJsonObjectEnd(scanner.buffer, valueStart)
+    const valueEnd = findJsonObjectEnd(buffer, valueStart)
 
     if (valueEnd === null) {
-      scanner.buffer = scanner.buffer.slice(valueStart)
-      return
+      cursor = valueStart
+      break
     }
 
     const feature = expectObject(
-      JSON.parse(scanner.buffer.slice(valueStart, valueEnd)) as unknown,
+      JSON.parse(buffer.slice(valueStart, valueEnd)) as unknown,
       `Visium HD segmentation feature ${scanner.featureIndex}`,
     )
-    const featureElements = segmentationFeatureToElements(feature, scanner.featureIndex, {
-      kind: options.kind ?? 'cell',
-      scalefactors: options.scalefactors,
-    })
-
-    scanner.elements.push(
-      ...(options.bbox === undefined
-        ? featureElements
-        : filterVisiumHdSegmentationElementsByBbox(featureElements, options.bbox)),
-    )
+    onFeature(feature, scanner.featureIndex)
     scanner.featureIndex += 1
-    scanner.buffer = scanner.buffer.slice(valueEnd)
+    cursor = valueEnd
   }
+
+  scanner.buffer = buffer.slice(cursor)
 }
 
 function assertStreamedGeojsonFeatureScannerComplete(
@@ -1036,13 +1048,13 @@ function findJsonObjectEnd(buffer: string, start: number): number | null {
     const char = buffer[cursor]
 
     if (char === '"') {
-      const token = readJsonStringToken(buffer, cursor)
+      const end = findJsonStringEnd(buffer, cursor)
 
-      if (token === null) {
+      if (end === null) {
         return null
       }
 
-      cursor = token.end
+      cursor = end
       continue
     }
 
@@ -1063,27 +1075,28 @@ function findJsonObjectEnd(buffer: string, start: number): number | null {
 }
 
 function readJsonStringToken(buffer: string, start: number): JsonStringToken | null {
+  const end = findJsonStringEnd(buffer, start)
+
+  return end === null
+    ? null
+    : { value: JSON.parse(buffer.slice(start, end)) as string, end }
+}
+
+// The index after the closing quote of the string that opens at `start`, or
+// null when the buffer ends first.
+function findJsonStringEnd(buffer: string, start: number): number | null {
   let cursor = start + 1
-  let escaped = false
 
   while (cursor < buffer.length) {
     const char = buffer[cursor]
 
-    if (escaped) {
-      escaped = false
-      cursor += 1
-      continue
-    }
-
     if (char === '\\') {
-      escaped = true
-      cursor += 1
+      cursor += 2
       continue
     }
 
     if (char === '"') {
-      const end = cursor + 1
-      return { value: JSON.parse(buffer.slice(start, end)) as string, end }
+      return cursor + 1
     }
 
     cursor += 1
@@ -1095,11 +1108,16 @@ function readJsonStringToken(buffer: string, start: number): JsonStringToken | n
 function skipJsonWhitespace(buffer: string, start: number): number {
   let cursor = start
 
-  while (cursor < buffer.length && /\s/.test(buffer[cursor] ?? '')) {
+  while (cursor < buffer.length && isJsonWhitespace(buffer.charCodeAt(cursor))) {
     cursor += 1
   }
 
   return cursor
+}
+
+// Space, tab, line feed and carriage return.
+function isJsonWhitespace(code: number): boolean {
+  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0d
 }
 
 function segmentationFeatureToElements(

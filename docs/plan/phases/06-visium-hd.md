@@ -155,8 +155,10 @@ Segmented outputs:
   the plain file is missing, keeping labels and colours.
 - `segmentationElements(kind, bbox)` loads cell or nucleus geometry.
   `elements(bbox)` stays cell-only.
-- The default 64 MB GeoJSON limit was removed. GeoJSON is streamed by
-  bounding box and cached per bounding box.
+- The default 64 MB GeoJSON limit was removed. GeoJSON was streamed by
+  bounding box and cached per bounding box; since 2026-11-14 each file is read
+  once into an index that every viewport selects from (see
+  [Closed Open Items](#closed-open-items)).
 - When cell polygons are loaded, the bin grid is hidden but kept for ROI and
   export. Segmented cells are pickable and have hover tooltips.
 - Nuclei are drawn as a separate blue, non-pickable layer. The nucleus TIFF
@@ -192,7 +194,8 @@ Shipped but not recorded at the time (from commits):
 Known gaps (2026-11-08 review):
 
 - Segmentation GeoJSON is re-streamed for each new viewport; the bbox cache
-  only helps when the same box is requested again.
+  only helps when the same box is requested again. Fixed 2026-11-14: each file
+  is read once into an index (see [Closed Open Items](#closed-open-items)).
 - Barcode-mapping reads are not cached when an `AbortSignal` is passed, and the
   app always passes one, so each bin selection re-reads
   `barcode_mappings.parquet`. Fixed 2026-11-12: they are shared loads, and a
@@ -251,6 +254,33 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
 Other gaps found in the review:
 
+- [x] Visium HD: avoid re-streaming segmentation GeoJSON for every viewport
+      (2026-11-14). Each new viewport used to fetch and parse the whole cell
+      (68 MB) and nucleus (44 MB) GeoJSON again, keeping only the polygons in
+      its box, and the reads ignored the request's signal.
+  - Now the first boundary request reads each file once into a columnar
+    index (`visiumHdSegmentationIndex.ts`): ids, per-polygon bounds, ring
+    offsets, Float32 coordinates in µm and interned annotation metadata. The
+    reference's 182,560 cells take 27.6 MB and its nuclei 17.8 MB. Each
+    viewport scans the bounds and builds elements only for the polygons it
+    returns (0.3–11 ms in Node for a 500 µm box of about 1,500 cells on the
+    reference), reusing those still in view. On the reference the index returns the same polygons as the old
+    per-viewport filter, to 0.001 µm.
+  - This thread fetches the file and pipes the body to a worker
+    (`visiumHdSegmentationIndex.worker.ts`), which parses one feature at a
+    time and transfers the columns back. The read is shared by all viewport
+    requests, so panning while it runs does not restart it; a failed read is
+    retried. The nucleus mask TIFF is still read per viewport.
+  - Live reference, local GPU build, three pans of three Shift+arrow presses
+    after enabling cell and nucleus boundaries: before, every pan re-read both
+    files and took 56–99 s; after, each file is fetched once and the pans took
+    9–21 ms. The first load is unchanged at about 70 s, which is Chromium's
+    download of the two files from the Sanger host (`curl` takes about 9 s
+    for the cell file). With the two files served locally, the old
+    main-thread parse left long tasks of 0, 613 and 645 ms (up to 547 ms in
+    one) in three first loads; the worker left one 103–105 ms task each time.
+  - The live boundary test now pans after the first load and checks that each
+    GeoJSON is requested once.
 - [x] Visium HD: cache barcode-mapping reads across bin selections
       (2026-11-12). Whole-file and per-cell reads are shared loads
       (`waitForSharedLoad`) that callers' signals no longer bypass. A bin
