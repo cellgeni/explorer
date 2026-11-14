@@ -74,6 +74,9 @@ export interface AnnDataH5adDatasetOptions {
   // `url` is an Icechunk repository holding AnnData, such as one written with
   // `adata.write_zarr(session.store)`, instead of an .h5ad file.
   readonly icechunk?: boolean
+  // `url` is a Zarr store holding AnnData, as `adata.write_zarr` writes it,
+  // instead of an .h5ad file.
+  readonly zarr?: boolean
   // Visium tissue images hosted as files next to the table. They replace
   // `uns/spatial/<library>/images`.
   readonly visiumImageUrls?: Readonly<Partial<Record<VisiumImageKind, string>>>
@@ -457,10 +460,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly zarrSource: AnnDataZarrSource | undefined
   private readonly memorySource: AnnDataMemorySource | undefined
-  // The fetcher passed in, which detection opened the repository with too;
-  // undefined for the global fetch.
-  private readonly icechunkFetcher: typeof fetch | undefined
+  // The fetcher passed in, which detection opened the repository or store
+  // with too; undefined for the global fetch.
+  private readonly storeFetcher: typeof fetch | undefined
   private readonly icechunk: boolean
+  private readonly zarrStore: boolean
   private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
@@ -484,7 +488,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.zarrSource = options.zarrSource
     this.memorySource = options.memorySource
     this.icechunk = options.icechunk === true
-    this.icechunkFetcher = options.fetcher
+    this.zarrStore = options.zarr === true
+    this.storeFetcher = options.fetcher
     this.visiumImageUrls = options.visiumImageUrls ?? {}
   }
 
@@ -970,15 +975,17 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         this.memorySource !== undefined
           ? readAnnDataMemory(this.url, this.memorySource, this.onProgress)
           : this.icechunk
-            ? readAnnDataIcechunk(this.url, this.icechunkFetcher, this.onProgress)
-            : this.zarrSource === undefined
-              ? readH5ad(this.url, {
-                  fetcher: this.fetcher,
-                  ...(this.onProgress === undefined
-                    ? {}
-                    : { onProgress: this.onProgress }),
-                })
-              : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
+            ? readAnnDataIcechunk(this.url, this.storeFetcher, this.onProgress)
+            : this.zarrStore
+              ? readAnnDataZarrStore(this.url, this.storeFetcher, this.onProgress)
+              : this.zarrSource === undefined
+                ? readH5ad(this.url, {
+                    fetcher: this.fetcher,
+                    ...(this.onProgress === undefined
+                      ? {}
+                      : { onProgress: this.onProgress }),
+                  })
+                : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
       ).catch((error: unknown) => {
         this.baseCachePromise = null
         throw error
@@ -1238,6 +1245,43 @@ async function readAnnDataIcechunk(
     virtualChunkUrl: icechunkCompanionFileUrl(url),
   })
   return readH5adCacheFromIcechunk(url, repository, 'Icechunk AnnData', onProgress)
+}
+
+async function readAnnDataZarrStore(
+  url: string,
+  fetcher: typeof fetch | undefined,
+  onProgress: H5adLoadProgressReporter | undefined,
+): Promise<H5adCache> {
+  reportH5adProgress(onProgress, `Opening AnnData Zarr store ${url}`)
+  const { openAnnDataZarrStore } = await import('./annDataZarrStore')
+  const opened = await openAnnDataZarrStore(url, {
+    ...(fetcher === undefined ? {} : { fetcher }),
+    obsmKeys: Array.from(
+      new Set([...H5AD_COORDINATE_KEYS, ...H5AD_EMBEDDING_DISPLAY_KEYS]),
+    ),
+  })
+  const nodes = opened.store.contents()
+  reportH5adProgress(
+    onProgress,
+    opened.metadata === 'consolidated'
+      ? `AnnData Zarr store opened from consolidated metadata: ${nodes.length.toLocaleString()} groups and arrays`
+      : `AnnData Zarr store has no consolidated metadata; read ${nodes.length.toLocaleString()} groups and arrays ${
+          opened.listing === null
+            ? `(no folder listing, so only obsm ${H5AD_COORDINATE_KEYS.join(', ')} were looked for)`
+            : `(obsm named by the ${opened.listing})`
+        }`,
+  )
+  const root = await hydrateZarrAnnDataGroup(
+    { store: opened.store, zarrFormat: opened.zarrFormat, rootPath: '' },
+    annDataIndexFromNodes(nodes, ''),
+    '',
+  )
+  const cache = await readH5adCacheFromGroup(url, root)
+  reportH5adProgress(
+    onProgress,
+    `AnnData Zarr store ready: ${cache.cellIds.length.toLocaleString()} cells, ${cache.geneNames.length.toLocaleString()} genes`,
+  )
+  return cache
 }
 
 async function readH5adCacheFromIcechunk(
@@ -1778,9 +1822,14 @@ function zarrAnnDataNodeLocation(
   path: string,
 ): zarr.Location<zarr.Readable> {
   const fullPath = joinZarrPath(location.rootPath, path)
+  // resolve() parses the path as a URL, which trims the trailing spaces of a
+  // name such as the obs column 'Norm. Sample Stage  '. Percent-encoded
+  // segments survive and are decoded back to their names.
   return fullPath === ''
     ? zarr.root(location.store)
-    : zarr.root(location.store).resolve(fullPath)
+    : zarr
+        .root(location.store)
+        .resolve(fullPath.split('/').map(encodeURIComponent).join('/'))
 }
 
 async function hydrateZarrAnnDataGroup(

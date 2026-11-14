@@ -283,13 +283,15 @@ export async function runDatasetDiagnostics(
     checks.push(
       detection.source === 'icechunk'
         ? await checkIcechunkAnnData(detection.h5adUrl, options)
-        : await checkDirectRangeFile(
-            detection.h5adUrl,
-            'h5ad-file',
-            'H5AD file',
-            true,
-            options,
-          ),
+        : detection.source === 'zarr'
+          ? await checkZarrAnnData(detection.h5adUrl, options)
+          : await checkDirectRangeFile(
+              detection.h5adUrl,
+              'h5ad-file',
+              'H5AD file',
+              true,
+              options,
+            ),
     )
 
     return {
@@ -1711,6 +1713,63 @@ async function checkIcechunkAnnData(
   }
 }
 
+async function checkZarrAnnData(
+  url: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const startedAt = Date.now()
+  const id = 'anndata-zarr-store'
+  const label = 'AnnData Zarr store'
+
+  try {
+    const [{ openAnnDataZarrStore }, zarr] = await Promise.all([
+      import('../datasets/annDataZarrStore'),
+      import('zarrita'),
+    ])
+    const { store, zarrFormat, metadata } = await openAnnDataZarrStore(
+      url,
+      options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+    )
+    const nodes = store.contents()
+    const matrixPath = nodes.some(
+      (node) => node.path === '/X/data' && node.kind === 'array',
+    )
+      ? 'X/data'
+      : 'X'
+    const location = zarr.root(store).resolve(matrixPath)
+    const matrix =
+      zarrFormat === 3
+        ? await zarr.open.v3(location, { kind: 'array' })
+        : await zarr.open.v2(location, { kind: 'array' })
+    await matrix.getChunk(
+      matrix.shape.map(() => 0),
+      options.signal === undefined ? undefined : { signal: options.signal },
+    )
+
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required: true,
+      status: 'pass',
+      message: `${nodes.length.toLocaleString()} groups and arrays (${
+        metadata === 'consolidated' ? 'consolidated metadata' : 'no consolidated metadata'
+      }); read the first chunk of /${matrixPath}`,
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id,
+      label,
+      url,
+      required: true,
+      status: 'fail',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
 function diagnosticCheck(options: {
   readonly id: string
   readonly label: string
@@ -1763,7 +1822,9 @@ function detectionDiagnosticCheck(
         : detection.platform === 'visium'
           ? 'Detected Visium (Space Ranger)'
           : detection.platform === 'h5ad'
-            ? 'Detected H5AD'
+            ? detection.source === 'zarr'
+              ? 'Detected AnnData Zarr store'
+              : 'Detected H5AD'
             : detection.platform === 'spatialdata'
               ? 'Detected SpatialData'
               : detection.platform === 'atera'
