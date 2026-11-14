@@ -111,6 +111,33 @@ describe('CellInfoPanel', () => {
     expect(screen.getByText('Gene expression')).toBeInTheDocument()
   })
 
+  it('shows why the gene expression profile is unavailable', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum()}
+        state={{
+          status: 'error',
+          url: 'https://example.test/data.zarr',
+          cellId: 'cell-1',
+          error: {
+            title: 'Expression matrix chunked by gene',
+            message:
+              "AnnData dense /X is chunked by gene, in chunks of 125,955 cells x 10 genes, so one cell's profile would read 1,297 chunks holding 6.1 GB of values, over the 256.0 MB limit.",
+          },
+        }}
+        transcriptDistributionState={{ status: 'idle' }}
+        transcriptDistributionVisible={false}
+      />,
+    )
+
+    expect(screen.getByText('Gene expression').nextElementSibling).toHaveTextContent(
+      'Unavailable',
+    )
+    expect(
+      screen.getByText(/^Expression matrix chunked by gene: AnnData dense \/X/),
+    ).toBeInTheDocument()
+  })
+
   it('reads metadata the source builds on demand', () => {
     const readMetadata = vi.fn(() => ({ cell_type: 'Astrocyte', n_genes: 812 }))
 

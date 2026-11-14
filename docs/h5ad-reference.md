@@ -152,11 +152,11 @@ compressed). The viewer never reads it.
    made on the main thread; the chunks are decompressed, and strings decoded,
    in the Zarr decode workers ([Workers](./architecture.md#workers)):
 
-| When                                  | What is read                                                                                                                                                                     |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Load                                  | Every `obs` column, the `var` index and gene-name column, the `obsm` coordinate matrix, and `/X/indptr` for sparse `/X`. Visium: scale factors and the `hires` or `lowres` image |
-| Colour by a gene                      | CSR: `data` and `indices` for every cell in view, so all of `/X` at full view. CSC: that gene's column. Dense: the chunks that hold that gene                                    |
-| Selected-cell profile, ROI gene stats | CSR and dense: those cells' rows. CSC: not available (`H5adAllGeneCscMatrixUnsupportedError`), because every gene's column would be read                                         |
+| When                                  | What is read                                                                                                                                                                                                                                                                                |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Load                                  | Every `obs` column, the `var` index and gene-name column, the `obsm` coordinate matrix, and `/X/indptr` for sparse `/X`. Visium: scale factors and the `hires` or `lowres` image                                                                                                            |
+| Colour by a gene                      | CSR: `data` and `indices` for every cell in view, so all of `/X` at full view. CSC: that gene's column. Dense: the chunks that hold that gene                                                                                                                                               |
+| Selected-cell profile, ROI gene stats | CSR: those cells' rows. Dense: the chunks that hold those cells, each read once; refused (`H5adDenseCellProfileOverBudgetError`) when one cell's chunks hold over 256 MiB of values. CSC: not available (`H5adAllGeneCscMatrixUnsupportedError`), because every gene's column would be read |
 
 Measured from the UK against the heart file on the CELLxGENE Census bucket
 (AWS us-west-2), 2026-11-10:

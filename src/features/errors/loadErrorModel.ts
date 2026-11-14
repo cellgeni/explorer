@@ -319,6 +319,27 @@ export function createStructuredLoadError(
     )
   }
 
+  if (isH5adDenseCellProfileOverBudgetError(error, normalizedMessage)) {
+    const chunkedByGene = normalizedMessage.includes('chunked by gene')
+
+    return withOptionalDetail(
+      {
+        source,
+        code: 'size-limit',
+        title: chunkedByGene
+          ? 'Expression matrix chunked by gene'
+          : 'Expression matrix chunks too large',
+        message,
+        action: `${
+          chunkedByGene
+            ? 'Colour cells by selected genes instead: each gene reads only its own chunks. '
+            : ''
+        }For cell profiles and ROI genes, rewrite /X in chunks of a few cells by every gene, such as adata.write_zarr(path, chunks=(1000, adata.n_vars)).`,
+      },
+      detail,
+    )
+  }
+
   if (isH5adReferenceUnavailableError(error, normalizedMessage)) {
     return withOptionalDetail(
       {
@@ -499,6 +520,17 @@ function isH5adAllGeneCscMatrixUnsupportedError(
     (error instanceof Error && error.name === 'H5adAllGeneCscMatrixUnsupportedError') ||
     (normalizedMessage.includes('h5ad reference-backed csc matrices') &&
       normalizedMessage.includes('scanning the whole expression matrix'))
+  )
+}
+
+function isH5adDenseCellProfileOverBudgetError(
+  error: unknown,
+  normalizedMessage: string,
+): boolean {
+  return (
+    (error instanceof Error && error.name === 'H5adDenseCellProfileOverBudgetError') ||
+    (normalizedMessage.includes('anndata dense /x') &&
+      normalizedMessage.includes("one cell's profile would read"))
   )
 }
 
