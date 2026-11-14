@@ -19,6 +19,7 @@ import type {
   VisiumHdSegmentedOutputPaths,
   VisiumHdSegmentationKind,
 } from './visiumHdSegmentationModel'
+import type { VisiumHdSegmentationIndexReader } from './visiumHdSegmentationIndexWorker'
 import type {
   VisiumHdBarcodeMapping,
   VisiumHdBarcodeMappingCellAssignment,
@@ -79,7 +80,10 @@ export interface VisiumHdDatasetOptions {
   readonly barcodeMappingsReader?: VisiumHdBarcodeMappingsReader
   readonly barcodeMappingsForCellReader?: VisiumHdBarcodeMappingsForCellReader
   readonly segmentedOutputs?: VisiumHdSegmentedOutputPaths
+  // Nucleus instance-mask TIFF windows.
   readonly segmentationReader?: VisiumHdSegmentationReader
+  // Whole cell and nucleus GeoJSON files.
+  readonly segmentationIndexReader?: VisiumHdSegmentationIndexReader
   readonly featureMatrixReader?: VisiumHdFeatureMatrixReader
   readonly featureSliceH5Path?: string
   readonly featureSliceReader?: VisiumHdFeatureSliceReader

@@ -2,12 +2,14 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
   VisiumHdSegmentationGeojsonBudgetExceededError,
+  createVisiumHdSegmentationIndexParser,
   normalizeVisiumHdGeojsonCellId,
   parseVisiumHdNucleusInstanceMaskRaster,
   parseVisiumHdSegmentationGeojson,
   readVisiumHdSegmentationElements,
   visiumHdSegmentationInfos,
 } from './visiumHdSegmentations'
+import { selectVisiumHdSegmentationIndexElements } from './visiumHdSegmentationIndex'
 
 const scalefactors = { micronsPerPixel: 0.5 }
 
@@ -254,76 +256,121 @@ describe('Visium HD segmentation GeoJSON reader', () => {
     expect(elements[0]?.geometry.kind).toBe('polygon')
   })
 
-  it('streams viewport GeoJSON features without materializing the full response JSON', async () => {
-    const insideFeature = JSON.stringify({
-      type: 'Feature',
-      properties: { cell_id: 1 },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [10, 20],
-            [14, 20],
-            [14, 24],
-            [10, 20],
-          ],
-        ],
-      },
-    })
-    const outsideFeature = JSON.stringify({
-      type: 'Feature',
-      properties: { cell_id: 2 },
-      geometry: {
-        type: 'Polygon',
-        coordinates: [
-          [
-            [200, 200],
-            [204, 200],
-            [204, 204],
-            [200, 200],
-          ],
-        ],
-      },
-    })
-    const encoder = new TextEncoder()
-    const stream = new ReadableStream<Uint8Array>({
-      start(controller) {
-        for (const chunk of [
-          '{"type":"FeatureCollection","features":[',
-          insideFeature.slice(0, 32),
-          insideFeature.slice(32),
-          ',',
-          outsideFeature,
-          ']}',
-        ]) {
-          controller.enqueue(encoder.encode(chunk))
-        }
-
-        controller.close()
-      },
-    })
-    const response = new Response(stream, { status: 200 })
-    const jsonSpy = vi.spyOn(response, 'json')
-    const fetcher = vi.fn(async () => response) as unknown as typeof fetch
-
-    const elements = await readVisiumHdSegmentationElements(
-      'https://example.test/visium/',
-      {
-        path: 'segmented_outputs/cell_segmentations.geojson',
-        scalefactors,
-        bbox: {
-          minX: micrometers(4),
-          maxX: micrometers(8),
-          minY: micrometers(9),
-          maxY: micrometers(13),
+  it('indexes GeoJSON that arrives in pieces as the whole-file parse reads it', () => {
+    const annotation = { label: 'Tumour – core', color: '#ff0000' }
+    const geojson = {
+      type: 'FeatureCollection',
+      name: 'cells',
+      features: [
+        {
+          type: 'Feature',
+          properties: { cell_id: 1, ...annotation, note: 'a "quoted" \\ value' },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [0, 0],
+                [40, 0],
+                [40, 40],
+                [0, 40],
+                [0, 0],
+              ],
+              [
+                [10, 10],
+                [20, 10],
+                [20, 20],
+                [10, 10],
+              ],
+            ],
+          },
         },
-        streamGeojson: true,
-        fetcher,
-      },
-    )
+        {
+          type: 'Feature',
+          id: 'split-cell',
+          properties: {},
+          geometry: {
+            type: 'MultiPolygon',
+            coordinates: [
+              [
+                [
+                  [100, 100],
+                  [104, 100],
+                  [104, 104],
+                  [100, 100],
+                ],
+              ],
+              [
+                [
+                  [200, 200],
+                  [204, 200],
+                  [204, 204],
+                  [200, 200],
+                ],
+              ],
+            ],
+          },
+        },
+        {
+          type: 'Feature',
+          properties: { cell_id: 3, ...annotation },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [300, 300],
+                [304, 300],
+                [304, 304],
+                [300, 300],
+              ],
+            ],
+          },
+        },
+      ],
+    }
+    const bytes = new TextEncoder().encode(JSON.stringify(geojson, null, 1))
+    const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
 
-    expect(elements.map((element) => element.id)).toEqual(['cellid_000000001-1'])
-    expect(jsonSpy).not.toHaveBeenCalled()
+    // Seven-byte pieces split features, strings, escapes and the en dash.
+    for (let offset = 0; offset < bytes.length; offset += 7) {
+      parser.push(bytes.subarray(offset, offset + 7))
+    }
+
+    const index = parser.finish()
+    const everything = {
+      minX: micrometers(-1000),
+      maxX: micrometers(1000),
+      minY: micrometers(-1000),
+      maxY: micrometers(1000),
+    }
+
+    expect(index.ids).toEqual([
+      'cellid_000000001-1',
+      'split-cell',
+      'split-cell#2',
+      'cellid_000000003-1',
+    ])
+    // The two annotated cells share one metadata entry.
+    expect(index.metadata).toHaveLength(2)
+    expect(Array.from(index.metadataIndexes)).toEqual([1, 0, 0, 1])
+    expect(
+      Array.from(selectVisiumHdSegmentationIndexElements(index, everything).values()),
+    ).toEqual(parseVisiumHdSegmentationGeojson(geojson, { scalefactors }))
+  })
+
+  it('rejects indexed GeoJSON that ends before its features array closes', () => {
+    const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
+
+    parser.push(new TextEncoder().encode('{"type":"FeatureCollection","features":[{"ty'))
+
+    expect(() => parser.finish()).toThrow('Unexpected end')
+  })
+
+  it('rejects indexed GeoJSON without a features array', () => {
+    const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
+
+    parser.push(new TextEncoder().encode('{"type":"Feature","geometry":null}'))
+
+    expect(() => parser.finish()).toThrow('to be a FeatureCollection')
   })
 
   it('converts labelled nucleus instance-mask TIFF pixels into polygon elements', () => {

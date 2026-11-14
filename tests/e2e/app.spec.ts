@@ -38,8 +38,8 @@ const VISIUM_HD_BIN_PROFILE_TIMEOUT_MS = 120_000
 // The cell assignment reads the footer of barcode_mappings.parquet (704 KB)
 // and the few row groups that can hold the bin, about 300 KB for 16 µm.
 const VISIUM_HD_BIN_ASSIGNMENT_TIMEOUT_MS = 60_000
-// Each boundary request streams the whole cell (68 MB) and nucleus (44 MB)
-// segmentation GeoJSON and keeps the polygons around the view.
+// The first boundary request reads the whole cell (68 MB) and nucleus (44 MB)
+// segmentation GeoJSON into an index; later viewports select from it.
 const VISIUM_HD_BOUNDARY_TIMEOUT_MS = 180_000
 // 3.4 million 2 µm bins from the 2 µm matrix barcodes: about 15 s and 2 GB
 // of JS heap locally.
@@ -1459,6 +1459,15 @@ test('draws Visium HD cell and nucleus segmentation boundaries around the view @
 }) => {
   test.setTimeout(360_000)
 
+  const geojsonReads = new Map<string, number>()
+  page.on('request', (request) => {
+    const file = /\/segmented_outputs\/([^/?]+\.geojson)/.exec(request.url())?.[1]
+
+    if (file !== undefined && request.method() === 'GET') {
+      geojsonReads.set(file, (geojsonReads.get(file) ?? 0) + 1)
+    }
+  })
+
   const visiumPanel = await openVisiumHdReferenceTissueLink(page)
   await expectVisiumHdBoundaryLayersOffByDefault(page)
 
@@ -1480,6 +1489,23 @@ test('draws Visium HD cell and nucleus segmentation boundaries around the view @
   await expect(page.getByText('Loading boundaries')).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
   await expect(visiumPanel).toContainText('54,504 at 16 µm')
+
+  // Panning past the padded request area queries boundaries again, from the
+  // files already read.
+  const ready = log.getByText(/Boundaries ready: /).first()
+  const firstReady = await ready.innerText()
+  await page.getByRole('img', { name: 'Spatial viewer canvas area' }).focus()
+  for (let step = 0; step < 3; step += 1) {
+    await page.keyboard.press('Shift+ArrowDown')
+  }
+  await expect(ready).not.toHaveText(firstReady, {
+    timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS,
+  })
+  await expect(ready).toHaveText(/Boundaries ready: [0-9,]+ cells in [0-9,]+ ms/)
+  expect(Object.fromEntries(geojsonReads)).toEqual({
+    'cell_segmentations.geojson': 1,
+    'nucleus_segmentations.geojson': 1,
+  })
 })
 
 // 3.4 million 2 µm bins take 7-15 s and 2 GB of JS heap locally (42 s with
