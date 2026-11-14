@@ -1,0 +1,258 @@
+import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
+import {
+  openPreviewSource,
+  PreviewUnavailableError,
+  type CollectionPreviewLoaders,
+  type PreviewCells,
+  type PreviewScores,
+  type PreviewSource,
+} from './collectionPreviewData'
+
+// The previews of a collection's datasets. Each dataset's cell positions are
+// read once; the scores for the selected genes are read again when the
+// selection changes. Only datasets in view are read, a few at a time, and
+// none start while the main view loads a dataset.
+
+export interface PreviewEntry {
+  readonly cells: PreviewCells | null
+  // For the current genes; null without genes, or until read.
+  readonly scores: PreviewScores | null
+  readonly loading: boolean
+  // Why there is no preview, such as an image without cells.
+  readonly unavailable: string | null
+  readonly error: string | null
+}
+
+export interface PreviewRequest {
+  readonly genes: readonly string[]
+  readonly scoreMode: GeneExpressionScoreMode
+}
+
+export const PREVIEW_CONCURRENCY = 4
+
+const EMPTY_ENTRY: PreviewEntry = {
+  cells: null,
+  scores: null,
+  loading: false,
+  unavailable: null,
+  error: null,
+}
+
+export class CollectionPreviewStore {
+  private readonly urls: readonly string[]
+  private readonly loaders: CollectionPreviewLoaders
+  private readonly concurrency: number
+  private readonly sources = new Map<string, Promise<PreviewSource>>()
+  private readonly cells = new Map<string, PreviewCells>()
+  private readonly unavailable = new Map<string, string>()
+  private readonly errors = new Map<string, string>()
+  private readonly running = new Map<string, AbortController>()
+  private readonly visible = new Set<string>()
+  private readonly listeners = new Set<() => void>()
+  // Cell positions do not depend on the genes, so only stopping stops them.
+  private lifetime = new AbortController()
+  private scores = new Map<string, PreviewScores>()
+  private request: PreviewRequest = { genes: [], scoreMode: 'sum' }
+  private paused = false
+  // Until start(), and after stop(): nothing is read.
+  private stopped = true
+  private entries = new Map<string, PreviewEntry>()
+  version = 0
+
+  constructor(
+    urls: readonly string[],
+    loaders: CollectionPreviewLoaders,
+    options: { readonly concurrency?: number } = {},
+  ) {
+    this.urls = urls
+    this.loaders = loaders
+    this.concurrency = options.concurrency ?? PREVIEW_CONCURRENCY
+  }
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener)
+    return () => {
+      this.listeners.delete(listener)
+    }
+  }
+
+  readonly getVersion = (): number => this.version
+
+  entry(url: string): PreviewEntry {
+    return this.entries.get(url) ?? EMPTY_ENTRY
+  }
+
+  // The score drawn at full colour: the highest of the previews read so far,
+  // so every preview uses one scale.
+  scaleMax(): number {
+    let max = 0
+
+    for (const scores of this.scores.values()) {
+      max = Math.max(max, scores.maxScore)
+    }
+
+    return max
+  }
+
+  setRequest(request: PreviewRequest): void {
+    if (requestKey(request) === requestKey(this.request)) return
+
+    this.request = { genes: [...request.genes], scoreMode: request.scoreMode }
+    this.scores = new Map()
+    this.errors.clear()
+
+    // Reads for the old genes stop; each dataset's next read starts when its
+    // current one ends, so a positions read is never repeated.
+    for (const controller of this.running.values()) controller.abort()
+
+    this.changed()
+    this.pump()
+  }
+
+  setVisible(url: string, visible: boolean): void {
+    if (visible === this.visible.has(url)) return
+
+    if (visible) {
+      this.visible.add(url)
+      this.pump()
+    } else {
+      this.visible.delete(url)
+    }
+  }
+
+  setPaused(paused: boolean): void {
+    if (paused === this.paused) return
+
+    this.paused = paused
+    this.pump()
+  }
+
+  start(): void {
+    if (!this.stopped) return
+
+    this.stopped = false
+    this.lifetime = new AbortController()
+    this.pump()
+  }
+
+  // Stops every read. What was read is kept for a later start().
+  stop(): void {
+    this.stopped = true
+    this.lifetime.abort()
+
+    for (const controller of this.running.values()) controller.abort()
+
+    this.running.clear()
+    this.changed()
+  }
+
+  private needsWork(url: string): boolean {
+    if (this.unavailable.has(url) || this.errors.has(url)) return false
+    if (!this.cells.has(url)) return true
+    return this.request.genes.length > 0 && !this.scores.has(url)
+  }
+
+  private pump(): void {
+    if (this.stopped || this.paused) return
+
+    for (const url of this.urls) {
+      if (this.running.size >= this.concurrency) return
+      if (this.visible.has(url) && !this.running.has(url) && this.needsWork(url)) {
+        void this.run(url)
+      }
+    }
+  }
+
+  private async run(url: string): Promise<void> {
+    const controller = new AbortController()
+    const { signal } = controller
+    this.running.set(url, controller)
+    this.changed()
+
+    try {
+      const source = await this.source(url)
+      let cells = this.cells.get(url)
+
+      if (cells === undefined) {
+        cells = await source.cells(this.lifetime.signal)
+        this.cells.set(url, cells)
+        this.changed()
+      }
+
+      const request = this.request
+
+      if (!signal.aborted && request.genes.length > 0 && !this.scores.has(url)) {
+        const scores = await source.scores(
+          cells.bounds,
+          request.genes,
+          request.scoreMode,
+          signal,
+        )
+        if (!signal.aborted) this.scores.set(url, scores)
+      }
+    } catch (error) {
+      if (this.stopped || signal.aborted) return
+
+      if (error instanceof PreviewUnavailableError) {
+        this.unavailable.set(url, error.message)
+      } else {
+        this.errors.set(url, error instanceof Error ? error.message : String(error))
+      }
+    } finally {
+      if (this.running.get(url) === controller) {
+        this.running.delete(url)
+        this.changed()
+        this.pump()
+      }
+    }
+  }
+
+  // Opening a dataset is shared by the reads that follow. A dataset that
+  // cannot be previewed is not tried again; other failures are.
+  private source(url: string): Promise<PreviewSource> {
+    const existing = this.sources.get(url)
+    if (existing !== undefined) return existing
+
+    const opening = openPreviewSource(url, this.loaders).catch((error: unknown) => {
+      if (!(error instanceof PreviewUnavailableError)) this.sources.delete(url)
+      throw error
+    })
+    this.sources.set(url, opening)
+    return opening
+  }
+
+  private changed(): void {
+    const entries = new Map<string, PreviewEntry>()
+
+    for (const url of this.urls) {
+      const previous = this.entries.get(url) ?? EMPTY_ENTRY
+      const next: PreviewEntry = {
+        cells: this.cells.get(url) ?? null,
+        scores: this.scores.get(url) ?? null,
+        loading: this.running.has(url),
+        unavailable: this.unavailable.get(url) ?? null,
+        error: this.errors.get(url) ?? null,
+      }
+      entries.set(url, sameEntry(previous, next) ? previous : next)
+    }
+
+    this.entries = entries
+    this.version += 1
+
+    for (const listener of this.listeners) listener()
+  }
+}
+
+function requestKey(request: PreviewRequest): string {
+  return `${request.scoreMode}\u0000${request.genes.join('\u0000')}`
+}
+
+function sameEntry(first: PreviewEntry, second: PreviewEntry): boolean {
+  return (
+    first.cells === second.cells &&
+    first.scores === second.scores &&
+    first.loading === second.loading &&
+    first.unavailable === second.unavailable &&
+    first.error === second.error
+  )
+}

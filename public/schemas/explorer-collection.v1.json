@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "explorer-collection.v1.json",
+  "title": "Spatial Omics Explorer dataset collection",
+  "description": "A list of datasets to browse together, opened with collection= in the viewer's address. Each entry is anything dataset= opens: a dataset folder, file or store, or a dataset manifest. Relative paths resolve against the collection's folder, or against `root` when set.",
+  "type": "object",
+  "required": ["version", "datasets"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "const": 1,
+      "description": "Collection format version."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display name, shown in the collection bar."
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the collection holds."
+    },
+    "source": { "$ref": "#/$defs/source" },
+    "root": {
+      "$ref": "#/$defs/path",
+      "description": "Base for relative dataset paths instead of the collection's folder. Relative to the collection, or an http(s) URL."
+    },
+    "datasets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/dataset" },
+      "description": "The datasets, in the order the collection bar lists them. The first one opens first."
+    },
+    "defaults": { "$ref": "#/$defs/defaults" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
+      "description": "A path relative to the collection's folder (or `root`), or an http(s) URL."
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["dataset"],
+      "properties": {
+        "dataset": {
+          "$ref": "#/$defs/path",
+          "description": "What dataset= opens: a dataset folder, file or store, or a dataset manifest. Each dataset appears once."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Label in the collection bar, and in the top bar when the dataset has no manifest name. Without it, the bar shows the last part of the path."
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Group label, such as a time point or donor. The bar lists groups in the order they first appear."
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "description": "Where the data comes from.",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Repository or host, such as BioImage Archive."
+        },
+        "accession": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Accession or identifier in that repository."
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^/]",
+          "description": "Landing page for the deposit."
+        },
+        "license": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Data licence, such as CC BY 4.0."
+        },
+        "citation": {
+          "type": "string",
+          "minLength": 1,
+          "description": "How to cite the data."
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "description": "Display settings for the first dataset opened from the collection. A shared link's own values take precedence; after that, switching datasets keeps the current genes and colouring.",
+      "properties": {
+        "genes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Genes to select. Names must match the gene panel exactly."
+        },
+        "colorCellsBy": {
+          "enum": [
+            "gene-expression",
+            "transcript-count",
+            "cell-area",
+            "annotations",
+            "metadata"
+          ],
+          "description": "The Cell color control. Without it, genes colour cells by gene expression."
+        },
+        "geneColorScale": {
+          "enum": [
+            "gold",
+            "magma",
+            "viridis",
+            "plasma",
+            "cividis",
+            "teal",
+            "rose",
+            "glasbey"
+          ],
+          "description": "The Gene scale control."
+        },
+        "geneScoreMode": {
+          "enum": ["sum", "mean", "z-score"],
+          "description": "The Signature score control."
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

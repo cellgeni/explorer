@@ -30,7 +30,7 @@ export function geneExpressionElementsToLayerData(
     return []
   }
 
-  const scores = scoreExpressionElements(elements, genes, scoreMode)
+  const scores = geneExpressionScores(elements, genes, scoreMode)
   const scoreDenominator = expressionScoreDenominator(scores, options.scaleMax)
 
   const layerData = elements.map((element, index): OverviewCellDatum => {
@@ -106,7 +106,7 @@ export function geneExpressionScoreDomainMax(
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
 ): number {
-  return maxExpressionScore(scoreExpressionElements(elements, genes, scoreMode))
+  return maxExpressionScore(geneExpressionScores(elements, genes, scoreMode))
 }
 
 export function styleCellsByGeneExpression(
@@ -280,7 +280,9 @@ export function createGeneExpressionElementStyleIndex(
   }
 }
 
-function scoreExpressionElements(
+// Each element's score for the genes, as the map colours it: the sum of their
+// counts, the mean, or the mean's z-score across the elements.
+export function geneExpressionScores(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,

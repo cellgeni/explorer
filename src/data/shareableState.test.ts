@@ -131,6 +131,25 @@ describe('shareableState', () => {
     expect(parseShareableState('#voff=0').visiumOffTissue).toBe(false)
   })
 
+  it('round-trips the collection ahead of the dataset', () => {
+    const hash = formatShareableState({
+      collectionUrl: 'https://example.test/studies/injury/collection.json',
+      datasetUrl: 'https://example.test/studies/injury/sham-a.zarr',
+    })
+
+    expect(hash).toBe(
+      '#xv=2&collection=https%3A%2F%2Fexample.test%2Fstudies%2Finjury%2Fcollection.json&dataset=https%3A%2F%2Fexample.test%2Fstudies%2Finjury%2Fsham-a.zarr',
+    )
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      collectionUrl: 'https://example.test/studies/injury/collection.json',
+      datasetUrl: 'https://example.test/studies/injury/sham-a.zarr',
+    })
+    expect(parseShareableState('?collection=https://example.test/c.json')).toEqual({
+      collectionUrl: 'https://example.test/c.json',
+    })
+  })
+
   it('round-trips the MERSCOPE stain and plane', () => {
     const hash = formatShareableState({ merscopeImage: 'Cellbound1_z3' })
 

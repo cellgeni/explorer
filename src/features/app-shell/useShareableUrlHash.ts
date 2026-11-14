@@ -15,6 +15,8 @@ interface ShareableDatasetHashOptions {
   readonly hiddenAnnotationIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
+  // The open dataset collection (collection=), if any.
+  readonly collectionUrl?: string | undefined
   readonly datasetUrl: string
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
@@ -106,6 +108,19 @@ function linkedDatasetUrl(): string {
   return readShareableStateFromLocation().datasetUrl?.trim() ?? ''
 }
 
+// The query string without collection=: once the hash is written it names the
+// collection, or leaves it out after the collection is closed, and a query
+// string copy would bring a closed collection back on reload.
+function searchWithoutCollection(search: string): string {
+  const params = new URLSearchParams(search)
+
+  if (!params.has('collection')) return search
+
+  params.delete('collection')
+  const rest = params.toString()
+  return rest === '' ? '' : `?${rest}`
+}
+
 // Writes the view to the address (15.1-L). Opening another dataset adds a
 // history entry, so Back returns to the previous dataset or to the start
 // screen (15.3-C); every other change replaces the current entry. The write
@@ -123,6 +138,7 @@ export function useShareableUrlHash({
   const {
     annotationGroupIds,
     annotationUrl,
+    collectionUrl,
     customImageOpacities,
     customImageUrls,
     datasetDefaults,
@@ -208,6 +224,7 @@ export function useShareableUrlHash({
     const hash = formatShareableState(
       withoutShareableDefaults(
         {
+          ...(collectionUrl === undefined ? {} : { collectionUrl }),
           datasetUrl,
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
@@ -274,7 +291,7 @@ export function useShareableUrlHash({
       if (leavingRef.current) return
 
       if (window.location.hash !== hash) {
-        const url = `${window.location.pathname}${window.location.search}${hash}`
+        const url = `${window.location.pathname}${searchWithoutCollection(window.location.search)}${hash}`
         const nextDatasetUrl = datasetUrl.trim()
 
         if (nextDatasetUrl !== '' && nextDatasetUrl !== linkedDatasetUrl()) {
@@ -297,6 +314,7 @@ export function useShareableUrlHash({
     panels,
     tool,
     annotationUrl,
+    collectionUrl,
     boundaryCellLimit,
     cellMetadataTrackId,
     coordinateUnit,
@@ -346,6 +364,6 @@ export function useShareableUrlHash({
     const { origin, pathname, search, href } = window.location
     return hashRef.current === null
       ? href
-      : `${origin}${pathname}${search}${hashRef.current}`
+      : `${origin}${pathname}${searchWithoutCollection(search)}${hashRef.current}`
   }, [])
 }

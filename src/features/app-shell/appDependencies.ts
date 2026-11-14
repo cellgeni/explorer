@@ -63,6 +63,8 @@ import type { Annotation, ElementBatch } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
+import { fetchDatasetCollection } from '../../datasets/datasetCollection'
+import type { CollectionLoader } from '../collection/useDatasetCollection'
 
 // The start screen's example gallery (plan 15.3-A).
 export type ExamplesIndexLoader = (
@@ -240,6 +242,7 @@ export interface AppDependencies {
     readonly getSpatialDataset: SpatialDatasetLoader
     readonly warmDatasetForRoi: DatasetWarmupLoader
     readonly loadExamplesIndex: ExamplesIndexLoader
+    readonly loadCollection: CollectionLoader
   }
   readonly morphology: {
     readonly loadMorphologyImage: MorphologyImageLoader
@@ -302,6 +305,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
   readonly loadExamplesIndex: ExamplesIndexLoader
+  readonly loadCollection: CollectionLoader
 }>
 
 export interface AppProps {
@@ -316,6 +320,7 @@ export const defaultAppDependencies = {
     getSpatialDataset: cachedSpatialDataset,
     warmDatasetForRoi,
     loadExamplesIndex: fetchExamplesIndex,
+    loadCollection: fetchDatasetCollection,
   },
   morphology: {
     loadMorphologyImage,

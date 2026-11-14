@@ -20,19 +20,21 @@ bar, the canvas, and the layer panel docked on the right.
 └── ShellLayout                                src/features/shell/ShellLayout.tsx
     ├── TopBar (48 px)                         src/features/shell/TopBar.tsx
     └── .shell-body
-        ├── .shell-canvas
-        │   ├── section.viewer-region → ViewerCore   src/components/ViewerCore.tsx
-        │   │   ├── MorphologyCanvas (image tiles)   src/components/MorphologyCanvas.tsx
-        │   │   ├── deck.gl canvas (cells, bins, boundaries, transcripts, ROI, shapes)
-        │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
-        │   │   ├── Bottom left: legend, loading indicator, viewport messages
-        │   │   ├── Bottom centre: mouse coordinates
-        │   │   ├── Bottom right: minimap; Zoom out, Zoom in, Fit to view; scale bar
-        │   │   ├── Top and left edges: axes, when on in Settings
-        │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
-        │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
-        │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
-        │   └── EmbeddingWindow (top right)     src/features/shell/EmbeddingWindow.tsx
+        ├── .shell-main
+        │   ├── .shell-canvas
+        │   │   ├── section.viewer-region → ViewerCore   src/components/ViewerCore.tsx
+        │   │   │   ├── MorphologyCanvas (image tiles)   src/components/MorphologyCanvas.tsx
+        │   │   │   ├── deck.gl canvas (cells, bins, boundaries, transcripts, ROI, shapes)
+        │   │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
+        │   │   │   ├── Bottom left: legend, loading indicator, viewport messages
+        │   │   │   ├── Bottom centre: mouse coordinates
+        │   │   │   ├── Bottom right: minimap; Zoom out, Zoom in, Fit to view; scale bar
+        │   │   │   ├── Top and left edges: axes, when on in Settings
+        │   │   │   └── StartScreen, before a dataset opens   src/features/start/StartScreen.tsx
+        │   │   ├── InfoDrawer (ⓘ, 380 px, left)   src/features/shell/InfoDrawer.tsx
+        │   │   ├── CardStack (360 px, top left)    src/features/cards/CardStack.tsx
+        │   │   └── EmbeddingWindow (top right)     src/features/shell/EmbeddingWindow.tsx
+        │   └── CollectionBar, with a collection open   src/features/collection/CollectionBar.tsx
         └── LayerPanel (360 px, right)         src/features/shell/LayerPanel.tsx
 ```
 
@@ -81,6 +83,49 @@ as `Load Dataset` would; a middle or modified click opens a new tab. A link
 that names a dataset skips the start screen. If a load fails with no other
 dataset open, the start screen comes back with the error above the form
 (`role="alert"`).
+
+## Collection Bar
+
+A link with `collection=` opens a [dataset collection](./dataset-collections.md)
+and shows `CollectionBar` (`src/features/collection/CollectionBar.tsx`) under
+the canvas, a `nav` named "Collection":
+
+- On the left, "Collection", the collection's `name` (or its file name) and
+  the number of datasets. With genes selected, the gene (or "N genes") and
+  the previews' shared scale, from 0 to the highest score read so far.
+  Hidden under 860 px.
+- A button per dataset, in groups labelled with their `group`, in one row
+  that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
+  label and its highest score (`max 92`); the button's name is the label.
+  The open dataset is highlighted (`aria-current`) and the one loading has
+  a dashed border (`aria-busy`). Choosing another opens it, keeping the
+  selected genes, the `Cell color` mode (gene expression, transcript count
+  or cell area) and `Combine genes`.
+- A preview draws every cell in grey and the cells scoring above zero in the
+  `Gene scale`, the highest score per pixel, when `Cell color` is gene
+  expression. A line runs along its foot while it is read. Instead of a
+  preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
+  MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
+  failed" with the reason as its tooltip.
+- `Previews` (pressed by default) turns the previews off, leaving the
+  labels.
+- `Close Collection` (×) removes the bar and `collection=` from the address;
+  the open dataset stays.
+- While the collection is read: "Reading the collection…". If it cannot be
+  read: "The collection could not be opened." with the reason
+  (`role="alert"`).
+
+`useDatasetCollection` (`src/features/collection/useDatasetCollection.ts`)
+reads the collection, opens its first dataset when the link names none, and
+closes the collection when a dataset outside it loads. The top bar shows the
+entry's `name` when the dataset has no manifest name.
+
+Previews are read by `CollectionPreviewStore`
+(`src/features/collection/collectionPreviewStore.ts`): the cards in view and
+240 px beyond, found with an `IntersectionObserver`, four datasets at a
+time, none while the main view loads. `openPreviewSource`
+(`collectionPreviewData.ts`) reads positions and scores with the main view's
+loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
 
 ## Top Bar
 
@@ -880,12 +925,13 @@ the page reloads that entry's link, with its view and settings.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL. Read from the hash or the query string; once the hash is written, the query string's copy is dropped, so a closed collection stays closed on reload                                                                                                                     |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
 | `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
 | `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                    |
-| `view`                                                                                                    | Target x, y, z, zoom                                                                                                                                                                                                                                                                                                                   |
+| `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names. A dataset opened after it starts fitted to its extent                                                                                                                                                                                                                            |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
 | `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer) and `embedding`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                |

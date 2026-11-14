@@ -45,13 +45,16 @@ interface ShellLayoutProps {
   // keeps (15.2-H).
   readonly panels: ShellPanelState
   readonly onPanelsChange: (panels: ShellPanelState) => void
+  // The open collection's datasets, under the canvas.
+  readonly collection?: ReactNode
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
 
 // The shell (plan 15.2): the top bar, the canvas with ⓘ's
 // dataset info drawer and the cards over it, the Embedding panel at its top
-// right, and the layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
+// right, the collection bar under it when a collection is open, and the
+// layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).
 export function ShellLayout({
   topBar,
@@ -67,6 +70,7 @@ export function ShellLayout({
   embedding,
   panels,
   onPanelsChange,
+  collection,
   children,
 }: ShellLayoutProps) {
   const { infoOpen, embeddingOpen } = panels
@@ -156,29 +160,32 @@ export function ShellLayout({
               : 'shell-body'
         }
       >
-        <div
-          ref={canvasRef}
-          className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}
-        >
-          <InfoDrawer
-            info={info}
-            open={infoOpen}
-            onClose={() => {
-              setInfoOpen(false)
-            }}
-          />
-          {children}
-          <CardStack cards={cards} />
-          {embedding === null ? null : (
-            <EmbeddingWindow
-              embedding={embedding}
-              fullWidth={narrow}
-              open={embeddingOpen}
+        <div className="shell-main">
+          <div
+            ref={canvasRef}
+            className={infoOpen ? 'shell-canvas has-info-drawer' : 'shell-canvas'}
+          >
+            <InfoDrawer
+              info={info}
+              open={infoOpen}
               onClose={() => {
-                setEmbeddingOpen(false)
+                setInfoOpen(false)
               }}
             />
-          )}
+            {children}
+            <CardStack cards={cards} />
+            {embedding === null ? null : (
+              <EmbeddingWindow
+                embedding={embedding}
+                fullWidth={narrow}
+                open={embeddingOpen}
+                onClose={() => {
+                  setEmbeddingOpen(false)
+                }}
+              />
+            )}
+          </div>
+          {collection}
         </div>
         {layerPanelContent}
       </div>

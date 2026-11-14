@@ -18,6 +18,9 @@ Without a manifest, the viewer reads the standard file names described in
 [Host your own data](./host-your-own-data.md). A manifest only needs the
 fields that differ from those names.
 
+To browse several datasets together, list them, or their manifests, in a
+[dataset collection](./dataset-collections.md).
+
 The format is defined by
 [`public/schemas/explorer-manifest.v1.json`](../public/schemas/explorer-manifest.v1.json)
 (JSON Schema 2020-12) and enforced by `parseDatasetManifest`
