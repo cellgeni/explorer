@@ -6,3 +6,5 @@ test-results/
 old/
 private/
 package-lock.json
+# Written by anndata; kept as written.
+src/test/fixtures/anndata-zarr/

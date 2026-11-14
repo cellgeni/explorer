@@ -21,6 +21,10 @@ import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
 import { SpatialDataDataset } from './spatialDataDataset'
 import { VisiumHdDataset } from './visiumHdDataset'
+import {
+  ANNDATA_ZARR_FIXTURE_ORIGIN,
+  annDataZarrFixtureFetcher,
+} from '../test/annDataZarrFixtures'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
 
@@ -1181,6 +1185,56 @@ describe('Icechunk repositories', () => {
     ).rejects.toMatchObject({
       name: 'IcechunkRepositoryUnavailableError',
       message: expect.stringContaining('Not a valid icechunk repository'),
+    })
+  })
+})
+
+describe('AnnData Zarr stores', () => {
+  it('detects AnnData from the root attributes of a .zarr URL and creates an AnnData dataset', async () => {
+    const fetcher = annDataZarrFixtureFetcher({ hidden: ['/tiny.zarr/.zmetadata'] })
+    const url = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
+
+    await expect(detectSpatialDataset(`${url}/`, { fetcher })).resolves.toEqual({
+      platform: 'h5ad',
+      baseUrl: url,
+      h5adUrl: url,
+      source: 'zarr',
+      checked: [
+        { path: 'zarr.json', url: `${url}/zarr.json`, ok: false, status: 404 },
+        { path: '.zattrs', url: `${url}/.zattrs`, ok: true, status: 200 },
+        { path: '.zattrs (AnnData)', url: `${url}/.zattrs`, ok: true, status: 200 },
+      ],
+    })
+
+    const dataset = await createSpatialDataset(url, { fetcher })
+
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+    await expect((dataset as AnnDataH5adDataset).genePanel()).resolves.toEqual([
+      'Actb',
+      'Gad1',
+      'Gapdh',
+      'Sst',
+    ])
+  })
+
+  it('detects AnnData in a Zarr v3 store from a plain directory URL', async () => {
+    const fetcher = annDataZarrFixtureFetcher({
+      aliases: { '/datasets/heart': '/tiny.v3.zarr' },
+    })
+    const url = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/datasets/heart`
+    const detection = await detectSpatialDataset(`${url}/`, { fetcher })
+
+    expect(detection).toMatchObject({
+      platform: 'h5ad',
+      baseUrl: url,
+      h5adUrl: url,
+      source: 'zarr',
+    })
+    expect(detection.checked.at(-1)).toEqual({
+      path: 'zarr.json (AnnData)',
+      url: `${url}/zarr.json`,
+      ok: true,
+      status: 200,
     })
   })
 })

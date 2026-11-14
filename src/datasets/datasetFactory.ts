@@ -64,10 +64,10 @@ export type SpatialDatasetDetection =
   | {
       readonly platform: 'h5ad'
       readonly baseUrl: string
-      // An .h5ad file, or with `source: 'icechunk'` an Icechunk repository
-      // holding AnnData.
+      // An .h5ad file, or a store holding AnnData: with `source: 'icechunk'`
+      // an Icechunk repository, with `source: 'zarr'` a Zarr store.
       readonly h5adUrl: string
-      readonly source?: 'icechunk'
+      readonly source?: 'icechunk' | 'zarr'
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
@@ -313,16 +313,16 @@ async function detectSpatialDatasetLayout(
     )
     checked.push(...probes)
 
-    const spatialDataProbe = await probeSpatialDataRoot(zarrRootUrl, probes, options)
+    const rootContent = await probeZarrRootContent(zarrRootUrl, probes, options)
 
-    if (spatialDataProbe !== null) {
-      checked.push(spatialDataProbe)
-      return {
-        platform: 'spatialdata',
-        baseUrl: normalizedBaseUrl,
-        spatialDataUrl: zarrRootUrl,
+    if (rootContent !== null) {
+      checked.push(rootContent.probe)
+      return zarrStoreDetection(
+        normalizedBaseUrl,
+        zarrRootUrl,
+        rootContent.content,
         checked,
-      }
+      )
     }
 
     return probes.some((probe) => probe.ok)
@@ -407,20 +407,20 @@ async function detectSpatialDatasetLayout(
   const zarrMetadataProbes = await probeZarrMetadata(normalizedBaseUrl, options)
   checked.push(...zarrMetadataProbes)
   const zarrMetadataProbe = zarrMetadataProbes.find((probe) => probe.ok)
-  const spatialDataProbe = await probeSpatialDataRoot(
+  const rootContent = await probeZarrRootContent(
     normalizedBaseUrl,
     zarrMetadataProbes,
     options,
   )
 
-  if (spatialDataProbe !== null) {
-    checked.push(spatialDataProbe)
-    return {
-      platform: 'spatialdata',
-      baseUrl: normalizedBaseUrl,
-      spatialDataUrl: normalizedBaseUrl,
+  if (rootContent !== null) {
+    checked.push(rootContent.probe)
+    return zarrStoreDetection(
+      normalizedBaseUrl,
+      normalizedBaseUrl,
+      rootContent.content,
       checked,
-    }
+    )
   }
 
   if (zarrMetadataProbe !== undefined) {
@@ -1128,6 +1128,7 @@ export async function createSpatialDataset(
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
       ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
+      ...(detection.source === 'zarr' ? { zarr: true } : {}),
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
         ? {}
@@ -1304,11 +1305,18 @@ async function probeDirectDatasetUrl(
 
 // A Zarr group is a SpatialData store when its root attributes carry
 // `spatialdata_attrs`; plain OME-Zarr images do not.
-async function probeSpatialDataRoot(
+type ZarrStoreContent = 'SpatialData' | 'AnnData'
+
+// Reads the root metadata the probes found and names the store's content when
+// it is SpatialData or AnnData. Other Zarr roots are taken as OME-Zarr images.
+async function probeZarrRootContent(
   rootUrl: string,
   metadataProbes: readonly DatasetProbeResult[],
   options: DetectSpatialDatasetOptions,
-): Promise<DatasetProbeResult | null> {
+): Promise<{
+  readonly content: ZarrStoreContent
+  readonly probe: DatasetProbeResult
+} | null> {
   for (const probe of metadataProbes) {
     if (!probe.ok) {
       continue
@@ -1326,21 +1334,46 @@ async function probeSpatialDataRoot(
       )
 
       noteReadableResponse(url, response.status)
+      const content = response.ok ? zarrStoreContent(await response.json()) : null
 
-      if (response.ok && isSpatialDataRootMetadata(await response.json())) {
+      if (content !== null) {
         return {
-          path: `${probe.path} (SpatialData)`,
-          url,
-          ok: true,
-          status: response.status,
+          content,
+          probe: {
+            path: `${probe.path} (${content})`,
+            url,
+            ok: true,
+            status: response.status,
+          },
         }
       }
     } catch {
-      // Unreadable or non-JSON metadata is not a SpatialData root.
+      // Unreadable or non-JSON metadata names no content.
     }
   }
 
   return null
+}
+
+// `metadata` is a v3 zarr.json or a v2 .zattrs.
+function zarrStoreContent(metadata: unknown): ZarrStoreContent | null {
+  if (isSpatialDataRootMetadata(metadata)) {
+    return 'SpatialData'
+  }
+
+  const attrs = objectOrNull(objectOrNull(metadata)?.attributes) ?? objectOrNull(metadata)
+  return attrs?.['encoding-type'] === 'anndata' ? 'AnnData' : null
+}
+
+function zarrStoreDetection(
+  baseUrl: string,
+  storeUrl: string,
+  content: ZarrStoreContent,
+  checked: readonly DatasetProbeResult[],
+): SpatialDatasetDetection {
+  return content === 'SpatialData'
+    ? { platform: 'spatialdata', baseUrl, spatialDataUrl: storeUrl, checked }
+    : { platform: 'h5ad', baseUrl, h5adUrl: storeUrl, source: 'zarr', checked }
 }
 
 async function fetchWithTimeout(

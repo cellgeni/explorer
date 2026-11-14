@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDiagnostics'
 import type { SpatialDatasetDetection } from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
+import {
+  ANNDATA_ZARR_FIXTURE_ORIGIN,
+  annDataZarrFixtureFetcher,
+} from '../test/annDataZarrFixtures'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
@@ -26,6 +30,34 @@ describe('runDatasetDiagnostics', () => {
         status: 'pass',
         message: expect.stringMatching(
           /^\d+ groups and arrays; read the first chunk of \/X\/data$/,
+        ),
+      }),
+    )
+    expect(summarizeDatasetDiagnostics(report)).toBe('All checks passed')
+  })
+
+  it('reads the first expression chunk of an AnnData Zarr store', async () => {
+    const report = await runDatasetDiagnostics(
+      `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      {
+        fetcher: annDataZarrFixtureFetcher({ hidden: ['/tiny.zarr/.zmetadata'] }),
+      },
+    )
+
+    expect(report.platform).toBe('h5ad')
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'dataset-layout',
+        status: 'pass',
+        message: 'Detected AnnData Zarr store',
+      }),
+    )
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: 'anndata-zarr-store',
+        status: 'pass',
+        message: expect.stringMatching(
+          /^\d+ groups and arrays \(no consolidated metadata\); read the first chunk of \/X$/,
         ),
       }),
     )
