@@ -47,9 +47,11 @@ below are as found on 2026-11-08. The plan status column in
   fixed: h5wasm, auto-contrast and zarrita's codecs moved to workers (see
   [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13)). Still
   open in [Open Items](open-items.md): segmentation GeoJSON is re-streamed for
-  each viewport, Xenium loads through free functions instead of
-  `XeniumDataset`, the remaining main-thread work, and byte-range cache keys
-  without the `ETag`.
+  each viewport, the remaining main-thread work, and byte-range cache keys
+  without the `ETag`. Xenium loading through free functions instead of one
+  `XeniumDataset` was closed without a code change on 2026-11-14 and recorded
+  as amendments to
+  [4.6](decisions.md#46-data-source-abstraction--capability-based).
 - **Section 4** is a snapshot; the plan records the current values. One has
   changed since: the diagnostics dump is now `<platform>-diagnostics.json`.
 - **Section 5.** The recheck found two more places where `docs/` disagreed with

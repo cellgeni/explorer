@@ -46,9 +46,12 @@ Other gaps found in the review:
       the SpatialData Visium table. The moves so far, with their measurements,
       are under
       [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13).
-- [ ] Xenium still loads through free functions in `src/data/` instead of one
-      `XeniumDataset` instance; the viewer's µm/px comes from OME-XML while
-      `meta()` reads the manifest.
+- [ ] Dataset instances are cached per URL for the life of the tab
+      (`datasetFactory.ts`, `xeniumDatasetCache.ts`) and never released. A
+      `XeniumDataset` keeps its DuckDB worker after its first query, and
+      nothing calls the client's `close()` (`src/data/duckdb.ts`), so each
+      Xenium dataset opened in a tab can leave up to three DuckDB workers
+      running until reload. Found 2026-11-14.
 - [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
       detection needs a positions file that is never read.
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,

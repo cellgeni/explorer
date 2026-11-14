@@ -226,6 +226,27 @@ Amendments made in later phases:
 - **Flat images (Phase 6).** `ImageSource.kind === 'flat'` is implemented for
   Visium HD PNGs. Image dimensions are optional; the browser image's natural
   size is the fallback.
+- **Xenium instances split by purpose (2026-11-14).** The other platforms load
+  through one `SpatialDataset` from `cachedSpatialDataset`. Xenium's load path
+  calls loaders in `src/data/` instead (`loadDatasetOverview`,
+  `loadGenePanel`, `loadMorphologyImage`, …). The overview, gene panel and
+  image readers do not use DuckDB. The other loaders wrap `XeniumDataset`
+  methods with Range checks, aborts, timings and fallback notices. A URL has
+  up to three instances, each with its own DuckDB client, created at its first
+  query: `cachedXeniumDataset` (gene expression, ROI cells and gene
+  statistics, annotations, warm-up), `cachedXeniumTranscriptDataset`
+  (transcripts), and the factory's `cachedSpatialDataset` (cell and nucleus
+  outlines). A client runs one query at a time, so one instance would queue
+  outline reads behind expression reads and ROI queries behind transcript
+  scans, which the separate-clients rule in 4.3 exists to prevent. Merging
+  them would change nothing users see, so they stay split.
+- **Xenium µm/px has two sources (2026-11-14).** The viewer takes µm/px from
+  the morphology image's OME-XML `PhysicalSizeX` (default 0.2125), not from
+  `meta().units`, which reads `experiment.xenium`. Nothing reads Xenium
+  `meta().units`: the outline loaders call `meta()` only for the platform,
+  capabilities and segmentations. On the demo dataset both give 0.2125.
+  Code that starts reading Xenium `meta().units` should settle on one source
+  first.
 
 ## 4.7 Transcript Source
 
