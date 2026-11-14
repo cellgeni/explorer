@@ -1,12 +1,18 @@
 import type * as zarr from 'zarrita'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
+import { morphologyImageFromPyramidLoader } from '../data/morphologyImage'
 import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { chunkWindowSamples, decodeChunk } from '../workers/zarrDecodeCore'
 import type { ZarrDecodeRequest, ZarrDecodeResponse } from '../workers/zarrDecodeMessages'
 import { ZarrDecodePool, type ZarrDecodeWorkerLike } from '../workers/zarrDecodePool'
-import { omeZarrImageRootUrl, openOmeZarrImageWithOptions } from './omeZarrLoader'
+import {
+  omeZarrImageRootUrl,
+  omeZarrPlaneSelectionUrl,
+  openOmeZarrImageWithOptions,
+} from './omeZarrLoader'
 
 const encoder = new TextEncoder()
 
@@ -496,47 +502,154 @@ describe('OME-Zarr image loader', () => {
     })
   })
 
-  it('reads the z-plane that omero rendering settings name as default', async () => {
+  it('opens a z-stack on the plane omero rendering settings name, else the middle one', async () => {
     const rootPath = '/images/stack.ome.zarr'
-    const files = (omero?: unknown) =>
-      new Map([
-        [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
-        [
-          `${rootPath}/.zattrs`,
-          jsonBytes({
-            ...(omero === undefined ? {} : { omero }),
-            multiscales: [
-              {
-                axes: [
-                  { name: 'c', type: 'channel' },
-                  { name: 'z', type: 'space' },
-                  { name: 'y', type: 'space' },
-                  { name: 'x', type: 'space' },
-                ],
-                datasets: [{ path: '0' }],
-              },
-            ],
-          }),
-        ],
-        [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([1, 3, 2, 2], [1, 1, 2, 2]))],
-        [`${rootPath}/0/0.0.0.0`, new Uint8Array([1, 1, 1, 1])],
-        [`${rootPath}/0/0.2.0.0`, new Uint8Array([5, 6, 7, 8])],
-      ])
     const open = (omero?: unknown) =>
       openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
-        fetcher: fetcherForFiles(files(omero)),
+        fetcher: fetcherForFiles(zStackOmeZarrFiles(rootPath, { omero })),
+      })
+    const withDefaultZ = await open({ rdefs: { defaultZ: 2 } })
+    const zPlanes = [{ zIndex: 0 }, { zIndex: 1 }, { zIndex: 2 }]
+
+    expect(withDefaultZ.zStack).toEqual({ sizeZ: 3, defaultZPlane: 2 })
+    expect(withDefaultZ.channels.map((channel) => channel.zPlanes)).toEqual([
+      zPlanes,
+      zPlanes,
+    ])
+    await expect(firstPixel(withDefaultZ)).resolves.toBe(3)
+
+    // Without rendering settings, or with an out-of-range plane, the middle
+    // plane is read, as for other z-stacks.
+    for (const omero of [undefined, { rdefs: { defaultZ: 3 } }]) {
+      const loader = await open(omero)
+
+      expect(loader.zStack?.defaultZPlane).toBe(1)
+      await expect(firstPixel(loader)).resolves.toBe(2)
+    }
+  })
+
+  it('selects a z plane with a z hash parameter beside the channel selector', async () => {
+    const rootUrl = 'https://example.test/images/stack.ome.zarr'
+    const fetcher = fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr'))
+    const open = (hash: string) =>
+      openOmeZarrImageWithOptions(`${rootUrl}${hash}`, { fetcher })
+    const channelOnePlaneZero = await open('#c=1&z=0')
+
+    expect(channelOnePlaneZero.zStack?.defaultZPlane).toBe(0)
+    await expect(firstPixel(channelOnePlaneZero)).resolves.toBe(11)
+
+    // The image's channel loaders read the plane its URL selects.
+    const planeTwo = await open('#z=2')
+
+    await expect(firstPixel(planeTwo)).resolves.toBe(3)
+    expect(planeTwo.channels[1]?.sourceUrl).toBe(`${rootUrl}#z=2&c=1`)
+
+    // Selectors that are not planes of the stack read the default plane.
+    for (const hash of ['#z=3', '#z=-1', '#z=one', '#z=']) {
+      await expect(firstPixel(await open(hash))).resolves.toBe(2)
+    }
+
+    expect(omeZarrPlaneSelectionUrl(`${rootUrl}#c=1`, 2)).toBe(`${rootUrl}#c=1&z=2`)
+  })
+
+  it('reports the z spacing only when the z axis has a length unit', async () => {
+    const rootPath = '/images/stack.ome.zarr'
+    const open = (zAxisUnit?: string) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(
+          zStackOmeZarrFiles(rootPath, {
+            zScale: 500,
+            ...(zAxisUnit === undefined ? {} : { zAxisUnit }),
+          }),
+        ),
       })
 
-    await expect(
-      (await open({ rdefs: { defaultZ: 2 } })).loadTilePixels(0, 0, 0),
-    ).resolves.toMatchObject({ pixels: new Uint8Array([5, 6, 7, 8]) })
-    // Without rendering settings, or with an out-of-range plane, z = 0 is read.
-    await expect((await open()).loadTilePixels(0, 0, 0)).resolves.toMatchObject({
-      pixels: new Uint8Array([1, 1, 1, 1]),
+    expect((await open('nanometer')).zStack?.micrometersPerPlane).toBe(0.5)
+    // bioformats2raw writes a unitless z scale when the spacing is unknown.
+    expect((await open()).zStack).not.toHaveProperty('micrometersPerPlane')
+  })
+
+  it('reads the matching plane of pyramid levels downsampled along z', async () => {
+    const rootPath = '/images/isotropic.ome.zarr'
+    const files = new Map([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            {
+              axes: [
+                { name: 'z', type: 'space' },
+                { name: 'y', type: 'space' },
+                { name: 'x', type: 'space' },
+              ],
+              datasets: [{ path: '0' }, { path: '1' }],
+            },
+          ],
+        }),
+      ],
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([4, 2, 2], [1, 2, 2]))],
+      [`${rootPath}/1/.zarray`, jsonBytes(v2ArrayMetadata([2, 1, 1], [1, 1, 1]))],
+      ...[0, 1, 2, 3].map(
+        (z) =>
+          [`${rootPath}/0/${z.toString()}.0.0`, new Uint8Array(4).fill(z + 1)] as const,
+      ),
+      ...[0, 1].map(
+        (z) =>
+          [`${rootPath}/1/${z.toString()}.0.0`, new Uint8Array([10 * (z + 1)])] as const,
+      ),
+    ])
+    const loader = await openOmeZarrImageWithOptions(
+      `https://example.test${rootPath}#z=3`,
+      { fetcher: fetcherForFiles(files) },
+    )
+
+    await expect(loader.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([4, 4, 4, 4]),
     })
-    await expect(
-      (await open({ rdefs: { defaultZ: 3 } })).loadTilePixels(0, 0, 0),
-    ).resolves.toMatchObject({ pixels: new Uint8Array([1, 1, 1, 1]) })
+    // Level 1 halves z, so level-0 plane 3 is its plane 1.
+    await expect(loader.loadTilePixels(1, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([20]),
+    })
+  })
+
+  it('opens other z planes of a morphology z-stack with a z selector', async () => {
+    const rootUrl = 'https://example.test/images/stack.ome.zarr'
+    const fetcher = fetcherForFiles(
+      zStackOmeZarrFiles('/images/stack.ome.zarr', { omero: { rdefs: { defaultZ: 2 } } }),
+    )
+    const openImage = vi.fn((url: string) =>
+      openOmeZarrImageWithOptions(url, { fetcher }),
+    )
+    const baseLoader = await openImage(rootUrl)
+    const image = await morphologyImageFromPyramidLoader(rootUrl, baseLoader, {
+      openImage,
+    })
+
+    expect(image.zStack).toMatchObject({ sizeZ: 3, zPlane: 2 })
+    // Channel 0 at the default plane is the image URL's own loader.
+    expect(image.channelLoaders[0]?.loader).toBe(baseLoader)
+    expect(image.channelLoaders[1]?.loader.url).toBe(`${rootUrl}#c=1`)
+    await expect(channelFirstPixels(image.channelLoaders)).resolves.toEqual([3, 13])
+
+    const firstPlane = await image.zStack?.openPlane(0)
+
+    expect(firstPlane?.zStack?.zPlane).toBe(0)
+    expect(firstPlane?.channelLoaders.map((channel) => channel.loader.url)).toEqual([
+      `${rootUrl}#z=0`,
+      `${rootUrl}#c=1&z=0`,
+    ])
+    await expect(channelFirstPixels(firstPlane?.channelLoaders ?? [])).resolves.toEqual([
+      1, 11,
+    ])
+
+    // A restored plane opens there.
+    const restored = await morphologyImageFromPyramidLoader(rootUrl, baseLoader, {
+      openImage,
+      zPlane: 1,
+    })
+
+    await expect(channelFirstPixels(restored.channelLoaders)).resolves.toEqual([2, 12])
   })
 
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {
@@ -595,6 +708,71 @@ function legacyV2OmeZarrFiles(
     [`${rootPath}/1/.zattrs`, jsonBytes({ _ARRAY_DIMENSIONS: ['c', 'y', 'x'] })],
     [`${rootPath}/0/1.0.0`, new Uint8Array([10, 20, 30, 40])],
   ])
+}
+
+// A c, z, y, x image of 2 channels by 3 planes of 2 × 2 pixels. Each plane is
+// filled with 10c + z + 1.
+function zStackOmeZarrFiles(
+  rootPath: string,
+  options: {
+    readonly omero?: unknown
+    readonly zAxisUnit?: string
+    readonly zScale?: number
+  } = {},
+): Map<string, Uint8Array> {
+  const files = new Map([
+    [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+    [
+      `${rootPath}/.zattrs`,
+      jsonBytes({
+        ...(options.omero === undefined ? {} : { omero: options.omero }),
+        multiscales: [
+          {
+            axes: [
+              { name: 'c', type: 'channel' },
+              {
+                name: 'z',
+                type: 'space',
+                ...(options.zAxisUnit === undefined ? {} : { unit: options.zAxisUnit }),
+              },
+              { name: 'y', type: 'space' },
+              { name: 'x', type: 'space' },
+            ],
+            datasets: [
+              {
+                path: '0',
+                coordinateTransformations: [
+                  { type: 'scale', scale: [1, options.zScale ?? 1, 1, 1] },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ],
+    [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([2, 3, 2, 2], [1, 1, 2, 2]))],
+  ])
+
+  for (const c of [0, 1]) {
+    for (const z of [0, 1, 2]) {
+      files.set(
+        `${rootPath}/0/${c.toString()}.${z.toString()}.0.0`,
+        new Uint8Array(4).fill(10 * c + z + 1),
+      )
+    }
+  }
+
+  return files
+}
+
+async function firstPixel(loader: ImagePyramidLoader): Promise<number | undefined> {
+  return (await loader.loadTilePixels?.(0, 0, 0))?.pixels[0]
+}
+
+function channelFirstPixels(
+  channels: readonly { readonly loader: ImagePyramidLoader }[],
+): Promise<(number | undefined)[]> {
+  return Promise.all(channels.map((channel) => firstPixel(channel.loader)))
 }
 
 function v3OmeZarrFiles(rootPath: string): Map<string, Uint8Array> {
