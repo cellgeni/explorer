@@ -51,6 +51,15 @@ AnnData Zarr store on the group's bucket, which the viewer reads directly:
 }
 ```
 
+[`docs/collections/gbm-space.json`](./collections/gbm-space.json) lists the
+97 Visium sections of the
+[GBM-space glioblastoma atlas](https://www.gbmspace.org/webatlas2/GBM),
+grouped by patient, and its snRNA-seq atlas of 1,025,329 nuclei. The sections
+open over their H&E, which the stores carry in `uns/spatial`. The atlas takes
+about 30 s to open. The nine sections of patient AT15 are Visium CytAssist
+11 mm, with counts about ten times higher than the others, so with them in
+view the previews' shared scale leaves the other sections dim.
+
 ## Fields
 
 | Field         | Required | Value                                                                                                    |
