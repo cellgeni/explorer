@@ -232,7 +232,7 @@ describe('parseDatasetManifest', () => {
         image: 'SPCOX-Sham-A-raw.zarr/',
         labels: 'SPCOX-Sham-A-label.zarr',
       },
-      options: { coordinates: 'image-pixels' },
+      options: { coordinates: 'image-pixels', labelColumn: 'cell_labels' },
     })
 
     expect(manifest).toMatchObject({
@@ -240,7 +240,7 @@ describe('parseDatasetManifest', () => {
         h5ad: { url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-anndata.zarr' },
         image: { path: 'SPCOX-Sham-A-raw.zarr' },
       },
-      options: { coordinates: 'image-pixels' },
+      options: { coordinates: 'image-pixels', labelColumn: 'cell_labels' },
     })
     expect(manifestImageAttachment(manifest)).toEqual({
       path: 'SPCOX-Sham-A-raw.zarr',
@@ -250,6 +250,7 @@ describe('parseDatasetManifest', () => {
         path: 'SPCOX-Sham-A-label.zarr',
         url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-label.zarr',
       },
+      labelColumn: 'cell_labels',
     })
     expect(
       manifestImageAttachment(
@@ -281,6 +282,9 @@ describe('parseDatasetManifest', () => {
     )
     expect(h5ad({ image: 'a.zarr' }, { coordinates: 'pixels' })).toBe(
       'explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".',
+    )
+    expect(h5ad({ image: 'a.zarr' }, { labelColumn: 'cell_labels' })).toBe(
+      'explorer.json: "options.labelColumn" needs "files.labels".',
     )
     expect(h5ad({ image: 'a.zarr' }, { table: 'x' })).toContain(
       'unknown field "options.table"',

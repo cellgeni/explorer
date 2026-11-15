@@ -492,6 +492,147 @@ describe('AnnDataH5adDataset', () => {
     expect(openLabels).toHaveBeenCalledTimes(1)
   })
 
+  it('matches labels by a named column, the instance key, a label column, or obs names', async () => {
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      imageWidth: 80,
+      imageHeight: 80,
+      units: { micrometersPerPixel: micrometers(1) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    const traced = [1, 2, 3, 4, 5].map((label) => ({
+      label,
+      ring: new Float64Array([label, 0, label + 1, 0, label + 1, 1]),
+    }))
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(80),
+      maxY: micrometers(80),
+    }
+    const outlinedCells = async (
+      fixture: TinyH5adOptions,
+      labelColumn?: string,
+    ): Promise<readonly string[]> => {
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/tiny.h5ad',
+        fetcher: h5adFetcher(await createTinyH5ad('dense', fixture)),
+        image: {
+          url: loader.url,
+          coordinates: 'micrometers',
+          labelsUrl: 'https://example.test/section-label.zarr',
+          ...(labelColumn === undefined ? {} : { labelColumn }),
+        },
+        openImage: vi.fn().mockResolvedValue(loader),
+        openLabels: (async () => ({
+          levels: [{ width: 80, height: 80 }],
+          outlines: async (
+            _bounds: unknown,
+            { include }: { include(label: number): boolean },
+          ) => traced.filter(({ label }) => include(label)),
+        })) as unknown as AnnDataLabelsOpener,
+      })
+      const { elements } = await dataset.elements(bbox)
+      return elements.map((element) => String(element.id))
+    }
+    // Obs names 0 to 3 are not the labels; the columns hold them.
+    const obsNames = ['0', '1', '2', '3']
+    const extraObs = {
+      cell_labels: Int32Array.from([2, 3, 4, 5]),
+      label_text: ['5', '4', 'none', '1'],
+    }
+
+    // Named columns: integers, or strings of whole numbers.
+    expect(await outlinedCells({ obsNames, extraObs }, 'cell_labels')).toEqual([
+      '0',
+      '1',
+      '2',
+      '3',
+    ])
+    expect(await outlinedCells({ obsNames, extraObs }, 'label_text')).toEqual([
+      '3',
+      '1',
+      '0',
+    ])
+    // The SpatialData instance key, without a named column.
+    expect(
+      await outlinedCells({
+        obsNames,
+        extraObs,
+        spatialDataInstanceKey: 'cell_labels',
+      }),
+    ).toEqual(['0', '1', '2', '3'])
+    // An instance key that holds no labels, such as a Xenium table's
+    // barcodes, gives way to the column named like labels.
+    expect(
+      await outlinedCells({
+        obsNames,
+        extraObs: {
+          cell_id: ['aaaamblj-1', 'aaaanhff-1', 'aaabjknp-1', 'aaablaep-1'],
+          cell_labels: Int32Array.from([2, 3, 4, 5]),
+        },
+        spatialDataInstanceKey: 'cell_id',
+        spatialDataInstanceKeyIn: 'attributes',
+      }),
+    ).toEqual(['0', '1', '2', '3'])
+    // The instance key in the table's attributes, as spatialdata 0.2 and later
+    // write it.
+    expect(
+      await outlinedCells({
+        obsNames,
+        extraObs: {
+          cell_labels: Int32Array.from([2, 3, 4, 5]),
+          id: ['4', '3', '2', '1'],
+        },
+        spatialDataInstanceKey: 'id',
+        spatialDataInstanceKeyIn: 'attributes',
+      }),
+    ).toEqual(['3', '2', '1', '0'])
+    // Otherwise the obs names: labels 1 to 3.
+    expect(
+      await outlinedCells({
+        obsNames,
+        extraObs: { area: Int32Array.from([1, 2, 3, 4]) },
+      }),
+    ).toEqual(['1', '2', '3'])
+  })
+
+  it('reports a named label column that gives no cells when boundaries load', async () => {
+    const dataset = (labelColumn: string) =>
+      createTinyH5ad('dense', { extraObs: { label_text: ['a', 'b', 'c', 'd'] } }).then(
+        (bytes) =>
+          new AnnDataH5adDataset({
+            url: 'https://example.test/tiny.h5ad',
+            fetcher: h5adFetcher(bytes),
+            image: {
+              url: 'https://example.test/section-raw.zarr',
+              coordinates: 'micrometers',
+              labelsUrl: 'https://example.test/section-label.zarr',
+              labelColumn,
+            },
+            openImage: vi.fn(),
+            openLabels: vi.fn() as unknown as AnnDataLabelsOpener,
+          }),
+      )
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(10),
+      maxY: micrometers(10),
+    }
+    const missing = await dataset('cell_labels')
+    const text = await dataset('label_text')
+
+    // Boundaries are offered, so the error shows where they load.
+    expect((await missing.meta()).capabilities.cellBoundaries).toBe(true)
+    await expect(missing.elements(bbox)).rejects.toThrow(
+      'The attached labels match no cells: obs has no column "cell_labels".',
+    )
+    await expect(text.elements(bbox)).rejects.toThrow(
+      'obs column "label_text" holds no whole-number labels',
+    )
+  })
+
   it('has no boundaries without labels or label-numbered obs names', async () => {
     const openLabels = vi.fn() as unknown as AnnDataLabelsOpener
     const bbox = {
@@ -1172,6 +1313,12 @@ interface TinyH5adOptions {
   readonly categoricalEncoding?: CategoricalEncoding
   // The obs index; defaults to cell-a to cell-d.
   readonly obsNames?: readonly string[]
+  // More obs columns, one value per cell.
+  readonly extraObs?: Readonly<Record<string, Int32Array | readonly string[]>>
+  // Written as `uns/spatialdata_attrs/instance_key`, as spatialdata before 0.2
+  // did, or with `in: 'attributes'` as the root's `instance_key` attribute.
+  readonly spatialDataInstanceKey?: string
+  readonly spatialDataInstanceKeyIn?: 'uns' | 'attributes'
   readonly coordinateKey?: string
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
@@ -1267,7 +1414,11 @@ async function createTinyH5ad(
     }
   } else {
     obs.create_attribute('_index', 'cell_id')
-    obs.create_attribute('column-order', ['cluster', 'score'])
+    obs.create_attribute('column-order', [
+      'cluster',
+      'score',
+      ...Object.keys(options.extraObs ?? {}),
+    ])
     obs.create_dataset({
       name: 'cell_id',
       data: [...(options.obsNames ?? ['cell-a', 'cell-b', 'cell-c', 'cell-d'])],
@@ -1278,6 +1429,25 @@ async function createTinyH5ad(
     name: 'score',
     data: new Float32Array([0.1, 0.5, 0.9, 0.2]),
   })
+
+  for (const [name, values] of Object.entries(options.extraObs ?? {})) {
+    obs.create_dataset({
+      name,
+      data: values instanceof Int32Array ? values : [...values],
+    })
+  }
+
+  if (
+    options.spatialDataInstanceKey !== undefined &&
+    options.spatialDataInstanceKeyIn === 'attributes'
+  ) {
+    file.create_attribute('instance_key', options.spatialDataInstanceKey)
+  } else if (options.spatialDataInstanceKey !== undefined) {
+    file
+      .create_group('uns')
+      .create_group('spatialdata_attrs')
+      .create_dataset({ name: 'instance_key', data: options.spatialDataInstanceKey })
+  }
   if (categoricalEncoding === 'group') {
     const cluster = obs.create_group('cluster')
     cluster.create_attribute('encoding-type', 'categorical')

@@ -1372,6 +1372,9 @@ export async function createSpatialDataset(
               url: image.url,
               coordinates: image.coordinates,
               ...(image.labels === undefined ? {} : { labelsUrl: image.labels.url }),
+              ...(image.labelColumn === undefined
+                ? {}
+                : { labelColumn: image.labelColumn }),
             },
           }),
       ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
@@ -1820,5 +1823,5 @@ function spatialDatasetCacheKey(
   spatialDataSelection: SpatialDataSelection | undefined,
   image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''}`}`
+  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
 }

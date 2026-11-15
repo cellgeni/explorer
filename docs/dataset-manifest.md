@@ -287,11 +287,13 @@ SPCOX section's AnnData Zarr store:
 }
 ```
 
-`image`, `labels` and `options.coordinates` mean what they do in a
-[collection entry](./dataset-collections.md#images): the image is the
-dataset's image layer, `image-pixels` scales the cell coordinates by the
-image's pixel size, and label N outlines the cell whose obs name is `N`. A
-collection entry that names an image replaces the manifest's.
+`image`, `labels`, `options.coordinates` and `options.labelColumn` mean what
+they do in a [collection entry](./dataset-collections.md#images): the image is
+the dataset's image layer, `image-pixels` scales the cell coordinates by the
+image's pixel size, and label N outlines the cell whose label value is N,
+from `labelColumn`, the table's SpatialData instance key or label column, or
+its obs names ([Labels](./dataset-collections.md#labels)). A collection entry
+that names an image replaces the manifest's.
 
 ## Options
 
@@ -303,6 +305,7 @@ collection entry that names an image replaces the manifest's.
 | `spatialdata` | `image`              | Image element name, without `images/`                                                            |
 | `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value                       |
 | `h5ad`        | `coordinates`        | `micrometers` (default) or `image-pixels`: what the cell coordinates are in. Needs `files.image` |
+| `h5ad`        | `labelColumn`        | The obs column holding each cell's label value. Needs `files.labels`                             |
 
 The SpatialData options are the starting view; the View options controls in
 the info drawer start from them. Changing the table clears the coordinate

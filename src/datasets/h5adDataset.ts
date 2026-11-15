@@ -108,9 +108,18 @@ export interface AnnDataAttachedImage {
   // With 'image-pixels', the obsm coordinates are the image's full-resolution
   // pixels and are scaled to micrometres by its pixel size.
   readonly coordinates: DatasetImageCoordinates
-  // A segmentation label image (OME-Zarr) covering the image, whose values
-  // are obs names: label 12 outlines the cell named "12".
+  // A segmentation label image (OME-Zarr) covering the image.
   readonly labelsUrl?: string
+  // The obs column holding each cell's label value. Without it, the
+  // SpatialData instance key in `uns/spatialdata_attrs`, else the obs names:
+  // label 12 outlines the cell named "12".
+  readonly labelColumn?: string
+}
+
+// Label value -> cell id, or why a named label column gives none.
+interface H5adLabelCells {
+  readonly byLabel: ReadonlyMap<number, string>
+  readonly error?: string
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
@@ -569,7 +578,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly openLabels: AnnDataLabelsOpener | undefined
   private labelsReaderPromise: Promise<AnnDataLabelsReader> | null = null
   // Label value -> cell id, per placed cache.
-  private readonly labelCellIds = new WeakMap<H5adCache, ReadonlyMap<number, string>>()
+  private readonly labelCellIds = new WeakMap<H5adCache, Promise<H5adLabelCells>>()
   // Cell elements for cached label rings, so unchanged cells keep the same
   // objects across viewport requests.
   private readonly labelElementsByRing = new WeakMap<
@@ -612,10 +621,14 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       extent: cache.extent,
       capabilities: {
         transcripts: false,
+        // A label column that gives no cells is reported when boundaries
+        // load, so it is not mistaken for a table without labels.
         cellBoundaries:
           visium !== undefined ||
           (this.attachedImage?.labelsUrl !== undefined &&
-            this.labelCellIdsFor(cache).size > 0),
+            (await this.labelCellsFor(cache).then(
+              ({ byLabel, error }) => byLabel.size > 0 || error !== undefined,
+            ))),
         pyramidImage: imageLoader !== null,
         multiChannel: (imageLoader?.channels.length ?? 0) > 1,
       },
@@ -1023,31 +1036,74 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return this.labelsReaderPromise
   }
 
-  // Label values are obs names, as in SpatialData and Vitessce: obs names
-  // that are whole numbers.
-  private labelCellIdsFor(cache: H5adCache): ReadonlyMap<number, string> {
-    let cellIds = this.labelCellIds.get(cache)
+  // Each cell's label value comes from `labelColumn`. Without it, as for a
+  // SpatialData table: the instance key the table records, else the shortest
+  // obs column named like `cell_labels`, whichever holds whole numbers for
+  // most rows; else the obs names, as in Vitessce. A SpatialData Xenium table
+  // can name its rows 0, 1, ..., keep labels 1, 2, ... in `cell_labels`, and
+  // have the cell barcode as its instance key.
+  private labelCellsFor(cache: H5adCache): Promise<H5adLabelCells> {
+    let cells = this.labelCellIds.get(cache)
 
-    if (cellIds === undefined) {
-      const byLabel = new Map<number, string>()
-
-      for (const cellId of cache.cellIds) {
-        if (/^\d+$/.test(cellId)) {
-          byLabel.set(Number(cellId), cellId)
-        }
-      }
-
-      if (byLabel.size === 0) {
-        this.onProgress?.(
-          'Attached labels not used: no obs names are label numbers, so no cell matches a label',
-        )
-      }
-
-      cellIds = byLabel
-      this.labelCellIds.set(cache, cellIds)
+    if (cells === undefined) {
+      cells = this.resolveLabelCells(cache)
+      this.labelCellIds.set(cache, cells)
     }
 
-    return cellIds
+    return cells
+  }
+
+  private async resolveLabelCells(cache: H5adCache): Promise<H5adLabelCells> {
+    const named = this.attachedImage?.labelColumn
+
+    if (named !== undefined) {
+      const values = obsLabelValues(cache, named)
+
+      if (values === null) {
+        return { byLabel: new Map(), error: `obs has no column "${named}"` }
+      }
+
+      const byLabel = cellIdsByLabel(cache, values)
+
+      return byLabel.size === 0
+        ? { byLabel, error: `obs column "${named}" holds no whole-number labels` }
+        : { byLabel }
+    }
+
+    const instanceKey = await readSpatialDataInstanceKey(cache.root)
+    const candidates = [
+      ...(instanceKey === undefined ? [] : [instanceKey]),
+      ...[...cache.continuousTracks, ...cache.categoricalTracks]
+        .map((track) => track.id)
+        .filter((name) => name !== instanceKey && LABEL_COLUMN_PATTERN.test(name))
+        .sort((left, right) => left.length - right.length),
+    ]
+
+    for (const column of candidates) {
+      const values = obsLabelValues(cache, column)
+
+      if (
+        values !== null &&
+        values.filter((value) => value !== null).length > values.length / 2
+      ) {
+        this.onProgress?.(
+          `Attached labels matched by obs column ${column}${
+            column === instanceKey ? ", the table's SpatialData instance key" : ''
+          }`,
+        )
+        return { byLabel: cellIdsByLabel(cache, values) }
+      }
+    }
+
+    const byLabel = cellIdsByLabel(cache, cache.cellIds.map(wholeNumberOrNull))
+
+    if (byLabel.size === 0) {
+      this.onProgress?.(
+        'Attached labels not used: no obs names are label numbers, so no cell matches a label; name the obs column that holds them',
+      )
+    }
+
+    return { byLabel }
   }
 
   // Outlines of the labelled cells in `bbox`. The label image covers the
@@ -1056,7 +1112,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     cache: H5adCache,
     bbox: BBox,
   ): Promise<readonly SpatialElement<SpatialElementId>[]> {
-    const cellIds = this.labelCellIdsFor(cache)
+    const { byLabel: cellIds, error } = await this.labelCellsFor(cache)
+
+    if (error !== undefined) {
+      throw new Error(`The attached labels match no cells: ${error}.`)
+    }
 
     if (cellIds.size === 0) {
       return []
@@ -1304,6 +1364,77 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
 
     return this.baseCachePromise
+  }
+}
+
+// A column's label values by row: whole numbers, else null. Null when obs
+// has no such column.
+function obsLabelValues(
+  cache: H5adCache,
+  column: string,
+): readonly (number | null)[] | null {
+  const numeric = cache.continuousTracks.find((track) => track.id === column)
+
+  if (numeric !== undefined) {
+    return numeric.values.map((value) =>
+      Number.isInteger(value) && value >= 0 ? value : null,
+    )
+  }
+
+  const text = cache.categoricalTracks.find((track) => track.id === column)
+
+  return text === undefined
+    ? null
+    : cache.cellIds.map((_cellId, row) => wholeNumberOrNull(labelAt(text.values, row)))
+}
+
+function cellIdsByLabel(
+  cache: H5adCache,
+  labels: readonly (number | null)[],
+): ReadonlyMap<number, string> {
+  const byLabel = new Map<number, string>()
+
+  labels.forEach((label, row) => {
+    const cellId = cache.cellIds[row]
+
+    if (label !== null && cellId !== undefined) {
+      byLabel.set(label, cellId)
+    }
+  })
+
+  return byLabel
+}
+
+function wholeNumberOrNull(value: string | null): number | null {
+  return value !== null && /^\d+$/.test(value) ? Number(value) : null
+}
+
+// Obs columns SpatialData tables commonly keep label values in.
+const LABEL_COLUMN_PATTERN = /label/i
+
+// The obs column a SpatialData table links to its elements: `instance_key` in
+// the table's attributes (spatialdata 0.2 and later), or in
+// `uns/spatialdata_attrs` (earlier).
+async function readSpatialDataInstanceKey(
+  root: H5GroupLike,
+): Promise<string | undefined> {
+  const fromAttributes = readStringAttribute(root, 'instance_key')
+
+  if (fromAttributes !== undefined && fromAttributes !== '') {
+    return fromAttributes
+  }
+
+  try {
+    const attrs = root.get('/uns/spatialdata_attrs')
+
+    if (!isGroup(attrs)) {
+      return undefined
+    }
+
+    const key = (await readScalarRecord(attrs)).instance_key
+    return typeof key === 'string' && key !== '' ? key : undefined
+  } catch {
+    return undefined
   }
 }
 

@@ -443,6 +443,7 @@ describe('spatial dataset detection', () => {
                   dataset: 'a.h5ad',
                   image,
                   labels: 'a-label.zarr',
+                  labelColumn: 'cell_labels',
                   coordinates: 'image-pixels',
                 },
           ],
@@ -466,6 +467,7 @@ describe('spatial dataset detection', () => {
         url: 'https://example.test/sections/a-raw.zarr',
         coordinates: 'image-pixels',
         labelsUrl: 'https://example.test/sections/a-label.zarr',
+        labelColumn: 'cell_labels',
       })
       await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(withImage)
 

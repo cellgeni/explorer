@@ -194,6 +194,25 @@ describe('parseDatasetCollection', () => {
     expect(
       parseError({ version: 1, datasets: [{ dataset: 'a', labels: 'a-label.zarr' }] }),
     ).toBe('collection.json: "datasets[0].labels" needs "datasets[0].image".')
+    expect(
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 'a', image: 'a.zarr', labelColumn: 'cell_labels' }],
+      }),
+    ).toBe('collection.json: "datasets[0].labelColumn" needs "datasets[0].labels".')
+    expect(
+      parse({
+        version: 1,
+        datasets: [
+          {
+            dataset: 'a',
+            image: 'a.zarr',
+            labels: 'a-label.zarr',
+            labelColumn: ' cell_labels ',
+          },
+        ],
+      }).datasets[0]?.image?.labelColumn,
+    ).toBe('cell_labels')
   })
 
   it('rejects the same dataset listed twice', () => {

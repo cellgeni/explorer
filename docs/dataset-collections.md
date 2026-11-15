@@ -101,6 +101,7 @@ Unknown fields are errors, as in a dataset manifest.
 | `image`       | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
 | `coordinates` | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
 | `labels`      | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
+| `labelColumn` | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -159,9 +160,25 @@ an OME-Zarr label image, including a `bioformats2raw` store, whose pixel
 values are cell labels and 0 is background. WebAtlas publishes one next to
 each section (`-label.zarr`).
 
-- **Which cell.** Label N outlines the cell whose obs name is `N`, as in
-  SpatialData and Vitessce. Labels that no obs name matches are not drawn, and
-  a table without whole-number obs names gets no boundaries.
+- **Which cell.** Label N outlines the cell whose label value is N. The
+  values come from:
+  1. `labelColumn`, an obs column of whole numbers or of strings of them.
+     A column that is missing, or holds no whole numbers, shows as a
+     `Cell boundaries` error when boundaries load.
+  2. Without it, as for a SpatialData table: the table's SpatialData instance
+     key (its `instance_key` attribute, or `uns/spatialdata_attrs`), else the
+     shortest obs column with "label" in its name, whichever holds whole
+     numbers for more than half the cells.
+  3. Otherwise the obs names, as in Vitessce: label 12 is the cell named
+     `12`. SPCOX's tables work this way.
+
+  The log says which column matched. Labels that no cell has are not drawn.
+  A SpatialData table's obs names need not be its labels: the Xenium ovary
+  table in `AU14_S14_final.zarr` names its cells 0, 1, ..., keeps labels
+  1, 2, ... in `cell_labels`, and has the cell barcode as its instance key.
+  It matches by `cell_labels`, and all 905 cells in a 300 × 250 µm window
+  sit inside their own outlines; by obs name, none would.
+
 - **Where.** The label image covers the same area as `image`, so its pixels
   are scaled to the image's extent. A mask on the image's own pixel grid, such
   as SPCOX's, lines up pixel for pixel; a downsampled one is stretched to fit.
@@ -307,5 +324,4 @@ errors as you type.
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
-- Labels need an image to be placed on, and are matched to cells by obs name
-  only, not by an obs column.
+- Labels need an image to be placed on.

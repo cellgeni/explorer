@@ -41,6 +41,7 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'image',
   'coordinates',
   'labels',
+  'labelColumn',
 ] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
@@ -220,11 +221,13 @@ function parseEntryImage(
       image: optionalPath(entry, 'image', prefix, fail),
       labels: optionalPath(entry, 'labels', prefix, fail),
       coordinates: entry.coordinates,
+      labelColumn: optionalString(entry, 'labelColumn', prefix, fail),
     },
     {
       image: `${prefix}image`,
       labels: `${prefix}labels`,
       coordinates: `${prefix}coordinates`,
+      labelColumn: `${prefix}labelColumn`,
     },
     rootUrl,
     fail,

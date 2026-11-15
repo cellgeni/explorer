@@ -9,6 +9,7 @@ import {
   DATASET_MANIFEST_TOP_LEVEL_KEYS,
   DATASET_IMAGE_COORDINATES,
   H5AD_MANIFEST_FILES,
+  H5AD_MANIFEST_OPTIONS,
   IMAGE_MANIFEST_FILES,
   VISIUM_HD_MANIFEST_BIN_SIZES,
   VISIUM_HD_MANIFEST_FILE_DEFAULTS,
@@ -74,7 +75,9 @@ describe('dataset manifest JSON Schema', () => {
     expect(keys(h5adPlatform?.then?.properties?.files)).toEqual(
       [...H5AD_MANIFEST_FILES].sort(),
     )
-    expect(keys(h5adPlatform?.then?.properties?.options)).toEqual(['coordinates'])
+    expect(keys(h5adPlatform?.then?.properties?.options)).toEqual(
+      [...H5AD_MANIFEST_OPTIONS].sort(),
+    )
     expect(
       h5adPlatform?.then?.properties?.options?.properties?.coordinates?.enum,
     ).toEqual(DATASET_IMAGE_COORDINATES)

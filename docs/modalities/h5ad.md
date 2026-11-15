@@ -282,16 +282,22 @@ image the [generic opener](./image.md) reads works: OME-Zarr (including
   pyramid in the background, as for SpatialData: channels, contrast, opacity
   and the minimap work as for any image, and `meta()` reports the image's
   units, `pyramidImage` and `multiChannel`.
-- **Labels.** With `labels`, `meta()` reports `cellBoundaries` when some obs
-  names are whole numbers, and `elements(bbox)` returns outlines from the
+- **Labels.** With `labels`, `labelCellsFor` maps label values to cells, once
+  per placed table: from `labelColumn`; else the SpatialData instance key
+  (`readSpatialDataInstanceKey`: the root's `instance_key` attribute, else
+  `uns/spatialdata_attrs/instance_key`) or the shortest obs column matching
+  `/label/i`, whichever holds whole numbers for more than half the rows; else
+  the obs names. `meta()` reports `cellBoundaries` when that maps some cells,
+  or when a named `labelColumn` maps none, so `elements(bbox)` can throw and
+  the boundary load shows why. `elements(bbox)` returns outlines from the
   label image. `openOmeZarrLabels` (`src/datasets/spatialDataLabels.ts`) opens
   the store's multiscale group (`openOmeZarrMultiscaleGroup`,
   `src/zarr/omeZarrLoader.ts`) as a `SpatialDataLabelsReader`, the reader
   SpatialData labels use: chunks are traced in the Zarr decode workers and
   joined across chunk edges, and rings are cached while their chunks are. The
   view's bbox is converted to label pixels by the image's extent over the
-  label image's (`labelElements`), and the rings back to micrometres. Label N
-  is the cell named `N`; other labels are skipped before rings are joined.
+  label image's (`labelElements`), and the rings back to micrometres. Labels
+  no cell has are skipped before rings are joined.
   `H5AD_PLATFORM_ADAPTER` loads boundaries while `Cell boundaries` is on, and
   points get outlines only then.
 - **Not used.** A Visium table keeps its own tissue image, and other platforms

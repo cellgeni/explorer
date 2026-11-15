@@ -220,12 +220,16 @@ export interface DatasetImageAttachment {
   readonly path: string
   readonly url: string
   readonly coordinates: DatasetImageCoordinates
-  // A segmentation label image covering the image, whose values are the
-  // table's obs names, drawn as cell boundaries.
+  // A segmentation label image covering the image, drawn as cell boundaries.
   readonly labels?: DatasetManifestFile
+  // The obs column holding each cell's label value. Without it, the SpatialData
+  // instance key the table records, else the obs names.
+  readonly labelColumn?: string
 }
 
 export const H5AD_MANIFEST_FILES = ['h5ad', 'image', 'labels'] as const
+
+export const H5AD_MANIFEST_OPTIONS = ['coordinates', 'labelColumn'] as const
 
 export interface H5adDatasetManifest extends DatasetManifestBase {
   readonly platform: 'h5ad'
@@ -235,7 +239,10 @@ export interface H5adDatasetManifest extends DatasetManifestBase {
     readonly image?: DatasetManifestFile
     readonly labels?: DatasetManifestFile
   }
-  readonly options: { readonly coordinates?: DatasetImageCoordinates }
+  readonly options: {
+    readonly coordinates?: DatasetImageCoordinates
+    readonly labelColumn?: string
+  }
 }
 
 export interface SpatialDataDatasetManifest extends DatasetManifestBase {
@@ -482,7 +489,7 @@ export function parseDatasetManifest(
     checkKeys(files, H5AD_MANIFEST_FILES, 'files.', fail)
 
     if (options !== undefined) {
-      checkKeys(options, ['coordinates'], 'options.', fail)
+      checkKeys(options, H5AD_MANIFEST_OPTIONS, 'options.', fail)
     }
 
     const h5ad = requiredFile('h5ad')
@@ -491,11 +498,16 @@ export function parseDatasetManifest(
         image: optionalPath(files, 'image', 'files.', fail),
         labels: optionalPath(files, 'labels', 'files.', fail),
         coordinates: options?.coordinates,
+        labelColumn:
+          options === undefined
+            ? undefined
+            : optionalString(options, 'labelColumn', 'options.', fail),
       },
       {
         image: 'files.image',
         labels: 'files.labels',
         coordinates: 'options.coordinates',
+        labelColumn: 'options.labelColumn',
       },
       rootUrl,
       fail,
@@ -511,10 +523,14 @@ export function parseDatasetManifest(
           : { image: { path: attachment.path, url: attachment.url } }),
         ...(attachment?.labels === undefined ? {} : { labels: attachment.labels }),
       },
-      options:
-        attachment === undefined || options?.coordinates === undefined
+      options: {
+        ...(attachment === undefined || options?.coordinates === undefined
           ? {}
-          : { coordinates: attachment.coordinates },
+          : { coordinates: attachment.coordinates }),
+        ...(attachment?.labelColumn === undefined
+          ? {}
+          : { labelColumn: attachment.labelColumn }),
+      },
     }
   }
 
@@ -598,16 +614,22 @@ export function parseImageAttachment(
     readonly image: string | undefined
     readonly labels: string | undefined
     readonly coordinates: unknown
+    readonly labelColumn: string | undefined
   },
   names: {
     readonly image: string
     readonly labels: string
     readonly coordinates: string
+    readonly labelColumn: string
   },
   rootUrl: string,
   fail: Fail,
 ): DatasetImageAttachment | undefined {
-  const { image, labels, coordinates } = fields
+  const { image, labels, coordinates, labelColumn } = fields
+
+  if (labelColumn !== undefined && labels === undefined) {
+    return fail(`"${names.labelColumn}" needs "${names.labels}".`)
+  }
 
   if (
     coordinates !== undefined &&
@@ -637,6 +659,7 @@ export function parseImageAttachment(
     ...(labels === undefined
       ? {}
       : { labels: { path: labels, url: resolve(rootUrl, labels) } }),
+    ...(labelColumn === undefined ? {} : { labelColumn }),
   }
 }
 
@@ -649,11 +672,13 @@ export function manifestImageAttachment(
   }
 
   const { image, labels } = manifest.files
+  const { coordinates, labelColumn } = manifest.options
 
   return {
     ...image,
-    coordinates: manifest.options.coordinates ?? 'micrometers',
+    coordinates: coordinates ?? 'micrometers',
     ...(labels === undefined ? {} : { labels }),
+    ...(labelColumn === undefined ? {} : { labelColumn }),
   }
 }
 
