@@ -90,11 +90,12 @@ A link with `collection=` opens a [dataset collection](./dataset-collections.md)
 and shows `CollectionBar` (`src/features/collection/CollectionBar.tsx`) under
 the canvas, a `nav` named "Collection":
 
-- On the left, "Collection", the collection's `name` (or its file name) and
-  the number of datasets. With genes selected, the gene (or "N genes") and
-  the previews' shared scale, from 0 to the highest score read so far. With
-  cells coloured by an annotation set, the set's name and "N hidden".
-  Hidden under 860 px.
+- On the left, "Collection" with two icon buttons, then the collection's
+  `name` (or its file name) and the number of datasets. With genes
+  selected, the gene (or "N genes") and the previews' shared scale, from 0
+  to the highest score read so far. With cells coloured by an annotation
+  set, the set's name and "N hidden". Under 860 px only "Collection" and
+  its buttons stay.
 - A button per dataset, in groups labelled with their `group`, in one row
   that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
   label and its highest score (`max 92`), or with hidden classes the cells
@@ -111,14 +112,15 @@ the canvas, a `nav` named "Collection":
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
   failed" with the reason as its tooltip.
-- `Expand` (`aria-expanded`) lays the previews out as a grid over the
-  canvas, with the heading and buttons along the top; the layer panel stays
-  beside it. Each group is a box with its name, boxes sit side by side where
-  they fit, and the grid scrolls down. Previews there are 150 px wide and
-  16:10, drawn at their size. Choosing a dataset, `Collapse` or Escape
-  returns to the bar. Shown only with previews on.
-- `Previews` (pressed by default) turns the previews off, leaving the
-  labels.
+- `Expand` (arrows out, `aria-expanded`), next to "Collection", lays the
+  previews out as a grid over the canvas, with the heading and buttons
+  along the top; the layer panel stays beside it. Each group is a box with
+  its name, boxes sit side by side where they fit, and the grid scrolls
+  down. Previews there are 150 px wide and 16:10, drawn at their size.
+  Choosing a dataset, `Collapse` (arrows in) or Escape returns to the bar.
+  Disabled with previews off. Its tooltip says what it does.
+- `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
+  previews off, leaving the labels. Its tooltip says what it does.
 - `Close Collection` (×) removes the bar and `collection=` from the address;
   the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be

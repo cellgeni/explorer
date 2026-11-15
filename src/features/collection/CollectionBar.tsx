@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Button, CloseIcon, IconButton } from '../../components/ui'
+import {
+  CloseIcon,
+  CollapseIcon,
+  ExpandIcon,
+  IconButton,
+  ImageIcon,
+} from '../../components/ui'
 import {
   collectionEntryFor,
   collectionGroups,
@@ -149,7 +155,44 @@ export function CollectionBar({
       }}
     >
       <div className="collection-bar-heading">
-        <span className="collection-bar-kicker">Collection</span>
+        <div className="collection-bar-title">
+          <span className="collection-bar-kicker">Collection</span>
+          {previews === undefined || collection === null ? null : (
+            <span className="collection-bar-actions">
+              <IconButton
+                className="collection-bar-action"
+                title={
+                  expanded
+                    ? 'Collapse: back to the view, with the datasets in a row under it (Escape)'
+                    : previewsShown
+                      ? 'Expand: show every dataset as a larger preview, in a grid over the view'
+                      : 'Expand: turn Previews on to show the datasets as a grid'
+                }
+                aria-label={expanded ? 'Collapse' : 'Expand'}
+                aria-expanded={expanded}
+                disabled={!previewsShown}
+                icon={expanded ? <CollapseIcon /> : <ExpandIcon />}
+                onClick={() => {
+                  setExpanded((current) => !current)
+                }}
+              />
+              <IconButton
+                className="collection-bar-action"
+                title={
+                  showPreviews
+                    ? 'Previews: each dataset shows its cells, coloured by the selected genes or annotation set. Click to list names only'
+                    : "Previews: off. Click to show each dataset's cells, coloured by the selected genes or annotation set"
+                }
+                aria-label="Previews"
+                aria-pressed={showPreviews}
+                icon={<ImageIcon />}
+                onClick={() => {
+                  setShowPreviews((current) => !current)
+                }}
+              />
+            </span>
+          )}
+        </div>
         <span className="collection-bar-name">
           {collection?.name ?? collectionFileName(state.url)}
         </span>
@@ -278,40 +321,6 @@ export function CollectionBar({
             </div>
           ))}
         </div>
-      )}
-      {!previewsShown || collection === null ? null : (
-        <Button
-          variant="ghost"
-          className="collection-bar-toggle"
-          title={
-            expanded
-              ? 'Back to the view, with the datasets in a row under it'
-              : 'Show every dataset as a grid over the view'
-          }
-          aria-expanded={expanded}
-          onClick={() => {
-            setExpanded((current) => !current)
-          }}
-        >
-          {expanded ? 'Collapse' : 'Expand'}
-        </Button>
-      )}
-      {previews === undefined || collection === null ? null : (
-        <Button
-          variant="ghost"
-          className="collection-bar-toggle"
-          title={
-            showPreviews
-              ? 'Show the datasets by name only'
-              : 'Show a preview of each dataset'
-          }
-          aria-pressed={showPreviews}
-          onClick={() => {
-            setShowPreviews((current) => !current)
-          }}
-        >
-          Previews
-        </Button>
       )}
       <IconButton
         className="collection-bar-close"

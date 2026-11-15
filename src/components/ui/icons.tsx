@@ -150,3 +150,31 @@ export function TargetIcon() {
     </svg>
   )
 }
+
+// Collection bar.
+
+export function ExpandIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M9.5 2.5h4v4M13.5 2.5L9 7M6.5 13.5h-4v-4M2.5 13.5L7 9" />
+    </svg>
+  )
+}
+
+export function CollapseIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M13.5 6.5h-4v-4M9.5 6.5L14 2M2.5 9.5h4v4M6.5 9.5L2 14" />
+    </svg>
+  )
+}
+
+export function ImageIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 3.5h11v9h-11z" />
+      <path d="M2.5 11l3.5-3.5 3 3 1.5-1.5 3 3" />
+      <circle cx="10.5" cy="6" r="1" />
+    </svg>
+  )
+}

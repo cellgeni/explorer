@@ -28,6 +28,30 @@
   width: 136px;
 }
 
+.collection-bar-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* Expand and Previews, next to the kicker. */
+.collection-bar-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.collection-bar-action {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+}
+
+.collection-bar-action[aria-pressed='true'] {
+  color: var(--accent);
+}
+
 .collection-bar-kicker {
   color: var(--text-3);
   font-size: var(--font-caption);
@@ -132,9 +156,16 @@
   margin-left: auto;
 }
 
+/* Narrow, the bar's heading keeps only the kicker and its buttons. */
 @media (max-width: 860px) {
-  .collection-bar-heading {
+  .collection-bar:not(.is-expanded)
+    .collection-bar-heading
+    > :not(.collection-bar-title) {
     display: none;
+  }
+
+  .collection-bar.has-previews:not(.is-expanded) .collection-bar-heading {
+    width: auto;
   }
 }
 
@@ -239,14 +270,6 @@
 
 .collection-bar-dataset[aria-current='true'] .collection-bar-dataset-max {
   color: inherit;
-}
-
-.collection-bar-toggle {
-  flex: 0 0 auto;
-}
-
-.collection-bar-toggle[aria-pressed='true'] {
-  color: var(--accent);
 }
 
 /* Expanded: the previews as a grid over the canvas, scrolling down, with
