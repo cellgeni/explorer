@@ -4,6 +4,7 @@ import type {
   DatasetManifestDefaults,
 } from '../../datasets/datasetManifest'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
+import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { parseObservationColorMode } from '../app-shell/appShellModel'
 import {
   parseGeneExpressionColorScale,
@@ -101,6 +102,10 @@ export function manifestDefaultsToShareableState(
     imageOpacity: defaults.imageOpacity,
     cellFillOpacity: defaults.cellFillOpacity,
     cellBoundaryOpacity: defaults.cellBoundaryOpacity,
+    cellPointScale:
+      defaults.cellPointScale === undefined
+        ? undefined
+        : normalizeCellPointScale(defaults.cellPointScale),
     transcriptOverlay: defaults.transcripts,
   }
   const state = Object.fromEntries(

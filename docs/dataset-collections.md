@@ -83,9 +83,9 @@ Unknown fields are errors, as in a dataset manifest.
 ### Defaults
 
 The dataset manifest's cross-dataset display settings: `genes`,
-`colorCellsBy`, `geneColorScale`, and `geneScoreMode`, with the
-[same values](./dataset-manifest.md#defaults). Layer toggles, opacities and
-image channels belong to each dataset, so set them in that dataset's
+`colorCellsBy`, `geneColorScale`, `geneScoreMode`, and `cellPointScale`, with
+the [same values](./dataset-manifest.md#defaults). Layer toggles, opacities
+and image channels belong to each dataset, so set them in that dataset's
 manifest.
 
 - The defaults apply to the first dataset opened from the collection, over

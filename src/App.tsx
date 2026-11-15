@@ -3018,6 +3018,7 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCellMetadataTrackId,
       setCellBoundaryOpacity,
       setCellFillOpacity,
+      setCellPointScale,
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,

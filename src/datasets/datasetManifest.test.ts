@@ -380,6 +380,7 @@ describe('parseDatasetManifest', () => {
           colorCellsBy: 'cell-area',
           cellBoundaries: false,
           imageOpacity: 0.6,
+          cellPointScale: 4,
           channels: ['DAPI'],
           transcripts: true,
         },
@@ -389,6 +390,7 @@ describe('parseDatasetManifest', () => {
       colorCellsBy: 'cell-area',
       cellBoundaries: false,
       imageOpacity: 0.6,
+      cellPointScale: 4,
       channels: ['DAPI'],
       transcripts: true,
     })
@@ -401,6 +403,9 @@ describe('parseDatasetManifest', () => {
     )
     expect(defaults({ imageOpacity: 1.5 })).toContain(
       '"defaults.imageOpacity" must be a number from 0 to 1',
+    )
+    expect(defaults({ cellPointScale: 0 })).toContain(
+      '"defaults.cellPointScale" must be a number above 0',
     )
     expect(defaults({ cellBoundaries: 'yes' })).toContain(
       '"defaults.cellBoundaries" must be true or false',

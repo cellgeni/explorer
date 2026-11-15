@@ -112,6 +112,8 @@ export interface DatasetManifestDefaults {
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
+  // The Cell point size multiplier; snapped to the slider's steps.
+  readonly cellPointScale?: number
   readonly transcripts?: boolean
 }
 
@@ -586,11 +588,14 @@ const DEFAULT_OPACITY_KEYS = [
   'cellBoundaryOpacity',
 ] as const
 
+const DEFAULT_POSITIVE_NUMBER_KEYS = ['cellPointScale'] as const
+
 export const DATASET_MANIFEST_DEFAULT_KEYS = [
   ...DEFAULT_STRING_LIST_KEYS,
   ...DEFAULT_STRING_KEYS,
   ...DEFAULT_BOOLEAN_KEYS,
   ...DEFAULT_OPACITY_KEYS,
+  ...DEFAULT_POSITIVE_NUMBER_KEYS,
 ] as const
 
 // The field checks below are shared with the collection parser
@@ -691,6 +696,20 @@ export function parseDefaults(
 
     if (typeof entry !== 'number' || !Number.isFinite(entry) || entry < 0 || entry > 1) {
       fail(`"defaults.${key}" must be a number from 0 to 1.`)
+    }
+
+    defaults[key] = entry
+  }
+
+  for (const key of DEFAULT_POSITIVE_NUMBER_KEYS) {
+    const entry = value[key]
+
+    if (entry === undefined) {
+      continue
+    }
+
+    if (typeof entry !== 'number' || !Number.isFinite(entry) || entry <= 0) {
+      fail(`"defaults.${key}" must be a number above 0.`)
     }
 
     defaults[key] = entry

@@ -297,6 +297,7 @@ Display settings applied each time the dataset loads.
 | `imageOpacity`        | `Dataset image opacity` | 0–1                                                                           |
 | `cellFillOpacity`     | `Cell fill opacity`     | 0–1                                                                           |
 | `cellBoundaryOpacity` | `Cell boundary opacity` | 0–1                                                                           |
+| `cellPointScale`      | `Cell point size`       | Multiplier above 0, snapped to the slider's steps (0.5–32)                    |
 | `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                              |
 
 How defaults combine with other settings:

@@ -491,6 +491,11 @@
         "imageOpacity": { "$ref": "#/$defs/opacity" },
         "cellFillOpacity": { "$ref": "#/$defs/opacity" },
         "cellBoundaryOpacity": { "$ref": "#/$defs/opacity" },
+        "cellPointScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The Cell point size multiplier, from 0.5 to 32; other values snap to the nearest slider step."
+        },
         "transcripts": {
           "type": "boolean",
           "description": "Show the transcript overlay (Xenium, Atera)."
