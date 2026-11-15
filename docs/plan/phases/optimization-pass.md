@@ -108,6 +108,45 @@ task, a `Map` of all 598,222), converting numeric columns to number arrays
 (110–145 ms over 20 columns), counting the distinct values of string columns
 (about 110 ms), and the CSR scan for a gene.
 
+## Range-Read Xenium H5 Fallback (2026-11-15)
+
+The H5 file worker reads the Xenium `cell_feature_matrix.h5` fallback by HTTP
+range instead of downloading it (`h5RangeFile.ts`, `rangeBlockCache.ts`). The
+file is a node in h5wasm's file system whose reads come from synchronous range
+requests, which a worker may make; SharedArrayBuffer is not an option because
+GitHub Pages cannot send COOP/COEP. Emscripten's `createLazyFile`, which the
+Visium HD workers use, was not reused: it reads range support from
+`Accept-Ranges`, which CELLxGENE's S3 and GEO hide from CORS, so there it
+downloads the whole file; it aborts the wasm module on a failed request; and
+it takes a 200 reply to a range request as the range. h5wasm ignores HDF5's
+read status, so a failed range read came back as uninitialised values (or a
+wasm trap for variable-length strings) in a test; the worker checks the range
+file's errors after every h5wasm call, and gex.ts opens the file in a new
+worker after a failed read. The block policy (64 KiB blocks, 1 MiB for a miss
+away from earlier reads, doubling to 16 MiB for sequential misses) was chosen
+by replaying h5py's read trace of the demo file: 4 requests for the barcodes and
+`indptr`, 6–11 per ROI, and 47 for 10,000 cells spread over the slide, where
+fixed 1 MiB blocks need 384. Measured in the browser pane against the demo
+bucket, one run each, reads in table order (after the open, the whole file's
+reads come from memory):
+
+| Read                               | Whole file (before) | By range               |
+| ---------------------------------- | ------------------- | ---------------------- |
+| Open                               | 47.9 s              | 1.1 s                  |
+| First cell (barcodes, `indptr`)    | 1.4 s               | 3.1 s (12 req., 14 MB) |
+| ROI, 2,311 cells within 150 µm     | 0.2 s               | 2.4 s (10 req., 17 MB) |
+| ROI, 10,000 of the cells in 500 µm | 0.7 s               | 2.2 s (9 req., 16 MB)  |
+| 10,000 cells spread over the slide | 28.7 s              | 75 s (47 req., 403 MB) |
+
+The values match h5py's for the cell checked. The first cell comes 4.2 s after
+the request instead of 49.3 s. The slide-wide sample still reads almost every
+chunk, and inflating them takes about 29 s either way: the whole sequence took
+78.9 s whole and 83.8 s by range. Bytes already in the worker's 128 MiB block
+cache are not fetched again, and nothing is kept across sessions: the IndexedDB
+byte-range cache is asynchronous. MEMFS now keeps the bytes of a whole file
+instead of copying them (`canOwn`), so the worker no longer holds two copies of
+an H5AD or Visium matrix.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

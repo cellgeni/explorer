@@ -45,9 +45,10 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly cellLimit?: number
   readonly geneLimit?: number
   readonly sampleStrategy?: RoiGeneStatsSampleStrategy
-  // False stops at the Zarr matrix: cell_feature_matrix.h5 is read whole
-  // (433 MB on the Xenium demo), so reads nobody asked for, such as the
-  // viewport warm-up, leave it to the first ROI.
+  // False stops at the Zarr matrix, so reads nobody asked for, such as the
+  // viewport warm-up, leave cell_feature_matrix.h5 to the first ROI. It is
+  // read by range (about 14 MB for the first cells of the 433 MB Xenium demo
+  // file), or whole from a host that ignores Range.
   readonly allowH5Fallback?: boolean
   readonly allowTranscriptFallback?: boolean
   readonly onFallback?: FallbackNotifier

@@ -434,10 +434,33 @@ export async function gexFromFeatureBarcodeMatrixH5<ElementId extends string>(
 
   const file = await loadH5Matrix(url, options)
   throwIfAborted(options.signal)
-  const result = await file.matrixCells(elementIds)
-  throwIfAborted(options.signal)
+  let result: GexResult<ElementId>
 
+  try {
+    result = await file.matrixCells(elementIds)
+  } catch (error) {
+    dropH5Matrix(url, file)
+    throw error
+  }
+
+  throwIfAborted(options.signal)
   return result
+}
+
+// A read that fails partway, such as a range request, can leave h5wasm's
+// module in a bad state, so the next read opens the file in a new worker.
+function dropH5Matrix(url: string, file: H5WorkerFile): void {
+  const entry = h5MatrixCache.get(url)
+
+  if (entry !== undefined) {
+    void entry.promise.then((cached) => {
+      if (cached === file && h5MatrixCache.get(url) === entry) {
+        h5MatrixCache.delete(url)
+      }
+    })
+  }
+
+  file.close()
 }
 
 export async function gexFromFeatureBarcodeMatrixH5LazyRangeWorker<
@@ -1603,8 +1626,10 @@ async function loadH5MatrixUncached(
 
   throwIfAborted(options.signal)
 
-  // Fetched in the worker: joining a 433 MB body into one buffer held the main
-  // thread for about 250 ms (Xenium demo, 2026-11-13).
+  // Read by range in the worker: the barcodes, indptr and the requested cells'
+  // chunks, about 20 MB for an ROI of the 433 MB Xenium demo file
+  // (2026-11-15). Hosts without range support send the file whole, which once
+  // held the main thread for about 250 ms when joined there (2026-11-13).
   return openH5WorkerFileFromUrl(url, 'cell_feature_matrix.h5', {
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })

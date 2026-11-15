@@ -79,8 +79,9 @@ export function openH5WorkerFile(
   return openH5WorkerFileFromSource({ kind: 'bytes', bytes }, options)
 }
 
-// The worker fetches the whole file itself; an abort terminates it, which
-// cancels the download. `label` names the file in an HTTP error.
+// The worker reads the file itself, by range when the server allows it, so
+// h5wasm fetches only what is read. An abort during the open terminates the
+// worker, which cancels the download. `label` names the file in an HTTP error.
 export function openH5WorkerFileFromUrl(
   url: string,
   label: string,

@@ -1,5 +1,5 @@
 // An H5 file worker holds one HDF5 file, opened with h5wasm from bytes the main
-// thread downloaded or from a URL it fetches itself. The main thread reads
+// thread downloaded or from a URL it reads itself. The main thread reads
 // datasets by path; values come back as transferred typed arrays or cloned
 // strings.
 
@@ -34,8 +34,9 @@ export interface H5FileOpenRequest {
 
 export type H5FileSource =
   | { readonly kind: 'bytes'; readonly bytes: Uint8Array }
-  // Fetched whole by the worker, so the file never reaches the main thread.
-  // `label` names the file in an HTTP error.
+  // Read by the worker, so the file never reaches the main thread: by range
+  // when the server answers range requests, otherwise whole. `label` names the
+  // file in an HTTP error.
   | { readonly kind: 'url'; readonly url: string; readonly label: string }
 
 export interface H5FileReadRequest {

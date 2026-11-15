@@ -541,8 +541,8 @@ Method:
   selection's comparison comes from the cache; other platforms read it with
   the first selection. The warm-up reads only a Zarr matrix with cell-major
   arrays. On the Xenium demo, whose Zarr matrix has none, ROI genes read
-  `cell_feature_matrix.h5` whole, so the first selection reads both the H5
-  and the reference sample; once the H5 was read, the comparison for a
+  `cell_feature_matrix.h5` (by range), so the first selection reads both the
+  H5 and the reference sample; once the H5 was read, the comparison for a
   37,000-cell box took 91 ms.
 - **Mean per cell** is the sum over the sampled cells divided by their
   number, so cells without the gene count as 0. **% of cells** is the share

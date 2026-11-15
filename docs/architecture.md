@@ -369,14 +369,17 @@ their cards stayed on "Loading".
 | `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
 | `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
 | `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
-| `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One whole downloaded HDF5 file each: H5AD, the Xenium H5 fallback, the standard Visium matrix  |
+| `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One HDF5 file each: H5AD and the standard Visium matrix whole, the Xenium H5 fallback by range |
 | `cellsOverview.worker.ts`        | `readCellsOverviewInWorker`      | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
 | `spatialDataShapes.worker.ts`    | `readSpatialDataShapesInWorker`  | SpatialData `shapes.parquet` files: decode them into transferred shape columns (one per read)  |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
-Visium) or fetches the file itself (the Xenium H5 fallback), writes them into
-its own h5wasm file system, and answers reads by path; the Xenium H5
-fallback's cell rows are read inside it. An H5AD file's worker stays open for reads after
+Visium), writes them into its own h5wasm file system, and answers reads by
+path. The Xenium H5 fallback it reads itself: the file sits in h5wasm's file
+system as a range-read file (`h5RangeFile.ts`) whose blocks come from
+synchronous range requests with read-ahead (`rangeBlockCache.ts`), so HDF5
+fetches only what it reads, and its cell rows are read inside the worker. A
+host that ignores Range, or hides the file's size, sends the file whole. An H5AD file's worker stays open for reads after
 load (embeddings, tissue images) and ends when the dataset is garbage
 collected; the Xenium matrix's stays open for the session, as the file did on
 the main thread; the standard Visium matrix's ends once it is read. Where

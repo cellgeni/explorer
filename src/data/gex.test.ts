@@ -13,6 +13,7 @@ import {
   isGeneFeature,
   selectionToSql,
 } from './gex'
+import { createH5Bytes } from '../test/h5Fixtures'
 import { micrometers } from './coords'
 import type {
   ArrowTableLike,
@@ -377,6 +378,36 @@ describe('GEX helpers', () => {
       })
     } finally {
       globalThis.fetch = originalFetch
+    }
+  })
+
+  it('opens the H5 file again after a failed read, and reuses it after a good one', async () => {
+    const good = await createTinyH5CellFeatureMatrix(['AAAC-1'])
+    const bad = await createH5Bytes((file) => {
+      file.create_group('obs')
+    })
+    const fetcher = vi.fn(
+      async (url: RequestInfo | URL) =>
+        new Response(String(url).includes('bad') ? bad.slice() : good.slice()),
+    )
+    vi.stubGlobal('fetch', fetcher)
+
+    try {
+      const goodUrl = 'https://example.test/reuse/good_feature_bc_matrix.h5'
+      await gexFromFeatureBarcodeMatrixH5(goodUrl, ['AAAC-1'])
+      await gexFromFeatureBarcodeMatrixH5(goodUrl, ['AAAC-1'])
+      expect(fetcher).toHaveBeenCalledTimes(1)
+
+      const badUrl = 'https://example.test/reuse/bad_feature_bc_matrix.h5'
+      await expect(gexFromFeatureBarcodeMatrixH5(badUrl, ['AAAC-1'])).rejects.toThrow(
+        'Expected /matrix/barcodes to be an HDF5 dataset.',
+      )
+      await expect(gexFromFeatureBarcodeMatrixH5(badUrl, ['AAAC-1'])).rejects.toThrow(
+        'Expected /matrix/barcodes to be an HDF5 dataset.',
+      )
+      expect(fetcher).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 
