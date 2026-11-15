@@ -36,6 +36,7 @@ import {
   createVisiumHdDetectorMock,
   deferredPromise,
   installAppViewportFixture,
+  offlineFetch,
   openControls,
   pendingPromise,
   visiumHdDetectionFixture,
@@ -125,10 +126,15 @@ describe('App', () => {
     // its address had been typed in.
     useViewerStore.setState({ ...initialViewerState, datasetUrl: DEMO_DATASET_URL })
     vi.mocked(warmDatasetForRoi).mockClear()
+    // Never the network; a loader a test leaves alone fails at once.
+    vi.stubGlobal('fetch', offlineFetch)
   })
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    // Reads a test leaves running carry on past this hook (a clicked cell's
+    // card is still detecting the dataset), so they stay offline too.
+    vi.stubGlobal('fetch', offlineFetch)
   })
 
   it('renders the shell with each control in its place', () => {
@@ -2305,11 +2311,13 @@ describe('App', () => {
         transcriptCount: 8,
       },
     ])
+    const loadGenePanel = vi.fn(async () => ['Actb'])
 
     render(
       <TestApp
         detectSpatialDataset={detectSpatialDataset}
         loadDatasetOverview={loadDatasetOverview}
+        loadGenePanel={loadGenePanel}
       />,
     )
     openControls('open-dataset')

@@ -192,11 +192,17 @@ From a run of `npm test` and the repository:
       and the renders after it. It now waits for the Exact points meter, then
       the density read. The three checks that wait for `loadGeneExpression`
       (CI #128) had the same shape; since 2026-11-14 they wait for the meter,
-      mounted while Transcripts is closed, before they pick a gene. The App
-      tests still read the demo dataset's morphology image from
-      `mp33.cog.sanger.ac.uk` by default, and decode its JPEG 2000 tiles on the
-      test thread, carrying on after the test's App unmounts; locally that
-      held one of those waits for up to 0.9 s.
+      mounted while Transcripts is closed, before they pick a gene. Those
+      waits kept failing in plain `npm test` (seven CI runs on 2026-11-15)
+      because work from earlier tests ran inside them: loaders a test left
+      alone read the demo dataset from `mp33.cog.sanger.ac.uk`, carried on
+      after the test's App unmounted, and decoded on the test thread. First
+      the morphology tiles (JPEG 2000, up to 0.9 s locally; the harness stubs
+      that loader since PR #109), then the cell feature matrix's cell-ID
+      index (about 1 s locally, in a random test each run). Since 2026-11-15
+      `fetch` fails every request in `App.test.tsx`, between tests too
+      (`offlineFetch` in `src/test/appTestHarness.ts`), and the longest stall
+      in a full run is the tests' own 0.25 s of queries.
 - [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
       Done 2026-11-12; see [Closed Open Items](#closed-open-items).

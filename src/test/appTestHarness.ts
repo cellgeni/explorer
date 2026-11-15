@@ -239,6 +239,20 @@ function closeButton(button: HTMLElement): void {
   if (isExpanded(button)) fireEvent.click(button)
 }
 
+// App tests' fetch: every request fails as one to an unreachable host does,
+// so a test that needs a file stubs its loader. With the real fetch, loaders
+// a test left alone read the demo dataset from S3 and finished tests later:
+// indexing the cell feature matrix's 1.4 million cell IDs held the test
+// thread for about 1 s, inside another test's 1 s wait.
+export function offlineFetch(input: RequestInfo | URL): Promise<Response> {
+  const url =
+    typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+
+  return Promise.reject(
+    new TypeError('fetch failed', { cause: new Error(`App tests are offline: ${url}`) }),
+  )
+}
+
 export function pendingPromise<T>(): Promise<T> {
   return new Promise<T>(() => {})
 }
