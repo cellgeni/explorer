@@ -20,6 +20,7 @@ export {
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
+  CogIcon,
   CollapseIcon,
   ExpandIcon,
   EyeIcon,
