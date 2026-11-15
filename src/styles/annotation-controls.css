@@ -9,16 +9,10 @@
   list-style: none;
 }
 
-.annotation-list.is-virtualized,
-.metadata-track-list.is-virtualized {
-  display: block;
-  box-sizing: border-box;
-  overflow-y: auto;
-}
-
-.annotation-list.is-virtualized li,
-.metadata-track-list.is-virtualized li {
-  margin-bottom: 3px;
+/* Every metadata track is listed; the layer panel scrolls. */
+.metadata-track-list {
+  max-height: none;
+  overflow: visible;
 }
 
 .annotation-url-import {
@@ -59,6 +53,9 @@
 
 .metadata-track-list li {
   grid-template-columns: minmax(0, 1fr) auto 22px;
+  /* Rows out of view skip layout and paint. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 30px;
 }
 
 .annotation-color-picker {

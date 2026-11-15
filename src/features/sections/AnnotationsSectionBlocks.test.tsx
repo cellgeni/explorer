@@ -4,7 +4,7 @@ import { asCellId } from '../../data/cellid'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { testAnnotationsSectionModel } from '../../test/sectionModels'
 import type { AnnotationSetsModel } from './annotationsSectionModel'
-import { AnnotationLabelLists } from './AnnotationsSectionBlocks'
+import { AnnotationLabelLists, MetadataTracksPanel } from './AnnotationsSectionBlocks'
 
 // 30 classes of one set, the largest first.
 const ANNOTATIONS: readonly Annotation[] = Array.from({ length: 30 }, (_, index) => ({
@@ -125,5 +125,29 @@ describe('AnnotationLabelLists', () => {
       false,
     )
     expect(sets.onManyVisibilityChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('MetadataTracksPanel', () => {
+  it('lists every track, past the old 9-row window', () => {
+    const tracks = Array.from({ length: 40 }, (_, index) => ({
+      id: `h5ad:track-${index}`,
+      label: `Track ${index}`,
+      values: null,
+      cellCount: 100,
+      min: 0,
+      max: index,
+    }))
+    const { metadataTracks } = testAnnotationsSectionModel({ metadataTracks: { tracks } })
+    render(<MetadataTracksPanel metadataTracks={metadataTracks} />)
+    const list = screen.getByRole('list', { name: 'Loaded metadata tracks' })
+
+    expect(within(list).getAllByRole('listitem')).toHaveLength(40)
+    expect(within(list).getByText('Track 39')).toBeInTheDocument()
+    // No inline sizing: the list is as tall as its rows.
+    expect(list).not.toHaveAttribute('style')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove Track 39' }))
+    expect(metadataTracks.onRemove).toHaveBeenCalledWith('h5ad:track-39')
   })
 })

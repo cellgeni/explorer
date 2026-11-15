@@ -333,7 +333,8 @@ Loaded state:
   cells, previews and the legend go back to the default colouring; with
   every class unchecked, all cells fade. Visium spots hidden off the tissue
   are not counted, here or in the legend.
-- **Metadata tracks**: per track label, cell count, range, and `x`.
+- **Metadata tracks**: every track, with its label, cell count, range, and
+  `x` (the panel scrolls, not the list).
 
 **Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).
 
