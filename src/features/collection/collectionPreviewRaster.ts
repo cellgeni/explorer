@@ -7,7 +7,8 @@ import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 // scale, or the cells of the shown classes in their class colours. A pixel
 // shared by several cells takes the highest score, so a few expressing cells
 // stay visible among many that do not; a cell of a shown class covers the
-// grey of hidden ones. Data y grows downwards, as in the main view.
+// grey of hidden ones, which is dimmer, as hidden classes fade in the main
+// view. Data y grows downwards, as in the main view.
 
 export type PreviewOverlay =
   | { readonly kind: 'scores'; readonly scores: PreviewScores }
@@ -33,6 +34,8 @@ export interface PreviewRasterOptions {
 // The same grey as unscored cells in the main view, opaque enough to read
 // against the canvas at this size.
 const TISSUE_RGBA = [92, 88, 76, 200] as const
+// Cells in no shown class, a faint outline of the tissue.
+const FADED_TISSUE_RGBA = [92, 88, 76, 72] as const
 
 export function rasterizePreview(
   cells: PreviewCells,
@@ -75,8 +78,10 @@ export function rasterizePreview(
     }
   }
 
+  const tissue = overlay?.kind === 'classes' ? FADED_TISSUE_RGBA : TISSUE_RGBA
+
   forEachPixel(cells.positions, (pixel) => {
-    pixels.set(TISSUE_RGBA, pixel * 4)
+    pixels.set(tissue, pixel * 4)
   })
 
   if (overlay?.kind === 'classes') {
