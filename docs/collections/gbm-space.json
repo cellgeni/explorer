@@ -1,0 +1,507 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-collection.v1.json",
+  "version": 1,
+  "name": "Glioblastoma Visium atlas (GBM-space)",
+  "description": "Ninety-seven Visium sections from twelve glioblastoma patients, several regions per tumour, and the snRNA-seq atlas of about one million nuclei they are mapped with, as published by the Bayraktar group on WebAtlas. Patient AT15's nine sections are Visium CytAssist 11 mm (about 11,000 spots and an 18,202-gene probe panel), so their counts run about ten times higher than the other sections'. Raw data: ArrayExpress E-MTAB-17164 (Visium) and E-MTAB-17183 (Multiome).",
+  "source": {
+    "repository": "WebAtlas (gbmspace.org)",
+    "accession": "GBM",
+    "url": "https://www.gbmspace.org/webatlas2/GBM"
+  },
+  "root": "https://gbmspace.cog.sanger.ac.uk/",
+  "datasets": [
+    {
+      "dataset": "GBM-AT3-BRA5-FO-1_1-anndata.zarr",
+      "name": "AT3-BRA5-FO-1_1",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-1_2-anndata.zarr",
+      "name": "AT3-BRA5-FO-1_2",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-2_1-anndata.zarr",
+      "name": "AT3-BRA5-FO-2_1",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-2_2-anndata.zarr",
+      "name": "AT3-BRA5-FO-2_2",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-3_1-anndata.zarr",
+      "name": "AT3-BRA5-FO-3_1",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-3_2-anndata.zarr",
+      "name": "AT3-BRA5-FO-3_2",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-4_1-anndata.zarr",
+      "name": "AT3-BRA5-FO-4_1",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT3-BRA5-FO-4_2-anndata.zarr",
+      "name": "AT3-BRA5-FO-4_2",
+      "group": "Patient AT3"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-1_1-anndata.zarr",
+      "name": "AT4-BRA5-FO-1_1",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-1_2-anndata.zarr",
+      "name": "AT4-BRA5-FO-1_2",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-2_1-anndata.zarr",
+      "name": "AT4-BRA5-FO-2_1",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-2_2-anndata.zarr",
+      "name": "AT4-BRA5-FO-2_2",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-3_1-anndata.zarr",
+      "name": "AT4-BRA5-FO-3_1",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-3_2-anndata.zarr",
+      "name": "AT4-BRA5-FO-3_2",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-4_1-anndata.zarr",
+      "name": "AT4-BRA5-FO-4_1",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT4-BRA5-FO-4_2-anndata.zarr",
+      "name": "AT4-BRA5-FO-4_2",
+      "group": "Patient AT4"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-1_1-anndata.zarr",
+      "name": "AT5-BRA-5-FO-1_1",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-1_2-anndata.zarr",
+      "name": "AT5-BRA-5-FO-1_2",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-2_1-anndata.zarr",
+      "name": "AT5-BRA-5-FO-2_1",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-2_2-anndata.zarr",
+      "name": "AT5-BRA-5-FO-2_2",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-3_1-anndata.zarr",
+      "name": "AT5-BRA-5-FO-3_1",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-3_2-anndata.zarr",
+      "name": "AT5-BRA-5-FO-3_2",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-4_1-anndata.zarr",
+      "name": "AT5-BRA-5-FO-4_1",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT5-BRA-5-FO-4_2-anndata.zarr",
+      "name": "AT5-BRA-5-FO-4_2",
+      "group": "Patient AT5"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-1_1-anndata.zarr",
+      "name": "AT6-BRA-3-FO-1_1",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-1_2-anndata.zarr",
+      "name": "AT6-BRA-3-FO-1_2",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-2_1-anndata.zarr",
+      "name": "AT6-BRA-3-FO-2_1",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-2_2-anndata.zarr",
+      "name": "AT6-BRA-3-FO-2_2",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-3_1-anndata.zarr",
+      "name": "AT6-BRA-3-FO-3_1",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-3_2-anndata.zarr",
+      "name": "AT6-BRA-3-FO-3_2",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-4_1-anndata.zarr",
+      "name": "AT6-BRA-3-FO-4_1",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT6-BRA-3-FO-4_2-anndata.zarr",
+      "name": "AT6-BRA-3-FO-4_2",
+      "group": "Patient AT6"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-1_1-anndata.zarr",
+      "name": "AT7-BRA-3-FO-1_1",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-1_2-anndata.zarr",
+      "name": "AT7-BRA-3-FO-1_2",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-2_1-anndata.zarr",
+      "name": "AT7-BRA-3-FO-2_1",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-2_2-anndata.zarr",
+      "name": "AT7-BRA-3-FO-2_2",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-2_3-anndata.zarr",
+      "name": "AT7-BRA-3-FO-2_3",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-2_4-anndata.zarr",
+      "name": "AT7-BRA-3-FO-2_4",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-3_1-anndata.zarr",
+      "name": "AT7-BRA-3-FO-3_1",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-3_2-anndata.zarr",
+      "name": "AT7-BRA-3-FO-3_2",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-4_1-anndata.zarr",
+      "name": "AT7-BRA-3-FO-4_1",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT7-BRA-3-FO-4_2-anndata.zarr",
+      "name": "AT7-BRA-3-FO-4_2",
+      "group": "Patient AT7"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-1_1-anndata.zarr",
+      "name": "AT9-BRA-4-FO-1_1",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-1_2-anndata.zarr",
+      "name": "AT9-BRA-4-FO-1_2",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-2_1-anndata.zarr",
+      "name": "AT9-BRA-4-FO-2_1",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-2_2-anndata.zarr",
+      "name": "AT9-BRA-4-FO-2_2",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-3_1-anndata.zarr",
+      "name": "AT9-BRA-4-FO-3_1",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-3_2-anndata.zarr",
+      "name": "AT9-BRA-4-FO-3_2",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-4_1-anndata.zarr",
+      "name": "AT9-BRA-4-FO-4_1",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT9-BRA-4-FO-4_2-anndata.zarr",
+      "name": "AT9-BRA-4-FO-4_2",
+      "group": "Patient AT9"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-1_1-anndata.zarr",
+      "name": "AT10-BRA-5-FO-1_1",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-1_2-anndata.zarr",
+      "name": "AT10-BRA-5-FO-1_2",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-2_1-anndata.zarr",
+      "name": "AT10-BRA-5-FO-2_1",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-2_2-anndata.zarr",
+      "name": "AT10-BRA-5-FO-2_2",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-3_1-anndata.zarr",
+      "name": "AT10-BRA-5-FO-3_1",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-3_2-anndata.zarr",
+      "name": "AT10-BRA-5-FO-3_2",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-4_1-anndata.zarr",
+      "name": "AT10-BRA-5-FO-4_1",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT10-BRA-5-FO-4_2-anndata.zarr",
+      "name": "AT10-BRA-5-FO-4_2",
+      "group": "Patient AT10"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-1_1-anndata.zarr",
+      "name": "AT11-BRA-6-FO-1_1",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-1_2-anndata.zarr",
+      "name": "AT11-BRA-6-FO-1_2",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-2_1-anndata.zarr",
+      "name": "AT11-BRA-6-FO-2_1",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-2_2-anndata.zarr",
+      "name": "AT11-BRA-6-FO-2_2",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-3_1-anndata.zarr",
+      "name": "AT11-BRA-6-FO-3_1",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-3_2-anndata.zarr",
+      "name": "AT11-BRA-6-FO-3_2",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-4_1-anndata.zarr",
+      "name": "AT11-BRA-6-FO-4_1",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-4_2-anndata.zarr",
+      "name": "AT11-BRA-6-FO-4_2",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-4_3-anndata.zarr",
+      "name": "AT11-BRA-6-FO-4_3",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT11-BRA-6-FO-4_4-anndata.zarr",
+      "name": "AT11-BRA-6-FO-4_4",
+      "group": "Patient AT11"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-1_1-anndata.zarr",
+      "name": "AT12-BRA-4-FO-1_1",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-1_2-anndata.zarr",
+      "name": "AT12-BRA-4-FO-1_2",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-2_1-anndata.zarr",
+      "name": "AT12-BRA-4-FO-2_1",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-2_2-anndata.zarr",
+      "name": "AT12-BRA-4-FO-2_2",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-3_1-anndata.zarr",
+      "name": "AT12-BRA-4-FO-3_1",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-3_2-anndata.zarr",
+      "name": "AT12-BRA-4-FO-3_2",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-4_1-anndata.zarr",
+      "name": "AT12-BRA-4-FO-4_1",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT12-BRA-4-FO-4_2-anndata.zarr",
+      "name": "AT12-BRA-4-FO-4_2",
+      "group": "Patient AT12"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-1_1-anndata.zarr",
+      "name": "AT13-BRA-3-FO-1_1",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-1_2-anndata.zarr",
+      "name": "AT13-BRA-3-FO-1_2",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-2_1-anndata.zarr",
+      "name": "AT13-BRA-3-FO-2_1",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-2_2-anndata.zarr",
+      "name": "AT13-BRA-3-FO-2_2",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-3_1-anndata.zarr",
+      "name": "AT13-BRA-3-FO-3_1",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-3_2-anndata.zarr",
+      "name": "AT13-BRA-3-FO-3_2",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-4_1-anndata.zarr",
+      "name": "AT13-BRA-3-FO-4_1",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT13-BRA-3-FO-4_2-anndata.zarr",
+      "name": "AT13-BRA-3-FO-4_2",
+      "group": "Patient AT13"
+    },
+    {
+      "dataset": "GBM-AT14-BRA-4-FO-2_1-anndata.zarr",
+      "name": "AT14-BRA-4-FO-2_1",
+      "group": "Patient AT14"
+    },
+    {
+      "dataset": "GBM-AT14-BRA-4-FO-2_2-anndata.zarr",
+      "name": "AT14-BRA-4-FO-2_2",
+      "group": "Patient AT14"
+    },
+    {
+      "dataset": "GBM-AT14-BRA-4-FO-4_1-anndata.zarr",
+      "name": "AT14-BRA-4-FO-4_1",
+      "group": "Patient AT14"
+    },
+    {
+      "dataset": "GBM-AT14-BRA-4-FO-4_2-anndata.zarr",
+      "name": "AT14-BRA-4-FO-4_2",
+      "group": "Patient AT14"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-A2-S21-anndata.zarr",
+      "name": "AT15-BRA-4-FO-A2-S21",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-B2-S25-anndata.zarr",
+      "name": "AT15-BRA-4-FO-B2-S25",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-C2-S27-anndata.zarr",
+      "name": "AT15-BRA-4-FO-C2-S27",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-C3-S33-anndata.zarr",
+      "name": "AT15-BRA-4-FO-C3-S33",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-C3-S34-anndata.zarr",
+      "name": "AT15-BRA-4-FO-C3-S34",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-D3-S36-anndata.zarr",
+      "name": "AT15-BRA-4-FO-D3-S36",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-F1-S18-anndata.zarr",
+      "name": "AT15-BRA-4-FO-F1-S18",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-F1-S31-anndata.zarr",
+      "name": "AT15-BRA-4-FO-F1-S31",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-AT15-BRA-4-FO-G1-S21-anndata.zarr",
+      "name": "AT15-BRA-4-FO-G1-S21",
+      "group": "Patient AT15"
+    },
+    {
+      "dataset": "GBM-snRNAseq-anndata.zarr",
+      "name": "snRNA-seq atlas",
+      "group": "snRNA-seq"
+    }
+  ],
+  "defaults": {
+    "genes": ["GFAP"]
+  }
+}
