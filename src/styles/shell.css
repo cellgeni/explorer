@@ -491,6 +491,24 @@
   outline-offset: 2px;
 }
 
+/* The commit this build came from, when the Pages workflow set one. */
+.shell-help-build {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
+.shell-help-build a {
+  color: inherit;
+  text-underline-offset: 2px;
+}
+
+.shell-help-build a:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .shell-settings {
   min-width: 260px;
 }

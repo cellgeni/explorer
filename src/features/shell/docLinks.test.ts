@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
+  buildCommit,
   DOCS_BASE_URL,
   HELP_LINKS,
   HOST_YOUR_OWN_DATA_URL,
@@ -70,5 +71,21 @@ describe('docLinks', () => {
       HOST_YOUR_OWN_DATA_URL,
       UI_REFERENCE_URL,
     ])
+  })
+})
+
+describe('buildCommit', () => {
+  it('links a full commit SHA and shortens it', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567'
+    expect(buildCommit(sha)).toEqual({
+      short: '0123456',
+      href: `https://github.com/cellgeni/explorer/commit/${sha}`,
+    })
+  })
+
+  it('shows nothing without a SHA or with something else', () => {
+    expect(buildCommit(undefined)).toBeNull()
+    expect(buildCommit('')).toBeNull()
+    expect(buildCommit('main')).toBeNull()
   })
 })

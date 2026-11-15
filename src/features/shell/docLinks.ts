@@ -18,3 +18,19 @@ export const HELP_LINKS: readonly { readonly label: string; readonly href: strin
   { label: 'Hosting your own data', href: HOST_YOUR_OWN_DATA_URL },
   { label: 'Every control (UI reference)', href: UI_REFERENCE_URL },
 ]
+
+export const REPOSITORY_URL = 'https://github.com/cellgeni/explorer'
+
+export interface BuildCommit {
+  readonly short: string
+  readonly href: string
+}
+
+// The commit this build came from, shown at the foot of Help. The Pages
+// workflow sets VITE_COMMIT_SHA; development and local builds have none.
+export function buildCommit(
+  sha: string | undefined = import.meta.env.VITE_COMMIT_SHA,
+): BuildCommit | null {
+  if (sha === undefined || !/^[0-9a-f]{40}$/i.test(sha)) return null
+  return { short: sha.slice(0, 7), href: `${REPOSITORY_URL}/commit/${sha}` }
+}
