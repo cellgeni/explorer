@@ -30,6 +30,7 @@ describe('shareableState', () => {
       },
       activeTab: 'genes',
       geneExpressionColorScale: 'plasma',
+      geneExpressionScaleRange: ',12.5',
       geneExpressionScoreMode: 'sum',
       geneExpressionDetailMode: 'auto',
       observationColorMode: 'transcript-count',
@@ -76,6 +77,7 @@ describe('shareableState', () => {
     expect(state.roiSelection?.kind).toBe('box')
     expect(state.activeTab).toBe('genes')
     expect(state.geneExpressionColorScale).toBe('plasma')
+    expect(state.geneExpressionScaleRange).toBe(',12.5')
     expect(state.cellMetadataTrackId).toBe('h5ad:n-genes')
     expect(state.coordinateUnit).toBe('px')
     expect(state.measurementUnit).toBe('um')

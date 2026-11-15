@@ -1,4 +1,7 @@
-import { geneExpressionColor } from '../../rendering/deckLayerColors'
+import {
+  geneExpressionColor,
+  geneExpressionIntensity,
+} from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 
@@ -27,7 +30,9 @@ export interface PreviewRasterOptions {
   readonly pointSize: number
   readonly padding: number
   readonly colorScale: GeneExpressionColorScale
-  // The score drawn at full colour; scores share it across previews.
+  // The scores drawn at the bottom and top of the scale, shared across
+  // previews.
+  readonly scaleMin: number
   readonly scaleMax: number
 }
 
@@ -114,7 +119,7 @@ export function rasterizePreview(
     const score = best[pixel] ?? 0
     if (score <= 0) continue
 
-    const intensity = Math.sqrt(Math.min(score / options.scaleMax, 1))
+    const intensity = geneExpressionIntensity(score, options.scaleMin, options.scaleMax)
     const color = geneExpressionColor(options.colorScale, intensity)
     pixels[pixel * 4] = color[0] ?? 0
     pixels[pixel * 4 + 1] = color[1] ?? 0

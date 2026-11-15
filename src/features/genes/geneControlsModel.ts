@@ -256,12 +256,13 @@ export function parseGeneExpressionDetailMode(
 }
 
 export function formatGeneScaleValue(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) {
+  if (!Number.isFinite(value) || value === 0) {
     return '0'
   }
 
+  // Negative only for a range set below zero (z-scores).
   return value.toLocaleString(undefined, {
-    maximumFractionDigits: value < 10 ? 2 : 1,
+    maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1,
   })
 }
 

@@ -18,6 +18,11 @@ import type {
 } from '../../rendering/deckLayerTypes'
 import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
+import {
+  AUTO_GENE_SCALE_RANGE,
+  geneScaleBounds,
+  type GeneScaleRange,
+} from '../genes/geneScaleRange'
 import { collectionEntryLabel, type CollectionState } from './collectionModel'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
@@ -38,6 +43,8 @@ export interface CollectionBarPreviews {
   readonly genes: readonly string[]
   readonly scoreMode: GeneExpressionScoreMode
   readonly colorScale: GeneExpressionColorScale
+  // The Gene scale's range; Auto ends use the highest score among previews.
+  readonly scaleRange?: GeneScaleRange
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotations: CollectionBarAnnotations | null
   // While the main view loads a dataset, previews wait.
@@ -97,7 +104,8 @@ export function CollectionBar({
     paused: previews?.paused ?? false,
   })
   const groupsRef = useRef<HTMLDivElement>(null)
-  const scaleMax = store?.scaleMax() ?? 0
+  const scaleRange = previews?.scaleRange ?? AUTO_GENE_SCALE_RANGE
+  const scaleBounds = geneScaleBounds(scaleRange, store?.scaleMax() ?? 0)
   const annotations = previews?.annotations ?? null
   const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
@@ -205,19 +213,27 @@ export function CollectionBar({
         {previewsShown && previews !== undefined && genes.length > 0 ? (
           <span
             className="collection-bar-scale"
-            title="Every preview uses this scale, up to the highest score among them"
+            title={
+              scaleRange.max === null
+                ? 'Every preview uses this scale, up to the highest score among them'
+                : 'Every preview uses this scale, the range set in Gene scale'
+            }
           >
             <span className="collection-bar-scale-genes">
               {genes.length === 1 ? genes[0] : `${genes.length.toLocaleString()} genes`}
             </span>
             <span className="collection-bar-scale-range">
-              <span>0</span>
+              <span>{formatGeneScaleValue(scaleBounds.min)}</span>
               <span
                 className="collection-bar-scale-ramp"
                 style={{ background: geneExpressionScaleGradient(previews.colorScale) }}
                 aria-hidden="true"
               />
-              <span>{scaleMax > 0 ? formatGeneScaleValue(scaleMax) : '…'}</span>
+              <span>
+                {scaleBounds.max > scaleBounds.min
+                  ? formatGeneScaleValue(scaleBounds.max)
+                  : '…'}
+              </span>
             </span>
           </span>
         ) : null}
@@ -306,7 +322,8 @@ export function CollectionBar({
                         <CollectionPreview
                           entry={preview ?? null}
                           colorScale={previews.colorScale}
-                          scaleMax={scaleMax}
+                          scaleMin={scaleBounds.min}
+                          scaleMax={scaleBounds.max}
                           annotations={annotations}
                         />
                         <span className="collection-bar-dataset-name">{label}</span>
@@ -335,11 +352,13 @@ export function CollectionBar({
 function CollectionPreview({
   entry,
   colorScale,
+  scaleMin,
   scaleMax,
   annotations,
 }: {
   readonly entry: PreviewEntry | null
   readonly colorScale: GeneExpressionColorScale
+  readonly scaleMin: number
   readonly scaleMax: number
   readonly annotations: CollectionBarAnnotations | null
 }) {
@@ -383,10 +402,11 @@ function CollectionPreview({
       pointSize: pixelRatio,
       padding: Math.round(3 * pixelRatio),
       colorScale,
+      scaleMin,
       scaleMax,
     })
     context.putImageData(new ImageData(pixels, width, height), 0, 0)
-  }, [cells, colorScale, overlay, scaleMax, size])
+  }, [cells, colorScale, overlay, scaleMax, scaleMin, size])
 
   const status =
     entry === null

@@ -152,6 +152,11 @@ import {
   IDLE_MERSCOPE_IMAGE_STATE,
   type MerscopeImageControlState,
 } from '../dataset/merscopeImageModel'
+import {
+  AUTO_GENE_SCALE_RANGE,
+  parseGeneScaleRange,
+  type GeneScaleRange,
+} from '../genes/geneScaleRange'
 
 const NO_MANIFEST_DEFAULTS: ShareableState = {}
 export interface UseAppDomainStateOptions {
@@ -460,6 +465,12 @@ export function useAppDomainState({
         parseGeneExpressionColorScale(initialShareableState.geneExpressionColorScale) ??
         DEFAULT_SHAREABLE_STATE.geneExpressionColorScale,
     )
+  const [geneExpressionScaleRange, setGeneExpressionScaleRange] =
+    useState<GeneScaleRange>(
+      () =>
+        parseGeneScaleRange(initialShareableState.geneExpressionScaleRange) ??
+        AUTO_GENE_SCALE_RANGE,
+    )
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
     useState<GeneExpressionScoreMode>(
       () =>
@@ -580,6 +591,7 @@ export function useAppDomainState({
       geneExpressionColorScale,
       geneExpressionDetailMode,
       geneExpressionScaleDomain,
+      geneExpressionScaleRange,
       geneExpressionScoreMode,
       geneExpressionState,
       genePanelState,
@@ -588,6 +600,7 @@ export function useAppDomainState({
       setGeneExpressionColorScale,
       setGeneExpressionDetailMode,
       setGeneExpressionScaleDomain,
+      setGeneExpressionScaleRange,
       setGeneExpressionScoreMode,
       setGeneExpressionState,
       setGenePanelState,

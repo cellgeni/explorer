@@ -65,6 +65,7 @@ interface ShareableLayerHashOptions {
 
 interface ShareableGeneHashOptions {
   readonly geneExpressionColorScale: string
+  readonly geneExpressionScaleRange: string | undefined
   readonly geneExpressionDetailMode: string
   readonly geneExpressionScoreMode: string
   readonly selectedGenes: readonly string[]
@@ -177,6 +178,7 @@ export function useShareableUrlHash({
   } = layers
   const {
     geneExpressionColorScale,
+    geneExpressionScaleRange,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
     selectedGenes,
@@ -241,6 +243,7 @@ export function useShareableUrlHash({
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
           geneExpressionColorScale,
+          ...(geneExpressionScaleRange === undefined ? {} : { geneExpressionScaleRange }),
           geneExpressionScoreMode,
           geneExpressionDetailMode,
           observationColorMode,
@@ -327,6 +330,7 @@ export function useShareableUrlHash({
     datasetUrl,
     geneExpressionColorScale,
     geneExpressionDetailMode,
+    geneExpressionScaleRange,
     geneExpressionScoreMode,
     imageOpacity,
     cellFillOpacity,

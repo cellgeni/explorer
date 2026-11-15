@@ -214,24 +214,55 @@
   border-radius: 6px;
 }
 
+/* Auto under the select; the ends as fields under the gradient. */
+.gene-scale-auto.ui-button {
+  justify-self: start;
+  min-height: 24px;
+  padding: 0 8px;
+  font-size: var(--font-caption);
+}
+
+.gene-scale-auto[aria-pressed='true'] {
+  color: var(--accent);
+}
+
 .gene-scale-values {
   display: grid;
-  grid-column: 2;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: minmax(0, 64px) minmax(0, 1fr) minmax(0, 64px);
   gap: 5px;
-  margin-top: -4px;
+  align-items: center;
   color: var(--text-2);
   font-size: var(--font-caption);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 
-.gene-scale-values span:nth-child(2) {
+.gene-scale-values > span {
   text-align: center;
 }
 
-.gene-scale-values span:last-child {
+.gene-scale-end.ui-number-field input {
+  min-height: 24px;
+  padding: 2px 6px;
+  color: var(--text-2);
+  font-size: var(--font-caption);
+  font-weight: 700;
+  -moz-appearance: textfield;
+}
+
+.gene-scale-end:last-child input {
   text-align: right;
+}
+
+.gene-scale-end.is-set input {
+  border-color: var(--accent);
+  color: var(--text-1);
+}
+
+.gene-scale-end input::-webkit-inner-spin-button,
+.gene-scale-end input::-webkit-outer-spin-button {
+  margin: 0;
+  appearance: none;
 }
 
 .transcript-density-scale-control {

@@ -47,6 +47,11 @@ import {
 import { readTimestamp } from './appRuntimeModel'
 import type { AnnotationState } from '../annotations/annotationModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
+import {
+  AUTO_GENE_SCALE_RANGE,
+  geneScaleBounds,
+  type GeneScaleRange,
+} from '../genes/geneScaleRange'
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map()
@@ -77,6 +82,8 @@ interface ViewerLayerGeneExpressionOptions {
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionScaleDomain: GeneExpressionScaleDomain
   readonly geneExpressionColorScale: GeneExpressionColorScale
+  // The Gene scale's range; Auto when left out.
+  readonly geneExpressionScaleRange?: GeneScaleRange
 }
 
 interface ViewerLayerTranscriptOptions {
@@ -134,6 +141,7 @@ export function useViewerLayerData({
     geneExpressionColorScale,
     geneExpressionScaleDatasetUrl,
     geneExpressionScaleDomain,
+    geneExpressionScaleRange = AUTO_GENE_SCALE_RANGE,
     geneExpressionScoreMode,
     selectedGenes,
   } = geneExpression
@@ -215,9 +223,15 @@ export function useViewerLayerData({
     geneExpressionScaleDomain.key === geneExpressionScaleKey
       ? geneExpressionScaleDomain.max
       : 0
-  const geneExpressionScaleMax = Math.max(
+  // Auto keeps the highest score seen for these genes, so the scale does not
+  // shrink as the view moves.
+  const geneExpressionAutoScaleMax = Math.max(
     storedGeneExpressionScaleMax,
     currentGeneExpressionScaleMax,
+  )
+  const { min: geneExpressionScaleMin, max: geneExpressionScaleMax } = geneScaleBounds(
+    geneExpressionScaleRange,
+    geneExpressionAutoScaleMax,
   )
   const geneExpressionLayerData = useMemo(() => {
     if (geneExpressionBatch === null) {
@@ -230,7 +244,7 @@ export function useViewerLayerData({
       geneExpressionBatch.genes,
       geneExpressionColorScale,
       geneExpressionScoreMode,
-      { scaleMax: geneExpressionScaleMax },
+      { scaleMin: geneExpressionScaleMin, scaleMax: geneExpressionScaleMax },
     )
 
     return { elements, durationMs: Math.max(0, readTimestamp() - startedAt) }
@@ -238,6 +252,7 @@ export function useViewerLayerData({
     geneExpressionBatch,
     geneExpressionColorScale,
     geneExpressionScaleMax,
+    geneExpressionScaleMin,
     geneExpressionScoreMode,
   ])
   const geneExpressionElements = geneExpressionLayerData.elements
@@ -248,12 +263,18 @@ export function useViewerLayerData({
       geneExpressionElements,
       geneExpressionColorScale,
       {
+        scaleMin: geneExpressionScaleMin,
         scaleMax: geneExpressionScaleMax,
       },
     )
 
     return { elements, durationMs: Math.max(0, readTimestamp() - startedAt) }
-  }, [geneExpressionElements, geneExpressionColorScale, geneExpressionScaleMax])
+  }, [
+    geneExpressionElements,
+    geneExpressionColorScale,
+    geneExpressionScaleMax,
+    geneExpressionScaleMin,
+  ])
   const styledGeneExpressionElements = styledGeneExpressionLayerData.elements
   const geneExpressionRestyleDurationMs = styledGeneExpressionLayerData.durationMs
   const transcriptLayerPoints = useMemo(
@@ -349,8 +370,10 @@ export function useViewerLayerData({
     nucleusBoundaryLayerData,
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
+    geneExpressionAutoScaleMax,
     geneExpressionScaleKey,
     geneExpressionScaleMax,
+    geneExpressionScaleMin,
     morphologyCanvasChannels,
     morphologyMicrometersPerPixel,
     overviewExtent,

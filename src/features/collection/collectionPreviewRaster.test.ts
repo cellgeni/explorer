@@ -9,6 +9,7 @@ const OPTIONS: PreviewRasterOptions = {
   pointSize: 1,
   padding: 0,
   colorScale: 'plasma',
+  scaleMin: 0,
   scaleMax: 4,
 }
 
@@ -75,6 +76,22 @@ describe('rasterizePreview', () => {
     const half = geneExpressionColor('plasma', 0.5)
     // sqrt(1 / 4): the same response as the main view.
     expect(pixel(quarter, 0, 0).slice(0, 3)).toEqual([half[0], half[1], half[2]])
+
+    // A set range: 2 to 6, so 3 is a quarter of the way up and 7 is the top.
+    const ranged = rasterizePreview(
+      square,
+      {
+        kind: 'scores',
+        scores: {
+          positions: new Float32Array([0, 0, 9, 9]),
+          scores: new Float32Array([3, 7]),
+          maxScore: 7,
+        },
+      },
+      { ...OPTIONS, scaleMin: 2, scaleMax: 6 },
+    )
+    expect(pixel(ranged, 0, 0).slice(0, 3)).toEqual([half[0], half[1], half[2]])
+    expect(pixel(ranged, 9, 9).slice(0, 3)).toEqual([full[0], full[1], full[2]])
   })
 
   it('colours the cells of shown classes, fading hidden ones and the rest', () => {

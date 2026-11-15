@@ -172,6 +172,22 @@ export function geneExpressionColor(
   return interpolateColorStops(lowStop, middleStop, highStop, intensity)
 }
 
+// Position of a gene score on the Gene scale, 0 to 1: square root of its share
+// of the range, so low counts stay visible. Scores outside clamp to the ends.
+export function geneExpressionIntensity(
+  score: number,
+  scaleMin: number,
+  scaleMax: number,
+): number {
+  const span = scaleMax - scaleMin
+
+  if (!(span > 0)) {
+    return score > scaleMin ? 1 : 0
+  }
+
+  return Math.sqrt(Math.min(1, Math.max(0, (score - scaleMin) / span)))
+}
+
 export function transcriptDensityColor(
   colorScale: TranscriptDensityColorScale,
   intensity: number,
