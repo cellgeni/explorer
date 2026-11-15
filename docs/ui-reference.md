@@ -111,6 +111,12 @@ the canvas, a `nav` named "Collection":
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
   failed" with the reason as its tooltip.
+- `Expand` (`aria-expanded`) lays the previews out as a grid over the
+  canvas, with the heading and buttons along the top; the layer panel stays
+  beside it. Each group is a box with its name, boxes sit side by side where
+  they fit, and the grid scrolls down. Previews there are 150 px wide and
+  16:10, drawn at their size. Choosing a dataset, `Collapse` or Escape
+  returns to the bar. Shown only with previews on.
 - `Previews` (pressed by default) turns the previews off, leaving the
   labels.
 - `Close Collection` (×) removes the bar and `collection=` from the address;
@@ -126,7 +132,7 @@ entry's `name` when the dataset has no manifest name.
 
 Previews are read by `CollectionPreviewStore`
 (`src/features/collection/collectionPreviewStore.ts`): the cards in view and
-240 px beyond, found with an `IntersectionObserver`, four datasets at a
+240 px beyond (sideways in the bar, up and down in the grid), found with an `IntersectionObserver`, four datasets at a
 time, none while the main view loads. `openPreviewSource`
 (`collectionPreviewData.ts`) reads positions, scores and classes with the
 main view's loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.

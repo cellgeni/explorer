@@ -242,6 +242,52 @@ describe('CollectionBar previews', () => {
     )
   })
 
+  it('expands into a grid over the view until a dataset is chosen', async () => {
+    const onSelect = vi.fn()
+    render(
+      <CollectionBar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+        previews={{
+          loaders: previewLoaders(),
+          genes: ['Aqp4'],
+          scoreMode: 'sum',
+          colorScale: 'plasma',
+          annotations: null,
+          paused: false,
+        }}
+      />,
+    )
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    const expand = within(bar).getByRole('button', { name: 'Expand' })
+    expect(expand).toHaveAttribute('aria-expanded', 'false')
+
+    fireEvent.click(expand)
+
+    expect(bar).toHaveClass('is-expanded')
+    const collapse = within(bar).getByRole('button', { name: 'Collapse' })
+    expect(collapse).toHaveAttribute('aria-expanded', 'true')
+    expect(await within(bar).findByText('max 8')).toBeInTheDocument()
+
+    fireEvent.keyDown(collapse, { key: 'Escape' })
+    expect(bar).not.toHaveClass('is-expanded')
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Expand' }))
+    fireEvent.click(within(bar).getByRole('button', { name: 'Sham B' }))
+
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ url: SHAM_B }))
+    expect(bar).not.toHaveClass('is-expanded')
+
+    // Without previews there is no grid.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Expand' }))
+    fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
+    expect(bar).not.toHaveClass('is-expanded')
+    expect(within(bar).queryByRole('button', { name: /^(Expand|Collapse)$/ })).toBe(null)
+  })
+
   it('previews the classes of an annotation set, counting the shown ones', async () => {
     const loaders = previewLoaders()
     renderBar({

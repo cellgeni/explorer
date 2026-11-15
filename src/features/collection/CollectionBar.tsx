@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import {
   collectionEntryFor,
@@ -21,8 +21,10 @@ import { useCollectionPreviews } from './useCollectionPreviews'
 // The preview's size in CSS px.
 export const PREVIEW_WIDTH = 112
 export const PREVIEW_HEIGHT = 64
-// Datasets this far beyond the bar's ends are read ahead of a scroll.
+// Datasets this far beyond the bar's ends, or below and above the grid,
+// are read ahead of a scroll.
 const PREVIEW_READ_AHEAD = '0px 240px'
+const GRID_READ_AHEAD = '240px 0px'
 
 export interface CollectionBarPreviews {
   readonly loaders: CollectionPreviewLoaders
@@ -62,6 +64,7 @@ const NO_GENES: readonly string[] = []
 // The open collection's datasets under the canvas, grouped as the collection
 // groups them, each with a preview of its cells coloured by the selected
 // genes or annotation set. Choosing one opens it in place of the current dataset.
+// Expanded, the previews fill the canvas as a grid, until one is chosen.
 export function CollectionBar({
   state,
   loadedUrl,
@@ -76,7 +79,9 @@ export function CollectionBar({
   const pendingEntry =
     collection === null ? undefined : collectionEntryFor(collection, pendingUrl)
   const [showPreviews, setShowPreviews] = useState(true)
+  const [expandedState, setExpanded] = useState(false)
   const previewsShown = previews !== undefined && showPreviews
+  const expanded = expandedState && previewsShown && collection !== null
   const store = useCollectionPreviews({
     collection: previewsShown ? collection : null,
     loaders: previews?.loaders ?? NO_LOADERS,
@@ -107,7 +112,10 @@ export function CollectionBar({
             store.setVisible(urlOf(entry.target), entry.isIntersecting)
           }
         },
-        { root: container, rootMargin: PREVIEW_READ_AHEAD },
+        {
+          root: container,
+          rootMargin: expanded ? GRID_READ_AHEAD : PREVIEW_READ_AHEAD,
+        },
       )
 
       for (const card of cards) observer.observe(card)
@@ -121,12 +129,24 @@ export function CollectionBar({
     return () => {
       for (const card of cards) store.setVisible(urlOf(card), false)
     }
-  }, [store])
+  }, [expanded, store])
 
   return (
     <nav
-      className={previewsShown ? 'collection-bar has-previews' : 'collection-bar'}
+      className={[
+        'collection-bar',
+        previewsShown ? 'has-previews' : '',
+        expanded ? 'is-expanded' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       aria-label="Collection"
+      onKeyDown={(event) => {
+        if (expanded && event.key === 'Escape') {
+          event.stopPropagation()
+          setExpanded(false)
+        }
+      }}
     >
       <div className="collection-bar-heading">
         <span className="collection-bar-kicker">Collection</span>
@@ -233,6 +253,7 @@ export function CollectionBar({
                     data-preview-url={store === null ? undefined : entry.url}
                     onClick={() => {
                       if (!isLoaded && !isPending) onSelect(entry)
+                      setExpanded(false)
                     }}
                   >
                     {store === null || previews === undefined ? (
@@ -257,6 +278,23 @@ export function CollectionBar({
             </div>
           ))}
         </div>
+      )}
+      {!previewsShown || collection === null ? null : (
+        <Button
+          variant="ghost"
+          className="collection-bar-toggle"
+          title={
+            expanded
+              ? 'Back to the view, with the datasets in a row under it'
+              : 'Show every dataset as a grid over the view'
+          }
+          aria-expanded={expanded}
+          onClick={() => {
+            setExpanded((current) => !current)
+          }}
+        >
+          {expanded ? 'Collapse' : 'Expand'}
+        </Button>
       )}
       {previews === undefined || collection === null ? null : (
         <Button
@@ -297,6 +335,7 @@ function CollectionPreview({
   readonly annotations: CollectionBarAnnotations | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const size = usePreviewSize(canvasRef)
   const cells = entry?.cells ?? null
   const scores = entry?.scores ?? null
   const classes = entry?.classes ?? null
@@ -325,8 +364,8 @@ function CollectionPreview({
     if (context === null) return
 
     const pixelRatio = window.devicePixelRatio || 1
-    const width = Math.round(PREVIEW_WIDTH * pixelRatio)
-    const height = Math.round(PREVIEW_HEIGHT * pixelRatio)
+    const width = Math.round(size.width * pixelRatio)
+    const height = Math.round(size.height * pixelRatio)
     canvas.width = width
     canvas.height = height
     const pixels = rasterizePreview(cells, overlay, {
@@ -338,7 +377,7 @@ function CollectionPreview({
       scaleMax,
     })
     context.putImageData(new ImageData(pixels, width, height), 0, 0)
-  }, [cells, colorScale, overlay, scaleMax])
+  }, [cells, colorScale, overlay, scaleMax, size])
 
   const status =
     entry === null
@@ -360,6 +399,41 @@ function CollectionPreview({
     </span>
   )
 }
+
+// The canvas's size in CSS px, which the bar sets and the grid stretches.
+function usePreviewSize(canvasRef: RefObject<HTMLCanvasElement | null>): PreviewSize {
+  const [size, setSize] = useState<PreviewSize>(DEFAULT_PREVIEW_SIZE)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (canvas === null || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return
+      const width = Math.round(entry.contentRect.width)
+      const height = Math.round(entry.contentRect.height)
+      if (width === 0 || height === 0) return
+      setSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      )
+    })
+    observer.observe(canvas)
+    return () => {
+      observer.disconnect()
+    }
+  }, [canvasRef])
+
+  return size
+}
+
+interface PreviewSize {
+  readonly width: number
+  readonly height: number
+}
+
+const DEFAULT_PREVIEW_SIZE: PreviewSize = { width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }
 
 // The cells of the classes not hidden, of every cell in the dataset.
 function shownClassCellCount(

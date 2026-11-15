@@ -152,8 +152,14 @@ once per dataset and selection, like a gene.
   the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
-- **When.** Only previews in view, and those just beyond the bar's ends, are
-  read, four datasets at a time. None start while the main view loads a
+- **Grid.** `Expand` in the bar lays the previews out as a grid over the
+  view, larger, with groups side by side where they fit, so a collection
+  of about twenty sections fits on one screen. The layer panel stays open
+  beside it, so changing the genes or the annotation set redraws the grid.
+  Choosing a dataset opens it and returns to the bar, as do `Collapse` and
+  Escape.
+- **When.** Only previews in view, and those just beyond the bar's ends or
+  the grid's edges, are read, four datasets at a time. None start while the main view loads a
   dataset. `Previews` in the bar turns them off and lists names only.
 - **No preview.** Image-only and Visium HD datasets show "No cells to
   preview". A plain `.h5ad` over 64 MB shows its size instead: the viewer
