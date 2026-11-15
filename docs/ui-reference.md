@@ -56,8 +56,9 @@ that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
 Until a dataset opens, the canvas shows the start screen
 (`src/features/start/StartScreen.tsx`, 15.3-A), "Open a dataset":
 
-- The `Dataset or image URL` field, `Morphology image` and `Load Dataset`.
-  The field starts empty. The boundary limit is in Settings.
+- The `Dataset or image URL` field, `Morphology image` and `Load Dataset`,
+  with `Browse Store` beside it for a Zarr store address. The field starts
+  empty. The boundary limit is in Settings.
 - "What can I open?", a link to [Loading data](user-guide.md#loading-data)
   in the user guide.
 - **Recent**: the last eight datasets opened in this browser, newest first,
@@ -835,6 +836,7 @@ Examples below it, and shows on the [start screen](#start-screen)
 | `Morphology image` (`Tissue image` for Visium and Visium HD) | Checkbox  | On                                     | Read when `Load Dataset` is pressed; off skips the image                                                                                                                                  |
 | `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                                                   |
 | `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then, or until the load is cancelled |
+| `Browse Store`                                               | Button    |                                        | Only for a Zarr store address (`isZarrStoreUrl`). Opens the [Store structure drawer](#store-structure-drawer) on it without loading it; from the dataset menu, the menu closes            |
 
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,
@@ -845,6 +847,37 @@ open.", with the error's next step and `Dismiss`). Diagnostics lists the full
 error until it is dismissed or another load starts. A Visium library or
 off-tissue change also reloads this way: the controls show the new choice at
 once, and the spots change when the reload is ready.
+
+### Store Structure Drawer
+
+`Browse Store` opens "Store structure" (`StoreStructureDrawer`,
+`src/features/store-structure/`): 560 px wide, on the right over the canvas,
+and not modal, so it can sit beside the info drawer. Esc or `Close Store
+structure` closes it. It keeps what it read while closed: `Browse Store` on
+the same address shows the same tree, and another address reads that store.
+Closing it during a read stops the read. `readZarrStructure`
+(`src/zarr/zarrStructure.ts`) reads the store:
+
+| Source                | Lists                                                                                                                                                                                         |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consolidated metadata | Every group and array (v2 `.zmetadata` or `zmetadata`, v3 `consolidated_metadata`)                                                                                                            |
+| Zip directory         | Every file: metadata comes from the consolidated metadata or the zip's metadata files; chunk files add up to each array's stored size; other files show as files                              |
+| Icechunk snapshot     | Every group and array on `main`                                                                                                                                                               |
+| Walked from the root  | Each group's children from the host's listing (S3 ListObjectsV2 or index pages, `createZarrFolderLister`), or else from its attributes; groups whose children may be missing are `not listed` |
+
+While reading, it says how many nodes it has read (`role="status"`). A
+failure shows the error's title, message and next step (`role="alert"`), as
+"No Zarr store at this address" when no metadata file answers, with `Retry`.
+Once read:
+
+| Part                          | Shows                                                                                                                                                                                                |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary                       | Format (`Zarr v2` / `Zarr v3`), "Listed from", "Written as" (SpatialData, AnnData, OME-NGFF image or plate, bioformats2raw, with versions), contents counts, and for a zip its files and size        |
+| Notes                         | When the walk stopped at 5,000 nodes, and when groups are `not listed`                                                                                                                               |
+| `Filter by name or path`      | Shows matching nodes, their ancestors (opened) and everything under a match (closed). Matches names; with a `/` in it, whole paths. Says how many match                                              |
+| `Expand All` / `Collapse All` | Opens every group / closes all but the root                                                                                                                                                          |
+| Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
+| Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
 
 ### View Options
 

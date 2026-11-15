@@ -31,6 +31,7 @@ export type LoadErrorSource =
   | 'Cell details'
   | 'Cell transcripts'
   | 'Dataset diagnostics'
+  | 'Store structure'
 
 export interface StructuredLoadError {
   readonly source: LoadErrorSource
@@ -108,6 +109,22 @@ export function createStructuredLoadError(
         title: 'File not found',
         message,
         action: 'Check the file path, then reload.',
+      },
+      detail,
+    )
+  }
+
+  // Thrown by Browse Store (src/zarr/zarrStructure.ts) when no metadata file
+  // answers at the address.
+  if (error instanceof Error && error.name === 'ZarrStructureNotFoundError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'not-found',
+        title: 'No Zarr store at this address',
+        message,
+        action:
+          "Check that the address is the store's folder, the one holding zarr.json or .zgroup, and that its files are publicly readable. Buckets that deny listing answer HTTP 403 for missing files.",
       },
       detail,
     )
