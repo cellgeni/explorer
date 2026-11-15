@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import {
   collectionEntryFor,
@@ -10,18 +10,21 @@ import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from '../../rendering/deckLayerTypes'
+import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import { collectionEntryLabel, type CollectionState } from './collectionModel'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
-import { rasterizePreview } from './collectionPreviewRaster'
+import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
 import type { PreviewEntry } from './collectionPreviewStore'
 import { useCollectionPreviews } from './useCollectionPreviews'
 
 // The preview's size in CSS px.
 export const PREVIEW_WIDTH = 112
 export const PREVIEW_HEIGHT = 64
-// Datasets this far beyond the bar's ends are read ahead of a scroll.
+// Datasets this far beyond the bar's ends, or below and above the grid,
+// are read ahead of a scroll.
 const PREVIEW_READ_AHEAD = '0px 240px'
+const GRID_READ_AHEAD = '240px 0px'
 
 export interface CollectionBarPreviews {
   readonly loaders: CollectionPreviewLoaders
@@ -29,8 +32,20 @@ export interface CollectionBarPreviews {
   readonly genes: readonly string[]
   readonly scoreMode: GeneExpressionScoreMode
   readonly colorScale: GeneExpressionColorScale
+  // The annotation set the cells are coloured by, in place of the genes.
+  readonly annotations: CollectionBarAnnotations | null
   // While the main view loads a dataset, previews wait.
   readonly paused: boolean
+}
+
+export interface CollectionBarAnnotations {
+  readonly groupId: string
+  readonly label: string
+  // The main view's class colours. A class it has not coloured yet takes
+  // the colour it will have when its dataset opens.
+  readonly colors: Readonly<Record<string, string>>
+  // Hidden classes are drawn grey, so the shown ones stand out.
+  readonly hiddenIds: ReadonlySet<string>
 }
 
 interface CollectionBarProps {
@@ -48,7 +63,8 @@ const NO_GENES: readonly string[] = []
 
 // The open collection's datasets under the canvas, grouped as the collection
 // groups them, each with a preview of its cells coloured by the selected
-// genes. Choosing one opens it in place of the current dataset.
+// genes or annotation set. Choosing one opens it in place of the current dataset.
+// Expanded, the previews fill the canvas as a grid, until one is chosen.
 export function CollectionBar({
   state,
   loadedUrl,
@@ -63,17 +79,21 @@ export function CollectionBar({
   const pendingEntry =
     collection === null ? undefined : collectionEntryFor(collection, pendingUrl)
   const [showPreviews, setShowPreviews] = useState(true)
+  const [expandedState, setExpanded] = useState(false)
   const previewsShown = previews !== undefined && showPreviews
+  const expanded = expandedState && previewsShown && collection !== null
   const store = useCollectionPreviews({
     collection: previewsShown ? collection : null,
     loaders: previews?.loaders ?? NO_LOADERS,
     genes: previews?.genes ?? NO_GENES,
     scoreMode: previews?.scoreMode ?? 'sum',
+    annotationGroupId: previews?.annotations?.groupId ?? null,
     paused: previews?.paused ?? false,
   })
   const groupsRef = useRef<HTMLDivElement>(null)
   const scaleMax = store?.scaleMax() ?? 0
-  const genes = previews?.genes ?? NO_GENES
+  const annotations = previews?.annotations ?? null
+  const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
   // Only the previews in view, and a little beyond, are read.
   useEffect(() => {
@@ -92,7 +112,10 @@ export function CollectionBar({
             store.setVisible(urlOf(entry.target), entry.isIntersecting)
           }
         },
-        { root: container, rootMargin: PREVIEW_READ_AHEAD },
+        {
+          root: container,
+          rootMargin: expanded ? GRID_READ_AHEAD : PREVIEW_READ_AHEAD,
+        },
       )
 
       for (const card of cards) observer.observe(card)
@@ -106,12 +129,24 @@ export function CollectionBar({
     return () => {
       for (const card of cards) store.setVisible(urlOf(card), false)
     }
-  }, [store])
+  }, [expanded, store])
 
   return (
     <nav
-      className={previewsShown ? 'collection-bar has-previews' : 'collection-bar'}
+      className={[
+        'collection-bar',
+        previewsShown ? 'has-previews' : '',
+        expanded ? 'is-expanded' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       aria-label="Collection"
+      onKeyDown={(event) => {
+        if (expanded && event.key === 'Escape') {
+          event.stopPropagation()
+          setExpanded(false)
+        }
+      }}
     >
       <div className="collection-bar-heading">
         <span className="collection-bar-kicker">Collection</span>
@@ -141,6 +176,19 @@ export function CollectionBar({
               />
               <span>{scaleMax > 0 ? formatGeneScaleValue(scaleMax) : '…'}</span>
             </span>
+          </span>
+        ) : null}
+        {previewsShown && annotations !== null ? (
+          <span
+            className="collection-bar-scale"
+            title="Hidden classes are grey in every preview"
+          >
+            <span className="collection-bar-scale-genes">{annotations.label}</span>
+            {annotations.hiddenIds.size === 0 ? null : (
+              <span className="collection-bar-scale-range">
+                {annotations.hiddenIds.size.toLocaleString()} hidden
+              </span>
+            )}
           </span>
         ) : null}
       </div>
@@ -174,6 +222,22 @@ export function CollectionBar({
                 const isPending = entry === pendingEntry && !isLoaded
                 const preview = store?.entry(entry.url)
                 const maxScore = preview?.scores?.maxScore
+                const shownCells =
+                  annotations === null || annotations.hiddenIds.size === 0
+                    ? undefined
+                    : shownClassCellCount(preview?.classes ?? null, annotations)
+                const stat =
+                  maxScore !== undefined && genes.length > 0
+                    ? {
+                        text: `max ${formatGeneScaleValue(maxScore)}`,
+                        title: `highest score ${formatGeneScaleValue(maxScore)}`,
+                      }
+                    : shownCells !== undefined
+                      ? {
+                          text: cellCountText(shownCells),
+                          title: `${cellCountText(shownCells)} in the shown classes`,
+                        }
+                      : null
 
                 return (
                   <button
@@ -181,9 +245,7 @@ export function CollectionBar({
                     type="button"
                     className="collection-bar-dataset"
                     title={`${isLoaded ? `${label} is open` : `Open ${label}`}${
-                      maxScore === undefined || genes.length === 0
-                        ? ''
-                        : `; highest score ${formatGeneScaleValue(maxScore)}`
+                      stat === null ? '' : `; ${stat.title}`
                     }`}
                     aria-label={label}
                     aria-current={isLoaded ? 'true' : undefined}
@@ -191,6 +253,7 @@ export function CollectionBar({
                     data-preview-url={store === null ? undefined : entry.url}
                     onClick={() => {
                       if (!isLoaded && !isPending) onSelect(entry)
+                      setExpanded(false)
                     }}
                   >
                     {store === null || previews === undefined ? (
@@ -201,12 +264,11 @@ export function CollectionBar({
                           entry={preview ?? null}
                           colorScale={previews.colorScale}
                           scaleMax={scaleMax}
+                          annotations={annotations}
                         />
                         <span className="collection-bar-dataset-name">{label}</span>
-                        {maxScore === undefined || genes.length === 0 ? null : (
-                          <span className="collection-bar-dataset-max">
-                            max {formatGeneScaleValue(maxScore)}
-                          </span>
+                        {stat === null ? null : (
+                          <span className="collection-bar-dataset-max">{stat.text}</span>
                         )}
                       </>
                     )}
@@ -216,6 +278,23 @@ export function CollectionBar({
             </div>
           ))}
         </div>
+      )}
+      {!previewsShown || collection === null ? null : (
+        <Button
+          variant="ghost"
+          className="collection-bar-toggle"
+          title={
+            expanded
+              ? 'Back to the view, with the datasets in a row under it'
+              : 'Show every dataset as a grid over the view'
+          }
+          aria-expanded={expanded}
+          onClick={() => {
+            setExpanded((current) => !current)
+          }}
+        >
+          {expanded ? 'Collapse' : 'Expand'}
+        </Button>
       )}
       {previews === undefined || collection === null ? null : (
         <Button
@@ -248,14 +327,34 @@ function CollectionPreview({
   entry,
   colorScale,
   scaleMax,
+  annotations,
 }: {
   readonly entry: PreviewEntry | null
   readonly colorScale: GeneExpressionColorScale
   readonly scaleMax: number
+  readonly annotations: CollectionBarAnnotations | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const size = usePreviewSize(canvasRef)
   const cells = entry?.cells ?? null
   const scores = entry?.scores ?? null
+  const classes = entry?.classes ?? null
+  const overlay = useMemo((): PreviewOverlay | null => {
+    if (annotations !== null) {
+      if (classes === null) return null
+
+      const colors = colorsForAnnotations(classes.classes, annotations.colors)
+      return {
+        kind: 'classes',
+        classOf: classes.classOf,
+        colors: classes.classes.map(({ id }) =>
+          annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
+        ),
+      }
+    }
+
+    return scores === null ? null : { kind: 'scores', scores }
+  }, [annotations, classes, scores])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -265,11 +364,11 @@ function CollectionPreview({
     if (context === null) return
 
     const pixelRatio = window.devicePixelRatio || 1
-    const width = Math.round(PREVIEW_WIDTH * pixelRatio)
-    const height = Math.round(PREVIEW_HEIGHT * pixelRatio)
+    const width = Math.round(size.width * pixelRatio)
+    const height = Math.round(size.height * pixelRatio)
     canvas.width = width
     canvas.height = height
-    const pixels = rasterizePreview(cells, scores, {
+    const pixels = rasterizePreview(cells, overlay, {
       width,
       height,
       pointSize: pixelRatio,
@@ -278,7 +377,7 @@ function CollectionPreview({
       scaleMax,
     })
     context.putImageData(new ImageData(pixels, width, height), 0, 0)
-  }, [cells, colorScale, scaleMax, scores])
+  }, [cells, colorScale, overlay, scaleMax, size])
 
   const status =
     entry === null
@@ -301,6 +400,59 @@ function CollectionPreview({
   )
 }
 
+// The canvas's size in CSS px, which the bar sets and the grid stretches.
+function usePreviewSize(canvasRef: RefObject<HTMLCanvasElement | null>): PreviewSize {
+  const [size, setSize] = useState<PreviewSize>(DEFAULT_PREVIEW_SIZE)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (canvas === null || typeof ResizeObserver === 'undefined') return
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry === undefined) return
+      const width = Math.round(entry.contentRect.width)
+      const height = Math.round(entry.contentRect.height)
+      if (width === 0 || height === 0) return
+      setSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      )
+    })
+    observer.observe(canvas)
+    return () => {
+      observer.disconnect()
+    }
+  }, [canvasRef])
+
+  return size
+}
+
+interface PreviewSize {
+  readonly width: number
+  readonly height: number
+}
+
+const DEFAULT_PREVIEW_SIZE: PreviewSize = { width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }
+
+// The cells of the classes not hidden, of every cell in the dataset.
+function shownClassCellCount(
+  classes: PreviewEntry['classes'],
+  annotations: CollectionBarAnnotations,
+): number | undefined {
+  if (classes === null) return undefined
+
+  let count = 0
+  for (const entry of classes.classes) {
+    if (!annotations.hiddenIds.has(entry.id)) count += entry.cellCount
+  }
+  return count
+}
+
+function cellCountText(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? 'cell' : 'cells'}`
+}
+
 function collectionFileName(url: string): string {
   try {
     return new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
@@ -314,4 +466,5 @@ const NO_LOADERS: CollectionPreviewLoaders = {
   getSpatialDataset: () => Promise.reject(new Error('No preview loaders.')),
   loadDatasetOverview: () => Promise.reject(new Error('No preview loaders.')),
   loadGeneExpression: () => Promise.reject(new Error('No preview loaders.')),
+  loadAnnotations: () => Promise.reject(new Error('No preview loaders.')),
 }

@@ -70,7 +70,12 @@ export interface AnnotationSetsModel {
   readonly placedCellIds: PlacedCellIds | null
   readonly onColorChange: (annotationId: string, color: string) => void
   readonly onSetVisibilityChange: (setId: string, visible: boolean) => void
-  readonly onVisibilityChange: (annotationId: string, visible: boolean) => void
+  // `only`: show only this class (an Alt-click).
+  readonly onVisibilityChange: (
+    annotationId: string,
+    visible: boolean,
+    only?: boolean,
+  ) => void
   readonly onRemove: (annotationId: string) => void
 }
 
@@ -111,6 +116,7 @@ export interface AnnotationsSectionModelInput {
   readonly handleAnnotationVisibilityChange: (
     annotationId: string,
     visible: boolean,
+    only?: boolean,
   ) => void
   readonly handleClearAnnotations: () => void
   readonly handleClearGeometricAnnotations: () => void

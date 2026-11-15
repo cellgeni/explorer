@@ -262,7 +262,7 @@ export function mergeImportedAnnotations(
 }
 
 export function colorsForAnnotations(
-  annotations: readonly Annotation[],
+  annotations: readonly Pick<Annotation, 'id'>[],
   currentColors: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const nextColors: Record<string, string> = { ...currentColors }

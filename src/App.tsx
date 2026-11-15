@@ -4,6 +4,7 @@ import {
   type RoiDrawMode,
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
+import type { LegendCategoryVisibilityChange } from './components/ViewerLegend'
 import { setSpatialDataSelection } from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
@@ -54,7 +55,10 @@ import {
 } from './features/app-shell/useUndoableRemovals'
 import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
-import { CollectionBar } from './features/collection/CollectionBar'
+import {
+  CollectionBar,
+  type CollectionBarAnnotations,
+} from './features/collection/CollectionBar'
 import {
   collectionSwitchOpening,
   type CollectionDatasetOpening,
@@ -109,7 +113,10 @@ import {
   type TranscriptViewportLoader,
 } from './features/app-shell/appDependencies'
 import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
-import { useDatasetLifecycle } from './features/app-shell/useDatasetLifecycle'
+import {
+  useDatasetLifecycle,
+  type DatasetOpeningState,
+} from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
 import { useVisiumControlsWorkflow } from './features/app-shell/useVisiumControlsWorkflow'
 import { useVisiumHdBinWorkflow } from './features/app-shell/useVisiumHdBinWorkflow'
@@ -633,13 +640,18 @@ export function App({ dependencies }: AppProps = {}) {
   const geneExpressionLayerTimingKeyRef = useRef<string | null>(null)
   const transcriptViewportKeyRef = useRef<string | null>(null)
   const lastViewportDetailRef = useRef<ViewerViewportDetail | null>(null)
-  const initialShareableStateRef = useRef<ShareableState | null>(initialShareableState)
+  const initialShareableStateRef = useRef<DatasetOpeningState | null>(
+    initialShareableState,
+  )
   const initialAnnotationImportUrlRef = useRef(
     initialShareableState.annotationUrl?.trim() || null,
   )
-  // Annotation sets a link names (groups=), loaded once the dataset is ready.
-  const initialAnnotationGroupIdsRef = useRef<readonly string[] | null>(
-    initialShareableState.annotationGroupIds ?? null,
+  // Annotation sets a link names (groups=), or the set a collection dataset
+  // keeps, loaded once that dataset is ready.
+  const pendingAnnotationGroupsRef = useRef<PendingAnnotationGroups | null>(
+    initialShareableState.annotationGroupIds === undefined
+      ? null
+      : pendingAnnotationGroupsFor(initialShareableState),
   )
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
@@ -1259,8 +1271,24 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setHiddenAnnotationSetIds],
   )
+  // A class's eye. With `only` (an Alt-click), only that class shows, or
+  // every class again when it is the only one shown.
   const handleAnnotationVisibilityChange = useCallback(
-    (annotationId: string, visible: boolean) => {
+    (annotationId: string, visible: boolean, only = false) => {
+      if (only) {
+        if (annotationState.status !== 'ready') return
+
+        const others = annotationState.annotations
+          .map((annotation) => annotation.id)
+          .filter((id) => id !== annotationId)
+        setHiddenAnnotationIds((current) =>
+          !current.includes(annotationId) && others.every((id) => current.includes(id))
+            ? []
+            : others,
+        )
+        return
+      }
+
       setHiddenAnnotationIds((current) => {
         if (visible) {
           return current.filter(
@@ -1271,17 +1299,18 @@ export function App({ dependencies }: AppProps = {}) {
         return current.includes(annotationId) ? current : [...current, annotationId]
       })
     },
-    [setHiddenAnnotationIds],
+    [annotationState, setHiddenAnnotationIds],
   )
   // The legend's eyes: transcript genes, or annotation classes.
   const { onVisibilityChange: setTranscriptGeneVisible } = transcriptGenes.model
-  const handleLegendCategoryVisibilityChange = useCallback(
-    (id: string, visible: boolean, sectionId: string) => {
-      if (sectionId === TRANSCRIPT_GENE_LEGEND_ID) setTranscriptGeneVisible(id, visible)
-      else handleAnnotationVisibilityChange(id, visible)
-    },
-    [handleAnnotationVisibilityChange, setTranscriptGeneVisible],
-  )
+  const handleLegendCategoryVisibilityChange =
+    useCallback<LegendCategoryVisibilityChange>(
+      (id, visible, sectionId, only) => {
+        if (sectionId === TRANSCRIPT_GENE_LEGEND_ID) setTranscriptGeneVisible(id, visible)
+        else handleAnnotationVisibilityChange(id, visible, only)
+      },
+      [handleAnnotationVisibilityChange, setTranscriptGeneVisible],
+    )
   const focusSpatialViewOnCell = useCallback(
     (cell: OverviewCellDatum) => {
       spatialFocusRequestIdRef.current += 1
@@ -2544,15 +2573,18 @@ export function App({ dependencies }: AppProps = {}) {
     setAnnotationImportUrl,
   ])
   useEffect(() => {
-    const groupIds = initialAnnotationGroupIdsRef.current
+    const pending = pendingAnnotationGroupsRef.current
 
-    if (groupIds === null || loadedDatasetUrl === null) {
+    if (pending === null || loadedDatasetUrl === null) {
       return
     }
 
-    // Only the link's own dataset takes its sets.
-    if (loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()) {
-      initialAnnotationGroupIdsRef.current = null
+    // Only the dataset they were kept for takes the sets; the dataset open
+    // when they were kept may still be showing until it loads.
+    if (loadedDatasetUrl !== pending.datasetUrl) {
+      if (loadedDatasetUrl !== pending.openUrl) {
+        pendingAnnotationGroupsRef.current = null
+      }
       return
     }
 
@@ -2563,8 +2595,8 @@ export function App({ dependencies }: AppProps = {}) {
       return
     }
 
-    initialAnnotationGroupIdsRef.current = null
-    const groupId = linkAnnotationGroupId(groupIds, annotationGroupState.groups)
+    pendingAnnotationGroupsRef.current = null
+    const groupId = linkAnnotationGroupId(pending.groupIds, annotationGroupState.groups)
 
     if (groupId !== undefined) {
       setSelectedAnnotationGroupId(groupId)
@@ -2573,18 +2605,12 @@ export function App({ dependencies }: AppProps = {}) {
       // no cellColor= colours cells by the set, as choosing it would.
       // The classes the link hides stay hidden once the set loads.
       loadAnnotationGroup(groupId, {
-        switchColorMode:
-          initialShareableState.linkVersion === undefined &&
-          initialShareableState.observationColorMode === undefined,
-        hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
+        switchColorMode: pending.switchColorMode,
+        hiddenAnnotationIds: pending.hiddenAnnotationIds,
       })
     }
   }, [
     annotationGroupState,
-    initialShareableState.datasetUrl,
-    initialShareableState.hiddenAnnotationIds,
-    initialShareableState.linkVersion,
-    initialShareableState.observationColorMode,
     loadAnnotationGroup,
     loadedDatasetUrl,
     setSelectedAnnotationGroupId,
@@ -3555,10 +3581,20 @@ export function App({ dependencies }: AppProps = {}) {
         appendDebugEvent(`The collection's ${ignored}, so the viewer default is used.`)
       }
 
-      initialShareableStateRef.current = { ...opening.linkState, datasetUrl: url }
+      const linkState = { ...opening.linkState, datasetUrl: url }
+      initialShareableStateRef.current = {
+        ...linkState,
+        ...(opening.annotationColors === undefined
+          ? {}
+          : { annotationColors: opening.annotationColors }),
+      }
+      pendingAnnotationGroupsRef.current =
+        linkState.annotationGroupIds === undefined
+          ? null
+          : pendingAnnotationGroupsFor(linkState, loadedDatasetUrl)
       handleOpenDataset(url)
     },
-    [appendDebugEvent, handleOpenDataset],
+    [appendDebugEvent, handleOpenDataset, loadedDatasetUrl],
   )
   useEffect(() => {
     openCollectionDatasetRef.current = handleOpenCollectionDataset
@@ -3569,9 +3605,40 @@ export function App({ dependencies }: AppProps = {}) {
       getSpatialDataset,
       loadDatasetOverview,
       loadGeneExpression,
+      loadAnnotations,
     }),
-    [detectSpatialDataset, getSpatialDataset, loadDatasetOverview, loadGeneExpression],
+    [
+      detectSpatialDataset,
+      getSpatialDataset,
+      loadAnnotations,
+      loadDatasetOverview,
+      loadGeneExpression,
+    ],
   )
+  // Previews take the loaded annotation set while cells are coloured by it.
+  const collectionPreviewAnnotations = useMemo((): CollectionBarAnnotations | null => {
+    if (observationColorMode !== 'annotations' || loadedAnnotationGroupId === undefined) {
+      return null
+    }
+
+    return {
+      groupId: loadedAnnotationGroupId,
+      label:
+        (annotationGroupState.status === 'ready'
+          ? annotationGroupState.groups.find(
+              (group) => group.id === loadedAnnotationGroupId,
+            )?.label
+          : undefined) ?? 'Annotations',
+      colors: annotationColors,
+      hiddenIds: hiddenAnnotationIdSet,
+    }
+  }, [
+    annotationColors,
+    annotationGroupState,
+    hiddenAnnotationIdSet,
+    loadedAnnotationGroupId,
+    observationColorMode,
+  ])
   const datasetLibrary = useMemo(
     (): DatasetLibraryModel => ({
       examples: examplesIndex.state,
@@ -4123,6 +4190,10 @@ export function App({ dependencies }: AppProps = {}) {
                     selectedGenes,
                     observationColorMode,
                     geneExpressionScoreMode,
+                    annotationGroupId: loadedAnnotationGroupId ?? null,
+                    hiddenAnnotationIds,
+                    annotationColors,
+                    cellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
                   }),
                 )
               }}
@@ -4135,6 +4206,7 @@ export function App({ dependencies }: AppProps = {}) {
                     : NO_PREVIEW_GENES,
                 scoreMode: geneExpressionScoreMode,
                 colorScale: geneExpressionColorScale,
+                annotations: collectionPreviewAnnotations,
                 paused: isLoading,
               }}
             />
@@ -4335,4 +4407,27 @@ function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox 
 
 function nonGeneColorMode(mode: ObservationColorMode | undefined): ObservationColorMode {
   return mode === undefined || mode === 'gene-expression' ? 'transcript-count' : mode
+}
+
+interface PendingAnnotationGroups {
+  readonly datasetUrl: string
+  // The dataset open when the sets were kept, shown until the next one loads.
+  readonly openUrl: string | null
+  readonly groupIds: readonly string[]
+  readonly hiddenAnnotationIds: readonly string[] | undefined
+  readonly switchColorMode: boolean
+}
+
+function pendingAnnotationGroupsFor(
+  state: ShareableState,
+  openUrl: string | null = null,
+): PendingAnnotationGroups {
+  return {
+    datasetUrl: state.datasetUrl?.trim() ?? '',
+    openUrl,
+    groupIds: state.annotationGroupIds ?? [],
+    hiddenAnnotationIds: state.hiddenAnnotationIds,
+    switchColorMode:
+      state.linkVersion === undefined && state.observationColorMode === undefined,
+  }
 }

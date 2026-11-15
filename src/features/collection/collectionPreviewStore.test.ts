@@ -34,6 +34,7 @@ function fakeDatasets() {
     done: Deferred<unknown>
   }[] = []
   const overviewCalls: string[] = []
+  const annotationCalls: { url: string; groupId?: string }[] = []
   const loaders: CollectionPreviewLoaders = {
     detectSpatialDataset: vi.fn(async (baseUrl: string) => ({
       platform: 'h5ad' as const,
@@ -63,19 +64,36 @@ function fakeDatasets() {
         })
         return done.promise
       },
+      annotations: async (options: { readonly groupId?: string }) => {
+        annotationCalls.push({
+          url,
+          ...(options.groupId === undefined ? {} : { groupId: options.groupId }),
+        })
+        return [{ id: 'analysis:type:a', label: 'type: A', cellIds: ['c0'] }]
+      },
     })) as unknown as CollectionPreviewLoaders['getSpatialDataset'],
     loadDatasetOverview: vi.fn(),
     loadGeneExpression: vi.fn(),
+    loadAnnotations: vi.fn(),
   }
 
   return {
     loaders,
     overviewCalls,
+    annotationCalls,
     expressions,
     finishOverview(url: string) {
       overviews.get(url)?.resolve([
-        { position: { x: micrometers(0), y: micrometers(0) }, transcriptCount: 0 },
-        { position: { x: micrometers(4), y: micrometers(2) }, transcriptCount: 0 },
+        {
+          cellId: 'c0',
+          position: { x: micrometers(0), y: micrometers(0) },
+          transcriptCount: 0,
+        },
+        {
+          cellId: 'c1',
+          position: { x: micrometers(4), y: micrometers(2) },
+          transcriptCount: 0,
+        },
       ])
     },
     finishExpression(url: string, count: number) {
@@ -125,7 +143,7 @@ describe('CollectionPreviewStore', () => {
   it('reads the genes for each preview and shares one scale', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS.slice(0, 2), fake.loaders)
-    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     store.start()
     store.setVisible(A, true)
     store.setVisible(B, true)
@@ -149,7 +167,7 @@ describe('CollectionPreviewStore', () => {
   it('reads new genes without reading the cells again', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore([A], fake.loaders)
-    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     store.start()
     store.setVisible(A, true)
     await flush()
@@ -157,7 +175,7 @@ describe('CollectionPreviewStore', () => {
     await flush()
 
     const first = fake.expressions[0]
-    store.setRequest({ genes: ['Gfap'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Gfap'], scoreMode: 'sum', annotationGroupId: null })
     expect(first?.signal?.aborted).toBe(true)
     // The old read ends before the next starts.
     fake.finishExpression(A, 5)
@@ -174,6 +192,35 @@ describe('CollectionPreviewStore', () => {
     expect(store.entry(A).scores?.maxScore).toBe(2)
   })
 
+  it('reads the classes of an annotation set in place of the genes', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      annotationGroupId: 'analysis:type',
+    })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    await flush()
+
+    expect(fake.expressions).toEqual([])
+    expect(fake.annotationCalls).toEqual([{ url: A, groupId: 'analysis:type' }])
+    expect(store.entry(A).classes?.classes).toEqual([
+      { id: 'analysis:type:a', label: 'type: A', cellCount: 1 },
+    ])
+    expect([...(store.entry(A).classes?.classOf ?? [])]).toEqual([0, -1])
+
+    // Back to genes: the classes go, and the scores are read.
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).classes).toBe(null)
+    expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4']])
+  })
+
   it('keeps the cells when the genes change during their read', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore([A], fake.loaders)
@@ -181,7 +228,7 @@ describe('CollectionPreviewStore', () => {
     store.setVisible(A, true)
     await flush()
 
-    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     fake.finishOverview(A)
     await flush()
 
@@ -210,7 +257,7 @@ describe('CollectionPreviewStore', () => {
       loading: false,
     })
 
-    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     await flush()
     expect(loaders.detectSpatialDataset).toHaveBeenCalledTimes(1)
   })
@@ -228,7 +275,7 @@ describe('CollectionPreviewStore', () => {
 
     expect(store.entry(A).error).toBe('HTTP 500')
 
-    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum' })
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
     await flush()
     expect(store.entry(A).error).toBe(null)
     expect(fake.overviewCalls).toEqual([A])

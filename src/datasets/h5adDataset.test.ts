@@ -384,6 +384,29 @@ describe('AnnDataH5adDataset', () => {
     })
   })
 
+  it('lists classes in category order, leaving out categories without cells', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/order.h5ad',
+      // B first by cell; no cell is A.
+      fetcher: h5adFetcher(await createTinyH5ad('dense', { clusterCodes: [1, 1, 1, 1] })),
+    })
+    const reordered = new AnnDataH5adDataset({
+      url: 'https://example.test/reordered.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense', { clusterCodes: [1, 0, 1, 0] })),
+    })
+
+    await expect(dataset.annotations()).resolves.toEqual([
+      {
+        id: 'analysis:cluster:b',
+        label: 'cluster: B',
+        cellIds: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
+      },
+    ])
+    await expect(
+      reordered.annotations().then((annotations) => annotations.map(({ id }) => id)),
+    ).resolves.toEqual(['analysis:cluster:a', 'analysis:cluster:b'])
+  })
+
   it('keeps the var index as gene names without an alias', async () => {
     const dataset = new AnnDataH5adDataset({
       url: 'https://example.test/index.h5ad',

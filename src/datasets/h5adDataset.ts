@@ -745,7 +745,14 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const annotations: Annotation<SpatialElementId>[] = []
 
     for (const track of selectedTracks) {
-      const cellIdsByLabel = new Map<string, string[]>()
+      // A categorical column's classes come in its categories' order, as
+      // scanpy colours them, so they keep their colours in every dataset with
+      // the same categories. Classes without cells are left out below.
+      const cellIdsByLabel = new Map<string, string[]>(
+        track.values.kind === 'codes'
+          ? track.values.categories.map((category) => [category, []])
+          : [],
+      )
 
       for (let index = 0; index < cache.cellIds.length; index += 1) {
         const label = labelAt(track.values, index)
@@ -761,6 +768,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       }
 
       for (const [label, cellIds] of cellIdsByLabel) {
+        if (cellIds.length === 0) continue
         annotations.push({
           id: `analysis:${slug(track.label)}:${slug(label)}`,
           label: `${track.label}: ${label}`,

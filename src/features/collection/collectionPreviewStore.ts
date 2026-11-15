@@ -4,28 +4,34 @@ import {
   PreviewUnavailableError,
   type CollectionPreviewLoaders,
   type PreviewCells,
+  type PreviewClasses,
   type PreviewScores,
   type PreviewSource,
 } from './collectionPreviewData'
 
 // The previews of a collection's datasets. Each dataset's cell positions are
-// read once; the scores for the selected genes are read again when the
-// selection changes. Only datasets in view are read, a few at a time, and
+// read once; the scores for the selected genes, or the classes of the
+// selected annotation set, are read again when the selection changes. Only datasets in view are read, a few at a time, and
 // none start while the main view loads a dataset.
 
 export interface PreviewEntry {
   readonly cells: PreviewCells | null
   // For the current genes; null without genes, or until read.
   readonly scores: PreviewScores | null
+  // For the current annotation set; null without one, or until read.
+  readonly classes: PreviewClasses | null
   readonly loading: boolean
   // Why there is no preview, such as an image without cells.
   readonly unavailable: string | null
   readonly error: string | null
 }
 
+// Cells are coloured by an annotation set when one is given, otherwise by
+// the genes; with neither, the previews show the cells only.
 export interface PreviewRequest {
   readonly genes: readonly string[]
   readonly scoreMode: GeneExpressionScoreMode
+  readonly annotationGroupId: string | null
 }
 
 export const PREVIEW_CONCURRENCY = 4
@@ -33,6 +39,7 @@ export const PREVIEW_CONCURRENCY = 4
 const EMPTY_ENTRY: PreviewEntry = {
   cells: null,
   scores: null,
+  classes: null,
   loading: false,
   unavailable: null,
   error: null,
@@ -52,7 +59,12 @@ export class CollectionPreviewStore {
   // Cell positions do not depend on the genes, so only stopping stops them.
   private lifetime = new AbortController()
   private scores = new Map<string, PreviewScores>()
-  private request: PreviewRequest = { genes: [], scoreMode: 'sum' }
+  private classes = new Map<string, PreviewClasses>()
+  private request: PreviewRequest = {
+    genes: [],
+    scoreMode: 'sum',
+    annotationGroupId: null,
+  }
   private paused = false
   // Until start(), and after stop(): nothing is read.
   private stopped = true
@@ -97,11 +109,12 @@ export class CollectionPreviewStore {
   setRequest(request: PreviewRequest): void {
     if (requestKey(request) === requestKey(this.request)) return
 
-    this.request = { genes: [...request.genes], scoreMode: request.scoreMode }
+    this.request = { ...request, genes: [...request.genes] }
     this.scores = new Map()
+    this.classes = new Map()
     this.errors.clear()
 
-    // Reads for the old genes stop; each dataset's next read starts when its
+    // Reads for the old selection stop; each dataset's next read starts when its
     // current one ends, so a positions read is never repeated.
     for (const controller of this.running.values()) controller.abort()
 
@@ -149,6 +162,7 @@ export class CollectionPreviewStore {
   private needsWork(url: string): boolean {
     if (this.unavailable.has(url) || this.errors.has(url)) return false
     if (!this.cells.has(url)) return true
+    if (this.request.annotationGroupId !== null) return !this.classes.has(url)
     return this.request.genes.length > 0 && !this.scores.has(url)
   }
 
@@ -181,7 +195,14 @@ export class CollectionPreviewStore {
 
       const request = this.request
 
-      if (!signal.aborted && request.genes.length > 0 && !this.scores.has(url)) {
+      if (signal.aborted) return
+
+      if (request.annotationGroupId !== null) {
+        if (!this.classes.has(url)) {
+          const classes = await source.classes(cells, request.annotationGroupId, signal)
+          if (!signal.aborted) this.classes.set(url, classes)
+        }
+      } else if (request.genes.length > 0 && !this.scores.has(url)) {
         const scores = await source.scores(
           cells.bounds,
           request.genes,
@@ -229,6 +250,7 @@ export class CollectionPreviewStore {
       const next: PreviewEntry = {
         cells: this.cells.get(url) ?? null,
         scores: this.scores.get(url) ?? null,
+        classes: this.classes.get(url) ?? null,
         loading: this.running.has(url),
         unavailable: this.unavailable.get(url) ?? null,
         error: this.errors.get(url) ?? null,
@@ -244,13 +266,16 @@ export class CollectionPreviewStore {
 }
 
 function requestKey(request: PreviewRequest): string {
-  return `${request.scoreMode}\u0000${request.genes.join('\u0000')}`
+  return request.annotationGroupId === null
+    ? `genes\u0000${request.scoreMode}\u0000${request.genes.join('\u0000')}`
+    : `annotations\u0000${request.annotationGroupId}`
 }
 
 function sameEntry(first: PreviewEntry, second: PreviewEntry): boolean {
   return (
     first.cells === second.cells &&
     first.scores === second.scores &&
+    first.classes === second.classes &&
     first.loading === second.loading &&
     first.unavailable === second.unavailable &&
     first.error === second.error

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { asAnyCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
 import {
@@ -11,8 +12,12 @@ import {
 
 const URL_A = 'https://example.test/a.zarr'
 
-function point(x: number, y: number) {
-  return { position: { x: micrometers(x), y: micrometers(y) }, transcriptCount: 0 }
+function point(x: number, y: number, cellId?: string) {
+  return {
+    position: { x: micrometers(x), y: micrometers(y) },
+    transcriptCount: 0,
+    ...(cellId === undefined ? {} : { cellId: asAnyCellId(cellId) }),
+  }
 }
 
 function loaders(
@@ -33,6 +38,9 @@ function loaders(
     }),
     loadGeneExpression: vi.fn(async () => {
       throw new Error('Unexpected expression.')
+    }),
+    loadAnnotations: vi.fn(async () => {
+      throw new Error('Unexpected annotations.')
     }),
     fetchImpl: vi.fn(async () => new Response(null)),
     ...overrides,
@@ -120,6 +128,64 @@ describe('openPreviewSource', () => {
     )
     expect(scores.maxScore).toBe(3)
     expect(getSpatialDataset).not.toHaveBeenCalled()
+  })
+
+  it('reads the classes of an annotation set for the drawn cells', async () => {
+    const annotations = vi.fn(async () => [
+      { id: 'analysis:type:a', label: 'type: A', cellIds: ['c1', 'c3', 'not-drawn'] },
+      // c1 is in A already, so it stays A.
+      { id: 'analysis:type:b', label: 'type: B', cellIds: ['c1', 'c2'] },
+    ])
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'h5ad', h5adUrl: URL_A, source: 'zarr' },
+        {
+          getSpatialDataset: vi.fn(
+            async () =>
+              ({
+                overview: async () => [
+                  point(0, 0, 'c1'),
+                  point(1, 0, 'c2'),
+                  point(2, 0, 'c3'),
+                  point(3, 0, 'c4'),
+                ],
+                geneExpression: vi.fn(),
+                annotations,
+              }) as never,
+          ),
+        },
+      ),
+    )
+    const cells = await source.cells()
+    const classes = await source.classes(cells, 'analysis:type')
+
+    expect(annotations).toHaveBeenCalledWith({ groupId: 'analysis:type' })
+    expect(classes.classes).toEqual([
+      { id: 'analysis:type:a', label: 'type: A', cellCount: 3 },
+      { id: 'analysis:type:b', label: 'type: B', cellCount: 2 },
+    ])
+    expect([...classes.classOf]).toEqual([0, 1, 0, -1])
+  })
+
+  it('reads Xenium classes through the main view loader', async () => {
+    const loadAnnotations = vi.fn(async () => [
+      { id: 'graphclust:1', label: 'Cluster 1', cellIds: [asAnyCellId('b')] },
+    ])
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'xenium' },
+        {
+          loadDatasetOverview: vi.fn(async () => [point(0, 0, 'a'), point(1, 1, 'b')]),
+          loadAnnotations,
+        },
+      ),
+    )
+    const classes = await source.classes(await source.cells(), 'graphclust')
+
+    expect(loadAnnotations).toHaveBeenCalledWith(URL_A, { groupId: 'graphclust' })
+    expect([...classes.classOf]).toEqual([-1, 0])
   })
 
   it('draws every Nth cell beyond the cell limit', async () => {

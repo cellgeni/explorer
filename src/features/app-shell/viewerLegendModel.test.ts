@@ -103,6 +103,7 @@ describe('viewerLegendSections', () => {
         { id: 'b', label: 'Cluster 2', color: '#00ff00', count: 5, visible: false },
       ],
       noun: { singular: 'cell', plural: 'cells' },
+      showOnly: true,
     })
   })
 
