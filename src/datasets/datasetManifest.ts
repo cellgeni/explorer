@@ -19,9 +19,11 @@ import {
 } from './merscopeFormat'
 import {
   VISIUM_FILE_DEFAULTS,
+  VISIUM_MEX_LIST_FILES,
   VISIUM_OPTIONAL_FILES,
   type VisiumAnalysisFileKey,
   type VisiumFileRole,
+  type VisiumMexListFile,
 } from './visiumFormat'
 
 export const DATASET_MANIFEST_FILE = 'explorer.json'
@@ -180,7 +182,12 @@ export interface AteraDatasetManifest extends DatasetManifestBase {
 export interface VisiumDatasetManifest extends DatasetManifestBase {
   readonly platform: 'visium'
   readonly files: Readonly<
-    Partial<Record<VisiumFileRole | VisiumAnalysisFileKey, DatasetManifestFile>>
+    Partial<
+      Record<
+        VisiumFileRole | VisiumMexListFile | VisiumAnalysisFileKey,
+        DatasetManifestFile
+      >
+    >
   >
 }
 
@@ -408,7 +415,11 @@ export function parseDatasetManifest(
     rejectOptions(options, platform, fail)
     checkKeys(
       files,
-      [...Object.keys(VISIUM_FILE_DEFAULTS), ...VISIUM_OPTIONAL_FILES],
+      [
+        ...Object.keys(VISIUM_FILE_DEFAULTS),
+        ...VISIUM_MEX_LIST_FILES,
+        ...VISIUM_OPTIONAL_FILES,
+      ],
       'files.',
       fail,
     )

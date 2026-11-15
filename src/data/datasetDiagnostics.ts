@@ -1151,7 +1151,10 @@ async function runVisiumDiagnostics(
       baseUrl,
       {
         id: 'visium-matrix',
-        label: 'Visium filtered matrix',
+        label:
+          files.filteredMatrixMex === undefined
+            ? 'Visium filtered matrix'
+            : 'Visium filtered matrix (MEX)',
         path: files.filteredMatrix,
       },
       true,
@@ -1159,6 +1162,31 @@ async function runVisiumDiagnostics(
       VISIUM_MATRIX_MAX_BYTES,
     ),
   ]
+
+  if (files.filteredMatrixMex !== undefined) {
+    checks.push(
+      await checkHeadFile(
+        baseUrl,
+        {
+          id: 'visium-matrix-barcodes',
+          label: 'Visium matrix barcodes',
+          path: files.filteredMatrixMex.barcodes,
+        },
+        true,
+        options,
+      ),
+      await checkHeadFile(
+        baseUrl,
+        {
+          id: 'visium-matrix-features',
+          label: 'Visium matrix features',
+          path: files.filteredMatrixMex.features,
+        },
+        true,
+        options,
+      ),
+    )
+  }
   const images = [
     {
       id: 'visium-tissue-hires',

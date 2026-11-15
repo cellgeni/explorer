@@ -117,7 +117,9 @@ by `spaceranger count`. Host the `outs/` folder with:
 - `spatial/tissue_positions.csv` (Space Ranger 2.0+), or
   `spatial/tissue_positions_list.csv` (1.x, no header row)
 - `spatial/scalefactors_json.json`
-- `filtered_feature_bc_matrix.h5` (up to 300 MB; it is read whole)
+- `filtered_feature_bc_matrix.h5` (up to 300 MB; it is read whole), or the
+  MEX folder `filtered_feature_bc_matrix/` with `matrix.mtx.gz`,
+  `barcodes.tsv.gz`, and `features.tsv.gz`
 
 Detection needs all three to answer `HEAD`. Recommended:
 
@@ -130,7 +132,8 @@ Detection needs all three to answer `HEAD`. Recommended:
   `analysis/pca/…/projection.csv` for embedding views.
 
 Nothing else in `outs/` is read: leave out the BAM files, `molecule_info.h5`,
-the raw matrices, the MEX folders, and the `.cloupe` file. Every file is read
+the raw matrices, the filtered MEX folder when the `.h5` is there, and the
+`.cloupe` file. Every file is read
 with a plain `GET`, so byte-range support is not required, and `.gz` copies of
 any file work when a [dataset manifest](./dataset-manifest.md#standard-visium)
 names them. That is how a GEO sample's supplementary files load in place.

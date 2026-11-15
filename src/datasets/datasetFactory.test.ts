@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   clearDatasetImages,
   datasetFileLabelFor,
@@ -189,6 +189,36 @@ describe('spatial dataset detection', () => {
     expect(detection.platform === 'visium' ? detection.files.hiresImage : null).toBe(
       undefined,
     )
+  })
+
+  it('detects the MEX filtered matrix when the folder has no .h5', async () => {
+    const fetcher = fetcherForOkPaths([
+      '/mex/spatial/tissue_positions.csv',
+      '/mex/spatial/scalefactors_json.json',
+      '/mex/filtered_feature_bc_matrix/matrix.mtx.gz',
+      '/mex/filtered_feature_bc_matrix/barcodes.tsv.gz',
+      '/mex/filtered_feature_bc_matrix/features.tsv.gz',
+    ])
+
+    await expect(
+      detectSpatialDataset('https://example.test/mex/', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'visium',
+      files: {
+        filteredMatrix: 'filtered_feature_bc_matrix/matrix.mtx.gz',
+        filteredMatrixMex: {
+          barcodes: 'filtered_feature_bc_matrix/barcodes.tsv.gz',
+          features: 'filtered_feature_bc_matrix/features.tsv.gz',
+        },
+      },
+    })
+
+    // Folders without the other Visium files make no MEX requests.
+    const other = fetcherForOkPaths([])
+    await detectSpatialDataset('https://example.test/other/', { fetcher: other })
+    expect(
+      vi.mocked(other).mock.calls.some(([url]) => String(url).includes('.mtx')),
+    ).toBe(false)
   })
 
   it('does not detect standard Visium without the filtered matrix', async () => {
@@ -1073,6 +1103,149 @@ describe('standard Visium manifests', () => {
     } finally {
       setDatasetManifest(baseUrl, undefined)
     }
+  })
+})
+
+describe('standard Visium manifests with a MEX matrix', () => {
+  const baseUrl = 'https://example.test/geo-mex/explorer.json'
+  const required = {
+    '/geo-mex/suppl/GSM1_tissue_positions_list_s1.csv.gz': () => new Response(null),
+    '/geo-mex/suppl/GSM1_scalefactors_json_s1.json.gz': () => new Response(null),
+  }
+  const manifest = (files: Readonly<Record<string, string>>) => ({
+    version: 1,
+    platform: 'visium',
+    root: 'suppl/',
+    files: {
+      tissuePositions: 'GSM1_tissue_positions_list_s1.csv.gz',
+      scalefactors: 'GSM1_scalefactors_json_s1.json.gz',
+      ...files,
+    },
+  })
+  const detect = (
+    files: Readonly<Record<string, string>>,
+    responses: Readonly<Record<string, () => Response>>,
+  ) =>
+    detectSpatialDataset(baseUrl, {
+      fetcher: fetcherForResponses({
+        '/geo-mex/explorer.json': () => Response.json(manifest(files)),
+        ...required,
+        ...responses,
+      }),
+    })
+
+  afterEach(() => {
+    setDatasetManifest(baseUrl, undefined)
+  })
+
+  it('finds the barcode and feature lists named like a GEO matrix', async () => {
+    await expect(
+      detect(
+        { filteredMatrix: 'GSM1_matrix.mtx_s1.mtx.gz' },
+        {
+          '/geo-mex/suppl/GSM1_matrix.mtx_s1.mtx.gz': () => new Response(null),
+          '/geo-mex/suppl/GSM1_barcodes.tsv_s1.tsv.gz': () => new Response(null),
+          '/geo-mex/suppl/GSM1_genes.tsv_s1.tsv.gz': () => new Response(null),
+        },
+      ),
+    ).resolves.toMatchObject({
+      platform: 'visium',
+      files: {
+        filteredMatrix: 'GSM1_matrix.mtx_s1.mtx.gz',
+        filteredMatrixMex: {
+          barcodes: 'GSM1_barcodes.tsv_s1.tsv.gz',
+          // features.tsv is missing, so Cell Ranger 2's genes.tsv is used.
+          features: 'GSM1_genes.tsv_s1.tsv.gz',
+        },
+      },
+    })
+
+    const dataset = await createSpatialDataset(baseUrl, {
+      fetcher: fetcherForResponses({
+        '/geo-mex/explorer.json': () =>
+          Response.json(
+            manifest({
+              filteredMatrix: 'GSM1_matrix.mtx_s1.mtx.gz',
+              filteredMatrixFeatures: 'GSM1_features.tsv.gz',
+            }),
+          ),
+        ...required,
+        '/geo-mex/suppl/GSM1_matrix.mtx_s1.mtx.gz': () => new Response(null),
+        '/geo-mex/suppl/GSM1_barcodes.tsv_s1.tsv.gz': () => new Response(null),
+        '/geo-mex/suppl/GSM1_features.tsv.gz': () => new Response(null),
+      }),
+    })
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+  })
+
+  it('uses named lists, also for a matrix without a .mtx name', async () => {
+    await expect(
+      detect(
+        {
+          filteredMatrix: 'counts/content',
+          filteredMatrixBarcodes: 'GSM1_spots.txt',
+          filteredMatrixFeatures: 'GSM1_genes.txt',
+        },
+        {
+          '/geo-mex/suppl/counts/content': () => new Response(null),
+          '/geo-mex/suppl/GSM1_spots.txt': () => new Response(null),
+          '/geo-mex/suppl/GSM1_genes.txt': () => new Response(null),
+        },
+      ),
+    ).resolves.toMatchObject({
+      files: {
+        filteredMatrix: 'counts/content',
+        filteredMatrixMex: { barcodes: 'GSM1_spots.txt', features: 'GSM1_genes.txt' },
+      },
+    })
+  })
+
+  it('falls back from the .h5 to the MEX folder when the matrix is not named', async () => {
+    await expect(
+      detect(
+        {},
+        {
+          '/geo-mex/suppl/filtered_feature_bc_matrix/matrix.mtx.gz': () =>
+            new Response(null),
+          '/geo-mex/suppl/filtered_feature_bc_matrix/barcodes.tsv.gz': () =>
+            new Response(null),
+          '/geo-mex/suppl/filtered_feature_bc_matrix/features.tsv.gz': () =>
+            new Response(null),
+        },
+      ),
+    ).resolves.toMatchObject({
+      files: {
+        filteredMatrix: 'filtered_feature_bc_matrix/matrix.mtx.gz',
+        filteredMatrixMex: { barcodes: 'filtered_feature_bc_matrix/barcodes.tsv.gz' },
+      },
+    })
+
+    await expect(detect({}, {})).rejects.toThrow(
+      'no filtered_feature_bc_matrix.h5 or filtered_feature_bc_matrix/matrix.mtx.gz under https://example.test/geo-mex/suppl. Name the file in "files.filteredMatrix".',
+    )
+  })
+
+  it('names the list it could not find', async () => {
+    await expect(
+      detect(
+        { filteredMatrix: 'GSM1_matrix.mtx.gz' },
+        {
+          '/geo-mex/suppl/GSM1_matrix.mtx.gz': () => new Response(null),
+          '/geo-mex/suppl/GSM1_barcodes.tsv.gz': () => new Response(null),
+        },
+      ),
+    ).rejects.toThrow(
+      'no GSM1_features.tsv.gz or GSM1_genes.tsv.gz under https://example.test/geo-mex/suppl. Name the file in "files.filteredMatrixFeatures".',
+    )
+
+    await expect(
+      detect(
+        { filteredMatrix: 'GSM1_counts.mtx.gz' },
+        { '/geo-mex/suppl/GSM1_counts.mtx.gz': () => new Response(null) },
+      ),
+    ).rejects.toThrow(
+      '"files.filteredMatrix" (GSM1_counts.mtx.gz) is not named like matrix.mtx. Name its list in "files.filteredMatrixBarcodes".',
+    )
   })
 })
 

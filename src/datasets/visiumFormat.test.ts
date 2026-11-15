@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
   encodeImageArrayAsBmp,
+  isMexMatrixPath,
+  mexSiblingPath,
   micrometersPerPixelFromLattice,
   parseVisiumClustersCsv,
   parseVisiumScalefactors,
@@ -221,5 +223,41 @@ describe('encodeImageArrayAsBmp', () => {
   it('rejects shapes that are not images', () => {
     expect(() => encodeImageArrayAsBmp(new Uint8Array(4), [4])).toThrow(/shape/)
     expect(() => encodeImageArrayAsBmp(new Uint8Array(4), [1, 2, 2])).toThrow(/shape/)
+  })
+})
+
+describe('MEX matrix paths', () => {
+  it('recognises Matrix Market files, including GEO and Zenodo names', () => {
+    expect(isMexMatrixPath('filtered_feature_bc_matrix/matrix.mtx.gz')).toBe(true)
+    expect(isMexMatrixPath('GSM1_matrix.mtx_MI_ctl.mtx.gz')).toBe(true)
+    expect(
+      isMexMatrixPath('https://zenodo.org/api/records/1/files/counts.mtx/content'),
+    ).toBe(true)
+    expect(isMexMatrixPath('https://example.test/matrix.mtx?download=1')).toBe(true)
+    expect(isMexMatrixPath('filtered_feature_bc_matrix.h5')).toBe(false)
+    expect(isMexMatrixPath('matrix.mtx.tar.gz')).toBe(false)
+  })
+
+  it('names the barcode and feature lists like the matrix', () => {
+    expect(mexSiblingPath('filtered_feature_bc_matrix/matrix.mtx.gz', 'barcodes')).toBe(
+      'filtered_feature_bc_matrix/barcodes.tsv.gz',
+    )
+    expect(mexSiblingPath('GSM1_M10_matrix.mtx.gz', 'features')).toBe(
+      'GSM1_M10_features.tsv.gz',
+    )
+    // GEO keeps the original name and adds the sample and extension again.
+    expect(mexSiblingPath('GSM10040779_matrix.mtx_MI_ctl.mtx.gz', 'barcodes')).toBe(
+      'GSM10040779_barcodes.tsv_MI_ctl.tsv.gz',
+    )
+    expect(
+      mexSiblingPath(
+        'https://zenodo.org/api/records/1/files/S1_matrix.mtx/content',
+        'genes',
+      ),
+    ).toBe('https://zenodo.org/api/records/1/files/S1_genes.tsv/content')
+    expect(mexSiblingPath('https://example.test/a/matrix.mtx.gz?dl=1', 'features')).toBe(
+      'https://example.test/a/features.tsv.gz?dl=1',
+    )
+    expect(mexSiblingPath('GSM1_counts.mtx.gz', 'barcodes')).toBeNull()
   })
 })

@@ -19,7 +19,11 @@ import {
 } from './datasetManifest'
 import { ATERA_FILE_DEFAULTS, ATERA_OPTIONAL_FILES } from './ateraFormat'
 import { MERSCOPE_FILE_DEFAULTS, MERSCOPE_OPTIONAL_FILES } from './merscopeFormat'
-import { VISIUM_FILE_DEFAULTS, VISIUM_OPTIONAL_FILES } from './visiumFormat'
+import {
+  VISIUM_FILE_DEFAULTS,
+  VISIUM_MEX_LIST_FILES,
+  VISIUM_OPTIONAL_FILES,
+} from './visiumFormat'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
 // enforces. These checks keep their field lists and values in step.
@@ -82,7 +86,11 @@ describe('dataset manifest JSON Schema', () => {
       h5adPlatform?.then?.properties?.options?.properties?.coordinates?.enum,
     ).toEqual(DATASET_IMAGE_COORDINATES)
     expect(keys(definition('visiumFiles'))).toEqual(
-      [...Object.keys(VISIUM_FILE_DEFAULTS), ...VISIUM_OPTIONAL_FILES].sort(),
+      [
+        ...Object.keys(VISIUM_FILE_DEFAULTS),
+        ...VISIUM_MEX_LIST_FILES,
+        ...VISIUM_OPTIONAL_FILES,
+      ].sort(),
     )
     expect(keys(definition('merscopeFiles'))).toEqual(
       [...Object.keys(MERSCOPE_FILE_DEFAULTS), ...MERSCOPE_OPTIONAL_FILES].sort(),

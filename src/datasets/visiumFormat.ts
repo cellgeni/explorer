@@ -32,8 +32,73 @@ export const VISIUM_FILE_DEFAULTS = {
 
 export type VisiumFileRole = keyof typeof VISIUM_FILE_DEFAULTS
 
+// Space Ranger's Market Exchange (MEX) copy of the filtered matrix, read when
+// the .h5 is missing; GEO samples often have only this. A manifest names the
+// barcode and feature lists when they are not named like its `matrix.mtx`.
+export const VISIUM_MEX_FILE_DEFAULTS = {
+  filteredMatrix: 'filtered_feature_bc_matrix/matrix.mtx.gz',
+  filteredMatrixBarcodes: 'filtered_feature_bc_matrix/barcodes.tsv.gz',
+  filteredMatrixFeatures: 'filtered_feature_bc_matrix/features.tsv.gz',
+} as const
+
+export const VISIUM_MEX_LIST_FILES = [
+  'filteredMatrixBarcodes',
+  'filteredMatrixFeatures',
+] as const
+
+export type VisiumMexListFile = (typeof VISIUM_MEX_LIST_FILES)[number]
+
+// `matrix.mtx` in a file name, then an optional `.gz`: Space Ranger's
+// `matrix.mtx.gz` and GEO's `GSM1_matrix.mtx.gz` or
+// `GSM1_matrix.mtx_sample.mtx.gz`. A Zenodo `/content` suffix may follow.
+const MEX_MATRIX_PATH = /\.mtx(?:\.gz)?(?:$|[?#]|\/content(?:$|[?#]))/i
+
+export function isMexMatrixPath(path: string): boolean {
+  return MEX_MATRIX_PATH.test(path)
+}
+
+// The barcode or feature list named like `matrixPath`: `matrix.mtx` in the
+// file name becomes `barcodes.tsv` (or `features.tsv`, `genes.tsv`), and a
+// trailing `.mtx` extension becomes `.tsv`. Null when the name does not
+// contain `matrix.mtx`.
+export function mexSiblingPath(
+  matrixPath: string,
+  list: 'barcodes' | 'features' | 'genes',
+): string | null {
+  const match = /^(.*?)([^/?#]*)(\/content)?([?#].*)?$/.exec(matrixPath)
+  const name = match?.[2] ?? ''
+  const at = name.toLowerCase().lastIndexOf('matrix.mtx')
+
+  if (match === null || at < 0) {
+    return null
+  }
+
+  const sibling = `${name.slice(0, at)}${list}.tsv${name.slice(at + 'matrix.mtx'.length)}`
+  return `${match[1] ?? ''}${sibling.replace(/\.mtx(\.gz)?$/i, '.tsv$1')}${match[3] ?? ''}${match[4] ?? ''}`
+}
+
 // The filtered matrix is read whole into memory; the same limit as .h5ad files.
 export const VISIUM_MATRIX_MAX_BYTES = 300 * 1024 * 1024
+
+export class VisiumMatrixTooLargeError extends Error {
+  readonly url: string
+  readonly byteLength: number
+
+  constructor(url: string, byteLength: number) {
+    super(
+      `Visium filtered matrix is ${matrixMegabytes(byteLength)}, above the ${matrixMegabytes(
+        VISIUM_MATRIX_MAX_BYTES,
+      )} browser load limit.`,
+    )
+    this.name = 'VisiumMatrixTooLargeError'
+    this.url = url
+    this.byteLength = byteLength
+  }
+}
+
+function matrixMegabytes(byteLength: number): string {
+  return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`
+}
 
 // Space Ranger 1.x name for the positions table, which has no header row.
 export const VISIUM_LEGACY_TISSUE_POSITIONS = 'spatial/tissue_positions_list.csv'

@@ -74,6 +74,27 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 - [x] The CELLxGENE heart example now opens as Visium; its description says
       2,913 spots under tissue of 4,992.
 
+## Follow-Up (2026-11-15): MEX Matrix
+
+173 of the 200 most recent GEO Visium samples with `.mtx` supplementary files
+have no `.h5`, so they could not be opened.
+
+- **DECISION:** Read the MEX matrix (`matrix.mtx.gz`, `barcodes.tsv.gz`,
+  `features.tsv.gz`) when there is no `.h5`, into the same
+  `FeatureBarcodeMatrix` the `.h5` reader returns. Parsed as it streams, in a
+  worker of its own, so the inflated text is never held; same 300 MB limit on
+  the gzipped matrix.
+- **DECISION:** A manifest names only the matrix; its lists are found from its
+  name (`matrix.mtx` → `barcodes.tsv`, `features.tsv`, then `genes.tsv`, and a
+  trailing `.mtx` → `.tsv`), which covers GEO's renamed files. Optional
+  `filteredMatrixBarcodes` and `filteredMatrixFeatures` name others.
+- [x] Folder detection probes `filtered_feature_bc_matrix/` only once the
+      positions and scale factors are found, so other platforms make no extra
+      requests.
+- [x] Diagnostics check the two lists; JSON Schema and docs updated.
+- [x] Checked on GEO GSM10040779 (MI_CTL): 2,131 spots × 32,285 genes; the
+      Nppa legend maximum (280) matches the raw file.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

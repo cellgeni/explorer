@@ -3,6 +3,7 @@
 // and parsed into columns; see merscopeFormat.ts.
 
 import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import { urlFileName as fileName } from '../data/urlFileName'
 import {
   MERSCOPE_CSV_MAX_BYTES,
   merscopeTable,
@@ -104,22 +105,7 @@ async function readCsvText(
   return text
 }
 
-// The file name for messages: the last path segment, or the one before a
-// Zenodo `/content` suffix.
-export function fileName(url: string): string {
-  let path = url
-
-  try {
-    path = decodeURIComponent(new URL(url).pathname)
-  } catch {
-    // Not an absolute URL: use it as given.
-  }
-
-  const segments = path.split('/').filter((segment) => segment.length > 0)
-  const last = segments.at(-1) ?? url
-
-  return last === 'content' && segments.length > 1 ? (segments.at(-2) ?? last) : last
-}
+export { fileName }
 
 export function formatMegabytes(byteLength: number): string {
   return `${(byteLength / (1024 * 1024)).toFixed(1)} MB`
