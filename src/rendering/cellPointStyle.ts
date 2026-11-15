@@ -76,6 +76,42 @@ export function createCellPointStyler(options: {
   }
 }
 
+// Multiplier on cell point radii and their screen-pixel limits, set by the
+// Cells section's point size slider. The steps are roughly logarithmic: a
+// dataset whose coordinates are image pixels needs 10x or more before its
+// cells show at the full view.
+export const DEFAULT_CELL_POINT_SCALE = 1
+export const CELL_POINT_SCALE_STEPS = [
+  0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32,
+] as const
+
+// The slider step nearest to a scale.
+export function cellPointScaleStepIndex(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return CELL_POINT_SCALE_STEPS.indexOf(DEFAULT_CELL_POINT_SCALE)
+  }
+
+  let nearestIndex = 0
+  let nearestDistance = Number.POSITIVE_INFINITY
+
+  CELL_POINT_SCALE_STEPS.forEach((step, index) => {
+    const distance = Math.abs(Math.log(value / step))
+
+    if (distance < nearestDistance) {
+      nearestIndex = index
+      nearestDistance = distance
+    }
+  })
+
+  return nearestIndex
+}
+
+export function normalizeCellPointScale(value: number): number {
+  return (
+    CELL_POINT_SCALE_STEPS[cellPointScaleStepIndex(value)] ?? DEFAULT_CELL_POINT_SCALE
+  )
+}
+
 export interface CellPointGeometry {
   // x and y (deck orientation) per cell.
   readonly positions: Float64Array

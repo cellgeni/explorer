@@ -52,6 +52,8 @@ export interface ViewerCoreProps {
   readonly cellLayersVisible?: boolean
   readonly cellFillOpacity?: number
   readonly cellBoundaryOpacity?: number
+  // Multiplier on cell point sizes, from the Cells section.
+  readonly cellPointScale?: number
   readonly pointSizeFullViewScale?: number
   // Draw points at their physical radius at every zoom (Visium spots).
   readonly trueSizePoints?: boolean

@@ -22,6 +22,7 @@ import type { TelemetryEvent } from '../../data/telemetry'
 import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { MorphologyImage } from '../../data/morphologyImage'
+import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { normalizeLayerOpacity } from '../../rendering/layerOpacity'
 import { normalizeBoundaryCellLimit } from '../../rendering/boundaryViewport'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
@@ -410,6 +411,11 @@ export function useAppDomainState({
       initialShareableState.cellFillOpacity ?? DEFAULT_SHAREABLE_STATE.cellFillOpacity,
     ),
   )
+  const [cellPointScale, setCellPointScale] = useState(() =>
+    normalizeCellPointScale(
+      initialShareableState.cellPointScale ?? DEFAULT_SHAREABLE_STATE.cellPointScale,
+    ),
+  )
   const [showCellBoundaries, setShowCellBoundaries] = useState(
     initialShareableState.showCellBoundaries ??
       DEFAULT_SHAREABLE_STATE.showCellBoundaries,
@@ -591,6 +597,7 @@ export function useAppDomainState({
       boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
+      cellPointScale,
       coordinateUnit,
       imageLayerOpacity,
       layerVisibility,
@@ -601,6 +608,7 @@ export function useAppDomainState({
       setBoundaryCellLimit,
       setCellBoundaryOpacity,
       setCellFillOpacity,
+      setCellPointScale,
       setCoordinateUnit,
       setImageLayerOpacity,
       setLayerVisibility,

@@ -20,6 +20,8 @@ export interface CellPointLayerOptions {
   readonly filled: boolean
   readonly pickable?: boolean
   readonly radiusMaxPixels?: number
+  // Multiplies each radius and both screen-pixel limits.
+  readonly radiusScale?: number
   // Packed per-cell geometry, colours (opacity applied) and GPU filter values.
   readonly packed?: {
     readonly geometry: CellPointGeometry
@@ -111,6 +113,23 @@ const POINT_SIZE_ZOOM_EASE_MID = 8
 const POINT_SIZE_ZOOM_EASE_END = 10
 const POINT_SIZE_ZOOM_MID_CLOSE_SCALE = 0.7
 
+// Applied as deck.gl's radiusScale uniform, so a size change re-uploads no
+// attributes.
+function scaledRadiusProps(
+  options: CellPointLayerOptions,
+  radiusMinPixels: number,
+  defaultRadiusMaxPixels: number,
+) {
+  const scale = options.radiusScale ?? 1
+
+  return {
+    radiusUnits: 'common',
+    radiusScale: scale,
+    radiusMinPixels: radiusMinPixels * scale,
+    radiusMaxPixels: (options.radiusMaxPixels ?? defaultRadiusMaxPixels) * scale,
+  } as const
+}
+
 export function createCellPointLayer(
   cells: readonly OverviewCellDatum[],
   options: CellPointLayerOptions,
@@ -118,9 +137,7 @@ export function createCellPointLayer(
   const common = {
     id: 'cells-overview-scatter',
     pickable: options.pickable ?? true,
-    radiusUnits: 'common',
-    radiusMinPixels: 0.12,
-    radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_CELL_RADIUS_MAX_PIXELS,
+    ...scaledRadiusProps(options, 0.12, DEFAULT_CELL_RADIUS_MAX_PIXELS),
     stroked: options.cellBoundaryOpacity > 0,
     filled: options.filled,
     opacity: 1,
@@ -188,9 +205,7 @@ export function createGeneExpressionScatterLayer(
     id: 'gene-expression-scatter',
     data: cells,
     pickable: false,
-    radiusUnits: 'common',
-    radiusMinPixels: 1.5,
-    radiusMaxPixels: options.radiusMaxPixels ?? DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
+    ...scaledRadiusProps(options, 1.5, DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS),
     stroked: options.cellBoundaryOpacity > 0,
     filled: true,
     opacity: 1,
@@ -234,6 +249,11 @@ export function geneExpressionRadiusMaxPixels(
   )
 }
 
+// Radius, in µm, of a cell without an area: 10 to 20 µm across, the usual
+// size of a cell, larger with more transcripts.
+const FALLBACK_CELL_RADIUS_MIN_MICROMETERS = 5
+const FALLBACK_CELL_RADIUS_RANGE_MICROMETERS = 5
+
 export function overviewCellsToLayerData(
   cells: readonly CellOverviewPoint[],
 ): readonly OverviewCellDatum[] {
@@ -254,7 +274,9 @@ export function overviewCellsToLayerData(
     return {
       id: cell.cellId ?? `overview-cell-${index}`,
       position: [cell.position.x, -cell.position.y, 0],
-      radiusPixels: 2 + intensity * 3,
+      radiusPixels:
+        FALLBACK_CELL_RADIUS_MIN_MICROMETERS +
+        intensity * FALLBACK_CELL_RADIUS_RANGE_MICROMETERS,
       ...(radiusMicrometers === undefined ? {} : { radiusMicrometers }),
       fillColor: [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 150 + Math.round(intensity * 90)],
       transcriptCount: cell.transcriptCount,

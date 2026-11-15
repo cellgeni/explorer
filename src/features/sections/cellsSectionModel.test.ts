@@ -9,6 +9,7 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
     offerUndo: vi.fn(),
     cellBoundaryOpacity: 1,
     cellFillOpacity: 1,
+    cellPointScale: 1,
     cellLayerControlsVisible: true,
     cellMetadataTracks: [],
     geneExpressionBatch: null,
@@ -34,6 +35,7 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
     selectedGenes: ['Actb', 'Slc17a7'],
     setCellBoundaryOpacity: vi.fn(),
     setCellFillOpacity: vi.fn(),
+    setCellPointScale: vi.fn(),
     setGeneExpressionColorScale: vi.fn(),
     setGeneExpressionDetailMode: vi.fn(),
     setGeneExpressionScaleDomain: vi.fn(),
@@ -67,6 +69,20 @@ describe('useCellsSectionModel', () => {
     })
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Cell boundary opacity: 25%', {
       coalesceKey: 'cell-boundary-opacity',
+    })
+  })
+
+  it('keeps point sizes on the slider steps and logs them', () => {
+    const options = input()
+    const { result } = renderHook(() => useCellsSectionModel(options))
+
+    result.current.appearance.onPointScaleChange(2.6)
+    result.current.appearance.onPointScaleChange(100)
+
+    expect(options.setCellPointScale).toHaveBeenNthCalledWith(1, 3)
+    expect(options.setCellPointScale).toHaveBeenNthCalledWith(2, 32)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Cell point size: 3x', {
+      coalesceKey: 'cell-point-scale',
     })
   })
 

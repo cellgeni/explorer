@@ -49,6 +49,8 @@ export interface ShareableState {
   readonly boundaryCellLimit?: number
   readonly imageOpacity?: number
   readonly cellFillOpacity?: number
+  // Multiplier on the size cells are drawn at when shown as points.
+  readonly cellPointScale?: number
   readonly showCellBoundaries?: boolean
   readonly showNucleusBoundaries?: boolean
   readonly showHoverTooltips?: boolean
@@ -124,6 +126,7 @@ export function parseShareableState(hash: string): ShareableState {
   const boundaryCellLimit = parsePositiveInteger(params.get('boundaryLimit'))
   const imageOpacity = parseUnitNumber(params.get('imgOpacity'))
   const cellFillOpacity = parseUnitNumber(params.get('cellFill'))
+  const cellPointScale = parsePositiveNumber(params.get('cellSize'))
   const showCellBoundaries = parseBoolean(params.get('cellBounds'))
   const showNucleusBoundaries = parseBoolean(params.get('nucleusBounds'))
   const showHoverTooltips = parseBoolean(params.get('hoverTips'))
@@ -258,6 +261,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (cellFillOpacity !== undefined) {
     state.cellFillOpacity = cellFillOpacity
+  }
+
+  if (cellPointScale !== undefined) {
+    state.cellPointScale = cellPointScale
   }
 
   if (showCellBoundaries !== undefined) {
@@ -463,6 +470,10 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.cellFillOpacity !== undefined && Number.isFinite(state.cellFillOpacity)) {
     params.set('cellFill', roundForHash(state.cellFillOpacity).toString())
+  }
+
+  if (state.cellPointScale !== undefined && Number.isFinite(state.cellPointScale)) {
+    params.set('cellSize', roundForHash(state.cellPointScale).toString())
   }
 
   if (state.showCellBoundaries !== undefined) {

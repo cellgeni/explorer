@@ -185,6 +185,8 @@ export interface OverviewLayerOptions {
   // No screen-pixel cap on point radii, so points with a physical size keep
   // it at every zoom.
   readonly trueSizePoints?: boolean
+  // Multiplier on cell point radii and their screen-pixel limits.
+  readonly cellPointScale?: number
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaryOpacity?: number
   readonly gridCells?: readonly GridCellDatum[]

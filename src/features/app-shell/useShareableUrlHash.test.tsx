@@ -39,6 +39,7 @@ function ShareableUrlHashProbe({
       boundaryCellLimit: 2500,
       cellBoundaryOpacity: 0.35,
       cellFillOpacity: 0.7,
+      cellPointScale: 1,
       cellMetadataTrackId: null,
       coordinateUnit: 'px',
       imageOpacity: 0.45,

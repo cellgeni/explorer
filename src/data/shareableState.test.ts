@@ -40,6 +40,7 @@ describe('shareableState', () => {
       boundaryCellLimit: 2500,
       imageOpacity: 0.45,
       cellFillOpacity: 0.7,
+      cellPointScale: 1.5,
       showCellBoundaries: false,
       showNucleusBoundaries: true,
       showHoverTooltips: false,
@@ -82,6 +83,7 @@ describe('shareableState', () => {
     expect(state.boundaryCellLimit).toBe(2500)
     expect(state.imageOpacity).toBe(0.45)
     expect(state.cellFillOpacity).toBe(0.7)
+    expect(state.cellPointScale).toBe(1.5)
     expect(state.showCellBoundaries).toBe(false)
     expect(state.showNucleusBoundaries).toBe(true)
     expect(state.showHoverTooltips).toBe(false)

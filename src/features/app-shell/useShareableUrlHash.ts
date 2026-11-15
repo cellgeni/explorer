@@ -50,6 +50,7 @@ interface ShareableLayerHashOptions {
   readonly coordinateUnit: string
   readonly imageOpacity: number
   readonly cellFillOpacity: number
+  readonly cellPointScale: number
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly showHoverTooltips: boolean
@@ -162,6 +163,7 @@ export function useShareableUrlHash({
     cellMetadataTrackId,
     cellBoundaryOpacity,
     cellFillOpacity,
+    cellPointScale,
     coordinateUnit,
     imageOpacity,
     measurementUnit,
@@ -249,6 +251,7 @@ export function useShareableUrlHash({
           boundaryCellLimit,
           imageOpacity,
           cellFillOpacity,
+          cellPointScale,
           showCellBoundaries,
           showNucleusBoundaries,
           showHoverTooltips,
@@ -327,6 +330,7 @@ export function useShareableUrlHash({
     geneExpressionScoreMode,
     imageOpacity,
     cellFillOpacity,
+    cellPointScale,
     showCellBoundaries,
     showNucleusBoundaries,
     showHoverTooltips,
