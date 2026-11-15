@@ -2110,7 +2110,10 @@ function ViewerSurface({
           <GridCellHoverTooltip detail={gridCellHover} />
         )}
         {cellBoundaryHover === null || magicLensActive ? null : (
-          <CellBoundaryHoverTooltip detail={cellBoundaryHover} />
+          <CellBoundaryHoverTooltip
+            detail={cellBoundaryHover}
+            sourceLabel={overviewCellSourceLabel}
+          />
         )}
         {!hasSpatialData && status === 'idle' ? (
           <div className="viewport-empty-state" aria-hidden="true">

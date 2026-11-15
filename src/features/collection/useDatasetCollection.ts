@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useEffectEvent, useState } from 'react'
+import { registerCollectionImages } from '../../data/datasetFiles'
 import {
   collectionEntryFor,
   type DatasetCollection,
@@ -74,6 +75,8 @@ export function useDatasetCollection({
       (collection) => {
         if (controller.signal.aborted) return
 
+        // Before any of its datasets opens, previews included.
+        registerCollectionImages(collection)
         setState({ status: 'ready', url: loadingUrl, collection })
         const first = collection.datasets[0]
 

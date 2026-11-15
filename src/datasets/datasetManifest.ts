@@ -206,9 +206,43 @@ export interface MerscopeDatasetManifest extends DatasetManifestBase {
   >
 }
 
+// How an AnnData table's cell coordinates relate to its image: micrometres,
+// as the viewer reads AnnData coordinates, or the image's full-resolution
+// pixels, as WebAtlas writes `obsm/X_spatial`.
+export const DATASET_IMAGE_COORDINATES = ['micrometers', 'image-pixels'] as const
+
+export type DatasetImageCoordinates = (typeof DATASET_IMAGE_COORDINATES)[number]
+
+// An image shown under an AnnData dataset's cells, named by an H5AD manifest
+// or a collection entry.
+export interface DatasetImageAttachment {
+  // As written.
+  readonly path: string
+  readonly url: string
+  readonly coordinates: DatasetImageCoordinates
+  // A segmentation label image covering the image, drawn as cell boundaries.
+  readonly labels?: DatasetManifestFile
+  // The obs column holding each cell's label value. Without it, the SpatialData
+  // instance key the table records, else the obs names.
+  readonly labelColumn?: string
+}
+
+export const H5AD_MANIFEST_FILES = ['h5ad', 'image', 'labels'] as const
+
+export const H5AD_MANIFEST_OPTIONS = ['coordinates', 'labelColumn'] as const
+
 export interface H5adDatasetManifest extends DatasetManifestBase {
   readonly platform: 'h5ad'
-  readonly files: { readonly h5ad: DatasetManifestFile }
+  readonly files: {
+    // An .h5ad file, an AnnData Zarr store or an Icechunk repository.
+    readonly h5ad: DatasetManifestFile
+    readonly image?: DatasetManifestFile
+    readonly labels?: DatasetManifestFile
+  }
+  readonly options: {
+    readonly coordinates?: DatasetImageCoordinates
+    readonly labelColumn?: string
+  }
 }
 
 export interface SpatialDataDatasetManifest extends DatasetManifestBase {
@@ -452,9 +486,52 @@ export function parseDatasetManifest(
   }
 
   if (platform === 'h5ad') {
-    rejectOptions(options, platform, fail)
-    checkKeys(files, ['h5ad'], 'files.', fail)
-    return { ...base, platform, files: { h5ad: requiredFile('h5ad') } }
+    checkKeys(files, H5AD_MANIFEST_FILES, 'files.', fail)
+
+    if (options !== undefined) {
+      checkKeys(options, H5AD_MANIFEST_OPTIONS, 'options.', fail)
+    }
+
+    const h5ad = requiredFile('h5ad')
+    const attachment = parseImageAttachment(
+      {
+        image: optionalPath(files, 'image', 'files.', fail),
+        labels: optionalPath(files, 'labels', 'files.', fail),
+        coordinates: options?.coordinates,
+        labelColumn:
+          options === undefined
+            ? undefined
+            : optionalString(options, 'labelColumn', 'options.', fail),
+      },
+      {
+        image: 'files.image',
+        labels: 'files.labels',
+        coordinates: 'options.coordinates',
+        labelColumn: 'options.labelColumn',
+      },
+      rootUrl,
+      fail,
+    )
+
+    return {
+      ...base,
+      platform,
+      files: {
+        h5ad,
+        ...(attachment === undefined
+          ? {}
+          : { image: { path: attachment.path, url: attachment.url } }),
+        ...(attachment?.labels === undefined ? {} : { labels: attachment.labels }),
+      },
+      options: {
+        ...(attachment === undefined || options?.coordinates === undefined
+          ? {}
+          : { coordinates: attachment.coordinates }),
+        ...(attachment?.labelColumn === undefined
+          ? {}
+          : { labelColumn: attachment.labelColumn }),
+      },
+    }
   }
 
   if (platform === 'image') {
@@ -527,6 +604,81 @@ export function parseDatasetManifest(
     platform,
     files: { store: requiredFile('store') },
     options: parsedOptions,
+  }
+}
+
+// An image, labels and coordinates read from `fields`; `names` say where each
+// is written, for errors. `coordinates` and `labels` need an image.
+export function parseImageAttachment(
+  fields: {
+    readonly image: string | undefined
+    readonly labels: string | undefined
+    readonly coordinates: unknown
+    readonly labelColumn: string | undefined
+  },
+  names: {
+    readonly image: string
+    readonly labels: string
+    readonly coordinates: string
+    readonly labelColumn: string
+  },
+  rootUrl: string,
+  fail: Fail,
+): DatasetImageAttachment | undefined {
+  const { image, labels, coordinates, labelColumn } = fields
+
+  if (labelColumn !== undefined && labels === undefined) {
+    return fail(`"${names.labelColumn}" needs "${names.labels}".`)
+  }
+
+  if (
+    coordinates !== undefined &&
+    !DATASET_IMAGE_COORDINATES.includes(coordinates as DatasetImageCoordinates)
+  ) {
+    return fail(
+      `"${names.coordinates}" must be one of ${DATASET_IMAGE_COORDINATES.map((value) => `"${value}"`).join(', ')}.`,
+    )
+  }
+
+  if (image === undefined) {
+    const without =
+      coordinates !== undefined
+        ? names.coordinates
+        : labels !== undefined
+          ? names.labels
+          : undefined
+    return without === undefined
+      ? undefined
+      : fail(`"${without}" needs "${names.image}".`)
+  }
+
+  return {
+    path: image,
+    url: resolve(rootUrl, image),
+    coordinates: (coordinates as DatasetImageCoordinates | undefined) ?? 'micrometers',
+    ...(labels === undefined
+      ? {}
+      : { labels: { path: labels, url: resolve(rootUrl, labels) } }),
+    ...(labelColumn === undefined ? {} : { labelColumn }),
+  }
+}
+
+// The image an H5AD manifest pairs with its table.
+export function manifestImageAttachment(
+  manifest: DatasetManifest | undefined,
+): DatasetImageAttachment | undefined {
+  if (manifest?.platform !== 'h5ad' || manifest.files.image === undefined) {
+    return undefined
+  }
+
+  const { image, labels } = manifest.files
+  const { coordinates, labelColumn } = manifest.options
+
+  return {
+    ...image,
+    coordinates: coordinates ?? 'micrometers',
+    ...(labels === undefined ? {} : { labels }),
+    ...(labelColumn === undefined ? {} : { labelColumn }),
   }
 }
 

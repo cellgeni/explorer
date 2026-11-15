@@ -3014,6 +3014,9 @@ export function App({ dependencies }: AppProps = {}) {
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
       isDatasetLoading: loadState.status === 'loading',
+      // A link naming a dataset and its collection loads the dataset once the
+      // collection is read, so the image the collection pairs with it shows.
+      initialDatasetLoadHeld: datasetCollection.state.status === 'loading',
     },
     initialState: {
       initialShareableState,
@@ -4107,7 +4110,10 @@ export function App({ dependencies }: AppProps = {}) {
         cellLayersVisible={layerVisibility.cells}
         cellFillOpacity={cellFillOpacity}
         cellPointScale={cellPointScale}
-        cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
+        cellBoundaryOpacity={
+          // H5AD points have no outline unless the table has label boundaries.
+          platformAdapter.kind === 'h5ad' && !showCellBoundaries ? 0 : cellBoundaryOpacity
+        }
         pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
         trueSizePoints={platformAdapter.trueSizePoints}
         transcriptOpacity={transcriptOpacity}

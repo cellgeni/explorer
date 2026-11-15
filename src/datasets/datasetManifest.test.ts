@@ -3,6 +3,7 @@ import {
   DatasetManifestError,
   isDatasetManifestUrl,
   looksLikeDatasetManifest,
+  manifestImageAttachment,
   manifestZchunkStoreUrl,
   parseDatasetManifest,
 } from './datasetManifest'
@@ -219,6 +220,75 @@ describe('parseDatasetManifest', () => {
         files: { h5ad: 'a.h5ad', zchunkstore: 'a.zchunkstore' },
       }),
     ).toContain('files.zchunkstore')
+  })
+
+  it('pairs an H5AD table with an image and labels', () => {
+    const manifest = parse({
+      version: 1,
+      platform: 'h5ad',
+      root: 'https://bucket.example.test/SPCOX/',
+      files: {
+        h5ad: 'SPCOX-Sham-A-anndata.zarr',
+        image: 'SPCOX-Sham-A-raw.zarr/',
+        labels: 'SPCOX-Sham-A-label.zarr',
+      },
+      options: { coordinates: 'image-pixels', labelColumn: 'cell_labels' },
+    })
+
+    expect(manifest).toMatchObject({
+      files: {
+        h5ad: { url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-anndata.zarr' },
+        image: { path: 'SPCOX-Sham-A-raw.zarr' },
+      },
+      options: { coordinates: 'image-pixels', labelColumn: 'cell_labels' },
+    })
+    expect(manifestImageAttachment(manifest)).toEqual({
+      path: 'SPCOX-Sham-A-raw.zarr',
+      url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-raw.zarr',
+      coordinates: 'image-pixels',
+      labels: {
+        path: 'SPCOX-Sham-A-label.zarr',
+        url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-label.zarr',
+      },
+      labelColumn: 'cell_labels',
+    })
+    expect(
+      manifestImageAttachment(
+        parse({
+          version: 1,
+          platform: 'h5ad',
+          files: { h5ad: 'a.h5ad', image: 'a.ome.tif' },
+        }),
+      ),
+    ).toMatchObject({ coordinates: 'micrometers' })
+    expect(
+      manifestImageAttachment(
+        parse({ version: 1, platform: 'h5ad', files: { h5ad: 'a.h5ad' } }),
+      ),
+    ).toBeUndefined()
+
+    const h5ad = (files: object, options?: object) =>
+      parseError({
+        version: 1,
+        platform: 'h5ad',
+        files: { h5ad: 'a.h5ad', ...files },
+        ...(options === undefined ? {} : { options }),
+      })
+    expect(h5ad({ labels: 'a-label.zarr' })).toBe(
+      'explorer.json: "files.labels" needs "files.image".',
+    )
+    expect(h5ad({}, { coordinates: 'image-pixels' })).toBe(
+      'explorer.json: "options.coordinates" needs "files.image".',
+    )
+    expect(h5ad({ image: 'a.zarr' }, { coordinates: 'pixels' })).toBe(
+      'explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".',
+    )
+    expect(h5ad({ image: 'a.zarr' }, { labelColumn: 'cell_labels' })).toBe(
+      'explorer.json: "options.labelColumn" needs "files.labels".',
+    )
+    expect(h5ad({ image: 'a.zarr' }, { table: 'x' })).toContain(
+      'unknown field "options.table"',
+    )
   })
 
   it('accepts a manifest without files for platforms with standard names', () => {

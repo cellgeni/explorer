@@ -60,7 +60,30 @@
           "type": "string",
           "minLength": 1,
           "description": "Group label, such as a time point or donor. The bar lists groups in the order they first appear."
+        },
+        "image": {
+          "$ref": "#/$defs/path",
+          "description": "An image to show under an AnnData dataset's cells: OME-Zarr, OME-TIFF, TIFF, QPTIFF, SVS or NDPI. Resolved like `dataset`. Other datasets keep their own image."
+        },
+        "coordinates": {
+          "enum": ["micrometers", "image-pixels"],
+          "default": "micrometers",
+          "description": "What the dataset's cell coordinates are in: micrometres, or the image's full-resolution pixels, which are scaled to micrometres by the image's pixel size. Needs `image`."
+        },
+        "labels": {
+          "$ref": "#/$defs/path",
+          "description": "An OME-Zarr segmentation label image covering `image`, drawn as cell boundaries. Label N outlines the cell whose label value is N (see `labelColumn`). Resolved like `dataset`. Needs `image`."
+        },
+        "labelColumn": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `labels`."
         }
+      },
+      "dependentRequired": {
+        "coordinates": ["image"],
+        "labels": ["image"],
+        "labelColumn": ["labels"]
       },
       "additionalProperties": false
     },

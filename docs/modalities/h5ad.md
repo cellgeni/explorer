@@ -15,6 +15,12 @@ before any other platform:
 2. A single `HEAD` request (15 s timeout) must return `2xx`. A host that rejects
    `HEAD` makes the file undetectable and the platform `unknown`.
 
+An `h5ad` [dataset manifest](../dataset-manifest.md) names the table in
+`files.h5ad` (`detectManifestAnnData`): an `.h5ad` file gets the same `HEAD`
+check; an AnnData Zarr store must have `encoding-type: anndata` in its root
+`.zattrs` or `zarr.json`, and an Icechunk repository must hold AnnData. A
+path that has no Zarr metadata is checked as an `.h5ad` file.
+
 `createSpatialDataset` then lazy-imports `AnnDataH5adDataset`
 (`src/datasets/h5adDataset.ts`). Instances are memoized per URL by
 `cachedSpatialDataset`.
@@ -191,7 +197,9 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 - Only columns 0 and 1 are used. Any non-finite value fails the load.
 - Values are used directly as micrometres (1 µm per unit), except for Visium
   files, whose `obsm/spatial` pixels are scaled to micrometres
-  ([Units And Coordinates](./visium.md#units-and-coordinates)).
+  ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
+  collection pairs with an image whose pixels they are in
+  ([Attached Image](#attached-image)).
 - Embedding options (`readObsmEmbeddingOptions`) are every dense 2D obsm
   matrix with `n_obs` rows and 2+ columns, ordered `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`, `X_spatial`, `spatial`, then alphabetically.
@@ -236,11 +244,69 @@ choice places the rows again) and returned to every caller. Its points carry
 `readMetadata` instead of a metadata object: building an object per cell with
 every obs column took 0.6–1.4 s per call on a 598,222-cell table.
 
-H5AD has no morphology image and no boundary polygons, so cell boundaries are
-switched off and `meta()` reports all capabilities as `false`. `elements()`
-returns `[]` and `image()` returns `null`. Before this, the lifecycle calls
-`visiumSummary()`; when it finds a Visium layout, the load continues as
-[Standard Visium](./visium.md#load-sequence) instead.
+Without [attached labels](#attached-image), H5AD has no boundary polygons, so
+cell boundaries are switched off and `elements()` returns `[]`. Without an
+attached image, `meta()` reports all capabilities as `false` and `image()`
+returns `null`.
+Before this, the lifecycle calls `visiumSummary()`; when it finds a Visium
+layout, the load continues as [Standard Visium](./visium.md#load-sequence)
+instead.
+
+## Attached Image
+
+A [dataset collection](../dataset-collections.md#images) entry or an `h5ad`
+[dataset manifest](../dataset-manifest.md#anndata-with-an-image) can name an
+image to show under an AnnData dataset's cells, such as the Xenium morphology
+image that WebAtlas publishes next to each section's AnnData Zarr store. Any
+image the [generic opener](./image.md) reads works: OME-Zarr (including
+`bioformats2raw` stores and image groups inside a `.zarr` store, such as a
+SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
+
+- **Registration.** `useDatasetCollection` calls `registerCollectionImages`
+  (`src/data/datasetFiles.ts`) when the collection is read, before any of its
+  datasets or previews opens. A manifest's image comes with the manifest,
+  which detection registers (`manifestImageAttachment`). `datasetImageFor`
+  prefers the collection's. `createSpatialDataset` passes it to
+  `AnnDataH5adDataset` as `image`, and `cachedSpatialDataset` keys the
+  instance by the collection's image only (`collectionImageFor`): the
+  manifest belongs to the URL, so the key needs no part of it. A link that
+  names both a collection and a dataset holds the dataset's load until the
+  collection is read.
+- **Placement.** With `coordinates: "image-pixels"`, the dataset opens the
+  image (`attachedImageLoader`, once per instance) before placing its cells
+  and multiplies the obsm coordinates by the image's micrometres per pixel, so
+  the cells, the image, the scale bar and every distance are in micrometres.
+  With `micrometers`, the default, the coordinates are used as they are and
+  the image is placed by its own pixel size. If the image cannot be opened,
+  the coordinates are used as they are, with a line in the log.
+- **Drawing.** After the cells are drawn, the lifecycle loads `image()` as a
+  pyramid in the background, as for SpatialData: channels, contrast, opacity
+  and the minimap work as for any image, and `meta()` reports the image's
+  units, `pyramidImage` and `multiChannel`.
+- **Labels.** With `labels`, `labelCellsFor` maps label values to cells, once
+  per placed table: from `labelColumn`; else the SpatialData instance key
+  (`readSpatialDataInstanceKey`: the root's `instance_key` attribute, else
+  `uns/spatialdata_attrs/instance_key`) or the shortest obs column matching
+  `/label/i`, whichever holds whole numbers for more than half the rows; else
+  the obs names. `meta()` reports `cellBoundaries` when that maps some cells,
+  or when a named `labelColumn` maps none, so `elements(bbox)` can throw and
+  the boundary load shows why. `elements(bbox)` returns outlines from the
+  label image. `openOmeZarrLabels` (`src/datasets/spatialDataLabels.ts`) opens
+  the store's multiscale group (`openOmeZarrMultiscaleGroup`,
+  `src/zarr/omeZarrLoader.ts`) as a `SpatialDataLabelsReader`, the reader
+  SpatialData labels use: chunks are traced in the Zarr decode workers and
+  joined across chunk edges, and rings are cached while their chunks are. The
+  view's bbox is converted to label pixels by the image's extent over the
+  label image's (`labelElements`), and the rings back to micrometres. Labels
+  no cell has are skipped before rings are joined.
+  `H5AD_PLATFORM_ADAPTER` loads boundaries while `Cell boundaries` is on, and
+  points get outlines only then.
+- **Not used.** A Visium table keeps its own tissue image, and other platforms
+  their own; the entry's image is then ignored, with a Fallbacks notice.
+
+For a SPCOX section, opening the image costs three requests (about 15 KB)
+before the cells are placed, which also applies to each collection preview,
+and the image row shows about 2.7 s after the link opens.
 
 ## Feature Read Paths
 

@@ -2,6 +2,10 @@
 // worker. Edges are pixel sides in level-pixel vertex coordinates, encoded as
 // `vertexKey * 4 + direction` with `vertexKey = y * (levelWidth + 1) + x`.
 
+// Label pixels traced per boundary request; coarser pyramid levels are used
+// when the viewport would need more.
+export const LABEL_OUTLINE_MAX_PIXELS = 16_000_000
+
 export interface PackedLabelTrace {
   // One entry per label with pixels in the chunk window.
   readonly labels: Int32Array

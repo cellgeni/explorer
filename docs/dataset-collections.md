@@ -29,7 +29,10 @@ The format is defined by
 Xenium sections of the
 [SPCOX spinal cord time course](https://www.sciatlas.org/SPCOX/), three per
 time point, and the snRNA-seq atlas they are compared with. Each entry is an
-AnnData Zarr store on the group's bucket, which the viewer reads directly:
+AnnData Zarr store on the group's bucket, which the viewer reads directly,
+and each section names its morphology image and its cell segmentation, two
+OME-Zarr stores next to it. The sections' coordinates are pixels of that
+image:
 
 ```json
 {
@@ -38,9 +41,22 @@ AnnData Zarr store on the group's bucket, which the viewer reads directly:
   "name": "Spinal cord Xenium time course (SPCOX)",
   "root": "https://spco.cog.sanger.ac.uk/SPCOX/",
   "datasets": [
-    { "dataset": "SPCOX-Sham-A-anndata.zarr", "name": "Sham-A", "group": "Sham" },
-    { "dataset": "SPCOX-Sham-B-anndata.zarr", "name": "Sham-B", "group": "Sham" },
-    { "dataset": "SPCOX-1dpi-A-anndata.zarr", "name": "1dpi-A", "group": "1 dpi" },
+    {
+      "dataset": "SPCOX-Sham-A-anndata.zarr",
+      "image": "SPCOX-Sham-A-raw.zarr",
+      "labels": "SPCOX-Sham-A-label.zarr",
+      "coordinates": "image-pixels",
+      "name": "Sham-A",
+      "group": "Sham"
+    },
+    {
+      "dataset": "SPCOX-1dpi-A-anndata.zarr",
+      "image": "SPCOX-1dpi-A-raw.zarr",
+      "labels": "SPCOX-1dpi-A-label.zarr",
+      "coordinates": "image-pixels",
+      "name": "1dpi-A",
+      "group": "1 dpi"
+    },
     {
       "dataset": "SPCO-snRNAseq-anndata.zarr",
       "name": "snRNA-seq atlas",
@@ -77,11 +93,15 @@ Unknown fields are errors, as in a dataset manifest.
 
 ### Datasets
 
-| Key       | Required | Value                                                                                                                       |
-| --------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `dataset` | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
-| `name`    | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
-| `group`   | No       | Group label, such as a time point or donor                                                                                  |
+| Key           | Required | Value                                                                                                                       |
+| ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`     | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
+| `name`        | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
+| `group`       | No       | Group label, such as a time point or donor                                                                                  |
+| `image`       | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
+| `coordinates` | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
+| `labels`      | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
+| `labelColumn` | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -92,7 +112,92 @@ Unknown fields are errors, as in a dataset manifest.
   datasets in file order. Entries without a group are listed where they
   appear.
 - An entry that points at a manifest gets that manifest's files, options and
-  defaults. A collection does not repeat them.
+  defaults, including an H5AD manifest's image and labels. A collection does
+  not repeat them; an entry that names an image replaces the manifest's.
+
+### Images
+
+An AnnData table (an `.h5ad` file, an AnnData Zarr store or an Icechunk
+repository) has no image of its own unless it is Visium. `image` names one
+to show under its cells, as the dataset's image layer: OME-Zarr, including
+`bioformats2raw` stores such as those Bio-Formats and WebAtlas write,
+OME-TIFF, TIFF, QPTIFF, SVS or NDPI. The path resolves like `dataset`.
+An OME-Zarr image needs `.zarr` in its own name or in the name of the store
+it sits in, so an image group such as `sample.zarr/images/he` works. The
+group is read on its own: a SpatialData store's coordinate transformations
+are not, so its coordinates must match the table's as `coordinates` below
+describes. To use them, open the whole store as SpatialData instead.
+
+`coordinates` says how the table's `obsm` coordinates relate to the image:
+
+- `micrometers`, the default: they are micrometres, as the viewer reads
+  AnnData coordinates, and the image is placed by its own pixel size.
+- `image-pixels`: they are the image's full-resolution pixels, as WebAtlas
+  writes them. The viewer scales them by the image's micrometres per
+  pixel, so the scale bar and distances are in micrometres. For SPCOX that is
+  0.2125 µm per pixel.
+
+The image then behaves as the dataset's own:
+
+- It loads in the background once the cells are drawn, with its
+  channels in the Image section. With `Morphology image` off it is not
+  drawn, though `image-pixels` still reads its metadata to place the cells.
+- Previews do not draw the image. With `image-pixels`, each preview reads the
+  image's metadata (about 15 KB for SPCOX) to place its cells.
+- A link that names a dataset as well as the collection opens the dataset once
+  the collection is read, so it opens over its image.
+- The image belongs to the collection: the same dataset opened on its own has
+  none, until a collection that pairs it with one has been read in that tab.
+  To give a dataset its image wherever it is opened, name it in the dataset's
+  [manifest](./dataset-manifest.md#anndata-with-an-image) instead.
+- Only AnnData tables take one. Other platforms, and Visium tables, keep their
+  own image; an entry's `image` is then ignored, with a notice under
+  Fallbacks.
+- To check alignment, zoom in until nuclei show in the image; each cell's
+  point should sit on its nucleus.
+
+See [Attached Image](./modalities/h5ad.md#attached-image) for how it is read.
+
+### Labels
+
+`labels` names a segmentation mask to draw as the dataset's cell boundaries:
+an OME-Zarr label image, including a `bioformats2raw` store, whose pixel
+values are cell labels and 0 is background. WebAtlas publishes one next to
+each section (`-label.zarr`).
+
+- **Which cell.** Label N outlines the cell whose label value is N. The
+  values come from:
+  1. `labelColumn`, an obs column of whole numbers or of strings of them.
+     A column that is missing, or holds no whole numbers, shows as a
+     `Cell boundaries` error when boundaries load.
+  2. Without it, as for a SpatialData table: the table's SpatialData instance
+     key (its `instance_key` attribute, or `uns/spatialdata_attrs`), else the
+     shortest obs column with "label" in its name, whichever holds whole
+     numbers for more than half the cells.
+  3. Otherwise the obs names, as in Vitessce: label 12 is the cell named
+     `12`. SPCOX's tables work this way.
+
+  The log says which column matched. Labels that no cell has are not drawn.
+  A SpatialData table's obs names need not be its labels: the Xenium ovary
+  table in `AU14_S14_final.zarr` names its cells 0, 1, ..., keeps labels
+  1, 2, ... in `cell_labels`, and has the cell barcode as its instance key.
+  It matches by `cell_labels`, and all 905 cells in a 300 × 250 µm window
+  sit inside their own outlines; by obs name, none would.
+
+- **Where.** The label image covers the same area as `image`, so its pixels
+  are scaled to the image's extent. A mask on the image's own pixel grid, such
+  as SPCOX's, lines up pixel for pixel; a downsampled one is stretched to fit.
+  The mask's own pixel size is not used: bioformats2raw writes 1 when it has
+  none.
+- **Drawing.** `Cell boundaries` starts on, and outlines load for the view as
+  for Xenium: once fewer than the Boundary limit's cells (50,000 by default)
+  are in view, from the finest pyramid level whose pixels in view fit 16
+  million. They are traced in the Zarr decode workers and coloured like the
+  cells. Hovering one shows its cell.
+- For SPCOX (headless Chromium with the GPU), the full view of Sham-A (16,597
+  cells) reads its outlines from a coarse level: 8 label chunks, 0.8 MB. A
+  field about 1.3 mm wide reads 12 chunks (1.4 MB) and one about 300 µm wide
+  12 chunks (0.75 MB), each done within 2.6 s of zooming.
 
 ### Defaults
 
@@ -224,3 +329,4 @@ errors as you type.
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
+- Labels need an image to be placed on.

@@ -131,8 +131,10 @@ export function OverviewCellHoverTooltip({
 
 export function CellBoundaryHoverTooltip({
   detail,
+  sourceLabel = 'Xenium',
 }: {
   readonly detail: ViewerCellBoundaryHoverDetail
+  readonly sourceLabel?: string
 }) {
   const boundary = detail.boundary
   const cell = detail.cell
@@ -150,7 +152,7 @@ export function CellBoundaryHoverTooltip({
       <dl>
         <div>
           <dt>Cell</dt>
-          <dd>{cell === undefined ? 'Segmented' : 'Xenium'}</dd>
+          <dd>{cell === undefined ? 'Segmented' : sourceLabel}</dd>
         </div>
         {boundary.annotationLabel === undefined ? null : (
           <div>

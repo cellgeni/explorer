@@ -8,7 +8,10 @@ import {
   MAX_COLLECTION_DATASETS,
   parseDatasetCollection,
 } from './datasetCollection'
-import { DATASET_MANIFEST_SOURCE_KEYS } from './datasetManifest'
+import {
+  DATASET_IMAGE_COORDINATES,
+  DATASET_MANIFEST_SOURCE_KEYS,
+} from './datasetManifest'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
 // enforces. These checks keep their field lists and values in step.
@@ -42,6 +45,9 @@ describe('dataset collection JSON Schema', () => {
       [...DATASET_COLLECTION_DEFAULT_KEYS].sort(),
     )
     expect(schema.properties?.datasets?.maxItems).toBe(MAX_COLLECTION_DATASETS)
+    expect(schema.$defs?.dataset?.properties?.coordinates?.enum).toEqual(
+      DATASET_IMAGE_COORDINATES,
+    )
   })
 
   it('offers the same default values as the dataset manifest', () => {

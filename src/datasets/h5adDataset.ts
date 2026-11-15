@@ -23,6 +23,10 @@ import type {
 import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import type { DatasetImageCoordinates } from './datasetManifest'
+import type { SpatialDataLabelsReader } from './spatialDataLabels'
+import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {
   analysisEmbeddingLabel,
   type AnalysisEmbedding,
@@ -84,6 +88,38 @@ export interface AnnDataH5adDatasetOptions {
   // The most decoded chunk bytes one cell's all-gene profile may read from a
   // dense Zarr /X. Defaults to DENSE_ZARR_CELL_PROFILE_MAX_BYTES.
   readonly denseCellProfileMaxBytes?: number
+  // An image shown under the cells, such as one a dataset collection pairs
+  // with the table. Not used for a Visium table, which has its own image.
+  readonly image?: AnnDataAttachedImage
+  // Opens `image`; defaults to the generic image opener.
+  readonly openImage?: ImagePyramidOpener
+  // Opens `image.labelsUrl`; defaults to the OME-Zarr label reader.
+  readonly openLabels?: AnnDataLabelsOpener
+}
+
+// What cell boundaries need from a label image's reader.
+export type AnnDataLabelsReader = Pick<SpatialDataLabelsReader, 'levels' | 'outlines'>
+
+export type AnnDataLabelsOpener = (url: string) => Promise<AnnDataLabelsReader>
+
+export interface AnnDataAttachedImage {
+  // OME-Zarr, OME-TIFF or another image the generic opener reads.
+  readonly url: string
+  // With 'image-pixels', the obsm coordinates are the image's full-resolution
+  // pixels and are scaled to micrometres by its pixel size.
+  readonly coordinates: DatasetImageCoordinates
+  // A segmentation label image (OME-Zarr) covering the image.
+  readonly labelsUrl?: string
+  // The obs column holding each cell's label value. Without it, the
+  // SpatialData instance key in `uns/spatialdata_attrs`, else the obs names:
+  // label 12 outlines the cell named "12".
+  readonly labelColumn?: string
+}
+
+// Label value -> cell id, or why a named label column gives none.
+interface H5adLabelCells {
+  readonly byLabel: ReadonlyMap<number, string>
+  readonly error?: string
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
@@ -536,6 +572,19 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   } | null = null
   // Per library and image kind.
   private readonly tissueImageUrls = new Map<string, Promise<string>>()
+  readonly attachedImage: AnnDataAttachedImage | undefined
+  private readonly openImage: ImagePyramidOpener | undefined
+  private attachedImageLoaderPromise: Promise<ImagePyramidLoader> | null = null
+  private readonly openLabels: AnnDataLabelsOpener | undefined
+  private labelsReaderPromise: Promise<AnnDataLabelsReader> | null = null
+  // Label value -> cell id, per placed cache.
+  private readonly labelCellIds = new WeakMap<H5adCache, Promise<H5adLabelCells>>()
+  // Cell elements for cached label rings, so unchanged cells keep the same
+  // objects across viewport requests.
+  private readonly labelElementsByRing = new WeakMap<
+    Float64Array,
+    SpatialElement<SpatialElementId>
+  >()
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
@@ -549,37 +598,56 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.visiumImageUrls = options.visiumImageUrls ?? {}
     this.denseCellProfileMaxBytes =
       options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
+    this.attachedImage = options.image
+    this.openImage = options.openImage
+    this.openLabels = options.openLabels
   }
 
   async meta(): Promise<DatasetMeta> {
     const cache = await this.cache()
     const visium = cache.visium?.summary
+    const imageLoader =
+      visium === undefined ? await this.attachedImageLoaderOrNull() : null
 
     return {
       platform: visium === undefined ? 'h5ad' : 'visium',
       units:
-        visium === undefined
-          ? DEFAULT_H5AD_UNITS
-          : {
+        visium !== undefined
+          ? {
               ...DEFAULT_H5AD_UNITS,
               micrometersPerPixel: micrometers(visium.units.micrometersPerPixel),
-            },
+            }
+          : (imageLoader?.units ?? DEFAULT_H5AD_UNITS),
       extent: cache.extent,
       capabilities: {
         transcripts: false,
-        cellBoundaries: visium !== undefined,
-        pyramidImage: false,
-        multiChannel: false,
+        // A label column that gives no cells is reported when boundaries
+        // load, so it is not mistaken for a table without labels.
+        cellBoundaries:
+          visium !== undefined ||
+          (this.attachedImage?.labelsUrl !== undefined &&
+            (await this.labelCellsFor(cache).then(
+              ({ byLabel, error }) => byLabel.size > 0 || error !== undefined,
+            ))),
+        pyramidImage: imageLoader !== null,
+        multiChannel: (imageLoader?.channels.length ?? 0) > 1,
       },
     }
   }
 
   // Visium spot outlines; other AnnData has no element geometry.
+  // Visium spot outlines, or outlines traced from the attached label image;
+  // other AnnData has no element geometry.
   async elements(bbox?: BBox): Promise<ElementBatch<SpatialElementId>> {
     const cache = await this.cache()
 
     if (cache.visium === null) {
-      return { elements: [] }
+      return {
+        elements:
+          bbox === undefined || this.attachedImage?.labelsUrl === undefined
+            ? []
+            : await this.labelElements(cache, bbox),
+      }
     }
 
     const spots = await this.spotElements()
@@ -892,11 +960,243 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }))
   }
 
-  // The Visium tissue image: high-res when present, else low-res.
+  // The Visium tissue image, high-res when present, else low-res; otherwise
+  // the attached image.
   async image(): Promise<ImageSource | null> {
     const visium = (await this.cache()).visium
-    const kind = visium === null ? undefined : this.visiumImageKinds(visium)[0]
+
+    if (visium === null) {
+      return this.attachedImage === undefined
+        ? null
+        : { kind: 'pyramid', loader: await this.attachedImageLoader() }
+    }
+
+    const kind = this.visiumImageKinds(visium)[0]
     return kind === undefined ? null : this.tissueImage(kind)
+  }
+
+  // Opened once; a failed open is tried again by the next caller.
+  private attachedImageLoader(): Promise<ImagePyramidLoader> {
+    const image = this.attachedImage
+
+    if (image === undefined) {
+      return Promise.reject(new Error('This AnnData dataset has no attached image.'))
+    }
+
+    if (this.attachedImageLoaderPromise === null) {
+      const promise = (async () => {
+        const openImage =
+          this.openImage ?? (await import('../data/morphologyImage')).openImagePyramid
+        return openImage(image.url)
+      })()
+      this.attachedImageLoaderPromise = promise
+      promise.catch(() => {
+        if (this.attachedImageLoaderPromise === promise) {
+          this.attachedImageLoaderPromise = null
+        }
+      })
+    }
+
+    return this.attachedImageLoaderPromise
+  }
+
+  private async attachedImageLoaderOrNull(): Promise<ImagePyramidLoader | null> {
+    if (this.attachedImage === undefined) {
+      return null
+    }
+
+    try {
+      return await this.attachedImageLoader()
+    } catch {
+      return null
+    }
+  }
+
+  private labelsReader(): Promise<AnnDataLabelsReader> {
+    const url = this.attachedImage?.labelsUrl
+
+    if (url === undefined) {
+      return Promise.reject(new Error('This AnnData dataset has no attached labels.'))
+    }
+
+    if (this.labelsReaderPromise === null) {
+      const promise = (async () => {
+        const openLabels =
+          this.openLabels ?? (await import('./spatialDataLabels')).openOmeZarrLabels
+        return openLabels(url)
+      })()
+      this.labelsReaderPromise = promise
+      promise.catch(() => {
+        if (this.labelsReaderPromise === promise) {
+          this.labelsReaderPromise = null
+        }
+      })
+    }
+
+    return this.labelsReaderPromise
+  }
+
+  // Each cell's label value comes from `labelColumn`. Without it, as for a
+  // SpatialData table: the instance key the table records, else the shortest
+  // obs column named like `cell_labels`, whichever holds whole numbers for
+  // most rows; else the obs names, as in Vitessce. A SpatialData Xenium table
+  // can name its rows 0, 1, ..., keep labels 1, 2, ... in `cell_labels`, and
+  // have the cell barcode as its instance key.
+  private labelCellsFor(cache: H5adCache): Promise<H5adLabelCells> {
+    let cells = this.labelCellIds.get(cache)
+
+    if (cells === undefined) {
+      cells = this.resolveLabelCells(cache)
+      this.labelCellIds.set(cache, cells)
+    }
+
+    return cells
+  }
+
+  private async resolveLabelCells(cache: H5adCache): Promise<H5adLabelCells> {
+    const named = this.attachedImage?.labelColumn
+
+    if (named !== undefined) {
+      const values = obsLabelValues(cache, named)
+
+      if (values === null) {
+        return { byLabel: new Map(), error: `obs has no column "${named}"` }
+      }
+
+      const byLabel = cellIdsByLabel(cache, values)
+
+      return byLabel.size === 0
+        ? { byLabel, error: `obs column "${named}" holds no whole-number labels` }
+        : { byLabel }
+    }
+
+    const instanceKey = await readSpatialDataInstanceKey(cache.root)
+    const candidates = [
+      ...(instanceKey === undefined ? [] : [instanceKey]),
+      ...[...cache.continuousTracks, ...cache.categoricalTracks]
+        .map((track) => track.id)
+        .filter((name) => name !== instanceKey && LABEL_COLUMN_PATTERN.test(name))
+        .sort((left, right) => left.length - right.length),
+    ]
+
+    for (const column of candidates) {
+      const values = obsLabelValues(cache, column)
+
+      if (
+        values !== null &&
+        values.filter((value) => value !== null).length > values.length / 2
+      ) {
+        this.onProgress?.(
+          `Attached labels matched by obs column ${column}${
+            column === instanceKey ? ", the table's SpatialData instance key" : ''
+          }`,
+        )
+        return { byLabel: cellIdsByLabel(cache, values) }
+      }
+    }
+
+    const byLabel = cellIdsByLabel(cache, cache.cellIds.map(wholeNumberOrNull))
+
+    if (byLabel.size === 0) {
+      this.onProgress?.(
+        'Attached labels not used: no obs names are label numbers, so no cell matches a label; name the obs column that holds them',
+      )
+    }
+
+    return { byLabel }
+  }
+
+  // Outlines of the labelled cells in `bbox`. The label image covers the
+  // attached image, so its pixels are scaled to the image's extent.
+  private async labelElements(
+    cache: H5adCache,
+    bbox: BBox,
+  ): Promise<readonly SpatialElement<SpatialElementId>[]> {
+    const { byLabel: cellIds, error } = await this.labelCellsFor(cache)
+
+    if (error !== undefined) {
+      throw new Error(`The attached labels match no cells: ${error}.`)
+    }
+
+    if (cellIds.size === 0) {
+      return []
+    }
+
+    const [reader, image] = await Promise.all([
+      this.labelsReader(),
+      this.attachedImageLoader(),
+    ])
+    const labels = reader.levels[0]
+
+    if (labels === undefined || labels.width === 0 || labels.height === 0) {
+      return []
+    }
+
+    const micrometersPerPixel = image.units.micrometersPerPixel
+    const scaleX = (micrometersPerPixel * image.imageWidth) / labels.width
+    const scaleY = (micrometersPerPixel * image.imageHeight) / labels.height
+    const outlines = await reader.outlines(
+      {
+        minX: bbox.minX / scaleX,
+        maxX: bbox.maxX / scaleX,
+        minY: bbox.minY / scaleY,
+        maxY: bbox.maxY / scaleY,
+      },
+      {
+        maxPixels: LABEL_OUTLINE_MAX_PIXELS,
+        include: (label) => cellIds.has(label),
+      },
+    )
+
+    return outlines.flatMap((outline) => {
+      const cached = this.labelElementsByRing.get(outline.ring)
+
+      if (cached !== undefined) {
+        return [cached]
+      }
+
+      const cellId = cellIds.get(outline.label)
+
+      if (cellId === undefined) {
+        return []
+      }
+
+      const ring: DataPoint[] = []
+
+      for (let index = 0; index < outline.ring.length; index += 2) {
+        ring.push({
+          x: micrometers((outline.ring[index] ?? 0) * scaleX),
+          y: micrometers((outline.ring[index + 1] ?? 0) * scaleY),
+        })
+      }
+
+      const element: SpatialElement<SpatialElementId> = {
+        id: cellId as SpatialElementId,
+        geometry: { kind: 'polygon', rings: [ring] },
+      }
+      this.labelElementsByRing.set(outline.ring, element)
+      return [element]
+    })
+  }
+
+  // Micrometres per coordinate unit: the attached image's pixel size when the
+  // coordinates are its pixels, else 1. An image that cannot be opened leaves
+  // the coordinates as they are; image() reports the failure.
+  private async coordinateScale(): Promise<number> {
+    if (this.attachedImage?.coordinates !== 'image-pixels') {
+      return 1
+    }
+
+    const loader = await this.attachedImageLoaderOrNull()
+
+    if (loader === null) {
+      this.onProgress?.(
+        'Attached image could not be opened, so cell coordinates are read as micrometres',
+      )
+      return 1
+    }
+
+    return loader.units.micrometersPerPixel
   }
 
   // A Visium tissue image placed with its `tissue_<kind>_scalef`. Images held
@@ -1024,7 +1324,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
       const view = this.visiumView
-      const promise = this.baseCache().then((base) => withVisiumView(base, view))
+      const promise = this.baseCache().then(async (base) =>
+        base.visiumSource === null
+          ? withCoordinateScale(base, await this.coordinateScale())
+          : withVisiumView(base, view),
+      )
       this.cachePromise = promise
       promise.catch(() => {
         if (this.cachePromise === promise) {
@@ -1061,6 +1365,91 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     return this.baseCachePromise
   }
+}
+
+// A column's label values by row: whole numbers, else null. Null when obs
+// has no such column.
+function obsLabelValues(
+  cache: H5adCache,
+  column: string,
+): readonly (number | null)[] | null {
+  const numeric = cache.continuousTracks.find((track) => track.id === column)
+
+  if (numeric !== undefined) {
+    return numeric.values.map((value) =>
+      Number.isInteger(value) && value >= 0 ? value : null,
+    )
+  }
+
+  const text = cache.categoricalTracks.find((track) => track.id === column)
+
+  return text === undefined
+    ? null
+    : cache.cellIds.map((_cellId, row) => wholeNumberOrNull(labelAt(text.values, row)))
+}
+
+function cellIdsByLabel(
+  cache: H5adCache,
+  labels: readonly (number | null)[],
+): ReadonlyMap<number, string> {
+  const byLabel = new Map<number, string>()
+
+  labels.forEach((label, row) => {
+    const cellId = cache.cellIds[row]
+
+    if (label !== null && cellId !== undefined) {
+      byLabel.set(label, cellId)
+    }
+  })
+
+  return byLabel
+}
+
+function wholeNumberOrNull(value: string | null): number | null {
+  return value !== null && /^\d+$/.test(value) ? Number(value) : null
+}
+
+// Obs columns SpatialData tables commonly keep label values in.
+const LABEL_COLUMN_PATTERN = /label/i
+
+// The obs column a SpatialData table links to its elements: `instance_key` in
+// the table's attributes (spatialdata 0.2 and later), or in
+// `uns/spatialdata_attrs` (earlier).
+async function readSpatialDataInstanceKey(
+  root: H5GroupLike,
+): Promise<string | undefined> {
+  const fromAttributes = readStringAttribute(root, 'instance_key')
+
+  if (fromAttributes !== undefined && fromAttributes !== '') {
+    return fromAttributes
+  }
+
+  try {
+    const attrs = root.get('/uns/spatialdata_attrs')
+
+    if (!isGroup(attrs)) {
+      return undefined
+    }
+
+    const key = (await readScalarRecord(attrs)).instance_key
+    return typeof key === 'string' && key !== '' ? key : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
+  if (scale === 1) {
+    return base
+  }
+
+  const coordinates = base.coordinates.map((point) =>
+    isFinitePoint(point)
+      ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
+      : point,
+  )
+
+  return { ...base, coordinates, extent: bboxForPoints(coordinates) }
 }
 
 function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {

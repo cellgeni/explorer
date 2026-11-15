@@ -1,11 +1,14 @@
 import {
   DATASET_FILE_DEFAULTS,
   isAbsoluteUrl,
+  manifestImageAttachment,
   manifestZchunkStoreUrl,
   type DatasetFileRole,
+  type DatasetImageAttachment,
   type DatasetManifest,
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
+import type { DatasetCollection } from '../datasets/datasetCollection'
 
 // Manifests found by detection, per dataset URL. Readers only receive the
 // dataset URL, so they look up relocated files here.
@@ -26,6 +29,44 @@ export function setDatasetManifest(
 
 export function datasetManifestFor(baseUrl: string): DatasetManifest | undefined {
   return datasetManifests.get(datasetUrlKey(baseUrl))
+}
+
+// Images that collections pair with their datasets, per dataset URL. A
+// collection's are registered when it is read, before any of its datasets is
+// opened, and stay registered so a dataset keeps its image (and its cells
+// their placement) after the collection closes; a later collection listing
+// the same dataset replaces them.
+const datasetImages = new Map<string, DatasetImageAttachment>()
+
+export function registerCollectionImages(collection: DatasetCollection): void {
+  for (const entry of collection.datasets) {
+    const key = datasetUrlKey(entry.url)
+
+    if (entry.image === undefined) {
+      datasetImages.delete(key)
+    } else {
+      datasetImages.set(key, entry.image)
+    }
+  }
+}
+
+// The image a collection pairs with the dataset, else the one its H5AD
+// manifest names. The manifest is known once detection has read it.
+export function datasetImageFor(baseUrl: string): DatasetImageAttachment | undefined {
+  return (
+    collectionImageFor(baseUrl) ?? manifestImageAttachment(datasetManifestFor(baseUrl))
+  )
+}
+
+// Only the collection's: the manifest belongs to the URL, so a dataset
+// instance cached by URL already has its image.
+export function collectionImageFor(baseUrl: string): DatasetImageAttachment | undefined {
+  return datasetImages.get(datasetUrlKey(baseUrl))
+}
+
+// For tests.
+export function clearDatasetImages(): void {
+  datasetImages.clear()
 }
 
 // URL of a file inside a dataset. Relative paths resolve against the

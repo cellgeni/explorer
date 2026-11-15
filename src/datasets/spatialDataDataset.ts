@@ -52,6 +52,7 @@ import {
 import { readSpatialDataShapesInWorker } from './spatialDataShapesWorker'
 import { applyAffine, composeAffine, type Affine2D } from './spatialDataTransforms'
 import { SpatialDataLabelsReader } from './spatialDataLabels'
+import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {
   declaredSpatialDataUnits,
   estimateUnitsFromAreas,
@@ -195,9 +196,6 @@ const DEFAULT_SPATIALDATA_UNITS: UnitsDescriptor = {
 }
 
 const CIRCLE_BOUNDARY_SEGMENTS = 32
-// Label pixels traced per boundary request; coarser pyramid levels are used
-// when the viewport would need more.
-const LABEL_OUTLINE_MAX_PIXELS = 16_000_000
 const AREA_COLUMNS = ['cell_area', 'area'] as const
 const LABEL_COLUMN_PATTERN = /label/i
 

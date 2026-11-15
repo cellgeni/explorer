@@ -74,20 +74,20 @@ useViewerLayerData → ViewerCore (deck.gl) + MorphologyCanvas (2D canvas)
 `detectSpatialDataset` tries platforms in this order and returns the first
 match:
 
-| Order | Test                                                                                                                 | Platform                                                           |
-| ----- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
-| 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here | The manifest's `platform`                                          |
-| 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                             | `h5ad`                                                             |
-| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`; root metadata `HEAD` succeeds                       | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
-| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.svs`, `.ndpi`, and `HEAD` succeeds                        | `image`                                                            |
-| 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                               | The manifest's `platform`                                          |
-| 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                              | `xenium`                                                           |
-| 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                             | `atera`                                                            |
-| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                   | `spatialdata` or `image`                                           |
-| 6     | `spatial/tissue_positions.csv` (or `…_list.csv`), `spatial/scalefactors_json.json`, `filtered_feature_bc_matrix.h5`  | `visium`                                                           |
-| 6b    | `cell_by_gene.csv` and `cell_metadata.csv` (probed alongside 6, with `cell_boundaries.parquet`)                      | `merscope`                                                         |
-| 7     | At least one complete `binned_outputs/square_*um` tier                                                               | `visium-hd`                                                        |
-| —     | Nothing matched                                                                                                      | `unknown` → "Unsupported spatial dataset layout."                  |
+| Order | Test                                                                                                                                    | Platform                                                           |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here                    | The manifest's `platform`                                          |
+| 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                                                | `h5ad`                                                             |
+| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`, or names a group inside a `.zarr` store; root metadata `HEAD` succeeds | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
+| 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.svs`, `.ndpi`, and `HEAD` succeeds                                           | `image`                                                            |
+| 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                                                  | The manifest's `platform`                                          |
+| 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                                                 | `xenium`                                                           |
+| 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                                                | `atera`                                                            |
+| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                                      | `spatialdata` or `image`                                           |
+| 6     | `spatial/tissue_positions.csv` (or `…_list.csv`), `spatial/scalefactors_json.json`, `filtered_feature_bc_matrix.h5`                     | `visium`                                                           |
+| 6b    | `cell_by_gene.csv` and `cell_metadata.csv` (probed alongside 6, with `cell_boundaries.parquet`)                                         | `merscope`                                                         |
+| 7     | At least one complete `binned_outputs/square_*um` tier                                                                                  | `visium-hd`                                                        |
+| —     | Nothing matched                                                                                                                         | `unknown` → "Unsupported spatial dataset layout."                  |
 
 Every probe has a 15 s timeout. A host that rejects `HEAD` breaks detection.
 

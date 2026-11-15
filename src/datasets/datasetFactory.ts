@@ -1,5 +1,7 @@
 import {
+  collectionImageFor,
   datasetFileUrl,
+  datasetImageFor,
   datasetManifestFor,
   setDatasetManifest,
 } from '../data/datasetFiles'
@@ -26,7 +28,9 @@ import {
   manifestZchunkStoreUrl,
   parseDatasetManifest,
   resolveManifestPath,
+  type DatasetImageAttachment,
   type DatasetManifest,
+  type H5adDatasetManifest,
   type MerscopeDatasetManifest,
   type VisiumDatasetManifest,
   type VisiumHdDatasetManifest,
@@ -771,18 +775,8 @@ async function detectFromManifest(
   }
 
   if (manifest.platform === 'h5ad') {
-    const { path, url } = manifest.files.h5ad
-    const probe = await probeDirectDatasetUrl(url, path, options)
-    checked.push(probe)
-
-    if (!probe.ok) {
-      throw new DatasetManifestError(
-        manifest.url,
-        `"files.h5ad" (${url}) is not readable (${probeFailure(probe)}).`,
-      )
-    }
-
-    return { platform: 'h5ad', baseUrl, h5adUrl: url, manifest, checked }
+    const table = await detectManifestAnnData(manifest, options, checked)
+    return { platform: 'h5ad', baseUrl, ...table, manifest, checked }
   }
 
   if (manifest.platform === 'spatialdata') {
@@ -820,6 +814,73 @@ async function detectFromManifest(
   }
 
   return detectVisiumHdFromManifest(baseUrl, manifest, options, checked)
+}
+
+// `files.h5ad` names an .h5ad file, which must answer HEAD, or an AnnData Zarr
+// store or Icechunk repository, whose root must hold AnnData.
+async function detectManifestAnnData(
+  manifest: H5adDatasetManifest,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<{ readonly h5adUrl: string; readonly source?: 'icechunk' | 'zarr' }> {
+  const { path, url } = manifest.files.h5ad
+  const invalid = (problem: string, cause?: unknown) =>
+    new DatasetManifestError(
+      manifest.url,
+      `"files.h5ad" (${url}) ${problem}.`,
+      cause === undefined ? undefined : { cause },
+    )
+
+  if (isIcechunkUrl(url)) {
+    let detection: SpatialDatasetDetection
+
+    try {
+      detection = await detectIcechunkRepository(url, options, checked)
+    } catch (error) {
+      if (options.signal?.aborted === true) throw error
+      throw invalid(
+        `is not a readable Icechunk repository (${error instanceof Error ? error.message : String(error)})`,
+        error,
+      )
+    }
+
+    if (detection.platform !== 'h5ad') {
+      throw invalid(
+        `holds ${detection.platform === 'spatialdata' ? 'SpatialData' : 'an image'}, not AnnData`,
+      )
+    }
+
+    return { h5adUrl: url, source: 'icechunk' }
+  }
+
+  if (!isH5adUrl(url)) {
+    const probes = await probeZarrMetadata(url, options)
+    checked.push(...probes)
+    const root = await probeZarrRootContent(url, probes, options)
+
+    if (root?.content === 'AnnData') {
+      checked.push(root.probe)
+      return { h5adUrl: url, source: 'zarr' }
+    }
+
+    if (root?.content === 'SpatialData') {
+      throw invalid('is a SpatialData store; use platform "spatialdata"')
+    }
+
+    if (probes.some((probe) => probe.ok)) {
+      throw invalid('is a Zarr store without AnnData at its root')
+    }
+    // No Zarr metadata: an .h5ad file under another name.
+  }
+
+  const probe = await probeDirectDatasetUrl(url, path, options)
+  checked.push(probe)
+
+  if (!probe.ok) {
+    throw invalid(`is not readable (${probeFailure(probe)})`)
+  }
+
+  return { h5adUrl: url }
 }
 
 // Standard Visium output: positions (Space Ranger 2.0+ or 1.x name), scale
@@ -1300,8 +1361,22 @@ export async function createSpatialDataset(
 
   if (detection.platform === 'h5ad') {
     const { AnnDataH5adDataset } = await import('./h5adDataset')
+    const image = datasetImageFor(detection.baseUrl)
+
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
+      ...(image === undefined
+        ? {}
+        : {
+            image: {
+              url: image.url,
+              coordinates: image.coordinates,
+              ...(image.labels === undefined ? {} : { labelsUrl: image.labels.url }),
+              ...(image.labelColumn === undefined
+                ? {}
+                : { labelColumn: image.labelColumn }),
+            },
+          }),
       ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
       ...(detection.source === 'zarr' ? { zarr: true } : {}),
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
@@ -1432,6 +1507,7 @@ export function cachedSpatialDataset(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
     spatialDataSelectionFor(normalizedBaseUrl),
+    collectionImageFor(normalizedBaseUrl),
   )
   const existing = spatialDatasetCache.get(cacheKey)
 
@@ -1745,6 +1821,7 @@ function spatialDatasetCacheKey(
   baseUrl: string,
   visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
   spatialDataSelection: SpatialDataSelection | undefined,
+  image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}`
+  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
 }

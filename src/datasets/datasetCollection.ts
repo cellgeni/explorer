@@ -11,9 +11,11 @@ import {
   optionalString,
   parentUrl,
   parseDefaults,
+  parseImageAttachment,
   parseSource,
   resolveManifestPath,
   trimTrailingSlashes,
+  type DatasetImageAttachment,
   type DatasetManifestDefaults,
   type DatasetManifestSource,
   type Fail,
@@ -32,7 +34,15 @@ export const DATASET_COLLECTION_TOP_LEVEL_KEYS = [
   'defaults',
 ] as const
 
-export const DATASET_COLLECTION_ENTRY_KEYS = ['dataset', 'name', 'group'] as const
+export const DATASET_COLLECTION_ENTRY_KEYS = [
+  'dataset',
+  'name',
+  'group',
+  'image',
+  'coordinates',
+  'labels',
+  'labelColumn',
+] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
 // toggles, opacities and channels belong to each dataset's own manifest;
@@ -63,6 +73,7 @@ export interface DatasetCollectionEntry {
   readonly url: string
   readonly name?: string
   readonly group?: string
+  readonly image?: DatasetImageAttachment
 }
 
 export interface DatasetCollection {
@@ -187,14 +198,40 @@ function parseEntries(
     seen.set(url, index)
     const name = optionalString(entry, 'name', prefix, fail)
     const group = optionalString(entry, 'group', prefix, fail)
+    const image = parseEntryImage(entry, rootUrl, prefix, fail)
 
     return {
       path,
       url,
       ...(name === undefined ? {} : { name }),
       ...(group === undefined ? {} : { group }),
+      ...(image === undefined ? {} : { image }),
     }
   })
+}
+
+function parseEntryImage(
+  entry: Readonly<Record<string, unknown>>,
+  rootUrl: string,
+  prefix: string,
+  fail: Fail,
+): DatasetImageAttachment | undefined {
+  return parseImageAttachment(
+    {
+      image: optionalPath(entry, 'image', prefix, fail),
+      labels: optionalPath(entry, 'labels', prefix, fail),
+      coordinates: entry.coordinates,
+      labelColumn: optionalString(entry, 'labelColumn', prefix, fail),
+    },
+    {
+      image: `${prefix}image`,
+      labels: `${prefix}labels`,
+      coordinates: `${prefix}coordinates`,
+      labelColumn: `${prefix}labelColumn`,
+    },
+    rootUrl,
+    fail,
+  )
 }
 
 // The entry for a dataset URL, as the address or a load names it.

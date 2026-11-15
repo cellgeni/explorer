@@ -15,12 +15,18 @@ For usage of image-only sources and GeoJSON shapes see
 `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) recognizes images by
 URL shape before any Xenium probe:
 
-| URL pattern                                                                                                    | Check                                                                        | Result                                                                                |
-| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs` (`isOmeZarrImageUrl`)                           | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
-| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, `.svs`, or `.ndpi` (query/hash allowed) | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, `'svs'`, or `'ndpi'`)                         |
-| Any other folder URL                                                                                           | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
-| Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                                      | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
+| URL pattern                                                                                                                   | Check                                                                        | Result                                                                                |
+| ----------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| Path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or `/.zattrs`, or names a group inside a `.zarr` store (`isOmeZarrImageUrl`) | `HEAD` on the root's `zarr.json` and/or `.zattrs`                            | SpatialData if the root has `spatialdata_attrs`, else image (`imageKind: 'ome-zarr'`) |
+| Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, `.svs`, or `.ndpi` (query/hash allowed)                | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, `'svs'`, or `'ndpi'`)                         |
+| Any other folder URL                                                                                                          | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
+| Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                                                     | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
+
+A group inside a store is a path below a folder named `.zarr` whose last part
+has no dot, such as a SpatialData store's `sample.zarr/images/he` or a
+`bioformats2raw` series `image.zarr/0`; a last part with a dot
+(`sample.zarr/he.ome.tif`) is a file and keeps its own type. The group opens
+as its own OME-Zarr image; the enclosing store is not read.
 
 `omeZarrImageRootUrl` strips a trailing `/zarr.json` or `/.zattrs` to find the
 store root. `createSpatialDataset` builds an `ImageOnlyDataset`

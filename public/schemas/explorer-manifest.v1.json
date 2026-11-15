@@ -99,11 +99,38 @@
             "type": "object",
             "required": ["h5ad"],
             "properties": {
-              "h5ad": { "$ref": "#/$defs/path", "description": "The .h5ad file." }
+              "h5ad": {
+                "$ref": "#/$defs/path",
+                "description": "The .h5ad file, an AnnData Zarr store, or an Icechunk repository holding AnnData."
+              },
+              "image": {
+                "$ref": "#/$defs/path",
+                "description": "An image to show under the cells: OME-Zarr, OME-TIFF, TIFF, QPTIFF, SVS or NDPI."
+              },
+              "labels": {
+                "$ref": "#/$defs/path",
+                "description": "An OME-Zarr segmentation label image covering `image`, drawn as cell boundaries. Label N outlines the cell whose label value is N (see `labelColumn`). Needs `image`."
+              }
             },
+            "dependentRequired": { "labels": ["image"] },
             "additionalProperties": false
           },
-          "options": { "type": "object", "maxProperties": 0 }
+          "options": {
+            "type": "object",
+            "properties": {
+              "coordinates": {
+                "enum": ["micrometers", "image-pixels"],
+                "default": "micrometers",
+                "description": "What the table's cell coordinates are in: micrometres, or the image's full-resolution pixels, which are scaled to micrometres by the image's pixel size. Needs `files.image`."
+              },
+              "labelColumn": {
+                "type": "string",
+                "minLength": 1,
+                "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `files.labels`."
+              }
+            },
+            "additionalProperties": false
+          }
         }
       }
     },

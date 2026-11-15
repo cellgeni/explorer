@@ -30,6 +30,68 @@ describe('morphology image loader', () => {
     }
   })
 
+  it('opens an image group inside a Zarr store as OME-Zarr', async () => {
+    const files = new Map<string, unknown>([
+      [
+        '/sample.zarr/images/he/zarr.json',
+        {
+          zarr_format: 3,
+          node_type: 'group',
+          attributes: {
+            ome: {
+              version: '0.5',
+              multiscales: [
+                {
+                  axes: [
+                    { name: 'y', type: 'space', unit: 'micrometer' },
+                    { name: 'x', type: 'space', unit: 'micrometer' },
+                  ],
+                  datasets: [
+                    {
+                      path: '0',
+                      coordinateTransformations: [{ type: 'scale', scale: [0.5, 0.5] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+        },
+      ],
+      [
+        '/sample.zarr/images/he/0/zarr.json',
+        {
+          zarr_format: 3,
+          node_type: 'array',
+          shape: [6, 10],
+          data_type: 'uint8',
+          chunk_grid: { name: 'regular', configuration: { chunk_shape: [6, 10] } },
+          chunk_key_encoding: { name: 'default', configuration: { separator: '/' } },
+          codecs: [{ name: 'bytes', configuration: { endian: 'little' } }],
+          fill_value: 0,
+        },
+      ],
+    ])
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = new URL(input instanceof Request ? input.url : String(input))
+        const json = files.get(url.pathname)
+        return json === undefined
+          ? new Response(null, { status: 404 })
+          : Response.json(json)
+      }),
+    )
+
+    try {
+      const loader = await openImagePyramid('https://example.test/sample.zarr/images/he')
+
+      expect([loader.imageWidth, loader.imageHeight]).toEqual([10, 6])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('normalises dataset file URLs', () => {
     expect(datasetFileUrl('https://example.test/xenium/', '/morphology.ome.tif')).toBe(
       'https://example.test/xenium/morphology.ome.tif',
