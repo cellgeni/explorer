@@ -41,6 +41,16 @@ export interface ImagePyramidChannelInfo {
   readonly purpose?: string
 }
 
+// Channel colours by index, for OME-TIFF and OME-Zarr channels whose metadata
+// gives none.
+export const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number])[] = [
+  [88, 144, 255],
+  [32, 166, 122],
+  [240, 200, 75],
+  [215, 63, 124],
+  [255, 253, 247],
+]
+
 export interface ImagePyramidZStack {
   readonly sizeZ: number
   readonly micrometersPerPlane?: number
