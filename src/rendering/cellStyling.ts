@@ -1,6 +1,10 @@
 import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
-import { colorsGradient } from './deckLayerColors'
+import {
+  colorsGradient,
+  DEFAULT_OVERVIEW_CELL_FILL_RGB,
+  FADED_CELL_ALPHA,
+} from './deckLayerColors'
 import type { OverviewCellDatum } from './deckLayers'
 
 export type ObservationColorMode =
@@ -35,6 +39,8 @@ export interface ObservationStyleOptions {
 }
 
 const UNSTYLED_OBSERVATION_COLOR: Color = [72, 68, 58, 44]
+// Coloured by class, a cell in no shown class fades back.
+const UNCLASSED_CELL_COLOR: Color = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, FADED_CELL_ALPHA]
 
 export function styleOverviewCellsByObservation(
   cells: readonly OverviewCellDatum[],
@@ -54,7 +60,8 @@ export function styleOverviewCellsByObservation(
 
 // A cell's colour under the observation mode, or null when the mode leaves
 // cells unchanged. Transcript-count and cell-area colours scale to the largest
-// value among `cells`; annotations take the first annotation listing the cell.
+// value among `cells`; annotations take the first annotation listing the cell,
+// and cells in none, such as those of hidden classes, fade.
 export function createObservationColorizer(
   cells: readonly OverviewCellDatum[],
   mode: ObservationColorMode,
@@ -87,11 +94,7 @@ export function createObservationColorizer(
 
 function annotationColorizer(
   annotations: readonly AnnotationColorStyle[],
-): ((cell: OverviewCellDatum) => Color) | null {
-  if (annotations.length === 0) {
-    return null
-  }
-
+): (cell: OverviewCellDatum) => Color {
   const colorByCellId = new Map<string, Color>()
 
   for (const annotation of annotations) {
@@ -104,7 +107,7 @@ function annotationColorizer(
     }
   }
 
-  return (cell) => colorByCellId.get(cell.id) ?? UNSTYLED_OBSERVATION_COLOR
+  return (cell) => colorByCellId.get(cell.id) ?? UNCLASSED_CELL_COLOR
 }
 
 function metadataColorizer(

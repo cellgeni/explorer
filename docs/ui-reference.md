@@ -90,11 +90,12 @@ A link with `collection=` opens a [dataset collection](./dataset-collections.md)
 and shows `CollectionBar` (`src/features/collection/CollectionBar.tsx`) under
 the canvas, a `nav` named "Collection":
 
-- On the left, "Collection", the collection's `name` (or its file name) and
-  the number of datasets. With genes selected, the gene (or "N genes") and
-  the previews' shared scale, from 0 to the highest score read so far. With
-  cells coloured by an annotation set, the set's name and "N hidden".
-  Hidden under 860 px.
+- On the left, "Collection" with two icon buttons, then the collection's
+  `name` (or its file name) and the number of datasets. With genes
+  selected, the gene (or "N genes") and the previews' shared scale, from 0
+  to the highest score read so far. With cells coloured by an annotation
+  set, the set's name and "N hidden". Under 860 px only "Collection" and
+  its buttons stay.
 - A button per dataset, in groups labelled with their `group`, in one row
   that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
   label and its highest score (`max 92`), or with hidden classes the cells
@@ -107,18 +108,19 @@ the canvas, a `nav` named "Collection":
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
   expression. When it is annotations, the cells of each class in its
-  colour, and hidden classes grey. A line runs along its foot while it is read. Instead of a
+  colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
   failed" with the reason as its tooltip.
-- `Expand` (`aria-expanded`) lays the previews out as a grid over the
-  canvas, with the heading and buttons along the top; the layer panel stays
-  beside it. Each group is a box with its name, boxes sit side by side where
-  they fit, and the grid scrolls down. Previews there are 150 px wide and
-  16:10, drawn at their size. Choosing a dataset, `Collapse` or Escape
-  returns to the bar. Shown only with previews on.
-- `Previews` (pressed by default) turns the previews off, leaving the
-  labels.
+- `Expand` (arrows out, `aria-expanded`), next to "Collection", lays the
+  previews out as a grid over the canvas, with the heading and buttons
+  along the top; the layer panel stays beside it. Each group is a box with
+  its name, boxes sit side by side where they fit, and the grid scrolls
+  down. Previews there are 150 px wide and 16:10, drawn at their size.
+  Choosing a dataset, `Collapse` (arrows in) or Escape returns to the bar.
+  Disabled with previews off. Its tooltip says what it does.
+- `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
+  previews off, leaving the labels. Its tooltip says what it does.
 - `Close Collection` (×) removes the bar and `collection=` from the address;
   the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
@@ -392,7 +394,7 @@ in view with All features ("+n more genes in view"). Each row has:
 - the number of its points loaded in view, hidden ones included.
 
 The canvas legend lists the same genes under "Transcripts" (the first 12,
-then "+n more in Transcripts"), and its checkboxes are the same eyes; it
+then "+n more in Transcripts", a link that opens this section), and its checkboxes are the same eyes; it
 stays while every gene in view is hidden. With density squares or QV colours
 there is no list; the section says why.
 
@@ -620,10 +622,14 @@ category lists last:
   the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin.
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
-  Clusters". The checkboxes and counts are the same as those in Cells ›
-  Clusters: Visium spots hidden off the tissue are left out. Alt-click
-  (Option-click) on a class's checkbox, here or in Cells › Clusters, shows
-  only that class, or every class again when it is the only one shown.
+  Clusters", a link that opens the layer panel and Cells and scrolls to the
+  Clusters heading, focusing it. The checkboxes and counts are the same as
+  those in Cells › Clusters: Visium spots hidden off the tissue are left
+  out. Alt-click (Option-click) on a class's checkbox, here or in Cells ›
+  Clusters, shows only that class, or every class again when it is the only
+  one shown. Cells of hidden classes, and cells in no class, fade to a
+  faint grey (fill and outline at 15% of the usual opacity), so the tissue
+  still shows but the shown classes stand out.
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per

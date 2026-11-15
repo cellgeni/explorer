@@ -43,6 +43,16 @@ describe('ViewerLegend', () => {
     expect(screen.getByText('Expression per cell')).toBeInTheDocument()
   })
 
+  it('links "+N more" to the full list when it can be opened', () => {
+    const onShowMore = vi.fn()
+    render(<ViewerLegend sections={[categories]} onShowMore={onShowMore} />)
+
+    const more = screen.getByRole('button', { name: '+2 more in Cells › Clusters' })
+    expect(more).toHaveAttribute('title', 'Show the other 2 in Cells › Clusters')
+    fireEvent.click(more)
+    expect(onShowMore).toHaveBeenCalledWith('cells')
+  })
+
   it('lists the first 12 categories with visibility toggles', () => {
     const onChange = vi.fn()
     render(<ViewerLegend sections={[categories]} onCategoryVisibilityChange={onChange} />)

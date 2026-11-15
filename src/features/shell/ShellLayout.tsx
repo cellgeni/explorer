@@ -20,7 +20,7 @@ import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { EmbeddingWindow } from './EmbeddingWindow'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
-import type { LayerPanelModel } from './layerPanelModel'
+import type { LayerPanelModel, LayerReveal } from './layerPanelModel'
 import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
 import { TopBar } from './TopBar'
@@ -47,6 +47,8 @@ interface ShellLayoutProps {
   readonly onPanelsChange: (panels: ShellPanelState) => void
   // The open collection's datasets, under the canvas.
   readonly collection?: ReactNode
+  // Brings part of the layer panel into view, such as from the legend.
+  readonly layerReveal?: LayerReveal | null
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
@@ -71,6 +73,7 @@ export function ShellLayout({
   panels,
   onPanelsChange,
   collection,
+  layerReveal = null,
   children,
 }: ShellLayoutProps) {
   const { infoOpen, embeddingOpen } = panels
@@ -128,6 +131,7 @@ export function ShellLayout({
       }}
       embeddingOpen={embeddingOpen}
       onEmbeddingOpenChange={setEmbeddingOpen}
+      reveal={layerReveal}
       sheet={
         narrow
           ? {

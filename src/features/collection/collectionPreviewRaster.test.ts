@@ -77,7 +77,7 @@ describe('rasterizePreview', () => {
     expect(pixel(quarter, 0, 0).slice(0, 3)).toEqual([half[0], half[1], half[2]])
   })
 
-  it('colours the cells of shown classes, leaving hidden ones and the rest grey', () => {
+  it('colours the cells of shown classes, fading hidden ones and the rest', () => {
     const pixels = rasterizePreview(
       square,
       {
@@ -92,8 +92,8 @@ describe('rasterizePreview', () => {
 
     expect(pixel(pixels, 0, 0)).toEqual([255, 128, 0, 255])
     expect(pixel(pixels, 9, 9)).toEqual([255, 128, 0, 255])
-    expect(pixel(pixels, 9, 0)).toEqual([92, 88, 76, 200])
-    expect(pixel(pixels, 0, 9)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 9, 0)).toEqual([92, 88, 76, 72])
+    expect(pixel(pixels, 0, 9)).toEqual([92, 88, 76, 72])
   })
 
   it('keeps the aspect ratio and centres the cells', () => {

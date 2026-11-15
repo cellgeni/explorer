@@ -212,12 +212,35 @@ function cssRgba(color: Color): string {
   return `rgba(${red}, ${green}, ${blue}, ${Math.round((alpha / 255) * 100) / 100})`
 }
 
+// Cells faded back, such as those of hidden classes while cells are coloured
+// by class, carry an alpha at or below FADED_CELL_ALPHA. Their fill and
+// outline keep FADED_CELL_OPACITY of the opacity other cells get, so the
+// tissue still shows but the shown cells stand out.
+export const FADED_CELL_ALPHA = 16
+export const FADED_CELL_OPACITY = 0.15
+
+export function isFadedCellColor(color: Color): boolean {
+  return (color[3] ?? 255) <= FADED_CELL_ALPHA
+}
+
+// A cell colour's alpha clamped to [min, max], or a share of min when faded.
+export function clampedCellAlpha(
+  color: Color,
+  min: number,
+  max: number,
+  fallback: number,
+): number {
+  return isFadedCellColor(color)
+    ? Math.round(min * FADED_CELL_OPACITY)
+    : Math.min(max, Math.max(min, color[3] ?? fallback))
+}
+
 export function boundaryFillColor(color: Color): Color {
   return [
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
-    Math.min(88, Math.max(28, color[3] ?? 64)),
+    clampedCellAlpha(color, 28, 88, 64),
   ]
 }
 
@@ -226,7 +249,7 @@ export function boundaryLineColor(color: Color): Color {
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
-    Math.min(235, Math.max(160, color[3] ?? 210)),
+    clampedCellAlpha(color, 160, 235, 210),
   ]
 }
 
@@ -235,7 +258,7 @@ export function cellPointOutlineColor(color: Color): Color {
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
-    Math.min(245, Math.max(160, color[3] ?? 210)),
+    clampedCellAlpha(color, 160, 245, 210),
   ]
 }
 
@@ -257,7 +280,9 @@ export function colorWithFillOpacity(color: Color, opacity: number): Color {
     color[0] ?? 0,
     color[1] ?? 0,
     color[2] ?? 0,
-    Math.round(255 * normalizedOpacity),
+    Math.round(
+      255 * normalizedOpacity * (isFadedCellColor(color) ? FADED_CELL_OPACITY : 1),
+    ),
   ]
 }
 

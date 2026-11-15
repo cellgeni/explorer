@@ -264,6 +264,10 @@ describe('CollectionBar previews', () => {
     const bar = screen.getByRole('navigation', { name: 'Collection' })
     const expand = within(bar).getByRole('button', { name: 'Expand' })
     expect(expand).toHaveAttribute('aria-expanded', 'false')
+    expect(expand).toHaveAttribute('title', expect.stringContaining('in a grid'))
+    // Next to the kicker, as icons.
+    expect(bar.querySelector('.collection-bar-title')).toContainElement(expand)
+    expect(expand).toHaveTextContent('')
 
     fireEvent.click(expand)
 
@@ -285,7 +289,7 @@ describe('CollectionBar previews', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Expand' }))
     fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
     expect(bar).not.toHaveClass('is-expanded')
-    expect(within(bar).queryByRole('button', { name: /^(Expand|Collapse)$/ })).toBe(null)
+    expect(within(bar).getByRole('button', { name: 'Expand' })).toBeDisabled()
   })
 
   it('previews the classes of an annotation set, counting the shown ones', async () => {

@@ -18,6 +18,17 @@ import type { TranscriptsSectionModel } from '../sections/transcriptsSectionMode
 // one-line state.
 export type LayerSectionId = 'image' | 'cells' | 'transcripts' | 'annotations'
 
+// A part of the panel to bring into view, such as the class list from the
+// legend's "+N more": the panel opens, then the section, and the anchor (or
+// the section) scrolls into view. A new key asks again.
+export interface LayerReveal {
+  readonly section: LayerSectionId
+  readonly anchor: LayerAnchor | null
+  readonly key: number
+}
+
+export type LayerAnchor = 'clusters'
+
 export interface LayerSectionHeader {
   readonly id: LayerSectionId
   readonly title: string

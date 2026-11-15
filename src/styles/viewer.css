@@ -743,6 +743,27 @@
   font-size: var(--font-caption);
 }
 
+/* "+N more in Cells › Clusters" as a link to that list. */
+.viewer-legend-more {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: var(--font-caption);
+  text-align: left;
+  cursor: pointer;
+}
+
+.viewer-legend-more:hover {
+  text-decoration: underline;
+}
+
+.viewer-legend-more:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
 .viewer-legend-gradient {
   display: block;
   height: 10px;

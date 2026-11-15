@@ -57,31 +57,34 @@ function StatefulLayerPanel(
   )
 }
 
+function panelProps(): LayerPanelProps {
+  return {
+    panel: {
+      sections: [
+        header('image', 'Image'),
+        header('cells', 'Cells'),
+        header('transcripts', 'Transcripts'),
+        header('annotations', 'Annotations'),
+      ],
+    },
+    collapsed: false,
+    onCollapsedChange: vi.fn(),
+    image: testImageSectionModel(),
+    cells: testCellsSectionModel({
+      genes: { panelState: READY_PANEL, options: ['Actb', 'Gad1'] },
+    }),
+    transcripts: testTranscriptsSectionModel(),
+    annotations: testAnnotationsSectionModel(),
+    viewOptions: testDatasetInfoModel().viewOptions,
+    expanded: null,
+    onExpandedChange: vi.fn(),
+    embeddingOpen: false,
+    onEmbeddingOpenChange: vi.fn(),
+  }
+}
+
 function renderPanel(props: Partial<LayerPanelProps> = {}): ReturnType<typeof render> {
-  return render(
-    <StatefulLayerPanel
-      panel={{
-        sections: [
-          header('image', 'Image'),
-          header('cells', 'Cells'),
-          header('transcripts', 'Transcripts'),
-          header('annotations', 'Annotations'),
-        ],
-      }}
-      collapsed={false}
-      onCollapsedChange={vi.fn()}
-      image={testImageSectionModel()}
-      cells={testCellsSectionModel({
-        genes: { panelState: READY_PANEL, options: ['Actb', 'Gad1'] },
-      })}
-      transcripts={testTranscriptsSectionModel()}
-      annotations={testAnnotationsSectionModel()}
-      viewOptions={testDatasetInfoModel().viewOptions}
-      embeddingOpen={false}
-      onEmbeddingOpenChange={vi.fn()}
-      {...props}
-    />,
-  )
+  return render(<StatefulLayerPanel {...panelProps()} {...props} />)
 }
 
 describe('LayerPanel', () => {
@@ -287,5 +290,34 @@ describe('LayerPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /^Cells/ }))
     expect(onExpandedChange).toHaveBeenCalledWith(['image', 'cells', 'transcripts'])
+  })
+
+  it('opens the panel and Cells to reveal Clusters, and focuses it', () => {
+    const onCollapsedChange = vi.fn()
+    const onExpandedChange = vi.fn()
+    const props = {
+      collapsed: true,
+      onCollapsedChange,
+      expanded: ['image'] as const,
+      onExpandedChange,
+    }
+    const { rerender } = renderPanel(props)
+    const reveal = { section: 'cells', anchor: 'clusters', key: 1 } as const
+
+    rerender(<StatefulLayerPanel {...panelProps()} {...props} reveal={reveal} />)
+    expect(onCollapsedChange).toHaveBeenCalledWith(false)
+    expect(onExpandedChange).toHaveBeenCalledWith(['image', 'cells'])
+    // Still collapsed, so nothing takes focus yet.
+    expect(document.body).toHaveFocus()
+
+    rerender(
+      <StatefulLayerPanel
+        {...panelProps()}
+        {...props}
+        collapsed={false}
+        reveal={reveal}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: 'Clusters' })).toHaveFocus()
   })
 })

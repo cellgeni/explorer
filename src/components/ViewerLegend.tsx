@@ -20,6 +20,8 @@ export type LegendCategoryVisibilityChange = (
 interface ViewerLegendProps {
   readonly sections: readonly ViewerLegendSection[]
   readonly onCategoryVisibilityChange?: LegendCategoryVisibilityChange | undefined
+  // "+N more in …" opens where the rest are listed, with the section's id.
+  readonly onShowMore?: ((sectionId: string) => void) | undefined
 }
 
 // The canvas legend in the bottom-left stack. It sits next to the deck.gl
@@ -28,6 +30,7 @@ interface ViewerLegendProps {
 export const ViewerLegend = memo(function ViewerLegend({
   sections,
   onCategoryVisibilityChange,
+  onShowMore,
 }: ViewerLegendProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -59,6 +62,7 @@ export const ViewerLegend = memo(function ViewerLegend({
                 key={section.id}
                 section={section}
                 onVisibilityChange={onCategoryVisibilityChange}
+                onShowMore={onShowMore}
               />
             ),
           )}
@@ -92,10 +96,13 @@ function ContinuousLegend({ section }: { readonly section: ContinuousLegendSecti
 function CategoryLegend({
   section,
   onVisibilityChange,
+  onShowMore,
 }: {
   readonly section: CategoryLegendSection
   readonly onVisibilityChange?: LegendCategoryVisibilityChange | undefined
+  readonly onShowMore?: ((sectionId: string) => void) | undefined
 }) {
+  const moreWhere = section.moreWhere ?? 'Cells › Clusters'
   const shown = section.items.slice(0, LEGEND_CATEGORY_LIMIT)
   const moreCount = section.items.length - shown.length + (section.moreCount ?? 0)
   const noun = section.noun ?? { singular: 'cell', plural: 'cells' }
@@ -135,10 +142,21 @@ function CategoryLegend({
           </li>
         ))}
       </ul>
-      {moreCount <= 0 ? null : (
+      {moreCount <= 0 ? null : onShowMore === undefined ? (
         <p className="viewer-legend-detail">
-          +{moreCount.toLocaleString()} more in {section.moreWhere ?? 'Cells › Clusters'}
+          +{moreCount.toLocaleString()} more in {moreWhere}
         </p>
+      ) : (
+        <button
+          type="button"
+          className="viewer-legend-detail viewer-legend-more"
+          title={`Show the other ${moreCount.toLocaleString()} in ${moreWhere}`}
+          onClick={() => {
+            onShowMore(section.id)
+          }}
+        >
+          +{moreCount.toLocaleString()} more in {moreWhere}
+        </button>
       )}
     </div>
   )

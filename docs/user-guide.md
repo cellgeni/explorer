@@ -84,7 +84,7 @@ coloured by the selected genes, all on one scale, so you can see where a
 gene is high before opening anything. With cells coloured by an annotation
 set, previews show its classes instead: Alt-click (Option-click) a class's
 checkbox in the legend to show only that class and see where that cell type
-is in each section. `Expand` shows every preview larger, as a grid over
+is in each section. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over
 the view, to compare more sections at once. Choosing one opens it in place and
 keeps the selected genes, the annotation set with its hidden classes and
 colours, and the cell colouring, so you can step through sections with the
@@ -233,7 +233,10 @@ cell-summary transcript-count hint. Exact molecule points require a readable
 
 Use Cells › Clusters to load built-in analysis labels or import local CSV/JSON
 cell annotations when the active platform supports cell-id annotations. H5AD
-categorical `obs` tracks appear as annotation sets.
+categorical `obs` tracks appear as annotation sets. Clusters is below the
+gene list in Cells; with cells coloured by a set, "+n more in Cells ›
+Clusters" in the legend jumps there. Unchecking a class fades its cells, so
+the classes left stand out against a faint outline of the tissue.
 
 The layer panel's Annotations section lists your selections and exposes
 `GeoJSON shapes` when geometric annotations are available. Import GeoJSON

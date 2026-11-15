@@ -77,6 +77,8 @@ export interface ViewerCoreProps {
   // The zoom number is for debugging (?debug=1).
   readonly showZoomLevel?: boolean
   readonly onLegendCategoryVisibilityChange?: LegendCategoryVisibilityChange
+  // The legend's "+N more in …", with the legend section's id.
+  readonly onLegendShowMore?: (sectionId: string) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit

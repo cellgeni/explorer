@@ -108,6 +108,38 @@ describe('cell point styling', () => {
     })
   })
 
+  it('fades cells in no shown class, in both colour paths', () => {
+    const styler = createCellPointStyler({
+      observationColor: createObservationColorizer(
+        cells,
+        'annotations',
+        observationOptions,
+      ),
+      expressionIndex: createGeneExpressionElementStyleIndex([]),
+      styleUnmatchedCells: false,
+    })
+    const { fill, line } = cellPointLayerColors(
+      packCellPointColors(cells, styler),
+      0.5,
+      1,
+    )
+    const alphas = (colors: Uint8Array) =>
+      [0, 1, 2, 3].map((index) => colors[index * 4 + 3])
+
+    // cell-2 is in the shown class; the others fade.
+    expect(alphas(fill)).toEqual([19, 19, 128, 19])
+    expect(alphas(line)).toEqual([24, 24, 230, 24])
+    cells.forEach((cell, index) => {
+      const color = styler.fillColor(cell)
+      expect(Array.from(fill.slice(index * 4, index * 4 + 4))).toEqual(
+        colorWithFillOpacity(color, 0.5),
+      )
+      expect(Array.from(line.slice(index * 4, index * 4 + 4))).toEqual(
+        colorWithOpacity(cellPointOutlineColor(color), 1),
+      )
+    })
+  })
+
   it('samples nested, evenly sized subsets by rank', () => {
     const ranks = cellPointRanks(10_000)
     const below = (fraction: number) =>

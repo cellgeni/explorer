@@ -136,8 +136,8 @@ coloured by something else, previews show the tissue only.
 
 While cells are coloured by an annotation set, previews show its classes in
 the main view's colours instead. A class the main view has not coloured yet
-takes the colour it will have when its dataset opens. Hidden classes stay
-grey, so hiding all but one cell type (Alt-click its checkbox in the legend
+takes the colour it will have when its dataset opens. Hidden classes fade
+to a faint grey, as in the main view, so hiding all but one cell type (Alt-click its checkbox in the legend
 or in Cells › Clusters) shows where it is in every section;
 each preview then counts the cells of the shown classes (`1,204 cells`). The
 bar's left side names the set and how many classes are hidden. A set is read
@@ -152,7 +152,7 @@ once per dataset and selection, like a gene.
   the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
-- **Grid.** `Expand` in the bar lays the previews out as a grid over the
+- **Grid.** `Expand` (the arrows next to "Collection" in the bar) lays the previews out as a grid over the
   view, larger, with groups side by side where they fit, so a collection
   of about twenty sections fits on one screen. The layer panel stays open
   beside it, so changing the genes or the annotation set redraws the grid.
@@ -160,7 +160,8 @@ once per dataset and selection, like a gene.
   Escape.
 - **When.** Only previews in view, and those just beyond the bar's ends or
   the grid's edges, are read, four datasets at a time. None start while the main view loads a
-  dataset. `Previews` in the bar turns them off and lists names only.
+  dataset. `Previews` (the picture icon next to "Collection") turns them off and
+  lists names only.
 - **No preview.** Image-only and Visium HD datasets show "No cells to
   preview". A plain `.h5ad` over 64 MB shows its size instead: the viewer
   reads such a file whole, which only opening it should do.

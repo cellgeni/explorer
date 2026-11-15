@@ -53,8 +53,19 @@ describe('cell observation styling', () => {
       ],
     })
 
-    expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
+    // Cells in no shown class fade.
+    expect(styled[0]?.fillColor).toEqual([72, 68, 58, 16])
     expect(styled[1]?.fillColor).toEqual([31, 119, 180, 230])
+  })
+
+  it('fades every cell when every class is hidden', () => {
+    const styled = styleOverviewCellsByObservation(cells, 'annotations', {
+      annotations: [],
+    })
+
+    expect(styled.map((cell) => cell.fillColor)).toEqual(
+      cells.map(() => [72, 68, 58, 16]),
+    )
   })
 
   it('keeps the first matching annotation color when skipping non-rendered cells', () => {

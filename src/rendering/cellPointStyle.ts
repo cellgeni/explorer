@@ -1,5 +1,9 @@
 import type { Color } from '@deck.gl/core'
-import { GENE_EXPRESSION_ZERO_FILL_COLOR } from './deckLayerColors'
+import {
+  FADED_CELL_ALPHA,
+  FADED_CELL_OPACITY,
+  GENE_EXPRESSION_ZERO_FILL_COLOR,
+} from './deckLayerColors'
 import type { GeneExpressionElementStyleIndex, OverviewCellDatum } from './deckLayerTypes'
 import {
   geneExpressionElementForCell,
@@ -174,7 +178,8 @@ export interface CellPointLayerColors {
 
 // Applies layer opacities the way colorWithFillOpacity and
 // colorWithOpacity(cellPointOutlineColor(...)) do: fills take their alpha from
-// the opacity alone, outlines clamp the cell alpha to 160-245 first.
+// the opacity alone, outlines clamp the cell alpha to 160-245 first. Faded
+// cells keep a share of both.
 export function cellPointLayerColors(
   colors: Uint8Array,
   fillOpacity: number,
@@ -190,15 +195,18 @@ export function cellPointLayerColors(
     const green = colors[offset + 1] ?? 0
     const blue = colors[offset + 2] ?? 0
     const alpha = colors[offset + 3] ?? DEFAULT_OUTLINE_ALPHA
+    const faded = alpha <= FADED_CELL_ALPHA
     fill[offset] = red
     fill[offset + 1] = green
     fill[offset + 2] = blue
-    fill[offset + 3] = fillAlpha
+    fill[offset + 3] = faded ? Math.round(fillAlpha * FADED_CELL_OPACITY) : fillAlpha
     line[offset] = red
     line[offset + 1] = green
     line[offset + 2] = blue
     line[offset + 3] = Math.round(
-      Math.min(245, Math.max(160, alpha)) * normalizedLineOpacity,
+      (faded
+        ? Math.round(160 * FADED_CELL_OPACITY)
+        : Math.min(245, Math.max(160, alpha))) * normalizedLineOpacity,
     )
   }
 
