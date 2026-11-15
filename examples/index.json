@@ -98,6 +98,22 @@
       }
     },
     {
+      "id": "geo/GSM9080376",
+      "path": "geo/GSM9080376.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/geo/GSM9080376.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/geo/GSM9080376.json",
+      "platform": "visium",
+      "name": "Human first-trimester decidua, invaded (Visium)",
+      "description": "Visium section of human first-trimester decidua basalis invaded by extravillous trophoblasts, over its H&E: 871 spots with whole-transcriptome expression (36,601 genes) read from GEO's Matrix Market files; opens on HLA-G (extravillous trophoblasts), from a study of how trophoblast invasion remodels the decidua.",
+      "source": {
+        "repository": "GEO",
+        "accession": "GSM9080376",
+        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM9080376",
+        "license": "No restrictions (NCBI GEO)",
+        "citation": "Moser G et al. (2026) Remodeling lesions locate at sites of strong extravillous trophoblast invasion and are associated with neutrophil presence in the human first-trimester decidua. Human Reproduction. doi:10.1093/humrep/deag078"
+      }
+    },
+    {
       "id": "idr/idr0054-tonsil",
       "path": "idr/idr0054-tonsil.json",
       "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",
