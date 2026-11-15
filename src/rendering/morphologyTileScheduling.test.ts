@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TIFF_COMPRESSION_LZW } from '../codecs/tiffTile'
+import { TIFF_COMPRESSION_LZW, TIFF_COMPRESSION_NONE } from '../codecs/tiffTile'
 import { tileSchedulingForLoader } from './morphologyTileScheduling'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
@@ -29,6 +29,23 @@ describe('tileSchedulingForLoader', () => {
       maxConcurrentRequests: 1,
       maxInitialTileRequests: 18,
       prefetchScreenMarginPixels: 0,
+    })
+  })
+
+  it('does not throttle large uncompressed tiles cut from shared reads', () => {
+    expect(
+      tileSchedulingForLoader(
+        {
+          ...fakeLoader({ compression: TIFF_COMPRESSION_NONE }),
+          tilesFromSharedReads: true,
+        },
+        { baseMaxCacheTiles: 120, baseMaxConcurrentRequests: 4 },
+      ),
+    ).toEqual({
+      maxCacheTiles: 120,
+      maxConcurrentRequests: 4,
+      maxInitialTileRequests: 96,
+      prefetchScreenMarginPixels: 256,
     })
   })
 

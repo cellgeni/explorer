@@ -120,12 +120,15 @@ matrices.
 
 ## 5.4 Image-Only Sources (Phase 8)
 
-- Direct `.ome.tif`, `.ome.tiff`, `.tif`, and `.tiff` URLs, plus `.ndpi`
-  through the same TIFF loader (no NDPI-specific code).
-- TIFFs must be tiled, with pyramid levels as `SubIFDs` of the base image, and
-  8- or 16-bit samples with 1, 3, or 4 samples per pixel. Stripped TIFFs and
-  top-level-IFD pyramids are not indexed; most NDPI files fall in these cases
-  and should be converted to pyramidal OME-TIFF.
+- Direct `.ome.tif`, `.ome.tiff`, `.tif`, and `.tiff` URLs, plus `.qptiff`,
+  `.svs`, and `.ndpi`, each read in its own layout by the TIFF loader
+  (Phases 13, 16, and 19).
+- TIFF pyramid levels are `SubIFDs` of the base image (or top-level IFDs for
+  QPTIFF, SVS, NDPI, and page pyramids), with 8- or 16-bit samples and 1, 3,
+  or 4 samples per pixel. Stripped levels are read in bands of whole rows
+  (`src/tiff/strips.ts`); NDPI levels in bands of whole JPEG MCU rows,
+  decoded in blocks of restart intervals (`src/tiff/ndpi.ts`). NDPI files
+  over 4 GB are refused.
 - µm/px comes from OME-XML `PhysicalSizeX` (default 0.2125). `Channel@Color` is
   a signed 32-bit RGBA integer with red in the high byte (`3e1a8d5`).
 - Extent is image dimensions × microns per pixel.

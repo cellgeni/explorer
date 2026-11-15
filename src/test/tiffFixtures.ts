@@ -22,7 +22,12 @@ export interface TestTiffImage {
   readonly photometric?: number
   readonly bitsPerSample?: number
   readonly jpegTables?: readonly number[]
+  // More tags, such as a format's private ones, replacing any written
+  // above: SHORT, LONG, SLONG, or FLOAT values.
+  readonly extraTags?: readonly TestTiffTag[]
 }
+
+export type TestTiffTag = readonly [tag: number, type: number, values: readonly number[]]
 
 export interface TestTiffFile {
   readonly bytes: Uint8Array
@@ -34,6 +39,10 @@ const LONG = 4
 const RATIONAL = 5
 const ASCII = 2
 const UNDEFINED = 7
+export const TIFF_SHORT = SHORT
+export const TIFF_LONG = LONG
+export const TIFF_SLONG = 9
+export const TIFF_FLOAT = 11
 
 // A little-endian classic TIFF with uncompressed 16-bit samples unless an
 // image says otherwise, written as pixel data, then tag data, then the IFD,
@@ -100,7 +109,8 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
             [324, LONG, offsets],
             [325, LONG, byteCounts],
           ]
-    const entries: Entry[] = [
+    const extraTags = image.extraTags ?? []
+    const baseEntries: readonly Entry[] = [
       [254, LONG, [image.subfileType]],
       [256, LONG, [image.width]],
       [257, LONG, [image.height]],
@@ -120,6 +130,10 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
         : [[347, UNDEFINED, image.jpegTables] as const]),
       ...layoutEntries,
     ]
+    const entries: Entry[] = [
+      ...baseEntries.filter(([tag]) => !extraTags.some(([extraTag]) => extraTag === tag)),
+      ...extraTags,
+    ]
     entries.sort((left, right) => left[0] - right[0])
 
     const encoded = entries.map(([tag, type, values]) => {
@@ -128,7 +142,13 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
           ? [...new TextEncoder().encode(values), 0]
           : type === UNDEFINED
             ? [...values]
-            : values.flatMap((value) => (type === SHORT ? u16(value) : u32(value)))
+            : values.flatMap((value) =>
+                type === SHORT
+                  ? u16(value)
+                  : type === TIFF_FLOAT
+                    ? f32(value)
+                    : u32(value),
+              )
       const count =
         typeof values === 'string'
           ? data.length
@@ -175,6 +195,12 @@ export function u32(value: number): number[] {
     (value >>> 16) & 0xff,
     (value >>> 24) & 0xff,
   ]
+}
+
+function f32(value: number): number[] {
+  const view = new DataView(new ArrayBuffer(4))
+  view.setFloat32(0, value, true)
+  return [view.getUint8(0), view.getUint8(1), view.getUint8(2), view.getUint8(3)]
 }
 
 // Serves `file` at `url` with 206 Range responses, as object storage does.

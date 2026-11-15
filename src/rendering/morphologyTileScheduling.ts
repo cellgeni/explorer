@@ -27,7 +27,9 @@ export interface TileSchedulingProfile {
 
 export function tileSchedulingForLoader(
   loader: Pick<ImagePyramidLoader, 'tileDecodeOptions'> &
-    Partial<Pick<ImagePyramidLoader, 'tileWidth' | 'tileHeight'>>,
+    Partial<
+      Pick<ImagePyramidLoader, 'tileWidth' | 'tileHeight' | 'tilesFromSharedReads'>
+    >,
   options: TileSchedulingOptions,
 ): TileSchedulingProfile {
   const decodeOptions = loader.tileDecodeOptions?.() ?? {}
@@ -35,6 +37,7 @@ export function tileSchedulingForLoader(
     (decodeOptions.tileWidth ?? loader.tileWidth ?? 0) *
     (decodeOptions.tileHeight ?? loader.tileHeight ?? 0)
   const isLargeRawTile =
+    loader.tilesFromSharedReads !== true &&
     tilePixelCount >= LARGE_TILE_PIXEL_COUNT &&
     (decodeOptions.compression === TIFF_COMPRESSION_LZW ||
       decodeOptions.compression === TIFF_COMPRESSION_NONE)

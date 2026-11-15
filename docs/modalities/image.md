@@ -30,8 +30,8 @@ as its own OME-Zarr image; the enclosing store is not read.
 
 `omeZarrImageRootUrl` strips a trailing `/zarr.json` or `/.zattrs` to find the
 store root. `createSpatialDataset` builds an `ImageOnlyDataset`
-(`src/datasets/imageOnlyDataset.ts`). There is no NDPI-specific code: NDPI
-files go through the TIFF loader.
+(`src/datasets/imageOnlyDataset.ts`). NDPI files open in the TIFF loader's
+[NDPI](#ndpi) reader.
 
 ## ImageOnlyDataset
 
@@ -63,18 +63,19 @@ Zarr loaders add `loadTile`/`loadTilePixels`/`sampleTilePixels`.
 `openImagePyramid` (`src/data/morphologyImage.ts`) sends Zarr-looking URLs to
 `openOmeZarrImage` and everything else to `openTiff`.
 
-## OME-TIFF / TIFF / NDPI
+## OME-TIFF / TIFF
 
 `openTiff` (`src/tiff/loader.ts`):
 
 1. Opens the file with `geotiff` `fromUrl(url, { allowFullFile: false })`. A
    `#ifd=N` hash selects the base IFD. `.qptiff` and `.qptif` URLs go to the
-   [QPTIFF](#qptiff) reader instead, and `.svs` URLs to the [SVS](#svs)
-   reader.
+   [QPTIFF](#qptiff) reader instead, `.svs` URLs to the [SVS](#svs) reader,
+   and `.ndpi` URLs without `#ifd=N` to the [NDPI](#ndpi) reader.
 2. Reads OME-XML from IFD 0's `ImageDescription` (`parseOmeTiffMetadata`,
    `src/tiff/omeMetadata.ts`). A `PerkinElmer-QPI-ImageDescription` there
-   sends the file to the QPTIFF reader, and a description starting with
-   `Aperio` to the SVS reader.
+   sends the file to the QPTIFF reader, a description starting with
+   `Aperio` to the SVS reader, and the NDPI format tag (65420) on IFD 0 to
+   the NDPI reader.
 3. Tries a `.zchunkstore` sidecar (`src/tiff/zchunkStore.ts`) for precomputed
    tile offsets. A sidecar named by the dataset manifest
    (`files.morphologyZchunkstore`, or `files.zchunkstore` for `image`) is the
@@ -158,12 +159,10 @@ tile across them.
 ### Requirements
 
 - **SubIFD pyramids.** OME-TIFF pyramids are read from SubIFDs. Pyramids
-  stored as additional top-level IFDs are read for QPTIFF, SVS, and
+  stored as additional top-level IFDs are read for QPTIFF, SVS, NDPI, and
   [page pyramids](#page-pyramids); other such files render at full
   resolution only. Stripped levels are read (see
-  [Stripped TIFFs](#stripped-tiffs)), but tiled pyramids load faster. Most
-  NDPI files store their pyramid as top-level IFDs and each level as one JPEG
-  strip, too large to decode; convert them to pyramidal OME-TIFF.
+  [Stripped TIFFs](#stripped-tiffs)), but tiled pyramids load faster.
 - **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
 
@@ -298,6 +297,91 @@ All but the last were opened in the app (the BioImage Archive ones directly
 from EBI); for `JP2K-33003-1.svs`, tiles decoded by the app were compared with
 tifffile (`imagecodecs`) decodes.
 
+### NDPI
+
+Hamamatsu NanoZoomer scanners write NDPI: a classic TIFF whose pyramid
+levels are top-level IFDs, each holding the whole level as one baseline JPEG
+in a single strip, followed by the macro image (slide overview) and a map of
+the scanned area. `openTiff` sends `.ndpi` URLs, and TIFFs whose IFD 0 has
+the NDPI format tag (65420), to the NDPI reader (`src/tiff/loader.ts`;
+layout, blocks, and tiles in `src/tiff/ndpi.ts`):
+
+- **Restart intervals.** A level's JPEG is far too large to decode whole
+  (68,096 × 37,632 RGB is 7.7 GB) and wider than the 65,535 pixels a JPEG
+  header can state, so the scanner writes a width of 0. It ends every few
+  MCUs with a restart marker and lists where each restart interval starts
+  in a private tag (McuStarts, 65426), which is how OpenSlide reads regions
+  of a level. Intervals run along MCU rows: 19 per row at every level of the
+  slides below, 3,584 pixels wide at full resolution.
+- **IFD walk.** As for SVS, through 64 KiB blocks, stopping at the macro
+  (magnification tag 65421 of −1), so the map's IFD is not read. The Sanger
+  slide below opens in 8 range requests.
+- **Layout.** The images with a positive magnification in the focal plane
+  nearest the focus (Z offset tag 65424), largest first, each smaller than
+  the one before. A level with McuStarts is read by block. One without, such
+  as the 2,128 × 1,176 smallest level of the Sanger slide, is read whole as
+  a [stripped level](#stripped-tiffs). A level that can be read neither way
+  is left out, unless it is the first.
+- **Bands.** A level's McuStarts tag and JPEG header (660 bytes) are read
+  with its first tile. MCU rows lie back to back in the file, so a band of
+  whole rows is one `Range` request. Bands start at the tile height (512 px)
+  and halve until they average 2 MiB or less: 16 MCU rows (128 px) at full
+  resolution, 1.5 to 2.5 MB of JPEG. Bands are kept in memory (64 MiB) while
+  the blocks across them decode, and in the IndexedDB byte-range cache.
+- **Blocks.** A block is a run of whole restart intervals across a band,
+  about 2,048 px wide (one 3,584-px interval at full resolution). It decodes
+  as a JPEG of its own: the level's header with the block's size written in,
+  the intervals' entropy-coded data, and restart markers numbered afresh
+  from RST0. Blocks decode in the strip-band decode workers with `geotiff`'s
+  decoder and are kept with stripped bands (256 MiB). Tiles of 512 px are
+  cut from them.
+- **DC level.** When the smallest level is over 2,048 px wide or tall, a
+  level an eighth its size is added. Its blocks decode only each 8 × 8 JPEG
+  block's DC term, one pixel per block (the block's mean), with the built-in
+  sequential decoder (`jpegDcOnly`). The whole-slide view of the BioImage
+  Archive slide below, whose smallest level is 5,704 × 4,880, then draws
+  from 4 tiles instead of 120.
+- **Scheduling.** The tiles are uncompressed 512-pixel tiles, which the
+  scheduler would hold to 18 tiles and one request at a time as large raw
+  tiles. Each is a cut from shared blocks, so the loader sets
+  `tilesFromSharedReads` and gets the normal budget.
+- **Metadata.** The pixel size is `XResolution` in `ResolutionUnit`
+  (centimetres). The slide is one channel, `RGB`, drawn as stored.
+- **Not read.** Files over 4 GB keep the upper 32 bits of their offsets
+  outside the TIFF fields: in 8-byte IFD offsets, an array after each IFD,
+  and the McuStartsHighBytes tag (65432). They are refused with a message
+  when the file size is readable from `Content-Range` or the IFDs parse far
+  enough to show that tag; otherwise, as on Zenodo, which hides
+  `Content-Range`, the open fails with a parse error. See
+  [Phase 19](../plan/phases/19-ndpi.md#64-bit-ndpi-files-over-4-gb) for the
+  layout, test files, and what support needs. Other focal planes, the macro
+  image, and the map are not shown; `#ifd=N` opens one IFD on its own as a
+  plain TIFF, so `#ifd=6` shows the Sanger slide's macro. Fluorescence NDPI
+  has not been tried.
+
+Checked against:
+
+| File                                                                                             | Scanner           | Levels                                                                          |
+| ------------------------------------------------------------------------------------------------ | ----------------- | ------------------------------------------------------------------------------- |
+| Sanger kidney section `mp33.cog.sanger.ac.uk/public/ndpi/STAN-FC34A - … 11.34.23.ndpi` (604 MB)  | NanoZoomer C13210 | 68,096 × 37,632, six 2× levels, the smallest without restart markers; 0.2212 µm |
+| BioImage Archive S-BIAD2323 `component_B_hamamatsu_ndpi/c003_hamamatsu.ndpi` (609 MB, CC BY 4.0) | NanoZoomer        | 91,264 × 78,080 (both over 65,535), five 2× levels, all with restart markers    |
+
+A tile at each level of the Sanger slide, edge tiles included, was compared
+with tifffile's decode (libjpeg-turbo): at most 3 levels apart, 0.15 on
+average. In headless Chromium at 1,400 × 900, from a cold cache (on
+2026-11-15, from a network where Sanger S3 answered in about 0.4 s):
+
+| View                         | Sanger slide               | BioImage Archive slide     |
+| ---------------------------- | -------------------------- | -------------------------- |
+| Whole slide                  | 0.8 s, 12 requests, 1.0 MB | 3.3 s, 22 requests, 3.1 MB |
+| Full resolution, over tissue | 4.2 s, 26 requests, 31 MB  | 2.7 s, 30 requests, 17 MB  |
+
+Whole-row bands make a full-resolution view read every interval of its
+rows, though it shows one or two of each row's 19: the 31 MB above, against
+about 1.5 MB for the intervals in view. Reading only those intervals would
+cost a request per 8-pixel MCU row in view, about 85 to 170 for that view,
+at 0.4 s each on that network.
+
 ### Codecs
 
 `decodeTiffTilePixels` (`src/codecs/tiffTile.ts`):
@@ -309,6 +393,7 @@ tifffile (`imagecodecs`) decodes.
 | 5 (LZW, predictor 1 or 2)                                  | Built-in decoder                                                                                          |
 | 7 (JPEG), 8-bit RGB                                        | The browser's decoder (`createImageBitmap`) in the decode worker (`src/codecs/jpeg.ts`); `geotiff` if not |
 | 7 (JPEG), more than 8 bits per sample                      | Built-in sequential decoder (`src/codecs/jpegSequential.ts`), 16-bit samples                              |
+| 7 (JPEG), NDPI blocks                                      | `geotiff`, in the strip-band decode workers; the DC level the built-in decoder's `dcOnly` mode            |
 | Other (JPEG, Deflate, PackBits, LERC, Zstd, WebP)          | `geotiff` `getDecoder`                                                                                    |
 
 JPEG-XR is not supported.
@@ -462,16 +547,17 @@ fails, tiles are decoded and sampled on the main thread.
 
 ## Constants
 
-| Constant                   | Value                                                                               | File                                                           |
-| -------------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                             | `omeMetadata.ts`, `omeZarrLoader.ts`                           |
-| Default tile size          | 256                                                                                 | `loader.ts`, `omeZarrLoader.ts`                                |
-| Level threshold            | 1.5 screen px per source px                                                         | `loader.ts`, `omeZarrLoader.ts`                                |
-| Decode workers             | TIFF ≤ 4, plus 1 per auto-contrast run; OME-Zarr ≤ 3                                | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
-| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
-| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples from ≤ 64 tiles, 32 bins                    | `morphologyContrast.ts`                                        |
-| Stripped levels            | 256 px tiles; 8 MiB / 1,024-row bands; 256 MiB of bands; strips ≤ 256 MiB decoded   | `strips.ts`                                                    |
-| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                            | `persistentByteRangeCache.ts`                                  |
+| Constant                   | Value                                                                                | File                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                              | `omeMetadata.ts`, `omeZarrLoader.ts`                           |
+| Default tile size          | 256                                                                                  | `loader.ts`, `omeZarrLoader.ts`                                |
+| Level threshold            | 1.5 screen px per source px                                                          | `loader.ts`, `omeZarrLoader.ts`                                |
+| Decode workers             | TIFF ≤ 4, plus 1 per auto-contrast run; OME-Zarr ≤ 3                                 | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
+| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px  | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
+| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples from ≤ 64 tiles, 32 bins                     | `morphologyContrast.ts`                                        |
+| Stripped levels            | 256 px tiles; 8 MiB / 1,024-row bands; 256 MiB of bands; strips ≤ 256 MiB decoded    | `strips.ts`                                                    |
+| NDPI                       | 512 px tiles; 2 MiB bands; ~2,048 px blocks; 64 MiB of bands; DC level over 2,048 px | `ndpi.ts`, `loader.ts`                                         |
+| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                             | `persistentByteRangeCache.ts`                                  |
 
 ## Source Files
 
@@ -482,6 +568,7 @@ fails, tiles are decoded and sampled on the main thread.
 | `src/data/morphologyImage.ts`                                                                                   | Image opening, per-channel loaders, custom layers, Xenium image choice |
 | `src/data/morphologyContrast.ts`, `tileSamples.ts`                                                              | Auto-contrast                                                          |
 | `src/tiff/loader.ts`, `omeMetadata.ts`, `qptiff.ts`, `svs.ts`, `zchunkStore.ts`, `tileCache.ts`, `chunkKeys.ts` | TIFF, QPTIFF, and SVS loading                                          |
+| `src/tiff/ndpi.ts`                                                                                              | NDPI layout, restart-interval bands and blocks, tiles cut from them    |
 | `src/tiff/strips.ts`                                                                                            | Stripped levels: bands, reads, and tiles cut from them                 |
 | `src/codecs/tiffTile.ts`, `tiffStrips.ts`, `jpeg.ts`, `jpeg2000.ts`                                             | Tile and strip decoding                                                |
 | `src/workers/tileDecode.worker.ts`, `tileDecodePool.ts`, `tileDecodeMessages.ts`, `tileSamplesCore.ts`          | Decode workers                                                         |
@@ -493,7 +580,8 @@ fails, tiles are decoded and sampled on the main thread.
 
 ## Known Limitations
 
-- Top-level-IFD pyramids (other than QPTIFF and SVS) are not supported.
+- Top-level-IFD pyramids (other than QPTIFF, SVS, NDPI, and page pyramids)
+  are not supported.
 - Stripped TIFFs without reduced levels read every band of the image to show
   it whole, and compressed strips that decode to more than 256 MiB each are
   refused.
@@ -520,3 +608,14 @@ fails, tiles are decoded and sampled on the main thread.
   Aperio fluorescence SVS files (one pyramid per channel) have not been
   tried. A JPEG 2000 33003 tile with full-width chroma would be shown as
   YCbCr; no such file has been seen.
+- NDPI: files over 4 GB are not read, and on hosts that hide
+  `Content-Range` (Zenodo) they fail with a parse error rather than the
+  over-4-GB message. An NDPI URL without a `.ndpi` suffix (Zenodo's
+  CORS-enabled `/files/<name>/content` form) is not detected as an image.
+  Only the focal plane nearest the focus
+  is shown, without a `Z plane` control, and the macro image and map only
+  through `#ifd=N`. Full-resolution views read whole MCU rows, many times
+  the bytes of the intervals in view. Blocks decode in JavaScript (`geotiff`),
+  not with the browser's JPEG decoder that SVS tiles use. A level whose
+  restart intervals do not divide its MCU rows fails when its tiles load,
+  not at open.
