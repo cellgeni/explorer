@@ -122,6 +122,11 @@ repository) has no image of its own unless it is Visium. `image` names one
 to show under its cells, as the dataset's image layer: OME-Zarr, including
 `bioformats2raw` stores such as those Bio-Formats and WebAtlas write,
 OME-TIFF, TIFF, QPTIFF, SVS or NDPI. The path resolves like `dataset`.
+An OME-Zarr image needs `.zarr` in its own name or in the name of the store
+it sits in, so an image group such as `sample.zarr/images/he` works. The
+group is read on its own: a SpatialData store's coordinate transformations
+are not, so its coordinates must match the table's as `coordinates` below
+describes. To use them, open the whole store as SpatialData instead.
 
 `coordinates` says how the table's `obsm` coordinates relate to the image:
 

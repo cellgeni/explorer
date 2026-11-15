@@ -259,7 +259,8 @@ A [dataset collection](../dataset-collections.md#images) entry or an `h5ad`
 image to show under an AnnData dataset's cells, such as the Xenium morphology
 image that WebAtlas publishes next to each section's AnnData Zarr store. Any
 image the [generic opener](./image.md) reads works: OME-Zarr (including
-`bioformats2raw` stores), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
+`bioformats2raw` stores and image groups inside a `.zarr` store, such as a
+SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
 
 - **Registration.** `useDatasetCollection` calls `registerCollectionImages`
   (`src/data/datasetFiles.ts`) when the collection is read, before any of its

@@ -12,7 +12,8 @@ SpatialData is detected in one of two places in `detectSpatialDataset`
 (`src/datasets/datasetFactory.ts`):
 
 - **Zarr-looking URL** (path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, or
-  `/.zattrs`). The URL is reduced to the store root, and `zarr.json` and/or
+  `/.zattrs`, or names a group inside a `.zarr` store, such as
+  `sample.zarr/images/he`). The URL is reduced to the store root, and `zarr.json` and/or
   `.zattrs` are probed with `HEAD`. This happens before the Xenium probe.
 - **Any other folder URL**, after the `experiment.xenium` probe fails. The
   same `zarr.json` / `.zattrs` probes run against the folder.

@@ -262,7 +262,7 @@ probed as usual.
 | `h5ad`        | `image`       | Optional. An image to show under the cells. See [AnnData With An Image](#anndata-with-an-image)                                                                            |
 | `h5ad`        | `labels`      | Optional. A segmentation label image covering `image`, drawn as cell boundaries. Needs `image`                                                                             |
 | `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
-| `image`       | `image`       | Required. OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                |
+| `image`       | `image`       | Required. OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr; the type is taken from the path                                                                                  |
 | `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
 
 ### AnnData With An Image
@@ -416,5 +416,5 @@ the parser accept the same fields and values.
   not name are still probed at their standard names.
 - The H5AD coordinate key, the annotation set to select, channel colours and
   contrast windows, and the initial camera cannot be set yet.
-- Image type comes from the path suffix; a renamed OME-Zarr store needs to keep
-  `.zarr` in its name.
+- Image type comes from the path: an OME-Zarr image needs `.zarr` in its own
+  name or in the name of the store it sits in (`sample.zarr/images/he`).

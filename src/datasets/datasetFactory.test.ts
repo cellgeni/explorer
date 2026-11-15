@@ -280,6 +280,8 @@ describe('spatial dataset detection', () => {
     expect(isImageOnlyUrl('https://example.test/sample.zarr?token=1')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample/zarr.json')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample/.zattrs')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.zarr/images/he')).toBe(true)
+    expect(isImageOnlyUrl('https://example.test/sample.zarr/0')).toBe(true)
     expect(isImageOnlyUrl('https://example.test/sample.tif/metadata.json')).toBe(false)
     expect(isImageOnlyUrl('https://example.test/sample.h5ad')).toBe(false)
   })
@@ -386,7 +388,35 @@ describe('spatial dataset detection', () => {
       detectSpatialDataset('https://example.test/stores/sample.zarr/images/he', {
         fetcher,
       }),
-    ).resolves.toMatchObject({ platform: 'image', imageKind: 'ome-zarr' })
+    ).resolves.toMatchObject({
+      platform: 'image',
+      imageUrl: 'https://example.test/stores/sample.zarr/images/he',
+      imageKind: 'ome-zarr',
+    })
+    // Inside a .zarr store, so not probed as a Xenium folder.
+    expect(fetcher).not.toHaveBeenCalledWith(
+      expect.stringContaining('experiment.xenium'),
+      expect.anything(),
+    )
+  })
+
+  it('detects an AnnData table inside a SpatialData store', async () => {
+    const fetcher = fetcherForJsonPaths({
+      '/stores/sample.zarr/tables/table/.zattrs': {
+        'encoding-type': 'anndata',
+        'encoding-version': '0.1.0',
+      },
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/stores/sample.zarr/tables/table', {
+        fetcher,
+      }),
+    ).resolves.toMatchObject({
+      platform: 'h5ad',
+      h5adUrl: 'https://example.test/stores/sample.zarr/tables/table',
+      source: 'zarr',
+    })
   })
 
   it('creates a SpatialData dataset for SpatialData stores', async () => {
