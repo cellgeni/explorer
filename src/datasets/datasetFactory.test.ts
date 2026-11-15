@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import {
+  clearDatasetImages,
   datasetFileLabelFor,
   datasetFileUrl,
   datasetFileUrlFor,
   datasetManifestFor,
+  registerCollectionImages,
   setDatasetManifest,
 } from '../data/datasetFiles'
 import { clearFolderListings, isListedAsMissing } from '../data/folderListing'
@@ -16,6 +18,7 @@ import {
   spatialDataSelectionFor,
 } from './datasetFactory'
 import { AteraDataset } from './ateraDataset'
+import { parseDatasetCollection } from './datasetCollection'
 import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
@@ -423,6 +426,48 @@ describe('spatial dataset detection', () => {
       expect(second).not.toBe(first)
     } finally {
       setSpatialDataSelection(url, undefined)
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('gives an AnnData dataset the image its collection entry names', async () => {
+    const url = 'https://example.test/sections/a.h5ad'
+    const collection = (image?: string) =>
+      parseDatasetCollection(
+        {
+          version: 1,
+          datasets: [
+            image === undefined
+              ? { dataset: 'a.h5ad' }
+              : { dataset: 'a.h5ad', image, coordinates: 'image-pixels' },
+          ],
+        },
+        'https://example.test/sections/collection.json',
+      )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { headers: { 'content-length': '1000' } })),
+    )
+
+    try {
+      const plain = await cachedSpatialDataset(url)
+      expect(plain).toBeInstanceOf(AnnDataH5adDataset)
+      expect((plain as AnnDataH5adDataset).attachedImage).toBeUndefined()
+
+      registerCollectionImages(collection('a-raw.zarr'))
+      const withImage = await cachedSpatialDataset(url)
+      expect(withImage).not.toBe(plain)
+      expect((withImage as AnnDataH5adDataset).attachedImage).toEqual({
+        url: 'https://example.test/sections/a-raw.zarr',
+        coordinates: 'image-pixels',
+      })
+      await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(withImage)
+
+      // A later collection listing the dataset without an image replaces it.
+      registerCollectionImages(collection())
+      await expect(cachedSpatialDataset(url)).resolves.toBe(plain)
+    } finally {
+      clearDatasetImages()
       vi.unstubAllGlobals()
     }
   })

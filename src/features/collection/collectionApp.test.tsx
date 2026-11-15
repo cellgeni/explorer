@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
-import { micrometers } from '../../data/coords'
+import { imagePixels, micrometers } from '../../data/coords'
+import { clearDatasetImages } from '../../data/datasetFiles'
+import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import { initialViewerState, useViewerStore } from '../../store/viewerStore'
 import {
@@ -93,6 +95,7 @@ describe('App with a dataset collection', () => {
   afterEach(() => {
     window.history.replaceState(null, '', '/')
     vi.unstubAllGlobals()
+    clearDatasetImages()
   })
 
   it('opens the first dataset with the defaults and keeps the genes when switching', async () => {
@@ -299,6 +302,91 @@ describe('App with a dataset collection', () => {
     expect(screen.getByLabelText('type: astro visible')).not.toBeChecked()
   })
 
+  it('opens a linked dataset over the image its entry names', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}`,
+    )
+    const imageUrl = 'https://example.test/injury/sham-a-raw.zarr'
+    const collection = parseDatasetCollection(
+      {
+        version: 1,
+        datasets: [
+          {
+            dataset: 'sham-a.h5ad',
+            image: 'sham-a-raw.zarr',
+            coordinates: 'image-pixels',
+            name: 'Sham A',
+          },
+          { dataset: '1dpi-a.h5ad', name: '1 dpi A' },
+        ],
+      },
+      COLLECTION_URL,
+    )
+    let readCollection: (value: typeof collection) => void = () => undefined
+    const loadCollection = vi.fn(
+      () =>
+        new Promise<typeof collection>((resolve) => {
+          readCollection = resolve
+        }),
+    )
+    const loader = imageLoaderFixture(imageUrl)
+    const dataset = {
+      ...h5adDataset(),
+      image: vi.fn(async () => ({ kind: 'pyramid' as const, loader })),
+    }
+    const detect = vi.fn(detectSpatialDataset)
+
+    render(
+      <TestApp
+        loadCollection={loadCollection}
+        detectSpatialDataset={detect}
+        getSpatialDataset={createSpatialDatasetLoaderMock(dataset)}
+        computeAutoChannelContrast={vi.fn(async () => ({
+          min: 0,
+          max: 255,
+          histogram: { bins: [1], maxCount: 1, min: 0, max: 255, sampleCount: 1 },
+        }))}
+      />,
+    )
+
+    // The dataset waits for the collection that pairs it with an image.
+    await waitFor(() => {
+      expect(loadCollection).toHaveBeenCalled()
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(detect).not.toHaveBeenCalled()
+
+    act(() => {
+      readCollection(collection)
+    })
+
+    await waitFor(() => {
+      expect(dataset.image).toHaveBeenCalledTimes(1)
+    })
+    openControls('image')
+    await waitFor(() => {
+      expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
+    })
+
+    // The next section has no image.
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))
+    await waitFor(() => {
+      expect(within(bar).getByRole('button', { name: '1 dpi A' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('checkbox', { name: 'DAPI' })).not.toBeInTheDocument()
+    })
+    expect(dataset.image).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the start screen when the collection cannot be read', async () => {
     window.history.replaceState(null, '', `/?collection=${COLLECTION_URL}`)
 
@@ -316,3 +404,31 @@ describe('App with a dataset collection', () => {
     expect(screen.getByRole('heading', { name: 'Open a dataset' })).toBeInTheDocument()
   })
 })
+
+function imageLoaderFixture(url: string): ImagePyramidLoader {
+  return {
+    url,
+    imageWidth: imagePixels(160),
+    imageHeight: imagePixels(80),
+    tileWidth: imagePixels(256),
+    tileHeight: imagePixels(256),
+    numLevels: 1,
+    tilesForLevel: () => [{ col: 0, row: 0 }],
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(0.5),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    channels: [
+      {
+        id: 'Channel:0',
+        index: 0,
+        name: 'DAPI',
+        color: [88, 144, 255],
+        contrast: { min: 0, max: 255 },
+      },
+    ],
+  } as unknown as ImagePyramidLoader
+}

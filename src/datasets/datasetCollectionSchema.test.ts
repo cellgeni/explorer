@@ -5,6 +5,7 @@ import {
   DATASET_COLLECTION_DEFAULT_KEYS,
   DATASET_COLLECTION_ENTRY_KEYS,
   DATASET_COLLECTION_TOP_LEVEL_KEYS,
+  DATASET_IMAGE_COORDINATES,
   MAX_COLLECTION_DATASETS,
   parseDatasetCollection,
 } from './datasetCollection'
@@ -42,6 +43,9 @@ describe('dataset collection JSON Schema', () => {
       [...DATASET_COLLECTION_DEFAULT_KEYS].sort(),
     )
     expect(schema.properties?.datasets?.maxItems).toBe(MAX_COLLECTION_DATASETS)
+    expect(schema.$defs?.dataset?.properties?.coordinates?.enum).toEqual(
+      DATASET_IMAGE_COORDINATES,
+    )
   })
 
   it('offers the same default values as the dataset manifest', () => {

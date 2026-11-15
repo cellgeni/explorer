@@ -60,8 +60,18 @@
           "type": "string",
           "minLength": 1,
           "description": "Group label, such as a time point or donor. The bar lists groups in the order they first appear."
+        },
+        "image": {
+          "$ref": "#/$defs/path",
+          "description": "An image to show under an AnnData dataset's cells: OME-Zarr, OME-TIFF, TIFF, QPTIFF, SVS or NDPI. Resolved like `dataset`. Other datasets keep their own image."
+        },
+        "coordinates": {
+          "enum": ["micrometers", "image-pixels"],
+          "default": "micrometers",
+          "description": "What the dataset's cell coordinates are in: micrometres, or the image's full-resolution pixels, which are scaled to micrometres by the image's pixel size. Needs `image`."
         }
       },
+      "dependentRequired": { "coordinates": ["image"] },
       "additionalProperties": false
     },
     "source": {

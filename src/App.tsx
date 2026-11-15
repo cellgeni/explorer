@@ -3014,6 +3014,9 @@ export function App({ dependencies }: AppProps = {}) {
     controls: {
       isDatasetLoaded: loadState.status === 'ready',
       isDatasetLoading: loadState.status === 'loading',
+      // A link naming a dataset and its collection loads the dataset once the
+      // collection is read, so the image the collection pairs with it shows.
+      initialDatasetLoadHeld: datasetCollection.state.status === 'loading',
     },
     initialState: {
       initialShareableState,

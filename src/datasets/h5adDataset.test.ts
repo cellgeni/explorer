@@ -7,6 +7,7 @@ import {
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
 import { AnnDataH5adDataset, type AnnDataH5adDatasetOptions } from './h5adDataset'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
 
 describe('AnnDataH5adDataset', () => {
@@ -330,6 +331,99 @@ describe('AnnDataH5adDataset', () => {
       ])
     },
   )
+
+  it('shows an attached image and places pixel coordinates on it', async () => {
+    const bytes = await createTinyH5ad('dense')
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      units: {
+        dataUnit: 'micrometer',
+        imageUnit: 'pixel',
+        micrometersPerPixel: micrometers(0.25),
+        origin: 'top-left',
+        imageYAxis: 'down',
+      },
+      channels: [{ id: 'c0' }, { id: 'c1' }],
+    } as unknown as ImagePyramidLoader
+    const openImage = vi.fn().mockResolvedValue(loader)
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(bytes),
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage,
+    })
+
+    const overview = await dataset.overview()
+
+    expect(overview.map((point) => point.position)).toContainEqual({
+      x: micrometers(2.5),
+      y: micrometers(0),
+    })
+    await expect(
+      dataset.cells({
+        minX: micrometers(2),
+        minY: micrometers(-1),
+        maxX: micrometers(3),
+        maxY: micrometers(1),
+      }),
+    ).resolves.toEqual([
+      { id: 'cell-b', position: { x: micrometers(2.5), y: micrometers(0) } },
+    ])
+    await expect(dataset.meta()).resolves.toMatchObject({
+      platform: 'h5ad',
+      units: { micrometersPerPixel: micrometers(0.25) },
+      extent: { maxX: micrometers(2.5), maxY: micrometers(2.5) },
+      capabilities: { pyramidImage: true, multiChannel: true },
+    })
+    await expect(dataset.image()).resolves.toEqual({ kind: 'pyramid', loader })
+    expect(openImage).toHaveBeenCalledTimes(1)
+    expect(openImage).toHaveBeenCalledWith('https://example.test/section-raw.zarr')
+  })
+
+  it('keeps micrometre coordinates, and coordinates whose image fails, as read', async () => {
+    const bytes = await createTinyH5ad('dense')
+    const loader = {
+      url: 'https://example.test/he.ome.tif',
+      units: { micrometersPerPixel: micrometers(0.25) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    const micrometreDataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(bytes),
+      image: { url: loader.url, coordinates: 'micrometers' },
+      openImage: vi.fn().mockResolvedValue(loader),
+    })
+    const openImage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('HTTP 403'))
+      .mockRejectedValueOnce(new Error('HTTP 403'))
+      .mockResolvedValue(loader)
+    const onProgress = vi.fn()
+    const failingDataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(bytes),
+      onProgress,
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage,
+    })
+
+    expect((await micrometreDataset.meta()).extent.maxX).toBe(micrometers(10))
+    expect((await failingDataset.meta()).extent.maxX).toBe(micrometers(10))
+    expect(onProgress).toHaveBeenCalledWith(
+      'Attached image could not be opened, so cell coordinates are read as micrometres',
+    )
+    // A failed open is tried again when the image is asked for.
+    await expect(failingDataset.image()).resolves.toEqual({ kind: 'pyramid', loader })
+  })
+
+  it('has no image without an attached one', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense')),
+    })
+
+    await expect(dataset.image()).resolves.toBeNull()
+  })
 
   it('applies the gene-name rules to categorical codes', async () => {
     // A missing code is an empty name, and a shared category is a duplicate.

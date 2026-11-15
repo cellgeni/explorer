@@ -23,6 +23,8 @@ import type {
 import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
+import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import type { DatasetImageCoordinates } from './datasetCollection'
 import {
   analysisEmbeddingLabel,
   type AnalysisEmbedding,
@@ -84,6 +86,19 @@ export interface AnnDataH5adDatasetOptions {
   // The most decoded chunk bytes one cell's all-gene profile may read from a
   // dense Zarr /X. Defaults to DENSE_ZARR_CELL_PROFILE_MAX_BYTES.
   readonly denseCellProfileMaxBytes?: number
+  // An image shown under the cells, such as one a dataset collection pairs
+  // with the table. Not used for a Visium table, which has its own image.
+  readonly image?: AnnDataAttachedImage
+  // Opens `image`; defaults to the generic image opener.
+  readonly openImage?: ImagePyramidOpener
+}
+
+export interface AnnDataAttachedImage {
+  // OME-Zarr, OME-TIFF or another image the generic opener reads.
+  readonly url: string
+  // With 'image-pixels', the obsm coordinates are the image's full-resolution
+  // pixels and are scaled to micrometres by its pixel size.
+  readonly coordinates: DatasetImageCoordinates
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
@@ -536,6 +551,9 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   } | null = null
   // Per library and image kind.
   private readonly tissueImageUrls = new Map<string, Promise<string>>()
+  readonly attachedImage: AnnDataAttachedImage | undefined
+  private readonly openImage: ImagePyramidOpener | undefined
+  private attachedImageLoaderPromise: Promise<ImagePyramidLoader> | null = null
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
@@ -549,27 +567,31 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.visiumImageUrls = options.visiumImageUrls ?? {}
     this.denseCellProfileMaxBytes =
       options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
+    this.attachedImage = options.image
+    this.openImage = options.openImage
   }
 
   async meta(): Promise<DatasetMeta> {
     const cache = await this.cache()
     const visium = cache.visium?.summary
+    const imageLoader =
+      visium === undefined ? await this.attachedImageLoaderOrNull() : null
 
     return {
       platform: visium === undefined ? 'h5ad' : 'visium',
       units:
-        visium === undefined
-          ? DEFAULT_H5AD_UNITS
-          : {
+        visium !== undefined
+          ? {
               ...DEFAULT_H5AD_UNITS,
               micrometersPerPixel: micrometers(visium.units.micrometersPerPixel),
-            },
+            }
+          : (imageLoader?.units ?? DEFAULT_H5AD_UNITS),
       extent: cache.extent,
       capabilities: {
         transcripts: false,
         cellBoundaries: visium !== undefined,
-        pyramidImage: false,
-        multiChannel: false,
+        pyramidImage: imageLoader !== null,
+        multiChannel: (imageLoader?.channels.length ?? 0) > 1,
       },
     }
   }
@@ -892,11 +914,76 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }))
   }
 
-  // The Visium tissue image: high-res when present, else low-res.
+  // The Visium tissue image, high-res when present, else low-res; otherwise
+  // the attached image.
   async image(): Promise<ImageSource | null> {
     const visium = (await this.cache()).visium
-    const kind = visium === null ? undefined : this.visiumImageKinds(visium)[0]
+
+    if (visium === null) {
+      return this.attachedImage === undefined
+        ? null
+        : { kind: 'pyramid', loader: await this.attachedImageLoader() }
+    }
+
+    const kind = this.visiumImageKinds(visium)[0]
     return kind === undefined ? null : this.tissueImage(kind)
+  }
+
+  // Opened once; a failed open is tried again by the next caller.
+  private attachedImageLoader(): Promise<ImagePyramidLoader> {
+    const image = this.attachedImage
+
+    if (image === undefined) {
+      return Promise.reject(new Error('This AnnData dataset has no attached image.'))
+    }
+
+    if (this.attachedImageLoaderPromise === null) {
+      const promise = (async () => {
+        const openImage =
+          this.openImage ?? (await import('../data/morphologyImage')).openImagePyramid
+        return openImage(image.url)
+      })()
+      this.attachedImageLoaderPromise = promise
+      promise.catch(() => {
+        if (this.attachedImageLoaderPromise === promise) {
+          this.attachedImageLoaderPromise = null
+        }
+      })
+    }
+
+    return this.attachedImageLoaderPromise
+  }
+
+  private async attachedImageLoaderOrNull(): Promise<ImagePyramidLoader | null> {
+    if (this.attachedImage === undefined) {
+      return null
+    }
+
+    try {
+      return await this.attachedImageLoader()
+    } catch {
+      return null
+    }
+  }
+
+  // Micrometres per coordinate unit: the attached image's pixel size when the
+  // coordinates are its pixels, else 1. An image that cannot be opened leaves
+  // the coordinates as they are; image() reports the failure.
+  private async coordinateScale(): Promise<number> {
+    if (this.attachedImage?.coordinates !== 'image-pixels') {
+      return 1
+    }
+
+    const loader = await this.attachedImageLoaderOrNull()
+
+    if (loader === null) {
+      this.onProgress?.(
+        'Attached image could not be opened, so cell coordinates are read as micrometres',
+      )
+      return 1
+    }
+
+    return loader.units.micrometersPerPixel
   }
 
   // A Visium tissue image placed with its `tissue_<kind>_scalef`. Images held
@@ -1024,7 +1111,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
       const view = this.visiumView
-      const promise = this.baseCache().then((base) => withVisiumView(base, view))
+      const promise = this.baseCache().then(async (base) =>
+        base.visiumSource === null
+          ? withCoordinateScale(base, await this.coordinateScale())
+          : withVisiumView(base, view),
+      )
       this.cachePromise = promise
       promise.catch(() => {
         if (this.cachePromise === promise) {
@@ -1061,6 +1152,20 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     return this.baseCachePromise
   }
+}
+
+function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
+  if (scale === 1) {
+    return base
+  }
+
+  const coordinates = base.coordinates.map((point) =>
+    isFinitePoint(point)
+      ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
+      : point,
+  )
+
+  return { ...base, coordinates, extent: bboxForPoints(coordinates) }
 }
 
 function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {

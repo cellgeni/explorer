@@ -32,7 +32,30 @@ export const DATASET_COLLECTION_TOP_LEVEL_KEYS = [
   'defaults',
 ] as const
 
-export const DATASET_COLLECTION_ENTRY_KEYS = ['dataset', 'name', 'group'] as const
+export const DATASET_COLLECTION_ENTRY_KEYS = [
+  'dataset',
+  'name',
+  'group',
+  'image',
+  'coordinates',
+] as const
+
+// How an entry's cell coordinates relate to its image: micrometres, as the
+// viewer reads AnnData coordinates, or the image's full-resolution pixels, as
+// WebAtlas writes `obsm/X_spatial`.
+export const DATASET_IMAGE_COORDINATES = ['micrometers', 'image-pixels'] as const
+
+export type DatasetImageCoordinates = (typeof DATASET_IMAGE_COORDINATES)[number]
+
+// An image shown under an AnnData dataset's cells, named by its collection
+// entry.
+export interface DatasetImageAttachment {
+  // As written in the collection.
+  readonly path: string
+  // Resolved like the entry's dataset.
+  readonly url: string
+  readonly coordinates: DatasetImageCoordinates
+}
 
 // The dataset manifest defaults that make sense across datasets. Layer
 // toggles, opacities and channels belong to each dataset's own manifest;
@@ -63,6 +86,7 @@ export interface DatasetCollectionEntry {
   readonly url: string
   readonly name?: string
   readonly group?: string
+  readonly image?: DatasetImageAttachment
 }
 
 export interface DatasetCollection {
@@ -187,14 +211,47 @@ function parseEntries(
     seen.set(url, index)
     const name = optionalString(entry, 'name', prefix, fail)
     const group = optionalString(entry, 'group', prefix, fail)
+    const image = parseEntryImage(entry, rootUrl, prefix, fail)
 
     return {
       path,
       url,
       ...(name === undefined ? {} : { name }),
       ...(group === undefined ? {} : { group }),
+      ...(image === undefined ? {} : { image }),
     }
   })
+}
+
+function parseEntryImage(
+  entry: Readonly<Record<string, unknown>>,
+  rootUrl: string,
+  prefix: string,
+  fail: Fail,
+): DatasetImageAttachment | undefined {
+  const path = optionalPath(entry, 'image', prefix, fail)
+  const coordinates = entry.coordinates
+
+  if (
+    coordinates !== undefined &&
+    !DATASET_IMAGE_COORDINATES.includes(coordinates as DatasetImageCoordinates)
+  ) {
+    return fail(
+      `"${prefix}coordinates" must be one of ${DATASET_IMAGE_COORDINATES.map((value) => `"${value}"`).join(', ')}.`,
+    )
+  }
+
+  if (path === undefined) {
+    return coordinates === undefined
+      ? undefined
+      : fail(`"${prefix}coordinates" needs "${prefix}image".`)
+  }
+
+  return {
+    path,
+    url: resolveManifestPath(rootUrl, path),
+    coordinates: (coordinates as DatasetImageCoordinates | undefined) ?? 'micrometers',
+  }
 }
 
 // The entry for a dataset URL, as the address or a load names it.

@@ -136,6 +136,58 @@ describe('parseDatasetCollection', () => {
     )
   })
 
+  it('pairs an image with a dataset, resolved like the dataset', () => {
+    const collection = parse({
+      version: 1,
+      root: 'https://bucket.example.test/SPCOX/',
+      datasets: [
+        {
+          dataset: 'SPCOX-Sham-A-anndata.zarr',
+          image: './SPCOX-Sham-A-raw.zarr/',
+          coordinates: 'image-pixels',
+        },
+        { dataset: 'b.h5ad', image: 'https://images.example.test/b.ome.tif' },
+        { dataset: 'atlas.h5ad' },
+      ],
+    })
+
+    expect(collection.datasets.map((entry) => entry.image)).toEqual([
+      {
+        path: 'SPCOX-Sham-A-raw.zarr',
+        url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-raw.zarr',
+        coordinates: 'image-pixels',
+      },
+      {
+        path: 'https://images.example.test/b.ome.tif',
+        url: 'https://images.example.test/b.ome.tif',
+        coordinates: 'micrometers',
+      },
+      undefined,
+    ])
+  })
+
+  it('rejects bad image entries', () => {
+    expect(
+      parseError({ version: 1, datasets: [{ dataset: 'a', image: 's3://bucket/a' }] }),
+    ).toBe(
+      'collection.json: "datasets[0].image" must be a relative path or an http(s) URL.',
+    )
+    expect(
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 'a', image: 'a.zarr', coordinates: 'pixels' }],
+      }),
+    ).toBe(
+      'collection.json: "datasets[0].coordinates" must be one of "micrometers", "image-pixels".',
+    )
+    expect(
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 'a', coordinates: 'image-pixels' }],
+      }),
+    ).toBe('collection.json: "datasets[0].coordinates" needs "datasets[0].image".')
+  })
+
   it('rejects the same dataset listed twice', () => {
     expect(
       parseError({

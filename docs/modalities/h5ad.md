@@ -191,7 +191,9 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 - Only columns 0 and 1 are used. Any non-finite value fails the load.
 - Values are used directly as micrometres (1 µm per unit), except for Visium
   files, whose `obsm/spatial` pixels are scaled to micrometres
-  ([Units And Coordinates](./visium.md#units-and-coordinates)).
+  ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
+  collection pairs with an image whose pixels they are in
+  ([Attached Image](#attached-image)).
 - Embedding options (`readObsmEmbeddingOptions`) are every dense 2D obsm
   matrix with `n_obs` rows and 2+ columns, ordered `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`, `X_spatial`, `spatial`, then alphabetically.
@@ -236,11 +238,45 @@ choice places the rows again) and returned to every caller. Its points carry
 `readMetadata` instead of a metadata object: building an object per cell with
 every obs column took 0.6–1.4 s per call on a 598,222-cell table.
 
-H5AD has no morphology image and no boundary polygons, so cell boundaries are
-switched off and `meta()` reports all capabilities as `false`. `elements()`
-returns `[]` and `image()` returns `null`. Before this, the lifecycle calls
-`visiumSummary()`; when it finds a Visium layout, the load continues as
-[Standard Visium](./visium.md#load-sequence) instead.
+H5AD has no boundary polygons, so cell boundaries are switched off and
+`elements()` returns `[]`. Without an [attached image](#attached-image),
+`meta()` reports all capabilities as `false` and `image()` returns `null`.
+Before this, the lifecycle calls `visiumSummary()`; when it finds a Visium
+layout, the load continues as [Standard Visium](./visium.md#load-sequence)
+instead.
+
+## Attached Image
+
+A [dataset collection](../dataset-collections.md#images) entry can name an
+image to show under an AnnData dataset's cells, such as the Xenium morphology
+image that WebAtlas publishes next to each section's AnnData Zarr store. Any
+image the [generic opener](./image.md) reads works: OME-Zarr (including
+`bioformats2raw` stores), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
+
+- **Registration.** `useDatasetCollection` calls `registerCollectionImages`
+  (`src/data/datasetFiles.ts`) when the collection is read, before any of its
+  datasets or previews opens. `createSpatialDataset` passes the entry's image
+  to `AnnDataH5adDataset` as `image`, and `cachedSpatialDataset` keys the
+  instance by it, so the same table without the image is a separate instance.
+  A link that names both a collection and a dataset holds the dataset's load
+  until the collection is read.
+- **Placement.** With `coordinates: "image-pixels"`, the dataset opens the
+  image (`attachedImageLoader`, once per instance) before placing its cells
+  and multiplies the obsm coordinates by the image's micrometres per pixel, so
+  the cells, the image, the scale bar and every distance are in micrometres.
+  With `micrometers`, the default, the coordinates are used as they are and
+  the image is placed by its own pixel size. If the image cannot be opened,
+  the coordinates are used as they are, with a line in the log.
+- **Drawing.** After the cells are drawn, the lifecycle loads `image()` as a
+  pyramid in the background, as for SpatialData: channels, contrast, opacity
+  and the minimap work as for any image, and `meta()` reports the image's
+  units, `pyramidImage` and `multiChannel`.
+- **Not used.** A Visium table keeps its own tissue image, and other platforms
+  their own; the entry's image is then ignored, with a Fallbacks notice.
+
+For a SPCOX section, opening the image costs three requests (about 15 KB)
+before the cells are placed, which also applies to each collection preview,
+and the image row shows about 2.7 s after the link opens.
 
 ## Feature Read Paths
 

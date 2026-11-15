@@ -1,8 +1,10 @@
 import {
   datasetFileUrl,
+  datasetImageFor,
   datasetManifestFor,
   setDatasetManifest,
 } from '../data/datasetFiles'
+import type { DatasetImageAttachment } from './datasetCollection'
 import {
   folderListingFor,
   folderListingMissing,
@@ -1300,8 +1302,13 @@ export async function createSpatialDataset(
 
   if (detection.platform === 'h5ad') {
     const { AnnDataH5adDataset } = await import('./h5adDataset')
+    const image = datasetImageFor(detection.baseUrl)
+
     return new AnnDataH5adDataset({
       url: detection.h5adUrl,
+      ...(image === undefined
+        ? {}
+        : { image: { url: image.url, coordinates: image.coordinates } }),
       ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
       ...(detection.source === 'zarr' ? { zarr: true } : {}),
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
@@ -1432,6 +1439,7 @@ export function cachedSpatialDataset(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
     spatialDataSelectionFor(normalizedBaseUrl),
+    datasetImageFor(normalizedBaseUrl),
   )
   const existing = spatialDatasetCache.get(cacheKey)
 
@@ -1745,6 +1753,7 @@ function spatialDatasetCacheKey(
   baseUrl: string,
   visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
   spatialDataSelection: SpatialDataSelection | undefined,
+  image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}`
+  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates}`}`
 }

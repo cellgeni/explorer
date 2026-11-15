@@ -19,6 +19,7 @@ import {
   type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
+import { datasetImageFor } from '../../data/datasetFiles'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import {
   morphologyImageFromPyramidLoader,
@@ -301,6 +302,9 @@ interface UseDatasetLifecycleControls {
   readonly isDatasetLoaded: boolean
   // A load with nothing on screen is under way, for Cancel (15.3-D).
   readonly isDatasetLoading: boolean
+  // The link's dataset waits while this is true, such as while the link's
+  // collection, which can pair an image with it, is read.
+  readonly initialDatasetLoadHeld?: boolean
 }
 
 interface UseDatasetLifecycleInitialState {
@@ -495,7 +499,7 @@ export function useDatasetLifecycle({
     queueAutoContrast,
     recordTelemetry,
   },
-  controls: { isDatasetLoaded, isDatasetLoading },
+  controls: { isDatasetLoaded, isDatasetLoading, initialDatasetLoadHeld = false },
   initialState: { initialShareableState },
   loaders: {
     detectSpatialDataset,
@@ -1246,6 +1250,60 @@ export function useDatasetLifecycle({
           })
         }
 
+        // An image a collection pairs with this dataset. Only AnnData tables
+        // without an image of their own take one.
+        const attachedImage = datasetImageFor(detection.baseUrl)
+        const notifyAttachedImageUnused = (reason: string) => {
+          if (attachedImage === undefined) return
+
+          notifyFallbackWhenCommitted({
+            source: 'Morphology image',
+            message: `The collection pairs ${shortDatasetLabel(attachedImage.url)} with this dataset, but ${reason}, so it is not shown.`,
+            action:
+              'Remove "image" from the collection entry, or list the AnnData table instead.',
+            coalesceKey: `collection-image-unused:${requestedUrl}`,
+          })
+        }
+
+        if (detection.platform !== 'h5ad' && detection.platform !== 'unknown') {
+          notifyAttachedImageUnused('only AnnData datasets take an image this way')
+        }
+
+        // A dataset's pyramid image, loaded once its cells are drawn.
+        const loadPyramidImageInBackground = (dataset: {
+          image(): Promise<ImageSource | null>
+        }) => {
+          loadMorphologyInBackground(
+            async () => {
+              const imageSource = await dataset.image()
+
+              if (imageSource?.kind !== 'pyramid') {
+                return null
+              }
+
+              return morphologyImageFromPyramidLoader(
+                imageSource.loader.url,
+                imageSource.loader,
+                {
+                  onFallback: notifyFallbackWhenCommitted,
+                  signal,
+                  ...(imageSource.openChannelLoader === undefined
+                    ? {}
+                    : { openImage: imageSource.openChannelLoader }),
+                  ...restoredZPlane,
+                },
+              )
+            },
+            {
+              ...(restoreState.morphologyEnabledChannelIds === undefined
+                ? {}
+                : { channelSelection: restoreState.morphologyEnabledChannelIds }),
+              enableFirstChannelsByDefault: true,
+              skipNativeRgbAutoContrast: true,
+            },
+          )
+        }
+
         const loadAnnDataOverview = async (
           dataset: unknown,
           label: 'H5AD' | 'Visium' | 'SpatialData' | 'Atera' | 'MERSCOPE',
@@ -1410,7 +1468,9 @@ export function useDatasetLifecycle({
             setDatasetPlatform('h5ad')
             setShowCellBoundaries(false)
             setShowNucleusBoundaries(false)
-            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            if (attachedImage === undefined || !loadImage) {
+              setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            }
             setGenePanelState(genePanelLoadStarted(requestedUrl))
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
@@ -1429,6 +1489,7 @@ export function useDatasetLifecycle({
           }
 
           if (visium !== null && isVisiumLifecycleDataset(dataset)) {
+            notifyAttachedImageUnused('it is a Visium table, shown over its own image')
             whenCommitted(() => {
               setDatasetPlatform('visium')
               setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
@@ -1437,7 +1498,22 @@ export function useDatasetLifecycle({
             return
           }
 
-          await loadAnnDataOverview(dataset, 'H5AD')
+          if (
+            !(await loadAnnDataOverview(dataset, 'H5AD')) ||
+            attachedImage === undefined ||
+            !loadImage
+          ) {
+            return
+          }
+
+          appendDebugEvent(
+            `Image from the collection: ${shortDatasetLabel(attachedImage.url)}${
+              attachedImage.coordinates === 'image-pixels'
+                ? ', cell coordinates in its pixels'
+                : ''
+            }`,
+          )
+          loadPyramidImageInBackground(dataset)
           return
         }
 
@@ -1509,35 +1585,7 @@ export function useDatasetLifecycle({
             return
           }
 
-          loadMorphologyInBackground(
-            async () => {
-              const imageSource = await dataset.image()
-
-              if (imageSource?.kind !== 'pyramid') {
-                return null
-              }
-
-              return morphologyImageFromPyramidLoader(
-                imageSource.loader.url,
-                imageSource.loader,
-                {
-                  onFallback: notifyFallbackWhenCommitted,
-                  signal,
-                  ...(imageSource.openChannelLoader === undefined
-                    ? {}
-                    : { openImage: imageSource.openChannelLoader }),
-                  ...restoredZPlane,
-                },
-              )
-            },
-            {
-              ...(restoreState.morphologyEnabledChannelIds === undefined
-                ? {}
-                : { channelSelection: restoreState.morphologyEnabledChannelIds }),
-              enableFirstChannelsByDefault: true,
-              skipNativeRgbAutoContrast: true,
-            },
-          )
+          loadPyramidImageInBackground(dataset)
           return
         }
 
@@ -2192,7 +2240,11 @@ export function useDatasetLifecycle({
   useEffect(() => {
     const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
 
-    if (initialDatasetUrl === undefined || initialDatasetUrl === '') {
+    if (
+      initialDatasetUrl === undefined ||
+      initialDatasetUrl === '' ||
+      initialDatasetLoadHeld
+    ) {
       return
     }
 
@@ -2207,6 +2259,7 @@ export function useDatasetLifecycle({
       window.clearTimeout(timeout)
     }
   }, [
+    initialDatasetLoadHeld,
     initialShareableState.datasetUrl,
     initialShouldLoadMorphologyRef,
     startDatasetLoadRef,

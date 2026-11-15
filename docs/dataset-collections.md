@@ -29,7 +29,9 @@ The format is defined by
 Xenium sections of the
 [SPCOX spinal cord time course](https://www.sciatlas.org/SPCOX/), three per
 time point, and the snRNA-seq atlas they are compared with. Each entry is an
-AnnData Zarr store on the group's bucket, which the viewer reads directly:
+AnnData Zarr store on the group's bucket, which the viewer reads directly,
+and each section names its morphology image, an OME-Zarr store next to it.
+The sections' coordinates are pixels of that image:
 
 ```json
 {
@@ -38,9 +40,20 @@ AnnData Zarr store on the group's bucket, which the viewer reads directly:
   "name": "Spinal cord Xenium time course (SPCOX)",
   "root": "https://spco.cog.sanger.ac.uk/SPCOX/",
   "datasets": [
-    { "dataset": "SPCOX-Sham-A-anndata.zarr", "name": "Sham-A", "group": "Sham" },
-    { "dataset": "SPCOX-Sham-B-anndata.zarr", "name": "Sham-B", "group": "Sham" },
-    { "dataset": "SPCOX-1dpi-A-anndata.zarr", "name": "1dpi-A", "group": "1 dpi" },
+    {
+      "dataset": "SPCOX-Sham-A-anndata.zarr",
+      "image": "SPCOX-Sham-A-raw.zarr",
+      "coordinates": "image-pixels",
+      "name": "Sham-A",
+      "group": "Sham"
+    },
+    {
+      "dataset": "SPCOX-1dpi-A-anndata.zarr",
+      "image": "SPCOX-1dpi-A-raw.zarr",
+      "coordinates": "image-pixels",
+      "name": "1dpi-A",
+      "group": "1 dpi"
+    },
     {
       "dataset": "SPCO-snRNAseq-anndata.zarr",
       "name": "snRNA-seq atlas",
@@ -77,11 +90,13 @@ Unknown fields are errors, as in a dataset manifest.
 
 ### Datasets
 
-| Key       | Required | Value                                                                                                                       |
-| --------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `dataset` | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
-| `name`    | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
-| `group`   | No       | Group label, such as a time point or donor                                                                                  |
+| Key           | Required | Value                                                                                                                       |
+| ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`     | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
+| `name`        | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
+| `group`       | No       | Group label, such as a time point or donor                                                                                  |
+| `image`       | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
+| `coordinates` | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -93,6 +108,42 @@ Unknown fields are errors, as in a dataset manifest.
   appear.
 - An entry that points at a manifest gets that manifest's files, options and
   defaults. A collection does not repeat them.
+
+### Images
+
+An AnnData table (an `.h5ad` file, an AnnData Zarr store or an Icechunk
+repository) has no image of its own unless it is Visium. `image` names one
+to show under its cells, as the dataset's image layer: OME-Zarr, including
+`bioformats2raw` stores such as those Bio-Formats and WebAtlas write,
+OME-TIFF, TIFF, QPTIFF, SVS or NDPI. The path resolves like `dataset`.
+
+`coordinates` says how the table's `obsm` coordinates relate to the image:
+
+- `micrometers`, the default: they are micrometres, as the viewer reads
+  AnnData coordinates, and the image is placed by its own pixel size.
+- `image-pixels`: they are the image's full-resolution pixels, as WebAtlas
+  writes them. The viewer scales them by the image's micrometres per
+  pixel, so the scale bar and distances are in micrometres. For SPCOX that is
+  0.2125 µm per pixel.
+
+The image then behaves as the dataset's own:
+
+- It loads in the background once the cells are drawn, with its
+  channels in the Image section. With `Morphology image` off it is not
+  drawn, though `image-pixels` still reads its metadata to place the cells.
+- Previews do not draw the image. With `image-pixels`, each preview reads the
+  image's metadata (about 15 KB for SPCOX) to place its cells.
+- A link that names a dataset as well as the collection opens the dataset once
+  the collection is read, so it opens over its image.
+- The image belongs to the collection: the same dataset opened on its own has
+  none, until a collection that pairs it with one has been read in that tab.
+- Only AnnData tables take one. Other platforms, and Visium tables, keep their
+  own image; an entry's `image` is then ignored, with a notice under
+  Fallbacks.
+- To check alignment, zoom in until nuclei show in the image; each cell's
+  point should sit on its nucleus.
+
+See [Attached Image](./modalities/h5ad.md#attached-image) for how it is read.
 
 ### Defaults
 
@@ -224,3 +275,6 @@ errors as you type.
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
+- Only a collection entry can pair an image with an AnnData table; a dataset
+  manifest cannot yet. Segmentation labels next to the image, such as SPCOX's
+  `-label.zarr` stores, are not read.
