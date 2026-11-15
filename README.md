@@ -71,8 +71,8 @@ runs the unit and E2E smoke tests, builds the app, and attaches it to the
 release as `explorer-<tag>.zip`. Pre-releases get a zip too. To retry, or to
 attach a zip to an older release, run the workflow manually with the tag.
 
-The zip holds one `explorer-<tag>/` folder with `index.html`, `assets/`, and a
-`version.json` that records the tag and commit. Asset paths are relative, so
+The zip holds one `explorer-<tag>/` folder with `index.html`, `assets/`,
+`LICENSE`, and a `version.json` that records the tag and commit. Asset paths are relative, so
 the folder works when served from a domain root or any subpath. It has to be
 served over HTTP; opening `index.html` from disk does not work. See
 [Deploy to S3](docs/deploy-to-s3.md) for hosting it.
@@ -197,3 +197,7 @@ The full index is in [docs/README.md](docs/README.md).
 - [Plan](PLAN.md): the build plan, with each phase's status. Phase records,
   architecture decisions, refactor history, and open items are in
   [`docs/plan/`](docs/plan/).
+
+## License
+
+[MIT](LICENSE). Copyright (c) 2026 Genome Research Ltd.

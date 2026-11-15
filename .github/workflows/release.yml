@@ -51,6 +51,7 @@ jobs:
         run: |
           name="explorer-$TAG"
           cp -R dist "$name"
+          cp LICENSE "$name/"
           jq -n --arg tag "$TAG" --arg commit "$(git rev-parse HEAD)" \
             '{tag: $tag, commit: $commit}' > "$name/version.json"
           zip -qr "$name.zip" "$name"
