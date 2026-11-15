@@ -259,6 +259,22 @@ describe('TopBar', () => {
     expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument()
   })
 
+  it('names the deployed commit at the foot of Help', () => {
+    const sha = '0123456789abcdef0123456789abcdef01234567'
+    vi.stubEnv('VITE_COMMIT_SHA', sha)
+    try {
+      renderTopBar()
+      fireEvent.keyDown(document.body, { key: '?', shiftKey: true })
+      const help = screen.getByRole('dialog', { name: 'Help' })
+      expect(within(help).getByRole('link', { name: '0123456' })).toHaveAttribute(
+        'href',
+        `https://github.com/cellgeni/explorer/commit/${sha}`,
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it('leaves ? alone while typing', () => {
     renderTopBar()
     const search = document.createElement('input')

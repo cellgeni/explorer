@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export const crossOriginIsolationHeaders = {
@@ -34,6 +34,18 @@ export const dependencyChunkGroups = [
   },
 ]
 
+// Records the deployed commit in index.html, so `curl` on the site shows it
+// without running the app. The Pages workflow sets VITE_COMMIT_SHA.
+export function buildCommitMeta(sha = process.env.VITE_COMMIT_SHA): Plugin {
+  return {
+    name: 'build-commit-meta',
+    transformIndexHtml() {
+      if (sha === undefined || !/^[0-9a-f]{40}$/i.test(sha)) return []
+      return [{ tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' }]
+    },
+  }
+}
+
 export default defineConfig({
   assetsInclude: ['**/*.wasm'],
   build: {
@@ -49,7 +61,7 @@ export default defineConfig({
     exclude: ['@duckdb/duckdb-wasm', 'h5wasm'],
     include: ['@cornerstonejs/codec-openjpeg'],
   },
-  plugins: [react()],
+  plugins: [react(), buildCommitMeta()],
   preview: {
     headers: crossOriginIsolationHeaders,
   },

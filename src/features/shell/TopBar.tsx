@@ -39,7 +39,7 @@ import {
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { ExampleGallery, RecentDatasetList } from '../start/StartScreen'
-import { HELP_LINKS } from './docLinks'
+import { buildCommit, HELP_LINKS } from './docLinks'
 import { isHelpKey, SHORTCUTS } from './shortcuts'
 import type {
   DatasetSummary,
@@ -488,7 +488,22 @@ function HelpMenu() {
           ))}
         </ul>
       </nav>
+      <BuildCommitNote />
     </Popover>
+  )
+}
+
+function BuildCommitNote() {
+  const commit = buildCommit()
+  if (commit === null) return null
+
+  return (
+    <p className="shell-help-build">
+      Build{' '}
+      <a href={commit.href} target="_blank" rel="noopener noreferrer">
+        <code>{commit.short}</code>
+      </a>
+    </p>
   )
 }
 
