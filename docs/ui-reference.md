@@ -324,13 +324,18 @@ Loaded state:
   eye (`{set} visible`), which turns its colours off and on and keeps the
   classes' checkboxes; a checkbox for all its classes (`All {set} classes`),
   checked when every class shows, a dash when some do, that checks or
-  unchecks them all; the set name and its cell total. Each row has a colour
+  unchecks them all; the set name and its cell total. A set of more than
+  8 classes has a search box under its heading (`Search {set} classes`) that
+  lists only the classes whose name contains the text, with "N of M" beside
+  it; the all-classes checkbox then checks or unchecks only those, so
+  unchecking all and searching shows one family of classes. Escape clears it. Each row has a colour
   picker, a visibility checkbox, the label without the set prefix, a bar of
   its size, its cell count and share of the set, and `×`. With the eye shut,
   cells, previews and the legend go back to the default colouring; with
   every class unchecked, all cells fade. Visium spots hidden off the tissue
   are not counted, here or in the legend.
-- **Metadata tracks**: per track label, cell count, range, and `x`.
+- **Metadata tracks**: every track, with its label, cell count, range, and
+  `x` (the panel scrolls, not the list).
 
 **Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).
 

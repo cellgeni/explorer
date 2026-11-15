@@ -87,7 +87,10 @@ the legend and every preview then use it, as you move between sections and
 genes. With cells coloured by an annotation
 set, previews show its classes instead: Alt-click (Option-click) a class's
 checkbox in the legend to show only that class and see where that cell type
-is in each section. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over
+is in each section. To show a group of classes, such as every
+astrocyte cluster, uncheck all with the checkbox by the set's name in Cells,
+type part of their name in the set's search box, and check the box again:
+it then applies to the matching classes only. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over
 the view, to compare more sections at once. Choosing one opens it in place and
 keeps the selected genes, the annotation set with its hidden classes and
 colours, and the cell colouring, so you can step through sections with the

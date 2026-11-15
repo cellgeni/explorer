@@ -29,9 +29,8 @@ import type {
   MetadataTracksModel,
 } from './annotationsSectionModel'
 
-const METADATA_TRACK_ROW_HEIGHT = 34
-const METADATA_TRACK_VISIBLE_ROWS = 6
-const METADATA_TRACK_OVERSCAN_ROWS = 3
+// Sets with more classes than this get a search box.
+const ANNOTATION_SET_SEARCH_MIN_ROWS = 8
 
 // The annotation set choice, Load, Clear and Export, and label import from
 // a file or URL.
@@ -470,9 +469,21 @@ function AnnotationSetList({
   ) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
 }) {
-  const rowIds = plot.rows.map((row) => row.id)
+  const [search, setSearch] = useState('')
+  const searchable = plot.rows.length > ANNOTATION_SET_SEARCH_MIN_ROWS
+  const query = searchable ? search.trim().toLowerCase() : ''
+  // Rows with their place in the set, which picks the default colour.
+  const matchingRows = plot.rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => query === '' || row.label.toLowerCase().includes(query))
+  // With a search, the all-classes checkbox acts on the matching classes.
+  const rowIds = matchingRows.map(({ row }) => row.id)
+  const rowsNoun =
+    query === ''
+      ? `all ${rowIds.length.toLocaleString()} classes`
+      : `the ${rowIds.length.toLocaleString()} matching classes`
   const hiddenRowCount = rowIds.filter((id) => hiddenAnnotationIdSet.has(id)).length
-  const allRowsShown = hiddenRowCount === 0
+  const allRowsShown = rowIds.length > 0 && hiddenRowCount === 0
   const someRowsShown = hiddenRowCount < rowIds.length
   const allRowsRef = useRef<HTMLInputElement>(null)
 
@@ -507,11 +518,12 @@ function AnnotationSetList({
           type="checkbox"
           className="annotation-set-all"
           checked={allRowsShown}
+          disabled={rowIds.length === 0}
           aria-label={`All ${plot.label} classes`}
           title={
             allRowsShown
-              ? `Uncheck all ${rowIds.length.toLocaleString()} classes`
-              : `Check all ${rowIds.length.toLocaleString()} classes (${hiddenRowCount.toLocaleString()} unchecked)`
+              ? `Uncheck ${rowsNoun}`
+              : `Check ${rowsNoun} (${hiddenRowCount.toLocaleString()} unchecked)`
           }
           onChange={() => {
             onAnnotationsVisibilityChange(rowIds, !allRowsShown)
@@ -520,8 +532,37 @@ function AnnotationSetList({
         <h5>{plot.label}</h5>
         <small>{plot.totalCellAssignments.toLocaleString()} cells</small>
       </div>
+      {searchable ? (
+        <div className="annotation-set-search">
+          <input
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            value={search}
+            placeholder={`Search ${plot.rows.length.toLocaleString()} classes`}
+            aria-label={`Search ${plot.label} classes`}
+            title={`Show the ${plot.label} classes whose name contains this text; the checkbox above then checks or unchecks only those (Escape clears)`}
+            onChange={(event) => {
+              setSearch(event.currentTarget.value)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && search !== '') {
+                event.stopPropagation()
+                setSearch('')
+              }
+            }}
+          />
+          {query === '' ? null : (
+            <small role="status">
+              {matchingRows.length === 0
+                ? 'No classes match'
+                : `${matchingRows.length.toLocaleString()} of ${plot.rows.length.toLocaleString()}`}
+            </small>
+          )}
+        </div>
+      ) : null}
       <ol className="annotation-set-rows">
-        {plot.rows.map((row, rowIndex) => {
+        {matchingRows.map(({ row, index: rowIndex }) => {
           const annotation = annotationById.get(row.id)
           const fullLabel = annotation?.label ?? row.label
           const color =
@@ -599,6 +640,7 @@ function AnnotationSetList({
   )
 }
 
+// Every track is listed; the layer panel scrolls.
 function MetadataTrackList({
   tracks,
   onRemoveCellMetadataTrack,
@@ -606,54 +648,27 @@ function MetadataTrackList({
   readonly tracks: readonly ContinuousCellMetadataTrack[]
   readonly onRemoveCellMetadataTrack: (trackId: string) => void
 }) {
-  const listKey = itemListKey(tracks)
-  const [scrollState, setScrollState] = useState({ key: '', scrollTop: 0 })
-  const virtualRows = virtualWindow({
-    itemCount: tracks.length,
-    rowHeight: METADATA_TRACK_ROW_HEIGHT,
-    visibleRows: METADATA_TRACK_VISIBLE_ROWS,
-    overscanRows: METADATA_TRACK_OVERSCAN_ROWS,
-    scrollTop: scrollState.key === listKey ? scrollState.scrollTop : 0,
-  })
-  const visibleTracks = tracks.slice(virtualRows.startIndex, virtualRows.endIndex)
-
   return (
-    <ul
-      className="metadata-track-list is-virtualized"
-      aria-label="Loaded metadata tracks"
-      onScroll={(event) => {
-        setScrollState({ key: listKey, scrollTop: event.currentTarget.scrollTop })
-      }}
-      style={{
-        height: `${virtualRows.viewportHeight}px`,
-        paddingTop: `${virtualRows.beforeHeight}px`,
-        paddingBottom: `${virtualRows.afterHeight}px`,
-      }}
-    >
-      {visibleTracks.map((track, visibleIndex) => {
-        const trackIndex = virtualRows.startIndex + visibleIndex
-
-        return (
-          <li key={track.id} aria-setsize={tracks.length} aria-posinset={trackIndex + 1}>
-            <span>{track.label}</span>
-            <small>
-              {track.cellCount.toLocaleString()} cells |{' '}
-              {formatMetadataTrackDomain(track)}
-            </small>
-            <button
-              type="button"
-              className="annotation-remove"
-              aria-label={`Remove ${track.label}`}
-              title={`Remove ${track.label}`}
-              onClick={() => {
-                onRemoveCellMetadataTrack(track.id)
-              }}
-            >
-              x
-            </button>
-          </li>
-        )
-      })}
+    <ul className="metadata-track-list" aria-label="Loaded metadata tracks">
+      {tracks.map((track) => (
+        <li key={track.id}>
+          <span>{track.label}</span>
+          <small>
+            {track.cellCount.toLocaleString()} cells | {formatMetadataTrackDomain(track)}
+          </small>
+          <button
+            type="button"
+            className="annotation-remove"
+            aria-label={`Remove ${track.label}`}
+            title={`Remove ${track.label}`}
+            onClick={() => {
+              onRemoveCellMetadataTrack(track.id)
+            }}
+          >
+            x
+          </button>
+        </li>
+      ))}
     </ul>
   )
 }
@@ -668,57 +683,4 @@ function formatMetadataValue(value: number): string {
 
 function formatAnnotationFraction(fraction: number): string {
   return `${(fraction * 100).toFixed(fraction >= 0.1 ? 0 : 1)}%`
-}
-
-function itemListKey(items: readonly { readonly id: string }[]): string {
-  return `${items.length}:${items[0]?.id ?? ''}:${items[items.length - 1]?.id ?? ''}`
-}
-
-function virtualWindow({
-  itemCount,
-  rowHeight,
-  visibleRows,
-  overscanRows,
-  scrollTop,
-}: {
-  readonly itemCount: number
-  readonly rowHeight: number
-  readonly visibleRows: number
-  readonly overscanRows: number
-  readonly scrollTop: number
-}): {
-  readonly startIndex: number
-  readonly endIndex: number
-  readonly beforeHeight: number
-  readonly afterHeight: number
-  readonly viewportHeight: number
-} {
-  if (itemCount <= 0) {
-    return {
-      startIndex: 0,
-      endIndex: 0,
-      beforeHeight: 0,
-      afterHeight: 0,
-      viewportHeight: 0,
-    }
-  }
-
-  const viewportRowCount = Math.min(itemCount, visibleRows)
-  const viewportHeight = viewportRowCount * rowHeight
-  const maxScrollTop = Math.max(0, itemCount * rowHeight - viewportHeight)
-  const normalizedScrollTop = Math.max(0, Math.min(scrollTop, maxScrollTop))
-  const firstVisibleIndex = Math.floor(normalizedScrollTop / rowHeight)
-  const startIndex = Math.max(0, firstVisibleIndex - overscanRows)
-  const endIndex = Math.min(
-    itemCount,
-    firstVisibleIndex + viewportRowCount + overscanRows,
-  )
-
-  return {
-    startIndex,
-    endIndex,
-    beforeHeight: startIndex * rowHeight,
-    afterHeight: Math.max(0, (itemCount - endIndex) * rowHeight),
-    viewportHeight,
-  }
 }
