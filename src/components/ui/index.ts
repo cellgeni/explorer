@@ -22,6 +22,8 @@ export {
   CloseIcon,
   CollapseIcon,
   ExpandIcon,
+  EyeIcon,
+  EyeOffIcon,
   FitIcon,
   HelpIcon,
   ImageIcon,

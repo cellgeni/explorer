@@ -318,11 +318,17 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 Loaded state:
 
-- **Loaded annotations**: one list per set, headed by the set name, its cell
-  total and a visibility checkbox. Each row has a colour picker, a visibility
-  checkbox, the label without the set prefix, a bar of its size, its cell
-  count and share of the set, and `×`. Visium spots hidden off the tissue are
-  not counted, here or in the legend.
+- **Loaded annotations**: one list per set, largest class first, listing
+  every class (the panel scrolls, not the list). The heading has the set's
+  eye (`{set} visible`), which turns its colours off and on and keeps the
+  classes' checkboxes; a checkbox for all its classes (`All {set} classes`),
+  checked when every class shows, a dash when some do, that checks or
+  unchecks them all; the set name and its cell total. Each row has a colour
+  picker, a visibility checkbox, the label without the set prefix, a bar of
+  its size, its cell count and share of the set, and `×`. With the eye shut,
+  cells, previews and the legend go back to the default colouring; with
+  every class unchecked, all cells fade. Visium spots hidden off the tissue
+  are not counted, here or in the legend.
 - **Metadata tracks**: per track label, cell count, range, and `x`.
 
 **Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).

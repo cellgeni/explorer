@@ -86,6 +86,49 @@ describe('useViewerLayerData', () => {
     expect(result.visibleTranscriptEstimate).toBe(4)
   })
 
+  it.each([
+    [true, 'annotations'],
+    [false, 'transcript-count'],
+  ] as const)(
+    'with every class unchecked and the set shown %s, colours by %s',
+    (annotationSetShown, mode) => {
+      function HiddenClassesProbe({
+        onReady,
+      }: {
+        readonly onReady: (nextResult: Result) => void
+      }) {
+        const nextResult = useViewerLayerData(
+          viewerLayerOptions({
+            annotations: {
+              annotationState: {
+                status: 'ready',
+                url: 'https://example.test/output',
+                annotations: [],
+              },
+              annotationSetShown,
+            },
+          }),
+        )
+
+        React.useEffect(() => {
+          onReady(nextResult)
+        })
+
+        return null
+      }
+
+      render(
+        <HiddenClassesProbe
+          onReady={(nextResult) => {
+            result = nextResult
+          }}
+        />,
+      )
+
+      expect(result.viewerObservationColorMode).toBe(mode)
+    },
+  )
+
   it('estimates visible transcripts from transcripts.zarr.zip grid counts once read', () => {
     function EstimateProbe({
       onReady,
@@ -385,6 +428,7 @@ function viewerLayerOptions({
           { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },
         ],
       },
+      annotationSetShown: true,
       ...annotations,
     },
     boundaries: {

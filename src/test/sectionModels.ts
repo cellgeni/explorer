@@ -339,6 +339,7 @@ export function testAnnotationsSectionModel(
       onColorChange: vi.fn(),
       onSetVisibilityChange: vi.fn(),
       onVisibilityChange: vi.fn(),
+      onManyVisibilityChange: vi.fn(),
       onRemove: vi.fn(),
       ...overrides.sets,
     },

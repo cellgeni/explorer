@@ -54,8 +54,12 @@ const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 
 interface ViewerLayerAnnotationOptions {
+  // The shown classes of the shown sets.
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly annotationColors: Readonly<Record<string, string>>
+  // A set is shown, even if all its classes are unchecked: cells stay in
+  // annotation colours and fade instead of going back to the default.
+  readonly annotationSetShown: boolean
 }
 
 interface ViewerLayerCellOptions {
@@ -117,7 +121,7 @@ export function useViewerLayerData({
   morphology,
   transcripts,
 }: UseViewerLayerDataOptions) {
-  const { annotationColors, annotationState } = annotations
+  const { annotationColors, annotationState, annotationSetShown } = annotations
   const {
     cellMetadataTrack,
     currentViewportBbox,
@@ -169,7 +173,9 @@ export function useViewerLayerData({
   const activeCellMetadataTrack =
     observationColorMode === 'metadata' ? cellMetadataTrack : null
   const viewerObservationColorMode: ObservationColorMode =
-    observationColorMode === 'annotations' && activeAnnotationStyleColors.length > 0
+    observationColorMode === 'annotations' &&
+    (activeAnnotationStyleColors.length > 0 ||
+      (annotationSetShown && annotationState.status === 'ready'))
       ? 'annotations'
       : observationColorMode === 'metadata' && activeCellMetadataTrack !== null
         ? 'metadata'

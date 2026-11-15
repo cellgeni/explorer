@@ -790,6 +790,16 @@ export function App({ dependencies }: AppProps = {}) {
     () => new Set(hiddenAnnotationIds),
     [hiddenAnnotationIds],
   )
+  // A set's eye is open. Its classes may all be unchecked.
+  const annotationSetShown = useMemo(
+    () =>
+      annotationState.status === 'ready' &&
+      filterAnnotationsByVisibleSets(
+        annotationState.annotations,
+        hiddenAnnotationSetIdSet,
+      ).length > 0,
+    [annotationState, hiddenAnnotationSetIdSet],
+  )
   const visibleAnnotationState = useMemo<AnnotationState<StructuredLoadError>>(
     () =>
       annotationState.status === 'ready'
@@ -927,6 +937,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotations: {
       annotationColors,
       annotationState: visibleAnnotationState,
+      annotationSetShown,
     },
     boundaries: {
       boundaryElements,
@@ -1300,6 +1311,17 @@ export function App({ dependencies }: AppProps = {}) {
       })
     },
     [annotationState, setHiddenAnnotationIds],
+  )
+  // A set's "all classes" checkbox: shows or hides every class at once.
+  const handleAnnotationsVisibilityChange = useCallback(
+    (annotationIds: readonly string[], visible: boolean) => {
+      const ids = new Set(annotationIds)
+      setHiddenAnnotationIds((current) => {
+        const others = current.filter((id) => !ids.has(id))
+        return visible ? others : [...others, ...annotationIds]
+      })
+    },
+    [setHiddenAnnotationIds],
   )
   // The legend's eyes: transcript genes, or annotation classes.
   const { onVisibilityChange: setTranscriptGeneVisible } = transcriptGenes.model
@@ -3627,7 +3649,11 @@ export function App({ dependencies }: AppProps = {}) {
   )
   // Previews take the loaded annotation set while cells are coloured by it.
   const collectionPreviewAnnotations = useMemo((): CollectionBarAnnotations | null => {
-    if (observationColorMode !== 'annotations' || loadedAnnotationGroupId === undefined) {
+    if (
+      observationColorMode !== 'annotations' ||
+      loadedAnnotationGroupId === undefined ||
+      !annotationSetShown
+    ) {
       return null
     }
 
@@ -3645,6 +3671,7 @@ export function App({ dependencies }: AppProps = {}) {
   }, [
     annotationColors,
     annotationGroupState,
+    annotationSetShown,
     hiddenAnnotationIdSet,
     loadedAnnotationGroupId,
     observationColorMode,
@@ -3795,6 +3822,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleAnnotationGroupChange,
     handleAnnotationSetVisibilityChange,
     handleAnnotationVisibilityChange,
+    handleAnnotationsVisibilityChange,
     handleClearAnnotations: undoable.handleClearAnnotations,
     handleClearGeometricAnnotations: undoable.handleClearShapes,
     handleExportAnnotations,
