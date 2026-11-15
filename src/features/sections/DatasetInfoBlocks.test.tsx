@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { testDatasetInfoModel } from '../../test/sectionModels'
 import {
   DatasetViewOptions,
+  OpenDatasetForm,
   VisiumHdBinControls,
   VisiumOffTissueToggle,
   VisiumTissueImageSelect,
@@ -45,6 +46,33 @@ const VISIUM_VIEW_OPTIONS = testDatasetInfoModel({
     },
   },
 }).viewOptions
+
+describe('OpenDatasetForm', () => {
+  it('offers Browse Store beside Load Dataset for Zarr store addresses', () => {
+    const { open } = testDatasetInfoModel({
+      open: { datasetUrl: '  https://bucket.test/sample.zarr/  ' },
+    })
+    render(<OpenDatasetForm open={open} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Browse Store' }))
+
+    expect(open.onBrowseStore).toHaveBeenCalledWith('https://bucket.test/sample.zarr/')
+    expect(open.onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('leaves Browse Store out for other addresses', () => {
+    render(
+      <OpenDatasetForm
+        open={
+          testDatasetInfoModel({ open: { datasetUrl: 'https://bucket.test/run/' } }).open
+        }
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Browse Store' })).not.toBeInTheDocument()
+  })
+})
 
 describe('DatasetViewOptions', () => {
   it('leaves section controls to the layer panel (15.2-C)', () => {

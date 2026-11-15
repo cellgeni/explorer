@@ -29,6 +29,37 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   image URL opens plane N, as `#c=N` opens channel N.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
 
+### Browsing A Zarr Store
+
+When the address is a Zarr store (a `.zarr` folder or a group inside one, a
+`zarr.json` or `.zattrs` file, a zipped store such as `sample.zarr.zip`, or an
+Icechunk repository), `Browse Store` appears next to `Load Dataset`. It opens
+the Store structure drawer over the right of the canvas, without loading the
+store as a dataset, so it also works for stores the viewer cannot open:
+
+- A summary: Zarr version, where the list of nodes came from, what the root's
+  attributes say wrote it (such as `SpatialData 0.1` or `AnnData 0.1.0`), and
+  how many groups, arrays and files it holds.
+- A tree of groups and arrays. Each row shows a node's role where its
+  attributes give one (`categorical`, `image, 5 levels`, `SpatialData
+shapes`), and its data type and shape or how many items it holds. `Filter
+by name or path` narrows the tree; a filter with a `/` matches whole paths.
+- The selected node's details: path, shape, data type, chunking (shards and
+  the chunks inside them for sharded v3 arrays), codecs, fill value, decoded
+  size, its attributes and its Zarr metadata document, and for stores read
+  over HTTP its own address, which `Copy` copies.
+
+Stores with consolidated metadata, zipped stores and Icechunk repositories
+list every node. Without consolidated metadata the store is walked from its
+root: a host that lists folders (an S3 bucket that allows listing, or a server
+with index pages) names every child, and otherwise only the children that a
+group's attributes name are found: AnnData encodings, OME-NGFF multiscales,
+labels, plates and wells, bioformats2raw series, and SpatialData's element
+groups. Groups whose children could not all be found are marked `not listed`.
+Zip directories and folder listings also show files that are not Zarr, such
+as a SpatialData element's Parquet files, and a zip gives the stored size of
+each array's chunks. The walk stops after 5,000 nodes.
+
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.

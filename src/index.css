@@ -13,5 +13,6 @@
 @import './styles/ui.css';
 @import './styles/shell.css';
 @import './styles/start-screen.css';
+@import './styles/store-structure.css';
 @import './styles/collection.css';
 @import './styles/responsive.css';
