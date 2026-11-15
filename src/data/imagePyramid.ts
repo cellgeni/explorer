@@ -100,6 +100,10 @@ export interface ImagePyramidLoader {
   // Set for a z-stack whose channels list their `zPlanes`. The loader itself
   // reads one plane; other planes open as other loaders.
   readonly zStack?: ImagePyramidZStack
+  // Set when every tile is cut from bands or blocks that are read and
+  // decoded once for many tiles (NDPI), so a large uncompressed tile is no
+  // heavier to load than its neighbours.
+  readonly tilesFromSharedReads?: boolean
 
   bestLevel(deckScale: number): number
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[]

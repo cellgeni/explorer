@@ -51,6 +51,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 16](docs/plan/phases/16-svs.md)                                                    | SVS (Aperio) images                                      | Done (2026-11-13)                                                |
 | [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                                |
 | [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | Done: 18-A tables and boundaries, 18-B `.vzg` image (2026-11-14) |
+| [Phase 19](docs/plan/phases/19-ndpi.md)                                                   | NDPI (Hamamatsu) images                                  | Done (2026-11-15)                                                |
 
 ## Purpose And Scope
 
@@ -72,6 +73,7 @@ request:
 | Image-only     | Direct OME-TIFF/TIFF/NDPI URL, plus GeoJSON annotations        | Phase 8                      | Done (2026-07-09)                           |
 | QPTIFF image   | Direct Akoya `.qptiff` URL; also custom layers and manifests   | Phase 13                     | Done (2026-11-09)                           |
 | SVS image      | Direct Aperio `.svs` URL; also custom layers and manifests     | Phase 16                     | Done (2026-11-13)                           |
+| NDPI image     | Direct Hamamatsu `.ndpi` URL; also custom layers and manifests | Phase 19                     | Done (2026-11-15)                           |
 | OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
 | SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
 | Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)                           |

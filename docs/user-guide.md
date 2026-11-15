@@ -22,7 +22,7 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   squidpy, or CELLxGENE.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
   such as `sample.zarr.zip`.
-- Direct OME-TIFF, TIFF, QPTIFF, SVS, OME-Zarr, or validated NDPI image URLs.
+- Direct OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr image URLs.
   An OME-Zarr written by bioformats2raw (as in the BioImage Archive) opens
   its first image series. An OME-Zarr z-stack opens on the plane its OMERO
   rendering settings name (`defaultZ`), or the middle plane; `#z=N` on the
@@ -399,8 +399,8 @@ coordinate system, table, shapes, labels, and image are chosen.
 Image-only sources render the image pyramid without requiring transcriptomics
 files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
 `.qptiff`, `.svs`, `.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`.
-TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF and SVS use their own
-layouts); see
+TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF, SVS, and NDPI use
+their own layouts); see
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 
 For image-only sources, use the Image section for image channels and custom

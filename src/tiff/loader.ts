@@ -42,7 +42,30 @@ import {
   tiffStripLevel,
   uncompressedStripBand,
 } from './strips'
+import {
+  isNdpiUrl,
+  NDPI_DC_LEVEL_MIN_SIZE,
+  NDPI_DC_SCALE,
+  NDPI_FORMAT_FLAG_TAG,
+  NDPI_MAGNIFICATION_TAG,
+  NDPI_MCU_STARTS_HIGH_BYTES_TAG,
+  NDPI_MCU_STARTS_TAG,
+  NDPI_OVER_4GB_MESSAGE,
+  NDPI_TILE_SIZE,
+  NDPI_Z_OFFSET_TAG,
+  ndpiBandByteRange,
+  ndpiBlockDecodeOptions,
+  ndpiBlockJpeg,
+  ndpiBlocksForWindow,
+  ndpiBlockWindow,
+  ndpiDcWindow,
+  ndpiLayout,
+  ndpiLevelGeometry,
+  ndpiTileBytes,
+  ndpiTileDecodeMetadata,
+} from './ndpi'
 import { decodeTiffStripBand } from '../codecs/tiffStrips'
+import { TIFF_COMPRESSION_JPEG } from '../codecs/tiffTile'
 import { sharedStripDecodePool } from '../workers/tileDecodePool'
 import { abortable } from '../utils/abortable'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
@@ -52,6 +75,13 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { TiffStripLevel, TiffStripTags } from './strips'
+import type {
+  NdpiBlock,
+  NdpiIfdSummary,
+  NdpiLevelGeometry,
+  NdpiLevelRead,
+  NdpiLevelSource,
+} from './ndpi'
 import type { OmeTiffZStack, TiffChannelInfo } from './omeMetadata'
 import type { OpenImagePyramidOptions } from '../data/imagePyramid'
 import type { QptiffIfdSummary } from './qptiff'
@@ -109,6 +139,8 @@ export interface TiffPyramidLoaderOptions {
   // Levels stored in strips, whose tiles are cut from bands of rows instead
   // of read from the tile index.
   readonly stripLevels?: ReadonlyMap<number, TiffStripLevel>
+  // NDPI levels, whose tiles are cut from blocks of JPEG restart intervals.
+  readonly ndpiLevels?: ReadonlyMap<number, NdpiLevelRead>
   readonly fetcher?: typeof fetch
   readonly byteRangeCache?: PersistentByteRangeCache | null
   // The image's top-left corner in data micrometres; 0, 0 by default.
@@ -138,6 +170,12 @@ const openTiffFiles = new Map<string, Promise<GeoTIFF>>()
 // Bands of stripped levels, shared by every loader so that the planes and
 // channels of one image share one memory limit.
 const stripBands = new StripBandCache()
+
+// Bands of NDPI MCU rows as read, kept while the blocks across them decode.
+const NDPI_BAND_CACHE_BYTES = 64 * 1024 * 1024
+const ndpiBands = new StripBandCache(NDPI_BAND_CACHE_BYTES)
+// First read of an NDPI level's JPEG header (660 bytes in NanoZoomer files).
+const NDPI_HEADER_READ_BYTES = 4096
 
 function openTiffFile(sourceUrl: string): Promise<GeoTIFF> {
   let file = openTiffFiles.get(sourceUrl)
@@ -176,6 +214,8 @@ function forgetTiffFile(sourceUrl: string, file: Promise<GeoTIFF>): void {
 export function clearOpenTiffFiles(): void {
   openTiffFiles.clear()
   stripBands.clear()
+  ndpiBands.clear()
+  ndpiFiles.clear()
 }
 
 export async function openTiff(
@@ -198,6 +238,11 @@ export async function openTiff(
 
   if (isSvsUrl(selection.sourceUrl)) {
     return openTopLevelPyramid(url, selection, signal, onFallback, options, SVS_FORMAT)
+  }
+
+  // `#ifd=N` opens one IFD on its own, such as the macro image.
+  if (isNdpiUrl(selection.sourceUrl) && selection.ifdIndex === undefined) {
+    return openNdpi(url, selection, signal, onFallback, options)
   }
 
   const file = openTiffFile(selection.sourceUrl)
@@ -236,6 +281,14 @@ async function openTiffImage(
 
   if (isSvsDescription(description)) {
     return openTopLevelPyramid(url, selection, signal, onFallback, options, SVS_FORMAT)
+  }
+
+  // An NDPI saved under another name.
+  if (
+    selection.ifdIndex === undefined &&
+    (await readOptionalFloatTag(metadataDirectory, NDPI_FORMAT_FLAG_TAG)) !== undefined
+  ) {
+    return openNdpi(url, selection, signal, onFallback, options, tiff)
   }
 
   if (
@@ -555,17 +608,10 @@ async function openTopLevelPyramid(
   // The file when the caller has already opened it.
   openedTiff?: GeoTIFF,
 ): Promise<TiffPyramidLoader> {
-  if (options.zchunkStoreUrl !== undefined) {
-    notifyFallback(onFallback, {
-      source: 'Morphology image',
-      message: `The dataset manifest names a .zchunkstore sidecar, but the image is ${format.withArticle}, so the sidecar is not used.`,
-      action: `Remove the sidecar from the manifest; ${format.name} images do not need one.`,
-      coalesceKey: `zchunkstore-${format.name.toLowerCase()}:${options.zchunkStoreUrl}`,
-    })
-  }
+  notifyUnusedZchunkStore(onFallback, options, format)
 
   const file = await abortable(
-    topLevelPyramidFile(selection.sourceUrl, async () => {
+    sharedPyramidFile(topLevelPyramidFiles, selection.sourceUrl, async () => {
       const tiff =
         openedTiff ??
         (options.bytes === undefined
@@ -632,35 +678,378 @@ async function openTopLevelPyramid(
   })
 }
 
-function topLevelPyramidFile(
+function notifyUnusedZchunkStore(
+  onFallback: FallbackNotifier | undefined,
+  options: OpenImagePyramidOptions,
+  format: Pick<TopLevelPyramidFormat, 'name' | 'withArticle'>,
+): void {
+  if (options.zchunkStoreUrl !== undefined) {
+    notifyFallback(onFallback, {
+      source: 'Morphology image',
+      message: `The dataset manifest names a .zchunkstore sidecar, but the image is ${format.withArticle}, so the sidecar is not used.`,
+      action: `Remove the sidecar from the manifest; ${format.name} images do not need one.`,
+      coalesceKey: `zchunkstore-${format.name.toLowerCase()}:${options.zchunkStoreUrl}`,
+    })
+  }
+}
+
+function sharedPyramidFile<T>(
+  files: Map<string, Promise<T>>,
   sourceUrl: string,
-  read: () => Promise<TopLevelPyramidFile>,
-): Promise<TopLevelPyramidFile> {
-  const cached = topLevelPyramidFiles.get(sourceUrl)
+  read: () => Promise<T>,
+): Promise<T> {
+  const cached = files.get(sourceUrl)
 
   // Map order is insertion order; re-inserting marks the file most recent.
-  topLevelPyramidFiles.delete(sourceUrl)
+  files.delete(sourceUrl)
 
   const file = cached ?? read()
-  topLevelPyramidFiles.set(sourceUrl, file)
+  files.set(sourceUrl, file)
 
   if (cached === undefined) {
     file.catch(() => {
-      if (topLevelPyramidFiles.get(sourceUrl) === file) {
-        topLevelPyramidFiles.delete(sourceUrl)
+      if (files.get(sourceUrl) === file) {
+        files.delete(sourceUrl)
       }
     })
   }
 
-  for (const oldestUrl of topLevelPyramidFiles.keys()) {
-    if (topLevelPyramidFiles.size <= TOP_LEVEL_PYRAMID_FILE_CACHE_SIZE) {
+  for (const oldestUrl of files.keys()) {
+    if (files.size <= TOP_LEVEL_PYRAMID_FILE_CACHE_SIZE) {
       break
     }
 
-    topLevelPyramidFiles.delete(oldestUrl)
+    files.delete(oldestUrl)
   }
 
   return file
+}
+
+// An NDPI's levels (see ndpi.ts) as the loader reads them: levels with
+// restart offsets by block, and small levels without them by strip.
+interface NdpiFile {
+  readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
+  readonly ndpiLevels: ReadonlyMap<number, NdpiLevelRead>
+  readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
+  readonly channel: TiffChannelInfo
+  readonly micrometersPerPixel: number
+  readonly imageWidth: ImagePixels
+  readonly imageHeight: ImagePixels
+  readonly numLevels: number
+}
+
+const ndpiFiles = new Map<string, Promise<NdpiFile>>()
+
+const NDPI_FORMAT = { name: 'NDPI', withArticle: 'an NDPI' }
+
+// Hamamatsu writes each IFD after its level's JPEG, with the McuStarts tag
+// data just before the IFD, so the IFDs are spread through the file.
+const NDPI_SOURCE_OPTIONS: BlockedRemoteSourceOptions = {
+  allowFullFile: false,
+  blockSize: 64 * 1024,
+  cacheSize: 64,
+}
+
+async function openNdpi(
+  url: string,
+  selection: TiffImageSelection,
+  signal: AbortSignal | undefined,
+  onFallback: FallbackNotifier | undefined,
+  options: OpenImagePyramidOptions,
+  // The file when the caller has already opened it.
+  openedTiff?: GeoTIFF,
+): Promise<TiffPyramidLoader> {
+  notifyUnusedZchunkStore(onFallback, options, NDPI_FORMAT)
+
+  const file = await abortable(
+    sharedPyramidFile(ndpiFiles, selection.sourceUrl, async () => {
+      const tiff =
+        openedTiff ??
+        (options.bytes === undefined
+          ? await fromUrl(selection.sourceUrl, NDPI_SOURCE_OPTIONS)
+          : await fromArrayBuffer(wholeArrayBuffer(options.bytes)))
+      return readNdpiFile(tiff)
+    }),
+    signal,
+  )
+
+  return new TiffPyramidLoader({
+    url,
+    sourceUrl: selection.sourceUrl,
+    ...loaderSourceOptions(options),
+    chunkIndex: new Map(),
+    levelMeta: file.levelMeta,
+    ndpiLevels: file.ndpiLevels,
+    stripLevels: file.stripLevels,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(
+        options.micrometersPerPixel ?? file.micrometersPerPixel,
+      ),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    tileWidth: imagePixels(NDPI_TILE_SIZE),
+    tileHeight: imagePixels(NDPI_TILE_SIZE),
+    numLevels: file.numLevels,
+    imageWidth: file.imageWidth,
+    imageHeight: file.imageHeight,
+    channels: [
+      options.channelName === undefined
+        ? file.channel
+        : { ...file.channel, name: options.channelName },
+    ],
+  })
+}
+
+async function readNdpiFile(tiff: GeoTIFF): Promise<NdpiFile> {
+  if ((tiff.source.fileSize ?? 0) > 0xffff_ffff) {
+    throw new Error(NDPI_OVER_4GB_MESSAGE)
+  }
+
+  // The macro image and map follow the pyramid, so the walk stops at the
+  // macro rather than reading the map's IFD too.
+  const directories = await readIfdChain(
+    tiff,
+    async (directory, index) =>
+      index > 0 &&
+      ((await readOptionalFloatTag(directory, NDPI_MAGNIFICATION_TAG)) ?? 0) < 0,
+  )
+  const summaries = await Promise.all(
+    directories.map(async (directory, index): Promise<NdpiIfdSummary> => {
+      const [shape, magnification, zOffset] = await Promise.all([
+        summarizeIfdShape(directory, index),
+        readOptionalFloatTag(directory, NDPI_MAGNIFICATION_TAG),
+        readOptionalFloatTag(directory, NDPI_Z_OFFSET_TAG),
+      ])
+
+      return {
+        index,
+        width: shape.width,
+        height: shape.height,
+        ...(magnification === undefined ? {} : { magnification }),
+        ...(zOffset === undefined ? {} : { zOffset }),
+      }
+    }),
+  )
+
+  if (directories.some((directory) => directory.hasTag(NDPI_MCU_STARTS_HIGH_BYTES_TAG))) {
+    throw new Error(NDPI_OVER_4GB_MESSAGE)
+  }
+
+  const levels = (
+    await Promise.all(
+      ndpiLayout(summaries).map(async (index) => {
+        const directory = directories[index]
+        const summary = summaries[index]
+
+        return directory === undefined || summary === undefined
+          ? undefined
+          : readNdpiLevel(tiff, directory, summary)
+      }),
+    )
+  ).filter((level) => level !== undefined)
+  const first = levels[0]
+
+  // A level that cannot be read is left out, unless it is the first.
+  if (first === undefined || 'error' in first) {
+    throw new Error(
+      first === undefined
+        ? 'The NDPI has no pyramid images.'
+        : `The NDPI's full-resolution image cannot be read: ${first.error}`,
+    )
+  }
+
+  const usable = levels.filter(
+    (level): level is Exclude<NdpiFileLevel, { readonly error: string }> =>
+      !('error' in level),
+  )
+  const imageWidth = imagePixels(first.width)
+  const imageHeight = imagePixels(first.height)
+  const levelMeta = new Map<number, TiffLevelMeta>()
+  const ndpiLevels = new Map<number, NdpiLevelRead>()
+  const stripLevels = new Map<number, TiffStripLevel>()
+  const levelSize = (width: number, height: number) =>
+    tiffLevelMeta({
+      width: imagePixels(width),
+      height: imagePixels(height),
+      tileWidth: imagePixels(NDPI_TILE_SIZE),
+      tileHeight: imagePixels(NDPI_TILE_SIZE),
+      fullWidth: imageWidth,
+      fullHeight: imageHeight,
+    })
+
+  usable.forEach((level, index) => {
+    levelMeta.set(index, levelSize(level.width, level.height))
+
+    if (level.kind === 'ndpi') {
+      ndpiLevels.set(index, { source: level.source, sourceLevel: index, dcOnly: false })
+    } else {
+      stripLevels.set(index, level.strip)
+    }
+  })
+
+  const smallest = usable.at(-1)
+  const smallestMeta = levelMeta.get(usable.length - 1)
+
+  if (
+    smallest?.kind === 'ndpi' &&
+    smallestMeta !== undefined &&
+    Math.max(smallest.width, smallest.height) > NDPI_DC_LEVEL_MIN_SIZE
+  ) {
+    const level = usable.length
+
+    levelMeta.set(level, {
+      ...levelSize(
+        Math.ceil(smallest.width / NDPI_DC_SCALE),
+        Math.ceil(smallest.height / NDPI_DC_SCALE),
+      ),
+      // Exactly an eighth: partial blocks make the size round up.
+      scaleX: (smallestMeta.scaleX ?? 1) * NDPI_DC_SCALE,
+      scaleY: (smallestMeta.scaleY ?? 1) * NDPI_DC_SCALE,
+    })
+    ndpiLevels.set(level, {
+      source: smallest.source,
+      sourceLevel: usable.length - 1,
+      dcOnly: true,
+    })
+  }
+
+  return {
+    levelMeta,
+    ndpiLevels,
+    stripLevels,
+    channel: svsChannelInfo(first.samplesPerPixel, first.bitsPerSample),
+    micrometersPerPixel: qptiffMicrometersPerPixel(
+      first.xResolution,
+      first.resolutionUnit,
+    ),
+    imageWidth,
+    imageHeight,
+    numLevels: levelMeta.size,
+  }
+}
+
+type NdpiFileLevel =
+  | (NdpiLevelBase & { readonly kind: 'ndpi'; readonly source: NdpiLevelSource })
+  | (NdpiLevelBase & { readonly kind: 'strip'; readonly strip: TiffStripLevel })
+  | { readonly error: string }
+
+interface NdpiLevelBase {
+  readonly width: number
+  readonly height: number
+  readonly samplesPerPixel: number
+  readonly bitsPerSample: number | undefined
+  readonly xResolution: number | undefined
+  readonly resolutionUnit: number | undefined
+}
+
+// A level with restart offsets in one JPEG strip is read by block; any
+// other level only when its strips decode small enough to read whole.
+async function readNdpiLevel(
+  tiff: GeoTIFF,
+  directory: ImageFileDirectory,
+  summary: NdpiIfdSummary,
+): Promise<NdpiFileLevel> {
+  const [decodeMetadata, stripTags, xResolution, resolutionUnit] = await Promise.all([
+    readTileDecodeMetadata(tiff, directory),
+    readStripTags(directory),
+    readOptionalRationalTag(directory, 'XResolution'),
+    readOptionalNumberTag(directory, 'ResolutionUnit'),
+  ])
+  const samplesPerPixel =
+    decodeMetadata.samplesPerPixel ?? decodeMetadata.bitsPerSample?.length ?? 1
+  const base: NdpiLevelBase = {
+    width: summary.width,
+    height: summary.height,
+    samplesPerPixel,
+    bitsPerSample: decodeMetadata.bitsPerSample?.[0],
+    xResolution,
+    resolutionUnit,
+  }
+
+  if (stripTags === undefined) {
+    return { error: `IFD ${summary.index} is tiled, which NDPI levels are not.` }
+  }
+
+  const streamOffset = stripTags.offsets[0]
+  const streamLength = stripTags.byteCounts[0]
+
+  if (
+    directory.hasTag(NDPI_MCU_STARTS_TAG) &&
+    decodeMetadata.compression === TIFF_COMPRESSION_JPEG &&
+    stripTags.offsets.length === 1 &&
+    streamOffset !== undefined &&
+    streamLength !== undefined
+  ) {
+    let intervalStarts: Promise<ArrayLike<number>> | undefined
+
+    return {
+      ...base,
+      kind: 'ndpi',
+      source: {
+        width: summary.width,
+        height: summary.height,
+        samplesPerPixel,
+        ...(decodeMetadata.photometric === undefined
+          ? {}
+          : { photometric: decodeMetadata.photometric }),
+        streamOffset,
+        streamLength,
+        // Read when the level's first tile is fetched; a failed read is
+        // retried by the next one.
+        intervalStarts: () => {
+          if (intervalStarts === undefined) {
+            const loading = readMcuStarts(directory)
+            loading.catch(() => {
+              if (intervalStarts === loading) {
+                intervalStarts = undefined
+              }
+            })
+            intervalStarts = loading
+          }
+
+          return intervalStarts
+        },
+      },
+    }
+  }
+
+  try {
+    return {
+      ...base,
+      kind: 'strip',
+      strip: tiffStripLevel({
+        level: summary.index,
+        width: summary.width,
+        height: summary.height,
+        tags: stripTags,
+        decodeMetadata,
+        tileHeight: NDPI_TILE_SIZE,
+      }),
+    }
+  } catch (cause) {
+    return { error: cause instanceof Error ? cause.message : String(cause) }
+  }
+}
+
+async function readMcuStarts(directory: ImageFileDirectory): Promise<ArrayLike<number>> {
+  const value: unknown = await directory.loadValue(NDPI_MCU_STARTS_TAG)
+
+  if (typeof value === 'number') {
+    return [value]
+  }
+
+  if (ArrayBuffer.isView(value) && !(value instanceof DataView) && 'length' in value) {
+    return value as unknown as ArrayLike<number>
+  }
+
+  if (Array.isArray(value) && value.every((item) => typeof item === 'number')) {
+    return value
+  }
+
+  throw new Error('The NDPI McuStarts tag is not a list of offsets.')
 }
 
 async function readQptiffFile(
@@ -1164,6 +1553,7 @@ export class TiffPyramidLoader {
   readonly imageHeight: ImagePixels
   readonly channels: readonly TiffChannelInfo[]
   readonly zStack?: OmeTiffZStack
+  readonly tilesFromSharedReads: boolean
   private readonly decodeMetadata: TiffTileDecodeMetadata
   private readonly levelDecodeMetadata: readonly TiffTileDecodeMetadata[]
   // The whole tile index, or each level's index once read.
@@ -1180,6 +1570,9 @@ export class TiffPyramidLoader {
     | undefined
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
+  private readonly ndpiLevels: ReadonlyMap<number, NdpiLevelRead>
+  // Each NDPI level's restart-interval layout, read with its first tile.
+  private readonly ndpiGeometries = new Map<number, Promise<NdpiLevelGeometry>>()
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
   private readonly byteRangeCache: PersistentByteRangeCache | null
@@ -1229,6 +1622,10 @@ export class TiffPyramidLoader {
     this.levelDecodeMetadata = options.levelDecodeMetadata ?? []
     this.readAdjacentTiles = options.readAdjacentTiles === true
     this.stripLevels = options.stripLevels ?? new Map()
+    this.ndpiLevels = options.ndpiLevels ?? new Map()
+    this.tilesFromSharedReads =
+      this.ndpiLevels.size > 0 &&
+      this.ndpiLevels.size + this.stripLevels.size === this.numLevels
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.byteRangeCache =
       options.byteRangeCache === undefined
@@ -1336,9 +1733,14 @@ export class TiffPyramidLoader {
         ? undefined
         : this.planarSampleByteLengths(level, col, row)
 
+    const ndpiLevel = this.ndpiLevels.get(level ?? 0)
+
     // Without a level, the full-resolution level's tags.
     return {
       ...(this.stripLevels.get(level ?? 0)?.tileDecode ??
+        (ndpiLevel === undefined
+          ? undefined
+          : ndpiTileDecodeMetadata(ndpiLevel.source.samplesPerPixel)) ??
         (level === undefined ? undefined : this.levelDecodeMetadata[level]) ??
         this.decodeMetadata),
       tileWidth: this.tileWidth,
@@ -1357,6 +1759,12 @@ export class TiffPyramidLoader {
 
     if (stripLevel !== undefined) {
       return this.fetchStripTileBytes(level, stripLevel, col, row, signal)
+    }
+
+    const ndpiLevel = this.ndpiLevels.get(level)
+
+    if (ndpiLevel !== undefined) {
+      return this.fetchNdpiTileBytes(level, ndpiLevel, col, row, signal)
     }
 
     const chunks = await this.chunkIndex(level)
@@ -1462,6 +1870,151 @@ export class TiffPyramidLoader {
       decodeStripBandOffMainThread(compressed.bytes, compressed.options),
       signal,
     )
+  }
+
+  // An NDPI level's tile, cut from the decoded blocks of restart intervals
+  // across it (see ndpi.ts). A DC level's blocks decode an eighth the size.
+  private async fetchNdpiTileBytes(
+    level: number,
+    read: NdpiLevelRead,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    const geometry = await this.ndpiGeometry(read, signal)
+    const size = this.tileSourceSize(level, col, row)
+    const window = {
+      left: col * this.tileWidth,
+      top: row * this.tileHeight,
+      width: size.width,
+      height: size.height,
+    }
+    const sourceWindow = read.dcOnly
+      ? {
+          left: window.left * NDPI_DC_SCALE,
+          top: window.top * NDPI_DC_SCALE,
+          width: window.width * NDPI_DC_SCALE,
+          height: window.height * NDPI_DC_SCALE,
+        }
+      : window
+    const blocks = await Promise.all(
+      ndpiBlocksForWindow(geometry, sourceWindow).map(async (block) => {
+        const blockWindow = ndpiBlockWindow(geometry, block)
+
+        return {
+          window: read.dcOnly ? ndpiDcWindow(blockWindow) : blockWindow,
+          bytes: await stripBands.get(
+            `${this.url}|ndpi:${read.sourceLevel}:${read.dcOnly ? 'dc' : 'full'}:${block.band}:${block.group}`,
+            (blockSignal) => this.readNdpiBlock(read, geometry, block, blockSignal),
+            signal,
+          ),
+        }
+      }),
+    )
+
+    return ndpiTileBytes(
+      blocks,
+      window,
+      this.tileWidth,
+      this.tileHeight,
+      geometry.samplesPerPixel,
+    )
+  }
+
+  private ndpiGeometry(
+    read: NdpiLevelRead,
+    signal?: AbortSignal,
+  ): Promise<NdpiLevelGeometry> {
+    let geometry = this.ndpiGeometries.get(read.sourceLevel)
+
+    if (geometry === undefined) {
+      const loading = this.readNdpiGeometry(read.source)
+      // A failed read is retried by the next tile fetch.
+      loading.catch(() => {
+        if (this.ndpiGeometries.get(read.sourceLevel) === loading) {
+          this.ndpiGeometries.delete(read.sourceLevel)
+        }
+      })
+      this.ndpiGeometries.set(read.sourceLevel, loading)
+      geometry = loading
+    }
+
+    return abortable(geometry, signal)
+  }
+
+  // The McuStarts tag and the JPEG header, read together: the header is
+  // usually well under NDPI_HEADER_READ_BYTES, and read again in full if not.
+  private async readNdpiGeometry(source: NdpiLevelSource): Promise<NdpiLevelGeometry> {
+    const guess = Math.min(source.streamLength, NDPI_HEADER_READ_BYTES)
+    const [intervalStarts, guessed] = await Promise.all([
+      source.intervalStarts(),
+      this.readFileRange(source.streamOffset, source.streamOffset + guess),
+    ])
+    const headerLength = Math.min(source.streamLength, intervalStarts[0] ?? 0)
+    const header =
+      headerLength <= guessed.byteLength
+        ? guessed
+        : await this.readFileRange(
+            source.streamOffset,
+            source.streamOffset + headerLength,
+          )
+
+    return ndpiLevelGeometry({
+      width: source.width,
+      height: source.height,
+      samplesPerPixel: source.samplesPerPixel,
+      header,
+      intervalStarts,
+      streamLength: source.streamLength,
+    })
+  }
+
+  // One block: its band of MCU rows is read once for every block across
+  // it, and the block's intervals decode as their own JPEG off the main
+  // thread.
+  private async readNdpiBlock(
+    read: NdpiLevelRead,
+    geometry: NdpiLevelGeometry,
+    block: NdpiBlock,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    const { source } = read
+    const range = ndpiBandByteRange(geometry, block.band)
+    const band = await ndpiBands.get(
+      `${this.sourceUrl}|${read.sourceLevel}:${block.band}`,
+      (bandSignal) =>
+        this.readFileRange(
+          source.streamOffset + range.start,
+          source.streamOffset + range.end,
+          bandSignal,
+        ),
+      signal,
+    )
+    const jpeg = ndpiBlockJpeg(geometry, band, block)
+
+    return abortable(
+      decodeStripBandOffMainThread(
+        jpeg.bytes,
+        ndpiBlockDecodeOptions(geometry, jpeg, source.photometric, read.dcOnly),
+      ),
+      signal,
+    )
+  }
+
+  private readFileRange(
+    start: number,
+    end: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    return fetchByteRangeWithCache({
+      cache: this.byteRangeCache,
+      namespace: TIFF_TILE_CACHE_NAMESPACE,
+      url: this.sourceUrl,
+      start,
+      end,
+      ...(signal === undefined ? {} : { signal }),
+      fetchRange: (rangeSignal) => this.fetchRange(start, end, rangeSignal),
+    })
   }
 
   private chunkIndex(level: number): Promise<TiffChunkIndex> {
@@ -1992,6 +2545,22 @@ export async function readNumberArrayTag(
   }
 
   throw new Error(`Expected TIFF tag ${key} to be a number array.`)
+}
+
+// FLOAT or signed tags, such as NDPI's magnification of 2.5 or -1.
+async function readOptionalFloatTag(
+  directory: TiffDirectoryValueLoader,
+  tag: number,
+): Promise<number | undefined> {
+  const value = await directory.loadValue(tag)
+  const number =
+    typeof value === 'number'
+      ? value
+      : ArrayBuffer.isView(value) && !(value instanceof DataView) && 'length' in value
+        ? Number((value as unknown as ArrayLike<number>)[0])
+        : undefined
+
+  return number !== undefined && Number.isFinite(number) ? number : undefined
 }
 
 // RATIONAL tags load as [numerator, denominator].

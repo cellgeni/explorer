@@ -37,6 +37,10 @@ export interface TiffTileDecodeMetadata {
   readonly photometric?: number
   readonly littleEndian?: boolean
   readonly jpegTables?: Uint8Array
+  // JPEG: decode only each 8 x 8 block's DC term, one pixel per block, for
+  // an image an eighth of the size. `tileWidth` and `tileHeight` are then
+  // that image's size.
+  readonly jpegDcOnly?: boolean
 }
 
 export async function decodeTiffTilePixels(
@@ -138,24 +142,30 @@ export async function decodeTiffChunkSamples(
               littleEndian: metadata.littleEndian ?? true,
             },
           )
-        : compression === TIFF_COMPRESSION_JPEG && (bitsPerSample[0] ?? 8) > 8
-          ? decodeHighBitDepthJpeg(bytes, metadata, {
+        : compression === TIFF_COMPRESSION_JPEG && metadata.jpegDcOnly === true
+          ? decodeDcOnlyJpeg(bytes, metadata, {
               samplesPerPixel,
               tileHeight,
               tileWidth,
             })
-          : await decodeWithGeotiff(bytes, {
-              bitsPerSample,
-              compression,
-              ...(metadata.jpegTables === undefined
-                ? {}
-                : { jpegTables: metadata.jpegTables }),
-              planarConfiguration,
-              predictor,
-              samplesPerPixel,
-              tileHeight,
-              tileWidth,
-            })
+          : compression === TIFF_COMPRESSION_JPEG && (bitsPerSample[0] ?? 8) > 8
+            ? decodeHighBitDepthJpeg(bytes, metadata, {
+                samplesPerPixel,
+                tileHeight,
+                tileWidth,
+              })
+            : await decodeWithGeotiff(bytes, {
+                bitsPerSample,
+                compression,
+                ...(metadata.jpegTables === undefined
+                  ? {}
+                  : { jpegTables: metadata.jpegTables }),
+                planarConfiguration,
+                predictor,
+                samplesPerPixel,
+                tileHeight,
+                tileWidth,
+              })
 
   // geotiff's JPEG decoder returns the stream's components unconverted.
   if (
@@ -173,6 +183,40 @@ export async function decodeTiffChunkSamples(
   }
 
   return decodedBuffer
+}
+
+// An 8-bit JPEG at an eighth of its size, one pixel per block (see
+// jpegDcOnly).
+function decodeDcOnlyJpeg(
+  bytes: Uint8Array,
+  metadata: TiffTileDecodeMetadata,
+  size: {
+    readonly samplesPerPixel: number
+    readonly tileHeight: number
+    readonly tileWidth: number
+  },
+): ArrayBuffer {
+  const image = decodeSequentialJpeg(bytes, metadata.jpegTables, { dcOnly: true })
+  const { samplesPerPixel, tileHeight, tileWidth } = size
+
+  if (image.components !== samplesPerPixel || image.precision !== 8) {
+    throw new Error(
+      `The JPEG has ${image.components} ${image.precision}-bit components; the TIFF says ${samplesPerPixel} 8-bit samples per pixel.`,
+    )
+  }
+
+  const output = new Uint8Array(tileWidth * tileHeight * samplesPerPixel)
+  const rowBytes = Math.min(image.width, tileWidth) * samplesPerPixel
+
+  for (let y = 0; y < Math.min(image.height, tileHeight); y += 1) {
+    const source = y * image.width * samplesPerPixel
+    output.set(
+      image.data.subarray(source, source + rowBytes),
+      y * tileWidth * samplesPerPixel,
+    )
+  }
+
+  return output.buffer
 }
 
 // 12-bit JPEG tiles (MERSCOPE `.vzg` pyramids), which geotiff's decoder
