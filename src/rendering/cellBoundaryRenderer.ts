@@ -112,7 +112,7 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
           _normalize: false,
           opacity: 1,
           getPolygon: () => [],
-          getFillColor: [32, 102, 83, 34],
+          getFillColor: DEFAULT_CELL_BOUNDARY_FILL_COLOR,
           updateTriggers: {
             getFillColor: [options.cellFillOpacity, options.style],
           },
