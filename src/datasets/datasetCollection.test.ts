@@ -144,6 +144,7 @@ describe('parseDatasetCollection', () => {
         {
           dataset: 'SPCOX-Sham-A-anndata.zarr',
           image: './SPCOX-Sham-A-raw.zarr/',
+          labels: 'SPCOX-Sham-A-label.zarr',
           coordinates: 'image-pixels',
         },
         { dataset: 'b.h5ad', image: 'https://images.example.test/b.ome.tif' },
@@ -156,6 +157,10 @@ describe('parseDatasetCollection', () => {
         path: 'SPCOX-Sham-A-raw.zarr',
         url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-raw.zarr',
         coordinates: 'image-pixels',
+        labels: {
+          path: 'SPCOX-Sham-A-label.zarr',
+          url: 'https://bucket.example.test/SPCOX/SPCOX-Sham-A-label.zarr',
+        },
       },
       {
         path: 'https://images.example.test/b.ome.tif',
@@ -186,6 +191,9 @@ describe('parseDatasetCollection', () => {
         datasets: [{ dataset: 'a', coordinates: 'image-pixels' }],
       }),
     ).toBe('collection.json: "datasets[0].coordinates" needs "datasets[0].image".')
+    expect(
+      parseError({ version: 1, datasets: [{ dataset: 'a', labels: 'a-label.zarr' }] }),
+    ).toBe('collection.json: "datasets[0].labels" needs "datasets[0].image".')
   })
 
   it('rejects the same dataset listed twice', () => {

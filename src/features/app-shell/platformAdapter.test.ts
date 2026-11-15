@@ -462,24 +462,41 @@ describe('platformAdapter', () => {
     expect(dataset.segmentationElements).toHaveBeenCalledWith('nucleus', selection.bbox)
   })
 
-  it('does not request boundary elements for H5AD datasets', async () => {
+  it('reads H5AD boundaries from the dataset only when it has label outlines', async () => {
     const adapter = appPlatformAdapterFor(readyLoadState, 'h5ad')
-    const loadBoundaryElements = vi.fn()
-    const getSpatialDataset = vi.fn()
-
-    await expect(
+    const elements = [
+      {
+        id: '12',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const datasetFor = (cellBoundaries: boolean) => ({
+      meta: vi.fn(async () => ({ capabilities: { cellBoundaries } })),
+      elements: vi.fn(async () => ({ elements })),
+    })
+    const load = (dataset: ReturnType<typeof datasetFor>) =>
       loadPlatformBoundaryElements(
         adapter,
         {
-          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
-          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+          getSpatialDataset: (async () => dataset) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: vi.fn() as BoundaryElementsLoader,
         },
         readyLoadState.url,
         selection.bbox,
-      ),
-    ).resolves.toEqual({ elements: [] })
-    expect(loadBoundaryElements).not.toHaveBeenCalled()
-    expect(getSpatialDataset).not.toHaveBeenCalled()
+      )
+    const plain = datasetFor(false)
+    const labelled = datasetFor(true)
+
+    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
+    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
+    await expect(load(plain)).resolves.toEqual({ elements: [] })
+    expect(plain.elements).not.toHaveBeenCalled()
+    await expect(load(labelled)).resolves.toEqual({ elements })
+    expect(labelled.elements).toHaveBeenCalledWith(selection.bbox)
   })
 
   it('reads SpatialData through AnnData workflows with dataset boundaries', async () => {

@@ -30,8 +30,9 @@ Xenium sections of the
 [SPCOX spinal cord time course](https://www.sciatlas.org/SPCOX/), three per
 time point, and the snRNA-seq atlas they are compared with. Each entry is an
 AnnData Zarr store on the group's bucket, which the viewer reads directly,
-and each section names its morphology image, an OME-Zarr store next to it.
-The sections' coordinates are pixels of that image:
+and each section names its morphology image and its cell segmentation, two
+OME-Zarr stores next to it. The sections' coordinates are pixels of that
+image:
 
 ```json
 {
@@ -43,6 +44,7 @@ The sections' coordinates are pixels of that image:
     {
       "dataset": "SPCOX-Sham-A-anndata.zarr",
       "image": "SPCOX-Sham-A-raw.zarr",
+      "labels": "SPCOX-Sham-A-label.zarr",
       "coordinates": "image-pixels",
       "name": "Sham-A",
       "group": "Sham"
@@ -50,6 +52,7 @@ The sections' coordinates are pixels of that image:
     {
       "dataset": "SPCOX-1dpi-A-anndata.zarr",
       "image": "SPCOX-1dpi-A-raw.zarr",
+      "labels": "SPCOX-1dpi-A-label.zarr",
       "coordinates": "image-pixels",
       "name": "1dpi-A",
       "group": "1 dpi"
@@ -97,6 +100,7 @@ Unknown fields are errors, as in a dataset manifest.
 | `group`       | No       | Group label, such as a time point or donor                                                                                  |
 | `image`       | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
 | `coordinates` | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
+| `labels`      | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -144,6 +148,31 @@ The image then behaves as the dataset's own:
   point should sit on its nucleus.
 
 See [Attached Image](./modalities/h5ad.md#attached-image) for how it is read.
+
+### Labels
+
+`labels` names a segmentation mask to draw as the dataset's cell boundaries:
+an OME-Zarr label image, including a `bioformats2raw` store, whose pixel
+values are cell labels and 0 is background. WebAtlas publishes one next to
+each section (`-label.zarr`).
+
+- **Which cell.** Label N outlines the cell whose obs name is `N`, as in
+  SpatialData and Vitessce. Labels that no obs name matches are not drawn, and
+  a table without whole-number obs names gets no boundaries.
+- **Where.** The label image covers the same area as `image`, so its pixels
+  are scaled to the image's extent. A mask on the image's own pixel grid, such
+  as SPCOX's, lines up pixel for pixel; a downsampled one is stretched to fit.
+  The mask's own pixel size is not used: bioformats2raw writes 1 when it has
+  none.
+- **Drawing.** `Cell boundaries` starts on, and outlines load for the view as
+  for Xenium: once fewer than the Boundary limit's cells (50,000 by default)
+  are in view, from the finest pyramid level whose pixels in view fit 16
+  million. They are traced in the Zarr decode workers and coloured like the
+  cells. Hovering one shows its cell.
+- For SPCOX (headless Chromium with the GPU), the full view of Sham-A (16,597
+  cells) reads its outlines from a coarse level: 8 label chunks, 0.8 MB. A
+  field about 1.3 mm wide reads 12 chunks (1.4 MB) and one about 300 µm wide
+  12 chunks (0.75 MB), each done within 2.6 s of zooming.
 
 ### Defaults
 
@@ -275,6 +304,7 @@ errors as you type.
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
-- Only a collection entry can pair an image with an AnnData table; a dataset
-  manifest cannot yet. Segmentation labels next to the image, such as SPCOX's
-  `-label.zarr` stores, are not read.
+- Only a collection entry can pair an image or labels with an AnnData table; a
+  dataset manifest cannot yet.
+- Labels need an image to be placed on, and are matched to cells by obs name
+  only, not by an obs column.

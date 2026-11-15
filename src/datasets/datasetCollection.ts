@@ -38,6 +38,7 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'group',
   'image',
   'coordinates',
+  'labels',
 ] as const
 
 // How an entry's cell coordinates relate to its image: micrometres, as the
@@ -55,6 +56,9 @@ export interface DatasetImageAttachment {
   // Resolved like the entry's dataset.
   readonly url: string
   readonly coordinates: DatasetImageCoordinates
+  // A segmentation label image on the image's pixel grid, whose values are the
+  // table's obs names, drawn as cell boundaries.
+  readonly labels?: { readonly path: string; readonly url: string }
 }
 
 // The dataset manifest defaults that make sense across datasets. Layer
@@ -230,6 +234,7 @@ function parseEntryImage(
   fail: Fail,
 ): DatasetImageAttachment | undefined {
   const path = optionalPath(entry, 'image', prefix, fail)
+  const labels = optionalPath(entry, 'labels', prefix, fail)
   const coordinates = entry.coordinates
 
   if (
@@ -242,15 +247,24 @@ function parseEntryImage(
   }
 
   if (path === undefined) {
-    return coordinates === undefined
+    const without =
+      coordinates !== undefined
+        ? 'coordinates'
+        : labels !== undefined
+          ? 'labels'
+          : undefined
+    return without === undefined
       ? undefined
-      : fail(`"${prefix}coordinates" needs "${prefix}image".`)
+      : fail(`"${prefix}${without}" needs "${prefix}image".`)
   }
 
   return {
     path,
     url: resolveManifestPath(rootUrl, path),
     coordinates: (coordinates as DatasetImageCoordinates | undefined) ?? 'micrometers',
+    ...(labels === undefined
+      ? {}
+      : { labels: { path: labels, url: resolveManifestPath(rootUrl, labels) } }),
   }
 }
 

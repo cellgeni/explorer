@@ -6,7 +6,11 @@ import {
   icechunkFixtureFetcher,
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
-import { AnnDataH5adDataset, type AnnDataH5adDatasetOptions } from './h5adDataset'
+import {
+  AnnDataH5adDataset,
+  type AnnDataH5adDatasetOptions,
+  type AnnDataLabelsOpener,
+} from './h5adDataset'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
 
@@ -414,6 +418,111 @@ describe('AnnDataH5adDataset', () => {
     )
     // A failed open is tried again when the image is asked for.
     await expect(failingDataset.image()).resolves.toEqual({ kind: 'pyramid', loader })
+  })
+
+  it('outlines cells from attached labels named by obs names', async () => {
+    // The label image is half the image's resolution: 80 x 80 pixels over a
+    // 160 x 160 image at 0.25 µm per pixel, so a label pixel is 0.5 µm.
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      imageWidth: 160,
+      imageHeight: 160,
+      units: { micrometersPerPixel: micrometers(0.25) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    const ring = (x: number) => new Float64Array([x, 0, x + 2, 0, x + 2, 2, x, 2])
+    // The reader returns the same ring arrays while their chunks stay loaded.
+    const traced = [
+      { label: 1, ring: ring(0) },
+      { label: 3, ring: ring(10) },
+      // No cell is named 9.
+      { label: 9, ring: ring(20) },
+    ]
+    const outlines = vi.fn(async () => traced)
+    const openLabels = vi.fn(async () => ({
+      levels: [{ width: 80, height: 80 }],
+      outlines,
+    })) as unknown as AnnDataLabelsOpener
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', { obsNames: ['1', '2', '3', 'cell-d'] }),
+      ),
+      image: {
+        url: loader.url,
+        coordinates: 'image-pixels',
+        labelsUrl: 'https://example.test/section-label.zarr',
+      },
+      openImage: vi.fn().mockResolvedValue(loader),
+      openLabels,
+    })
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(10),
+      maxY: micrometers(5),
+    }
+
+    expect((await dataset.meta()).capabilities.cellBoundaries).toBe(true)
+    const { elements } = await dataset.elements(bbox)
+
+    expect(elements.map((element) => element.id)).toEqual(['1', '3'])
+    expect(elements[1]?.geometry).toEqual({
+      kind: 'polygon',
+      rings: [
+        [
+          { x: micrometers(5), y: micrometers(0) },
+          { x: micrometers(6), y: micrometers(0) },
+          { x: micrometers(6), y: micrometers(1) },
+          { x: micrometers(5), y: micrometers(1) },
+        ],
+      ],
+    })
+    // The view is asked for in label pixels, for cells the table names.
+    expect(outlines).toHaveBeenCalledWith(
+      { minX: 0, minY: 0, maxX: 20, maxY: 10 },
+      expect.objectContaining({ maxPixels: 16_000_000 }),
+    )
+    const include = (
+      outlines.mock.calls[0] as unknown as [unknown, { include(label: number): boolean }]
+    )[1].include
+    expect([1, 2, 3, 4, 9].map(include)).toEqual([true, true, true, false, false])
+    // The same rings give the same elements, and the store opens once.
+    expect((await dataset.elements(bbox)).elements[0]).toBe(elements[0])
+    expect(openLabels).toHaveBeenCalledTimes(1)
+  })
+
+  it('has no boundaries without labels or label-numbered obs names', async () => {
+    const openLabels = vi.fn() as unknown as AnnDataLabelsOpener
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(10),
+      maxY: micrometers(10),
+    }
+    const named = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense')),
+      image: {
+        url: 'https://example.test/section-raw.zarr',
+        coordinates: 'micrometers',
+        labelsUrl: 'https://example.test/section-label.zarr',
+      },
+      openImage: vi.fn().mockResolvedValue({ units: {}, channels: [] }),
+      openLabels,
+    })
+    const unlabelled = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', { obsNames: ['1', '2', '3', '4'] }),
+      ),
+    })
+
+    expect((await named.meta()).capabilities.cellBoundaries).toBe(false)
+    await expect(named.elements(bbox)).resolves.toEqual({ elements: [] })
+    expect(openLabels).not.toHaveBeenCalled()
+    expect((await unlabelled.meta()).capabilities.cellBoundaries).toBe(false)
+    await expect(unlabelled.elements(bbox)).resolves.toEqual({ elements: [] })
   })
 
   it('has no image without an attached one', async () => {
@@ -1061,6 +1170,8 @@ type CategoricalEncoding = 'group' | 'dataframe-categories'
 
 interface TinyH5adOptions {
   readonly categoricalEncoding?: CategoricalEncoding
+  // The obs index; defaults to cell-a to cell-d.
+  readonly obsNames?: readonly string[]
   readonly coordinateKey?: string
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
@@ -1159,7 +1270,7 @@ async function createTinyH5ad(
     obs.create_attribute('column-order', ['cluster', 'score'])
     obs.create_dataset({
       name: 'cell_id',
-      data: ['cell-a', 'cell-b', 'cell-c', 'cell-d'],
+      data: [...(options.obsNames ?? ['cell-a', 'cell-b', 'cell-c', 'cell-d'])],
     })
   }
 

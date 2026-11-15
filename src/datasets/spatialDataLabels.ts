@@ -5,7 +5,12 @@ import {
   traceLabelEdges,
   type PackedLabelTrace,
 } from './spatialDataLabelTrace'
-import { applyAffine, composeAffine, type Affine2D } from './spatialDataTransforms'
+import {
+  applyAffine,
+  composeAffine,
+  IDENTITY_AFFINE,
+  type Affine2D,
+} from './spatialDataTransforms'
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
 import {
   ZarrChunkUnavailableError,
@@ -195,9 +200,10 @@ export class SpatialDataLabelsReader {
     this.maxTraceCacheBytes = options.maxTraceCacheBytes ?? DEFAULT_MAX_TRACE_CACHE_BYTES
   }
 
+  // `zarrFormat` undefined reads either format.
   static async open(
     store: zarr.Readable,
-    zarrFormat: 2 | 3,
+    zarrFormat: 2 | 3 | undefined,
     elementPath: string,
     attrs: Readonly<Record<string, unknown>>,
     toTarget: Affine2D,
@@ -221,7 +227,9 @@ export class SpatialDataLabelsReader {
       const array =
         zarrFormat === 3
           ? await zarr.open.v3(location, { kind: 'array' })
-          : await zarr.open.v2(location, { kind: 'array' })
+          : zarrFormat === 2
+            ? await zarr.open.v2(location, { kind: 'array' })
+            : await zarr.open(location, { kind: 'array' })
       const names =
         axes.length === array.shape.length
           ? axes
@@ -586,6 +594,32 @@ function sameTraces(
 ): boolean {
   return (
     left.length === right.length && left.every((trace, index) => trace === right[index])
+  )
+}
+
+// A label image in its own OME-Zarr store (or the first series of a
+// bioformats2raw store), such as the segmentation WebAtlas publishes next to a
+// section's AnnData. Outlines come back in its level-0 pixels.
+export async function openOmeZarrLabels(
+  url: string,
+  options: {
+    readonly signal?: AbortSignal
+    readonly tracer?: SpatialDataLabelTracer
+  } = {},
+): Promise<SpatialDataLabelsReader> {
+  const { openOmeZarrMultiscaleGroup } = await import('../zarr/omeZarrLoader')
+  const group = await openOmeZarrMultiscaleGroup(
+    url,
+    options.signal === undefined ? {} : { signal: options.signal },
+  )
+
+  return SpatialDataLabelsReader.open(
+    group.store,
+    undefined,
+    group.path,
+    group.attrs,
+    IDENTITY_AFFINE,
+    options.tracer === undefined ? {} : { tracer: options.tracer },
   )
 }
 

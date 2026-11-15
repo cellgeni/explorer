@@ -246,11 +246,14 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
-  boundaryLoadingEnabled: () => false,
+  // Cell boundaries come from a label image a collection pairs with the
+  // table; without one the dataset returns none.
+  boundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
   cellBoundaryLoadingEnabled: () => true,
-  boundaryOverlayRequestKey: () => 'disabled:no-nucleus',
+  boundaryOverlayRequestKey: (showCellBoundaries) =>
+    `${showCellBoundaries ? 'enabled' : 'disabled'}:no-nucleus`,
   geneExpressionOverlayEnabled: () => true,
-  cellBoundaryHoverEnabled: () => false,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
   magicLensAvailability: () => ({
     loadEnabled: false,
     unavailableReason: 'Unavailable for H5AD',
@@ -599,11 +602,12 @@ export async function loadPlatformBoundaryElements(
 ): ReturnType<BoundaryElementsLoader> {
   const [baseUrl, bbox, options = {}] = args
 
-  if (adapter.kind === 'h5ad' || adapter.kind === 'image') {
+  if (adapter.kind === 'image') {
     return { elements: [] }
   }
 
   if (
+    adapter.kind !== 'h5ad' &&
     adapter.kind !== 'visium-hd' &&
     adapter.kind !== 'visium' &&
     adapter.kind !== 'spatialdata' &&

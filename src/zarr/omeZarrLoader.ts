@@ -319,6 +319,28 @@ async function openImageStore(
     : consolidatedZarrStore(base, consolidated.knownMetadata)
 }
 
+// The multiscale group of an OME-Zarr store, the first series of a
+// bioformats2raw store, for readers other than the image loader such as label
+// tracing. `path` is the group's path in `store`, '' at its root.
+export async function openOmeZarrMultiscaleGroup(
+  url: string,
+  options: Pick<OpenOmeZarrImageOptions, 'fetcher' | 'signal'> = {},
+): Promise<{
+  readonly store: zarr.AsyncReadable
+  readonly path: string
+  readonly attrs: Readonly<Record<string, unknown>>
+}> {
+  const store = await openImageStore(omeZarrImageRootUrl(url), options)
+  const rootGroup = await zarr.open(zarr.root(store), {
+    kind: 'group',
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  const group = await bioformats2rawImageGroup(rootGroup, options.signal)
+  firstOmeZarrMultiscale(group.attrs)
+
+  return { store, path: group.path.replace(/^\/+|\/+$/g, ''), attrs: group.attrs }
+}
+
 export function omeZarrImageRootUrl(url: string): string {
   const parsedUrl = new URL(url)
 

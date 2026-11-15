@@ -2,7 +2,8 @@ import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { TranscriptAggregateDatum } from '../rendering/deckLayers'
 import { transcriptAggregateTitle } from './viewerHoverModel'
-import { TranscriptHoverTooltip } from './viewerHoverTooltips'
+import { CellBoundaryHoverTooltip, TranscriptHoverTooltip } from './viewerHoverTooltips'
+import type { ViewerCellBoundaryHoverDetail } from './viewerCoreTypes'
 
 const square: TranscriptAggregateDatum = {
   id: 'native-zarr-density:2:1:1',
@@ -65,5 +66,44 @@ describe('transcript density hover', () => {
     )
     expect(screen.getByText('Selected-gene transcripts')).toBeInTheDocument()
     expect(rows.slice(0, 3)).toEqual(['Count12', 'SNAP259', 'AQP43'])
+  })
+})
+
+describe('cell boundary hover', () => {
+  it('names the source of the cell under the outline', () => {
+    const boundary = {
+      id: '2717',
+      polygon: [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+      ],
+      fillColor: [0, 0, 0, 0],
+      lineColor: [0, 0, 0, 0],
+    } as unknown as ViewerCellBoundaryHoverDetail['boundary']
+    const cell = {
+      id: '2717',
+      position: [2397.2, 1126.1, 0],
+    } as unknown as NonNullable<ViewerCellBoundaryHoverDetail['cell']>
+    const screenPoint = { x: 10, y: 10 } as ViewerCellBoundaryHoverDetail['screen']
+    const { rerender } = render(
+      <CellBoundaryHoverTooltip detail={{ boundary, cell, screen: screenPoint }} />,
+    )
+
+    expect(screen.getByText('Xenium')).toBeInTheDocument()
+    rerender(
+      <CellBoundaryHoverTooltip
+        detail={{ boundary, cell, screen: screenPoint }}
+        sourceLabel="H5AD"
+      />,
+    )
+    expect(screen.getByText('H5AD')).toBeInTheDocument()
+    rerender(
+      <CellBoundaryHoverTooltip
+        detail={{ boundary, screen: screenPoint }}
+        sourceLabel="H5AD"
+      />,
+    )
+    expect(screen.getByText('Segmented')).toBeInTheDocument()
   })
 })

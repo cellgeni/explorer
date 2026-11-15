@@ -430,7 +430,7 @@ describe('spatial dataset detection', () => {
     }
   })
 
-  it('gives an AnnData dataset the image its collection entry names', async () => {
+  it('gives an AnnData dataset the image and labels its collection entry names', async () => {
     const url = 'https://example.test/sections/a.h5ad'
     const collection = (image?: string) =>
       parseDatasetCollection(
@@ -439,7 +439,12 @@ describe('spatial dataset detection', () => {
           datasets: [
             image === undefined
               ? { dataset: 'a.h5ad' }
-              : { dataset: 'a.h5ad', image, coordinates: 'image-pixels' },
+              : {
+                  dataset: 'a.h5ad',
+                  image,
+                  labels: 'a-label.zarr',
+                  coordinates: 'image-pixels',
+                },
           ],
         },
         'https://example.test/sections/collection.json',
@@ -460,6 +465,7 @@ describe('spatial dataset detection', () => {
       expect((withImage as AnnDataH5adDataset).attachedImage).toEqual({
         url: 'https://example.test/sections/a-raw.zarr',
         coordinates: 'image-pixels',
+        labelsUrl: 'https://example.test/sections/a-label.zarr',
       })
       await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(withImage)
 

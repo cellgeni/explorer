@@ -25,6 +25,8 @@ import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 import type { DatasetImageCoordinates } from './datasetCollection'
+import type { SpatialDataLabelsReader } from './spatialDataLabels'
+import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {
   analysisEmbeddingLabel,
   type AnalysisEmbedding,
@@ -91,7 +93,14 @@ export interface AnnDataH5adDatasetOptions {
   readonly image?: AnnDataAttachedImage
   // Opens `image`; defaults to the generic image opener.
   readonly openImage?: ImagePyramidOpener
+  // Opens `image.labelsUrl`; defaults to the OME-Zarr label reader.
+  readonly openLabels?: AnnDataLabelsOpener
 }
+
+// What cell boundaries need from a label image's reader.
+export type AnnDataLabelsReader = Pick<SpatialDataLabelsReader, 'levels' | 'outlines'>
+
+export type AnnDataLabelsOpener = (url: string) => Promise<AnnDataLabelsReader>
 
 export interface AnnDataAttachedImage {
   // OME-Zarr, OME-TIFF or another image the generic opener reads.
@@ -99,6 +108,9 @@ export interface AnnDataAttachedImage {
   // With 'image-pixels', the obsm coordinates are the image's full-resolution
   // pixels and are scaled to micrometres by its pixel size.
   readonly coordinates: DatasetImageCoordinates
+  // A segmentation label image (OME-Zarr) covering the image, whose values
+  // are obs names: label 12 outlines the cell named "12".
+  readonly labelsUrl?: string
 }
 
 export type H5adLoadProgressReporter = (message: string) => void
@@ -554,6 +566,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly attachedImage: AnnDataAttachedImage | undefined
   private readonly openImage: ImagePyramidOpener | undefined
   private attachedImageLoaderPromise: Promise<ImagePyramidLoader> | null = null
+  private readonly openLabels: AnnDataLabelsOpener | undefined
+  private labelsReaderPromise: Promise<AnnDataLabelsReader> | null = null
+  // Label value -> cell id, per placed cache.
+  private readonly labelCellIds = new WeakMap<H5adCache, ReadonlyMap<number, string>>()
+  // Cell elements for cached label rings, so unchanged cells keep the same
+  // objects across viewport requests.
+  private readonly labelElementsByRing = new WeakMap<
+    Float64Array,
+    SpatialElement<SpatialElementId>
+  >()
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
@@ -569,6 +591,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
     this.attachedImage = options.image
     this.openImage = options.openImage
+    this.openLabels = options.openLabels
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -589,7 +612,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       extent: cache.extent,
       capabilities: {
         transcripts: false,
-        cellBoundaries: visium !== undefined,
+        cellBoundaries:
+          visium !== undefined ||
+          (this.attachedImage?.labelsUrl !== undefined &&
+            this.labelCellIdsFor(cache).size > 0),
         pyramidImage: imageLoader !== null,
         multiChannel: (imageLoader?.channels.length ?? 0) > 1,
       },
@@ -597,11 +623,18 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // Visium spot outlines; other AnnData has no element geometry.
+  // Visium spot outlines, or outlines traced from the attached label image;
+  // other AnnData has no element geometry.
   async elements(bbox?: BBox): Promise<ElementBatch<SpatialElementId>> {
     const cache = await this.cache()
 
     if (cache.visium === null) {
-      return { elements: [] }
+      return {
+        elements:
+          bbox === undefined || this.attachedImage?.labelsUrl === undefined
+            ? []
+            : await this.labelElements(cache, bbox),
+      }
     }
 
     const spots = await this.spotElements()
@@ -964,6 +997,126 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     } catch {
       return null
     }
+  }
+
+  private labelsReader(): Promise<AnnDataLabelsReader> {
+    const url = this.attachedImage?.labelsUrl
+
+    if (url === undefined) {
+      return Promise.reject(new Error('This AnnData dataset has no attached labels.'))
+    }
+
+    if (this.labelsReaderPromise === null) {
+      const promise = (async () => {
+        const openLabels =
+          this.openLabels ?? (await import('./spatialDataLabels')).openOmeZarrLabels
+        return openLabels(url)
+      })()
+      this.labelsReaderPromise = promise
+      promise.catch(() => {
+        if (this.labelsReaderPromise === promise) {
+          this.labelsReaderPromise = null
+        }
+      })
+    }
+
+    return this.labelsReaderPromise
+  }
+
+  // Label values are obs names, as in SpatialData and Vitessce: obs names
+  // that are whole numbers.
+  private labelCellIdsFor(cache: H5adCache): ReadonlyMap<number, string> {
+    let cellIds = this.labelCellIds.get(cache)
+
+    if (cellIds === undefined) {
+      const byLabel = new Map<number, string>()
+
+      for (const cellId of cache.cellIds) {
+        if (/^\d+$/.test(cellId)) {
+          byLabel.set(Number(cellId), cellId)
+        }
+      }
+
+      if (byLabel.size === 0) {
+        this.onProgress?.(
+          'Attached labels not used: no obs names are label numbers, so no cell matches a label',
+        )
+      }
+
+      cellIds = byLabel
+      this.labelCellIds.set(cache, cellIds)
+    }
+
+    return cellIds
+  }
+
+  // Outlines of the labelled cells in `bbox`. The label image covers the
+  // attached image, so its pixels are scaled to the image's extent.
+  private async labelElements(
+    cache: H5adCache,
+    bbox: BBox,
+  ): Promise<readonly SpatialElement<SpatialElementId>[]> {
+    const cellIds = this.labelCellIdsFor(cache)
+
+    if (cellIds.size === 0) {
+      return []
+    }
+
+    const [reader, image] = await Promise.all([
+      this.labelsReader(),
+      this.attachedImageLoader(),
+    ])
+    const labels = reader.levels[0]
+
+    if (labels === undefined || labels.width === 0 || labels.height === 0) {
+      return []
+    }
+
+    const micrometersPerPixel = image.units.micrometersPerPixel
+    const scaleX = (micrometersPerPixel * image.imageWidth) / labels.width
+    const scaleY = (micrometersPerPixel * image.imageHeight) / labels.height
+    const outlines = await reader.outlines(
+      {
+        minX: bbox.minX / scaleX,
+        maxX: bbox.maxX / scaleX,
+        minY: bbox.minY / scaleY,
+        maxY: bbox.maxY / scaleY,
+      },
+      {
+        maxPixels: LABEL_OUTLINE_MAX_PIXELS,
+        include: (label) => cellIds.has(label),
+      },
+    )
+
+    return outlines.flatMap((outline) => {
+      const cached = this.labelElementsByRing.get(outline.ring)
+
+      if (cached !== undefined) {
+        return [cached]
+      }
+
+      const cellId = cellIds.get(outline.label)
+
+      if (cellId === undefined) {
+        return []
+      }
+
+      const ring: DataPoint[] = []
+
+      for (let index = 0; index < outline.ring.length; index += 2) {
+        ring.push({
+          x: micrometers((outline.ring[index] ?? 0) * scaleX),
+          y: micrometers((outline.ring[index + 1] ?? 0) * scaleY),
+        })
+      }
+
+      const element: SpatialElement<SpatialElementId> = {
+        id: cellId as SpatialElementId,
+        geometry: { kind: 'polygon', rings: [ring] },
+      }
+      this.labelElementsByRing.set(outline.ring, element)
+      return [element]
+    })
   }
 
   // Micrometres per coordinate unit: the attached image's pixel size when the

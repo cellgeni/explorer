@@ -238,9 +238,10 @@ choice places the rows again) and returned to every caller. Its points carry
 `readMetadata` instead of a metadata object: building an object per cell with
 every obs column took 0.6–1.4 s per call on a 598,222-cell table.
 
-H5AD has no boundary polygons, so cell boundaries are switched off and
-`elements()` returns `[]`. Without an [attached image](#attached-image),
-`meta()` reports all capabilities as `false` and `image()` returns `null`.
+Without [attached labels](#attached-image), H5AD has no boundary polygons, so
+cell boundaries are switched off and `elements()` returns `[]`. Without an
+attached image, `meta()` reports all capabilities as `false` and `image()`
+returns `null`.
 Before this, the lifecycle calls `visiumSummary()`; when it finds a Visium
 layout, the load continues as [Standard Visium](./visium.md#load-sequence)
 instead.
@@ -271,6 +272,18 @@ image the [generic opener](./image.md) reads works: OME-Zarr (including
   pyramid in the background, as for SpatialData: channels, contrast, opacity
   and the minimap work as for any image, and `meta()` reports the image's
   units, `pyramidImage` and `multiChannel`.
+- **Labels.** With `labels`, `meta()` reports `cellBoundaries` when some obs
+  names are whole numbers, and `elements(bbox)` returns outlines from the
+  label image. `openOmeZarrLabels` (`src/datasets/spatialDataLabels.ts`) opens
+  the store's multiscale group (`openOmeZarrMultiscaleGroup`,
+  `src/zarr/omeZarrLoader.ts`) as a `SpatialDataLabelsReader`, the reader
+  SpatialData labels use: chunks are traced in the Zarr decode workers and
+  joined across chunk edges, and rings are cached while their chunks are. The
+  view's bbox is converted to label pixels by the image's extent over the
+  label image's (`labelElements`), and the rings back to micrometres. Label N
+  is the cell named `N`; other labels are skipped before rings are joined.
+  `H5AD_PLATFORM_ADAPTER` loads boundaries while `Cell boundaries` is on, and
+  points get outlines only then.
 - **Not used.** A Visium table keeps its own tissue image, and other platforms
   their own; the entry's image is then ignored, with a Fallbacks notice.
 

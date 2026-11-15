@@ -1466,7 +1466,11 @@ export function useDatasetLifecycle({
         if (detection.platform === 'h5ad') {
           whenCommitted(() => {
             setDatasetPlatform('h5ad')
-            setShowCellBoundaries(false)
+            setShowCellBoundaries(
+              attachedImage?.labels === undefined
+                ? false
+                : (restoreState.showCellBoundaries ?? true),
+            )
             setShowNucleusBoundaries(false)
             if (attachedImage === undefined || !loadImage) {
               setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
@@ -1511,6 +1515,10 @@ export function useDatasetLifecycle({
               attachedImage.coordinates === 'image-pixels'
                 ? ', cell coordinates in its pixels'
                 : ''
+            }${
+              attachedImage.labels === undefined
+                ? ''
+                : `; cell boundaries from ${shortDatasetLabel(attachedImage.labels.url)}`
             }`,
           )
           loadPyramidImageInBackground(dataset)

@@ -302,7 +302,7 @@ describe('App with a dataset collection', () => {
     expect(screen.getByLabelText('type: astro visible')).not.toBeChecked()
   })
 
-  it('opens a linked dataset over the image its entry names', async () => {
+  it('opens a linked dataset over the image and labels its entry names', async () => {
     window.history.replaceState(
       null,
       '',
@@ -316,6 +316,7 @@ describe('App with a dataset collection', () => {
           {
             dataset: 'sham-a.h5ad',
             image: 'sham-a-raw.zarr',
+            labels: 'sham-a-label.zarr',
             coordinates: 'image-pixels',
             name: 'Sham A',
           },
@@ -371,6 +372,9 @@ describe('App with a dataset collection', () => {
     await waitFor(() => {
       expect(screen.getByRole('checkbox', { name: 'DAPI' })).toBeChecked()
     })
+    // Its labels are its cell boundaries, shown by default.
+    openControls('cell-appearance')
+    expect(screen.getByLabelText('Cell boundaries')).toBeChecked()
 
     // The next section has no image.
     const bar = screen.getByRole('navigation', { name: 'Collection' })
@@ -385,6 +389,8 @@ describe('App with a dataset collection', () => {
       expect(screen.queryByRole('checkbox', { name: 'DAPI' })).not.toBeInTheDocument()
     })
     expect(dataset.image).toHaveBeenCalledTimes(1)
+    openControls('cell-appearance')
+    expect(screen.getByLabelText('Cell boundaries')).not.toBeChecked()
   })
 
   it('shows the start screen when the collection cannot be read', async () => {

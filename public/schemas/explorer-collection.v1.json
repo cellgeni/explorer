@@ -69,9 +69,13 @@
           "enum": ["micrometers", "image-pixels"],
           "default": "micrometers",
           "description": "What the dataset's cell coordinates are in: micrometres, or the image's full-resolution pixels, which are scaled to micrometres by the image's pixel size. Needs `image`."
+        },
+        "labels": {
+          "$ref": "#/$defs/path",
+          "description": "An OME-Zarr segmentation label image covering `image`, drawn as cell boundaries. Label N outlines the cell whose obs name is N. Resolved like `dataset`. Needs `image`."
         }
       },
-      "dependentRequired": { "coordinates": ["image"] },
+      "dependentRequired": { "coordinates": ["image"], "labels": ["image"] },
       "additionalProperties": false
     },
     "source": {
