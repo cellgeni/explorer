@@ -7,13 +7,14 @@ import {
   type TileIndex,
   type UnitsDescriptor,
 } from '../data/coords'
-import type {
-  ImagePyramidChannelInfo,
-  ImagePyramidDecodedTile,
-  ImagePyramidLoader,
-  ImagePyramidTilePixels,
-  ImagePyramidTileRenderOptions,
-  ImagePyramidZStack,
+import {
+  DEFAULT_CHANNEL_COLORS,
+  type ImagePyramidChannelInfo,
+  type ImagePyramidDecodedTile,
+  type ImagePyramidLoader,
+  type ImagePyramidTilePixels,
+  type ImagePyramidTileRenderOptions,
+  type ImagePyramidZStack,
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { Array as ZarrArray, DataType } from 'zarrita'
@@ -41,13 +42,6 @@ const DEFAULT_TILE_SIZE = 256
 const MAX_VIRTUAL_TILE_SIZE = 512
 const DECODED_CHUNK_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
-const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number])[] = [
-  [88, 144, 255],
-  [32, 166, 122],
-  [240, 200, 75],
-  [215, 63, 124],
-  [255, 253, 247],
-]
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]

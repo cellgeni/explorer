@@ -232,6 +232,22 @@ lets tests replace them.
   `src/rendering/deckLayers.ts`.
 - `MorphologyCanvas` draws image tiles on a 2D canvas underneath deck.gl.
 
+## Default Colours
+
+Colours used when the data gives none. Most canvas defaults are in
+`src/rendering/deckLayerColors.ts`; a few are written where they are used.
+
+| What                                                                                                                                                           | Where                                                                                                                                                                                                                              |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outline and fill of cells with no colour, default cell point fill, gene and transcript-density colour scales, alpha range of outlines drawn in a cell's colour | `src/rendering/deckLayerColors.ts`: `DEFAULT_CELL_BOUNDARY_LINE_COLOR`, `DEFAULT_CELL_BOUNDARY_FILL_COLOR`, `DEFAULT_OVERVIEW_CELL_FILL_RGB`, `GENE_EXPRESSION_COLOR_STOPS`, `TRANSCRIPT_DENSITY_COLOR_STOPS`, `boundaryLineColor` |
+| Nucleus outline and fill                                                                                                                                       | `src/features/app-shell/useViewerLayerData.ts`, written in the nucleus `boundaryElementsToLayerData` call                                                                                                                          |
+| Cell point outline alpha                                                                                                                                       | `src/rendering/cellPointStyle.ts`: `DEFAULT_OUTLINE_ALPHA`                                                                                                                                                                         |
+| Annotation class palette                                                                                                                                       | `src/rendering/annotationPalette.ts`: `ANNOTATION_DEFAULT_PALETTE`, `FALLBACK_ANNOTATION_COLOR`                                                                                                                                    |
+| Transcript colours per gene                                                                                                                                    | `src/rendering/transcriptColors.ts`: `TRANSCRIPT_FEATURE_PALETTE`                                                                                                                                                                  |
+| Transcript point outline                                                                                                                                       | `src/rendering/transcriptRenderer.ts`, written in `getLineColor`                                                                                                                                                                   |
+| Image channel colours                                                                                                                                          | `src/data/imagePyramid.ts`: `DEFAULT_CHANNEL_COLORS`, used by the OME-Zarr and OME-TIFF loaders. `defaultChannelColor` in `src/tiff/omeMetadata.ts` picks some by channel name                                                     |
+| Interface colours: the accent, and selections, measurements and the lens over the canvas                                                                       | `src/styles/tokens.css`: `--accent`, `--overlay-selection`                                                                                                                                                                         |
+
 ## Section Models
 
 The layer panel, info drawer, top bar and Embedding panel take section
