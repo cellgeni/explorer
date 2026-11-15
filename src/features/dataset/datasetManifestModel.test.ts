@@ -22,6 +22,7 @@ describe('manifestDefaultsToShareableState', () => {
         imageOpacity: 0.5,
         cellFillOpacity: 0.25,
         cellBoundaryOpacity: 0.75,
+        cellPointScale: 10,
         transcripts: true,
       }),
     ).toEqual({
@@ -36,6 +37,8 @@ describe('manifestDefaultsToShareableState', () => {
         imageOpacity: 0.5,
         cellFillOpacity: 0.25,
         cellBoundaryOpacity: 0.75,
+        // Snapped to the nearest slider step.
+        cellPointScale: 12,
         transcriptOverlay: true,
       },
       ignored: [],

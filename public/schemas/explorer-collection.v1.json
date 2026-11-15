@@ -134,6 +134,11 @@
         "geneScoreMode": {
           "enum": ["sum", "mean", "z-score"],
           "description": "The Signature score control."
+        },
+        "cellPointScale": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The Cell point size multiplier, from 0.5 to 32; other values snap to the nearest slider step."
         }
       },
       "additionalProperties": false

@@ -7,6 +7,10 @@ import {
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
+import {
+  CELL_POINT_SCALE_STEPS,
+  cellPointScaleStepIndex,
+} from '../../rendering/cellPointStyle'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { Chip, InfoTip } from '../../components/ui'
 import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
@@ -71,7 +75,8 @@ export function CellBoundaryToggles({
   )
 }
 
-// The cell fill and boundary opacity sliders, without a wrapper.
+// The cell fill and boundary opacity and point size sliders, without a
+// wrapper.
 export function CellOpacityControls({
   appearance,
 }: {
@@ -79,6 +84,7 @@ export function CellOpacityControls({
 }) {
   const fillInputId = useId()
   const boundaryInputId = useId()
+  const pointScaleInputId = useId()
 
   if (!appearance.available) {
     return null
@@ -124,6 +130,29 @@ export function CellOpacityControls({
           title="Cell boundary opacity"
           onChange={(event) => {
             appearance.onBoundaryOpacityPercentChange(event.currentTarget.valueAsNumber)
+          }}
+        />
+      </div>
+      <div className="layer-opacity-control">
+        <div className="layer-opacity-header">
+          <label htmlFor={pointScaleInputId}>Cell point size</label>
+          <span>{appearance.pointScale}×</span>
+        </div>
+        <input
+          id={pointScaleInputId}
+          type="range"
+          min="0"
+          max={CELL_POINT_SCALE_STEPS.length - 1}
+          step="1"
+          value={cellPointScaleStepIndex(appearance.pointScale)}
+          aria-valuetext={`${appearance.pointScale} times`}
+          title="Size of cells drawn as points"
+          onChange={(event) => {
+            const step = CELL_POINT_SCALE_STEPS[event.currentTarget.valueAsNumber]
+
+            if (step !== undefined) {
+              appearance.onPointScaleChange(step)
+            }
           }}
         />
       </div>

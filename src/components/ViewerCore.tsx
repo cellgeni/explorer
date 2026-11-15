@@ -247,6 +247,7 @@ export function ViewerCore({
   cellLayersVisible = true,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
   cellBoundaryOpacity = 1,
+  cellPointScale = 1,
   pointSizeFullViewScale = 1,
   trueSizePoints = false,
   cellPointPickable = true,
@@ -366,6 +367,7 @@ export function ViewerCore({
       cellLayersVisible={cellLayersVisible}
       cellFillOpacity={cellFillOpacity}
       cellBoundaryOpacity={cellBoundaryOpacity}
+      cellPointScale={cellPointScale}
       pointSizeFullViewScale={pointSizeFullViewScale}
       trueSizePoints={trueSizePoints}
       cellPointPickable={cellPointPickable}
@@ -454,6 +456,7 @@ interface ViewerSurfaceProps {
   readonly cellLayersVisible: boolean
   readonly cellFillOpacity: number
   readonly cellBoundaryOpacity: number
+  readonly cellPointScale: number
   readonly pointSizeFullViewScale: number
   readonly trueSizePoints: boolean
   readonly cellPointPickable: boolean
@@ -542,6 +545,7 @@ function ViewerSurface({
   cellLayersVisible,
   cellFillOpacity,
   cellBoundaryOpacity,
+  cellPointScale,
   pointSizeFullViewScale,
   trueSizePoints,
   cellPointPickable,
@@ -986,6 +990,7 @@ function ViewerSurface({
         pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
         pointSizeFullViewScale,
         trueSizePoints,
+        cellPointScale,
         cellPointPacking,
       }),
     [
@@ -1011,6 +1016,7 @@ function ViewerSurface({
       transcriptPoints,
       pointSizeFullViewScale,
       trueSizePoints,
+      cellPointScale,
       viewState.zoom,
       fittedViewZoom,
     ],

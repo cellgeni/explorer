@@ -211,6 +211,7 @@ export function createOverviewLayers(
     (visibleGeneExpressionOverlayCells.length > 0 ||
       pointCells.some(hasGeneExpressionStyle))
   const pointSizeFullViewScale = options.pointSizeFullViewScale ?? 1
+  const cellPointScale = options.cellPointScale ?? 1
   const effectiveBoundaryFillEnabled = boundaryFillLayerEnabled || geneExpressionActive
   const cellPointFillOpacity = geneExpressionActive
     ? Math.max(cellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
@@ -242,6 +243,7 @@ export function createOverviewLayers(
         cellBoundaryOpacity,
         filled: cellPointFilled,
         pickable: options.cellPointPickable ?? true,
+        radiusScale: cellPointScale,
         radiusMaxPixels:
           options.trueSizePoints === true
             ? UNCAPPED_RADIUS_PIXELS
@@ -276,6 +278,7 @@ export function createOverviewLayers(
       ),
       cellBoundaryOpacity,
       filled: true,
+      radiusScale: cellPointScale,
       radiusMaxPixels:
         options.trueSizePoints === true
           ? UNCAPPED_RADIUS_PIXELS

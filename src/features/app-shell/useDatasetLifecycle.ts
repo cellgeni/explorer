@@ -52,6 +52,7 @@ import type {
   AnalysisEmbeddingOption,
 } from '../../data/analysisEmbeddings'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
@@ -373,6 +374,8 @@ interface UseDatasetLifecycleSetters {
   readonly setCellFillOpacity?: Setter<number>
   readonly setImageLayerOpacity?: Setter<number>
   readonly setShowTranscriptOverlay?: Setter<boolean>
+  // From manifest defaults and from a link's state, such as a collection's.
+  readonly setCellPointScale?: Setter<number>
   // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   // The manifest's defaults, which the dataset's links leave out.
@@ -552,6 +555,7 @@ export function useDatasetLifecycle({
     setSelectedCellMetadataTrackId,
     setCellBoundaryOpacity,
     setCellFillOpacity,
+    setCellPointScale,
     setImageLayerOpacity,
     setShowTranscriptOverlay,
     setDatasetAbout,
@@ -796,6 +800,10 @@ export function useDatasetLifecycle({
 
     if (defaults.cellBoundaryOpacity !== undefined) {
       setCellBoundaryOpacity?.(defaults.cellBoundaryOpacity)
+    }
+
+    if (defaults.cellPointScale !== undefined) {
+      setCellPointScale?.(defaults.cellPointScale)
     }
 
     if (defaults.transcriptOverlay !== undefined) {
@@ -1094,6 +1102,12 @@ export function useDatasetLifecycle({
             shouldRestoreSharedState &&
             sharedState?.transcriptExactPointLimit !== undefined
               ? normalizeTranscriptExactPointLimit(sharedState.transcriptExactPointLimit)
+              : current,
+          )
+          // Such as a collection's default for the first dataset it opens.
+          setCellPointScale?.((current) =>
+            shouldRestoreSharedState && sharedState?.cellPointScale !== undefined
+              ? normalizeCellPointScale(sharedState.cellPointScale)
               : current,
           )
           setSelectedGenes(sharedSelectedGenes)

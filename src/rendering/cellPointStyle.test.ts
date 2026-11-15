@@ -5,6 +5,7 @@ import {
   cellPointRanks,
   cellPointSampleFraction,
   createCellPointStyler,
+  normalizeCellPointScale,
   packCellPointColors,
 } from './cellPointStyle'
 import {
@@ -128,5 +129,21 @@ describe('cell point styling', () => {
     expect(Array.from(values.filter((_value, index) => index % 2 === 1))).toEqual([
       0, 0, 1,
     ])
+  })
+})
+
+describe('normalizeCellPointScale', () => {
+  it('snaps scales to the nearest slider step on a log scale', () => {
+    expect(normalizeCellPointScale(1)).toBe(1)
+    expect(normalizeCellPointScale(10)).toBe(12)
+    expect(normalizeCellPointScale(9)).toBe(8)
+    expect(normalizeCellPointScale(0.1)).toBe(0.5)
+    expect(normalizeCellPointScale(500)).toBe(32)
+  })
+
+  it('falls back to 1x for scales that are not positive numbers', () => {
+    expect(normalizeCellPointScale(Number.NaN)).toBe(1)
+    expect(normalizeCellPointScale(0)).toBe(1)
+    expect(normalizeCellPointScale(-2)).toBe(1)
   })
 })

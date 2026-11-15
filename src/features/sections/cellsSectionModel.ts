@@ -7,6 +7,7 @@ import type {
   GeneExpressionColorScale,
   GeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
+import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { percentToOpacity } from '../../rendering/layerOpacity'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import type { UndoOffer } from '../app-shell/useUndoToast'
@@ -39,6 +40,9 @@ export interface CellAppearanceModel {
   readonly onFillOpacityPercentChange: (percent: number) => void
   readonly boundaryOpacity: number
   readonly onBoundaryOpacityPercentChange: (percent: number) => void
+  // Multiplier on the size cells drawn as points have.
+  readonly pointScale: number
+  readonly onPointScaleChange: (scale: number) => void
 }
 
 export interface GeneSelectionModel {
@@ -87,6 +91,7 @@ export interface CellsSectionModelInput {
   readonly offerUndo: (offer: UndoOffer) => void
   readonly cellBoundaryOpacity: number
   readonly cellFillOpacity: number
+  readonly cellPointScale: number
   readonly cellLayerControlsVisible: boolean
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly geneExpressionBatch: GeneExpressionBatch | null
@@ -112,6 +117,7 @@ export interface CellsSectionModelInput {
   readonly selectedGenes: readonly string[]
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
   readonly setCellFillOpacity: Dispatch<SetStateAction<number>>
+  readonly setCellPointScale: Dispatch<SetStateAction<number>>
   readonly setGeneExpressionColorScale: Dispatch<SetStateAction<GeneExpressionColorScale>>
   readonly setGeneExpressionDetailMode: Dispatch<SetStateAction<GeneExpressionDetailMode>>
   readonly setGeneExpressionScaleDomain: Dispatch<
@@ -136,6 +142,7 @@ export function useCellsSectionModel({
   offerUndo,
   cellBoundaryOpacity,
   cellFillOpacity,
+  cellPointScale,
   cellLayerControlsVisible,
   cellMetadataTracks,
   geneExpressionBatch,
@@ -157,6 +164,7 @@ export function useCellsSectionModel({
   selectedGenes,
   setCellBoundaryOpacity,
   setCellFillOpacity,
+  setCellPointScale,
   setGeneExpressionColorScale,
   setGeneExpressionDetailMode,
   setGeneExpressionScaleDomain,
@@ -237,6 +245,14 @@ export function useCellsSectionModel({
         setCellBoundaryOpacity(percentToOpacity(nextPercent))
         appendDebugEvent(`Cell boundary opacity: ${nextPercent}%`, {
           coalesceKey: 'cell-boundary-opacity',
+        })
+      },
+      pointScale: cellPointScale,
+      onPointScaleChange: (nextScale) => {
+        const normalized = normalizeCellPointScale(nextScale)
+        setCellPointScale(normalized)
+        appendDebugEvent(`Cell point size: ${normalized}x`, {
+          coalesceKey: 'cell-point-scale',
         })
       },
     },

@@ -35,12 +35,14 @@ export const DATASET_COLLECTION_TOP_LEVEL_KEYS = [
 export const DATASET_COLLECTION_ENTRY_KEYS = ['dataset', 'name', 'group'] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
-// toggles, opacities and channels belong to each dataset's own manifest.
+// toggles, opacities and channels belong to each dataset's own manifest;
+// a point size suits sections of one kind, which a collection usually holds.
 export const DATASET_COLLECTION_DEFAULT_KEYS = [
   'genes',
   'colorCellsBy',
   'geneColorScale',
   'geneScoreMode',
+  'cellPointScale',
 ] as const
 
 // The viewer keeps every entry in memory and lists them all, so a collection

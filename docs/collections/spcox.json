@@ -107,6 +107,7 @@
     }
   ],
   "defaults": {
-    "genes": ["Aqp4"]
+    "genes": ["Aqp4"],
+    "cellPointScale": 2
   }
 }

@@ -6,6 +6,7 @@ import {
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
 } from '../../rendering/deckLayers'
+import { DEFAULT_CELL_POINT_SCALE } from '../../rendering/cellPointStyle'
 import { DEFAULT_CELL_FILL_OPACITY } from '../../rendering/layerOpacity'
 
 // The value of each shareable setting when neither the link nor the dataset
@@ -26,6 +27,7 @@ export const DEFAULT_SHAREABLE_STATE = {
   shouldLoadMorphology: true,
   imageOpacity: 1,
   cellFillOpacity: DEFAULT_CELL_FILL_OPACITY,
+  cellPointScale: DEFAULT_CELL_POINT_SCALE,
   showCellBoundaries: true,
   showNucleusBoundaries: true,
   showHoverTooltips: true,

@@ -425,6 +425,7 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
+      cellPointScale,
       coordinateUnit,
       imageLayerOpacity,
       layerVisibility,
@@ -435,6 +436,7 @@ export function App({ dependencies }: AppProps = {}) {
       setBoundaryCellLimit,
       setCellBoundaryOpacity,
       setCellFillOpacity,
+      setCellPointScale,
       setCoordinateUnit,
       setImageLayerOpacity,
       setLayerVisibility,
@@ -3016,6 +3018,7 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCellMetadataTrackId,
       setCellBoundaryOpacity,
       setCellFillOpacity,
+      setCellPointScale,
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,
@@ -3342,6 +3345,7 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
+      cellPointScale,
       cellMetadataTrackId:
         observationColorMode === 'metadata'
           ? (selectedCellMetadataTrack?.id ?? null)
@@ -3613,6 +3617,7 @@ export function App({ dependencies }: AppProps = {}) {
     offerUndo,
     cellBoundaryOpacity,
     cellFillOpacity,
+    cellPointScale,
     cellLayerControlsVisible: platformAdapter.capabilities.cells,
     cellMetadataTracks,
     geneExpressionBatch,
@@ -3635,6 +3640,7 @@ export function App({ dependencies }: AppProps = {}) {
     selectedGenes,
     setCellBoundaryOpacity,
     setCellFillOpacity,
+    setCellPointScale,
     setGeneExpressionColorScale,
     setGeneExpressionDetailMode,
     setGeneExpressionScaleDomain,
@@ -3981,6 +3987,7 @@ export function App({ dependencies }: AppProps = {}) {
         imageOpacity={morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1}
         cellLayersVisible={layerVisibility.cells}
         cellFillOpacity={cellFillOpacity}
+        cellPointScale={cellPointScale}
         cellBoundaryOpacity={platformAdapter.kind === 'h5ad' ? 0 : cellBoundaryOpacity}
         pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
         trueSizePoints={platformAdapter.trueSizePoints}

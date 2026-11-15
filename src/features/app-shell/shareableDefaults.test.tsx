@@ -29,6 +29,7 @@ function initialSettings(initialShareableState = {}) {
     shouldLoadMorphology: morphology.shouldLoadMorphology,
     imageOpacity: layers.imageLayerOpacity,
     cellFillOpacity: layers.cellFillOpacity,
+    cellPointScale: layers.cellPointScale,
     showCellBoundaries: layers.showCellBoundaries,
     showNucleusBoundaries: layers.showNucleusBoundaries,
     showHoverTooltips: layers.showHoverTooltips,

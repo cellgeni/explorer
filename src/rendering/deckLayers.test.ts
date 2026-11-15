@@ -99,7 +99,7 @@ describe('deck layer factory', () => {
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
     expect(layer.props.lineWidthMinPixels).toBe(1)
-    expect(layer.props.radiusMinPixels).toBe(0.12)
+    expect(layer.props.radiusMinPixels).toBe(0.5)
     expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
@@ -203,6 +203,38 @@ describe('deck layer factory', () => {
 
     expect(fullViewLayer.props.radiusMaxPixels).toBe(5)
     expect(closeViewLayer.props.radiusMaxPixels).toBe(24)
+  })
+
+  it('scales cell point radii and their pixel limits by the cell point scale', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 0,
+      cellPointScale: 3,
+      geneExpressionOverlayElements: [
+        { ...fixtureCells[0]!, id: 'expression-cell', expressionCount: 2 },
+      ],
+    })
+    const cellLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'cells-overview-scatter',
+    )
+    const expressionLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+    )
+
+    if (
+      !(cellLayer instanceof ScatterplotLayer) ||
+      !(expressionLayer instanceof ScatterplotLayer)
+    ) {
+      throw new Error('Expected cell and expression ScatterplotLayer instances.')
+    }
+
+    expect(cellLayer.props.radiusScale).toBe(3)
+    expect(cellLayer.props.radiusMinPixels).toBe(1.5)
+    expect(cellLayer.props.radiusMaxPixels).toBe(30)
+    expect(expressionLayer.props.radiusScale).toBe(3)
+    expect(expressionLayer.props.radiusMinPixels).toBe(3)
+    expect(expressionLayer.props.radiusMaxPixels).toBe(36)
   })
 
   it('fills fallback overview cell proxies when boundary fill is enabled without boundary data', () => {
@@ -677,7 +709,7 @@ describe('deck layer factory', () => {
     expect(expressionLayer.props.data).toBe(expressionElements)
     expect(expressionLayer.props.pickable).toBe(false)
     expect(expressionLayer.props.filled).toBe(true)
-    expect(expressionLayer.props.radiusMinPixels).toBe(1.5)
+    expect(expressionLayer.props.radiusMinPixels).toBe(1)
     expect(expressionLayer.props.radiusMaxPixels).toBe(28)
     expect(expressionLayer.props.updateTriggers).toMatchObject({
       getFillColor: [0.5],
@@ -1190,7 +1222,7 @@ describe('deck layer factory', () => {
     }
 
     expect(datum.position).toEqual([10, -20, 0])
-    expect(datum.radiusPixels).toBe(5)
+    expect(datum.radiusPixels).toBe(10)
     expect(datum.radiusMicrometers).toBe(4)
     expect(datum.fillColor).toEqual([72, 68, 58, 240])
     expect(datum.nucleusCount).toBe(2)
@@ -1210,6 +1242,8 @@ describe('deck layer factory', () => {
 
     expect(datum?.readMetadata).toBe(readMetadata)
     expect(datum?.metadata).toBeUndefined()
+    // No area: a 10 µm cell, the smallest fallback size.
+    expect(datum?.radiusPixels).toBe(5)
     expect(readMetadata).not.toHaveBeenCalled()
   })
 
