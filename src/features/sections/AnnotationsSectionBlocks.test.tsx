@@ -64,6 +64,56 @@ describe('AnnotationLabelLists', () => {
     expect(all.indeterminate).toBe(false)
   })
 
+  it('searches the classes, and checks or unchecks only the matches', () => {
+    const sets = renderLists({ hiddenIds: [IDS[2] ?? ''] })
+    const set = screen.getByRole('region', { name: 'fine_celltype labels' })
+
+    fireEvent.change(screen.getByLabelText('Search fine_celltype classes'), {
+      target: { value: 'class 2' },
+    })
+    // Class 2 and Class 20 to 29.
+    expect(within(set).getAllByRole('listitem')).toHaveLength(11)
+    expect(screen.getByRole('status')).toHaveTextContent('11 of 30')
+
+    const all = screen.getByLabelText<HTMLInputElement>('All fine_celltype classes')
+    expect(all.indeterminate).toBe(true)
+    fireEvent.click(all)
+    expect(sets.onManyVisibilityChange).toHaveBeenCalledWith(
+      [2, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29].map((index) => IDS[index]),
+      true,
+    )
+  })
+
+  it('says when no class matches, and clears the search with Escape', () => {
+    renderLists()
+    const search = screen.getByLabelText('Search fine_celltype classes')
+    const set = screen.getByRole('region', { name: 'fine_celltype labels' })
+
+    fireEvent.change(search, { target: { value: 'microglia' } })
+    expect(screen.getByRole('status')).toHaveTextContent('No classes match')
+    expect(within(set).queryAllByRole('listitem')).toHaveLength(0)
+    expect(screen.getByLabelText('All fine_celltype classes')).toBeDisabled()
+
+    fireEvent.keyDown(search, { key: 'Escape' })
+    expect(search).toHaveValue('')
+    expect(within(set).getAllByRole('listitem')).toHaveLength(30)
+  })
+
+  it('leaves the search out of short sets', () => {
+    const { sets } = testAnnotationsSectionModel({
+      sets: {
+        state: {
+          status: 'ready',
+          url: 'https://example.test',
+          annotations: ANNOTATIONS.slice(0, 8),
+        },
+      },
+    })
+    render(<AnnotationLabelLists sets={sets} />)
+
+    expect(screen.queryByLabelText('Search fine_celltype classes')).toBeNull()
+  })
+
   it('hides and shows the whole set with its eye, keeping the classes', () => {
     const sets = renderLists()
     const eye = screen.getByRole('button', { name: 'fine_celltype visible' })
