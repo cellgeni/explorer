@@ -41,7 +41,9 @@ export function buildCommitMeta(sha = process.env.VITE_COMMIT_SHA): Plugin {
     name: 'build-commit-meta',
     transformIndexHtml() {
       if (sha === undefined || !/^[0-9a-f]{40}$/i.test(sha)) return []
-      return [{ tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' }]
+      return [
+        { tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' },
+      ]
     },
   }
 }
