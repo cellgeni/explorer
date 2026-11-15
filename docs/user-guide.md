@@ -81,7 +81,10 @@ together, such as the sections of one study. Open one with
 lists the others in a bar under the canvas, grouped by time point, donor or
 whatever the collection groups them by. Each has a preview of its cells
 coloured by the selected genes, all on one scale, so you can see where a
-gene is high before opening anything. With cells coloured by an annotation
+gene is high before opening anything. To fix that scale, type the ends
+under the `Gene scale` gradient in Cells (`Auto` puts them back): the view,
+the legend and every preview then use it, as you move between sections and
+genes. With cells coloured by an annotation
 set, previews show its classes instead: Alt-click (Option-click) a class's
 checkbox in the legend to show only that class and see where that cell type
 is in each section. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over

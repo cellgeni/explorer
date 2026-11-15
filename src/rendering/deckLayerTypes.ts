@@ -254,6 +254,9 @@ export interface GeneExpressionScoreModeOption {
 }
 
 export interface GeneExpressionLayerDataOptions {
+  // The scores at the bottom (default 0) and top (default the highest) of
+  // the scale.
+  readonly scaleMin?: number
   readonly scaleMax?: number
 }
 

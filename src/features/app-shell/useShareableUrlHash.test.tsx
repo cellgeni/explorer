@@ -32,6 +32,7 @@ function ShareableUrlHashProbe({
     genes: {
       geneExpressionColorScale: 'plasma',
       geneExpressionDetailMode: 'auto',
+      geneExpressionScaleRange: undefined,
       geneExpressionScoreMode: 'sum',
       selectedGenes,
     },

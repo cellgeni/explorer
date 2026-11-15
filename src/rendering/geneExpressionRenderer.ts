@@ -6,6 +6,7 @@ import {
   DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   geneExpressionColor,
+  geneExpressionIntensity,
   GENE_EXPRESSION_ZERO_FILL_COLOR,
 } from './deckLayerColors'
 import type {
@@ -31,11 +32,12 @@ export function geneExpressionElementsToLayerData(
   }
 
   const scores = geneExpressionScores(elements, genes, scoreMode)
-  const scoreDenominator = expressionScoreDenominator(scores, options.scaleMax)
+  const scaleMin = options.scaleMin ?? 0
+  const scaleMax = expressionScoreScaleMax(scores, options.scaleMax)
 
   const layerData = elements.map((element, index): OverviewCellDatum => {
     const score = scores[index] ?? 0
-    const intensity = Math.sqrt(Math.max(score, 0) / scoreDenominator)
+    const intensity = geneExpressionIntensity(score, scaleMin, scaleMax)
     const radiusMicrometers = cellAreaToRadiusMicrometers(element.cellArea)
 
     return {
@@ -74,14 +76,17 @@ export function styleGeneExpressionElementsByScale(
     return elements
   }
 
-  const scoreDenominator = expressionScoreDenominator(
+  const scaleMin = options.scaleMin ?? 0
+  const scaleMax = expressionScoreScaleMax(
     elements.map((element) => element.expressionCount ?? 0),
     options.scaleMax,
   )
 
   return elements.map((element) => {
-    const intensity = Math.sqrt(
-      Math.max(element.expressionCount ?? 0, 0) / scoreDenominator,
+    const intensity = geneExpressionIntensity(
+      element.expressionCount ?? 0,
+      scaleMin,
+      scaleMax,
     )
 
     return {
@@ -321,7 +326,8 @@ export function geneExpressionScores(
   return meanScores.map((score) => (score - mean) / standardDeviation)
 }
 
-function expressionScoreDenominator(
+// The score at the top of the scale: the given one, or the highest score.
+function expressionScoreScaleMax(
   scores: readonly number[],
   scaleMax: number | undefined,
 ): number {

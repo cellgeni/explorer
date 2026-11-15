@@ -3565,9 +3565,11 @@ describe('App', () => {
       expect(
         await screen.findByText('Expression exact region: 1 cell'),
       ).toBeInTheDocument()
-      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('0')
-      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('4')
-      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent('8')
+      expect(screen.getByLabelText('Gene scale minimum')).toHaveValue(0)
+      // The gradient's middle is a quarter of the range: colours follow the
+      // square root of each score's share.
+      expect(screen.getByLabelText('Gene scale range')).toHaveTextContent('2')
+      expect(screen.getByLabelText('Gene scale maximum')).toHaveValue(8)
     } finally {
       viewport.restore()
     }

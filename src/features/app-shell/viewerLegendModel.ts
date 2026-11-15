@@ -48,6 +48,8 @@ export interface ViewerLegendInput {
     readonly names: readonly string[]
     readonly scoreMode: GeneExpressionScoreMode
     readonly colorScale: GeneExpressionColorScale
+    // The scores at the ends of the scale; the bottom defaults to 0.
+    readonly scaleMin?: number
     readonly scaleMax: number
     // Unavailable: the expression failed, or the platform is waiting.
     readonly status: 'loading' | 'ready' | 'unavailable'
@@ -144,7 +146,7 @@ function cellNoun(input: ViewerLegendInput): {
 function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection | null {
   switch (input.colorMode) {
     case 'gene-expression': {
-      const { names, scoreMode, colorScale, scaleMax, status } = input.genes
+      const { names, scoreMode, colorScale, scaleMin = 0, scaleMax, status } = input.genes
       if (names.length === 0) return null
 
       return {
@@ -160,7 +162,7 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
                 ? `Expression per ${cellNoun(input).singular}`
                 : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${cellNoun(input).singular}`,
         gradient: geneExpressionScaleGradient(colorScale),
-        min: '0',
+        min: formatGeneScaleValue(scaleMin),
         max: formatGeneScaleValue(scaleMax),
       }
     }

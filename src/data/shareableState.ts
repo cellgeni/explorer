@@ -39,6 +39,9 @@ export interface ShareableState {
   // comma-separated, with `%` and `,` in an ID written as `%25` and `%2C`.
   readonly hiddenAnnotationIds?: readonly string[]
   readonly geneExpressionColorScale?: string
+  // The Gene scale's range when set: `geneRange=min,max`, an end empty for
+  // Auto.
+  readonly geneExpressionScaleRange?: string
   readonly geneExpressionScoreMode?: string
   readonly geneExpressionDetailMode?: string
   readonly observationColorMode?: string
@@ -116,6 +119,7 @@ export function parseShareableState(hash: string): ShareableState {
   const hiddenLayers = readCsv(params, 'hidden')
   const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
   const geneExpressionColorScale = readString(params, 'scale')
+  const geneExpressionScaleRange = readString(params, 'geneRange')
   const geneExpressionScoreMode = readString(params, 'score')
   const geneExpressionDetailMode = readString(params, 'detail')
   const observationColorMode = readString(params, 'cellColor')
@@ -221,6 +225,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (geneExpressionColorScale !== undefined) {
     state.geneExpressionColorScale = geneExpressionColorScale
+  }
+
+  if (geneExpressionScaleRange !== undefined) {
+    state.geneExpressionScaleRange = geneExpressionScaleRange
   }
 
   if (geneExpressionScoreMode !== undefined) {
@@ -446,6 +454,7 @@ export function formatShareableState(state: ShareableState): string {
     params.set('hiddenClasses', hiddenAnnotationIds.map(escapeCsvEntry).join(','))
   }
   setOptionalString(params, 'scale', state.geneExpressionColorScale)
+  setOptionalString(params, 'geneRange', state.geneExpressionScaleRange)
   setOptionalString(params, 'score', state.geneExpressionScoreMode)
   setOptionalString(params, 'detail', state.geneExpressionDetailMode)
   setOptionalString(params, 'cellColor', state.observationColorMode)

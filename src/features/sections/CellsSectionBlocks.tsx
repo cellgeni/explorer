@@ -12,7 +12,7 @@ import {
   cellPointScaleStepIndex,
 } from '../../rendering/cellPointStyle'
 import { opacityToPercent } from '../../rendering/layerOpacity'
-import { Chip, InfoTip } from '../../components/ui'
+import { Button, Chip, InfoTip, NumberField } from '../../components/ui'
 import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
 import { GeneOptionList } from '../genes/GeneOptionList'
@@ -22,6 +22,11 @@ import {
   geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
 } from '../genes/geneControlsModel'
+import {
+  AUTO_GENE_SCALE_RANGE,
+  geneScaleMidpoint,
+  isAutoGeneScaleRange,
+} from '../genes/geneScaleRange'
 import { useGeneSetControls } from '../genes/useGeneSetControls'
 import type {
   CellAppearanceModel,
@@ -374,14 +379,66 @@ export function GeneExpressionControls({ colour }: { readonly colour: CellColour
           }}
           aria-hidden="true"
         />
-        <div className="gene-scale-values" aria-label="Gene scale values">
-          <span>0</span>
-          <span>{formatGeneScaleValue(colour.scaleMax / 2)}</span>
-          <span>{formatGeneScaleValue(colour.scaleMax)}</span>
-        </div>
+        <GeneScaleRangeFields colour={colour} />
       </div>
     </>
   )
+}
+
+// The Gene scale's ends, editable, with the score at the gradient's middle;
+// Auto puts both back to 0 and the highest score.
+function GeneScaleRangeFields({ colour }: { readonly colour: CellColourModel }) {
+  const { scaleMin, scaleMax, autoScaleMax, scaleRange, onScaleRangeChange } = colour
+  const auto = isAutoGeneScaleRange(scaleRange)
+
+  return (
+    <>
+      <Button
+        title={
+          auto
+            ? `The scale follows the data: 0 to the highest score, ${formatGeneScaleValue(autoScaleMax)}`
+            : `Back to 0 to the highest score, ${formatGeneScaleValue(autoScaleMax)}`
+        }
+        variant="ghost"
+        className="gene-scale-auto"
+        aria-pressed={auto}
+        onClick={() => {
+          onScaleRangeChange(AUTO_GENE_SCALE_RANGE)
+        }}
+      >
+        Auto
+      </Button>
+      <div className="gene-scale-values" role="group" aria-label="Gene scale range">
+        <NumberField
+          title={`Score at the bottom of the scale (${scaleRange.min === null ? 'auto, 0' : 'set'}). Cells at or below it get the first colour; Enter to apply`}
+          label={<span className="visually-hidden">Gene scale minimum</span>}
+          value={roundScaleValue(scaleMin)}
+          className={scaleRange.min === null ? 'gene-scale-end' : 'gene-scale-end is-set'}
+          onChange={(value) => {
+            if (value < scaleMax) onScaleRangeChange({ ...scaleRange, min: value })
+          }}
+        />
+        <span title="Score at the middle of the gradient">
+          {formatGeneScaleValue(geneScaleMidpoint({ min: scaleMin, max: scaleMax }))}
+        </span>
+        <NumberField
+          title={`Score at the top of the scale (${scaleRange.max === null ? `auto, the highest score` : 'set'}). Cells at or above it get the last colour; Enter to apply`}
+          label={<span className="visually-hidden">Gene scale maximum</span>}
+          value={roundScaleValue(scaleMax)}
+          className={scaleRange.max === null ? 'gene-scale-end' : 'gene-scale-end is-set'}
+          onChange={(value) => {
+            if (value > scaleMin) onScaleRangeChange({ ...scaleRange, max: value })
+          }}
+        />
+      </div>
+    </>
+  )
+}
+
+// To the digits the scale labels show.
+function roundScaleValue(value: number): number {
+  const factor = Math.abs(value) < 10 ? 100 : 10
+  return Math.round(value * factor) / factor
 }
 
 export function ExpressionDetailControl({

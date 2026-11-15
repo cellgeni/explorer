@@ -227,6 +227,7 @@ import {
   isVisiumHdOverviewDataset,
 } from './useVisiumHdBinWorkflow'
 import { visiumHdOverviewToGridCellLayerData } from './visiumHdGridLayerData'
+import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 
@@ -409,6 +410,7 @@ interface UseDatasetLifecycleSetters {
   readonly setGeneExpressionColorScale: Setter<GeneExpressionColorScale>
   readonly setGeneExpressionDetailMode: Setter<GeneExpressionDetailMode>
   readonly setGeneExpressionScaleDomain: Setter<GeneExpressionScaleDomain>
+  readonly setGeneExpressionScaleRange: Setter<GeneScaleRange>
   readonly setGeneExpressionScoreMode: Setter<GeneExpressionScoreMode>
   readonly setGeneExpressionState: Setter<GeneExpressionState<StructuredLoadError>>
   readonly setGenePanelState: Setter<GenePanelState<StructuredLoadError>>
@@ -585,6 +587,7 @@ export function useDatasetLifecycle({
     setGeneExpressionColorScale,
     setGeneExpressionDetailMode,
     setGeneExpressionScaleDomain,
+    setGeneExpressionScaleRange,
     setGeneExpressionScoreMode,
     setGeneExpressionState,
     setGenePanelState,
@@ -1090,6 +1093,12 @@ export function useDatasetLifecycle({
             (current) =>
               (shouldRestoreSharedState
                 ? parseGeneExpressionColorScale(sharedState?.geneExpressionColorScale)
+                : undefined) ?? current,
+          )
+          setGeneExpressionScaleRange(
+            (current) =>
+              (shouldRestoreSharedState
+                ? parseGeneScaleRange(sharedState?.geneExpressionScaleRange)
                 : undefined) ?? current,
           )
           setTranscriptDensityColorScale(

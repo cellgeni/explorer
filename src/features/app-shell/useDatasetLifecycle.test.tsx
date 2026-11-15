@@ -218,6 +218,7 @@ function Probe({
       setGeneExpressionColorScale: noopSetter,
       setGeneExpressionDetailMode: noopSetter,
       setGeneExpressionScaleDomain: noopSetter,
+      setGeneExpressionScaleRange: noopSetter,
       setGeneExpressionScoreMode: noopSetter,
       setGeneExpressionState: noopSetter,
       setGenePanelState,

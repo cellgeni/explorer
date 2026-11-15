@@ -17,6 +17,7 @@ import type {
   GeneExpressionState,
   GenePanelState,
 } from '../genes/geneControlsModel'
+import type { GeneScaleRange } from '../genes/geneScaleRange'
 import { useGeneControlsWorkflow } from '../genes/useGeneControlsWorkflow'
 
 // Cells, spots or bins: how they are drawn, which genes are selected, and
@@ -80,7 +81,13 @@ export interface CellColourModel {
   readonly onScoreModeChange: (mode: GeneExpressionScoreMode) => void
   readonly colorScale: GeneExpressionColorScale
   readonly onColorScaleChange: (scale: GeneExpressionColorScale) => void
+  // The scores at the ends of the scale, and the range that sets them; an
+  // Auto end is 0 or autoScaleMax, the highest score seen.
+  readonly scaleMin: number
   readonly scaleMax: number
+  readonly autoScaleMax: number
+  readonly scaleRange: GeneScaleRange
+  readonly onScaleRangeChange: (range: GeneScaleRange) => void
   readonly detailMode: GeneExpressionDetailMode
   readonly onDetailModeChange: (mode: GeneExpressionDetailMode) => void
 }
@@ -99,7 +106,10 @@ export interface CellsSectionModelInput {
   readonly geneExpressionCopy: string
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
   readonly geneExpressionScaleDatasetUrl: string
+  readonly geneExpressionScaleMin: number
   readonly geneExpressionScaleMax: number
+  readonly geneExpressionAutoScaleMax: number
+  readonly geneExpressionScaleRange: GeneScaleRange
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
   readonly geneExpressionState: GeneExpressionState<StructuredLoadError>
   readonly geneOptions: readonly string[]
@@ -123,6 +133,7 @@ export interface CellsSectionModelInput {
   readonly setGeneExpressionScaleDomain: Dispatch<
     SetStateAction<GeneExpressionScaleDomain>
   >
+  readonly setGeneExpressionScaleRange: Dispatch<SetStateAction<GeneScaleRange>>
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
@@ -150,7 +161,10 @@ export function useCellsSectionModel({
   geneExpressionCopy,
   geneExpressionDetailMode,
   geneExpressionScaleDatasetUrl,
+  geneExpressionScaleMin,
   geneExpressionScaleMax,
+  geneExpressionAutoScaleMax,
+  geneExpressionScaleRange,
   geneExpressionScoreMode,
   geneExpressionState,
   geneOptions,
@@ -168,6 +182,7 @@ export function useCellsSectionModel({
   setGeneExpressionColorScale,
   setGeneExpressionDetailMode,
   setGeneExpressionScaleDomain,
+  setGeneExpressionScaleRange,
   setGeneExpressionScoreMode,
   setManualTranscriptExactRequestKey,
   setObservationColorMode,
@@ -282,7 +297,11 @@ export function useCellsSectionModel({
       onScoreModeChange: handleGeneExpressionScoreModeChange,
       colorScale: geneExpressionColorScale,
       onColorScaleChange: handleGeneExpressionColorScaleChange,
+      scaleMin: geneExpressionScaleMin,
       scaleMax: geneExpressionScaleMax,
+      autoScaleMax: geneExpressionAutoScaleMax,
+      scaleRange: geneExpressionScaleRange,
+      onScaleRangeChange: setGeneExpressionScaleRange,
       detailMode: geneExpressionDetailMode,
       onDetailModeChange: handleGeneExpressionDetailModeChange,
     },

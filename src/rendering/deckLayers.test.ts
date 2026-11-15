@@ -27,6 +27,7 @@ import {
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
 } from './deckLayers'
+import { geneExpressionColor } from './deckLayerColors'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 import { GridBinLayer } from './gridBinLayer'
 import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
@@ -1758,6 +1759,37 @@ describe('deck layer factory', () => {
       position: datum.position,
       fillColor: [252, 223, 116, 245],
     })
+  })
+
+  it('colours expression on a set range, clamping scores outside it', () => {
+    const elements = [3, 6, 20].map((count, index) => ({
+      id: intToCellId(index + 1, 1),
+      position: { x: micrometers(index), y: micrometers(0) },
+      count,
+    }))
+    const colors = geneExpressionElementsToLayerData(elements, ['Gad1'], 'magma', 'sum', {
+      scaleMin: 6,
+      scaleMax: 10,
+    }).map((datum) => datum.fillColor)
+
+    expect(colors[0]).toEqual(geneExpressionColor('magma', 0))
+    expect(colors[1]).toEqual(geneExpressionColor('magma', 0))
+    expect(colors[2]).toEqual(geneExpressionColor('magma', 1))
+    expect(
+      styleGeneExpressionElementsByScale(
+        [
+          {
+            id: 'a',
+            position: [0, 0, 0],
+            radiusPixels: 4,
+            fillColor: [0, 0, 0],
+            expressionCount: 7,
+          },
+        ],
+        'magma',
+        { scaleMin: 6, scaleMax: 10 },
+      )[0]?.fillColor,
+    ).toEqual(geneExpressionColor('magma', 0.5))
   })
 
   it('converts polygon elements into deck.gl boundary coordinates', () => {
