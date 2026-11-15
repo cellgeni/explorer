@@ -25,6 +25,7 @@ function input(
     handleAnnotationGroupChange: vi.fn(),
     handleAnnotationSetVisibilityChange: vi.fn(),
     handleAnnotationVisibilityChange: vi.fn(),
+    handleAnnotationsVisibilityChange: vi.fn(),
     handleClearAnnotations: vi.fn(),
     handleClearGeometricAnnotations: vi.fn(),
     handleExportAnnotations: vi.fn(),

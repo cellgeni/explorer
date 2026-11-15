@@ -76,6 +76,11 @@ export interface AnnotationSetsModel {
     visible: boolean,
     only?: boolean,
   ) => void
+  // Every class of a set at once.
+  readonly onManyVisibilityChange: (
+    annotationIds: readonly string[],
+    visible: boolean,
+  ) => void
   readonly onRemove: (annotationId: string) => void
 }
 
@@ -117,6 +122,10 @@ export interface AnnotationsSectionModelInput {
     annotationId: string,
     visible: boolean,
     only?: boolean,
+  ) => void
+  readonly handleAnnotationsVisibilityChange: (
+    annotationIds: readonly string[],
+    visible: boolean,
   ) => void
   readonly handleClearAnnotations: () => void
   readonly handleClearGeometricAnnotations: () => void
@@ -163,6 +172,7 @@ export function useAnnotationsSectionModel({
   handleAnnotationGroupChange,
   handleAnnotationSetVisibilityChange,
   handleAnnotationVisibilityChange,
+  handleAnnotationsVisibilityChange,
   handleClearAnnotations,
   handleClearGeometricAnnotations,
   handleExportAnnotations,
@@ -233,6 +243,7 @@ export function useAnnotationsSectionModel({
       onColorChange: handleAnnotationColorChange,
       onSetVisibilityChange: handleAnnotationSetVisibilityChange,
       onVisibilityChange: handleAnnotationVisibilityChange,
+      onManyVisibilityChange: handleAnnotationsVisibilityChange,
       onRemove: handleRemoveAnnotation,
     },
     metadataTracks: {
