@@ -11,6 +11,8 @@ import { isListedAsMissing } from '../data/folderListing'
 import { h5TreeNodeAt, openH5WorkerFile } from '../data/h5WorkerFile'
 import { readMaybeGzipText } from '../data/readMaybeGzipText'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
+import type { FeatureBarcodeMexReader, FeatureBarcodeMexUrls } from './featureBarcodeMex'
+import { readFeatureBarcodeMexInWorker } from './featureBarcodeMexWorker'
 import {
   AnnDataH5adDataset,
   type AnnDataMemoryColumn,
@@ -22,6 +24,7 @@ import {
   parseVisiumTissuePositions,
   VISIUM_MATRIX_MAX_BYTES,
   VISIUM_SCALEFACTOR_NAMES,
+  VisiumMatrixTooLargeError,
   type VisiumAnalysisFileKey,
   type VisiumImageKind,
   type VisiumTissuePositions,
@@ -31,7 +34,9 @@ export interface VisiumFileUrls {
   // Tried in order; Space Ranger 1.x writes the headerless list instead.
   readonly tissuePositions: readonly string[]
   readonly scalefactors: string
+  // An .h5, or a MEX matrix.mtx when `filteredMatrixMex` is set.
   readonly filteredMatrix: string
+  readonly filteredMatrixMex?: Omit<FeatureBarcodeMexUrls, 'matrix'>
   readonly images: Readonly<Partial<Record<VisiumImageKind, string>>>
   // Candidate URLs per analysis output, tried in order.
   readonly analysis: Readonly<Partial<Record<VisiumAnalysisFileKey, readonly string[]>>>
@@ -42,7 +47,13 @@ export interface VisiumDatasetOptions {
   readonly files: VisiumFileUrls
   readonly fetcher?: typeof fetch
   readonly onProgress?: H5adLoadProgressReporter
+  readonly readMex?: FeatureBarcodeMexReader
 }
+
+type MexMatrixReader = (
+  urls: FeatureBarcodeMexUrls,
+  onProgress?: H5adLoadProgressReporter,
+) => Promise<FeatureBarcodeMatrix>
 
 const DEFAULT_LIBRARY_ID = 'visium'
 const EMBEDDING_OBSM_KEYS: Readonly<
@@ -53,24 +64,16 @@ const EMBEDDING_OBSM_KEYS: Readonly<
   pca: 'X_pca',
 }
 
-export class VisiumMatrixTooLargeError extends Error {
-  readonly url: string
-  readonly byteLength: number
-
-  constructor(url: string, byteLength: number) {
-    super(
-      `Visium filtered matrix is ${formatMegabytes(byteLength)}, above the ${formatMegabytes(
-        VISIUM_MATRIX_MAX_BYTES,
-      )} browser load limit.`,
-    )
-    this.name = 'VisiumMatrixTooLargeError'
-    this.url = url
-    this.byteLength = byteLength
-  }
-}
-
 export function createVisiumDataset(options: VisiumDatasetOptions): AnnDataH5adDataset {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const readMex = options.readMex ?? readFeatureBarcodeMexInWorker
+  // A custom fetcher keeps the read on this thread.
+  const readMexMatrix: MexMatrixReader = (urls, onProgress) =>
+    readMex({
+      urls,
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(onProgress === undefined ? {} : { onProgress }),
+    })
 
   return new AnnDataH5adDataset({
     url: options.baseUrl,
@@ -78,7 +81,8 @@ export function createVisiumDataset(options: VisiumDatasetOptions): AnnDataH5adD
     ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
     memorySource: {
       label: 'Visium Space Ranger output',
-      load: (onProgress) => readSpaceRangerVisium(options.files, fetcher, onProgress),
+      load: (onProgress) =>
+        readSpaceRangerVisium(options.files, fetcher, onProgress, readMexMatrix),
     },
     visiumImageUrls: options.files.images,
   })
@@ -103,15 +107,26 @@ export async function readSpaceRangerVisium(
   files: VisiumFileUrls,
   fetcher: typeof fetch,
   onProgress?: H5adLoadProgressReporter,
+  readMexMatrix: MexMatrixReader = (urls, onMexProgress) =>
+    readFeatureBarcodeMexInWorker({
+      urls,
+      fetcher,
+      ...(onMexProgress === undefined ? {} : { onProgress: onMexProgress }),
+    }),
 ): Promise<AnnDataMemoryTable> {
   onProgress?.('Visium spot positions, scale factors, and matrix loading')
+  const mex = files.filteredMatrixMex
   const [positions, scalefactors, matrix, analysis] = await Promise.all([
     readTissuePositions(files.tissuePositions, fetcher),
     readScalefactorsJson(files.scalefactors, fetcher),
-    fetchMatrixBytes(files.filteredMatrix, fetcher).then((bytes) => {
-      onProgress?.(`Visium filtered matrix loaded (${formatMegabytes(bytes.byteLength)})`)
-      return readFeatureBarcodeMatrixH5(bytes, files.filteredMatrix)
-    }),
+    mex === undefined
+      ? fetchMatrixBytes(files.filteredMatrix, fetcher).then((bytes) => {
+          onProgress?.(
+            `Visium filtered matrix loaded (${formatMegabytes(bytes.byteLength)})`,
+          )
+          return readFeatureBarcodeMatrixH5(bytes, files.filteredMatrix)
+        })
+      : readMexMatrix({ matrix: files.filteredMatrix, ...mex }, onProgress),
     readAnalysisFiles(files.analysis, fetcher),
   ])
 

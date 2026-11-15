@@ -312,6 +312,68 @@ describe('createVisiumDataset', () => {
     expect(new Uint8Array(await blob.arrayBuffer())).toEqual(png)
   })
 
+  it('reads a MEX filtered matrix when the folder has no .h5', async () => {
+    const mex = `${ROOT}/filtered_feature_bc_matrix`
+    const barcodes = [...SPOTS.map((spot) => spot.barcode), 'UNPLACED-1']
+    // The same counts as the .h5 fixture: Actb = spot index + 1, Gad1 = 2 in
+    // even spots.
+    const entries = barcodes.flatMap((_barcode, index) => [
+      `1 ${(index + 1).toString()} ${(index + 1).toString()}`,
+      ...(index % 2 === 0 ? [`2 ${(index + 1).toString()} 2`] : []),
+    ])
+    const dataset = createVisiumDataset({
+      baseUrl: ROOT,
+      files: fileUrls({
+        filteredMatrix: `${mex}/matrix.mtx.gz`,
+        filteredMatrixMex: {
+          barcodes: `${mex}/barcodes.tsv.gz`,
+          features: `${mex}/features.tsv.gz`,
+        },
+        analysis: {},
+      }),
+      fetcher: fetcherFor({
+        [`${ROOT}/spatial/tissue_positions.csv`]: positionsCsv({ header: true }),
+        [`${ROOT}/spatial/scalefactors_json.json`]: JSON.stringify(SCALEFACTORS),
+        [`${mex}/matrix.mtx.gz`]: gzipSync(
+          [
+            '%%MatrixMarket matrix coordinate integer general',
+            '%metadata_json: {"software_version": "spaceranger-1.2.2", "format_version": 2}',
+            `3 ${barcodes.length.toString()} ${entries.length.toString()}`,
+            ...entries,
+          ].join('\n'),
+        ),
+        [`${mex}/barcodes.tsv.gz`]: gzipSync(barcodes.join('\n')),
+        [`${mex}/features.tsv.gz`]: gzipSync(
+          [
+            'ENSMUSG1\tActb\tGene Expression',
+            'ENSMUSG2\tGad1\tGene Expression',
+            'ENSMUSG3\tMbp\tGene Expression',
+          ].join('\n'),
+        ),
+      }),
+    })
+
+    const [meta, summary, cells] = await Promise.all([
+      dataset.meta(),
+      dataset.visiumSummary(),
+      dataset.overview(),
+    ])
+
+    expect(meta.units.micrometersPerPixel).toBeCloseTo(MICROMETERS_PER_PIXEL, 6)
+    expect(summary).toMatchObject({
+      libraryId: 'visium',
+      spotCount: SPOTS.length,
+      softwareVersion: 'spaceranger-1.2.2',
+    })
+    expect(cells).toHaveLength(SPOTS.length)
+    expect(await dataset.genePanel()).toEqual(['Actb', 'Gad1', 'Mbp'])
+    expect(
+      (await dataset.matrix([SPOTS[2]?.barcode ?? ''])).cells.get(
+        SPOTS[2]?.barcode ?? '',
+      ),
+    ).toEqual({ geneNames: ['Actb', 'Gad1'], counts: [3, 2] })
+  })
+
   it('reports a filtered matrix above the browser load limit', async () => {
     const dataset = createVisiumDataset({
       baseUrl: ROOT,

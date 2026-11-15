@@ -112,7 +112,9 @@ describe('parseDatasetManifest', () => {
       files: {
         tissuePositions: 'GSM1_tissue_positions_list.csv.gz',
         scalefactors: 'GSM1_scalefactors_json.json.gz',
-        filteredMatrix: 'GSM1_filtered_feature_bc_matrix.h5',
+        filteredMatrix: 'GSM1_matrix.mtx_s1.mtx.gz',
+        filteredMatrixBarcodes: 'GSM1_barcodes.tsv_s1.tsv.gz',
+        filteredMatrixFeatures: 'GSM1_features.tsv_s1.tsv.gz',
         hiresImage: 'https://images.example.test/GSM1_hires.png',
         clusters: 'GSM1_clusters.csv',
       },
@@ -125,6 +127,9 @@ describe('parseDatasetManifest', () => {
         tissuePositions: {
           path: 'GSM1_tissue_positions_list.csv.gz',
           url: 'https://ftp.example.test/geo/GSM1/suppl/GSM1_tissue_positions_list.csv.gz',
+        },
+        filteredMatrixBarcodes: {
+          url: 'https://ftp.example.test/geo/GSM1/suppl/GSM1_barcodes.tsv_s1.tsv.gz',
         },
         hiresImage: { url: 'https://images.example.test/GSM1_hires.png' },
         clusters: { url: 'https://ftp.example.test/geo/GSM1/suppl/GSM1_clusters.csv' },

@@ -37,9 +37,13 @@ import {
   type VisiumHdManifestSegmentedOutput,
 } from './datasetManifest'
 import {
+  isMexMatrixPath,
+  mexSiblingPath,
   VISIUM_ANALYSIS_FILE_CANDIDATES,
   VISIUM_FILE_DEFAULTS,
   VISIUM_LEGACY_TISSUE_POSITIONS,
+  VISIUM_MEX_FILE_DEFAULTS,
+  VISIUM_MEX_LIST_FILES,
   VISIUM_OPTIONAL_FILES,
   type VisiumAnalysisFileKey,
 } from './visiumFormat'
@@ -127,11 +131,19 @@ export type SpatialDatasetDetection =
 export interface VisiumDetectedFiles {
   readonly tissuePositions: string
   readonly scalefactors: string
+  // An .h5, or a MEX matrix.mtx when `filteredMatrixMex` is set.
   readonly filteredMatrix: string
+  readonly filteredMatrixMex?: VisiumMexListPaths
   readonly hiresImage?: string
   readonly lowresImage?: string
   // Analysis files a manifest names; others are searched for.
   readonly analysis?: Readonly<Partial<Record<VisiumAnalysisFileKey, string>>>
+}
+
+// The barcode and feature lists of a MEX matrix.
+export interface VisiumMexListPaths {
+  readonly barcodes: string
+  readonly features: string
 }
 
 // MERSCOPE files, as paths relative to the dataset (or manifest) root or
@@ -885,6 +897,8 @@ async function detectManifestAnnData(
 
 // Standard Visium output: positions (Space Ranger 2.0+ or 1.x name), scale
 // factors, and the filtered matrix are required; tissue images are optional.
+// Without the .h5, the MEX folder is probed, only once the other required
+// files are found.
 async function probeVisiumOutputs(
   rootUrl: string,
   options: DetectSpatialDatasetOptions,
@@ -908,18 +922,22 @@ async function probeVisiumOutputs(
     VISIUM_LEGACY_TISSUE_POSITIONS,
   ].find(found)
 
-  if (
-    tissuePositions === undefined ||
-    !found(VISIUM_FILE_DEFAULTS.scalefactors) ||
-    !found(VISIUM_FILE_DEFAULTS.filteredMatrix)
-  ) {
+  if (tissuePositions === undefined || !found(VISIUM_FILE_DEFAULTS.scalefactors)) {
+    return null
+  }
+
+  const matrix = found(VISIUM_FILE_DEFAULTS.filteredMatrix)
+    ? { filteredMatrix: VISIUM_FILE_DEFAULTS.filteredMatrix }
+    : await probeVisiumMexFolder(rootUrl, options, checked)
+
+  if (matrix === null) {
     return null
   }
 
   return {
     tissuePositions,
     scalefactors: VISIUM_FILE_DEFAULTS.scalefactors,
-    filteredMatrix: VISIUM_FILE_DEFAULTS.filteredMatrix,
+    ...matrix,
     ...(found(VISIUM_FILE_DEFAULTS.hiresImage)
       ? { hiresImage: VISIUM_FILE_DEFAULTS.hiresImage }
       : {}),
@@ -927,6 +945,28 @@ async function probeVisiumOutputs(
       ? { lowresImage: VISIUM_FILE_DEFAULTS.lowresImage }
       : {}),
   }
+}
+
+async function probeVisiumMexFolder(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<Pick<VisiumDetectedFiles, 'filteredMatrix' | 'filteredMatrixMex'> | null> {
+  const paths = Object.values(VISIUM_MEX_FILE_DEFAULTS)
+  const probes = await Promise.all(
+    paths.map((path) => probeDatasetPath(rootUrl, path, options)),
+  )
+  checked.push(...probes)
+
+  return probes.every((probe) => probe.ok)
+    ? {
+        filteredMatrix: VISIUM_MEX_FILE_DEFAULTS.filteredMatrix,
+        filteredMatrixMex: {
+          barcodes: VISIUM_MEX_FILE_DEFAULTS.filteredMatrixBarcodes,
+          features: VISIUM_MEX_FILE_DEFAULTS.filteredMatrixFeatures,
+        },
+      }
+    : null
 }
 
 // Files the manifest names must exist; the others fall back to the Space
@@ -988,14 +1028,83 @@ async function detectVisiumFromManifest(
 
     return result.ok ? (named ?? VISIUM_FILE_DEFAULTS[role]) : undefined
   }
-  const [tissuePositions, scalefactors, filteredMatrix, hiresImage, lowresImage] =
+  // A named list file must exist; otherwise the list named like the matrix
+  // (features.tsv, then Cell Ranger 2's genes.tsv) is used.
+  const mexList = async (
+    role: (typeof VISIUM_MEX_LIST_FILES)[number],
+    matrixPath: string,
+  ): Promise<string> => {
+    const named = files[role]?.path
+    const candidates =
+      named !== undefined
+        ? [named]
+        : (role === 'filteredMatrixBarcodes'
+            ? [mexSiblingPath(matrixPath, 'barcodes')]
+            : [
+                mexSiblingPath(matrixPath, 'features'),
+                mexSiblingPath(matrixPath, 'genes'),
+              ]
+          ).filter((path): path is string => path !== null)
+
+    if (candidates.length === 0) {
+      throw new DatasetManifestError(
+        manifest.url,
+        `"files.filteredMatrix" (${matrixPath}) is not named like matrix.mtx. Name its list in "files.${role}".`,
+      )
+    }
+
+    for (const path of candidates) {
+      const result = await probe(path)
+
+      if (result.ok) {
+        return path
+      }
+
+      if (named !== undefined) {
+        throw new DatasetManifestError(
+          manifest.url,
+          `"files.${role}" (${result.url}) is not readable (${probeFailure(result)}).`,
+        )
+      }
+    }
+
+    throw new DatasetManifestError(
+      manifest.url,
+      `no ${candidates.join(' or ')} under ${rootUrl}. Name the file in "files.${role}".`,
+    )
+  }
+  const mexFiles = async (
+    matrixPath: string,
+  ): Promise<Pick<VisiumDetectedFiles, 'filteredMatrix' | 'filteredMatrixMex'>> => {
+    const [barcodes, features] = await Promise.all([
+      mexList('filteredMatrixBarcodes', matrixPath),
+      mexList('filteredMatrixFeatures', matrixPath),
+    ])
+    return { filteredMatrix: matrixPath, filteredMatrixMex: { barcodes, features } }
+  }
+  // A matrix is MEX when it is a .mtx file or the manifest names its lists.
+  // Without a name, the .h5 is tried, then the MEX folder.
+  const filteredMatrixFiles = async (): Promise<
+    Pick<VisiumDetectedFiles, 'filteredMatrix' | 'filteredMatrixMex'>
+  > => {
+    const listsNamed = VISIUM_MEX_LIST_FILES.some((role) => files[role] !== undefined)
+    const filteredMatrix = await requireFile('filteredMatrix', [
+      ...(listsNamed ? [] : [VISIUM_FILE_DEFAULTS.filteredMatrix]),
+      VISIUM_MEX_FILE_DEFAULTS.filteredMatrix,
+    ])
+
+    return listsNamed || isMexMatrixPath(filteredMatrix)
+      ? mexFiles(filteredMatrix)
+      : { filteredMatrix }
+  }
+  const [tissuePositions, scalefactors, matrixFiles, hiresImage, lowresImage] =
     await Promise.all([
       requireFile('tissuePositions', [
         VISIUM_FILE_DEFAULTS.tissuePositions,
         VISIUM_LEGACY_TISSUE_POSITIONS,
       ]),
       requireFile('scalefactors', [VISIUM_FILE_DEFAULTS.scalefactors]),
-      requireFile('filteredMatrix', [VISIUM_FILE_DEFAULTS.filteredMatrix]),
+      filteredMatrixFiles(),
       optionalImage('hiresImage'),
       optionalImage('lowresImage'),
     ])
@@ -1015,7 +1124,7 @@ async function detectVisiumFromManifest(
     files: {
       tissuePositions,
       scalefactors,
-      filteredMatrix,
+      ...matrixFiles,
       ...(hiresImage === undefined ? {} : { hiresImage }),
       ...(lowresImage === undefined ? {} : { lowresImage }),
       ...(Object.keys(analysis).length === 0 ? {} : { analysis }),
@@ -1427,6 +1536,14 @@ export async function createSpatialDataset(
         tissuePositions: [fileUrl(files.tissuePositions)],
         scalefactors: fileUrl(files.scalefactors),
         filteredMatrix: fileUrl(files.filteredMatrix),
+        ...(files.filteredMatrixMex === undefined
+          ? {}
+          : {
+              filteredMatrixMex: {
+                barcodes: fileUrl(files.filteredMatrixMex.barcodes),
+                features: fileUrl(files.filteredMatrixMex.features),
+              },
+            }),
         images: {
           ...(files.hiresImage === undefined ? {} : { hires: fileUrl(files.hiresImage) }),
           ...(files.lowresImage === undefined

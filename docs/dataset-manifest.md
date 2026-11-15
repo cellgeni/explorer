@@ -168,16 +168,18 @@ are probed at their Space Ranger names; a missing tissue image is skipped.
 Every file is read whole, so no byte-range support is needed, and gzipped
 copies (`.gz`) work.
 
-| Key               | Standard name                                                                                          | Notes                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `tissuePositions` | `spatial/tissue_positions.csv`, then `spatial/tissue_positions_list.csv`                               | With or without a header row                                          |
-| `scalefactors`    | `spatial/scalefactors_json.json`                                                                       |                                                                       |
-| `filteredMatrix`  | `filtered_feature_bc_matrix.h5`                                                                        | Up to 300 MB                                                          |
-| `hiresImage`      | `spatial/tissue_hires_image.png`                                                                       | Any image the browser draws; `.png.gz` and `.jpg.gz` are decompressed |
-| `lowresImage`     | `spatial/tissue_lowres_image.png`                                                                      | As above                                                              |
-| `clusters`        | `analysis/clustering/gene_expression_graphclust/clusters.csv`, then `analysis/clustering/graphclust/…` | `Barcode,Cluster` CSV, shown as the `graphclust` annotation set       |
-| `umap`, `tsne`    | `analysis/<kind>/gene_expression_2_components/projection.csv`, then `analysis/<kind>/2_components/…`   | Projection CSV                                                        |
-| `pca`             | `analysis/pca/gene_expression_10_components/projection.csv`, then `analysis/pca/10_components/…`       | The first two components are shown                                    |
+| Key                      | Standard name                                                                                          | Notes                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `tissuePositions`        | `spatial/tissue_positions.csv`, then `spatial/tissue_positions_list.csv`                               | With or without a header row                                          |
+| `scalefactors`           | `spatial/scalefactors_json.json`                                                                       |                                                                       |
+| `filteredMatrix`         | `filtered_feature_bc_matrix.h5`, then `filtered_feature_bc_matrix/matrix.mtx.gz`                       | Up to 300 MB. A `.mtx` or `.mtx.gz` file is read as MEX               |
+| `filteredMatrixBarcodes` | Named like a MEX matrix: `matrix.mtx` becomes `barcodes.tsv`, and a `.mtx` extension `.tsv`            | Only for a MEX matrix; naming it makes the matrix MEX                 |
+| `filteredMatrixFeatures` | As above, with `features.tsv`, then `genes.tsv`                                                        | As above                                                              |
+| `hiresImage`             | `spatial/tissue_hires_image.png`                                                                       | Any image the browser draws; `.png.gz` and `.jpg.gz` are decompressed |
+| `lowresImage`            | `spatial/tissue_lowres_image.png`                                                                      | As above                                                              |
+| `clusters`               | `analysis/clustering/gene_expression_graphclust/clusters.csv`, then `analysis/clustering/graphclust/…` | `Barcode,Cluster` CSV, shown as the `graphclust` annotation set       |
+| `umap`, `tsne`           | `analysis/<kind>/gene_expression_2_components/projection.csv`, then `analysis/<kind>/2_components/…`   | Projection CSV                                                        |
+| `pca`                    | `analysis/pca/gene_expression_10_components/projection.csv`, then `analysis/pca/10_components/…`       | The first two components are shown                                    |
 
 GEO publishes each Visium sample's Space Ranger files flat, with the sample
 name as a prefix, and gzipped. A manifest hosted anywhere loads them from GEO,
@@ -197,6 +199,29 @@ which allows browser reads:
   }
 }
 ```
+
+Most GEO Visium samples have the MEX matrix instead of the `.h5`. Name the
+matrix; its barcode and feature lists are found from its name, here
+`GSM10040779_barcodes.tsv_MI_ctl.tsv.gz` and
+`GSM10040779_features.tsv_MI_ctl.tsv.gz`:
+
+```json
+{
+  "version": 1,
+  "platform": "visium",
+  "name": "GSM10040779 (MI_CTL)",
+  "root": "https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10040nnn/GSM10040779/suppl/",
+  "files": {
+    "tissuePositions": "GSM10040779_tissue_positions_list_MI_ctl.csv.gz",
+    "scalefactors": "GSM10040779_scalefactors_json_MI_ctl.json.gz",
+    "filteredMatrix": "GSM10040779_matrix.mtx_MI_ctl.mtx.gz",
+    "lowresImage": "GSM10040779_tissue_lowres_image_MI_ctl.png.gz"
+  }
+}
+```
+
+That sample's high-res image is a `.tif.gz`, which the browser cannot draw as
+a flat image, so only the low-res one is named.
 
 See [Standard Visium](./modalities/visium.md).
 

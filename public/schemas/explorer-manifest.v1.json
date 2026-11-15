@@ -351,7 +351,15 @@
         },
         "filteredMatrix": {
           "$ref": "#/$defs/path",
-          "description": "Default filtered_feature_bc_matrix.h5. Read whole, up to 300 MB."
+          "description": "Default filtered_feature_bc_matrix.h5, then the MEX filtered_feature_bc_matrix/matrix.mtx.gz. A .mtx or .mtx.gz file (Matrix Market) is read with its barcode and feature lists. Up to 300 MB."
+        },
+        "filteredMatrixBarcodes": {
+          "$ref": "#/$defs/path",
+          "description": "Barcode list of a MEX filteredMatrix, gzip allowed. Default: the matrix's name with matrix.mtx changed to barcodes.tsv (and a .mtx extension to .tsv)."
+        },
+        "filteredMatrixFeatures": {
+          "$ref": "#/$defs/path",
+          "description": "Feature list of a MEX filteredMatrix (id, name, type columns), gzip allowed. Default: the matrix's name with matrix.mtx changed to features.tsv, then genes.tsv."
         },
         "hiresImage": {
           "$ref": "#/$defs/path",
