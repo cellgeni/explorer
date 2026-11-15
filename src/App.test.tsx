@@ -4290,6 +4290,9 @@ describe('App', () => {
       expect(await screen.findByTestId('deckgl')).toBeInTheDocument()
       openControls('transcripts')
       expect(await screen.findByText('Native LOD + exact')).toBeInTheDocument()
+      // The exact load needs the view, which the viewer reports 180 ms after
+      // fitting it; until then the meter counts no transcripts.
+      await waitForViewReport('8')
 
       fireEvent.change(screen.getByRole('combobox', { name: 'Feature filter' }), {
         target: { value: 'all' },

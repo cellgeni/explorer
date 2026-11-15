@@ -120,8 +120,9 @@ export function appTestDependencies({
   if (getSpatialDataset !== undefined) dataset.getSpatialDataset = getSpatialDataset
   if (warmDatasetForRoi !== undefined) dataset.warmDatasetForRoi = warmDatasetForRoi
 
-  if (loadMorphologyImage !== undefined)
-    morphology.loadMorphologyImage = loadMorphologyImage
+  // Never the network: the real loader fetched the demo dataset's morphology TIFFs
+  // from S3, and their JPEG 2000 decode ran on into later tests' waits.
+  morphology.loadMorphologyImage = loadMorphologyImage ?? (() => pendingPromise())
   if (loadCustomMorphologyLayer !== undefined) {
     morphology.loadCustomMorphologyLayer = loadCustomMorphologyLayer
   }
