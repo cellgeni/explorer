@@ -1,15 +1,14 @@
 import {
   DATASET_FILE_DEFAULTS,
   isAbsoluteUrl,
+  manifestImageAttachment,
   manifestZchunkStoreUrl,
   type DatasetFileRole,
+  type DatasetImageAttachment,
   type DatasetManifest,
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
-import type {
-  DatasetCollection,
-  DatasetImageAttachment,
-} from '../datasets/datasetCollection'
+import type { DatasetCollection } from '../datasets/datasetCollection'
 
 // Manifests found by detection, per dataset URL. Readers only receive the
 // dataset URL, so they look up relocated files here.
@@ -51,7 +50,17 @@ export function registerCollectionImages(collection: DatasetCollection): void {
   }
 }
 
+// The image a collection pairs with the dataset, else the one its H5AD
+// manifest names. The manifest is known once detection has read it.
 export function datasetImageFor(baseUrl: string): DatasetImageAttachment | undefined {
+  return (
+    collectionImageFor(baseUrl) ?? manifestImageAttachment(datasetManifestFor(baseUrl))
+  )
+}
+
+// Only the collection's: the manifest belongs to the URL, so a dataset
+// instance cached by URL already has its image.
+export function collectionImageFor(baseUrl: string): DatasetImageAttachment | undefined {
   return datasetImages.get(datasetUrlKey(baseUrl))
 }
 

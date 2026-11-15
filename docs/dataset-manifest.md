@@ -258,20 +258,51 @@ probed as usual.
 
 | Platform      | Key           | Value                                                                                                                                                                      |
 | ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `h5ad`        | `h5ad`        | Required. The `.h5ad` file; checked with `HEAD`                                                                                                                            |
+| `h5ad`        | `h5ad`        | Required. The `.h5ad` file, checked with `HEAD`; or an AnnData Zarr store or Icechunk repository, whose root metadata must say AnnData                                     |
+| `h5ad`        | `image`       | Optional. An image to show under the cells. See [AnnData With An Image](#anndata-with-an-image)                                                                            |
+| `h5ad`        | `labels`      | Optional. A segmentation label image covering `image`, drawn as cell boundaries. Needs `image`                                                                             |
 | `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
 | `image`       | `image`       | Required. OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr; the type is taken from the suffix                                                                                |
 | `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
 
+### AnnData With An Image
+
+An AnnData table has no image of its own unless it is Visium. An `h5ad`
+manifest can name one, and a segmentation to draw as cell boundaries, such as
+the morphology image and label stores WebAtlas publishes next to each
+SPCOX section's AnnData Zarr store:
+
+```json
+{
+  "version": 1,
+  "platform": "h5ad",
+  "name": "SPCOX Sham-A",
+  "root": "https://spco.cog.sanger.ac.uk/SPCOX/",
+  "files": {
+    "h5ad": "SPCOX-Sham-A-anndata.zarr",
+    "image": "SPCOX-Sham-A-raw.zarr",
+    "labels": "SPCOX-Sham-A-label.zarr"
+  },
+  "options": { "coordinates": "image-pixels" }
+}
+```
+
+`image`, `labels` and `options.coordinates` mean what they do in a
+[collection entry](./dataset-collections.md#images): the image is the
+dataset's image layer, `image-pixels` scales the cell coordinates by the
+image's pixel size, and label N outlines the cell whose obs name is `N`. A
+collection entry that names an image replaces the manifest's.
+
 ## Options
 
-| Platform      | Key                  | Value                                                                                 |
-| ------------- | -------------------- | ------------------------------------------------------------------------------------- |
-| `visium-hd`   | `binSize`            | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set |
-| `spatialdata` | `table`              | Table element name, without `tables/`                                                 |
-| `spatialdata` | `coordinateSystem`   | Coordinate system to show                                                             |
-| `spatialdata` | `image`              | Image element name, without `images/`                                                 |
-| `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value            |
+| Platform      | Key                  | Value                                                                                            |
+| ------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| `visium-hd`   | `binSize`            | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set            |
+| `spatialdata` | `table`              | Table element name, without `tables/`                                                            |
+| `spatialdata` | `coordinateSystem`   | Coordinate system to show                                                                        |
+| `spatialdata` | `image`              | Image element name, without `images/`                                                            |
+| `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value                       |
+| `h5ad`        | `coordinates`        | `micrometers` (default) or `image-pixels`: what the cell coordinates are in. Needs `files.image` |
 
 The SpatialData options are the starting view; the View options controls in
 the info drawer start from them. Changing the table clears the coordinate

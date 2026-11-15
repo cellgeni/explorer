@@ -24,7 +24,7 @@ import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
-import type { DatasetImageCoordinates } from './datasetCollection'
+import type { DatasetImageCoordinates } from './datasetManifest'
 import type { SpatialDataLabelsReader } from './spatialDataLabels'
 import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {

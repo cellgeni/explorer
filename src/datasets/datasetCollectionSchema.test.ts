@@ -5,11 +5,13 @@ import {
   DATASET_COLLECTION_DEFAULT_KEYS,
   DATASET_COLLECTION_ENTRY_KEYS,
   DATASET_COLLECTION_TOP_LEVEL_KEYS,
-  DATASET_IMAGE_COORDINATES,
   MAX_COLLECTION_DATASETS,
   parseDatasetCollection,
 } from './datasetCollection'
-import { DATASET_MANIFEST_SOURCE_KEYS } from './datasetManifest'
+import {
+  DATASET_IMAGE_COORDINATES,
+  DATASET_MANIFEST_SOURCE_KEYS,
+} from './datasetManifest'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
 // enforces. These checks keep their field lists and values in step.

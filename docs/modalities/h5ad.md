@@ -15,6 +15,12 @@ before any other platform:
 2. A single `HEAD` request (15 s timeout) must return `2xx`. A host that rejects
    `HEAD` makes the file undetectable and the platform `unknown`.
 
+An `h5ad` [dataset manifest](../dataset-manifest.md) names the table in
+`files.h5ad` (`detectManifestAnnData`): an `.h5ad` file gets the same `HEAD`
+check; an AnnData Zarr store must have `encoding-type: anndata` in its root
+`.zattrs` or `zarr.json`, and an Icechunk repository must hold AnnData. A
+path that has no Zarr metadata is checked as an `.h5ad` file.
+
 `createSpatialDataset` then lazy-imports `AnnDataH5adDataset`
 (`src/datasets/h5adDataset.ts`). Instances are memoized per URL by
 `cachedSpatialDataset`.
@@ -248,7 +254,8 @@ instead.
 
 ## Attached Image
 
-A [dataset collection](../dataset-collections.md#images) entry can name an
+A [dataset collection](../dataset-collections.md#images) entry or an `h5ad`
+[dataset manifest](../dataset-manifest.md#anndata-with-an-image) can name an
 image to show under an AnnData dataset's cells, such as the Xenium morphology
 image that WebAtlas publishes next to each section's AnnData Zarr store. Any
 image the [generic opener](./image.md) reads works: OME-Zarr (including
@@ -256,11 +263,14 @@ image the [generic opener](./image.md) reads works: OME-Zarr (including
 
 - **Registration.** `useDatasetCollection` calls `registerCollectionImages`
   (`src/data/datasetFiles.ts`) when the collection is read, before any of its
-  datasets or previews opens. `createSpatialDataset` passes the entry's image
-  to `AnnDataH5adDataset` as `image`, and `cachedSpatialDataset` keys the
-  instance by it, so the same table without the image is a separate instance.
-  A link that names both a collection and a dataset holds the dataset's load
-  until the collection is read.
+  datasets or previews opens. A manifest's image comes with the manifest,
+  which detection registers (`manifestImageAttachment`). `datasetImageFor`
+  prefers the collection's. `createSpatialDataset` passes it to
+  `AnnDataH5adDataset` as `image`, and `cachedSpatialDataset` keys the
+  instance by the collection's image only (`collectionImageFor`): the
+  manifest belongs to the URL, so the key needs no part of it. A link that
+  names both a collection and a dataset holds the dataset's load until the
+  collection is read.
 - **Placement.** With `coordinates: "image-pixels"`, the dataset opens the
   image (`attachedImageLoader`, once per instance) before placing its cells
   and multiplies the obsm coordinates by the image's micrometres per pixel, so

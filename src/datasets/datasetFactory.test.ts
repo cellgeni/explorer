@@ -478,6 +478,51 @@ describe('spatial dataset detection', () => {
     }
   })
 
+  it("gives an AnnData dataset its manifest's image unless a collection names one", async () => {
+    const url = 'https://example.test/sections/a.json'
+    const manifest = {
+      version: 1,
+      platform: 'h5ad',
+      files: { h5ad: 'a.h5ad', image: 'a-raw.zarr', labels: 'a-label.zarr' },
+      options: { coordinates: 'image-pixels' },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) =>
+        new URL(String(input)).pathname.endsWith('.json')
+          ? Response.json(manifest)
+          : new Response(null, { headers: { 'content-length': '1000' } }),
+      ),
+    )
+
+    try {
+      const fromManifest = (await cachedSpatialDataset(url)) as AnnDataH5adDataset
+      expect(fromManifest.attachedImage).toEqual({
+        url: 'https://example.test/sections/a-raw.zarr',
+        coordinates: 'image-pixels',
+        labelsUrl: 'https://example.test/sections/a-label.zarr',
+      })
+      // The manifest belongs to the URL, so the same instance comes back.
+      await expect(cachedSpatialDataset(url)).resolves.toBe(fromManifest)
+
+      registerCollectionImages(
+        parseDatasetCollection(
+          { version: 1, datasets: [{ dataset: 'a.json', image: 'b.ome.tif' }] },
+          'https://example.test/sections/collection.json',
+        ),
+      )
+      const fromCollection = (await cachedSpatialDataset(url)) as AnnDataH5adDataset
+      expect(fromCollection.attachedImage).toEqual({
+        url: 'https://example.test/sections/b.ome.tif',
+        coordinates: 'micrometers',
+      })
+    } finally {
+      clearDatasetImages()
+      setDatasetManifest(url, undefined)
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('times out direct H5AD probes that never answer', async () => {
     vi.useFakeTimers()
     const fetcher = vi.fn(
@@ -737,6 +782,52 @@ describe('dataset manifests', () => {
     } finally {
       setSpatialDataSelection(urls[2] ?? '', undefined)
 
+      for (const url of urls) {
+        setDatasetManifest(url, undefined)
+      }
+    }
+  })
+
+  it('reads AnnData Zarr stores named by an H5AD manifest', async () => {
+    const fetcher = fetcherForResponses({
+      '/m/anndata.json': () =>
+        Response.json({
+          version: 1,
+          platform: 'h5ad',
+          files: { h5ad: 'sections/a-anndata.zarr' },
+        }),
+      '/m/sections/a-anndata.zarr/.zattrs': () =>
+        Response.json({ 'encoding-type': 'anndata', 'encoding-version': '0.1.0' }),
+      '/m/sdata-as-h5ad.json': () =>
+        Response.json({ version: 1, platform: 'h5ad', files: { h5ad: 'sample.zarr' } }),
+      '/m/sample.zarr/.zattrs': () =>
+        Response.json({ spatialdata_attrs: { version: '0.1' } }),
+      '/m/image-as-h5ad.json': () =>
+        Response.json({ version: 1, platform: 'h5ad', files: { h5ad: 'raw.zarr' } }),
+      '/m/raw.zarr/.zattrs': () => Response.json({ 'bioformats2raw.layout': 3 }),
+    })
+    const urls = [
+      'https://example.test/m/anndata.json',
+      'https://example.test/m/sdata-as-h5ad.json',
+      'https://example.test/m/image-as-h5ad.json',
+    ]
+
+    try {
+      await expect(
+        detectSpatialDataset(urls[0] ?? '', { fetcher }),
+      ).resolves.toMatchObject({
+        platform: 'h5ad',
+        baseUrl: 'https://example.test/m/anndata.json',
+        h5adUrl: 'https://example.test/m/sections/a-anndata.zarr',
+        source: 'zarr',
+      })
+      await expect(detectSpatialDataset(urls[1] ?? '', { fetcher })).rejects.toThrow(
+        'sdata-as-h5ad.json: "files.h5ad" (https://example.test/m/sample.zarr) is a SpatialData store; use platform "spatialdata".',
+      )
+      await expect(detectSpatialDataset(urls[2] ?? '', { fetcher })).rejects.toThrow(
+        'image-as-h5ad.json: "files.h5ad" (https://example.test/m/raw.zarr) is a Zarr store without AnnData at its root.',
+      )
+    } finally {
       for (const url of urls) {
         setDatasetManifest(url, undefined)
       }

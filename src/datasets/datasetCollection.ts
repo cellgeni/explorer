@@ -11,9 +11,11 @@ import {
   optionalString,
   parentUrl,
   parseDefaults,
+  parseImageAttachment,
   parseSource,
   resolveManifestPath,
   trimTrailingSlashes,
+  type DatasetImageAttachment,
   type DatasetManifestDefaults,
   type DatasetManifestSource,
   type Fail,
@@ -40,26 +42,6 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'coordinates',
   'labels',
 ] as const
-
-// How an entry's cell coordinates relate to its image: micrometres, as the
-// viewer reads AnnData coordinates, or the image's full-resolution pixels, as
-// WebAtlas writes `obsm/X_spatial`.
-export const DATASET_IMAGE_COORDINATES = ['micrometers', 'image-pixels'] as const
-
-export type DatasetImageCoordinates = (typeof DATASET_IMAGE_COORDINATES)[number]
-
-// An image shown under an AnnData dataset's cells, named by its collection
-// entry.
-export interface DatasetImageAttachment {
-  // As written in the collection.
-  readonly path: string
-  // Resolved like the entry's dataset.
-  readonly url: string
-  readonly coordinates: DatasetImageCoordinates
-  // A segmentation label image on the image's pixel grid, whose values are the
-  // table's obs names, drawn as cell boundaries.
-  readonly labels?: { readonly path: string; readonly url: string }
-}
 
 // The dataset manifest defaults that make sense across datasets. Layer
 // toggles, opacities and channels belong to each dataset's own manifest;
@@ -233,39 +215,20 @@ function parseEntryImage(
   prefix: string,
   fail: Fail,
 ): DatasetImageAttachment | undefined {
-  const path = optionalPath(entry, 'image', prefix, fail)
-  const labels = optionalPath(entry, 'labels', prefix, fail)
-  const coordinates = entry.coordinates
-
-  if (
-    coordinates !== undefined &&
-    !DATASET_IMAGE_COORDINATES.includes(coordinates as DatasetImageCoordinates)
-  ) {
-    return fail(
-      `"${prefix}coordinates" must be one of ${DATASET_IMAGE_COORDINATES.map((value) => `"${value}"`).join(', ')}.`,
-    )
-  }
-
-  if (path === undefined) {
-    const without =
-      coordinates !== undefined
-        ? 'coordinates'
-        : labels !== undefined
-          ? 'labels'
-          : undefined
-    return without === undefined
-      ? undefined
-      : fail(`"${prefix}${without}" needs "${prefix}image".`)
-  }
-
-  return {
-    path,
-    url: resolveManifestPath(rootUrl, path),
-    coordinates: (coordinates as DatasetImageCoordinates | undefined) ?? 'micrometers',
-    ...(labels === undefined
-      ? {}
-      : { labels: { path: labels, url: resolveManifestPath(rootUrl, labels) } }),
-  }
+  return parseImageAttachment(
+    {
+      image: optionalPath(entry, 'image', prefix, fail),
+      labels: optionalPath(entry, 'labels', prefix, fail),
+      coordinates: entry.coordinates,
+    },
+    {
+      image: `${prefix}image`,
+      labels: `${prefix}labels`,
+      coordinates: `${prefix}coordinates`,
+    },
+    rootUrl,
+    fail,
+  )
 }
 
 // The entry for a dataset URL, as the address or a load names it.

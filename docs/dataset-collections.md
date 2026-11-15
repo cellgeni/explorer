@@ -111,7 +111,8 @@ Unknown fields are errors, as in a dataset manifest.
   datasets in file order. Entries without a group are listed where they
   appear.
 - An entry that points at a manifest gets that manifest's files, options and
-  defaults. A collection does not repeat them.
+  defaults, including an H5AD manifest's image and labels. A collection does
+  not repeat them; an entry that names an image replaces the manifest's.
 
 ### Images
 
@@ -141,6 +142,8 @@ The image then behaves as the dataset's own:
   the collection is read, so it opens over its image.
 - The image belongs to the collection: the same dataset opened on its own has
   none, until a collection that pairs it with one has been read in that tab.
+  To give a dataset its image wherever it is opened, name it in the dataset's
+  [manifest](./dataset-manifest.md#anndata-with-an-image) instead.
 - Only AnnData tables take one. Other platforms, and Visium tables, keep their
   own image; an entry's `image` is then ignored, with a notice under
   Fallbacks.
@@ -304,7 +307,5 @@ errors as you type.
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or
   opened from `Load Dataset`.
-- Only a collection entry can pair an image or labels with an AnnData table; a
-  dataset manifest cannot yet.
 - Labels need an image to be placed on, and are matched to cells by obs name
   only, not by an obs column.

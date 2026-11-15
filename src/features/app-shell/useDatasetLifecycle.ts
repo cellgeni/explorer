@@ -19,7 +19,7 @@ import {
   type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
-import { datasetImageFor } from '../../data/datasetFiles'
+import { collectionImageFor, datasetImageFor } from '../../data/datasetFiles'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import {
   morphologyImageFromPyramidLoader,
@@ -1250,18 +1250,22 @@ export function useDatasetLifecycle({
           })
         }
 
-        // An image a collection pairs with this dataset. Only AnnData tables
-        // without an image of their own take one.
+        // An image a collection or the dataset's H5AD manifest pairs with
+        // this dataset. Only AnnData tables without an image of their own
+        // take one.
         const attachedImage = datasetImageFor(detection.baseUrl)
+        const attachedImageSource =
+          collectionImageFor(detection.baseUrl) === undefined
+            ? 'dataset manifest'
+            : 'collection'
         const notifyAttachedImageUnused = (reason: string) => {
           if (attachedImage === undefined) return
 
           notifyFallbackWhenCommitted({
             source: 'Morphology image',
-            message: `The collection pairs ${shortDatasetLabel(attachedImage.url)} with this dataset, but ${reason}, so it is not shown.`,
-            action:
-              'Remove "image" from the collection entry, or list the AnnData table instead.',
-            coalesceKey: `collection-image-unused:${requestedUrl}`,
+            message: `The ${attachedImageSource} pairs ${shortDatasetLabel(attachedImage.url)} with this dataset, but ${reason}, so it is not shown.`,
+            action: `Remove "image" from the ${attachedImageSource === 'collection' ? 'collection entry' : 'dataset manifest'}, or name the AnnData table instead.`,
+            coalesceKey: `attached-image-unused:${requestedUrl}`,
           })
         }
 
@@ -1511,7 +1515,7 @@ export function useDatasetLifecycle({
           }
 
           appendDebugEvent(
-            `Image from the collection: ${shortDatasetLabel(attachedImage.url)}${
+            `Image from the ${attachedImageSource}: ${shortDatasetLabel(attachedImage.url)}${
               attachedImage.coordinates === 'image-pixels'
                 ? ', cell coordinates in its pixels'
                 : ''
