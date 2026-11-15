@@ -104,6 +104,13 @@ function attributeDescriptor(
   return descriptor
 }
 
+// Smallest radii at 1x. A cell point is at least about a pixel across, so a
+// sparse section stays visible at its full view, where its cells are far
+// smaller than a pixel; expression points stay a little larger, to stand out
+// over the cells. Kept within 2x of each other, so one Cell point size suits
+// either colouring.
+const CELL_RADIUS_MIN_PIXELS = 0.5
+const GENE_EXPRESSION_RADIUS_MIN_PIXELS = 1
 const DEFAULT_CELL_RADIUS_MAX_PIXELS = 24
 const DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS = 28
 const OVERVIEW_FULL_VIEW_RADIUS_MAX_PIXELS = 10
@@ -137,7 +144,7 @@ export function createCellPointLayer(
   const common = {
     id: 'cells-overview-scatter',
     pickable: options.pickable ?? true,
-    ...scaledRadiusProps(options, 0.12, DEFAULT_CELL_RADIUS_MAX_PIXELS),
+    ...scaledRadiusProps(options, CELL_RADIUS_MIN_PIXELS, DEFAULT_CELL_RADIUS_MAX_PIXELS),
     stroked: options.cellBoundaryOpacity > 0,
     filled: options.filled,
     opacity: 1,
@@ -205,7 +212,11 @@ export function createGeneExpressionScatterLayer(
     id: 'gene-expression-scatter',
     data: cells,
     pickable: false,
-    ...scaledRadiusProps(options, 1.5, DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS),
+    ...scaledRadiusProps(
+      options,
+      GENE_EXPRESSION_RADIUS_MIN_PIXELS,
+      DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
+    ),
     stroked: options.cellBoundaryOpacity > 0,
     filled: true,
     opacity: 1,

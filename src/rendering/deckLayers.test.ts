@@ -99,7 +99,7 @@ describe('deck layer factory', () => {
     expect(layer.props.stroked).toBe(true)
     expect(layer.props.lineWidthUnits).toBe('pixels')
     expect(layer.props.lineWidthMinPixels).toBe(1)
-    expect(layer.props.radiusMinPixels).toBe(0.12)
+    expect(layer.props.radiusMinPixels).toBe(0.5)
     expect(layer.props.radiusMaxPixels).toBe(24)
     expect(layer.props.opacity).toBe(1)
     expect(layer.props.updateTriggers).toMatchObject({
@@ -230,10 +230,10 @@ describe('deck layer factory', () => {
     }
 
     expect(cellLayer.props.radiusScale).toBe(3)
-    expect(cellLayer.props.radiusMinPixels).toBeCloseTo(0.36)
+    expect(cellLayer.props.radiusMinPixels).toBe(1.5)
     expect(cellLayer.props.radiusMaxPixels).toBe(30)
     expect(expressionLayer.props.radiusScale).toBe(3)
-    expect(expressionLayer.props.radiusMinPixels).toBe(4.5)
+    expect(expressionLayer.props.radiusMinPixels).toBe(3)
     expect(expressionLayer.props.radiusMaxPixels).toBe(36)
   })
 
@@ -709,7 +709,7 @@ describe('deck layer factory', () => {
     expect(expressionLayer.props.data).toBe(expressionElements)
     expect(expressionLayer.props.pickable).toBe(false)
     expect(expressionLayer.props.filled).toBe(true)
-    expect(expressionLayer.props.radiusMinPixels).toBe(1.5)
+    expect(expressionLayer.props.radiusMinPixels).toBe(1)
     expect(expressionLayer.props.radiusMaxPixels).toBe(28)
     expect(expressionLayer.props.updateTriggers).toMatchObject({
       getFillColor: [0.5],
