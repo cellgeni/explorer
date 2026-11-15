@@ -33,6 +33,8 @@ export interface CategoryLegendSection {
   readonly moreCount?: number | undefined
   // Where the rest are listed; "Cells › Clusters" by default.
   readonly moreWhere?: string | undefined
+  // An Alt-click on an eye shows only that category.
+  readonly showOnly?: boolean | undefined
 }
 
 export type ViewerLegendSection = ContinuousLegendSection | CategoryLegendSection

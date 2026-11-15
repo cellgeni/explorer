@@ -16,7 +16,7 @@ function cells(points: readonly (readonly [number, number])[]): PreviewCells {
   const positions = new Float32Array(points.flat())
   const bounds = previewBounds(positions)
   if (bounds === null) throw new Error('Expected cells.')
-  return { positions, bounds }
+  return { positions, cellIds: points.map((_point, index) => `cell-${index}`), bounds }
 }
 
 function pixel(pixels: Uint8ClampedArray, x: number, y: number): number[] {
@@ -45,10 +45,13 @@ describe('rasterizePreview', () => {
     const pixels = rasterizePreview(
       square,
       {
-        // Two cells on the top left pixel, and a zero score at the bottom right.
-        positions: new Float32Array([0, 0, 0, 0, 9, 9]),
-        scores: new Float32Array([1, 4, 0]),
-        maxScore: 4,
+        kind: 'scores',
+        scores: {
+          // Two cells on the top left pixel, and a zero score at the bottom right.
+          positions: new Float32Array([0, 0, 0, 0, 9, 9]),
+          scores: new Float32Array([1, 4, 0]),
+          maxScore: 4,
+        },
       },
       OPTIONS,
     )
@@ -59,12 +62,38 @@ describe('rasterizePreview', () => {
 
     const quarter = rasterizePreview(
       square,
-      { positions: new Float32Array([0, 0]), scores: new Float32Array([1]), maxScore: 1 },
+      {
+        kind: 'scores',
+        scores: {
+          positions: new Float32Array([0, 0]),
+          scores: new Float32Array([1]),
+          maxScore: 1,
+        },
+      },
       OPTIONS,
     )
     const half = geneExpressionColor('plasma', 0.5)
     // sqrt(1 / 4): the same response as the main view.
     expect(pixel(quarter, 0, 0).slice(0, 3)).toEqual([half[0], half[1], half[2]])
+  })
+
+  it('colours the cells of shown classes, leaving hidden ones and the rest grey', () => {
+    const pixels = rasterizePreview(
+      square,
+      {
+        kind: 'classes',
+        // Top left and bottom right in a shown class, top right in a hidden
+        // one, bottom left in none.
+        classOf: new Int32Array([0, 1, -1, 0]),
+        colors: ['#ff8000', null],
+      },
+      OPTIONS,
+    )
+
+    expect(pixel(pixels, 0, 0)).toEqual([255, 128, 0, 255])
+    expect(pixel(pixels, 9, 9)).toEqual([255, 128, 0, 255])
+    expect(pixel(pixels, 9, 0)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 0, 9)).toEqual([92, 88, 76, 200])
   })
 
   it('keeps the aspect ratio and centres the cells', () => {

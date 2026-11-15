@@ -27,6 +27,9 @@ export const IDLE_COLLECTION_STATE: CollectionState = { status: 'idle' }
 // link's. Version 2, so the colour mode is taken as written.
 export interface CollectionDatasetOpening {
   readonly linkState: ShareableState
+  // Class colours from the dataset before, so each class keeps its colour.
+  // A link does not carry them.
+  readonly annotationColors?: Readonly<Record<string, string>>
   // Defaults the collection sets to values the controls do not have.
   readonly ignored: readonly string[]
 }
@@ -52,30 +55,38 @@ export function collectionFirstOpening(
   }
 }
 
-// Colour modes that mean the same in every dataset. Annotations and metadata
-// name one dataset's columns, so the next dataset starts with its own.
-const KEPT_COLOR_MODES: ReadonlySet<ObservationColorMode> = new Set([
-  'gene-expression',
-  'transcript-count',
-  'cell-area',
-])
-
-// Switching to another dataset of the collection keeps the selected genes and
-// how cells are coloured. The gene colour scale stays anyway.
+// The datasets of a collection share their genes and annotations, so every
+// colour mode means the same in each. Switching to another dataset keeps the
+// selected genes, the loaded annotation set with its hidden classes and
+// colours, the metadata column, and how cells are coloured. The gene colour
+// scale stays anyway.
 export function collectionSwitchOpening(current: {
   readonly selectedGenes: readonly string[]
   readonly observationColorMode: ObservationColorMode
   readonly geneExpressionScoreMode: string
+  // The loaded annotation set, if any.
+  readonly annotationGroupId: string | null
+  readonly hiddenAnnotationIds: readonly string[]
+  readonly annotationColors: Readonly<Record<string, string>>
+  readonly cellMetadataTrackId: string | null
 }): CollectionDatasetOpening {
   return {
     linkState: {
       linkVersion: 2,
       selectedGenes: current.selectedGenes,
-      ...(KEPT_COLOR_MODES.has(current.observationColorMode)
-        ? { observationColorMode: current.observationColorMode }
-        : {}),
+      observationColorMode: current.observationColorMode,
       geneExpressionScoreMode: current.geneExpressionScoreMode,
+      ...(current.annotationGroupId === null
+        ? {}
+        : {
+            annotationGroupIds: [current.annotationGroupId],
+            hiddenAnnotationIds: current.hiddenAnnotationIds,
+          }),
+      ...(current.cellMetadataTrackId === null
+        ? {}
+        : { cellMetadataTrackId: current.cellMetadataTrackId }),
     },
+    annotationColors: current.annotationColors,
     ignored: [],
   }
 }

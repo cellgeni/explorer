@@ -6,6 +6,7 @@ import {
 } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
+import { altClick } from '../../utils/altClick'
 import {
   annotationSizePlots,
   isIdLikeAnnotationGroup,
@@ -375,7 +376,11 @@ function AnnotationSetLists({
   readonly placedCellIds: PlacedCellIds | null
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
-  readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
+  readonly onAnnotationVisibilityChange: (
+    annotationId: string,
+    visible: boolean,
+    only?: boolean,
+  ) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
 }) {
   const plots = useMemo(
@@ -439,7 +444,11 @@ function AnnotationSetList({
   readonly visible: boolean
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
-  readonly onAnnotationVisibilityChange: (annotationId: string, visible: boolean) => void
+  readonly onAnnotationVisibilityChange: (
+    annotationId: string,
+    visible: boolean,
+    only?: boolean,
+  ) => void
   readonly onRemoveAnnotation: (annotationId: string) => void
 }) {
   const [scrollTop, setScrollTop] = useState(0)
@@ -525,9 +534,13 @@ function AnnotationSetList({
                   type="checkbox"
                   checked={rowVisible}
                   aria-label={`${fullLabel} visible`}
-                  title={`${fullLabel} visible`}
+                  title={`${fullLabel} visible (Alt-click: show only this)`}
                   onChange={(event) => {
-                    onAnnotationVisibilityChange(row.id, event.currentTarget.checked)
+                    if (altClick(event.nativeEvent)) {
+                      onAnnotationVisibilityChange(row.id, true, true)
+                    } else {
+                      onAnnotationVisibilityChange(row.id, event.currentTarget.checked)
+                    }
                   }}
                 />
               </label>

@@ -3,10 +3,21 @@ import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 
 // A collection preview as pixels: every cell in grey, so the tissue shows,
-// and the cells that score above zero in the gene colour scale over them. A
-// pixel shared by several cells takes the highest score, so a few expressing
-// cells stay visible among many that do not. Data y grows downwards, as in
-// the main view.
+// and over them either the cells that score above zero in the gene colour
+// scale, or the cells of the shown classes in their class colours. A pixel
+// shared by several cells takes the highest score, so a few expressing cells
+// stay visible among many that do not; a cell of a shown class covers the
+// grey of hidden ones. Data y grows downwards, as in the main view.
+
+export type PreviewOverlay =
+  | { readonly kind: 'scores'; readonly scores: PreviewScores }
+  | {
+      readonly kind: 'classes'
+      // Each drawn cell's class index, or -1.
+      readonly classOf: Int32Array
+      // Each class's colour as #rrggbb, or null for a hidden class.
+      readonly colors: readonly (string | null)[]
+    }
 
 export interface PreviewRasterOptions {
   // In device pixels.
@@ -25,7 +36,7 @@ const TISSUE_RGBA = [92, 88, 76, 200] as const
 
 export function rasterizePreview(
   cells: PreviewCells,
-  scores: PreviewScores | null,
+  overlay: PreviewOverlay | null,
   options: PreviewRasterOptions,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width, height, padding } = options
@@ -68,7 +79,24 @@ export function rasterizePreview(
     pixels.set(TISSUE_RGBA, pixel * 4)
   })
 
-  if (scores === null || options.scaleMax <= 0) return pixels
+  if (overlay?.kind === 'classes') {
+    const colors = overlay.colors.map(hexRgb)
+
+    forEachPixel(cells.positions, (pixel, index) => {
+      const color = colors[overlay.classOf[index] ?? -1]
+      if (color === undefined || color === null) return
+      pixels[pixel * 4] = color[0]
+      pixels[pixel * 4 + 1] = color[1]
+      pixels[pixel * 4 + 2] = color[2]
+      pixels[pixel * 4 + 3] = 255
+    })
+
+    return pixels
+  }
+
+  if (overlay === null || options.scaleMax <= 0) return pixels
+
+  const { scores } = overlay
 
   const best = new Float32Array(width * height)
 
@@ -90,4 +118,11 @@ export function rasterizePreview(
   }
 
   return pixels
+}
+
+function hexRgb(color: string | null): readonly [number, number, number] | null {
+  if (color === null || !/^#[0-9a-f]{6}$/i.test(color)) return null
+
+  const value = Number.parseInt(color.slice(1), 16)
+  return [(value >> 16) & 255, (value >> 8) & 255, value & 255]
 }

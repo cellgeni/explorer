@@ -182,6 +182,7 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
               : item.label,
           visible: !annotations.hiddenIds.has(item.id),
         })),
+        showOnly: true,
       }
     }
     case 'metadata': {

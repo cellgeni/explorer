@@ -48,10 +48,18 @@ describe('collectionFirstOpening', () => {
   })
 })
 
+const NOTHING_LOADED = {
+  annotationGroupId: null,
+  hiddenAnnotationIds: [],
+  annotationColors: {},
+  cellMetadataTrackId: null,
+} as const
+
 describe('collectionSwitchOpening', () => {
-  it('keeps genes and colour modes that mean the same in every dataset', () => {
+  it('keeps the genes and how cells are coloured', () => {
     expect(
       collectionSwitchOpening({
+        ...NOTHING_LOADED,
         selectedGenes: ['Aqp4', 'Gfap'],
         observationColorMode: 'gene-expression',
         geneExpressionScoreMode: 'mean',
@@ -64,13 +72,29 @@ describe('collectionSwitchOpening', () => {
     })
   })
 
-  it('leaves annotation colouring and an empty gene list to the next dataset', () => {
+  it('keeps the annotation set, its hidden classes and colours, and the metadata column', () => {
     expect(
       collectionSwitchOpening({
         selectedGenes: [],
         observationColorMode: 'annotations',
         geneExpressionScoreMode: 'sum',
-      }).linkState,
-    ).toEqual({ linkVersion: 2, selectedGenes: [], geneExpressionScoreMode: 'sum' })
+        annotationGroupId: 'analysis:coarse_celltype',
+        hiddenAnnotationIds: ['analysis:coarse_celltype:astrocytes'],
+        annotationColors: { 'analysis:coarse_celltype:neurons': '#123456' },
+        cellMetadataTrackId: 'h5ad:cell_area',
+      }),
+    ).toEqual({
+      linkState: {
+        linkVersion: 2,
+        selectedGenes: [],
+        observationColorMode: 'annotations',
+        geneExpressionScoreMode: 'sum',
+        annotationGroupIds: ['analysis:coarse_celltype'],
+        hiddenAnnotationIds: ['analysis:coarse_celltype:astrocytes'],
+        cellMetadataTrackId: 'h5ad:cell_area',
+      },
+      annotationColors: { 'analysis:coarse_celltype:neurons': '#123456' },
+      ignored: [],
+    })
   })
 })

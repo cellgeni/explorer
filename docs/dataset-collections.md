@@ -10,8 +10,13 @@ https://cellgeni.github.io/explorer/?collection=https://host/study/collection.js
 
 The viewer opens the first dataset and lists the collection's datasets in a
 bar under the canvas. Choosing one opens it in place of the current dataset
-and keeps the selected genes and how cells are coloured, so you can step
-through sections with the same gene. Only one dataset is open at a time.
+and keeps the selected genes, the annotation set and how cells are coloured,
+so you can step through sections with the same gene or cell type. Only one
+dataset is open at a time.
+
+The datasets of a collection are expected to share their genes and their
+annotation and metadata columns, such as one `cell_type` column with the
+same categories in every section.
 
 The format is defined by
 [`public/schemas/explorer-collection.v1.json`](../public/schemas/explorer-collection.v1.json)
@@ -100,14 +105,22 @@ manifest.
 Choosing a dataset in the bar opens it the way a shared link would, with:
 
 - the selected genes,
-- the `Cell color` mode, when it is gene expression, transcript count or cell
-  area,
-- the `Combine genes` mode.
+- the `Cell color` mode,
+- the `Combine genes` mode,
+- the loaded annotation set, its hidden classes and its class colours,
+- the metadata column cells are coloured by.
 
-Annotation and metadata colouring name one dataset's columns, so the next
-dataset starts without them. The gene colour scale and the opacities stay as
-they are. A gene missing from the next dataset's panel is handled as it is
-for a shared link.
+The gene colour scale and the opacities stay as they are. A gene, set or
+column missing from the next dataset is handled as it is for a shared link:
+the gene is dropped and the set or column is not loaded.
+
+### Class Colours
+
+A class keeps its colour from one dataset to the next, including a colour
+you picked. AnnData classes come in the order of their column's categories,
+the order scanpy colours them in, so datasets with the same categories give
+each class the same colour even when opened on their own or from a link. A
+class that only the next dataset has takes the next free colour.
 
 Each switch adds a browser history entry, so Back returns to the previous
 dataset of the collection.
@@ -121,12 +134,22 @@ Where several cells share a pixel, the highest score shows, as the main view
 draws the highest-scoring cells on top. Without genes, or when cells are
 coloured by something else, previews show the tissue only.
 
+While cells are coloured by an annotation set, previews show its classes in
+the main view's colours instead. A class the main view has not coloured yet
+takes the colour it will have when its dataset opens. Hidden classes stay
+grey, so hiding all but one cell type (Alt-click its checkbox in the legend
+or in Cells › Clusters) shows where it is in every section;
+each preview then counts the cells of the shown classes (`1,204 cells`). The
+bar's left side names the set and how many classes are hidden. A set is read
+once per dataset and selection, like a gene.
+
 - **One scale.** Every preview uses the same scale, from 0 to the highest
   score among the previews read so far. The bar's left side shows the gene
   and that maximum, and each preview its own highest score (`max 92`). The
   scale can rise as more previews are read.
 - **What is read.** A preview reads every cell's position once per dataset,
-  then the selected genes' scores whenever the selection changes. Positions
+  then the selected genes' scores, or the annotation set's classes, whenever
+  the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
 - **When.** Only previews in view, and those just beyond the bar's ends, are
@@ -176,8 +199,11 @@ errors as you type.
 ## Known Limitations
 
 - Datasets are shown one at a time. There are no side-by-side embedding and
-  spatial views or shared annotation colours yet, and previews show genes,
-  not annotations.
+  spatial views yet.
+- Class colours are kept while you switch datasets, not written into the
+  address: a link restores the set and its hidden classes with the dataset's
+  own colours.
+- Previews do not show metadata colouring.
 - Previews are listed in the collection's order; they cannot be sorted by
   expression yet.
 - A collection cannot be listed in the start screen's examples yet, or

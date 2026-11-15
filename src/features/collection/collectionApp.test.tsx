@@ -208,6 +208,97 @@ describe('App with a dataset collection', () => {
     })
   })
 
+  it('keeps the annotation set, its hidden classes and colours when switching', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}&cellColor=annotations&groups=analysis%3Atype&hiddenClasses=analysis%3Atype%3Aneuron`,
+    )
+    const astro = { id: 'analysis:type:astro', label: 'type: astro' }
+    const neuron = { id: 'analysis:type:neuron', label: 'type: neuron' }
+    const datasetFor = (url: string) => ({
+      ...h5adDataset(),
+      annotationGroups: vi.fn(async () => [
+        { id: 'analysis:type', label: 'type', groupingName: 'type', groupCount: 2 },
+      ]),
+      // The second section lists its classes the other way round, so its
+      // own colours would swap.
+      annotations: vi.fn(async () =>
+        url === SHAM_A
+          ? [
+              { ...astro, cellIds: ['cell-a'] },
+              { ...neuron, cellIds: ['cell-b'] },
+            ]
+          : [
+              { ...neuron, cellIds: ['cell-a'] },
+              { ...astro, cellIds: ['cell-b'] },
+            ],
+      ),
+    })
+    const datasets = new Map([SHAM_A, DPI_A].map((url) => [url, datasetFor(url)]))
+
+    render(
+      <TestApp
+        loadCollection={async () => COLLECTION}
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={vi.fn(async (url: string) => datasets.get(url) as never)}
+      />,
+    )
+
+    const bar = await screen.findByRole('navigation', { name: 'Collection' })
+    openControls('clusters')
+    const astroColor = await screen.findByLabelText('type: astro color')
+    await waitFor(() => {
+      expect(screen.getByLabelText('type: neuron visible')).not.toBeChecked()
+    })
+    fireEvent.change(astroColor, { target: { value: '#123456' } })
+    const neuronColor = (screen.getByLabelText('type: neuron color') as HTMLInputElement)
+      .value
+    // The previews colour by the set, counting the cells of the shown class.
+    expect(
+      await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
+        '1 cell',
+      ),
+    ).toBeInTheDocument()
+
+    fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))
+    await waitFor(() => {
+      expect(within(bar).getByRole('button', { name: '1 dpi A' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+    })
+    await waitFor(() => {
+      expect(datasets.get(DPI_A)?.annotations).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'analysis:type' }),
+      )
+    })
+
+    openControls('clusters')
+    await waitFor(() => {
+      expect(screen.getByLabelText('type: astro color')).toHaveValue('#123456')
+    })
+    expect(screen.getByLabelText('type: neuron color')).toHaveValue(neuronColor)
+    expect(screen.getByLabelText('type: neuron visible')).not.toBeChecked()
+    expect(screen.getByLabelText('type: astro visible')).toBeChecked()
+    await waitFor(() => {
+      const hash = new URLSearchParams(window.location.hash.slice(1))
+      expect(hash.get('dataset')).toBe(DPI_A)
+      expect(hash.get('cellColor')).toBe('annotations')
+      expect(hash.get('groups')).toBe('analysis:type')
+      expect(hash.get('hiddenClasses')).toBe('analysis:type:neuron')
+    })
+
+    // An Alt-click on the only class shown shows every class again, and on
+    // another class shows only that one.
+    fireEvent.click(screen.getByLabelText('type: astro visible'), { altKey: true })
+    expect(screen.getByLabelText('type: neuron visible')).toBeChecked()
+    expect(screen.getByLabelText('type: astro visible')).toBeChecked()
+    fireEvent.click(screen.getByLabelText('type: neuron visible'), { altKey: true })
+    expect(screen.getByLabelText('type: neuron visible')).toBeChecked()
+    expect(screen.getByLabelText('type: astro visible')).not.toBeChecked()
+  })
+
   it('shows the start screen when the collection cannot be read', async () => {
     window.history.replaceState(null, '', `/?collection=${COLLECTION_URL}`)
 

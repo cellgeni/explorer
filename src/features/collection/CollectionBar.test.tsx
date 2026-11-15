@@ -130,9 +130,25 @@ describe('CollectionBar previews', () => {
       ),
       getSpatialDataset: vi.fn(async (url: string) => ({
         overview: async () => [
-          { position: { x: micrometers(0), y: micrometers(0) }, transcriptCount: 0 },
-          { position: { x: micrometers(5), y: micrometers(5) }, transcriptCount: 0 },
+          {
+            cellId: 'c0',
+            position: { x: micrometers(0), y: micrometers(0) },
+            transcriptCount: 0,
+          },
+          {
+            cellId: 'c1',
+            position: { x: micrometers(5), y: micrometers(5) },
+            transcriptCount: 0,
+          },
         ],
+        // Sham B has two astrocytes; the others one astrocyte, one neuron.
+        annotations: async () =>
+          url === SHAM_B
+            ? [{ id: 'analysis:type:astro', label: 'type: astro', cellIds: ['c0', 'c1'] }]
+            : [
+                { id: 'analysis:type:astro', label: 'type: astro', cellIds: ['c0'] },
+                { id: 'analysis:type:neuron', label: 'type: neuron', cellIds: ['c1'] },
+              ],
         geneExpression: async (_bbox: unknown, genes: readonly string[]) => ({
           genes,
           maxCount: scoreByUrl[url] ?? 0,
@@ -147,6 +163,7 @@ describe('CollectionBar previews', () => {
       })) as unknown as CollectionPreviewLoaders['getSpatialDataset'],
       loadDatasetOverview: vi.fn(),
       loadGeneExpression: vi.fn(),
+      loadAnnotations: vi.fn(),
     }
   }
 
@@ -170,6 +187,7 @@ describe('CollectionBar previews', () => {
       genes: ['Aqp4'],
       scoreMode: 'sum',
       colorScale: 'plasma',
+      annotations: null,
       paused: false,
     })
     const bar = screen.getByRole('navigation', { name: 'Collection' })
@@ -202,6 +220,7 @@ describe('CollectionBar previews', () => {
       genes: [],
       scoreMode: 'sum',
       colorScale: 'plasma',
+      annotations: null,
       paused: false,
     })
     const bar = screen.getByRole('navigation', { name: 'Collection' })
@@ -223,6 +242,36 @@ describe('CollectionBar previews', () => {
     )
   })
 
+  it('previews the classes of an annotation set, counting the shown ones', async () => {
+    const loaders = previewLoaders()
+    renderBar({
+      loaders,
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      annotations: {
+        groupId: 'analysis:type',
+        label: 'type',
+        colors: {},
+        hiddenIds: new Set(['analysis:type:neuron']),
+      },
+      paused: false,
+    })
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    const shamB = within(bar).getByRole('button', { name: 'Sham B' })
+
+    expect(await within(shamB).findByText('2 cells')).toBeInTheDocument()
+    expect(shamB).toHaveAttribute('title', 'Open Sham B; 2 cells in the shown classes')
+    expect(
+      await within(within(bar).getByRole('button', { name: 'Sham A' })).findByText(
+        '1 cell',
+      ),
+    ).toBeInTheDocument()
+    expect(bar.querySelector('.collection-bar-scale')).toHaveTextContent('type1 hidden')
+    // The genes are not read while the cells are coloured by the set.
+    expect(within(bar).queryByText(/^max /)).toBe(null)
+  })
+
   it('waits while the main view loads a dataset', async () => {
     const loaders = previewLoaders()
     const { rerender } = renderBar({
@@ -230,6 +279,7 @@ describe('CollectionBar previews', () => {
       genes: ['Aqp4'],
       scoreMode: 'sum',
       colorScale: 'plasma',
+      annotations: null,
       paused: true,
     })
     await act(async () => {})
@@ -247,6 +297,7 @@ describe('CollectionBar previews', () => {
           genes: ['Aqp4'],
           scoreMode: 'sum',
           colorScale: 'plasma',
+          annotations: null,
           paused: false,
         }}
       />,

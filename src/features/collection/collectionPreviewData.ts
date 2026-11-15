@@ -1,10 +1,12 @@
 import { micrometers, type BBox } from '../../data/coords'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
+import type { Annotation } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import { geneExpressionScores } from '../../rendering/geneExpressionRenderer'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {
+  AnnotationLoader,
   DatasetOverviewLoader,
   GeneExpressionLoader,
   SpatialDatasetDetector,
@@ -12,7 +14,8 @@ import type {
 } from '../app-shell/appDependencies'
 
 // What a collection preview reads: every cell's position once per dataset,
-// and the selected genes' scores per gene selection. Datasets open through
+// and the selected genes' scores per gene selection, or the classes of the
+// selected annotation set. Datasets open through
 // the same per-URL caches as the main view, so a previewed dataset opens
 // faster when chosen.
 
@@ -21,6 +24,7 @@ export interface CollectionPreviewLoaders {
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly loadDatasetOverview: DatasetOverviewLoader
   readonly loadGeneExpression: GeneExpressionLoader
+  readonly loadAnnotations: AnnotationLoader
   readonly fetchImpl?: typeof fetch
 }
 
@@ -34,6 +38,8 @@ export interface PreviewBounds {
 export interface PreviewCells {
   // Interleaved x, y, in the dataset's coordinates.
   readonly positions: Float32Array
+  // Each drawn cell's ID, or '' without one.
+  readonly cellIds: readonly string[]
   readonly bounds: PreviewBounds
 }
 
@@ -42,6 +48,20 @@ export interface PreviewScores {
   readonly positions: Float32Array
   readonly scores: Float32Array
   readonly maxScore: number
+}
+
+export interface PreviewClass {
+  readonly id: string
+  readonly label: string
+  // Every cell of the class, drawn or not.
+  readonly cellCount: number
+}
+
+export interface PreviewClasses {
+  readonly classes: readonly PreviewClass[]
+  // Each drawn cell's class, as an index into classes, or -1 for none. A
+  // cell in several classes takes the first, as in the main view.
+  readonly classOf: Int32Array
 }
 
 export interface PreviewSource {
@@ -53,6 +73,12 @@ export interface PreviewSource {
     scoreMode: GeneExpressionScoreMode,
     signal?: AbortSignal,
   ) => Promise<PreviewScores>
+  // The classes of an annotation set, for the drawn cells.
+  readonly classes: (
+    cells: PreviewCells,
+    groupId: string,
+    signal?: AbortSignal,
+  ) => Promise<PreviewClasses>
 }
 
 export type PreviewUnavailable =
@@ -118,6 +144,15 @@ export async function openPreviewSource(
           scoreMode,
           scoreSignal,
         ),
+      classes: async (cells, groupId, classSignal) =>
+        previewClasses(
+          cells,
+          await loaders.loadAnnotations(url, {
+            groupId,
+            ...(classSignal === undefined ? {} : { signal: classSignal }),
+          }),
+          classSignal,
+        ),
     }
   }
 
@@ -134,6 +169,12 @@ export async function openPreviewSource(
     genes: readonly string[],
     options: { readonly signal?: AbortSignal },
   ) => Promise<GeneExpressionBatch>
+  const readAnnotations = hasMethod(dataset, 'annotations')
+    ? (dataset.annotations as (options: {
+        readonly groupId?: string
+        readonly signal?: AbortSignal
+      }) => Promise<readonly Annotation<string>[]>)
+    : null
 
   return {
     cells: async (cellSignal) =>
@@ -145,6 +186,18 @@ export async function openPreviewSource(
         }),
         scoreMode,
         scoreSignal,
+      ),
+    // A dataset without annotations draws its cells without classes.
+    classes: async (cells, groupId, classSignal) =>
+      previewClasses(
+        cells,
+        readAnnotations === null
+          ? []
+          : await readAnnotations.call(dataset, {
+              groupId,
+              ...(classSignal === undefined ? {} : { signal: classSignal }),
+            }),
+        classSignal,
       ),
   }
 }
@@ -161,6 +214,7 @@ function previewCells(
 
   const stride = Math.max(1, Math.ceil(cells.length / PREVIEW_MAX_CELLS))
   const positions = new Float32Array(Math.ceil(cells.length / stride) * 2)
+  const cellIds: string[] = []
   let offset = 0
 
   for (let index = 0; index < cells.length; index += stride) {
@@ -168,6 +222,7 @@ function previewCells(
     if (cell === undefined) continue
     positions[offset] = cell.position.x
     positions[offset + 1] = cell.position.y
+    cellIds.push(cell.cellId ?? '')
     offset += 2
   }
 
@@ -178,7 +233,7 @@ function previewCells(
     throw new PreviewUnavailableError({ reason: 'no-cells' })
   }
 
-  return { positions: sampled, bounds }
+  return { positions: sampled, cellIds, bounds }
 }
 
 export function previewBounds(positions: Float32Array): PreviewBounds | null {
@@ -235,6 +290,36 @@ function previewScores(
   })
 
   return { positions, scores: values, maxScore }
+}
+
+function previewClasses(
+  cells: PreviewCells,
+  annotations: readonly Annotation<string>[],
+  signal: AbortSignal | undefined,
+): PreviewClasses {
+  throwIfAborted(signal)
+
+  const cellIndex = new Map<string, number>()
+  cells.cellIds.forEach((cellId, index) => {
+    if (cellId !== '') cellIndex.set(cellId, index)
+  })
+  const classOf = new Int32Array(cells.cellIds.length).fill(-1)
+
+  annotations.forEach((annotation, classIndex) => {
+    for (const cellId of annotation.cellIds) {
+      const index = cellIndex.get(cellId)
+      if (index !== undefined && classOf[index] === -1) classOf[index] = classIndex
+    }
+  })
+
+  return {
+    classes: annotations.map(({ id, label, cellIds }) => ({
+      id,
+      label,
+      cellCount: cellIds.length,
+    })),
+    classOf,
+  }
 }
 
 async function rejectLargeWholeFile(

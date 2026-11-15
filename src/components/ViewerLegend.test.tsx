@@ -60,6 +60,35 @@ describe('ViewerLegend', () => {
     expect(onChange).toHaveBeenCalledWith('cluster-1', false, categories.id)
   })
 
+  it('shows only one class on an Alt-click, where the section allows it', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(
+      <ViewerLegend
+        sections={[{ ...categories, showOnly: true }]}
+        onCategoryVisibilityChange={onChange}
+      />,
+    )
+    const cluster1 = screen.getByRole('checkbox', { name: 'Cluster 1, 1,000 cells' })
+
+    expect(cluster1).toHaveAttribute(
+      'title',
+      'Hide Cluster 1 (Alt-click: show only this)',
+    )
+    fireEvent.click(cluster1, { altKey: true })
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', true, 'cells', true)
+    // The eye waits for the new state rather than toggling itself.
+    expect(cluster1).toBeChecked()
+
+    onChange.mockClear()
+    rerender(
+      <ViewerLegend sections={[categories]} onCategoryVisibilityChange={onChange} />,
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Cluster 1, 1,000 cells' }), {
+      altKey: true,
+    })
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', false, 'cells')
+  })
+
   it('counts transcripts and points to the Transcripts section for the rest', () => {
     render(
       <ViewerLegend

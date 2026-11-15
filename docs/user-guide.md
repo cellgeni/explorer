@@ -81,9 +81,13 @@ together, such as the sections of one study. Open one with
 lists the others in a bar under the canvas, grouped by time point, donor or
 whatever the collection groups them by. Each has a preview of its cells
 coloured by the selected genes, all on one scale, so you can see where a
-gene is high before opening anything. Choosing one opens it in place and
-keeps the selected genes and the cell colouring, so you can step through
-sections with the same gene. `Share` copies a link with the collection and
+gene is high before opening anything. With cells coloured by an annotation
+set, previews show its classes instead: Alt-click (Option-click) a class's
+checkbox in the legend to show only that class and see where that cell type
+is in each section. Choosing one opens it in place and
+keeps the selected genes, the annotation set with its hidden classes and
+colours, and the cell colouring, so you can step through sections with the
+same gene or cell type. `Share` copies a link with the collection and
 the open dataset. Close the bar with its ×, or by opening a dataset that is
 not in the collection.
 

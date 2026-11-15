@@ -10,6 +10,8 @@ interface UseCollectionPreviewsOptions {
   readonly loaders: CollectionPreviewLoaders
   readonly genes: readonly string[]
   readonly scoreMode: GeneExpressionScoreMode
+  // The annotation set the cells are coloured by, in place of the genes.
+  readonly annotationGroupId: string | null
   readonly paused: boolean
 }
 
@@ -19,6 +21,7 @@ export function useCollectionPreviews({
   loaders,
   genes,
   scoreMode,
+  annotationGroupId,
   paused,
 }: UseCollectionPreviewsOptions): CollectionPreviewStore | null {
   const store = useMemo(
@@ -48,8 +51,9 @@ export function useCollectionPreviews({
     store?.setRequest({
       genes: genesKey === '' ? [] : genesKey.split('\u0000'),
       scoreMode,
+      annotationGroupId,
     })
-  }, [genesKey, scoreMode, store])
+  }, [annotationGroupId, genesKey, scoreMode, store])
 
   useEffect(() => {
     store?.setPaused(paused)

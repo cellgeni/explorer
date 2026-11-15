@@ -92,18 +92,22 @@ the canvas, a `nav` named "Collection":
 
 - On the left, "Collection", the collection's `name` (or its file name) and
   the number of datasets. With genes selected, the gene (or "N genes") and
-  the previews' shared scale, from 0 to the highest score read so far.
+  the previews' shared scale, from 0 to the highest score read so far. With
+  cells coloured by an annotation set, the set's name and "N hidden".
   Hidden under 860 px.
 - A button per dataset, in groups labelled with their `group`, in one row
   that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
-  label and its highest score (`max 92`); the button's name is the label.
+  label and its highest score (`max 92`), or with hidden classes the cells
+  of the shown ones (`1,204 cells`); the button's name is the label.
   The open dataset is highlighted (`aria-current`) and the one loading has
   a dashed border (`aria-busy`). Choosing another opens it, keeping the
-  selected genes, the `Cell color` mode (gene expression, transcript count
-  or cell area) and `Combine genes`.
+  selected genes, the `Cell color` mode, `Combine genes`, the loaded
+  annotation set with its hidden classes and class colours, and the
+  metadata column.
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
-  expression. A line runs along its foot while it is read. Instead of a
+  expression. When it is annotations, the cells of each class in its
+  colour, and hidden classes grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
   failed" with the reason as its tooltip.
@@ -124,8 +128,8 @@ Previews are read by `CollectionPreviewStore`
 (`src/features/collection/collectionPreviewStore.ts`): the cards in view and
 240 px beyond, found with an `IntersectionObserver`, four datasets at a
 time, none while the main view loads. `openPreviewSource`
-(`collectionPreviewData.ts`) reads positions and scores with the main view's
-loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
+(`collectionPreviewData.ts`) reads positions, scores and classes with the
+main view's loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
 
 ## Top Bar
 
@@ -216,7 +220,8 @@ stay mounted while closed, so a gene search survives. `Hide layers (\)` (or
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. The link keeps
 them (`hidden=`) and the open sections (`panel=`). Hidden annotation classes
-are kept as `hiddenClasses=`.
+are kept as `hiddenClasses=`. Alt-click on a class's checkbox shows only that
+class.
 
 ### Image
 
@@ -609,7 +614,9 @@ category lists last:
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
   Clusters". The checkboxes and counts are the same as those in Cells ›
-  Clusters: Visium spots hidden off the tissue are left out.
+  Clusters: Visium spots hidden off the tissue are left out. Alt-click
+  (Option-click) on a class's checkbox, here or in Cells › Clusters, shows
+  only that class, or every class again when it is the only one shown.
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per

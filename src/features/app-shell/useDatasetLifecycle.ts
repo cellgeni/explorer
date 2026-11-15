@@ -268,6 +268,12 @@ interface MerscopeImageDataset {
   ): Promise<ImageSource>
 }
 
+// What a dataset opens with: a shared link's state, plus the class colours a
+// collection dataset keeps from the one before.
+export type DatasetOpeningState = ShareableState & {
+  readonly annotationColors?: Readonly<Record<string, string>>
+}
+
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
   meta(): Promise<DatasetMeta>
   setVisiumView(view: AnnDataVisiumView): VisiumLifecycleDataset
@@ -330,7 +336,7 @@ interface UseDatasetLifecycleRefs {
   readonly geneExpressionAbortRef: MutableRef<AbortController | null>
   readonly geneExpressionRequestIdRef: MutableRef<number>
   readonly geneExpressionViewportKeyRef: MutableRef<string | null>
-  readonly initialShareableStateRef: MutableRef<ShareableState | null>
+  readonly initialShareableStateRef: MutableRef<DatasetOpeningState | null>
   readonly initialSharedRoiSelectionRef: MutableRef<RoiSelection | null>
   readonly initialShouldLoadMorphologyRef: MutableRef<boolean>
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
@@ -1036,7 +1042,9 @@ export function useDatasetLifecycle({
           setHoveredTranscript(null)
           setPinnedTranscript(null)
           setManualTranscriptExactRequestKey(null)
-          setAnnotationColors({})
+          setAnnotationColors(
+            shouldRestoreSharedState ? (sharedState?.annotationColors ?? {}) : {},
+          )
           setHiddenAnnotationIds([])
           setHiddenAnnotationSetIds([])
           setCellMetadataTracks([])
