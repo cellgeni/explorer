@@ -233,7 +233,10 @@ cell-summary transcript-count hint. Exact molecule points require a readable
 
 Use Cells › Clusters to load built-in analysis labels or import local CSV/JSON
 cell annotations when the active platform supports cell-id annotations. H5AD
-categorical `obs` tracks appear as annotation sets.
+categorical `obs` tracks appear as annotation sets. Clusters is below the
+gene list in Cells; with cells coloured by a set, "+n more in Cells ›
+Clusters" in the legend jumps there. Unchecking a class fades its cells, so
+the classes left stand out against a faint outline of the tissue.
 
 The layer panel's Annotations section lists your selections and exposes
 `GeoJSON shapes` when geometric annotations are available. Import GeoJSON

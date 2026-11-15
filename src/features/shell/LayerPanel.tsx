@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from 'react'
 import { Button, ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
 import { classNames } from '../../components/ui/classNames'
 import {
@@ -44,7 +44,9 @@ import {
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import { TranscriptGeneList } from '../sections/TranscriptGeneListBlock'
 import type {
+  LayerAnchor,
   LayerPanelModel,
+  LayerReveal,
   LayerSectionHeader,
   LayerSectionId,
 } from './layerPanelModel'
@@ -70,6 +72,8 @@ interface LayerPanelProps {
   // Under 860 px the panel is a bottom sheet (15.2-I): a handle that names
   // what colours the cells, instead of the collapse button.
   readonly sheet?: LayerSheetProps | undefined
+  // Brings a section, or a part of one, into view.
+  readonly reveal?: LayerReveal | null | undefined
 }
 
 export interface LayerSheetProps {
@@ -95,8 +99,11 @@ export function LayerPanel({
   embeddingOpen,
   onEmbeddingOpenChange,
   sheet,
+  reveal = null,
 }: LayerPanelProps) {
   const bodyId = useId()
+  const panelRef = useRef<HTMLElement>(null)
+  const pendingRevealRef = useRef<LayerReveal | null>(null)
   // Until the user opens or closes a section, Cells is open, or Image where
   // there are no cells.
   const expanded = new Set<LayerSectionId>(
@@ -123,6 +130,52 @@ export function LayerPanel({
     ),
   }
 
+  const openForReveal = useEffectEvent((request: LayerReveal) => {
+    if (sheet === undefined) onCollapsedChange(false)
+    else sheet.onExpandedChange(true)
+
+    if (!expanded.has(request.section)) {
+      onExpandedChange(
+        panel.sections
+          .map((section) => section.id)
+          .filter((id) => id === request.section || expanded.has(id)),
+      )
+    }
+  })
+
+  useEffect(() => {
+    if (reveal === null) return
+
+    pendingRevealRef.current = reveal
+    openForReveal(reveal)
+  }, [reveal])
+
+  // Once the panel and section are open, the target scrolls into view and
+  // takes focus.
+  useEffect(() => {
+    const request = pendingRevealRef.current
+    const root = panelRef.current
+    if (request === null || root === null) return
+
+    const section = root.querySelector<HTMLElement>(
+      `[data-layer-section="${request.section}"]`,
+    )
+    const target =
+      request.anchor === null
+        ? section
+        : (section?.querySelector<HTMLElement>(
+            `[data-layer-anchor="${request.anchor}"]`,
+          ) ?? null)
+    if (target === null || target.closest('[hidden]') !== null) return
+
+    pendingRevealRef.current = null
+    target.scrollIntoView?.({ block: 'start', behavior: 'smooth' })
+    ;(request.anchor === null
+      ? target.querySelector<HTMLElement>('h3 button')
+      : target
+    )?.focus({ preventScroll: true })
+  })
+
   const sections = panel.sections.map((header) => (
     <LayerSection
       key={header.id}
@@ -144,6 +197,7 @@ export function LayerPanel({
   // as a gene search (15.5-B); only the header differs.
   return (
     <aside
+      ref={panelRef}
       className={classNames(
         sheet === undefined ? 'shell-layer-panel' : 'ui-sheet shell-layer-sheet',
         sheet === undefined
@@ -219,6 +273,7 @@ function LayerSection({
       className={
         header.visible ? 'shell-layer-section' : 'shell-layer-section is-layer-hidden'
       }
+      data-layer-section={header.id}
     >
       <div className="shell-layer-section-header">
         <input
@@ -264,8 +319,21 @@ function LayerSection({
   )
 }
 
-function SubHeading({ children }: { readonly children: string }) {
-  return <h4 className="shell-subheading">{children}</h4>
+// An anchor lets the panel scroll to the heading and focus it (LayerReveal).
+function SubHeading({
+  children,
+  anchor,
+}: {
+  readonly children: string
+  readonly anchor?: LayerAnchor
+}) {
+  return anchor === undefined ? (
+    <h4 className="shell-subheading">{children}</h4>
+  ) : (
+    <h4 className="shell-subheading" data-layer-anchor={anchor} tabIndex={-1}>
+      {children}
+    </h4>
+  )
 }
 
 function ImageSection({
@@ -326,7 +394,7 @@ function CellsSection({
           {cells.colour.statusCopy}
         </p>
 
-        <SubHeading>Clusters</SubHeading>
+        <SubHeading anchor="clusters">Clusters</SubHeading>
         <AnnotationSetControls sets={annotations.sets} />
         <AnnotationLabelLists sets={annotations.sets} />
         <MetadataTracksPanel metadataTracks={annotations.metadataTracks} />

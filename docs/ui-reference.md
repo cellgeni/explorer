@@ -108,7 +108,7 @@ the canvas, a `nav` named "Collection":
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
   expression. When it is annotations, the cells of each class in its
-  colour, and hidden classes grey. A line runs along its foot while it is read. Instead of a
+  colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
   failed" with the reason as its tooltip.
@@ -394,7 +394,7 @@ in view with All features ("+n more genes in view"). Each row has:
 - the number of its points loaded in view, hidden ones included.
 
 The canvas legend lists the same genes under "Transcripts" (the first 12,
-then "+n more in Transcripts"), and its checkboxes are the same eyes; it
+then "+n more in Transcripts", a link that opens this section), and its checkboxes are the same eyes; it
 stays while every gene in view is hidden. With density squares or QV colours
 there is no list; the section says why.
 
@@ -622,10 +622,14 @@ category lists last:
   the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin.
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
-  Clusters". The checkboxes and counts are the same as those in Cells ›
-  Clusters: Visium spots hidden off the tissue are left out. Alt-click
-  (Option-click) on a class's checkbox, here or in Cells › Clusters, shows
-  only that class, or every class again when it is the only one shown.
+  Clusters", a link that opens the layer panel and Cells and scrolls to the
+  Clusters heading, focusing it. The checkboxes and counts are the same as
+  those in Cells › Clusters: Visium spots hidden off the tissue are left
+  out. Alt-click (Option-click) on a class's checkbox, here or in Cells ›
+  Clusters, shows only that class, or every class again when it is the only
+  one shown. Cells of hidden classes, and cells in no class, fade to a
+  faint grey (fill and outline at 15% of the usual opacity), so the tissue
+  still shows but the shown classes stand out.
 - `Cell color` Metadata: the track name and its range.
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per

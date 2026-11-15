@@ -263,6 +263,7 @@ export function ViewerCore({
   selectionHighlight = null,
   onClearSelection,
   onLegendCategoryVisibilityChange,
+  onLegendShowMore,
   coordinateUnit = 'um',
   measurementEnabled = false,
   measurementUnit = 'um',
@@ -385,6 +386,7 @@ export function ViewerCore({
       {...(onLegendCategoryVisibilityChange === undefined
         ? {}
         : { onLegendCategoryVisibilityChange })}
+      {...(onLegendShowMore === undefined ? {} : { onLegendShowMore })}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
       measurementUnit={measurementUnit}
@@ -476,6 +478,7 @@ interface ViewerSurfaceProps {
     visible: boolean,
     sectionId: string,
   ) => void
+  readonly onLegendShowMore?: (sectionId: string) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
@@ -561,6 +564,7 @@ function ViewerSurface({
   selectionHighlight,
   onClearSelection,
   onLegendCategoryVisibilityChange,
+  onLegendShowMore,
   coordinateUnit,
   measurementEnabled,
   measurementUnit,
@@ -2179,6 +2183,7 @@ function ViewerSurface({
           <ViewerLegend
             sections={legendSections}
             onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
+            onShowMore={onLegendShowMore}
           />
           <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
           {viewportMessage === null ? null : (

@@ -26,7 +26,7 @@ import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
 import { useImageSectionModel } from './features/sections/imageSectionModel'
 import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
 import { useViewSettingsModel } from './features/sections/viewSettingsModel'
-import { useLayerPanelModel } from './features/shell/layerPanelModel'
+import { useLayerPanelModel, type LayerReveal } from './features/shell/layerPanelModel'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
@@ -1311,6 +1311,16 @@ export function App({ dependencies }: AppProps = {}) {
       },
       [handleAnnotationVisibilityChange, setTranscriptGeneVisible],
     )
+  // The legend's "+N more in …" opens that list in the layer panel.
+  const [layerReveal, setLayerReveal] = useState<LayerReveal | null>(null)
+  const handleLegendShowMore = useCallback((sectionId: string) => {
+    setLayerReveal((current) => ({
+      ...(sectionId === TRANSCRIPT_GENE_LEGEND_ID
+        ? { section: 'transcripts' as const, anchor: null }
+        : { section: 'cells' as const, anchor: 'clusters' as const }),
+      key: (current?.key ?? 0) + 1,
+    }))
+  }, [])
   const focusSpatialViewOnCell = useCallback(
     (cell: OverviewCellDatum) => {
       spatialFocusRequestIdRef.current += 1
@@ -4070,6 +4080,7 @@ export function App({ dependencies }: AppProps = {}) {
         selectionHighlight={selectionHighlight}
         onClearSelection={handleClearSelection}
         onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
+        onLegendShowMore={handleLegendShowMore}
         coordinateUnit={coordinateUnit}
         measurementEnabled={measurementEnabled}
         measurementUnit={measurementUnit}
@@ -4177,6 +4188,7 @@ export function App({ dependencies }: AppProps = {}) {
         embedding={platformAdapter.capabilities.cells ? embedding : null}
         panels={shellPanels}
         onPanelsChange={setShellPanels}
+        layerReveal={layerReveal}
         collection={
           datasetCollection.state.status === 'idle' ? null : (
             <CollectionBar
