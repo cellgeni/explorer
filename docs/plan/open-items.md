@@ -321,11 +321,6 @@ Correctness and robustness:
       (`useAnnotationWorkflow.ts`), with no byte limit, unlike the H5AD and
       segmentation loaders, and parses it on the main thread, so a link to a
       large file can stall or crash the tab.
-- [ ] CSV exports do not neutralise a leading `=`, `+`, `-` or `@`, so a cell
-      ID or label from a remote dataset or an `annotationUrl=` import can run
-      as a formula when the file is opened in a spreadsheet. `csvEscape` has
-      three copies (`roiModel.ts`, `visiumHdRoiModel.ts`,
-      `annotationModel.ts`).
 - [ ] A `compare=` in a link's query string is not removed once the hash is
       written (only `collection=` is, in `useShareableUrlHash.ts`), and the
       hash overrides the query string only for the keys it sets
@@ -355,8 +350,8 @@ Code structure:
       SpatialData and Visium HD runners.
 - [ ] Helpers are copied rather than shared: `throwIfAborted` is defined 28
       times, `abortError` and `isAbortError` 40 times between them,
-      `csvEscape` three times, `parseCsvRows` twice, and the six one-shot
-      worker wrappers are near copies of each other.
+      `parseCsvRows` twice, and the six one-shot worker wrappers are near
+      copies of each other.
 - [ ] A type-aware ESLint pass found no floating promises and one misused one
       (`handleDatasetSubmit`, an async function used as a submit handler in
       `App.tsx`). Turning on `no-floating-promises` and `no-misused-promises`
