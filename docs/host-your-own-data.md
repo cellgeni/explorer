@@ -35,6 +35,83 @@ Important rules:
 - Allow `HEAD` requests. Platform detection, H5AD size checks, and the Parquet
   reader use them. A failed `HEAD` makes detection skip that platform.
 
+## Serve Data From Your Computer
+
+A small file server such as rclone or `npx http-server` can serve data from your
+own computer over plain `http://`. Whether the viewer can read it depends on
+where the viewer itself is loaded from. This section was checked with Chrome 157
+and WebKit, Safari's engine, in November 2026. Other browsers were not tested.
+
+### Serve The Viewer With The Data
+
+This setup works in every browser. Serve a
+[release zip](../README.md#releases) and your data from the same server. The
+viewer and the data then share an origin, so no CORS headers or browser
+permissions are needed:
+
+```sh
+unzip explorer-vX.Y.Z.zip -d /path/to/data
+npx http-server /path/to/data -a 127.0.0.1 -c-1
+```
+
+Then open
+`http://127.0.0.1:8080/explorer-vX.Y.Z/?dataset=http://127.0.0.1:8080/sample.h5ad`,
+or open `http://127.0.0.1:8080/explorer-vX.Y.Z/` and paste the dataset address.
+The server still has to answer byte-range requests (see
+[File servers](#file-servers)).
+
+### Use The Hosted Viewer With Local Data
+
+The hosted viewer at <https://cellgeni.github.io/explorer/> is served over
+HTTPS, and browsers restrict what an HTTPS page can read from `http://`
+addresses:
+
+| Data address                                          | Chrome                                                                                                                                                                                                  | Safari  |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| This computer: `http://localhost`, `http://127.0.0.1` | Asks to let the site access other apps and services on this device. Allow it and the data loads. If you blocked it, allow **Apps on device** in the site settings next to the address bar, then reload. | Blocked |
+| The local network, such as `http://192.168.1.20`      | Asks for **Local network** access. Even with it, reads made by the viewer's background workers fail, so a dataset may load only partly or not at all.                                                   | Blocked |
+| Any other `http://` address                           | Blocked as mixed content                                                                                                                                                                                | Blocked |
+
+When a read is blocked, usually reported as "Request blocked", the error says
+which of these cases applies. The server must also send CORS headers (see
+[File servers](#file-servers)), or Chrome reports the same error after the
+permission is allowed.
+
+For data on another machine, such as a cluster node, forward its port over SSH.
+The data is then on this computer as far as the browser can tell, so Chrome
+can read it after asking:
+
+```sh
+ssh -L 8080:localhost:8080 user@node
+```
+
+Then use `http://localhost:8080/...` as the dataset address. On Safari, serve
+the viewer with the data instead, or serve the data over HTTPS.
+
+### File Servers
+
+The server must answer `Range` requests with `206 Partial Content` and allow
+`HEAD`. Unless it also serves the viewer, it must send
+`Access-Control-Allow-Origin`.
+
+| Server                     | Command                                                             | Notes                                                                                                                                                                                                                                  |
+| -------------------------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rclone                     | `rclone serve http /path/to/data --allow-origin '*' -L`             | Without `-L` it skips symbolic links. It caches folder listings for 5 minutes, so files added after it starts answer 404 until then: restart it or lower `--dir-cache-time`. It can also serve a remote, such as `remote:bucket/path`. |
+| http-server                | `npx http-server /path/to/data --cors -c-1 -a 127.0.0.1`            | By default it tells the browser to cache files for an hour, so a rewritten file keeps its old bytes; `-c-1` turns that off.                                                                                                            |
+| serve                      | `npx serve /path/to/data --cors --symlinks -l tcp://127.0.0.1:3000` | Without `--symlinks` it answers 404 for symbolic links.                                                                                                                                                                                |
+| Python `http.server`       | Does not work                                                       | It ignores `Range` and always sends the whole file, and has no option for CORS headers. This includes running it through `uv` or `uvx`.                                                                                                |
+| `scripts/range-server.mjs` | `node scripts/range-server.mjs /path/to/data --port 4199`           | This repository's test server. See [Serve data locally](./profiling.md#serve-data-locally).                                                                                                                                            |
+
+With these flags, all of them send CORS headers on `404` responses too, so a
+missing file is reported as missing. None of them expose `Content-Range` to the
+browser, and the viewer does not need it.
+
+`--cors` and `--allow-origin '*'` let any website open in your browser read the
+served folder while the server runs. Serve only the data folder, and stop the
+server when you are done. rclone listens only on this computer by default; the
+`-a` and `-l` options above do the same for http-server and serve, which
+otherwise listen on every network interface.
+
 ## Host Your Own Xenium Data
 
 At minimum, host a Xenium output folder with:

@@ -14,7 +14,7 @@
 ## Hosting Data And Deploying
 
 - [Host your own data](./host-your-own-data.md): which files to host for each
-  source type.
+  source type, and how to serve data from your own computer.
 - [Dataset manifest](./dataset-manifest.md): an optional `explorer.json` that
   declares the platform, points to renamed or moved files, and sets what the
   viewer shows on first load.

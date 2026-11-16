@@ -411,6 +411,74 @@ describe('loadErrorModel', () => {
     )
     expect(many.detail).toMatch(/f5: HTTP 404; and 2 more$/)
   })
+
+  it('explains failed plain-http reads from an HTTPS page instead of blaming CORS', async () => {
+    const hosted = { pageUrl: 'https://cellgeni.github.io/explorer/' }
+    const blockedAt = (url: string) =>
+      datasetDetectionError([
+        { path: 'a.h5ad', url, ok: false, error: 'Failed to fetch' },
+      ])
+
+    const loopback = createStructuredLoadError(
+      'Dataset overview',
+      blockedAt('http://127.0.0.1:8080/a.h5ad'),
+      hosted,
+    )
+    expect(loopback).toMatchObject({ code: 'blocked', title: 'Request blocked' })
+    expect(loopback.action).toContain('apps and services on this device')
+
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        blockedAt('http://192.168.1.20:8080/a.h5ad'),
+        hosted,
+      ).action,
+    ).toContain('local network')
+
+    // The same failure from a plain-http page, or for an HTTPS address, keeps
+    // the CORS advice.
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        blockedAt('http://127.0.0.1:8080/a'),
+        {
+          pageUrl: 'http://localhost:5173/',
+        },
+      ).action,
+    ).toContain('CORS')
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        blockedAt('https://example.org/a'),
+        hosted,
+      ).action,
+    ).toContain('CORS')
+
+    // A bare network error takes the address from the caller.
+    const network = createStructuredLoadError(
+      'Morphology image',
+      new TypeError('Failed to fetch'),
+      {
+        ...hosted,
+        url: 'http://example.org/slide.ome.tif',
+      },
+    )
+    expect(network).toMatchObject({ code: 'network', title: 'Network request failed' })
+    expect(network.action).toContain('mixed content')
+
+    // A Range probe that got no response names the address in its message.
+    const probe = await assertHttpRangeSupport('http://localhost:8080/cells.parquet', {
+      fetcher: async () => {
+        throw new TypeError('Failed to fetch')
+      },
+    }).then(
+      () => new Error('Range probe unexpectedly passed'),
+      (error: unknown) => error,
+    )
+    const rangeBlocked = createStructuredLoadError('Dataset overview', probe, hosted)
+    expect(rangeBlocked.code).toBe('range-not-supported')
+    expect(rangeBlocked.action).toContain('apps and services on this device')
+  })
 })
 
 // Runs the real Range probe against a stub response without Content-Range, so

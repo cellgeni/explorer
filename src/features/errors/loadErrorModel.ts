@@ -1,3 +1,5 @@
+import { firstUrlIn, insecureRequestAction } from './insecureRequest'
+
 export type LoadErrorCode =
   | 'network'
   | 'http'
@@ -65,21 +67,35 @@ export function formatStructuredError(error: StructuredLoadError): string {
   return `${error.title}: ${error.message}`
 }
 
+export interface LoadErrorContext {
+  // The address being read, for errors that do not name one.
+  readonly url?: string
+  // The page's own address. Defaults to the current location.
+  readonly pageUrl?: string
+}
+
 const SERVER_ERROR_ACTION =
   'The host failed to serve the file. Retry; if it keeps failing, check the server, gateway, or object store hosting the dataset.'
 
 export function createStructuredLoadError(
   source: LoadErrorSource,
   error: unknown,
+  context: LoadErrorContext = {},
 ): StructuredLoadError {
   const message = readErrorMessage(error)
   const normalizedMessage = message.toLowerCase()
   const detail = readErrorDetail(error)
   const rangeReadStatus = readRangeReadFailureStatus(normalizedMessage)
   const detection = readDatasetDetectionError(error)
+  // Replaces the CORS advice when a read that got no response went from this
+  // HTTPS page to a plain-http address (src/features/errors/insecureRequest.ts).
+  const insecureAction = insecureRequestAction(
+    detection?.checked[0]?.url ?? firstUrlIn(message) ?? context.url,
+    context.pageUrl ?? currentPageUrl(),
+  )
 
   if (detection !== null) {
-    return datasetDetectionLoadError(source, message, detection)
+    return datasetDetectionLoadError(source, message, detection, insecureAction)
   }
 
   if (rangeReadStatus === 403 || rangeReadStatus === 404) {
@@ -187,7 +203,8 @@ export function createStructuredLoadError(
   }
 
   // Thrown by detection for a dataset manifest (explorer.json) that cannot be
-  // read or does not validate. Matched by name to keep this module import-free.
+  // read or does not validate. Matched by name to keep this module free of
+  // data-layer imports.
   if (error instanceof Error && error.name === 'DatasetManifestError') {
     return withOptionalDetail(
       {
@@ -212,7 +229,11 @@ export function createStructuredLoadError(
         code: 'range-not-supported',
         title: 'Byte-range requests blocked',
         message,
-        action: 'Configure the host to return HTTP 206 for Range requests.',
+        action:
+          insecureAction !== undefined &&
+          normalizedMessage.includes('before an http response')
+            ? insecureAction
+            : 'Configure the host to return HTTP 206 for Range requests.',
       },
       detail,
     )
@@ -256,7 +277,7 @@ export function createStructuredLoadError(
         code: 'network',
         title: 'Network request failed',
         message,
-        action: 'Check dataset URL, CORS, and network access.',
+        action: insecureAction ?? 'Check dataset URL, CORS, and network access.',
       },
       detail,
     )
@@ -473,6 +494,10 @@ function isNetworkErrorMessage(normalizedMessage: string): boolean {
   )
 }
 
+function currentPageUrl(): string | undefined {
+  return typeof location === 'undefined' ? undefined : location.href
+}
+
 export function readErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.length > 0) {
     return error.message
@@ -626,6 +651,7 @@ interface DatasetDetectionErrorSummary {
   readonly kind: string
   readonly checked: readonly {
     readonly path: string
+    readonly url?: string
     readonly ok: boolean
     readonly status?: number
     readonly error?: string
@@ -633,7 +659,7 @@ interface DatasetDetectionErrorSummary {
 }
 
 // DatasetDetectionError (src/datasets/datasetDetectionError.ts), matched by
-// name to keep this module import-free.
+// name to keep this module free of data-layer imports.
 function readDatasetDetectionError(error: unknown): DatasetDetectionErrorSummary | null {
   if (!(error instanceof Error) || error.name !== 'DatasetDetectionError') {
     return null
@@ -690,9 +716,17 @@ function datasetDetectionLoadError(
   source: LoadErrorSource,
   message: string,
   detection: DatasetDetectionErrorSummary,
+  insecureAction: string | undefined,
 ): StructuredLoadError {
-  const { code, title, action } =
-    DATASET_DETECTION_ERRORS[detection.kind] ?? DATASET_DETECTION_ERRORS.unsupported!
+  const {
+    code,
+    title,
+    action: defaultAction,
+  } = DATASET_DETECTION_ERRORS[detection.kind] ?? DATASET_DETECTION_ERRORS.unsupported!
+  const action =
+    detection.kind === 'blocked' && insecureAction !== undefined
+      ? insecureAction
+      : defaultAction
   const listed = detection.checked.slice(0, CHECKED_FILES_LISTED)
   const unlisted = detection.checked.length - listed.length
   const detail = listed
