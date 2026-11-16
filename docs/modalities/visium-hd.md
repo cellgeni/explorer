@@ -220,5 +220,3 @@ Changing the bin size runs `useVisiumHdBinWorkflow`.
 - With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
   stand-in bins but query the 2 µm matrix (found by reading the code; not
   reproduced).
-- Diagnostics range-check one per-tier UMAP path, while the viewer searches
-  the tier's paths and then the root's.

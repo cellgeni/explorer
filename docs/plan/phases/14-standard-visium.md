@@ -49,6 +49,9 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
       dots; Dataset tab panel with library, spots, chemistry, scale, and a
       `Tissue image` select (High-res, Low-res, None).
 - [x] Diagnostics for Space Ranger folders (no Range support needed).
+  - [x] 2026-11-16: when no clusters or UMAP path can be read, the check
+        reports the first path's failure, not the last, and names the others
+        (see [Phase 6](06-visium-hd.md#closed-open-items)).
 - [x] Unit tests for parsing, units, BMP encoding, the Space Ranger reader,
       `uns/spatial`, detection, manifests, the adapter, the lifecycle, and the
       Dataset tab; Playwright smoke with a routed Space Ranger folder and a

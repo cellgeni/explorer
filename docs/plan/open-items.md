@@ -18,13 +18,6 @@ Sequencing:
 - [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
       Slice ranges, memory, and bundles.
 
-Reopened by the 2026-11-08 review (marked done before, found incomplete):
-
-- [ ] Diagnostics left as they were on 2026-11-12: the Visium HD per-tier UMAP
-      check range-checks one path while the viewer searches the tier's paths
-      and then the root's, and the standard Visium analysis check reports the
-      last candidate's failure, not the first.
-
 Other gaps found in the review:
 
 - [ ] Byte-range cache keys omit the `ETag`.

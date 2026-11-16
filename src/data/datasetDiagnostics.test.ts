@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { loadDatasetAnalysisEmbeddings } from './analysisEmbeddings'
 import { runDatasetDiagnostics, summarizeDatasetDiagnostics } from './datasetDiagnostics'
 import {
   setSpatialDataSelection,
@@ -759,9 +760,14 @@ describe('runDatasetDiagnostics', () => {
       'https://example.test/visium/feature_slice.h5',
       expect.objectContaining({ label: 'Feature Slice H5' }),
     )
-    expect(rangeValidator).toHaveBeenCalledWith(
+    // The viewer reads the projection CSV whole.
+    expect(fetcher).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_016um/analysis/umap/gene_expression_2_components/projection.csv',
-      expect.objectContaining({ label: 'Visium HD 16um UMAP projection' }),
+      expect.objectContaining({ method: 'HEAD' }),
+    )
+    expect(rangeValidator).not.toHaveBeenCalledWith(
+      expect.stringContaining('projection.csv'),
+      expect.anything(),
     )
     expect(rangeValidator).toHaveBeenCalledWith(
       'https://example.test/visium/segmented_outputs/filtered_feature_cell_matrix.h5',
@@ -934,6 +940,104 @@ describe('runDatasetDiagnostics', () => {
       expect.objectContaining({ method: 'GET' }),
     )
     expect(summarizeDatasetDiagnostics(report)).toBe('2 failed, 0 warnings')
+  })
+
+  it.each([
+    [
+      'a later path in the tier',
+      'binned_outputs/square_016um/analysis/umap/projection.csv',
+    ],
+    ['the root', 'analysis/umap/gene_expression_2_components/projection.csv'],
+  ])('passes a Visium HD UMAP projection found only at %s', async (_where, path) => {
+    const fetcher = projectionFetcher([path])
+    const report = await runDatasetDiagnostics('https://example.test/visium', {
+      detectDataset: vi.fn(async () =>
+        visiumHdDetection([visiumBin(16, 'square_016um')]),
+      ),
+      fetcher,
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'visium-hd-16um-umap-projection'),
+    ).toMatchObject({
+      label: 'Visium HD 16um UMAP projection',
+      required: false,
+      status: 'pass',
+      url: `https://example.test/visium/${path}`,
+    })
+    // In the viewer's order, stopping at the first that answers.
+    expect(projectionRequests(fetcher)).toEqual(
+      VISIUM_HD_16UM_UMAP_PATHS.slice(0, VISIUM_HD_16UM_UMAP_PATHS.indexOf(path) + 1).map(
+        (candidate) => ['HEAD', candidate],
+      ),
+    )
+    expect(summarizeDatasetDiagnostics(report)).toBe('All checks passed')
+  })
+
+  it('reports the first Visium HD UMAP path when the viewer would find none', async () => {
+    const fetcher = projectionFetcher([])
+    const report = await runDatasetDiagnostics('https://example.test/visium', {
+      detectDataset: vi.fn(async () =>
+        visiumHdDetection([visiumBin(16, 'square_016um')]),
+      ),
+      fetcher,
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'visium-hd-16um-umap-projection'),
+    ).toMatchObject({
+      required: false,
+      status: 'warning',
+      url: `https://example.test/visium/${VISIUM_HD_16UM_UMAP_PATHS[0]}`,
+      message: `HTTP 404; ${VISIUM_HD_16UM_UMAP_PATHS.slice(1).join(', ')} also could not be read`,
+    })
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+
+    // The viewer asks for the same paths in the same order.
+    const viewerFetcher = projectionFetcher([])
+    await expect(
+      loadDatasetAnalysisEmbeddings('https://example.test/visium', {
+        fetcher: viewerFetcher as unknown as typeof fetch,
+        visiumHdBinSizeMicrometers: 16,
+      }),
+    ).resolves.toEqual([])
+    expect(
+      projectionRequests(viewerFetcher)
+        .map(([, path]) => path)
+        .filter((path) => path.includes('/umap/')),
+    ).toEqual(projectionRequests(fetcher).map(([, path]) => path))
+  })
+
+  it('reports the first standard Visium analysis path when none can be read', async () => {
+    const fetcher = statusFetcher({
+      // Clusters at the Space Ranger 1.x path only.
+      'gene_expression_graphclust/clusters.csv': 404,
+      'gene_expression_2_components/projection.csv': 403,
+      '/2_components/projection.csv': 404,
+    })
+    const report = await runDatasetDiagnostics('https://example.test/visium', {
+      detectDataset: vi.fn(async () => visiumDetection()),
+      fetcher,
+    })
+    const check = (id: string) => report.checks.find((entry) => entry.id === id)
+
+    expect(check('visium-clusters')).toMatchObject({
+      label: 'Visium graph-based clusters',
+      required: false,
+      status: 'pass',
+      url: 'https://example.test/visium/analysis/clustering/graphclust/clusters.csv',
+    })
+    expect(check('visium-umap')).toMatchObject({
+      label: 'Visium UMAP projection',
+      required: false,
+      status: 'warning',
+      url: 'https://example.test/visium/analysis/umap/gene_expression_2_components/projection.csv',
+      message:
+        'HTTP 403; analysis/umap/2_components/projection.csv also could not be read',
+    })
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
   })
 
   it('cancels the body of each file it only checks with GET', async () => {
@@ -1177,6 +1281,34 @@ function xeniumDetection(baseUrl: string): SpatialDatasetDetection {
   return { platform: 'xenium', baseUrl, checked: [] }
 }
 
+// Where the viewer looks for a 16 µm tier's UMAP, in order.
+const VISIUM_HD_16UM_UMAP_PATHS = [
+  'binned_outputs/square_016um/analysis/umap/gene_expression_2_components/projection.csv',
+  'binned_outputs/square_016um/analysis/umap/2_components/projection.csv',
+  'binned_outputs/square_016um/analysis/umap/projection.csv',
+  'analysis/umap/gene_expression_2_components/projection.csv',
+  'analysis/umap/2_components/projection.csv',
+  'analysis/umap/projection.csv',
+]
+
+function visiumDetection(): Extract<
+  SpatialDatasetDetection,
+  { readonly platform: 'visium' }
+> {
+  return {
+    platform: 'visium',
+    baseUrl: 'https://example.test/visium',
+    files: {
+      tissuePositions: 'spatial/tissue_positions.csv',
+      scalefactors: 'spatial/scalefactors_json.json',
+      filteredMatrix: 'filtered_feature_bc_matrix.h5',
+      hiresImage: 'spatial/tissue_hires_image.png',
+      lowresImage: 'spatial/tissue_lowres_image.png',
+    },
+    checked: [],
+  }
+}
+
 function visiumHdDetection(
   bins: Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }>['bins'],
 ): Extract<SpatialDatasetDetection, { readonly platform: 'visium-hd' }> {
@@ -1205,6 +1337,36 @@ function statusFetcher(
 
     return body === undefined ? new Response('{}', { status: 200 }) : Response.json(body)
   })
+}
+
+// Like statusFetcher, but a projection CSV answers 404 unless its path under
+// https://example.test/visium/ is in `readable`. Suffixes cannot tell the
+// root's projection paths from a tier's.
+function projectionFetcher(readable: readonly string[]) {
+  return vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+    async (input) => {
+      const path = String(input).replace('https://example.test/visium/', '')
+
+      return path.endsWith('projection.csv') && !readable.includes(path)
+        ? new Response(null, { status: 404 })
+        : new Response('{}', { status: 200 })
+    },
+  )
+}
+
+// [method, path] of each projection CSV request, in order.
+function projectionRequests(
+  fetcher: ReturnType<typeof projectionFetcher>,
+): readonly (readonly [string, string])[] {
+  return fetcher.mock.calls
+    .map(
+      ([input, init]) =>
+        [
+          init?.method ?? 'GET',
+          String(input).replace('https://example.test/visium/', ''),
+        ] as const,
+    )
+    .filter(([, path]) => path.endsWith('projection.csv'))
 }
 
 function visiumBin(
