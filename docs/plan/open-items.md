@@ -289,10 +289,6 @@ Correctness and robustness:
       DuckDB's extension repository at run time, outside the lockfile.
 - [ ] When a Zarr decode worker fails, its chunks decode on the main thread
       with no notice (`workerZarrCodecs.ts`).
-- [ ] `annotationUrl=` reads the whole response with `response.text()`
-      (`useAnnotationWorkflow.ts`), with no byte limit, unlike the H5AD and
-      segmentation loaders, and parses it on the main thread, so a link to a
-      large file can stall or crash the tab.
 
 Rendering:
 

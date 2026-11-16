@@ -140,3 +140,13 @@ Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review
       one of those, a tab or a line break, unless it is a number, so
       negative coordinates stay numbers. The annotation importer drops that
       `'`, so an exported file imports unchanged.
+- [x] `annotationUrl=` and Import URL read the whole response with
+      `response.text()`, with no byte limit, unlike the H5AD and segmentation
+      loaders, and parse it on the main thread, so a link to a large file
+      could stall or crash the tab. Since 2026-11-16 they stop at 100 MB
+      (`readAnnotationUrlText` in `annotationUrlText.ts`): before reading
+      when Content-Length is over it, or as soon as the bytes read pass it,
+      and say "Annotation file too large". Parsing stays on the main thread;
+      it ran at about 40 MB/s here (2 million `cell_id,label` rows, 95 MB, in
+      2.5 s). Imports from disk are not limited, since the user picks the
+      file.
