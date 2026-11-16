@@ -39,6 +39,7 @@ import {
   offlineFetch,
   openControls,
   pendingPromise,
+  visiumHdBinFixture,
   visiumHdDetectionFixture,
   visiumHdMetaFixture,
   visiumOverviewFixture,
@@ -702,6 +703,120 @@ describe('App', () => {
       await waitFor(() => {
         expect(window.location.hash).toContain('card=bin%3ABC-2')
       })
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  it('keeps a Visium HD dataset open when another bin size fails to load', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    // Zoomed in far enough that 2 µm bins are read as 2 µm, not as a 16 µm view.
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&view=20,10,0,4`,
+    )
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        bins: [
+          visiumHdBinFixture(),
+          visiumHdBinFixture({
+            binSizeMicrometers: 2,
+            outputPath: 'binned_outputs/square_002um',
+            tissuePositionsPath:
+              'binned_outputs/square_002um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_002um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
+          }),
+        ],
+      }),
+    )
+    const overview = visiumOverviewFixture()
+    let failTwoMicrometerBins = true
+    const readBinnedOverview = vi.fn(async (binSize?: number) => {
+      if (binSize === 2 && failTwoMicrometerBins) {
+        throw new Error('HTTP 503 for square_002um/spatial/tissue_positions.parquet')
+      }
+      return binSize === 2 ? twoMicrometerOverview(overview) : overview
+    })
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        readBinnedOverview,
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({ geneNames: ['A2M'], cells: new Map() })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+      // Summarise View waits for the viewer's first view report, which
+      // carries the zoom that picks the tier to read.
+      openControls('magic-lens')
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+
+      openControls('spot-options')
+      const bins = screen.getByRole('region', { name: 'Visium HD dataset' })
+      fireEvent.click(within(bins).getByRole('button', { name: '2 µm' }))
+
+      await waitFor(() => {
+        expect(within(bins).getByText(/HTTP 503/)).toBeInTheDocument()
+      })
+      expect(readBinnedOverview).toHaveBeenLastCalledWith(2)
+      // The 16 µm bins stay open and drawn; only the bin control and the
+      // diagnostics report the failed tier.
+      expect(
+        screen.queryByRole('region', { name: 'Open a dataset' }),
+      ).not.toBeInTheDocument()
+      expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+        'data-count',
+        '2',
+      )
+      expect(within(bins).getByRole('button', { name: '2 µm' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      openControls('diagnostics')
+      expect(screen.getByRole('status', { name: 'Fallback notices' })).toHaveTextContent(
+        '2 µm bins could not be loaded, so the app kept the 16 µm bins already drawn.',
+      )
+      expect(screen.getByText(/Visium HD 2 µm bins failed/)).toBeInTheDocument()
+      expect(screen.queryByRole('alert', { name: 'Load issues' })).toBeNull()
+
+      // Clicking the failed size again retries it.
+      failTwoMicrometerBins = false
+      openControls('spot-options')
+      fireEvent.click(
+        within(screen.getByRole('region', { name: 'Visium HD dataset' })).getByRole(
+          'button',
+          { name: '2 µm' },
+        ),
+      )
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+          'data-count',
+          '3',
+        )
+      })
+      expect(
+        screen.getByRole('region', { name: 'Visium HD dataset' }),
+      ).not.toHaveTextContent('HTTP 503')
     } finally {
       viewport.restore()
     }
@@ -6312,6 +6427,30 @@ async function waitForViewReport(transcriptsInView: string): Promise<void> {
       screen.getByRole('meter', { name: 'Exact points', hidden: true }),
     ).toHaveAttribute('aria-valuetext', `${transcriptsInView} of 100,000 points`)
   })
+}
+
+// A 2 µm tier over the same tissue: three bins where the 16 µm fixture has two.
+function twoMicrometerOverview(
+  overview: ReturnType<typeof visiumOverviewFixture>,
+): ReturnType<typeof visiumOverviewFixture> {
+  const grid = { ...overview.grid, id: 'grid-2um', binSizeMicrometers: micrometers(2) }
+
+  return {
+    ...overview,
+    binSizeMicrometers: 2,
+    scalefactors: { ...overview.scalefactors, binSizeMicrometers: 2 },
+    grid,
+    gridCells: {
+      kind: 'grid-cells',
+      gridId: grid.id,
+      ids: ['BC-2-1', 'BC-2-2', 'BC-2-3'],
+      rows: new Int32Array([0, 0, 1]),
+      cols: new Int32Array([0, 1, 0]),
+    },
+    fullresRows: new Float64Array([5, 5, 7]),
+    fullresCols: new Float64Array([10, 12, 10]),
+    inTissue: new Uint8Array([1, 1, 1]),
+  }
 }
 
 function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {

@@ -154,7 +154,10 @@ Visium HD has no transcript records.
 
 Changing the bin size runs `useVisiumHdBinWorkflow`. The drawn tier stays on
 screen until the new one is ready, and the `Active bins` row names it, as in
-"54,504 at 16 µm view; 2 µm selected"; after a failed load it still does.
+"54,504 at 16 µm view; 2 µm selected"; after a failed load it still does. A
+failed load leaves the dataset open on that tier: the bin control shows the
+error, Diagnostics lists it under Fallbacks and in the activity log, and
+selecting the size again retries it.
 
 ## Caching And Workers
 
@@ -221,4 +224,8 @@ screen until the new one is ready, and the `Active bins` row names it, as in
 - The 2 → 16 µm gene LOD does not check that 16 µm exists.
 - With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
   stand-in bins but query the 2 µm matrix (found by reading the code; not
+  reproduced).
+- After a failed bin-size switch, and while a tier loads, the new size is
+  selected but the old tier is drawn. Selected-gene overlays, ROI, Magic Lens
+  and the Bin card read the selected size (found by reading the code; not
   reproduced).

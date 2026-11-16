@@ -47,6 +47,11 @@ Other gaps found in the review:
       running until reload. Found 2026-11-14.
 - [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
       detection needs a positions file that is never read.
+- [ ] Visium HD: after a failed bin-size switch, and while a tier loads, the
+      new size is selected but the old tier is drawn, and selected-gene
+      overlays, ROI, Magic Lens and the Bin card read the selected size
+      (`activeVisiumHdBinSize` in `App.tsx`). Found by reading the code
+      2026-11-16; not reproduced.
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](phases/11-dataset-manifest.md)).

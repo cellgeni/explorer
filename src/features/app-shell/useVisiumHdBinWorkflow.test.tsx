@@ -696,6 +696,159 @@ describe('useVisiumHdBinWorkflow', () => {
       }),
     )
   })
+
+  it('keeps the dataset open when a bin tier fails, and retries it', async () => {
+    const grid = visiumGrid(2)
+    const overview = visiumOverview(grid, 'BC-2')
+    const readBinnedOverview = vi
+      .fn<() => Promise<VisiumHdBinnedOverview>>()
+      .mockRejectedValueOnce(new Error('HTTP 503 for tissue_positions.parquet'))
+      .mockResolvedValueOnce(overview)
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => null),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview,
+    }
+    let controlState = visiumControlState()
+    const setVisiumHdControlState = vi.fn(
+      (
+        next:
+          | VisiumHdControlState
+          | ((current: VisiumHdControlState) => VisiumHdControlState),
+      ) => {
+        controlState = typeof next === 'function' ? next(controlState) : next
+      },
+    )
+    const setLoadState = vi.fn()
+    const setSpatialGridCells = vi.fn()
+    const onFallback = vi.fn()
+    let api: UseVisiumHdBinWorkflowResult | null = null
+    const probe = (state: VisiumHdControlState) => (
+      <Probe
+        state={state}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        currentViewportDetail={viewportDetail(3)}
+        onFallback={onFallback}
+        setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
+        setLoadState={setLoadState}
+        setMorphologyState={vi.fn()}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={setVisiumHdControlState}
+      />
+    )
+
+    const { rerender } = render(probe(controlState))
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(2)
+    })
+
+    // The 16 µm bins stay drawn and the dataset stays loaded.
+    expect(readBinnedOverview).toHaveBeenCalledWith(2)
+    expect(setSpatialGridCells).not.toHaveBeenCalled()
+    expect(setLoadState).not.toHaveBeenCalled()
+    expect(controlState).toEqual(
+      expect.objectContaining({
+        status: 'error',
+        selectedBinSize: 2,
+        error: 'HTTP 503 for tissue_positions.parquet',
+      }),
+    )
+    expect(onFallback).toHaveBeenCalledWith({
+      source: 'Dataset overview',
+      message:
+        '2 µm bins could not be loaded, so the app kept the 16 µm bins already drawn.',
+      action: 'Select 2 µm again to retry, or choose another bin size.',
+      detail: 'HTTP 503 for tissue_positions.parquet',
+    })
+
+    // Selecting the failed size again retries it.
+    rerender(probe(controlState))
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(2)
+    })
+
+    expect(readBinnedOverview).toHaveBeenCalledTimes(2)
+    expect(setSpatialGridCells).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'BC-2', binSizeMicrometers: 2 }),
+    ])
+    expect(setLoadState).toHaveBeenCalledWith({
+      status: 'ready',
+      url: 'https://example.test/visium',
+      cellCount: 1,
+    })
+    expect(controlState).toEqual(
+      expect.objectContaining({ status: 'ready', selectedBinSize: 2, binCount: 1 }),
+    )
+  })
+
+  it('reports a failed tissue image without failing the bin tier', async () => {
+    const grid = visiumGrid(8)
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => {
+        throw new Error('HTTP 403 for tissue_hires_image.png')
+      }),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview: vi.fn(async () => visiumOverview(grid, 'BC-8')),
+    }
+    const setLoadState = vi.fn()
+    const setMorphologyState = vi.fn()
+    const setVisiumHdControlState = vi.fn()
+    const onFallback = vi.fn()
+    let api: UseVisiumHdBinWorkflowResult | null = null
+
+    render(
+      <Probe
+        state={visiumControlState()}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        onFallback={onFallback}
+        setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
+        setLoadState={setLoadState}
+        setMorphologyState={setMorphologyState}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={vi.fn()}
+        setVisiumHdControlState={setVisiumHdControlState}
+      />,
+    )
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(8)
+    })
+
+    expect(setLoadState).toHaveBeenCalledTimes(1)
+    expect(setLoadState).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ready' }),
+    )
+    expect(setVisiumHdControlState).toHaveBeenLastCalledWith(
+      expect.objectContaining({ status: 'ready', selectedBinSize: 8 }),
+    )
+    expect(setMorphologyState).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        status: 'error',
+        error: expect.objectContaining({ source: 'Morphology image' }) as unknown,
+      }),
+    )
+    expect(onFallback).not.toHaveBeenCalled()
+  })
 })
 
 function visiumControlState(): VisiumHdControlState {
@@ -795,5 +948,31 @@ function visiumMeta(grid: SpatialGrid): DatasetMeta {
       multiChannel: false,
     },
     grids: [grid],
+  }
+}
+
+function visiumOverview(grid: SpatialGrid, id: string): VisiumHdBinnedOverview {
+  const binSize = grid.binSizeMicrometers as 2 | 8 | 16
+  const folder = `binned_outputs/square_${binSize.toString().padStart(3, '0')}um`
+
+  return {
+    binSizeMicrometers: binSize,
+    scalefactors: {
+      micronsPerPixel: 0.5,
+      tissueHiresScale: 0.2,
+      tissueLowresScale: 0.02,
+    },
+    grid,
+    gridCells: gridCells(grid, id),
+    fullresRows: new Float64Array([16]),
+    fullresCols: new Float64Array([16]),
+    inTissue: new Uint8Array([1]),
+    sourcePaths: {
+      tissuePositions: `${folder}/spatial/tissue_positions.parquet`,
+      scalefactors: `${folder}/spatial/scalefactors_json.json`,
+      tissueHiresImage: `${folder}/spatial/tissue_hires_image.png`,
+      tissueLowresImage: `${folder}/spatial/tissue_lowres_image.png`,
+      filteredMatrixH5: `${folder}/filtered_feature_bc_matrix.h5`,
+    },
   }
 }
