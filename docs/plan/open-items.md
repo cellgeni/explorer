@@ -274,21 +274,14 @@ A read of the code at `bea26d2` against the conventions in
 [PLAN.md](../../PLAN.md#conventions-for-every-task). None of these was
 recorded before.
 
-Loading and dependencies:
+Dependencies (the `h5wasm` preload and the unused `deck.gl` package are
+closed; see
+[Optimization Pass](phases/optimization-pass.md#closed-open-items)):
 
-- [ ] The start screen preloads `spatial-io-vendor`, 5.3 MB (1,244 kB gzip),
-      and 3.7 MB of it is `h5wasm`, which the main thread imports only
-      lazily. Taking `h5wasm` out of that chunk group in `vite.config.ts` cut
-      the start screen's JavaScript from 1,783 kB to 753 kB gzip in a test
-      build (see
-      [Bundle Check](phases/optimization-pass.md#bundle-check-2026-11-16)).
-- [ ] The umbrella `deck.gl` package is never imported, but its `carto`,
-      `geo-layers` and `mesh-layers` dependencies bring 15 of the 16
-      advisories `npm audit --omit=dev` reports, all 9 high ones among them.
-      None reaches the bundle. The 16th, `qs`, comes with duckdb-wasm.
-      `h5wasm` is the one dependency not pinned (`^0.10.2`). hyparquet stays
-      at 1.26.0 for `patches/hyparquet+1.26.0.patch` while 1.33.0 is out.
-      Nothing in CI audits dependencies, and there is no Dependabot.
+- [ ] hyparquet stays at 1.26.0 for `patches/hyparquet+1.26.0.patch` while
+      1.33.0 is out. `npm audit --omit=dev` reports one moderate advisory,
+      `qs` through duckdb-wasm. Nothing in CI audits dependencies, and there
+      is no Dependabot.
 
 Correctness and robustness:
 

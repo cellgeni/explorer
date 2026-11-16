@@ -61,7 +61,8 @@ For each profile the script prints:
 
 - **Main thread by script.** Time per built chunk, named without its hash.
   Dependencies are grouped as in `vite.config.ts`: `spatial-io-vendor` holds
-  zarrita, hyparquet, geotiff and h5wasm; `codec-vendor` holds OpenJPEG,
+  zarrita, hyparquet and geotiff (h5wasm is in a lazily loaded chunk of its
+  own, `hdf5_hl`); `codec-vendor` holds OpenJPEG,
   pako, LERC and zstd; `deck-vendor` holds deck.gl and luma.gl. App code is in
   `index` or in lazily loaded chunks named after their module, such as
   `h5adDataset` or `spatialDataDataset`. Worker time is not included.
