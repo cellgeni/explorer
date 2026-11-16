@@ -40,7 +40,12 @@ function GeneControlsProbe() {
   const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
     React.useState<GeneExpressionDetailMode>('auto')
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
-    React.useState<GeneExpressionScaleDomain>({ key: 'active', top: 12, highest: 20 })
+    React.useState<GeneExpressionScaleDomain>({
+      key: 'active',
+      percentile: 99,
+      top: 12,
+      highest: 20,
+    })
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
     React.useState<GeneExpressionScoreMode>('sum')
   const [geneExpressionState, setGeneExpressionState] = React.useState<
@@ -71,7 +76,7 @@ function GeneControlsProbe() {
     geneExpressionRequestIdRef.current += 1
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', top: 0, highest: 0 })
+    setGeneExpressionScaleDomain({ key: '', percentile: 99, top: 0, highest: 0 })
     setGeneExpressionState({ status: 'idle' })
   }, [])
 
@@ -140,6 +145,7 @@ describe('useGeneControlsWorkflow', () => {
     expect(geneControlsSnapshot.geneExpressionBatch).toBeNull()
     expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({
       key: '',
+      percentile: 99,
       top: 0,
       highest: 0,
     })
@@ -173,6 +179,7 @@ describe('useGeneControlsWorkflow', () => {
     // Without a batch the remembered scale resets.
     expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({
       key: '',
+      percentile: 99,
       top: 0,
       highest: 0,
     })

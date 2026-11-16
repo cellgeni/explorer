@@ -162,6 +162,7 @@
   ],
   "defaults": {
     "genes": ["Aqp4"],
+    "geneRange": [null, "p95"],
     "cellPointScale": 2
   }
 }

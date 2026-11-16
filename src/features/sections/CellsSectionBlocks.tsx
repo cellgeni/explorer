@@ -25,7 +25,9 @@ import {
 import {
   AUTO_GENE_SCALE_PERCENTILE,
   AUTO_GENE_SCALE_RANGE,
+  formatPercentile,
   geneScaleMidpoint,
+  geneScalePercentile,
   isAutoGeneScaleRange,
 } from '../genes/geneScaleRange'
 import { useGeneSetControls } from '../genes/useGeneSetControls'
@@ -357,7 +359,7 @@ export function GeneExpressionControls({ colour }: { readonly colour: CellColour
         <label htmlFor={scaleInputId}>Gene scale</label>
         {isAutoGeneScaleRange(colour.scaleRange) ? null : (
           <Button
-            title={`Back to Auto: 0 to ${autoScaleTopCopy(colour)}`}
+            title={`Back to Auto: 0 to the ${formatPercentile(AUTO_GENE_SCALE_PERCENTILE)} percentile of the selected genes' scores above 0`}
             variant="ghost"
             className="gene-scale-reset"
             onClick={() => {
@@ -400,9 +402,26 @@ export function GeneExpressionControls({ colour }: { readonly colour: CellColour
   )
 }
 
-// Where Auto puts the top of the scale, for titles.
-function autoScaleTopCopy({ autoScaleMax, highestScore }: CellColourModel): string {
-  return `the ${AUTO_GENE_SCALE_PERCENTILE}th percentile of the selected genes' scores above 0, ${formatGeneScaleValue(autoScaleMax)} (highest ${formatGeneScaleValue(highestScore)})`
+// Where a top that follows the data is, for titles.
+function scaleTopCopy({
+  autoScaleMax,
+  highestScore,
+  scaleRange,
+}: CellColourModel): string {
+  return `the ${formatPercentile(geneScalePercentile(scaleRange))} percentile of the selected genes' scores above 0, ${formatGeneScaleValue(autoScaleMax)} (highest ${formatGeneScaleValue(highestScore)})`
+}
+
+// The top end's title: Auto, a percentile (from a link or manifest), or set.
+function scaleTopTitle(colour: CellColourModel): string {
+  const { max } = colour.scaleRange
+  const where =
+    max === null
+      ? `Auto, ${scaleTopCopy(colour)}`
+      : typeof max === 'number'
+        ? 'set'
+        : `set to ${scaleTopCopy(colour)}`
+
+  return `Score at the top of the scale: ${where}. Cells at or above it get the last colour. Type a score and press Enter to ${max === null ? 'fix' : 'change'} it`
 }
 
 // The Gene scale's ends under the gradient, with the score at its middle. Each
@@ -426,7 +445,7 @@ function GeneScaleRangeFields({ colour }: { readonly colour: CellColourModel }) 
         {formatGeneScaleValue(geneScaleMidpoint({ min: scaleMin, max: scaleMax }))}
       </span>
       <NumberField
-        title={`Score at the top of the scale: ${scaleRange.max === null ? `Auto, ${autoScaleTopCopy(colour)}` : 'set'}. Cells at or above it get the last colour. Type a score and press Enter to ${scaleRange.max === null ? 'fix' : 'change'} it`}
+        title={scaleTopTitle(colour)}
         label={<span className="visually-hidden">Gene scale maximum</span>}
         value={roundScaleValue(scaleMax)}
         className={scaleRange.max === null ? 'gene-scale-end' : 'gene-scale-end is-set'}

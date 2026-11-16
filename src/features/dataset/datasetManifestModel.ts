@@ -10,7 +10,11 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionScoreMode,
 } from '../genes/geneControlsModel'
-import { formatGeneScaleRange } from '../genes/geneScaleRange'
+import {
+  formatGeneScaleRange,
+  parseGeneScalePercentile,
+  type GeneScaleRange,
+} from '../genes/geneScaleRange'
 
 // What the info drawer shows about a dataset described by a manifest.
 export type DatasetManifestAbout = Pick<
@@ -99,10 +103,7 @@ export function manifestDefaultsToShareableState(
     geneExpressionScaleRange:
       defaults.geneRange === undefined
         ? undefined
-        : formatGeneScaleRange({
-            min: defaults.geneRange[0],
-            max: defaults.geneRange[1],
-          }),
+        : formatGeneScaleRange(manifestGeneScaleRange(defaults.geneRange)),
     geneExpressionScoreMode,
     showCellBoundaries: defaults.cellBoundaries,
     showNucleusBoundaries: defaults.nucleusBoundaries,
@@ -121,6 +122,17 @@ export function manifestDefaultsToShareableState(
   ) as ShareableState
 
   return { state, ignored }
+}
+
+// `[null, "p95"]` as the range the Gene scale keeps. The parser has checked
+// the percentile.
+function manifestGeneScaleRange([min, max]: NonNullable<
+  DatasetManifestDefaults['geneRange']
+>): GeneScaleRange {
+  return {
+    min,
+    max: typeof max === 'string' ? (parseGeneScalePercentile(max) ?? null) : max,
+  }
 }
 
 // Fields of `defaults` that a shared link for the same dataset does not set.

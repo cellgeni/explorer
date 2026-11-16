@@ -56,6 +56,23 @@ describe('Gene scale range', () => {
     expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument()
   })
 
+  it('names a percentile top from a link or manifest', () => {
+    renderScale({
+      scaleRange: { min: null, max: { percentile: 95 } },
+      autoScaleMax: 30,
+      scaleMax: 30,
+    })
+
+    const max = screen.getByLabelText('Gene scale maximum')
+    expect(max).toHaveValue(30)
+    expect(max.closest('.gene-scale-end')).toHaveClass('is-set')
+    expect(max).toHaveAttribute(
+      'title',
+      "Score at the top of the scale: set to the 95th percentile of the selected genes' scores above 0, 30 (highest 140). Cells at or above it get the last colour. Type a score and press Enter to change it",
+    )
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeInTheDocument()
+  })
+
   it('sets each end on its own, keeping the other', () => {
     const colour = renderScale({ scaleRange: { min: null, max: 40 }, scaleMax: 40 })
 
@@ -85,7 +102,7 @@ describe('Gene scale range', () => {
 
     expect(reset).toHaveAttribute(
       'title',
-      "Back to Auto: 0 to the 99th percentile of the selected genes' scores above 0, 92 (highest 140)",
+      "Back to Auto: 0 to the 99th percentile of the selected genes' scores above 0",
     )
     fireEvent.click(reset)
     expect(colour.onScaleRangeChange).toHaveBeenCalledWith({ min: null, max: null })

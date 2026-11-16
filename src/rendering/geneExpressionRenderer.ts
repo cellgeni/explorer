@@ -107,14 +107,15 @@ export function expressingElementsByScore(
     .sort((first, second) => (first.expressionCount ?? 0) - (second.expressionCount ?? 0))
 }
 
-// Where Auto puts the top of the Gene scale for these cells, and the highest
-// score among them.
+// The top of the Gene scale for these cells, at `percentile` of their scores
+// above 0, and the highest score among them.
 export function geneExpressionScoreSpread(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
+  percentile?: number,
 ): GeneScoreSpread {
-  return geneScoreSpread(geneExpressionScores(elements, genes, scoreMode))
+  return geneScoreSpread(geneExpressionScores(elements, genes, scoreMode), percentile)
 }
 
 export function styleCellsByGeneExpression(

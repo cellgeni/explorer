@@ -166,9 +166,11 @@ describe('CollectionPreviewStore', () => {
     await flush()
 
     expect(store.entry(A).scores?.maxScore).toBe(3)
-    expect(store.entry(B).scores).toMatchObject({ maxScore: 50, topScore: 2 })
+    expect(store.entry(B).scores?.maxScore).toBe(50)
     // The highest of the previews' 99th percentiles, not the outlier.
     expect(store.scaleMax()).toBe(3)
+    // At the 100th, the highest score, B's top is the outlier.
+    expect(store.scaleMax(100)).toBe(50)
   })
 
   it('reads new genes without reading the cells again', async () => {

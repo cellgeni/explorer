@@ -82,7 +82,8 @@ export interface CellColourModel {
   readonly colorScale: GeneExpressionColorScale
   readonly onColorScaleChange: (scale: GeneExpressionColorScale) => void
   // The scores at the ends of the scale, and the range that sets them; an
-  // Auto end is 0 or autoScaleMax, the 99th percentile of the scores seen.
+  // Auto end is 0 or autoScaleMax, the top at the range's percentile (99th
+  // unless set) of the scores seen.
   readonly scaleMin: number
   readonly scaleMax: number
   readonly autoScaleMax: number

@@ -20,7 +20,9 @@ import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_RANGE,
+  formatPercentile,
   geneScaleBounds,
+  geneScalePercentile,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
 import { collectionEntryLabel, type CollectionState } from './collectionModel'
@@ -105,7 +107,8 @@ export function CollectionBar({
   })
   const groupsRef = useRef<HTMLDivElement>(null)
   const scaleRange = previews?.scaleRange ?? AUTO_GENE_SCALE_RANGE
-  const scaleBounds = geneScaleBounds(scaleRange, store?.scaleMax() ?? 0)
+  const scalePercentile = geneScalePercentile(scaleRange)
+  const scaleBounds = geneScaleBounds(scaleRange, store?.scaleMax(scalePercentile) ?? 0)
   const annotations = previews?.annotations ?? null
   const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
@@ -214,9 +217,9 @@ export function CollectionBar({
           <span
             className="collection-bar-scale"
             title={
-              scaleRange.max === null
-                ? 'Every preview uses this scale, up to the highest of their 99th percentiles; cells above it get the top colour'
-                : 'Every preview uses this scale, the range set in Gene scale'
+              typeof scaleRange.max === 'number'
+                ? 'Every preview uses this scale, the range set in Gene scale'
+                : `Every preview uses this scale, up to the highest of their ${formatPercentile(scalePercentile)} percentiles; cells above it get the top colour`
             }
           >
             <span className="collection-bar-scale-genes">

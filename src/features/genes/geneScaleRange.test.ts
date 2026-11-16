@@ -3,8 +3,10 @@ import { geneExpressionIntensity } from '../../rendering/deckLayerColors'
 import {
   AUTO_GENE_SCALE_RANGE,
   formatGeneScaleRange,
+  formatPercentile,
   geneScaleBounds,
   geneScaleMidpoint,
+  geneScalePercentile,
   geneScoreSpread,
   parseGeneScaleRange,
 } from './geneScaleRange'
@@ -26,7 +28,11 @@ describe('gene scale range', () => {
     ]
     expect(geneScoreSpread(scores)).toEqual({ top: 10, highest: 100 })
     expect(geneScoreSpread(scores.slice().reverse())).toEqual({ top: 10, highest: 100 })
-    // With 100 or fewer cells, the highest score.
+    // At the 95th of 1 to 100: the 95th score.
+    const oneToHundred = Array.from({ length: 100 }, (_value, index) => index + 1)
+    expect(geneScoreSpread(oneToHundred, 95)).toEqual({ top: 95, highest: 100 })
+    expect(geneScoreSpread(oneToHundred)).toEqual({ top: 99, highest: 100 })
+    // At the 99th with 100 or fewer cells, the highest score.
     expect(geneScoreSpread([0, 2, 7, 3])).toEqual({ top: 7, highest: 7 })
     expect(geneScoreSpread([0, -1.5, 0])).toEqual({ top: 0, highest: 0 })
     expect(geneScoreSpread([])).toEqual({ top: 0, highest: 0 })
@@ -67,6 +73,44 @@ describe('gene scale range', () => {
     expect(parseGeneScaleRange('20,5')).toBeUndefined()
     expect(parseGeneScaleRange('a,5')).toBeUndefined()
     expect(parseGeneScaleRange('5')).toBeUndefined()
+  })
+
+  it('reads and writes a percentile top, geneRange=,p95', () => {
+    const p95 = { min: null, max: { percentile: 95 } }
+
+    expect(parseGeneScaleRange(',p95')).toEqual(p95)
+    expect(formatGeneScaleRange(p95)).toBe(',p95')
+    expect(parseGeneScaleRange('2,p99.5')).toEqual({ min: 2, max: { percentile: 99.5 } })
+    expect(parseGeneScaleRange(',p100')).toEqual({ min: null, max: { percentile: 100 } })
+    for (const value of [',p0', ',p101', ',95p', ',P95', ',p', 'p5,10']) {
+      expect(parseGeneScaleRange(value)).toBeUndefined()
+    }
+
+    expect(geneScalePercentile(p95)).toBe(95)
+    expect(geneScalePercentile(AUTO_GENE_SCALE_RANGE)).toBe(99)
+    expect(geneScalePercentile({ min: null, max: 40 })).toBe(99)
+    // A percentile top is the data's, like Auto; a score is itself.
+    expect(geneScaleBounds(p95, 7)).toEqual({ min: 0, max: 7 })
+    expect(geneScaleBounds({ min: 1, max: 40 }, 7)).toEqual({ min: 1, max: 40 })
+  })
+
+  it('names percentiles', () => {
+    expect([1, 2, 3, 4, 11, 12, 13, 21, 95, 99, 100, 99.5].map(formatPercentile)).toEqual(
+      [
+        '1st',
+        '2nd',
+        '3rd',
+        '4th',
+        '11th',
+        '12th',
+        '13th',
+        '21st',
+        '95th',
+        '99th',
+        '100th',
+        '99.5th',
+      ],
+    )
   })
 })
 

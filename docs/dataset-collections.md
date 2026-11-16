@@ -63,7 +63,7 @@ image:
       "group": "snRNA-seq"
     }
   ],
-  "defaults": { "genes": ["Aqp4"] }
+  "defaults": { "genes": ["Aqp4"], "geneRange": [null, "p95"] }
 }
 ```
 
@@ -204,7 +204,10 @@ each section (`-label.zarr`).
 The dataset manifest's cross-dataset display settings: `genes`,
 `colorCellsBy`, `geneColorScale`, `geneRange`, `geneScoreMode`, and
 `cellPointScale`, with the [same values](./dataset-manifest.md#defaults).
-`geneRange` puts every section's colours and previews on one fixed scale. Layer toggles, opacities
+`geneRange` puts every section's colours and previews on one fixed scale.
+With a percentile top, such as `[null, "p95"]`, the open section's scale
+tops out at that percentile of its own scores, and the previews share the
+highest of theirs. Layer toggles, opacities
 and image channels belong to each dataset, so set them in that dataset's
 manifest.
 

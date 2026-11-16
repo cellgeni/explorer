@@ -487,11 +487,26 @@ describe('parseDatasetManifest', () => {
     expect(defaults({ cellBoundaries: 'yes' })).toContain(
       '"defaults.cellBoundaries" must be true or false',
     )
-    for (const geneRange of [[10, 2], [5, 5], [0], [0, 10, 20], '0,10', [0, '10']]) {
+    for (const geneRange of [
+      [10, 2],
+      [5, 5],
+      [0],
+      [0, 10, 20],
+      '0,10',
+      [0, '10'],
+      [0, 'p0'],
+      [0, 'p101'],
+      [0, 'P95'],
+      ['p5', 10],
+    ]) {
       expect(defaults({ geneRange })).toContain(
-        '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min',
+        '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile',
       )
     }
+    expect(
+      parse({ version: 1, platform: 'xenium', defaults: { geneRange: [null, 'p95'] } })
+        .defaults,
+    ).toEqual({ geneRange: [null, 'p95'] })
     expect(defaults({ zoom: 2 })).toContain('unknown field "defaults.zoom"')
   })
 

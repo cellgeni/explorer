@@ -143,6 +143,7 @@ describe('useCellsSectionModel', () => {
     // Without a batch the remembered scale resets.
     expect(options.setGeneExpressionScaleDomain).toHaveBeenCalledWith({
       key: '',
+      percentile: 99,
       top: 0,
       highest: 0,
     })

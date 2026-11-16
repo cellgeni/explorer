@@ -52,6 +52,7 @@ import {
   AUTO_GENE_SCALE_RANGE,
   EMPTY_GENE_SCORE_SPREAD,
   geneScaleBounds,
+  geneScalePercentile,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
 
@@ -210,6 +211,7 @@ export function useViewerLayerData({
       ),
     [geneExpressionScaleDatasetUrl, geneExpressionScoreMode, selectedGenes],
   )
+  const geneScaleTopPercentile = geneScalePercentile(geneExpressionScaleRange)
   const currentGeneExpressionScoreSpread = useMemo(
     () =>
       geneExpressionBatch === null
@@ -218,11 +220,13 @@ export function useViewerLayerData({
             geneExpressionBatch.elements,
             geneExpressionBatch.genes,
             geneExpressionScoreMode,
+            geneScaleTopPercentile,
           ),
-    [geneExpressionBatch, geneExpressionScoreMode],
+    [geneExpressionBatch, geneExpressionScoreMode, geneScaleTopPercentile],
   )
   const storedGeneExpressionScaleDomain =
-    geneExpressionScaleDomain.key === geneExpressionScaleKey
+    geneExpressionScaleDomain.key === geneExpressionScaleKey &&
+    geneExpressionScaleDomain.percentile === geneScaleTopPercentile
       ? geneExpressionScaleDomain
       : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
   // Auto keeps the highest top seen for these genes, so the scale does not

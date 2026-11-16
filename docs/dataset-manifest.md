@@ -349,7 +349,7 @@ Display settings applied each time the dataset loads.
 | `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                 |
 | `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata` |
 | `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`    |
-| `geneRange`           | `Gene scale` range      | `[min, max]` in score units, such as `[0, 40]`; `null` for an Auto end        |
+| `geneRange`           | `Gene scale` range      | `[min, max]`, such as `[0, 40]`; `null` is Auto; max may be `"p95"`           |
 | `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                      |
 | `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                              |
 | `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                              |
@@ -380,8 +380,16 @@ How defaults combine with other settings:
   range writes `geneRange=,` once the range is reset to Auto.
 - `geneRange` is in the units of the selected `Combine genes` score, so a
   range set for `sum` does not suit `mean` or `z-score`. An Auto end is 0 at
-  the bottom and, at the top, the 99th percentile of the scores above 0. Its max must be above
-  its min, or the load stops; `[0, null]` fixes only the bottom.
+  the bottom and, at the top, the 99th percentile of the scores above 0. Its
+  max must be above its min, or the load stops; `[0, null]` fixes only the
+  bottom.
+- A percentile max, such as `[null, "p95"]`, follows the data like Auto but
+  at that percentile: each dataset gets its own top, the 95th percentile of
+  its selected genes' scores above 0, and cells above it get the top colour.
+  Use it to compare where a gene is high across sections whose expression
+  levels differ; a number compares the levels themselves. Percentiles run
+  from `"p1"` to `"p100"` (the highest score); links write it the same way,
+  `geneRange=,p95`.
 - `colorCellsBy: "annotations"` takes effect once annotations are loaded.
 - `genes` without `colorCellsBy` colours cells by gene expression. With
   `colorCellsBy` set to another mode, the genes are selected (for transcripts,

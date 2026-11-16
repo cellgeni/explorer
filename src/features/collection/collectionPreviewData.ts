@@ -4,7 +4,6 @@ import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import { geneExpressionScores } from '../../rendering/geneExpressionRenderer'
-import { geneScoreSpread } from '../genes/geneScaleRange'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {
   AnnotationLoader,
@@ -49,8 +48,6 @@ export interface PreviewScores {
   readonly positions: Float32Array
   readonly scores: Float32Array
   readonly maxScore: number
-  // Where Auto puts the top of the Gene scale: the 99th percentile.
-  readonly topScore: number
 }
 
 export interface PreviewClass {
@@ -282,16 +279,17 @@ function previewScores(
   const scores = geneExpressionScores(batch.elements, batch.genes, scoreMode)
   const positions = new Float32Array(batch.elements.length * 2)
   const values = new Float32Array(batch.elements.length)
+  let maxScore = 0
 
   batch.elements.forEach((element, index) => {
+    const score = scores[index] ?? 0
     positions[index * 2] = element.position.x
     positions[index * 2 + 1] = element.position.y
-    values[index] = scores[index] ?? 0
+    values[index] = score
+    maxScore = Math.max(maxScore, score)
   })
 
-  const { top, highest } = geneScoreSpread(scores)
-
-  return { positions, scores: values, maxScore: highest, topScore: top }
+  return { positions, scores: values, maxScore }
 }
 
 function previewClasses(

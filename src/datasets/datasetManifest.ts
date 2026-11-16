@@ -107,8 +107,9 @@ export interface DatasetManifestDefaults {
   readonly genes?: readonly string[]
   readonly colorCellsBy?: string
   readonly geneColorScale?: string
-  // The Gene scale's range, [min, max]; null leaves that end on Auto.
-  readonly geneRange?: readonly [number | null, number | null]
+  // The Gene scale's range, [min, max]; null leaves that end on Auto. max may
+  // be a percentile of each dataset's scores above 0, such as "p95".
+  readonly geneRange?: readonly [number | null, number | string | null]
   readonly geneScoreMode?: string
   readonly cellBoundaries?: boolean
   readonly nucleusBoundaries?: boolean
@@ -888,22 +889,30 @@ export function parseDefaults(
   return defaults as DatasetManifestDefaults
 }
 
+// "p95": above 0, up to 100, as the viewer's links write it.
+const GENE_RANGE_PERCENTILE_PATTERN = /^p(\d+(?:\.\d+)?)$/
+
 function parseGeneRange(
   value: unknown,
   fail: Fail,
-): readonly [number | null, number | null] {
-  const isEnd = (end: unknown): end is number | null =>
+): readonly [number | null, number | string | null] {
+  const isScore = (end: unknown): end is number | null =>
     end === null || (typeof end === 'number' && Number.isFinite(end))
+  const isPercentile = (end: unknown): end is string => {
+    if (typeof end !== 'string') return false
+    const percentile = Number(GENE_RANGE_PERCENTILE_PATTERN.exec(end)?.[1])
+    return percentile > 0 && percentile <= 100
+  }
 
   if (
     !Array.isArray(value) ||
     value.length !== 2 ||
-    !isEnd(value[0]) ||
-    !isEnd(value[1]) ||
-    (value[0] !== null && value[1] !== null && value[1] <= value[0])
+    !isScore(value[0]) ||
+    !(isScore(value[1]) || isPercentile(value[1])) ||
+    (typeof value[0] === 'number' && typeof value[1] === 'number' && value[1] <= value[0])
   ) {
     return fail(
-      '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min.',
+      '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".',
     )
   }
 

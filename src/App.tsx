@@ -214,7 +214,10 @@ import {
   geneExpressionStatusCopy,
   genePanelStatusCopy,
 } from './features/genes/geneControlsModel'
-import { formatGeneScaleRange } from './features/genes/geneScaleRange'
+import {
+  formatGeneScaleRange,
+  geneScalePercentile,
+} from './features/genes/geneScaleRange'
 import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
@@ -1765,16 +1768,33 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setMorphologyState],
   )
+  // The percentile the Gene scale's top follows, read as each batch loads. A
+  // ref, so a new percentile does not restart the expression loads that hold
+  // rememberGeneExpressionScaleMax.
+  const geneScaleTopPercentile = geneScalePercentile(geneExpressionScaleRange)
+  const geneScalePercentileRef = useRef(geneScaleTopPercentile)
+  useEffect(() => {
+    geneScalePercentileRef.current = geneScaleTopPercentile
+  }, [geneScaleTopPercentile])
   const rememberGeneExpressionScaleMax = useCallback(
     (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
-      const spread = geneExpressionScoreSpread(batch.elements, batch.genes, scoreMode)
+      const percentile = geneScalePercentileRef.current
+      const spread = geneExpressionScoreSpread(
+        batch.elements,
+        batch.genes,
+        scoreMode,
+        percentile,
+      )
 
       if (spread.highest <= 0) {
         return
       }
 
       setGeneExpressionScaleDomain((current) => {
-        const seen = current.key === key ? current : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
+        const seen =
+          current.key === key && current.percentile === percentile
+            ? current
+            : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
 
         if (seen.top >= spread.top && seen.highest >= spread.highest) {
           return current
@@ -1782,6 +1802,7 @@ export function App({ dependencies }: AppProps = {}) {
 
         return {
           key,
+          percentile,
           top: Math.max(seen.top, spread.top),
           highest: Math.max(seen.highest, spread.highest),
         }

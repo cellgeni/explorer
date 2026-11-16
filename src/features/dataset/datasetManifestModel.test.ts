@@ -48,6 +48,15 @@ describe('manifestDefaultsToShareableState', () => {
     })
   })
 
+  it('maps a percentile top as a link writes it', () => {
+    expect(manifestDefaultsToShareableState({ geneRange: [null, 'p95'] }).state).toEqual({
+      geneExpressionScaleRange: ',p95',
+    })
+    expect(manifestDefaultsToShareableState({ geneRange: [0, 'p99.5'] }).state).toEqual({
+      geneExpressionScaleRange: '0,p99.5',
+    })
+  })
+
   it('drops values the controls do not offer', () => {
     expect(
       manifestDefaultsToShareableState({

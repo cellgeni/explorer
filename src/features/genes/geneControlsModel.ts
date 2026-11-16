@@ -9,6 +9,7 @@ import {
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
 } from '../../rendering/deckLayers'
+import { AUTO_GENE_SCALE_PERCENTILE } from './geneScaleRange'
 
 const GENE_SET_SYMBOL_SPLIT_PATTERN = /[\s,;]+/
 
@@ -64,18 +65,20 @@ export interface SavedGeneSet {
   readonly scoreMode: GeneExpressionScoreMode
 }
 
-// What the Gene scale's Auto top has seen for one dataset, score mode and
-// gene selection (`key`): it keeps the highest, so the scale does not shrink
-// as the view moves.
+// What the Gene scale's top has seen for one dataset, score mode and gene
+// selection (`key`) at one percentile: it keeps the highest, so the scale
+// does not shrink as the view moves.
 export interface GeneExpressionScaleDomain {
   readonly key: string
-  // The highest Auto top (99th percentile) of the batches read.
+  readonly percentile: number
+  // The highest top (that percentile) of the batches read.
   readonly top: number
   readonly highest: number
 }
 
 export const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = {
   key: '',
+  percentile: AUTO_GENE_SCALE_PERCENTILE,
   top: 0,
   highest: 0,
 }
