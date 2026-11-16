@@ -179,6 +179,26 @@ Its 3.4 million barcodes would take about 283 MB to keep indexed, so readers of
 more than 2 million barcodes are built for each request, as before; the Xenium
 demo's 1.4 million are kept.
 
+### ROI Warm-Up Reads the H5 by Range (2026-11-16)
+
+The ROI warm-up's gene sample and enriched-genes reference fall back to
+`cell_feature_matrix.h5` again (`h5Fallback: 'range-read'`), now that it is
+read by range. The fallback comes after a Range probe of the file: the worker
+reads a whole file from a host that answers Range with 200, so there the
+warm-up still stops at the Zarr matrix ("no matrix sample"). Measured on the
+demo with Playwright (headless Chromium with GPU, one run each, the same
+25-cell box drawn after the warm-up):
+
+| Read                         | Before                   | After                 |
+| ---------------------------- | ------------------------ | --------------------- |
+| Warm-up H5 reads             | none                     | 35 req., 36.6 MB, 8 s |
+| First ROI's genes            | 4.9 s (35 req., 36.6 MB) | 0.8 s (1 req., 1 MB)  |
+| Its enriched-genes reference | 3.3 s                    | 71 ms                 |
+
+An ROI drawn while the warm-up opens the file cancels the warm-up, which
+stops its worker, and opens the file again: its genes took 4.5 s, and the
+warm-up's 1 MB was spent for nothing.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -270,7 +290,8 @@ Original-brief items with no outcome:
     A drawn ROI, a cell and the Magic Lens still fall back, with the notice.
     On the demo the warm-up now takes 2.5 s with no H5 request; the first
     ROI's genes take about 52 s, the download the warm-up used to hide from
-    an ROI drawn a minute or more after load.
+    an ROI drawn a minute or more after load. Since 2026-11-16 the warm-up
+    reads the H5 by range ([above](#roi-warm-up-reads-the-h5-by-range-2026-11-16)).
   - Not done: reading cell rows from the feature-major Zarr. A cell's counts
     are spread over every gene's entries, so it means reading all of
     `indices`.

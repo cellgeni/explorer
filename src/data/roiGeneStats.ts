@@ -29,6 +29,7 @@ export interface RoiGeneStats {
 }
 
 export type RoiGeneStatsSampleStrategy = 'stratified' | 'head'
+export type RoiGeneStatsH5Fallback = 'always' | 'range-read'
 
 interface RoiGeneStatsDataset {
   matrix(ids: readonly CellId[]): Promise<GexResult>
@@ -45,11 +46,12 @@ export interface LoadDatasetRoiGeneStatsOptions {
   readonly cellLimit?: number
   readonly geneLimit?: number
   readonly sampleStrategy?: RoiGeneStatsSampleStrategy
-  // False stops at the Zarr matrix, so reads nobody asked for, such as the
-  // viewport warm-up, leave cell_feature_matrix.h5 to the first ROI. It is
+  // When the Zarr matrix cannot serve the cells, cell_feature_matrix.h5 is
   // read by range (about 14 MB for the first cells of the 433 MB Xenium demo
-  // file), or whole from a host that ignores Range.
-  readonly allowH5Fallback?: boolean
+  // file), or whole from a host that ignores Range. 'range-read' falls back
+  // only after a Range probe of the H5 file, so reads nobody asked for, such
+  // as the viewport warm-up, never download the whole file.
+  readonly h5Fallback?: RoiGeneStatsH5Fallback
   readonly allowTranscriptFallback?: boolean
   readonly onFallback?: FallbackNotifier
   readonly readH5Matrix?: (
@@ -85,7 +87,7 @@ export async function loadDatasetRoiGeneStats(
   const matrix = await loadRoiGeneStatsMatrix(baseUrl, dataset, sampledCells, {
     validateRangeSupport: options.validateRangeSupport ?? assertHttpRangeSupport,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
-    allowH5Fallback: options.allowH5Fallback ?? true,
+    h5Fallback: options.h5Fallback ?? 'always',
     allowTranscriptFallback: options.allowTranscriptFallback ?? false,
     onFallback: options.onFallback,
     readH5Matrix: options.readH5Matrix ?? gexFromCellFeatureMatrixH5,
@@ -165,7 +167,7 @@ async function loadRoiGeneStatsMatrix(
   options: {
     readonly validateRangeSupport: DatasetRangeValidator
     readonly signal?: AbortSignal
-    readonly allowH5Fallback: boolean
+    readonly h5Fallback: RoiGeneStatsH5Fallback
     readonly allowTranscriptFallback: boolean
     readonly onFallback: FallbackNotifier | undefined
     readonly readH5Matrix: (
@@ -199,8 +201,8 @@ async function loadRoiGeneStatsMatrix(
       throw error
     }
 
-    if (!options.allowH5Fallback) {
-      throw new RoiGeneStatsH5FallbackSkippedError(error)
+    if (options.h5Fallback === 'range-read') {
+      await assertH5RangeRead(baseUrl, error, options)
     }
 
     matrixError = error
@@ -248,6 +250,35 @@ async function loadRoiGeneStatsMatrix(
   throwIfAborted(options.signal)
 
   return dataset.transcriptsForCellIds(cellIds)
+}
+
+// The H5 worker reads a whole file from a host that answers Range with 200,
+// so the probe's 206 is what keeps a 'range-read' fallback to range reads.
+async function assertH5RangeRead(
+  baseUrl: string,
+  zarrCause: unknown,
+  options: {
+    readonly validateRangeSupport: DatasetRangeValidator
+    readonly signal?: AbortSignal
+  },
+): Promise<void> {
+  try {
+    await options.validateRangeSupport(
+      datasetFileUrlFor(baseUrl, 'cellFeatureMatrixH5'),
+      {
+        label: datasetFileLabelFor(baseUrl, 'cellFeatureMatrixH5'),
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+    )
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw error
+    }
+
+    throw new RoiGeneStatsH5FallbackSkippedError(zarrCause, error)
+  }
+
+  throwIfAborted(options.signal)
 }
 
 function sampleRoiCells(
@@ -313,13 +344,13 @@ function abortError(signal: AbortSignal): Error {
   return error
 }
 
-// The Zarr matrix could not serve the cells, and the caller did not allow the
-// H5 fallback (allowH5Fallback: false).
+// The Zarr matrix could not serve the cells, and a 'range-read' fallback found
+// that cell_feature_matrix.h5 cannot be range-read.
 export class RoiGeneStatsH5FallbackSkippedError extends Error {
-  constructor(zarrCause: unknown) {
+  constructor(zarrCause: unknown, h5Cause: unknown) {
     super(
-      'The native Zarr cell-feature matrix could not serve these cells, and this read does not fall back to cell_feature_matrix.h5.',
-      { cause: zarrCause },
+      'The native Zarr cell-feature matrix could not serve these cells, and cell_feature_matrix.h5 cannot be range-read, so this read does not fall back to it.',
+      { cause: { zarr: zarrCause, h5: h5Cause } },
     )
     this.name = 'RoiGeneStatsH5FallbackSkippedError'
   }

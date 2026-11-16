@@ -84,8 +84,9 @@ Use the cell-feature matrix in this order:
    `cell_feature_matrix.h5` as the ROI gene-statistics fallback. This is slower:
    h5wasm reads synchronously, so its range requests go one at a time, and a
    sample spread over the whole slide touches almost every chunk, about as
-   slow as reading the file whole. Only reads the user asks for (an ROI, a
-   cell, the Magic Lens) use it; the viewport warm-up does not.
+   slow as reading the file whole. Reads the user asks for (an ROI, a cell,
+   the Magic Lens) use it, and the viewport warm-up does only after a Range
+   probe, so it never downloads the whole file.
 3. If both native CSC Zarr and readable H5 are unavailable, report ROI gene
    statistics as unsupported by default. Transcript aggregation can remain an
    explicit diagnostic or one-off fallback, but it is not the default

@@ -319,13 +319,13 @@ export function useRoiWorkflow({
               ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
-          // Only from the Zarr matrix: the H5 fallback waits for an ROI (see
-          // allowH5Fallback).
+          // The H5 fallback only by range, so the warm-up never downloads a
+          // whole cell_feature_matrix.h5 (see h5Fallback).
           const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
             signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             sampleStrategy: 'head',
-            allowH5Fallback: false,
+            h5Fallback: 'range-read',
             onFallback: appendFallbackNotice,
           })
 
@@ -356,7 +356,7 @@ export function useRoiWorkflow({
               cellLimit: referenceCells.length,
               sampleStrategy: 'head',
               geneLimit: ALL_GENES,
-              allowH5Fallback: false,
+              h5Fallback: 'range-read',
               onFallback: appendFallbackNotice,
             })
           } catch (error) {
@@ -386,7 +386,7 @@ export function useRoiWorkflow({
 
           if (error instanceof RoiGeneStatsH5FallbackSkippedError) {
             appendDebugEvent(
-              `ROI gene warmup ready: no matrix sample, the Zarr matrix cannot serve cells and the H5 fallback waits for an ROI (${formatElapsed(warmupStartedAt)})`,
+              `ROI gene warmup ready: no matrix sample, the Zarr matrix cannot serve cells and cell_feature_matrix.h5 cannot be range-read (${formatElapsed(warmupStartedAt)})`,
               {
                 coalesceKey: 'roi-gene-warmup',
               },
