@@ -35,7 +35,8 @@ files. Parsing happens in the browser:
 | `src/features/`                         | Feature modules: panels and blocks (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                          |
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
 | `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
-| `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, Embedding panel, link panel state, narrow layout                                                         |
+| `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, the Embedding and Plots windows, link panel state, narrow layout                                         |
+| `src/features/plots/`                   | The Plots panel (plan 22): what it groups, the stats store and its worker session, the dot plot model and SVG, exports                                                                   |
 | `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
 | `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
@@ -436,6 +437,7 @@ their own, and their cards stayed on "Loading".
 | `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                            |
 | `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                        |
 | `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                     |
+| `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)       |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
 Visium), writes them into its own h5wasm file system, and answers reads by
@@ -480,6 +482,21 @@ custom fetcher (except the segmentation index), with no `Worker`, or if the
 worker fails to run, the same reader runs on the main thread. See
 [MERSCOPE](./modalities/merscope.md), [Standard Visium](./modalities/visium.md)
 and [Visium HD](./modalities/visium-hd.md#caching-and-workers).
+
+The Plots panel reads each selected gene's value in every cell with the
+dataset's `geneValues(genes)` (`src/data/geneValues.ts`): the rows with a
+stored value other than 0, and those values, as typed arrays. A matrix held
+in memory (standard Visium, MERSCOPE, an `.h5ad` read whole) is scanned on the
+main thread, yielding every million stored values; a CSR matrix is scanned
+once for all the genes asked for. The values go by transfer to the panel's
+plot worker, which the panel starts once per dataset and gives the dataset's
+row cell IDs. The worker maps each class's cell IDs, and the selection's, to
+rows once per set, then sums each gene's stored values into the groups of
+their rows; every other cell of a group counts as 0. It keeps gene values up
+to 128 MiB, least recently used first out, and answers for genes it no longer
+holds with their names, which the panel reads again. If the worker fails, or
+there is no `Worker`, the same store runs on the main thread. See
+[plan 22](plan/phases/22-plots-panel.md).
 
 Auto-contrast decodes and samples tiles off the main thread and gets back only
 the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile

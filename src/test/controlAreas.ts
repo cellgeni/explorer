@@ -15,6 +15,8 @@ export type ControlAreaPlace =
   | { readonly kind: 'popover'; readonly title: string }
   // Cells › Show Embedding.
   | { readonly kind: 'embedding' }
+  // Cells › Show Plots.
+  | { readonly kind: 'plots' }
   // Shown on their own, such as cards, which appear with what they show.
   | { readonly kind: 'none' }
 
@@ -64,6 +66,8 @@ export const CONTROL_AREAS = {
   'cell-card': { kind: 'none' },
   // Embedding panel.
   embedding: { kind: 'embedding' },
+  // Plots panel (plan 22-D8): Group by, Scale, Colour, numbers and exports.
+  plots: { kind: 'plots' },
 } as const satisfies Record<string, ControlAreaPlace>
 
 export type ControlArea = keyof typeof CONTROL_AREAS

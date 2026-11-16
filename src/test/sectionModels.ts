@@ -32,6 +32,7 @@ import type {
   ViewSettingsModel,
 } from '../features/sections/viewSettingsModel'
 import type { EmbeddingModel } from '../features/sections/embeddingModel'
+import type { PlotsModel } from '../features/plots/usePlotsModel'
 import type { DatasetLibraryModel } from '../features/start/datasetLibraryModel'
 import { DEFAULT_EXAMPLES_INDEX_URL } from '../features/start/examplesIndex'
 import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
@@ -433,6 +434,34 @@ export function testEmbeddingModel(
     selectedElementId: null,
     elementLabel: 'cells',
     onSelectElement: vi.fn(),
+    ...overrides,
+  }
+}
+
+export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel {
+  return {
+    status: 'Nothing to plot',
+    loading: false,
+    setOptions: [],
+    setId: null,
+    onSetChange: vi.fn(),
+    scale: 'log1p',
+    log1pAvailable: true,
+    onScaleChange: vi.fn(),
+    colour: 'shared',
+    onColourChange: vi.fn(),
+    showNumbers: false,
+    onShowNumbersChange: vi.fn(),
+    message: 'Select genes in Cells › Genes to plot them.',
+    plot: null,
+    notes: [],
+    geneErrors: [],
+    reading: false,
+    onCancel: vi.fn(),
+    canRetry: false,
+    onRetry: vi.fn(),
+    onExportSvg: vi.fn(),
+    onExportCsv: vi.fn(),
     ...overrides,
   }
 }

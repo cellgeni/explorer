@@ -69,12 +69,14 @@ describe('panels in the link', () => {
       expanded: ['image'],
       infoOpen: true,
       embeddingOpen: false,
+      plotsOpen: false,
     })
     // The drawer alone: every section closed (15.5-B).
     expect(panelsFromLink({ panels: ['info'] })).toEqual({
       expanded: [],
       infoOpen: true,
       embeddingOpen: false,
+      plotsOpen: false,
     })
     expect(panelsFromLink({ panels: [] }).expanded).toEqual([])
   })
@@ -86,23 +88,39 @@ describe('panels in the link', () => {
     expect(defaultExpandedSections(false)).toEqual(['image'])
     expect(panelsForLink(DEFAULT_SHELL_PANELS, cells)).toBeUndefined()
     expect(
-      panelsForLink({ expanded: null, infoOpen: true, embeddingOpen: false }, cells),
+      panelsForLink(
+        { expanded: null, infoOpen: true, embeddingOpen: false, plotsOpen: false },
+        cells,
+      ),
     ).toEqual(['cells', 'info'])
     expect(
       panelsForLink(
-        { expanded: ['cells', 'transcripts'], infoOpen: false, embeddingOpen: true },
+        {
+          expanded: ['cells', 'transcripts'],
+          infoOpen: false,
+          embeddingOpen: true,
+          plotsOpen: false,
+        },
         cells,
       ),
     ).toEqual(['cells', 'transcripts', 'embedding'])
     expect(
-      panelsForLink({ expanded: [], infoOpen: false, embeddingOpen: false }, cells),
+      panelsForLink(
+        { expanded: [], infoOpen: false, embeddingOpen: false, plotsOpen: false },
+        cells,
+      ),
     ).toEqual([])
   })
 
   it('round-trips through the link', () => {
     for (const panels of [
-      { expanded: ['image' as const], infoOpen: true, embeddingOpen: false },
-      { expanded: [], infoOpen: true, embeddingOpen: false },
+      {
+        expanded: ['image' as const],
+        infoOpen: true,
+        embeddingOpen: false,
+        plotsOpen: false,
+      },
+      { expanded: [], infoOpen: true, embeddingOpen: false, plotsOpen: false },
     ]) {
       const hash = formatShareableState({
         panels: panelsForLink(panels, ['cells']) ?? [],
@@ -112,15 +130,17 @@ describe('panels in the link', () => {
     expect(
       formatShareableState({
         panels:
-          panelsForLink({ expanded: [], infoOpen: true, embeddingOpen: false }, [
-            'cells',
-          ]) ?? [],
+          panelsForLink(
+            { expanded: [], infoOpen: true, embeddingOpen: false, plotsOpen: false },
+            ['cells'],
+          ) ?? [],
       }),
     ).toBe('#xv=2&panel=info')
     expect(panelsFromLink(parseShareableState('#xv=2&panel='))).toEqual({
       expanded: [],
       infoOpen: false,
       embeddingOpen: false,
+      plotsOpen: false,
     })
   })
 })

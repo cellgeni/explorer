@@ -479,7 +479,7 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   const findings: AxeFindings = new Map()
 
   // Every layer section, the info drawer, the dataset menu, Help, Settings
-  // and the Embedding panel, empty and with data.
+  // and the Embedding and Plots panels, empty and with data.
   async function checkEachPlace(state: string) {
     const layers = page.getByRole('complementary', { name: 'Layers' })
     const sections = layers.getByRole('heading', { level: 3 }).getByRole('button')
@@ -503,6 +503,10 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
     await openControls(page, 'embedding')
     await collectAxeFindings(page, `${state}, embedding`, findings)
     await page.getByRole('button', { name: 'Close embedding' }).click()
+
+    await openControls(page, 'plots')
+    await collectAxeFindings(page, `${state}, plots`, findings)
+    await page.getByRole('button', { name: 'Close plots' }).click()
   }
 
   await routeTinyH5adFixture(page)
@@ -525,7 +529,70 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   })
   await checkEachPlace('H5AD fixture with a gene selected')
 
+  // The dot plot and its table (plan 22-I).
+  const clusters = await openControls(page, 'clusters')
+  await clusters.getByLabel('Annotation set').selectOption({ label: 'cluster' })
+  await clusters.getByRole('button', { name: 'Load Annotations' }).click()
+  const plots = await openControls(page, 'plots')
+  await expect(plots.getByRole('img', { name: /^Dot plot of Actb/ })).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await collectAxeFindings(page, 'H5AD fixture, dot plot', findings)
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+  await collectAxeFindings(page, 'H5AD fixture, dot plot numbers', findings)
+
   expectAxeFindingsMatchBaseline(findings)
+})
+
+// Plan 22, M1: select genes, load a set, open Plots, read the numbers and
+// export them.
+test('plots the selected genes by cluster and exports the numbers @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+
+  await openControls(page, 'open-dataset')
+  await page
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/h5ad-smoke.h5ad', page.url()).toString())
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  const genesPanel = await openControls(page, 'genes')
+  await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
+  await genesPanel.getByRole('button', { name: 'Gad1', exact: true }).click()
+  const clusters = await openControls(page, 'clusters')
+  await clusters.getByLabel('Annotation set').selectOption({ label: 'cluster' })
+  await clusters.getByRole('button', { name: 'Load Annotations' }).click()
+
+  const plots = await openControls(page, 'plots')
+  await expect(
+    plots.getByRole('img', { name: /^Dot plot of Actb and Gad1 across 2 groups/ }),
+  ).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expect(page).toHaveURL(/panel=[^&]*plots/)
+
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+  await expect(plots.getByRole('table').getByRole('row')).toHaveText([
+    'GroupGeneCells% expressingMean log1p(counts)',
+    'AActb250%0.347',
+    'BActb2100%1.59',
+    'AGad1250%0.805',
+    'BGad1250%0.693',
+  ])
+
+  const download = page.waitForEvent('download')
+  await plots.getByRole('button', { name: 'Export CSV' }).click()
+  const csv = await readFile(await (await download).path(), 'utf8')
+  expect((await download).suggestedFilename()).toBe('h5ad-smoke-dot-plot-cluster.csv')
+  expect(csv.split('\n').slice(0, 2)).toEqual([
+    'set,group,group_kind,gene,cells,cells_expressing,percent_expressing,mean,mean_log1p',
+    'cluster,A,class,Actb,2,1,50,0.5,0.346574',
+  ])
 })
 
 // Presses Tab until the target has focus, as a keyboard user would, and

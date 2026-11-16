@@ -216,8 +216,8 @@ cancels." The tools are one tab stop, on the active tool; the arrow keys,
 `Home` and `End` move between them (the ARIA toolbar pattern). Esc, anywhere
 except a text field, returns to Pan and drops a
 half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
-closes a popover, the info drawer, the Embedding panel or a shown tooltip
-does only that, and the tool stays.
+closes a popover, the info drawer, the Embedding or Plots panel or a shown
+tooltip does only that, and the tool stays.
 
 - **Box selection** and **Lasso selection** draw a selection (see
   [ROI drawing](#roi-drawing)); its results open in the Selection card. On an
@@ -369,7 +369,9 @@ Loaded state:
 - **Metadata tracks**: every track, with its label, cell count, range, and
   `x` (the panel scrolls, not the list).
 
-**Embedding**: `Show Embedding` opens the [Embedding panel](#embedding-panel).
+**Panels**: `Show Embedding` opens the [Embedding panel](#embedding-panel),
+and `Show Plots` the [Plots panel](#plots-panel). Visium HD has no `Show
+Plots`: its bins have no annotation sets.
 
 **Advanced**: `Expression detail`, a select of **Auto LOD**, Exact region and
 All cells.
@@ -657,6 +659,69 @@ Opening the panel moves focus into it, and closing it returns focus to
 | `Embedding view`                                          | Dataset options (H5AD/SpatialData `obsm` keys) or UMAP / t-SNE                                                                                                   |
 | `Load Embeddings`                                         | Loads the projection                                                                                                                                             |
 | Scatter plot (`src/features/analysis/EmbeddingPanel.tsx`) | Up to 120,000 points; coloured by annotation when active; ROI members yellow; selection pink. Click selects the nearest cell or bin and centres the spatial view |
+
+## Plots Panel
+
+The Plots panel draws a dot plot of the selected genes by the classes of one
+annotation set, with the active selection as one more group
+([plan 22](plan/phases/22-plots-panel.md); `src/features/plots/`,
+`src/features/shell/PlotsWindow.tsx`). It opens from Cells › `Show Plots`
+and closes with `Close plots` or Esc. It sits at the top right of the canvas,
+480 × 420 px at first, or to the left of the Embedding panel when that is
+open. Its grip resizes it from 320 × 280 px up to the canvas, as the
+Embedding panel's does.
+
+| Control               | Notes                                                                                                                                                                                                          |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Group by`            | The sets loaded in Cells › Clusters, as the lists there group them: the dataset's set, each imported file's sets, and selections kept with `Save ROI` ("Loaded annotations"). The dataset's set is the default |
+| `Scale`               | `log1p` or `As stored`. `log1p` is the default when every value read is a whole number, as counts are; it is off when the matrix holds negative values, which look scaled                                      |
+| `Colour`              | `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                               |
+| `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and mean. It is also the plot's text alternative                                                                                        |
+| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                    |
+| `Export SVG`          | The dot plot as `{dataset}-dot-plot-{set}.svg`, drawn from the same model with its colours and font written out, so it looks the same outside the app                                                          |
+| `Export CSV`          | One row per group and gene: set, group, group kind, gene, cells, cells expressing, % expressing, mean and mean log1p                                                                                           |
+
+The dot plot has groups down and genes across, as in Scanpy. A dot's area is
+the share of the group's cells expressing the gene (the key shows 20 to
+100%), and its colour is the group's mean on the Gene scale palette chosen in
+Cells › Genes. Hovering a dot gives the group, the gene, the cells, %
+expressing and the mean. The selection comes first, in its colour, above a
+dashed rule.
+
+What it plots:
+
+- Up to 32 selected genes, in the order of the gene chips, each on its own;
+  `Combine genes` does not apply. More are left out, with a note.
+- The set's shown classes in the legend's order and colours, up to 60. Hidden
+  classes are left out, with a note saying how many; hide some to plot
+  others.
+- The active selection as an extra group, named and coloured as in the
+  Selection card. Its cells stay in their classes too, so it overlaps them.
+  A Xenium selection that stopped at 50,000 cells is those cells, with a note.
+
+Method:
+
+- Every cell of the dataset counts, not only those in view, so the plot does
+  not change as the view moves. Nothing is sampled.
+- Values are what the matrix stores: counts for standard Visium and MERSCOPE,
+  whatever `X` holds for AnnData. Nothing is normalised by library size.
+  log1p is taken of each value before the mean.
+- "% expressing" is the share of a group's cells with a stored value above 0,
+  as in the Selection card. A group's mean counts its cells without a stored
+  value as 0.
+- A cell that two classes of an imported set both list counts in both, and
+  IDs that match no matrix row are left out; a note says how many of each.
+- The plot compares nothing statistically: there are no tests, p-values or
+  rankings between groups ([Phase 15](plan/phases/15-interface-redesign.md)'s
+  non-goal).
+
+The panel reads the expression matrix the dataset holds in memory after
+load: standard Visium, MERSCOPE, and `.h5ad` files read whole (up to
+300 MiB). For Xenium, Atera, SpatialData, and AnnData read over HTTP
+(references, Icechunk, AnnData Zarr) it says the panel is not available yet;
+those come in a later milestone. Gene values are kept in the panel's worker,
+up to 128 MiB, so changing `Group by`, `Scale` or `Colour` reads nothing
+again; a new gene is read once.
 
 ## Canvas
 
@@ -1027,7 +1092,8 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   to at most 65% of the screen. It is the same panel as on wide screens, so a
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
-  layer sheet's handle, and the Embedding panel takes the canvas's width.
+  layer sheet's handle. The Embedding and Plots panels take the canvas's
+  width, one at a time: opening one closes the other.
 
 ## Platform Availability
 
@@ -1046,6 +1112,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
 | Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
 | Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
+| Plots panel                                    | Not yet                 | Not yet          | ✓             | —                 | ✓                | Files read whole | Not yet          | —                |
 | Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
 | SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
 | Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |
@@ -1091,7 +1158,7 @@ the page reloads that entry's link, with its view and settings.
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names. A dataset opened after it starts fitted to its extent                                                                                                                                                                                                                            |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer) and `embedding`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer), `embedding` and `plots`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                       |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                       |
 | `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |

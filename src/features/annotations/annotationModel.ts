@@ -166,6 +166,16 @@ export function annotationSetIdForAnnotation(annotation: Annotation): string {
   return annotationSizeGrouping(annotation).id
 }
 
+// The set a class belongs to, as the Clusters lists show it: its id and
+// name, and the class's name within it.
+export function annotationSetGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
+  readonly id: string
+  readonly label: string
+  readonly rowLabel: string
+} {
+  return annotationSizeGrouping(annotation)
+}
+
 // Cells that are on the map. Visium hides spots off the tissue, which then
 // should not count towards a label's size.
 export interface PlacedCellIds {
@@ -322,7 +332,7 @@ export function customAnnotationFilePrefix(fileName: string): string {
   return `custom:${slug(fileName)}:`
 }
 
-function annotationSizeGrouping(annotation: Annotation): {
+function annotationSizeGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
   readonly id: string
   readonly label: string
   readonly rowLabel: string

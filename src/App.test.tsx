@@ -3707,6 +3707,142 @@ describe('App', () => {
     }
   })
 
+  it('plots the selected genes by class, with a selection as its own group (plan 22)', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const h5adUrl = 'https://example.test/plots.h5ad'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(h5adUrl)}&genes=Actb%2CGad1&groups=analysis%3Acell-type&panel=cells%2Cplots`,
+    )
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const cellIds = ['cell-a', 'cell-b', 'cell-c', 'cell-d']
+    const h5adDataset = {
+      overview: vi.fn(async () =>
+        cellIds.map((cellId, index) => ({
+          cellId,
+          position: { x: micrometers(index * 10), y: micrometers(index * 10) },
+          transcriptCount: 0,
+        })),
+      ),
+      genePanel: vi.fn(async () => ['Actb', 'Gad1']),
+      geneExpression: vi.fn(async (_bbox: unknown, genes: readonly string[]) => ({
+        elements: [],
+        genes,
+        maxCount: 0,
+      })),
+      annotationGroups: vi.fn(async () => [
+        {
+          id: 'analysis:cell-type',
+          label: 'cell_type',
+          groupingName: 'cell_type',
+          groupCount: 2,
+        },
+      ]),
+      annotations: vi.fn(async () => [
+        {
+          id: 'analysis:cell-type:t-cell',
+          label: 'cell_type: T cell',
+          cellIds: ['cell-a', 'cell-b'],
+        },
+        {
+          id: 'analysis:cell-type:b-cell',
+          label: 'cell_type: B cell',
+          cellIds: ['cell-c', 'cell-d'],
+        },
+      ]),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      cells: vi.fn(async () =>
+        ['cell-a', 'cell-c'].map((id, index) => ({
+          id,
+          position: { x: micrometers(index * 20), y: micrometers(index * 20) },
+        })),
+      ),
+      matrix: vi.fn(async () => ({ geneNames: [], cells: new Map() })),
+      geneValuesRowIds: vi.fn(async () => cellIds),
+      estimateGeneValuesRead: vi.fn(async () => ({ kind: 'read' as const, bytes: 0 })),
+      geneValues: vi.fn(async (genes: readonly string[]) =>
+        genes.map((gene) => ({
+          gene,
+          rows: new Uint32Array(gene === 'Actb' ? [0, 2, 3] : [1]),
+          values: new Float32Array(gene === 'Actb' ? [1, 3, 7] : [2]),
+        })),
+      ),
+    }
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset)}
+        />,
+      )
+
+      openControls('diagnostics')
+      await screen.findByText(/H5AD ready: 4 cells, 2 genes/)
+      const plots = screen.getByRole('region', { name: 'Plots' })
+      expect(
+        await within(plots).findByRole('img', {
+          name: /^Dot plot of Actb and Gad1 across 2 groups of cell_type/,
+        }),
+      ).toBeInTheDocument()
+      expect(within(plots).getByText('2 genes by cell_type')).toBeInTheDocument()
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+
+      fireEvent.click(within(plots).getByRole('switch', { name: 'Show numbers' }))
+      const table = within(plots).getByRole('table')
+      expect(
+        within(table)
+          .getAllByRole('row')
+          .slice(1)
+          .map((row) => row.textContent),
+      ).toEqual([
+        'T cellActb250%0.347',
+        'B cellActb2100%1.73',
+        'T cellGad1250%0.549',
+        'B cellGad120%0',
+      ])
+
+      // Closing and opening again reads nothing more.
+      fireEvent.click(within(plots).getByRole('button', { name: 'Close plots' }))
+      openControls('plots')
+      expect(screen.getByRole('region', { name: 'Plots' })).toBeVisible()
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+      await waitFor(() => {
+        expect(window.location.hash).toContain('panel=cells%2Cplots')
+      })
+
+      // A selection is one more group, first, overlapping the classes.
+      const roiLayer = document.querySelector('.roi-draw-layer')
+      if (!(roiLayer instanceof HTMLElement)) throw new Error('Expected ROI draw layer.')
+      fireEvent.click(screen.getByRole('button', { name: 'Box selection' }))
+      fireEvent.pointerDown(roiLayer, { clientX: 400, clientY: 400, pointerId: 1 })
+      fireEvent.pointerMove(roiLayer, { clientX: 600, clientY: 600, pointerId: 1 })
+      fireEvent.pointerUp(roiLayer, { clientX: 600, clientY: 600, pointerId: 1 })
+
+      const reopened = screen.getByRole('region', { name: 'Plots' })
+      await waitFor(() => {
+        expect(
+          within(reopened)
+            .getAllByRole('row')
+            .slice(1)
+            .map((row) => row.textContent),
+        ).toContain('ROI 1 (selection)Actb2100%1.04')
+      })
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads H5AD selected-cell observations and expression from the matrix', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

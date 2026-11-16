@@ -12,6 +12,10 @@ import {
   type AnnDataLabelsOpener,
 } from './h5adDataset'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
+import {
+  ANNDATA_ZARR_FIXTURE_ORIGIN,
+  annDataZarrFixtureFetcher,
+} from '../test/annDataZarrFixtures'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
 
 describe('AnnDataH5adDataset', () => {
@@ -1303,6 +1307,86 @@ describe('AnnDataH5adDataset', () => {
       ['cell-f', 0],
     ])
     expect(progress.at(-1)).toBe('Icechunk AnnData ready: 6 cells, 4 genes')
+  })
+})
+
+describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
+  // The tiny fixture's matrix, cells by genes (Actb, Gad1, Gapdh).
+  const expected = {
+    Actb: [
+      [0, 1],
+      [1, 2],
+      [3, 7],
+    ],
+    Gad1: [
+      [1, 3],
+      [2, 4],
+    ],
+    Gapdh: [
+      [0, 5],
+      [2, 6],
+      [3, 8],
+    ],
+  }
+
+  it.each(['dense', 'csr', 'csc'] as const)(
+    'reads every cell of each gene from a %s matrix in memory',
+    async (matrixKind) => {
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/tiny.h5ad',
+        fetcher: h5adFetcher(await createTinyH5ad(matrixKind)),
+      })
+
+      await expect(dataset.estimateGeneValuesRead()).resolves.toEqual({
+        kind: 'read',
+        bytes: 0,
+      })
+      await expect(dataset.geneValuesRowIds()).resolves.toEqual([
+        'cell-a',
+        'cell-b',
+        'cell-c',
+        'cell-d',
+      ])
+      const reads = await dataset.geneValues(['Gapdh', 'Actb', 'Nope', 'Gad1'])
+
+      expect(
+        reads.map((read) =>
+          'error' in read
+            ? read.error
+            : [...read.rows]
+                .map((row, index) => [row, read.values[index]])
+                .sort((left, right) => (left[0] ?? 0) - (right[0] ?? 0)),
+        ),
+      ).toEqual([
+        expected.Gapdh,
+        expected.Actb,
+        'Nope is not in the expression matrix.',
+        expected.Gad1,
+      ])
+
+      // The same values the cell profile reads, cell by cell.
+      const matrix = await dataset.matrix(['cell-a', 'cell-b', 'cell-c', 'cell-d'])
+      for (const [gene, entries] of Object.entries(expected)) {
+        for (const [row, value] of entries) {
+          const cell = matrix.cells.get(
+            ['cell-a', 'cell-b', 'cell-c', 'cell-d'][row ?? 0] ?? '',
+          )
+          expect(cell?.counts[cell.geneNames.indexOf(gene)]).toBe(value)
+        }
+      }
+    },
+  )
+
+  it('says a matrix read over HTTP cannot be plotted yet', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      zarr: true,
+      fetcher: annDataZarrFixtureFetcher(),
+    })
+
+    await expect(dataset.estimateGeneValuesRead()).resolves.toMatchObject({
+      kind: 'unavailable',
+    })
   })
 })
 

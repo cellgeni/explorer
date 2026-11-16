@@ -32,9 +32,9 @@
   overflow: hidden;
 }
 
-/* Embedding panel (15.2-G): top right of the canvas, resized from the grip
-   at its bottom left. */
-.shell-embedding {
+/* Floating windows (15.2-G, 22-D8): Embedding and Plots, top right of the
+   canvas, resized from the grip at their bottom left. */
+.shell-floating {
   position: absolute;
   z-index: var(--z-cards);
   top: var(--space-3);
@@ -51,11 +51,11 @@
   color: var(--text-1);
 }
 
-.shell-embedding[hidden] {
+.shell-floating[hidden] {
   display: none;
 }
 
-.shell-embedding-body {
+.shell-floating-body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-2);
@@ -87,7 +87,7 @@
   height: 100%;
 }
 
-.shell-embedding-resize {
+.shell-floating-resize {
   position: absolute;
   bottom: 0;
   left: 0;
@@ -102,7 +102,7 @@
   touch-action: none;
 }
 
-.shell-embedding-resize svg {
+.shell-floating-resize svg {
   width: 12px;
   height: 12px;
   fill: none;
@@ -111,9 +111,127 @@
   transform: scaleX(-1);
 }
 
-.shell-embedding-resize:hover,
-.shell-embedding-resize:focus-visible {
+.shell-floating-resize:hover,
+.shell-floating-resize:focus-visible {
   color: var(--text-1);
+}
+
+/* Plots panel (22-D8): the controls, the plot or its table, which scroll
+   when larger than the window, then notes and exports. */
+.shell-plots-body {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.plots-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.plots-controls .ui-switch {
+  align-self: center;
+}
+
+.plots-view {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+}
+
+.plots-message {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--text-2);
+}
+
+.plots-figure {
+  width: max-content;
+  padding: var(--space-1);
+}
+
+.plots-figure svg {
+  display: block;
+}
+
+.plot-svg {
+  font-family: inherit;
+}
+
+.plot-text {
+  fill: var(--text-1);
+}
+
+.plot-muted {
+  fill: var(--text-3);
+}
+
+.plot-rule {
+  stroke: var(--border-strong);
+  stroke-dasharray: 3 3;
+}
+
+.plots-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.plots-table caption {
+  padding: var(--space-2);
+  color: var(--text-3);
+  text-align: left;
+}
+
+.plots-table th,
+.plots-table td {
+  padding: 2px var(--space-2);
+  border-top: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.plots-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+.plots-table tbody th {
+  font-weight: 600;
+}
+
+.plots-footer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.plots-notes {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  list-style: none;
+}
+
+.plots-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* Show Embedding and Show Plots, side by side. */
+.shell-panel-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
 }
 
 /* Cards (15.2-D): top left, above the legend, scrolling when they outgrow
@@ -859,7 +977,7 @@
   min-height: 0;
 }
 
-.shell-embedding.is-full-width {
+.shell-floating.is-full-width {
   top: var(--space-2);
   right: var(--space-2);
   left: var(--space-2);
