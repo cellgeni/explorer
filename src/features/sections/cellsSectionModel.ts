@@ -82,10 +82,12 @@ export interface CellColourModel {
   readonly colorScale: GeneExpressionColorScale
   readonly onColorScaleChange: (scale: GeneExpressionColorScale) => void
   // The scores at the ends of the scale, and the range that sets them; an
-  // Auto end is 0 or autoScaleMax, the highest score seen.
+  // Auto end is 0 or autoScaleMax, the top at the range's percentile (99th
+  // unless set) of the scores seen.
   readonly scaleMin: number
   readonly scaleMax: number
   readonly autoScaleMax: number
+  readonly highestScore: number
   readonly scaleRange: GeneScaleRange
   readonly onScaleRangeChange: (range: GeneScaleRange) => void
   readonly detailMode: GeneExpressionDetailMode
@@ -109,6 +111,7 @@ export interface CellsSectionModelInput {
   readonly geneExpressionScaleMin: number
   readonly geneExpressionScaleMax: number
   readonly geneExpressionAutoScaleMax: number
+  readonly geneExpressionHighestScore: number
   readonly geneExpressionScaleRange: GeneScaleRange
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
   readonly geneExpressionState: GeneExpressionState<StructuredLoadError>
@@ -164,6 +167,7 @@ export function useCellsSectionModel({
   geneExpressionScaleMin,
   geneExpressionScaleMax,
   geneExpressionAutoScaleMax,
+  geneExpressionHighestScore,
   geneExpressionScaleRange,
   geneExpressionScoreMode,
   geneExpressionState,
@@ -300,6 +304,7 @@ export function useCellsSectionModel({
       scaleMin: geneExpressionScaleMin,
       scaleMax: geneExpressionScaleMax,
       autoScaleMax: geneExpressionAutoScaleMax,
+      highestScore: geneExpressionHighestScore,
       scaleRange: geneExpressionScaleRange,
       onScaleRangeChange: setGeneExpressionScaleRange,
       detailMode: geneExpressionDetailMode,

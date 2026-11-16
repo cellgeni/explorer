@@ -3575,8 +3575,9 @@ describe('App', () => {
       ).toBeInTheDocument()
       // The gradient's middle is a quarter of the range: colours follow the
       // square root of each score's share.
-      expect(screen.getByLabelText('Gene scale values')).toHaveTextContent(/^028$/)
-      fireEvent.click(screen.getByRole('button', { name: 'Edit the Gene scale range' }))
+      expect(screen.getByTitle('Score at the middle of the gradient')).toHaveTextContent(
+        /^2$/,
+      )
       expect(screen.getByLabelText('Gene scale minimum')).toHaveValue(0)
       expect(screen.getByLabelText('Gene scale maximum')).toHaveValue(8)
     } finally {

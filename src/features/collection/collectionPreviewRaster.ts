@@ -3,6 +3,7 @@ import {
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import { geneScoreSpread } from '../genes/geneScaleRange'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 
 // A collection preview as pixels: every cell in grey, so the tissue shows,
@@ -30,9 +31,18 @@ export interface PreviewRasterOptions {
   readonly pointSize: number
   readonly padding: number
   readonly colorScale: GeneExpressionColorScale
-  // The scores drawn at the bottom and top of the scale, shared across
-  // previews.
+  // The scores drawn at the bottom and top of the scale.
   readonly scaleMin: number
+  readonly scaleMax: number
+  // When set, the top is instead this percentile of the drawn pixels' scores
+  // above 0. A pixel shows the highest of its cells, so a percentile of the
+  // cells would leave most pixels above it at this size.
+  readonly scalePercentile?: number
+}
+
+export interface PreviewRaster {
+  readonly pixels: Uint8ClampedArray<ArrayBuffer>
+  // The score drawn at the top colour; 0 without scores.
   readonly scaleMax: number
 }
 
@@ -46,13 +56,13 @@ export function rasterizePreview(
   cells: PreviewCells,
   overlay: PreviewOverlay | null,
   options: PreviewRasterOptions,
-): Uint8ClampedArray<ArrayBuffer> {
+): PreviewRaster {
   const { width, height, padding } = options
   const pointSize = Math.max(1, Math.round(options.pointSize))
   const pixels = new Uint8ClampedArray(width * height * 4)
   const { bounds } = cells
 
-  if (width <= 0 || height <= 0) return pixels
+  if (width <= 0 || height <= 0) return { pixels, scaleMax: 0 }
 
   const spanX = Math.max(bounds.maxX - bounds.minX, Number.EPSILON)
   const spanY = Math.max(bounds.maxY - bounds.minY, Number.EPSILON)
@@ -101,10 +111,10 @@ export function rasterizePreview(
       pixels[pixel * 4 + 3] = 255
     })
 
-    return pixels
+    return { pixels, scaleMax: 0 }
   }
 
-  if (overlay === null || options.scaleMax <= 0) return pixels
+  if (overlay === null) return { pixels, scaleMax: 0 }
 
   const { scores } = overlay
 
@@ -115,11 +125,18 @@ export function rasterizePreview(
     if (score > (best[pixel] ?? 0)) best[pixel] = score
   })
 
+  const scaleMax =
+    options.scalePercentile === undefined
+      ? options.scaleMax
+      : geneScoreSpread(best, options.scalePercentile).top
+
+  if (scaleMax <= 0) return { pixels, scaleMax: 0 }
+
   for (let pixel = 0; pixel < best.length; pixel += 1) {
     const score = best[pixel] ?? 0
     if (score <= 0) continue
 
-    const intensity = geneExpressionIntensity(score, options.scaleMin, options.scaleMax)
+    const intensity = geneExpressionIntensity(score, options.scaleMin, scaleMax)
     const color = geneExpressionColor(options.colorScale, intensity)
     pixels[pixel * 4] = color[0] ?? 0
     pixels[pixel * 4 + 1] = color[1] ?? 0
@@ -127,7 +144,7 @@ export function rasterizePreview(
     pixels[pixel * 4 + 3] = Math.max(color[3] ?? 255, 200)
   }
 
-  return pixels
+  return { pixels, scaleMax }
 }
 
 function hexRgb(color: string | null): readonly [number, number, number] | null {

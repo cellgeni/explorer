@@ -210,13 +210,17 @@ import {
   type CellMetadataTrackValuesLoader,
 } from './features/annotations/useCellMetadataTrackValues'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   type GeneExpressionState,
   geneExpressionModeLabel,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
 } from './features/genes/geneControlsModel'
-import { formatGeneScaleRange } from './features/genes/geneScaleRange'
+import {
+  formatGeneScaleRange,
+  geneScalePercentile,
+} from './features/genes/geneScaleRange'
 import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
@@ -240,7 +244,7 @@ import type { FallbackNotice } from './data/fallbackNotice'
 import { normalizeLayerOpacity } from './rendering/layerOpacity'
 import {
   geometricAnnotationsToLayerData,
-  geneExpressionScoreDomainMax,
+  geneExpressionScoreSpread,
   styleCellBoundariesByGeneExpression,
   styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
@@ -942,6 +946,7 @@ export function App({ dependencies }: AppProps = {}) {
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
     geneExpressionAutoScaleMax,
+    geneExpressionHighestScore,
     geneExpressionScaleKey,
     geneExpressionScaleMax,
     geneExpressionScaleMin,
@@ -1769,22 +1774,44 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setMorphologyState],
   )
+  // The percentile the Gene scale's top follows, read as each batch loads. A
+  // ref, so a new percentile does not restart the expression loads that hold
+  // rememberGeneExpressionScaleMax.
+  const geneScaleTopPercentile = geneScalePercentile(geneExpressionScaleRange)
+  const geneScalePercentileRef = useRef(geneScaleTopPercentile)
+  useEffect(() => {
+    geneScalePercentileRef.current = geneScaleTopPercentile
+  }, [geneScaleTopPercentile])
   const rememberGeneExpressionScaleMax = useCallback(
     (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
-      const max = geneExpressionScoreDomainMax(batch.elements, batch.genes, scoreMode)
+      const percentile = geneScalePercentileRef.current
+      const spread = geneExpressionScoreSpread(
+        batch.elements,
+        batch.genes,
+        scoreMode,
+        percentile,
+      )
 
-      if (max <= 0) {
+      if (spread.highest <= 0) {
         return
       }
 
       setGeneExpressionScaleDomain((current) => {
-        const currentMax = current.key === key ? current.max : 0
+        const seen =
+          current.key === key && current.percentile === percentile
+            ? current
+            : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
 
-        if (currentMax >= max) {
+        if (seen.top >= spread.top && seen.highest >= spread.highest) {
           return current
         }
 
-        return { key, max }
+        return {
+          key,
+          percentile,
+          top: Math.max(seen.top, spread.top),
+          highest: Math.max(seen.highest, spread.highest),
+        }
       })
     },
     [setGeneExpressionScaleDomain],
@@ -1796,7 +1823,7 @@ export function App({ dependencies }: AppProps = {}) {
     })
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', max: 0 })
+    setGeneExpressionScaleDomain(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
     setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
   }, [setGeneExpressionBatch, setGeneExpressionScaleDomain, setGeneExpressionState])
   const loadActiveAnnotations = useCallback<AnnotationLoader>(
@@ -3768,6 +3795,7 @@ export function App({ dependencies }: AppProps = {}) {
     geneExpressionScaleMin,
     geneExpressionScaleMax,
     geneExpressionAutoScaleMax,
+    geneExpressionHighestScore,
     geneExpressionScaleRange,
     geneExpressionScoreMode,
     geneExpressionState,

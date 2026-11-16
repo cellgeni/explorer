@@ -96,14 +96,18 @@ function fakeDatasets() {
         },
       ])
     },
-    finishExpression(url: string, count: number) {
+    // One cell per count.
+    finishExpression(url: string, count: number | readonly number[]) {
+      const counts = typeof count === 'number' ? [count] : count
       const call = expressions.find((entry) => entry.url === url)
       call?.done.resolve({
         genes: call.genes,
-        maxCount: count,
-        elements: [
-          { id: 'a', position: { x: micrometers(0), y: micrometers(0) }, count },
-        ],
+        maxCount: Math.max(...counts),
+        elements: counts.map((cellCount, index) => ({
+          id: `c${index}`,
+          position: { x: micrometers(index), y: micrometers(0) },
+          count: cellCount,
+        })),
       })
     },
   }
@@ -140,7 +144,7 @@ describe('CollectionPreviewStore', () => {
     expect(fake.overviewCalls).toEqual([A, B, C])
   })
 
-  it('reads the genes for each preview and shares one scale', async () => {
+  it('reads the genes for each preview', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS.slice(0, 2), fake.loaders)
     store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
@@ -157,11 +161,11 @@ describe('CollectionPreviewStore', () => {
       [B, ['Aqp4']],
     ])
     fake.finishExpression(A, 3)
-    fake.finishExpression(B, 8)
+    fake.finishExpression(B, [...Array.from({ length: 199 }, () => 2), 50])
     await flush()
 
     expect(store.entry(A).scores?.maxScore).toBe(3)
-    expect(store.scaleMax()).toBe(8)
+    expect(store.entry(B).scores?.maxScore).toBe(50)
   })
 
   it('reads new genes without reading the cells again', async () => {
@@ -183,7 +187,6 @@ describe('CollectionPreviewStore', () => {
 
     expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4'], ['Gfap']])
     expect(store.entry(A).scores).toBe(null)
-    expect(store.scaleMax()).toBe(0)
     expect(fake.overviewCalls).toEqual([A])
 
     fake.expressions.splice(0, 1)

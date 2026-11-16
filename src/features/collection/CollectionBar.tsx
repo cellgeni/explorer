@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import {
   CloseIcon,
   CollapseIcon,
@@ -20,7 +20,9 @@ import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_RANGE,
+  formatPercentile,
   geneScaleBounds,
+  geneScalePercentile,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
 import {
@@ -113,7 +115,19 @@ export function CollectionBar({
   })
   const groupsRef = useRef<HTMLDivElement>(null)
   const scaleRange = previews?.scaleRange ?? AUTO_GENE_SCALE_RANGE
-  const scaleBounds = geneScaleBounds(scaleRange, store?.scaleMax() ?? 0)
+  // A top score puts every preview on one scale, to compare levels; a top
+  // that follows the data (Auto, a percentile) gives each its own, to show
+  // where a gene is high within each section.
+  const sharedScale = typeof scaleRange.max === 'number'
+  const scalePercentile = geneScalePercentile(scaleRange)
+  const { min: scaleMin, max: sharedScaleMax } = geneScaleBounds(scaleRange, 0)
+  // Each preview's top as drawn, for its label.
+  const [drawnTops, setDrawnTops] = useState<ReadonlyMap<string, number>>(() => new Map())
+  const reportDrawnTop = useCallback((url: string, top: number) => {
+    setDrawnTops((current) =>
+      current.get(url) === top ? current : new Map(current).set(url, top),
+    )
+  }, [])
   const annotations = previews?.annotations ?? null
   const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
@@ -222,25 +236,25 @@ export function CollectionBar({
           <span
             className="collection-bar-scale"
             title={
-              scaleRange.max === null
-                ? 'Every preview uses this scale, up to the highest score among them'
-                : 'Every preview uses this scale, the range set in Gene scale'
+              sharedScale
+                ? 'Every preview uses this scale, the range set in Gene scale'
+                : `Each preview runs up to its own ${formatPercentile(scalePercentile)} percentile of the scores above 0, shown under it; cells above it get the top colour. Type a top score in Gene scale to put every preview on one scale`
             }
           >
             <span className="collection-bar-scale-genes">
               {genes.length === 1 ? genes[0] : `${genes.length.toLocaleString()} genes`}
             </span>
             <span className="collection-bar-scale-range">
-              <span>{formatGeneScaleValue(scaleBounds.min)}</span>
+              <span>{formatGeneScaleValue(scaleMin)}</span>
               <span
                 className="collection-bar-scale-ramp"
                 style={{ background: geneExpressionScaleGradient(previews.colorScale) }}
                 aria-hidden="true"
               />
               <span>
-                {scaleBounds.max > scaleBounds.min
-                  ? formatGeneScaleValue(scaleBounds.max)
-                  : '…'}
+                {sharedScale
+                  ? formatGeneScaleValue(sharedScaleMax)
+                  : `p${scalePercentile}`}
               </span>
             </span>
           </span>
@@ -289,16 +303,22 @@ export function CollectionBar({
                 const isPending = entry === pendingEntry && !isLoaded
                 const preview = store?.entry(entry.url)
                 const maxScore = preview?.scores?.maxScore
+                const drawnTop = drawnTops.get(entry.url) ?? 0
                 const shownCells =
                   annotations === null || annotations.hiddenIds.size === 0
                     ? undefined
                     : shownClassCellCount(preview?.classes ?? null, annotations)
                 const stat =
                   maxScore !== undefined && genes.length > 0
-                    ? {
-                        text: `max ${formatGeneScaleValue(maxScore)}`,
-                        title: `highest score ${formatGeneScaleValue(maxScore)}`,
-                      }
+                    ? sharedScale || drawnTop <= 0
+                      ? {
+                          text: `max ${formatGeneScaleValue(maxScore)}`,
+                          title: `highest score ${formatGeneScaleValue(maxScore)}`,
+                        }
+                      : {
+                          text: `top ${formatGeneScaleValue(drawnTop)}`,
+                          title: `top colour from ${formatGeneScaleValue(drawnTop)}, the ${formatPercentile(scalePercentile)} percentile of the preview's pixels; highest score ${formatGeneScaleValue(maxScore)}`,
+                        }
                     : shownCells !== undefined
                       ? {
                           text: cellCountText(shownCells),
@@ -330,8 +350,11 @@ export function CollectionBar({
                         <CollectionPreview
                           entry={preview ?? null}
                           colorScale={previews.colorScale}
-                          scaleMin={scaleBounds.min}
-                          scaleMax={scaleBounds.max}
+                          url={entry.url}
+                          scaleMin={scaleMin}
+                          scaleMax={sharedScaleMax}
+                          scalePercentile={sharedScale ? null : scalePercentile}
+                          onDrawnTop={reportDrawnTop}
                           annotations={annotations}
                         />
                         <span className="collection-bar-dataset-name">{label}</span>
@@ -359,15 +382,23 @@ export function CollectionBar({
 
 function CollectionPreview({
   entry,
+  url,
   colorScale,
   scaleMin,
   scaleMax,
+  scalePercentile,
+  onDrawnTop,
   annotations,
 }: {
   readonly entry: PreviewEntry | null
+  readonly url: string
   readonly colorScale: GeneExpressionColorScale
   readonly scaleMin: number
+  // The top on a shared scale; with scalePercentile, each preview's top is
+  // that percentile of its own drawn pixels, reported through onDrawnTop.
   readonly scaleMax: number
+  readonly scalePercentile: number | null
+  readonly onDrawnTop: (url: string, top: number) => void
   readonly annotations: CollectionBarAnnotations | null
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -396,15 +427,10 @@ function CollectionPreview({
     const canvas = canvasRef.current
     if (canvas === null || cells === null) return
 
-    const context = canvas.getContext('2d')
-    if (context === null) return
-
     const pixelRatio = window.devicePixelRatio || 1
     const width = Math.round(size.width * pixelRatio)
     const height = Math.round(size.height * pixelRatio)
-    canvas.width = width
-    canvas.height = height
-    const pixels = rasterizePreview(cells, overlay, {
+    const raster = rasterizePreview(cells, overlay, {
       width,
       height,
       pointSize: pixelRatio,
@@ -412,9 +438,28 @@ function CollectionPreview({
       colorScale,
       scaleMin,
       scaleMax,
+      ...(scalePercentile === null ? {} : { scalePercentile }),
     })
-    context.putImageData(new ImageData(pixels, width, height), 0, 0)
-  }, [cells, colorScale, overlay, scaleMax, scaleMin, size])
+    // Reported even where the canvas cannot draw, so the label matches.
+    onDrawnTop(url, raster.scaleMax)
+
+    const context = canvas.getContext('2d')
+    if (context === null) return
+
+    canvas.width = width
+    canvas.height = height
+    context.putImageData(new ImageData(raster.pixels, width, height), 0, 0)
+  }, [
+    cells,
+    colorScale,
+    onDrawnTop,
+    overlay,
+    scaleMax,
+    scaleMin,
+    scalePercentile,
+    size,
+    url,
+  ])
 
   const status =
     entry === null

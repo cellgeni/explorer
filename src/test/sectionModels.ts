@@ -124,6 +124,7 @@ export function testCellsSectionModel(
       scaleMin: 0,
       scaleMax: 1,
       autoScaleMax: 1,
+      highestScore: 1,
       scaleRange: { min: null, max: null },
       onScaleRangeChange: vi.fn(),
       detailMode: 'auto',

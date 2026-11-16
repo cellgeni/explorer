@@ -34,6 +34,7 @@ import type {
   GenePanelState,
 } from '../genes/geneControlsModel'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   genePanelLoadFailed,
   genePanelLoadReady,
@@ -395,7 +396,7 @@ function resetVisiumHdExpressionState({
   }
 
   setGeneExpressionBatch?.(null)
-  setGeneExpressionScaleDomain?.({ key: '', max: 0 })
+  setGeneExpressionScaleDomain?.(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
   setGeneExpressionState?.(IDLE_GENE_EXPRESSION_STATE)
 }
 

@@ -8,6 +8,7 @@ import {
 } from '../../rendering/deckLayers'
 import { DEFAULT_CELL_POINT_SCALE } from '../../rendering/cellPointStyle'
 import { DEFAULT_CELL_FILL_OPACITY } from '../../rendering/layerOpacity'
+import { AUTO_GENE_SCALE_RANGE, formatGeneScaleRange } from '../genes/geneScaleRange'
 
 // The value of each shareable setting when neither the link nor the dataset
 // manifest sets it. useAppDomainState starts from these, so share links can
@@ -19,6 +20,7 @@ export const DEFAULT_SHAREABLE_STATE = {
   hiddenLayers: [],
   selectedGenes: [],
   geneExpressionColorScale: DEFAULT_GENE_EXPRESSION_COLOR_SCALE,
+  geneExpressionScaleRange: formatGeneScaleRange(AUTO_GENE_SCALE_RANGE),
   geneExpressionScoreMode: DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   geneExpressionDetailMode: 'auto',
   observationColorMode: 'transcript-count',

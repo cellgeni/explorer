@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { render, renderHook } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
@@ -6,6 +6,7 @@ import { micrometers } from '../../data/coords'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
+import { geneExpressionScaleKeyFor } from '../genes/geneControlsModel'
 import { useViewerLayerData } from './useViewerLayerData'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
@@ -128,6 +129,64 @@ describe('useViewerLayerData', () => {
       expect(result.viewerObservationColorMode).toBe(mode)
     },
   )
+
+  it('tops the Gene scale at the range percentile, keeping a higher top seen at it', () => {
+    // 100 cells scoring 1 to 100.
+    const batch: GeneExpressionBatch = {
+      elements: Array.from({ length: 100 }, (_value, index) => ({
+        id: asCellId(`aaaaaaaa-${index + 1}`),
+        position: { x: micrometers(index), y: micrometers(0) },
+        count: index + 1,
+      })),
+      genes: ['Actb'],
+      maxCount: 100,
+    }
+    const key = geneExpressionScaleKeyFor('https://example.test/output', 'sum', ['Actb'])
+    const p95 = { min: null, max: { percentile: 95 } }
+    const scale = (geneExpression: Partial<ViewerLayerOptions['geneExpression']>) => {
+      const { result } = renderHook(() =>
+        useViewerLayerData(
+          viewerLayerOptions({
+            geneExpression: { geneExpressionBatch: batch, ...geneExpression },
+          }),
+        ),
+      )
+      const {
+        geneExpressionAutoScaleMax,
+        geneExpressionHighestScore,
+        geneExpressionScaleMax,
+      } = result.current
+      return {
+        geneExpressionAutoScaleMax,
+        geneExpressionHighestScore,
+        geneExpressionScaleMax,
+      }
+    }
+
+    expect(scale({})).toEqual({
+      geneExpressionAutoScaleMax: 99,
+      geneExpressionHighestScore: 100,
+      geneExpressionScaleMax: 99,
+    })
+    expect(scale({ geneExpressionScaleRange: p95 })).toEqual({
+      geneExpressionAutoScaleMax: 95,
+      geneExpressionHighestScore: 100,
+      geneExpressionScaleMax: 95,
+    })
+    // A higher top seen before at the 95th counts; one seen at the 99th does not.
+    expect(
+      scale({
+        geneExpressionScaleRange: p95,
+        geneExpressionScaleDomain: { key, percentile: 95, top: 120, highest: 130 },
+      }),
+    ).toMatchObject({ geneExpressionScaleMax: 120, geneExpressionHighestScore: 130 })
+    expect(
+      scale({
+        geneExpressionScaleRange: p95,
+        geneExpressionScaleDomain: { key, percentile: 99, top: 120, highest: 130 },
+      }),
+    ).toMatchObject({ geneExpressionScaleMax: 95, geneExpressionHighestScore: 100 })
+  })
 
   it('estimates visible transcripts from transcripts.zarr.zip grid counts once read', () => {
     function EstimateProbe({
@@ -451,7 +510,7 @@ function viewerLayerOptions({
       geneExpressionBatch: expressionBatch,
       geneExpressionColorScale: 'plasma',
       geneExpressionScaleDatasetUrl: 'https://example.test/output',
-      geneExpressionScaleDomain: { key: '', max: 0 },
+      geneExpressionScaleDomain: { key: '', percentile: 99, top: 0, highest: 0 },
       geneExpressionScoreMode: 'sum',
       selectedGenes: ['Actb'],
       ...geneExpression,

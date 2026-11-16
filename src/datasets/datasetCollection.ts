@@ -51,6 +51,7 @@ export const DATASET_COLLECTION_DEFAULT_KEYS = [
   'genes',
   'colorCellsBy',
   'geneColorScale',
+  'geneRange',
   'geneScoreMode',
   'cellPointScale',
 ] as const

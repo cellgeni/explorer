@@ -1,5 +1,6 @@
 import type { Position } from '@deck.gl/core'
 import type { GeneExpressionElement } from '../datasets/xeniumDataset'
+import { geneScoreSpread, type GeneScoreSpread } from '../features/genes/geneScaleRange'
 import {
   boundaryLineColor,
   cellAreaToRadiusMicrometers,
@@ -106,12 +107,15 @@ export function expressingElementsByScore(
     .sort((first, second) => (first.expressionCount ?? 0) - (second.expressionCount ?? 0))
 }
 
-export function geneExpressionScoreDomainMax(
+// The top of the Gene scale for these cells, at `percentile` of their scores
+// above 0, and the highest score among them.
+export function geneExpressionScoreSpread(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
-): number {
-  return maxExpressionScore(geneExpressionScores(elements, genes, scoreMode))
+  percentile?: number,
+): GeneScoreSpread {
+  return geneScoreSpread(geneExpressionScores(elements, genes, scoreMode), percentile)
 }
 
 export function styleCellsByGeneExpression(

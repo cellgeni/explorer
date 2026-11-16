@@ -63,7 +63,7 @@ image:
       "group": "snRNA-seq"
     }
   ],
-  "defaults": { "genes": ["Aqp4"] }
+  "defaults": { "genes": ["Aqp4"], "geneRange": [null, "p95"] }
 }
 ```
 
@@ -73,8 +73,8 @@ image:
 grouped by patient, and its snRNA-seq atlas of 1,025,329 nuclei. The sections
 open over their H&E, which the stores carry in `uns/spatial`. The atlas takes
 about 30 s to open. The nine sections of patient AT15 are Visium CytAssist
-11 mm, with counts about ten times higher than the others, so with them in
-view the previews' shared scale leaves the other sections dim.
+11 mm, with counts about ten times higher than the others, so on a shared
+scale (a top score typed in `Gene scale`) they leave the other sections dim.
 
 ## Fields
 
@@ -202,8 +202,12 @@ each section (`-label.zarr`).
 ### Defaults
 
 The dataset manifest's cross-dataset display settings: `genes`,
-`colorCellsBy`, `geneColorScale`, `geneScoreMode`, and `cellPointScale`, with
-the [same values](./dataset-manifest.md#defaults). Layer toggles, opacities
+`colorCellsBy`, `geneColorScale`, `geneRange`, `geneScoreMode`, and
+`cellPointScale`, with the [same values](./dataset-manifest.md#defaults).
+`geneRange` puts every section's colours and previews on one fixed scale.
+With a percentile top, such as `[null, "p95"]`, each section, open or
+previewed, tops out at that percentile of its own scores. Layer toggles,
+opacities
 and image channels belong to each dataset, so set them in that dataset's
 manifest.
 
@@ -257,10 +261,19 @@ each preview then counts the cells of the shown classes (`1,204 cells`). The
 bar's left side names the set and how many classes are hidden. A set is read
 once per dataset and selection, like a gene.
 
-- **One scale.** Every preview uses the same scale, from 0 to the highest
-  score among the previews read so far. The bar's left side shows the gene
-  and that maximum, and each preview its own highest score (`max 92`). The
-  scale can rise as more previews are read.
+- **Each its own scale, or one.** On Auto, or with a percentile top
+  (`geneRange=,p95`), each preview runs from 0 to its own 99th (or that)
+  percentile, so it shows where a gene is high within that section and one
+  outlier cell does not wash the rest out. The percentile is of the
+  preview's drawn pixels, each showing the highest of its cells, not of
+  the cells: at 112 × 64 px a pixel covers many cells, so a percentile of
+  the cells would leave most pixels at the top colour. A preview's top is
+  therefore above the main view's for the same section. The bar's left
+  side shows the gene and the percentile (`0 – p99`), and each preview its
+  own top (`top 50`; its title adds the highest score). Typing a top score in
+  `Gene scale` puts every preview on that one scale instead, to compare
+  levels across sections; each preview then shows its highest score
+  (`max 92`).
 - **What is read.** A preview reads every cell's position once per dataset,
   then the selected genes' scores, or the annotation set's classes, whenever
   the selection changes. Positions

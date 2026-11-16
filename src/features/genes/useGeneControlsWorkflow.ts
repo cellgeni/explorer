@@ -9,6 +9,7 @@ import type {
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import {
   geneExpressionScaleKeyFor,
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   type GeneExpressionScaleDomain,
 } from './geneControlsModel'
 
@@ -122,7 +123,7 @@ export function useGeneControlsWorkflow({
       setGeneExpressionScoreMode(nextScoreMode)
 
       if (geneExpressionBatch === null) {
-        setGeneExpressionScaleDomain({ key: '', max: 0 })
+        setGeneExpressionScaleDomain(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
         return
       }
 

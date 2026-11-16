@@ -81,6 +81,7 @@ import {
 } from '../dataset/visiumHdModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   IDLE_GENE_PANEL_STATE,
   parseGeneExpressionColorScale,
@@ -374,7 +375,7 @@ export function useAppDomainState({
   const [geneExpressionBatch, setGeneExpressionBatch] =
     useState<GeneExpressionBatch | null>(null)
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
-    useState<GeneExpressionScaleDomain>({ key: '', max: 0 })
+    useState<GeneExpressionScaleDomain>(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
   const [morphologyImage, setMorphologyImage] = useState<MorphologyImage | null>(null)
   const [flatMorphologyImage, setFlatMorphologyImage] =
     useState<FlatMorphologyCanvasImage | null>(null)

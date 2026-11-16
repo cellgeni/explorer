@@ -84,6 +84,7 @@ describe('parseDatasetCollection', () => {
         genes: [' Aqp4 '],
         colorCellsBy: 'gene-expression',
         geneColorScale: 'plasma',
+        geneRange: [0, 25],
         cellPointScale: 12,
       },
     })
@@ -97,6 +98,7 @@ describe('parseDatasetCollection', () => {
       genes: ['Aqp4'],
       colorCellsBy: 'gene-expression',
       geneColorScale: 'plasma',
+      geneRange: [0, 25],
       cellPointScale: 12,
     })
   })

@@ -126,7 +126,7 @@ describe('App with a dataset collection', () => {
     // Each dataset is previewed with the selected gene.
     expect(
       await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
-        'max 1',
+        'top 1',
       ),
     ).toBeInTheDocument()
 
@@ -137,7 +137,7 @@ describe('App with a dataset collection', () => {
     // The previews follow: both genes count in the first cell.
     expect(
       await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
-        'max 2',
+        'top 2',
       ),
     ).toBeInTheDocument()
     fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))

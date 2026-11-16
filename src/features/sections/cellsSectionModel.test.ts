@@ -20,6 +20,7 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
     geneExpressionScaleMin: 0,
     geneExpressionScaleMax: 12,
     geneExpressionAutoScaleMax: 12,
+    geneExpressionHighestScore: 20,
     geneExpressionScaleRange: { min: null, max: null },
     geneExpressionScoreMode: 'sum',
     geneExpressionState: { status: 'idle' },
@@ -140,7 +141,12 @@ describe('useCellsSectionModel', () => {
 
     expect(options.setGeneExpressionScoreMode).toHaveBeenCalledWith('mean')
     // Without a batch the remembered scale resets.
-    expect(options.setGeneExpressionScaleDomain).toHaveBeenCalledWith({ key: '', max: 0 })
+    expect(options.setGeneExpressionScaleDomain).toHaveBeenCalledWith({
+      key: '',
+      percentile: 99,
+      top: 0,
+      highest: 0,
+    })
     expect(options.setGeneExpressionColorScale).toHaveBeenCalledWith('viridis')
     expect(options.setGeneExpressionDetailMode).toHaveBeenCalledWith('all-cells')
     expect(options.setObservationColorMode).toHaveBeenCalledWith('annotations')

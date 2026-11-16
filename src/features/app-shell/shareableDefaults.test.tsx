@@ -2,6 +2,7 @@ import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { detectPerformanceBudget } from '../../data/performanceBudget'
 import { formatShareableState, parseShareableState } from '../../data/shareableState'
+import { formatGeneScaleRange } from '../genes/geneScaleRange'
 import { DEFAULT_SHAREABLE_STATE, withoutShareableDefaults } from './shareableDefaults'
 import { useAppDomainState } from './useAppDomainState'
 
@@ -21,6 +22,7 @@ function initialSettings(initialShareableState = {}) {
     ),
     selectedGenes: genes.selectedGenes,
     geneExpressionColorScale: genes.geneExpressionColorScale,
+    geneExpressionScaleRange: formatGeneScaleRange(genes.geneExpressionScaleRange),
     geneExpressionScoreMode: genes.geneExpressionScoreMode,
     geneExpressionDetailMode: genes.geneExpressionDetailMode,
     observationColorMode: layers.observationColorMode,
@@ -107,5 +109,24 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     expect(withoutShareableDefaults({ imageOpacity: 1 }, manifest)).toEqual({
       imageOpacity: 1,
     })
+  })
+
+  it('writes an Auto gene range only to undo the manifest’s range', () => {
+    const manifest = { geneExpressionScaleRange: '0,40' }
+
+    expect(withoutShareableDefaults({ geneExpressionScaleRange: ',' })).toEqual({})
+    expect(
+      withoutShareableDefaults({ geneExpressionScaleRange: '0,40' }, manifest),
+    ).toEqual({})
+    expect(withoutShareableDefaults({ geneExpressionScaleRange: ',' }, manifest)).toEqual(
+      {
+        geneExpressionScaleRange: ',',
+      },
+    )
+    expect(
+      formatShareableState(
+        withoutShareableDefaults({ geneExpressionScaleRange: ',' }, manifest),
+      ),
+    ).toBe('#xv=2&geneRange=%2C')
   })
 })

@@ -268,7 +268,12 @@ describe('useVisiumHdBinWorkflow', () => {
     })
 
     expect(setGeneExpressionBatch).toHaveBeenCalledWith(null)
-    expect(setGeneExpressionScaleDomain).toHaveBeenCalledWith({ key: '', max: 0 })
+    expect(setGeneExpressionScaleDomain).toHaveBeenCalledWith({
+      key: '',
+      percentile: 99,
+      top: 0,
+      highest: 0,
+    })
     expect(setGeneExpressionState).toHaveBeenCalledWith({ status: 'idle' })
   })
 

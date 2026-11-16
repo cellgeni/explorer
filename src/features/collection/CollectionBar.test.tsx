@@ -203,7 +203,7 @@ describe('CollectionBar previews', () => {
     )
   }
 
-  it('previews each dataset on one scale for the selected genes', async () => {
+  it('previews each dataset up to its own top for the selected genes', async () => {
     const loaders = previewLoaders()
     renderBar({
       loaders,
@@ -216,13 +216,16 @@ describe('CollectionBar previews', () => {
     const bar = screen.getByRole('navigation', { name: 'Collection' })
     const shamA = within(bar).getByRole('button', { name: 'Sham A' })
 
-    expect(await within(shamA).findByText('max 3')).toBeInTheDocument()
+    expect(await within(shamA).findByText('top 3')).toBeInTheDocument()
     expect(
       await within(within(bar).getByRole('button', { name: 'Sham B' })).findByText(
-        'max 8',
+        'top 8',
       ),
     ).toBeInTheDocument()
-    expect(shamA).toHaveAttribute('title', 'Sham A is open; highest score 3')
+    expect(shamA).toHaveAttribute(
+      'title',
+      "Sham A is open; top colour from 3, the 99th percentile of the preview's pixels; highest score 3",
+    )
     expect(
       await within(within(bar).getByRole('button', { name: '1 dpi A' })).findByText(
         'No cells to preview',
@@ -231,9 +234,31 @@ describe('CollectionBar previews', () => {
 
     const scale = bar.querySelector('.collection-bar-scale')
     expect(scale).toHaveTextContent('Aqp4')
-    await waitFor(() => {
-      expect(scale).toHaveTextContent('08')
+    expect(scale).toHaveTextContent('0p99')
+    expect(scale?.getAttribute('title')).toMatch(/^Each preview runs up to its own 99th/)
+  })
+
+  it('puts every preview on one scale when the top is a score', async () => {
+    renderBar({
+      loaders: previewLoaders(),
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      annotations: null,
+      paused: false,
+      scaleRange: { min: null, max: 20 },
     })
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    const shamA = within(bar).getByRole('button', { name: 'Sham A' })
+
+    expect(await within(shamA).findByText('max 3')).toBeInTheDocument()
+    expect(shamA).toHaveAttribute('title', 'Sham A is open; highest score 3')
+    const scale = bar.querySelector('.collection-bar-scale')
+    expect(scale).toHaveTextContent('020')
+    expect(scale).toHaveAttribute(
+      'title',
+      'Every preview uses this scale, the range set in Gene scale',
+    )
   })
 
   it('shows the tissue only without genes, and names only when turned off', async () => {
@@ -252,7 +277,7 @@ describe('CollectionBar previews', () => {
       expect(loaders.getSpatialDataset).toHaveBeenCalledTimes(3)
     })
     expect(bar.querySelector('.collection-bar-scale')).toBe(null)
-    expect(within(bar).queryByText(/^max /)).toBe(null)
+    expect(within(bar).queryByText(/^(max|top) /)).toBe(null)
 
     const toggle = within(bar).getByRole('button', { name: 'Previews' })
     expect(toggle).toHaveAttribute('aria-pressed', 'true')
@@ -299,7 +324,7 @@ describe('CollectionBar previews', () => {
     expect(bar).toHaveClass('is-expanded')
     const collapse = within(bar).getByRole('button', { name: 'Collapse' })
     expect(collapse).toHaveAttribute('aria-expanded', 'true')
-    expect(await within(bar).findByText('max 8')).toBeInTheDocument()
+    expect(await within(bar).findByText('top 8')).toBeInTheDocument()
 
     fireEvent.keyDown(collapse, { key: 'Escape' })
     expect(bar).not.toHaveClass('is-expanded')
@@ -417,7 +442,7 @@ describe('CollectionBar previews', () => {
     ).toBeInTheDocument()
     expect(bar.querySelector('.collection-bar-scale')).toHaveTextContent('type1 hidden')
     // The genes are not read while the cells are coloured by the set.
-    expect(within(bar).queryByText(/^max /)).toBe(null)
+    expect(within(bar).queryByText(/^(max|top) /)).toBe(null)
   })
 
   it('waits while the main view loads a dataset', async () => {
@@ -450,7 +475,7 @@ describe('CollectionBar previews', () => {
         }}
       />,
     )
-    expect(await screen.findByText('max 3')).toBeInTheDocument()
+    expect(await screen.findByText('top 3')).toBeInTheDocument()
   })
 })
 
