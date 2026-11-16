@@ -109,8 +109,8 @@ the canvas, a `nav` named "Collection":
   The open dataset is highlighted (`aria-current`) and the one loading has
   a dashed border (`aria-busy`). Choosing another opens it, keeping the
   selected genes, the `Cell color` mode, `Combine genes`, the loaded
-  annotation set with its hidden classes and class colours, and the
-  metadata column.
+  annotation set with its hidden classes, class colours and whether it is
+  hidden, and the metadata column.
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
   expression. Each preview runs from 0 to its own percentile of its drawn
@@ -261,8 +261,8 @@ stay mounted while closed, so a gene search survives. `Hide layers (\)` (or
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. The link keeps
 them (`hidden=`) and the open sections (`panel=`). Hidden annotation classes
-are kept as `hiddenClasses=`. Alt-click on a class's checkbox shows only that
-class.
+are kept as `hiddenClasses=`, and sets hidden with their eye as `hiddenSets=`.
+Alt-click on a class's checkbox shows only that class.
 
 ### Image
 
@@ -735,6 +735,11 @@ Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
 - `Enter` on the focused view: the bin or cell at its centre (see
   [Navigation](#navigation)).
 
+A press counts as a click however long it is held, as long as the pointer
+stays within 9 px. deck.gl's 250 ms click limit is lifted, because it
+included the pick on pointerdown, which software WebGL can take that long
+to run.
+
 ### Hover Tooltips
 
 `src/components/viewerHoverTooltips.tsx`. Suppressed while the cursor lens is
@@ -1050,10 +1055,9 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 ## Shareable URL
 
 `src/data/shareableState.ts` writes the state to the URL hash (debounced
-160 ms, with `xv=2`); query-string values are also read on startup, and hash
-values win. Numbers are rounded to three decimals. Version 2 links leave out
-every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. For a dataset with a
+160 ms, with `xv=2`). Numbers are rounded to three decimals. Version 2 links
+leave out every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a
+missing parameter means the default. For a dataset with a
 [manifest](./dataset-manifest.md#defaults), the manifest's `defaults` take the
 place of the app's: a value equal to the manifest's is left out, and one set
 back to the app default is written, so the manifest does not bring its value
@@ -1063,6 +1067,12 @@ wrote every value, still open as before. `Share` in the top bar and
 `Copy Link` copy the link for the current state, which the address shows up
 to 160 ms later, and say "Link copied".
 
+The query string is read on startup too, except under a version 2 hash,
+which is the whole link; under any other hash, the hash's values win. Once the
+hash is written, the query string keeps only keys a link does not set, such as
+`debug=`, so a value the view no longer has, such as a closed compare panel,
+does not come back on reload.
+
 Opening another dataset adds a browser history entry; every other change
 replaces the current one (15.3-C). Back returns to the previous dataset, or to
 the start screen: when Back or Forward reaches an entry for another dataset,
@@ -1070,11 +1080,11 @@ the page reloads that entry's link, with its view and settings.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL. Read from the hash or the query string; once the hash is written, the query string's copy is dropped, so a closed collection stays closed on reload                                                                                                                     |
+| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL                                                                                                                                                                                                                                                                          |
 | `collectionView`                                                                                          | How the collection bar shows its datasets: `grid` (`Expand`) or `names` (`Previews` off). Left out for the previews in a row. Written only with `collection`                                                                                                                                                                           |
 | `compare`                                                                                                 | A section shown [side by side](#sections-side-by-side) with the open dataset, by its URL as in `dataset`; repeatable, in the panels' order. Once the collection is read and its dataset open, only the first three other sections in the open dataset's `coordinateSystem` stay. Written only with `collection`                        |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
-| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
+| `annotationUrl`                                                                                           | Annotation import URL (imported automatically; with `groups`, after the set loads, whose labels it adds to)                                                                                                                                                                                                                            |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
 | `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                    |
@@ -1086,6 +1096,7 @@ the page reloads that entry's link, with its view and settings.
 | `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |
 | `hiddenClasses`                                                                                           | Hidden annotation classes: comma-separated class IDs such as `analysis:leiden:3`; `%` and `,` inside an ID are written `%25` and `%2C`. Applied once the set loads                                                                                                                                                                     |
+| `hiddenSets`                                                                                              | Hidden annotation sets, as the set's eye hides them: comma-separated set IDs such as `analysis:leiden`, written as in `hiddenClasses`. Applied once the set loads                                                                                                                                                                      |
 | `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode. A version 1 link with `genes` opens in Gene expression whatever `cellColor` says, as such links looked before that mode existed                                                                                                                                      |
 | `geneRange`                                                                                               | The Gene scale's range when set: `min,max`, an end left empty for Auto, such as `,10`. The max may be a percentile of each dataset's scores above 0, such as `,p95`, which follows the data like Auto at that percentile. `,` is Auto, written only to undo a dataset manifest's `geneRange`                                           |
 | `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                                                                                                                                                                                                                                   |

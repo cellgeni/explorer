@@ -208,6 +208,12 @@ const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 // its props are unchanged. Skip those renders so ROI drags, the cursor readout,
 // and hover tooltips do not redraw every cell on each pointer move.
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
+// deck.gl picks what is under the pointer on pointerdown, synchronously, and
+// mjolnir.js drops a click whose pointerup comes more than 250 ms after its
+// pointerdown, pick included. Under software WebGL (headless Chromium) the
+// pick alone takes about that long on the Visium HD grid, so clicks on bins
+// were often lost. A browser click has no time limit, and neither has this.
+const DECK_EVENT_RECOGNIZER_OPTIONS = { click: { time: Infinity } }
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
@@ -2068,6 +2074,7 @@ function ViewerSurface({
               viewState={viewState}
               onViewStateChange={handleViewStateChange}
               onClick={handleDeckClick}
+              eventRecognizerOptions={DECK_EVENT_RECOGNIZER_OPTIONS}
               {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
               controller
               layers={layers}

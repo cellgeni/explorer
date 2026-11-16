@@ -33,6 +33,7 @@ import {
   annotationLoadFailed,
   annotationLoadReady,
   annotationLoadStarted,
+  annotationSetIdForAnnotation,
   annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
@@ -104,10 +105,11 @@ interface UseAnnotationWorkflowOptions {
   readonly setters: AnnotationWorkflowSetters
 }
 
-// Classes a link hides (hiddenClasses=). Those in the loaded labels stay
-// hidden once they load; the rest are dropped.
+// Classes and sets a link hides (hiddenClasses=, hiddenSets=). Those in the
+// loaded labels stay hidden once they load; the rest are dropped.
 interface LinkHiddenAnnotationOptions {
   readonly hiddenAnnotationIds?: readonly string[] | undefined
+  readonly hiddenAnnotationSetIds?: readonly string[] | undefined
 }
 
 interface UseAnnotationWorkflowResult {
@@ -126,11 +128,12 @@ interface UseAnnotationWorkflowResult {
   readonly handleLoadAnnotations: () => void
   // Loads one of the dataset's annotation sets, such as one named by a link.
   // Loading a set colours cells by it, unless switchColorMode is false (a
-  // link's set, under the link's own colour mode).
+  // link's set, under the link's own colour mode). Settles once the labels
+  // are shown or the load has failed.
   readonly loadAnnotationGroup: (
     groupId: string,
     options?: { readonly switchColorMode?: boolean } & LinkHiddenAnnotationOptions,
-  ) => void
+  ) => Promise<void>
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
@@ -182,15 +185,16 @@ export function useAnnotationWorkflow({
       selectedGroupId: string,
       {
         hiddenAnnotationIds = [],
+        hiddenAnnotationSetIds = [],
         switchColorMode = true,
       }: { readonly switchColorMode?: boolean } & LinkHiddenAnnotationOptions = {},
-    ) => {
+    ): Promise<void> => {
       if (loadState.status !== 'ready' || annotationState.status === 'loading') {
-        return
+        return Promise.resolve()
       }
 
       if (selectedGroupId === NO_ANNOTATION_GROUP_ID) {
-        return
+        return Promise.resolve()
       }
 
       const requestId = loadRequestIdRef.current
@@ -202,7 +206,7 @@ export function useAnnotationWorkflow({
       )
       setAnnotationState(annotationLoadStarted(loadState.url))
 
-      void loadAnnotations(loadState.url, {
+      return loadAnnotations(loadState.url, {
         ...(signal === undefined ? {} : { signal }),
         ...(groupId === undefined ? {} : { groupId }),
       })
@@ -216,6 +220,9 @@ export function useAnnotationWorkflow({
           )
           setAnnotationColors((current) => colorsForAnnotations(annotations, current))
           setHiddenAnnotationIds(loadedAnnotationIds(annotations, hiddenAnnotationIds))
+          setHiddenAnnotationSetIds((current) =>
+            withLoadedAnnotationSetIds(current, annotations, hiddenAnnotationSetIds),
+          )
           // The set replaces the imported labels.
           setImportNotice(null)
           if (switchColorMode && annotations.length > 0) {
@@ -248,12 +255,13 @@ export function useAnnotationWorkflow({
       loadState,
       setAnnotationColors,
       setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
       setAnnotationState,
       setObservationColorMode,
     ],
   )
   const handleLoadAnnotations = useCallback(() => {
-    loadAnnotationGroup(selectedAnnotationGroupId)
+    void loadAnnotationGroup(selectedAnnotationGroupId)
   }, [loadAnnotationGroup, selectedAnnotationGroupId])
 
   const handleAnnotationGroupChange = useCallback(
@@ -269,7 +277,10 @@ export function useAnnotationWorkflow({
       text: string,
       sourceName: string,
       sourceLabel: string,
-      linkHiddenAnnotationIds: readonly string[] = [],
+      {
+        hiddenAnnotationIds: linkHiddenAnnotationIds = [],
+        hiddenAnnotationSetIds: linkHiddenAnnotationSetIds = [],
+      }: LinkHiddenAnnotationOptions = {},
     ) => {
       const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
         parseCustomAnnotationImport(text, sourceName)
@@ -316,6 +327,13 @@ export function useAnnotationWorkflow({
         ...removeHiddenAnnotationIdsByPrefix(current, importedPrefix),
         ...loadedAnnotationIds(importedAnnotations, linkHiddenAnnotationIds),
       ])
+      setHiddenAnnotationSetIds((current) =>
+        withLoadedAnnotationSetIds(
+          current,
+          importedAnnotations,
+          linkHiddenAnnotationSetIds,
+        ),
+      )
       setImportNotice(
         cellCheck.missing === 0
           ? null
@@ -358,6 +376,7 @@ export function useAnnotationWorkflow({
       loadState,
       setAnnotationColors,
       setHiddenAnnotationIds,
+      setHiddenAnnotationSetIds,
       setAnnotationState,
       setCellMetadataTracks,
       setObservationColorMode,
@@ -394,7 +413,7 @@ export function useAnnotationWorkflow({
   )
 
   const handleImportAnnotationUrl = useCallback(
-    async (url: string, { hiddenAnnotationIds }: LinkHiddenAnnotationOptions = {}) => {
+    async (url: string, linkHidden: LinkHiddenAnnotationOptions = {}) => {
       const requestId = loadRequestIdRef.current
 
       try {
@@ -420,7 +439,7 @@ export function useAnnotationWorkflow({
           text,
           sourceName,
           'Imported URL annotations',
-          hiddenAnnotationIds,
+          linkHidden,
         )
         return true
       } catch (error) {
@@ -738,6 +757,24 @@ function loadedAnnotationIds(
   const loadedIds = new Set(annotations.map((annotation) => annotation.id))
 
   return annotationIds.filter((annotationId) => loadedIds.has(annotationId))
+}
+
+// The hidden sets with those a link hides that the loaded labels belong to.
+function withLoadedAnnotationSetIds(
+  hiddenSetIds: readonly string[],
+  annotations: readonly Annotation[],
+  linkHiddenSetIds: readonly string[],
+): readonly string[] {
+  if (linkHiddenSetIds.length === 0) {
+    return hiddenSetIds
+  }
+
+  const loadedSetIds = new Set(annotations.map(annotationSetIdForAnnotation))
+  const added = linkHiddenSetIds.filter(
+    (setId) => loadedSetIds.has(setId) && !hiddenSetIds.includes(setId),
+  )
+
+  return added.length === 0 ? hiddenSetIds : [...hiddenSetIds, ...added]
 }
 
 function mergeImportedCellMetadataTracks(

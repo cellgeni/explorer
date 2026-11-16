@@ -126,6 +126,18 @@ describe('AnnotationLabelLists', () => {
     )
     expect(sets.onManyVisibilityChange).not.toHaveBeenCalled()
   })
+
+  it('counts in the dataset’s own noun', () => {
+    renderLists({ elementNoun: 'spots' })
+    const set = screen.getByRole('region', { name: 'fine_celltype labels' })
+
+    // 30 + 29 + ... + 1 assignments.
+    expect(within(set).getByText('465 spots')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'fine_celltype visible' })).toHaveAttribute(
+      'title',
+      'Hide fine_celltype: draw the spots without its colours, keeping the classes checked below',
+    )
+  })
 })
 
 describe('MetadataTracksPanel', () => {
@@ -149,5 +161,20 @@ describe('MetadataTracksPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove Track 39' }))
     expect(metadataTracks.onRemove).toHaveBeenCalledWith('h5ad:track-39')
+  })
+  it('counts in the dataset’s own noun', () => {
+    const { metadataTracks } = testAnnotationsSectionModel({
+      metadataTracks: {
+        elementNoun: 'spots',
+        tracks: [
+          { id: 'h5ad:a', label: 'A', values: null, cellCount: 370, min: 0, max: 2 },
+          { id: 'h5ad:b', label: 'B', values: null, cellCount: 1, min: 1, max: 1 },
+        ],
+      },
+    })
+    render(<MetadataTracksPanel metadataTracks={metadataTracks} />)
+
+    expect(screen.getByText('370 spots | 0-2')).toBeInTheDocument()
+    expect(screen.getByText('1 spot | 1-1')).toBeInTheDocument()
   })
 })

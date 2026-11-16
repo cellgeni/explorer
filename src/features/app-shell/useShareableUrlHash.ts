@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
 import {
   formatShareableState,
+  parseShareableState,
   type ShareableState,
   type ShareableViewState,
 } from '../../data/shareableState'
@@ -13,6 +14,8 @@ interface ShareableDatasetHashOptions {
   readonly annotationGroupIds?: readonly string[] | undefined
   // Hidden annotation classes (hiddenClasses=).
   readonly hiddenAnnotationIds?: readonly string[] | undefined
+  // Hidden annotation sets (hiddenSets=).
+  readonly hiddenAnnotationSetIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   // The open dataset collection (collection=), if any.
@@ -114,16 +117,28 @@ function linkedDatasetUrl(): string {
   return readShareableStateFromLocation().datasetUrl?.trim() ?? ''
 }
 
-// The query string without collection=: once the hash is written it names the
-// collection, or leaves it out after the collection is closed, and a query
-// string copy would bring a closed collection back on reload.
-function searchWithoutCollection(search: string): string {
-  const params = new URLSearchParams(search)
+// The query string without the link's values: once the hash is written it is
+// the whole link (readShareableStateFromLocation), so a copy in the query
+// string could only show values the view no longer has, such as a closed
+// collection or compare panel. A key is the link's when it alone parses to
+// some state; others, such as debug=, stay.
+function searchWithoutLinkState(search: string): string {
+  const kept = new URLSearchParams()
+  let dropped = false
 
-  if (!params.has('collection')) return search
+  for (const [key, value] of new URLSearchParams(search)) {
+    const entry = new URLSearchParams([[key, value]]).toString()
 
-  params.delete('collection')
-  const rest = params.toString()
+    if (Object.keys(parseShareableState(entry)).length === 0) {
+      kept.append(key, value)
+    } else {
+      dropped = true
+    }
+  }
+
+  if (!dropped) return search
+
+  const rest = kept.toString()
   return rest === '' ? '' : `?${rest}`
 }
 
@@ -151,6 +166,7 @@ export function useShareableUrlHash({
     datasetDefaults,
     datasetUrl,
     hiddenAnnotationIds,
+    hiddenAnnotationSetIds,
   } = dataset
   // As a string, so a new array with the same URLs writes nothing.
   const compareKey = dataset.compareUrls?.join('\n') ?? ''
@@ -251,6 +267,7 @@ export function useShareableUrlHash({
           tool,
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
+          ...(hiddenAnnotationSetIds === undefined ? {} : { hiddenAnnotationSetIds }),
           geneExpressionColorScale,
           ...(geneExpressionScaleRange === undefined ? {} : { geneExpressionScaleRange }),
           geneExpressionScoreMode,
@@ -306,7 +323,7 @@ export function useShareableUrlHash({
       if (leavingRef.current) return
 
       if (window.location.hash !== hash) {
-        const url = `${window.location.pathname}${searchWithoutCollection(window.location.search)}${hash}`
+        const url = `${window.location.pathname}${searchWithoutLinkState(window.location.search)}${hash}`
         const nextDatasetUrl = datasetUrl.trim()
 
         if (nextDatasetUrl !== '' && nextDatasetUrl !== linkedDatasetUrl()) {
@@ -325,6 +342,7 @@ export function useShareableUrlHash({
     annotationGroupIds,
     card,
     hiddenAnnotationIds,
+    hiddenAnnotationSetIds,
     hiddenLayers,
     panels,
     tool,
@@ -383,6 +401,6 @@ export function useShareableUrlHash({
     const { origin, pathname, search, href } = window.location
     return hashRef.current === null
       ? href
-      : `${origin}${pathname}${searchWithoutCollection(search)}${hashRef.current}`
+      : `${origin}${pathname}${searchWithoutLinkState(search)}${hashRef.current}`
   }, [])
 }

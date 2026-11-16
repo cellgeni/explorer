@@ -300,6 +300,9 @@ Testing:
     Bin card.
   - The Bin card's cell assignment: "Loaded" in about 1.3 s locally after
     Enter, from 4 requests (HEAD, two footer reads, one 300 KB range).
+  - Since 2026-11-16, the Bin card opened with a mouse click held for
+    400 ms, which mjolnir.js dropped before (see
+    [Phase 6](phases/06-visium-hd.md#closed-open-items)).
 - [x] Direct tests for small helpers. About 14 pure helpers have no test, for
       example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
       `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the

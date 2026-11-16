@@ -273,6 +273,25 @@ Other gaps found in the review:
       (2026-11-14). Each new viewport used to fetch and parse the whole cell
       (68 MB) and nucleus (44 MB) GeoJSON again, keeping only the polygons in
       its box, and the reads ignored the request's signal.
+
+Found by the [15.5-E](15-interface-redesign.md#155-close-out) re-run
+(2026-11-12):
+
+- [x] The Bin card shows "Score 0" for a selected gene the bin expresses
+      unless cells are coloured by gene expression: bins only get expression
+      counts in that mode, and `activeSelectedGridCell` (`App.tsx`) filled in 0.
+      Since 2026-11-16 the card takes the bin's score from the expression
+      batch in every colour mode. A bin outside the last batch (out of view,
+      or left out by sampling) still shows 0.
+- [x] Clicking a bin selects nothing under software WebGL (headless
+      Chromium). Enter at the crosshair works. The cause was not picking:
+      deck.gl picks on pointerdown, and under SwiftShader that pick took
+      170–310 ms on the reference grid, while mjolnir.js drops a click whose
+      pointerup comes over 250 ms after its pointerdown, pick included. Since
+      2026-11-16 the viewer lifts that limit
+      (`eventRecognizerOptions={ click: { time: Infinity } }` in
+      `ViewerCore.tsx`), so a press of any length counts as a click, as in a
+      browser. With the limit lifted, SwiftShader picks the same bin as a GPU.
   - Now the first boundary request reads each file once into a columnar
     index (`visiumHdSegmentationIndex.ts`): ids, per-polygon bounds, ring
     offsets, Float32 coordinates in µm and interned annotation metadata. The

@@ -57,4 +57,18 @@ describe('vite config', () => {
       'codec-vendor',
     ])
   })
+
+  it('keeps h5wasm out of the vendor chunks, so it loads only when imported', () => {
+    const groupOf = (path: string) =>
+      dependencyChunkGroups.find((group) => group.test.test(path))?.name
+
+    expect(groupOf('/app/node_modules/h5wasm/dist/esm/hdf5_hl.js')).toBeUndefined()
+    expect(
+      groupOf('C:\\app\\node_modules\\h5wasm\\dist\\esm\\hdf5_hl.js'),
+    ).toBeUndefined()
+    expect(groupOf('/app/node_modules/zarrita/dist/src/index.js')).toBe(
+      'spatial-io-vendor',
+    )
+    expect(groupOf('/app/node_modules/hyparquet/src/index.js')).toBe('spatial-io-vendor')
+  })
 })

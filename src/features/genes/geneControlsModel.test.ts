@@ -148,6 +148,19 @@ describe('geneControlsModel', () => {
         visibleCellCount: 1000,
       }),
     ).toBe('Expression all cells: 25 positive cells across 1,000 slide cells')
+    expect(
+      geneExpressionStatusCopy(
+        {
+          status: 'ready',
+          url: 'https://example.test/output',
+          genes: ['Actb'],
+          mode: 'all-cells',
+          cellCount: 1,
+          visibleCellCount: 370,
+        },
+        'spots',
+      ),
+    ).toBe('Expression all spots: 1 positive spot across 370 slide spots')
     expect(geneExpressionStatusCopy({ status: 'waiting', message: 'Zoom in' })).toBe(
       'Zoom in',
     )
@@ -163,6 +176,7 @@ describe('geneControlsModel', () => {
   it('formats modes, timings, scales, and parser values', () => {
     expect(geneExpressionModeLabel('exact')).toBe('Expression')
     expect(geneExpressionModeLabel('all-cells')).toBe('Expression all cells')
+    expect(geneExpressionModeLabel('all-cells', 'bins')).toBe('Expression all bins')
     expect(
       formatGeneExpressionTiming({
         totalMs: 10.4,

@@ -210,7 +210,8 @@ chunk's source is `h5wasm`, which inlines its WASM. The main thread imports
 group in `vite.config.ts` puts it with zarrita, geotiff and hyparquet, which
 the entry imports statically. A build with `h5wasm` taken out of that group
 put it in its own lazy chunk and cut the start screen's JavaScript to
-2.3 MB (753 kB gzip). Not yet applied; see [Open Items](../open-items.md).
+2.3 MB (753 kB gzip). Applied the same day; see
+[Closed Open Items](#closed-open-items).
 
 | Chunk preloaded by `index.html` | Raw      | Gzip     |
 | ------------------------------- | -------- | -------- |
@@ -315,3 +316,26 @@ Original-brief items with no outcome:
   - Not done: reading cell rows from the feature-major Zarr. A cell's counts
     are spread over every gene's entries, so it means reading all of
     `indices`.
+
+Found by the 2026-11-16 review:
+
+- [x] The start screen preloaded `h5wasm` (2026-11-16). The
+      `spatial-io-vendor` group in `vite.config.ts` put it, 3.7 MB of source
+      with its WASM inlined, in one chunk with zarrita, geotiff and
+      hyparquet, which the entry imports statically, so `index.html`
+      preloaded it although the main thread imports `h5wasm` only lazily.
+      Left out of every group, it builds into its own chunk (`hdf5_hl`,
+      1,030 kB gzip) that loads on first import. The start screen's
+      JavaScript fell from 7.1 MB (1,783 kB gzip) to 2.3 MB (753 kB gzip);
+      in the browser it transferred 768 kB with no request for the chunk,
+      and importing the chunk then wrote and read back an HDF5 file in
+      144 ms. A test in `tests/config/viteConfig.test.ts` keeps `h5wasm` out
+      of the groups. Workers bundle their own copy, as before.
+- [x] The umbrella `deck.gl` package was a dependency but never imported
+      (2026-11-16). The app imports the `@deck.gl/*` packages it uses
+      directly. Removing it took 272 packages out of the lockfile, among
+      them `@deck.gl/carto`, `geo-layers` and `mesh-layers`. The production
+      audit (`npm audit --omit=dev`) went from 16 advisories (9 high) to
+      one, `qs` through duckdb-wasm. The bundle did not change. `h5wasm` is
+      pinned at 0.10.2, the version the lockfile already held, so every
+      dependency is now pinned.

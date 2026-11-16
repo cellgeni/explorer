@@ -288,6 +288,25 @@ describe('shareableState', () => {
     expect(parseShareableState('#hiddenClasses=').hiddenAnnotationIds).toBeUndefined()
   })
 
+  it('writes and reads hidden annotation sets after the hidden classes', () => {
+    const hash = formatShareableState({
+      annotationGroupIds: ['h5ad:leiden'],
+      hiddenAnnotationIds: ['analysis:leiden:0'],
+      hiddenAnnotationSetIds: ['analysis:leiden', 'custom:labels-csv:CD4+, naive'],
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).get('hiddenSets')).toBe(
+      'analysis:leiden,custom:labels-csv:CD4+%2C naive',
+    )
+    expect(hash.indexOf('hiddenSets=')).toBeGreaterThan(hash.indexOf('hiddenClasses='))
+    expect(parseShareableState(hash).hiddenAnnotationSetIds).toEqual([
+      'analysis:leiden',
+      'custom:labels-csv:CD4+, naive',
+    ])
+    expect(formatShareableState({ hiddenAnnotationSetIds: [' '] })).toBe('#xv=2')
+    expect(parseShareableState('#hiddenSets=').hiddenAnnotationSetIds).toBeUndefined()
+  })
+
   it('escapes commas and percent signs in hidden class IDs', () => {
     const ids = ['analysis:CD4+, naive:1', 'custom:100%:a b', 'roi:1:%2C']
     const hash = formatShareableState({ hiddenAnnotationIds: ids })
