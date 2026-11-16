@@ -258,9 +258,11 @@ outlines from `dataset.elements(bbox)`, true-size points, embeddings labelled
 `runVisiumDiagnostics` (`src/data/datasetDiagnostics.ts`) checks the positions
 and scale factors with `GET`, the filtered matrix (and a MEX matrix's barcode
 and feature lists) and both tissue images with `HEAD` (the matrix fails above
-300 MB), and the graph-based clusters and UMAP
-CSVs as optional. No Range support is needed: every standard Visium file is
-read whole. A Visium `.h5ad` gets the H5AD diagnostics.
+300 MB), and the graph-based clusters and UMAP CSVs as optional, each at the
+first path the viewer would read. When none can be read, the warning gives the
+first path's error and names the other paths. No Range support is needed:
+every standard Visium file is read whole. A Visium `.h5ad` gets the H5AD
+diagnostics.
 
 ## Source Files
 

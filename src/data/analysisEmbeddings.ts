@@ -242,6 +242,14 @@ function analysisEmbeddingCandidates(
     manifestBin?.path ??
     `binned_outputs/square_${String(visiumHdBinSizeMicrometers).padStart(3, '0')}um`
 
+  return visiumHdEmbeddingCandidates(binDirectory)
+}
+
+// A Visium HD tier's projections: the standard paths under the tier's folder,
+// then under the output root. Diagnostics check the same list.
+export function visiumHdEmbeddingCandidates(
+  binDirectory: string,
+): readonly EmbeddingCandidate[] {
   return [
     ...EMBEDDING_CANDIDATES.map((candidate) => ({
       ...candidate,

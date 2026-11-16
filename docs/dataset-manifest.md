@@ -273,8 +273,9 @@ GEO deposits name every file `<sample>_<name>.gz`, for example
 
 Within a bin, files default to `<path>/spatial/tissue_positions.parquet`,
 `<path>/spatial/scalefactors_json.json`, and
-`<path>/filtered_feature_bc_matrix.h5`. The tissue images, barcode and feature
-lists, and UMAP projection are always read from under `<path>`. The viewer
+`<path>/filtered_feature_bc_matrix.h5`. The tissue images and barcode and
+feature lists are always read from under `<path>`; the UMAP and t-SNE
+projections from `<path>/analysis/`, else the root's `analysis/`. The viewer
 checks the three bin files with `HEAD` and stops with an error naming the
 missing file. Without `bins`, the standard tiers under the manifest root are
 probed as usual.

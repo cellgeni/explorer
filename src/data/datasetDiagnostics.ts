@@ -1,4 +1,8 @@
-import { EMBEDDING_CANDIDATES, analysisEmbeddingLabel } from './analysisEmbeddings'
+import {
+  EMBEDDING_CANDIDATES,
+  analysisEmbeddingLabel,
+  visiumHdEmbeddingCandidates,
+} from './analysisEmbeddings'
 import {
   datasetFileLabelFor,
   datasetFileUrl,
@@ -495,11 +499,12 @@ async function checkXeniumEmbeddings(
         : [named.url]
 
     checks.push(
-      await checkFirstHeadFile(
+      await checkFirstFile(
         baseUrl,
         { id: `${kind}-projection`, label: `${analysisEmbeddingLabel(kind)} projection` },
         paths,
         options,
+        checkHeadFile,
       ),
     )
   }
@@ -507,19 +512,28 @@ async function checkXeniumEmbeddings(
   return checks
 }
 
-// The first of `paths` that HEAD can read, as the viewer loads the first that
-// exists. When none can, the first path's failure. Optional.
-async function checkFirstHeadFile(
+type FileCheck = (
+  baseUrl: string,
+  file: { readonly id: string; readonly label: string; readonly path: string },
+  required: boolean,
+  options: DatasetDiagnosticsOptions,
+) => Promise<DatasetDiagnosticCheck>
+
+// The first of `paths` that `checkFile` can read, as the viewer loads the
+// first that exists. When none can, the first path's failure, naming the
+// others. Optional.
+async function checkFirstFile(
   baseUrl: string,
   file: { readonly id: string; readonly label: string },
   paths: readonly string[],
   options: DatasetDiagnosticsOptions,
+  checkFile: FileCheck,
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
   let firstFailure: DatasetDiagnosticCheck | undefined
 
   for (const path of paths) {
-    const check = await checkHeadFile(baseUrl, { ...file, path }, false, options)
+    const check = await checkFile(baseUrl, { ...file, path }, false, options)
 
     if (check.status === 'pass') {
       return check
@@ -1216,33 +1230,23 @@ async function runVisiumDiagnostics(
     )
   }
 
+  // The viewer reads the first candidate that answers (readAnalysisFiles).
   for (const key of ['clusters', 'umap'] as const) {
     const named = files.analysis?.[key]
-    const candidates =
-      named === undefined ? VISIUM_ANALYSIS_FILE_CANDIDATES[key] : [named]
-    let check: DatasetDiagnosticCheck | null = null
 
-    for (const path of candidates) {
-      check = await checkReadableFile(
+    checks.push(
+      await checkFirstFile(
         baseUrl,
         {
           id: `visium-${key}`,
           label:
             key === 'clusters' ? 'Visium graph-based clusters' : 'Visium UMAP projection',
-          path,
         },
-        false,
+        named === undefined ? VISIUM_ANALYSIS_FILE_CANDIDATES[key] : [named],
         options,
-      )
-
-      if (check.status === 'pass') {
-        break
-      }
-    }
-
-    if (check !== null) {
-      checks.push(check)
-    }
+        checkReadableFile,
+      ),
+    )
   }
 
   return checks
@@ -1511,16 +1515,20 @@ async function runVisiumHdDiagnostics(
     checks.push(
       ...(await checkVisiumHdTissueImages(detection.baseUrl, bin, suffix, options)),
     )
+    // The paths loadDatasetAnalysisEmbeddings searches, the tier's then the
+    // root's. The CSV is read whole, so HEAD is enough.
     checks.push(
-      await checkRangeFile(
+      await checkFirstFile(
         detection.baseUrl,
         {
           id: `visium-hd-${suffix}-umap-projection`,
           label: `Visium HD ${suffix} UMAP projection`,
-          path: `${bin.outputPath}/analysis/umap/gene_expression_2_components/projection.csv`,
         },
-        false,
+        visiumHdEmbeddingCandidates(bin.outputPath)
+          .filter((candidate) => candidate.kind === 'umap')
+          .map((candidate) => candidate.path),
         options,
+        checkHeadFile,
       ),
     )
   }

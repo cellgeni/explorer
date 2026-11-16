@@ -224,6 +224,9 @@ Known gaps (2026-11-08 review):
         required on every tier and `barcodes.tsv.gz` on 2 µm. Checks that read
         only the status, and the Range probe, cancel the body, so a host that
         ignores Range no longer starts a whole-file download.
+  - [x] **2026-11-16:** the UMAP check covers the paths the viewer searches,
+        the tier's then the root's, instead of one (see
+        [Closed Open Items](#closed-open-items)).
 - [x] Unit tests cover detection, scalefactors, tissue positions, the affine
       transform, grid layer conversion, and capability gating.
 - [x] Browser smoke covers image plus 16 µm bins (54,504 bins).
@@ -251,6 +254,18 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 - [x] Visium HD diagnostics: treat the high-res PNG as optional, avoid fetching
       whole GeoJSON files, and check `barcodes.tsv.gz` and `features.tsv.gz`
       (2026-11-12; see [Phase 6](#phase-6--visium-hd)).
+- [x] Diagnostics left as they were on 2026-11-12 (2026-11-16). The per-tier
+      UMAP check range-checked
+      `<tier>/analysis/umap/gene_expression_2_components/projection.csv` alone,
+      while the viewer searches the tier's three UMAP paths and then the
+      root's. It now sends `HEAD` to the same list, in the same order
+      (`visiumHdEmbeddingCandidates`, shared with
+      `loadDatasetAnalysisEmbeddings`), and passes on the first that answers;
+      the viewer reads the CSV whole, so Range support is not needed. The
+      standard Visium clusters and UMAP checks
+      ([Phase 14](14-standard-visium.md)) reported the last candidate's
+      failure. Both now report the first path's, the Space Ranger 2.0+ name,
+      and name the other paths tried, as the Xenium projection checks do.
 
 Other gaps found in the review:
 
