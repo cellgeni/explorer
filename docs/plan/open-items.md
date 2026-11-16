@@ -86,18 +86,6 @@ Found by the [15.5-E](phases/15-interface-redesign.md#155-close-out) re-run (202
       open the canvas is 664 px wide and the card stack 360 px, so no position
       clears the card, the legend and the minimap at once. Under 860 px a
       toast still sits over the card sheet. Found 2026-11-12.
-- [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
-      (which also count every obs row, 4,992 on the Census file, not the 370
-      placed spots) and the gene summary ("positive cells across 370 slide
-      cells"). The Visium adapter already has the noun "spots"
-      (`labels.embeddingElementPlural`); these strings do not use it. They are
-      hard-coded in `AnnotationsSectionBlocks.tsx` (set total, track counts)
-      and `geneControlsModel.ts` (gene summary). Rechecked 2026-11-16.
-- [ ] Links do not carry hidden annotation sets (the set's eye button, a
-      checkbox until 2026-11-15), only hidden classes. Found 2026-11-12.
-- [ ] A link with both `groups=` and `annotationUrl=` can lose the imported
-      labels: loading a set replaces all labels, so an import that finishes
-      first is dropped. Found by reading the code on 2026-11-12.
 - [ ] The Xenium demo blocks the main thread for up to 4 s at a time in the
       first 30 s after load; see the main-thread exceptions above. 15.5-E put
       this on the viewport warm-up ("Preparing cell feature matrix"). CPU
@@ -200,15 +188,6 @@ Testing:
       [Testing And CI](engineering.md#testing-and-ci). `main` has no branch
       protection or rulesets, so today no check blocks a merge at all;
       protecting it with the existing checks comes first.
-- [ ] The Visium HD Bin card shows "Score 0" for a selected gene the bin
-      expresses unless cells are coloured by gene expression: bins only get
-      expression counts in that mode, and `activeSelectedGridCell`
-      (`App.tsx`) fills in 0. Found 2026-11-12.
-- [ ] Clicking a Visium HD bin selects nothing under software WebGL (headless
-      Chromium), because bin picking relies on deck.gl's picking, and bins have
-      no coordinate fallback as cells do. Enter at the crosshair works. Not
-      root-caused; found 2026-11-12. `gridCellAtPoint`
-      (`viewerKeyboardPick.ts`), which Enter uses, could back clicks too.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
       nightly examples test loads an OME-Zarr, a QPTIFF, and a SpatialData
       store (Zarr v2 with circle shapes). No smoke test covers these sources,
@@ -274,21 +253,14 @@ A read of the code at `bea26d2` against the conventions in
 [PLAN.md](../../PLAN.md#conventions-for-every-task). None of these was
 recorded before.
 
-Loading and dependencies:
+Dependencies (the `h5wasm` preload and the unused `deck.gl` package are
+closed; see
+[Optimization Pass](phases/optimization-pass.md#closed-open-items)):
 
-- [ ] The start screen preloads `spatial-io-vendor`, 5.3 MB (1,244 kB gzip),
-      and 3.7 MB of it is `h5wasm`, which the main thread imports only
-      lazily. Taking `h5wasm` out of that chunk group in `vite.config.ts` cut
-      the start screen's JavaScript from 1,783 kB to 753 kB gzip in a test
-      build (see
-      [Bundle Check](phases/optimization-pass.md#bundle-check-2026-11-16)).
-- [ ] The umbrella `deck.gl` package is never imported, but its `carto`,
-      `geo-layers` and `mesh-layers` dependencies bring 15 of the 16
-      advisories `npm audit --omit=dev` reports, all 9 high ones among them.
-      None reaches the bundle. The 16th, `qs`, comes with duckdb-wasm.
-      `h5wasm` is the one dependency not pinned (`^0.10.2`). hyparquet stays
-      at 1.26.0 for `patches/hyparquet+1.26.0.patch` while 1.33.0 is out.
-      Nothing in CI audits dependencies, and there is no Dependabot.
+- [ ] hyparquet stays at 1.26.0 for `patches/hyparquet+1.26.0.patch` while
+      1.33.0 is out. `npm audit --omit=dev` reports one moderate advisory,
+      `qs` through duckdb-wasm. Nothing in CI audits dependencies, and there
+      is no Dependabot.
 
 Correctness and robustness:
 
@@ -321,11 +293,6 @@ Correctness and robustness:
       (`useAnnotationWorkflow.ts`), with no byte limit, unlike the H5AD and
       segmentation loaders, and parses it on the main thread, so a link to a
       large file can stall or crash the tab.
-- [ ] CSV exports do not neutralise a leading `=`, `+`, `-` or `@`, so a cell
-      ID or label from a remote dataset or an `annotationUrl=` import can run
-      as a formula when the file is opened in a spreadsheet. `csvEscape` has
-      three copies (`roiModel.ts`, `visiumHdRoiModel.ts`,
-      `annotationModel.ts`).
 
 Rendering:
 
@@ -350,8 +317,8 @@ Code structure:
       SpatialData and Visium HD runners.
 - [ ] Helpers are copied rather than shared: `throwIfAborted` is defined 28
       times, `abortError` and `isAbortError` 40 times between them,
-      `csvEscape` three times, `parseCsvRows` twice, and the six one-shot
-      worker wrappers are near copies of each other.
+      `parseCsvRows` twice, and the six one-shot worker wrappers are near
+      copies of each other.
 - [ ] A type-aware ESLint pass found no floating promises and one misused one
       (`handleDatasetSubmit`, an async function used as a submit handler in
       `App.tsx`). Turning on `no-floating-promises` and `no-misused-promises`

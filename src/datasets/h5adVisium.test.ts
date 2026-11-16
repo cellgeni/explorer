@@ -285,6 +285,23 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(await dataset.setVisiumView({}).overview()).toHaveLength(30)
   })
 
+  it('counts and scales metadata tracks over the placed spots', async () => {
+    const dataset = datasetFor(
+      await createVisiumH5ad({ inTissue: true, secondLibrary: true }),
+    )
+    const track = async () =>
+      (await dataset.metadataTracks()).find(
+        (candidate) => candidate.label === 'in_tissue',
+      )
+
+    // Library A's 24 rows, less the six spots off the tissue.
+    expect(await track()).toMatchObject({ cellCount: 18, min: 1, max: 1 })
+    dataset.setVisiumView({ showOffTissue: true })
+    expect(await track()).toMatchObject({ cellCount: 24, min: 0, max: 1 })
+    dataset.setVisiumView({ libraryId: 'lib-B' })
+    expect(await track()).toMatchObject({ cellCount: 12, min: 1, max: 1 })
+  })
+
   it('falls back to the spot pitch without array coordinates', async () => {
     const dataset = datasetFor(await createVisiumH5ad({ arrayCoordinates: false }))
     const summary = await dataset.visiumSummary()

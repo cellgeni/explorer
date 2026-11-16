@@ -14,6 +14,8 @@ interface ShareableDatasetHashOptions {
   readonly annotationGroupIds?: readonly string[] | undefined
   // Hidden annotation classes (hiddenClasses=).
   readonly hiddenAnnotationIds?: readonly string[] | undefined
+  // Hidden annotation sets (hiddenSets=).
+  readonly hiddenAnnotationSetIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
   // The open dataset collection (collection=), if any.
@@ -164,6 +166,7 @@ export function useShareableUrlHash({
     datasetDefaults,
     datasetUrl,
     hiddenAnnotationIds,
+    hiddenAnnotationSetIds,
   } = dataset
   // As a string, so a new array with the same URLs writes nothing.
   const compareKey = dataset.compareUrls?.join('\n') ?? ''
@@ -264,6 +267,7 @@ export function useShareableUrlHash({
           tool,
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
+          ...(hiddenAnnotationSetIds === undefined ? {} : { hiddenAnnotationSetIds }),
           geneExpressionColorScale,
           ...(geneExpressionScaleRange === undefined ? {} : { geneExpressionScaleRange }),
           geneExpressionScoreMode,
@@ -338,6 +342,7 @@ export function useShareableUrlHash({
     annotationGroupIds,
     card,
     hiddenAnnotationIds,
+    hiddenAnnotationSetIds,
     hiddenLayers,
     panels,
     tool,

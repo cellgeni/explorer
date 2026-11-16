@@ -120,9 +120,7 @@ async function openVisiumHdReferenceTissueLink(page: Page) {
   return visiumPanel
 }
 
-// Enter opens the bin under the viewer's crosshair (15.5-D). A mouse click
-// does not select bins under headless Chromium's software WebGL, though it
-// does with a GPU.
+// Enter opens the bin under the viewer's crosshair (15.5-D).
 async function selectVisiumHdBinAtCentre(page: Page) {
   await page.getByRole('img', { name: 'Spatial viewer canvas area' }).focus()
   await page.keyboard.press('Enter')
@@ -918,7 +916,7 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   await genesPanel.getByLabel('Gene selection').fill('GeneB')
   await genesPanel.getByRole('button', { name: 'GeneB', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 0 positive cells across 70 slide cells/,
+    /Expression all spots: 0 positive spots across 70 slide spots/,
   )
 
   // The library switch reloads from the link, which follows within 160 ms.
@@ -930,7 +928,7 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   // The gene selection survives the reload.
   await openControls(page, 'genes')
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 70 positive cells across 70 slide cells/,
+    /Expression all spots: 70 positive spots across 70 slide spots/,
   )
 
   const spots = await openControls(page, 'spot-options')
@@ -987,7 +985,7 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   await genesPanel.getByLabel('Gene selection').fill('Gad1')
   await genesPanel.getByRole('button', { name: 'Gad1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 18 positive cells across 36 slide cells/,
+    /Expression all spots: 18 positive spots across 36 slide spots/,
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
 })
@@ -1170,7 +1168,7 @@ test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live
   await genesPanel.getByLabel('Gene selection').fill('MALAT1')
   await genesPanel.getByRole('button', { name: 'MALAT1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: [1-9][0-9,]* positive cells across 370 slide cells/,
+    /Expression all spots: [1-9][0-9,]* positive spots across 370 slide spots/,
     { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
   )
 })
@@ -1475,7 +1473,7 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   await genesPanel.getByRole('button', { name: 'A2M', exact: true }).click()
   await expect(genesPanel.getByTitle('Remove A2M')).toBeVisible()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: [1-9][0-9,]* positive cells across 54,504 slide cells/,
+    /Expression all bins: [1-9][0-9,]* positive bins across 54,504 slide bins/,
     { timeout: 60_000 },
   )
 
@@ -1578,6 +1576,23 @@ test('opens a Visium HD bin card from the keyboard and again from its link @live
   await expect(binCard).toContainText('Selected bin')
   await expectVisiumHdBinDetails(binCard, barcode)
   await expectVisiumHdBinProfile(binCard)
+})
+
+// deck.gl picks the bin on pointerdown, and under headless Chromium's
+// software WebGL that pick can take over 250 ms, after which mjolnir.js
+// dropped the click. Holding the click for 400 ms does the same on any
+// machine.
+test('opens a Visium HD bin card with a click @live', async ({ page }) => {
+  test.setTimeout(300_000)
+
+  await openVisiumHdReferenceTissueLink(page)
+  await page
+    .getByRole('img', { name: 'Spatial viewer canvas area' })
+    .click({ delay: 400 })
+
+  const binCard = page.getByRole('region', { name: 'Bin', exact: true })
+  await expect(binCard).toContainText('Selected bin', { timeout: 30_000 })
+  await expect(binCard.getByText(/^s_016um_\d{5}_\d{5}-1$/)).toBeVisible()
 })
 
 // Reading all of barcode_mappings.parquet (110 MB, 1,123 row groups) sent
