@@ -533,8 +533,10 @@ it in sync. The field list is in the
 ## Build
 
 - `vite.config.ts` splits vendor chunks (`react-vendor`, `deck-vendor`,
-  `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`) and serves
-  `Cross-Origin-Opener-Policy: same-origin` and
+  `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`); h5wasm, whose
+  WASM is inlined, stays out of them in a chunk of its own that loads on
+  first import, so the start screen does not preload it. The config also
+  serves `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` in dev and preview. The app does not
   depend on cross-origin isolation: nothing uses `SharedArrayBuffer`, and
   DuckDB-WASM uses its non-threaded bundles. See
