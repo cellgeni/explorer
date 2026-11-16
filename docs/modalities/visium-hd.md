@@ -157,7 +157,9 @@ screen until the new one is ready, and the `Active bins` row names it, as in
 "54,504 at 16 µm view; 2 µm selected"; after a failed load it still does. A
 failed load leaves the dataset open on that tier: the bin control shows the
 error, Diagnostics lists it under Fallbacks and in the activity log, and
-selecting the size again retries it.
+selecting the size again retries it. After a failed load, selected-gene
+overlays, ROI, Magic Lens and the Bin card read the drawn tier
+(`visiumHdActiveBinSize`); while a tier loads they read the new size.
 
 ## Caching And Workers
 
@@ -225,7 +227,7 @@ selecting the size again retries it.
 - With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
   stand-in bins but query the 2 µm matrix (found by reading the code; not
   reproduced).
-- After a failed bin-size switch, and while a tier loads, the new size is
-  selected but the old tier is drawn. Selected-gene overlays, ROI, Magic Lens
-  and the Bin card read the selected size (found by reading the code; not
-  reproduced).
+- While a tier loads, the old tier stays drawn but reads use the new size. Its
+  bins have no selected-gene colour until the new tier is drawn, and an ROI,
+  Magic Lens scan or Bin card on them reads the new tier's data, which does
+  not hold their barcodes.

@@ -822,6 +822,160 @@ describe('App', () => {
     }
   })
 
+  it('reads the drawn Visium HD bins after another bin size fails to load', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        bins: [
+          visiumHdBinFixture(),
+          visiumHdBinFixture({
+            binSizeMicrometers: 8,
+            outputPath: 'binned_outputs/square_008um',
+            tissuePositionsPath:
+              'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_008um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+          }),
+        ],
+      }),
+    )
+    const overview = visiumOverviewFixture()
+    const readBinnedOverview = vi.fn(async (binSize?: number) => {
+      if (binSize === 8) {
+        throw new Error('HTTP 503 for square_008um/spatial/tissue_positions.parquet')
+      }
+      return overview
+    })
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        readBinnedOverview,
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M'],
+          cells: new Map([['BC-1', { geneNames: ['A2M'], counts: [7] }]]),
+        })),
+        // Each tier answers with its own bin IDs.
+        geneExpression: vi.fn(
+          async (
+            _bbox: unknown,
+            _genes: readonly string[],
+            options: { readonly binSizeMicrometers?: number } = {},
+          ) => ({
+            elements: [
+              {
+                id: options.binSizeMicrometers === 16 ? 'BC-1' : 'BC-8-1',
+                position: { x: micrometers(10), y: micrometers(5) },
+                count: 7,
+              },
+            ],
+            genes: ['A2M'],
+            maxCount: 7,
+          }),
+        ),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+      openControls('magic-lens')
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+
+      openControls('spot-options')
+      const bins = screen.getByRole('region', { name: 'Visium HD dataset' })
+      fireEvent.click(within(bins).getByRole('button', { name: '8 µm' }))
+      await waitFor(() => {
+        expect(within(bins).getByText(/HTTP 503/)).toBeInTheDocument()
+      })
+      expect(within(bins).getByRole('button', { name: '8 µm' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
+        'data-count',
+        '2',
+      )
+
+      // 8 µm stays selected, but the 16 µm bins are drawn, so the reads
+      // follow them: Magic Lens, the Bin card and selected-gene expression.
+      openControls('magic-lens')
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Summarise View' }))
+      await waitFor(() => {
+        expect(visiumDataset.matrix).toHaveBeenCalledWith(
+          ['BC-1', 'BC-2'],
+          expect.any(Number),
+          expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+        )
+      })
+      expect(visiumDataset.matrix).toHaveBeenLastCalledWith(
+        ['BC-1', 'BC-2'],
+        16,
+        expect.anything(),
+      )
+
+      openControls('cell-card')
+      fireEvent.click(screen.getByTestId('deck-layer-spatial-grid-cells'))
+      await waitFor(() => {
+        expect(visiumDataset.matrix).toHaveBeenCalledWith(
+          ['BC-1'],
+          expect.any(Number),
+          expect.objectContaining({ signal: expect.any(AbortSignal) as AbortSignal }),
+        )
+      })
+      expect(visiumDataset.matrix).toHaveBeenLastCalledWith(
+        ['BC-1'],
+        16,
+        expect.anything(),
+      )
+
+      openControls('genes')
+      fireEvent.click(
+        await within(screen.getByRole('region', { name: /^Bins/ })).findByRole('button', {
+          name: 'A2M',
+        }),
+      )
+      await waitFor(() => {
+        expect(visiumDataset.geneExpression).toHaveBeenCalled()
+      })
+      for (const [, , options] of visiumDataset.geneExpression.mock.calls) {
+        expect(options?.binSizeMicrometers).toBe(16)
+      }
+      // The selected 16 µm bin gets its expression score.
+      openControls('cell-card')
+      await waitFor(() => {
+        expect(
+          within(screen.getByRole('region', { name: 'Bin' })).getByText('Score')
+            .nextElementSibling,
+        ).toHaveTextContent('7')
+      })
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('scans Visium HD viewport bins with selected-gene magic lens expression', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

@@ -307,6 +307,27 @@ Other gaps found in the review:
       selection reads only the row groups that can hold the bin, and the file's
       size and footer are read once per dataset, so a later selection is one
       range request (about 300 KB for a 16 µm bin on the reference).
+- [x] Visium HD: after a failed bin-size switch the old tier stayed drawn, but
+      selected-gene overlays, ROI, Magic Lens and the Bin card read the failed
+      size (`activeVisiumHdBinSize` in `App.tsx`). Found by reading the code
+      2026-11-16. Fixed 2026-11-16:
+  - Reproduced with an App test: after a failed 8 µm read over the 16 µm
+    bins, Magic Lens and the Bin card read the 8 µm matrix for 16 µm
+    barcodes, and the overlay read 8 µm expression, so the selected 16 µm
+    bin scored 0 instead of 7.
+  - In `error`, reads now follow the drawn tier (`visiumHdActiveBinSize`
+    returns `loadedBinSize ?? selectedBinSize`). The bin control still shows
+    the failed size selected, and Diagnostics checks that size.
+  - While a tier loads, reads keep the selected size. A switch has already
+    cleared the old expression and the selected bin, so the new tier's
+    expression is read alongside it. Zooming in past 3 with 2 µm selected
+    loads the 2 µm bins in the same state over the 16 µm view; following the
+    drawn tier there would read 16 µm and then 2 µm expression on every zoom
+    in, and hide a 2 µm ROI until the bins load. What still differs during a
+    load is a known limitation in
+    [the Visium HD page](../../modalities/visium-hd.md#known-limitations).
+  - The 16 µm view of 2 µm bins (`ready`, `loadedBinSize: 16`) still reads
+    2 µm, which `planGeneExpressionLod` maps to 16 µm below zoom 3.
 
 Testing:
 

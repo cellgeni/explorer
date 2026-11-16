@@ -8,6 +8,7 @@ import type {
 import {
   IDLE_VISIUM_HD_CONTROL_STATE,
   createVisiumHdBinOptions,
+  visiumHdActiveBinSize,
   visiumHdControlFailed,
   visiumHdControlLoading,
   visiumHdControlReadyFromOptions,
@@ -205,6 +206,44 @@ describe('Visium HD controls model', () => {
       binCount: 2,
     })
     expect(zoomingOut).not.toHaveProperty('loadedBinSize')
+  })
+
+  it('reads the drawn tier after a failed switch', () => {
+    const url = 'https://example.test/visium'
+    const options = createVisiumHdBinOptions([16, 8, 2])
+    const ready16 = visiumHdControlReadyFromOptions(url, options, overview(16, ['BC-16']))
+    const viewOf2 = visiumHdControlReadyFromOptions(
+      url,
+      options,
+      overview(16, ['BC-16']),
+      2,
+    )
+
+    expect(visiumHdActiveBinSize(IDLE_VISIUM_HD_CONTROL_STATE)).toBeUndefined()
+    expect(visiumHdActiveBinSize(ready16)).toBe(16)
+    // The 16 µm view of 2 µm bins reads 2 µm; the gene LOD maps it by zoom.
+    expect(visiumHdActiveBinSize(viewOf2)).toBe(2)
+    // A load in progress reads the selected size, as do the zoom LOD loads.
+    expect(visiumHdActiveBinSize(visiumHdControlLoading(ready16, 8))).toBe(8)
+    expect(visiumHdActiveBinSize(visiumHdControlLoading(viewOf2, 2))).toBe(2)
+    // A failed load leaves the 16 µm bins drawn, so reads follow them.
+    expect(
+      visiumHdActiveBinSize(
+        visiumHdControlFailed(visiumHdControlLoading(ready16, 8), 'Failed'),
+      ),
+    ).toBe(16)
+    expect(
+      visiumHdActiveBinSize(
+        visiumHdControlFailed(visiumHdControlLoading(viewOf2, 2), 'Failed'),
+      ),
+    ).toBe(16)
+    // With the selected tier drawn, a failed zoom LOD load reads it.
+    const ready2 = visiumHdControlReadyFromOptions(url, options, overview(2, ['BC-2']), 2)
+    expect(
+      visiumHdActiveBinSize(
+        visiumHdControlFailed(visiumHdControlLoading(ready2, 2), 'Failed'),
+      ),
+    ).toBe(2)
   })
 })
 
