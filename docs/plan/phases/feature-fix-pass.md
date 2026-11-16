@@ -45,3 +45,10 @@ Fixes recorded:
       (`tilesForBboxOnAxes`), the clamp only hid negative-origin tiles. Large
       raw LZW or uncompressed tiles have no prefetch margin and were not
       affected.
+- [x] A failed Visium HD bin-size switch closed the dataset (2026-11-16).
+      `useVisiumHdBinWorkflow` set the dataset load state to failed, so the
+      start screen covered the tier still drawn. Now the dataset stays open:
+      the bin control shows the error, a Fallbacks notice and the activity log
+      record it, and selecting the size again retries it. A tissue image that
+      fails during the switch is reported as a morphology error, not as a
+      failed tier. Only a dataset's first load fails it.

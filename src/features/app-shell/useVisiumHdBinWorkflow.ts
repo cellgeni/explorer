@@ -15,8 +15,8 @@ import type {
 import { type GridCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_MORPHOLOGY_LOAD_STATE,
-  datasetLoadFailed,
   datasetLoadReady,
+  morphologyLoadFailed,
   morphologyLoadReady,
   morphologyLoadStarted,
   type DatasetLoadState,
@@ -292,11 +292,29 @@ export function useVisiumHdBinWorkflow({
         setMorphologyState(morphologyLoadStarted(datasetUrl))
         // Notices wait until this request is still the latest one.
         const imageNotices: FallbackNotice[] = []
-        const imageSource = await dataset.image(overviewBinSize, {
-          onFallback: (notice) => {
-            imageNotices.push(notice)
-          },
-        })
+        let imageSource: ImageSource | null
+
+        try {
+          imageSource = await dataset.image(overviewBinSize, {
+            onFallback: (notice) => {
+              imageNotices.push(notice)
+            },
+          })
+        } catch (error) {
+          if (requestIdRef.current !== requestId) {
+            return
+          }
+
+          // The new bins are drawn; only the tissue image is missing.
+          setMorphologyState(
+            morphologyLoadFailed(
+              datasetUrl,
+              createStructuredLoadError('Morphology image', error),
+            ),
+          )
+          appendDebugEvent('Visium HD tissue image failed')
+          return
+        }
 
         if (requestIdRef.current !== requestId) {
           return
@@ -321,16 +339,21 @@ export function useVisiumHdBinWorkflow({
           return
         }
 
+        // The bins already drawn stay loaded, so the dataset stays open: the
+        // bin control shows the error, and selecting the size again retries.
+        // Only the first load of a dataset fails it (useDatasetLifecycle).
         setVisiumHdControlState((current) =>
           visiumHdControlFailed(current, readErrorMessage(error)),
         )
-        setLoadState(
-          datasetLoadFailed(
-            datasetUrl,
-            createStructuredLoadError('Dataset overview', error),
-          ),
-        )
         appendDebugEvent(`Visium HD ${binSize} µm bins failed`)
+        const drawnBinSize =
+          visiumHdControlState.loadedBinSize ?? visiumHdControlState.selectedBinSize
+        onFallback?.({
+          source: 'Dataset overview',
+          message: `${binSize} µm bins could not be loaded, so the app kept the ${drawnBinSize} µm bins already drawn.`,
+          action: `Select ${binSize} µm again to retry, or choose another bin size.`,
+          detail: readErrorMessage(error),
+        })
       }
     },
     [
