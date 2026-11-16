@@ -54,6 +54,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 19](docs/plan/phases/19-ndpi.md)                                                   | NDPI (Hamamatsu) images                                  | Done (2026-11-15)                                                |
 | [Phase 20](docs/plan/phases/20-dataset-collections.md)                                    | Dataset collections: many datasets with previews         | Done (2026-11-14 to 2026-11-16)                                  |
 | [Phase 21](docs/plan/phases/21-structure-browser.md)                                      | Browse Store and Browse File (Zarr and Parquet)          | Done (2026-11-15 to 2026-11-16)                                  |
+| [Phase 22](docs/plan/phases/22-plots-panel.md)                                            | Plots panel: dot plot, violin, group-mean heatmap        | Planned 2026-11-16                                               |
 
 ## Purpose And Scope
 
