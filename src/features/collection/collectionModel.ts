@@ -23,6 +23,22 @@ export type CollectionState =
 
 export const IDLE_COLLECTION_STATE: CollectionState = { status: 'idle' }
 
+// How the bar shows the datasets: previews in a row under the view, previews
+// in a grid over it (Expand), or names only (Previews off).
+export type CollectionView = 'row' | 'grid' | 'names'
+
+const COLLECTION_VIEWS: readonly CollectionView[] = ['row', 'grid', 'names']
+
+// The link's collectionView=; the row when it has none.
+export function collectionViewFromLink(state: ShareableState): CollectionView {
+  return COLLECTION_VIEWS.find((view) => view === state.collectionView) ?? 'row'
+}
+
+// Left out for the row, the default.
+export function collectionViewForLink(view: CollectionView): string | undefined {
+  return view === 'row' ? undefined : view
+}
+
 // How a collection dataset opens: the state its load restores, like a shared
 // link's. Version 2, so the colour mode is taken as written.
 export interface CollectionDatasetOpening {

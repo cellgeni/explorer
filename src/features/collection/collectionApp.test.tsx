@@ -211,6 +211,53 @@ describe('App with a dataset collection', () => {
     })
   })
 
+  it("keeps the bar's grid and previews in the address", async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}&collectionView=grid`,
+    )
+
+    render(
+      <TestApp
+        loadCollection={async () => COLLECTION}
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+      />,
+    )
+
+    const bar = await screen.findByRole('navigation', { name: 'Collection' })
+    await waitFor(() => {
+      expect(within(bar).getByRole('button', { name: 'Sham A' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+    })
+    // The link's grid, kept while the dataset loads.
+    expect(bar).toHaveClass('is-expanded')
+    const hashAfterWrite = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      })
+      return new URLSearchParams(window.location.hash.slice(1))
+    }
+    expect((await hashAfterWrite()).get('collectionView')).toBe('grid')
+
+    // The row is the default, so the link leaves it out.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Collapse' }))
+    expect(bar).not.toHaveClass('is-expanded')
+    expect((await hashAfterWrite()).has('collectionView')).toBe(false)
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
+    expect((await hashAfterWrite()).get('collectionView')).toBe('names')
+
+    // Closed, the collection leaves the link with its view.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Close Collection' }))
+    const closed = await hashAfterWrite()
+    expect(closed.has('collection')).toBe(false)
+    expect(closed.has('collectionView')).toBe(false)
+  })
+
   it('keeps the annotation set, its hidden classes and colours when switching', async () => {
     window.history.replaceState(
       null,

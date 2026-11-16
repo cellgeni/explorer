@@ -3,6 +3,8 @@ import {
   collectionEntryLabel,
   collectionFirstOpening,
   collectionSwitchOpening,
+  collectionViewForLink,
+  collectionViewFromLink,
 } from './collectionModel'
 
 describe('collectionEntryLabel', () => {
@@ -20,6 +22,21 @@ describe('collectionEntryLabel', () => {
         url: 'https://x.test/runs/sham-b/outs',
       }),
     ).toBe('sham-b')
+  })
+})
+
+describe('collectionViewFromLink', () => {
+  it('reads the grid and names only, and the row otherwise', () => {
+    expect(collectionViewFromLink({ collectionView: 'grid' })).toBe('grid')
+    expect(collectionViewFromLink({ collectionView: 'names' })).toBe('names')
+    expect(collectionViewFromLink({ collectionView: 'carousel' })).toBe('row')
+    expect(collectionViewFromLink({})).toBe('row')
+  })
+
+  it('leaves the row, the default, out of the link', () => {
+    expect(collectionViewForLink('row')).toBeUndefined()
+    expect(collectionViewForLink('grid')).toBe('grid')
+    expect(collectionViewForLink('names')).toBe('names')
   })
 })
 

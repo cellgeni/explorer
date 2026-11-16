@@ -63,7 +63,10 @@ import {
 } from './features/collection/CollectionBar'
 import {
   collectionSwitchOpening,
+  collectionViewForLink,
+  collectionViewFromLink,
   type CollectionDatasetOpening,
+  type CollectionView,
 } from './features/collection/collectionModel'
 import { useDatasetCollection } from './features/collection/useDatasetCollection'
 import { collectionEntryFor } from './datasets/datasetCollection'
@@ -349,6 +352,9 @@ export function App({ dependencies }: AppProps = {}) {
   const [debugMode, setDebugMode] = useState(readDebugModeFromLocation)
   const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
     panelsFromLink(initialShareableState),
+  )
+  const [collectionView, setCollectionView] = useState<CollectionView>(() =>
+    collectionViewFromLink(initialShareableState),
   )
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -3399,7 +3405,10 @@ export function App({ dependencies }: AppProps = {}) {
       customImageUrls,
       ...(datasetCollection.state.status === 'idle'
         ? {}
-        : { collectionUrl: datasetCollection.state.url }),
+        : {
+            collectionUrl: datasetCollection.state.url,
+            collectionView: collectionViewForLink(collectionView),
+          }),
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
       datasetUrl: loadedDatasetUrl ?? initialShareableState.datasetUrl ?? '',
@@ -4267,6 +4276,8 @@ export function App({ dependencies }: AppProps = {}) {
                 )
               }}
               onClose={datasetCollection.close}
+              view={collectionView}
+              onViewChange={setCollectionView}
               previews={{
                 loaders: collectionPreviewLoaders,
                 genes:

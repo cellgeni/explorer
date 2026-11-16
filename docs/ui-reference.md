@@ -121,11 +121,13 @@ the canvas, a `nav` named "Collection":
   its name, boxes sit side by side where they fit, and the grid scrolls
   down. Previews there are 150 px wide and 16:10, drawn at their size.
   Choosing a dataset, `Collapse` (arrows in) or Escape returns to the bar.
-  Disabled with previews off. Its tooltip says what it does.
+  Disabled with previews off. Its tooltip says what it does. The link
+  keeps it as `collectionView=grid`.
 - `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
-  previews off, leaving the labels. Its tooltip says what it does.
-- `Close Collection` (×) removes the bar and `collection=` from the address;
-  the open dataset stays.
+  previews off, leaving the labels, and back on in the row. Its tooltip
+  says what it does. The link keeps it as `collectionView=names`.
+- `Close Collection` (×) removes the bar, `collection=` and
+  `collectionView=` from the address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
@@ -1019,6 +1021,7 @@ the page reloads that entry's link, with its view and settings.
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL. Read from the hash or the query string; once the hash is written, the query string's copy is dropped, so a closed collection stays closed on reload                                                                                                                     |
+| `collectionView`                                                                                          | How the collection bar shows its datasets: `grid` (`Expand`) or `names` (`Previews` off). Left out for the previews in a row. Written only with `collection`                                                                                                                                                                           |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
 | `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
