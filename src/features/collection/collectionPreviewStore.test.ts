@@ -144,6 +144,30 @@ describe('CollectionPreviewStore', () => {
     expect(fake.overviewCalls).toEqual([A, B, C])
   })
 
+  it('reads the sections shown side by side first, in view or not', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore(URLS, fake.loaders, { concurrency: 1 })
+    // A URL outside the collection is ignored.
+    store.setLinked([C, 'https://example.test/other.zarr'])
+    store.setVisible(A, true)
+    store.start()
+    await flush()
+    expect(fake.overviewCalls).toEqual([C])
+
+    fake.finishOverview(C)
+    await flush()
+    expect(fake.overviewCalls).toEqual([C, A])
+    expect(store.entry(C).cells?.positions.length).toBe(4)
+
+    // No longer side by side and not in view: not read again for new genes.
+    fake.finishOverview(A)
+    await flush()
+    store.setLinked([])
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(fake.expressions.map((call) => call.url)).toEqual([A])
+  })
+
   it('reads the genes for each preview', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS.slice(0, 2), fake.loaders)

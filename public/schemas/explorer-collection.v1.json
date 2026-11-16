@@ -78,6 +78,11 @@
           "type": "string",
           "minLength": 1,
           "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `labels`."
+        },
+        "coordinateSystem": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A name for registered coordinates, such as one patient's serial sections. Datasets with the same name put a point at the same place in each, so they can be shown side by side with one view, and switching between them keeps the view."
         }
       },
       "dependentRequired": {

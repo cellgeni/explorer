@@ -231,6 +231,29 @@ describe('parseDatasetCollection', () => {
     )
   })
 
+  it('keeps the coordinate system each registered section is in', () => {
+    const collection = parse({
+      version: 1,
+      datasets: [
+        { dataset: 's1.zarr', coordinateSystem: ' patient-1 ' },
+        { dataset: 's2.zarr', coordinateSystem: 'patient-1' },
+        { dataset: 'atlas.zarr' },
+      ],
+    })
+
+    expect(collection.datasets.map((entry) => entry.coordinateSystem)).toEqual([
+      'patient-1',
+      'patient-1',
+      undefined,
+    ])
+    expect(
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 's1.zarr', coordinateSystem: '' }],
+      }),
+    ).toBe('collection.json: "datasets[0].coordinateSystem" must be a non-empty string.')
+  })
+
   it('caps the number of datasets', () => {
     const datasets = Array.from({ length: MAX_COLLECTION_DATASETS + 1 }, (_, index) => ({
       dataset: `section-${index}.zarr`,

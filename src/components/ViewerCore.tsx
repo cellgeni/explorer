@@ -1,6 +1,17 @@
 import { DeckGL } from '@deck.gl/react'
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react'
-import { memo, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
+import { removeDeckFromTabOrder } from './deckTabOrder'
+import type { LinkedViewChannel } from './linkedView'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import { FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
@@ -198,16 +209,6 @@ const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 // and hover tooltips do not redraw every cell on each pointer move.
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
 
-// deck.gl's event root takes keyboard focus (tabindex 0), but it sits in an
-// aria-hidden host and the canvas frame handles the keyboard, so it leaves
-// the tab order (axe's aria-hidden-focus).
-function removeDeckFromTabOrder(): void {
-  for (const root of document.querySelectorAll<HTMLElement>(
-    '.deckgl-host [tabindex="0"]',
-  )) {
-    root.tabIndex = -1
-  }
-}
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_OVERVIEW_CELLS: readonly OverviewCellDatum[] = []
 const EMPTY_GEOMETRIC_ANNOTATIONS: readonly GeometricAnnotationDatum[] = []
@@ -287,6 +288,7 @@ export function ViewerCore({
   initialViewStateOverride,
   viewResetKey,
   focusRequest = null,
+  linkedView = null,
   navigationControls = false,
   minimap = false,
   axes = false,
@@ -397,6 +399,7 @@ export function ViewerCore({
       initialViewStateOverride={initialViewStateOverride}
       viewResetKey={resetKey}
       focusRequest={focusRequest}
+      linkedView={linkedView}
       navigationControls={navigationControls}
       minimap={minimap}
       axes={axes}
@@ -488,6 +491,7 @@ interface ViewerSurfaceProps {
   readonly fitExtent: DeckExtent | null
   readonly initialViewStateOverride: InitialViewStateOverride | undefined
   readonly viewResetKey: string
+  readonly linkedView: LinkedViewChannel | null
   readonly focusRequest: ViewerFocusRequest | null
   readonly navigationControls: boolean
   readonly minimap: boolean
@@ -575,6 +579,7 @@ function ViewerSurface({
   initialViewStateOverride,
   viewResetKey,
   focusRequest,
+  linkedView,
   navigationControls,
   minimap,
   axes,
@@ -733,6 +738,43 @@ function ViewerSurface({
         : nextViewState
     })
   }, [focusRequest, viewport, viewportMeasured])
+  // Registered sections shown beside this one follow its view, and it
+  // follows theirs. Published in a layout effect, so the panels move in the
+  // same frame.
+  const linkedViewSource = useId()
+  useLayoutEffect(() => {
+    linkedView?.publish(
+      { target: [viewState.target[0], viewState.target[1]], zoom: viewState.zoom },
+      linkedViewSource,
+    )
+  }, [linkedView, linkedViewSource, viewState])
+  useEffect(() => {
+    if (linkedView === null) return
+
+    return linkedView.subscribe(() => {
+      const view = linkedView.getView()
+      if (view === null || linkedView.source === linkedViewSource) return
+
+      // Exactly the view given, not one within equivalentViewState's
+      // tolerance, which at high zoom is many pixels.
+      setViewState((currentViewState) => {
+        const zoom = Math.min(
+          currentViewState.maxZoom,
+          Math.max(currentViewState.minZoom, view.zoom),
+        )
+
+        return currentViewState.target[0] === view.target[0] &&
+          currentViewState.target[1] === view.target[1] &&
+          currentViewState.zoom === zoom
+          ? currentViewState
+          : {
+              ...currentViewState,
+              target: [view.target[0], view.target[1], currentViewState.target[2]],
+              zoom,
+            }
+      })
+    })
+  }, [linkedView, linkedViewSource])
   const viewportBbox = useMemo(() => {
     if (viewport.width <= 0 || viewport.height <= 0) {
       return null

@@ -189,6 +189,15 @@ export function ImageIcon() {
   )
 }
 
+// Two sections side by side.
+export function SideBySideIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 3.5h4.5v9H2.5zM9 3.5h4.5v9H9z" />
+    </svg>
+  )
+}
+
 // Annotation sets.
 
 export function EyeIcon() {

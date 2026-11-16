@@ -170,6 +170,22 @@ describe('shareableState', () => {
     })
   })
 
+  it('round-trips the sections shown side by side, in order', () => {
+    const hash = formatShareableState({
+      collectionUrl: 'https://example.test/c.json',
+      datasetUrl: 'https://example.test/s1.zarr',
+      compareUrls: ['https://example.test/s3.zarr', 'https://example.test/s2.zarr'],
+    })
+
+    expect(hash).toBe(
+      '#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&compare=https%3A%2F%2Fexample.test%2Fs3.zarr&compare=https%3A%2F%2Fexample.test%2Fs2.zarr&dataset=https%3A%2F%2Fexample.test%2Fs1.zarr',
+    )
+    expect(parseShareableState(hash).compareUrls).toEqual([
+      'https://example.test/s3.zarr',
+      'https://example.test/s2.zarr',
+    ])
+  })
+
   it('round-trips the MERSCOPE stain and plane', () => {
     const hash = formatShareableState({ merscopeImage: 'Cellbound1_z3' })
 

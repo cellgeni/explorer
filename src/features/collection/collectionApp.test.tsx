@@ -14,14 +14,37 @@ import {
 } from '../../test/appTestHarness'
 import type { SpatialDatasetDetector } from '../app-shell/appDependencies'
 
-// The camera ViewerCore gives deck.gl.
+interface MockViewState {
+  readonly target?: readonly number[]
+  readonly zoom?: number
+}
+type MockViewStateChange = (info: { readonly viewState: MockViewState }) => void
+
+// The camera ViewerCore gives deck.gl, and that of a section shown beside it.
 const deckView = vi.hoisted(() => ({
-  current: undefined as { readonly target?: readonly number[] } | undefined,
+  current: undefined as MockViewState | undefined,
+  onChange: undefined as MockViewStateChange | undefined,
+  linked: undefined as MockViewState | undefined,
+  onLinkedChange: undefined as MockViewStateChange | undefined,
 }))
 
 vi.mock('@deck.gl/react', () => ({
-  DeckGL: ({ viewState }: { readonly viewState?: { readonly target?: number[] } }) => {
-    deckView.current = viewState
+  DeckGL: ({
+    viewState,
+    views,
+    onViewStateChange,
+  }: {
+    readonly viewState?: MockViewState
+    readonly views?: { readonly id?: string }
+    readonly onViewStateChange?: MockViewStateChange
+  }) => {
+    if (views?.id === 'linked-section') {
+      deckView.linked = viewState
+      deckView.onLinkedChange = onViewStateChange
+    } else {
+      deckView.current = viewState
+      deckView.onChange = onViewStateChange
+    }
     return <div data-testid="deckgl" />
   },
 }))
@@ -347,6 +370,142 @@ describe('App with a dataset collection', () => {
     fireEvent.click(screen.getByLabelText('type: neuron visible'), { altKey: true })
     expect(screen.getByLabelText('type: neuron visible')).toBeChecked()
     expect(screen.getByLabelText('type: astro visible')).not.toBeChecked()
+  })
+
+  describe('with registered sections', () => {
+    const SECTION_1 = 'https://example.test/cord/s1.h5ad'
+    const SECTION_2 = 'https://example.test/cord/s2.h5ad'
+    const REGISTERED = parseDatasetCollection(
+      {
+        version: 1,
+        datasets: [
+          { dataset: 's1.h5ad', name: 'Section 1', coordinateSystem: 'cord' },
+          { dataset: 's2.h5ad', name: 'Section 2', coordinateSystem: 'cord' },
+          { dataset: 'atlas.h5ad', name: 'Atlas' },
+        ],
+      },
+      'https://example.test/cord/collection.json',
+    )
+    const hashAfterWrite = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      })
+      return new URLSearchParams(window.location.hash.slice(1))
+    }
+
+    afterEach(() => {
+      deckView.linked = undefined
+      deckView.onLinkedChange = undefined
+    })
+
+    it('shows a section beside the open one, with one view, and swaps them', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/?collection=${encodeURIComponent(REGISTERED.url)}`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const bar = await screen.findByRole('navigation', { name: 'Collection' })
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Section 1' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      // Only a section registered to the open one can be shown beside it.
+      expect(
+        within(bar).queryByRole('button', { name: 'Show Atlas beside' }),
+      ).not.toBeInTheDocument()
+      const toggle = within(bar).getByRole('button', { name: 'Show Section 2 beside' })
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      fireEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      // The panel draws once its cells are read, at the main view's camera.
+      await waitFor(() => {
+        expect(deckView.linked?.target).toEqual(deckView.current?.target)
+      })
+      expect(deckView.linked?.zoom).toBe(deckView.current?.zoom)
+
+      // Panning the main view moves the panel, and the other way round.
+      act(() => {
+        deckView.onChange?.({ viewState: { target: [3, -4, 0], zoom: 2 } })
+      })
+      expect(deckView.linked).toMatchObject({ target: [3, -4, 0], zoom: 2 })
+      act(() => {
+        deckView.onLinkedChange?.({ viewState: { target: [7, -1, 0], zoom: 3 } })
+      })
+      expect(deckView.current).toMatchObject({ target: [7, -1, 0], zoom: 3 })
+
+      expect((await hashAfterWrite()).getAll('compare')).toEqual([SECTION_2])
+
+      // Opening the panel's section swaps it with the open one, at the same
+      // view: the sections are registered.
+      fireEvent.click(within(panel).getByRole('button', { name: 'Open' }))
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Section 2' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      expect(await screen.findByRole('region', { name: 'Section 1' })).toBeInTheDocument()
+      expect(deckView.current).toMatchObject({ target: [7, -1, 0], zoom: 3 })
+      const swapped = await hashAfterWrite()
+      expect(swapped.get('dataset')).toBe(SECTION_2)
+      expect(swapped.getAll('compare')).toEqual([SECTION_1])
+
+      // A dataset outside the coordinate system closes the panels and fits.
+      fireEvent.click(within(bar).getByRole('button', { name: 'Atlas' }))
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Atlas' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      expect(screen.queryByRole('region', { name: 'Section 1' })).not.toBeInTheDocument()
+      await waitFor(() => {
+        expect(deckView.current?.target?.[0]).toBeCloseTo(5)
+      })
+      expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
+
+    it("opens the link's sections side by side at its view, and closes one", async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&view=900%2C900%2C0%2C3`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toMatchObject({ target: [900, 900, 0], zoom: 3 })
+      })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close Section 2' }))
+      expect(screen.queryByRole('region', { name: 'Section 2' })).not.toBeInTheDocument()
+      const bar = screen.getByRole('navigation', { name: 'Collection' })
+      expect(
+        within(bar).getByRole('button', { name: 'Show Section 2 beside' }),
+      ).toHaveAttribute('aria-pressed', 'false')
+      expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
   })
 
   it('opens a linked dataset over the image and labels its entry names', async () => {

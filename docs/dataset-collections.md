@@ -11,8 +11,9 @@ https://cellgeni.github.io/explorer/?collection=https://host/study/collection.js
 The viewer opens the first dataset and lists the collection's datasets in a
 bar under the canvas. Choosing one opens it in place of the current dataset
 and keeps the selected genes, the annotation set and how cells are coloured,
-so you can step through sections with the same gene or cell type. Only one
-dataset is open at a time.
+so you can step through sections with the same gene or cell type. One
+dataset is open at a time; sections registered to it can be shown
+[side by side](#side-by-side) with it, sharing its view.
 
 The datasets of a collection are expected to share their genes and their
 annotation and metadata columns, such as one `cell_type` column with the
@@ -93,15 +94,16 @@ Unknown fields are errors, as in a dataset manifest.
 
 ### Datasets
 
-| Key           | Required | Value                                                                                                                       |
-| ------------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `dataset`     | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
-| `name`        | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
-| `group`       | No       | Group label, such as a time point or donor                                                                                  |
-| `image`       | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
-| `coordinates` | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
-| `labels`      | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
-| `labelColumn` | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
+| Key                | Required | Value                                                                                                                       |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`          | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
+| `name`             | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
+| `group`            | No       | Group label, such as a time point or donor                                                                                  |
+| `image`            | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
+| `coordinates`      | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
+| `labels`           | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
+| `labelColumn`      | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
+| `coordinateSystem` | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                   |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -232,6 +234,10 @@ The gene colour scale and the opacities stay as they are. A gene, set or
 column missing from the next dataset is handled as it is for a shared link:
 the gene is dropped and the set or column is not loaded.
 
+The view fits the next dataset, unless both are in the same
+[coordinate system](#side-by-side): then it stays where it is, so the same
+place shows in the next section.
+
 ### Class Colours
 
 A class keeps its colour from one dataset to the next, including a colour
@@ -304,10 +310,89 @@ its cell table, and the eight previews in view fill about 5 s after the
 first dataset opens. A new gene then reads 100 to 500 KB per section, about
 2.7 s for the eight.
 
+## Side by Side
+
+Consecutive sections registered to each other can be shown side by side,
+up to four at once, with one view: pan or zoom any of them and the others
+follow.
+
+### Registered Coordinates
+
+Give each registered section the same `coordinateSystem`:
+
+```json
+{
+  "version": 1,
+  "datasets": [
+    {
+      "dataset": "p1-s1.zarr",
+      "name": "S1",
+      "group": "Patient 1",
+      "coordinateSystem": "patient-1"
+    },
+    {
+      "dataset": "p1-s2.zarr",
+      "name": "S2",
+      "group": "Patient 1",
+      "coordinateSystem": "patient-1"
+    },
+    {
+      "dataset": "p2-s1.zarr",
+      "name": "S1",
+      "group": "Patient 2",
+      "coordinateSystem": "patient-2"
+    },
+    { "dataset": "atlas.zarr", "name": "snRNA-seq atlas" }
+  ]
+}
+```
+
+The name is the collection's own: entries with the same one have their cells
+in one frame, so a point in one section is the same place in the others.
+The viewer does not register sections. Their coordinates, as the viewer reads
+them, must already be registered: an AnnData table's `obsm` coordinates
+(micrometres, or image pixels scaled by the image's pixel size with
+`coordinates: "image-pixels"`), a SpatialData store's coordinate system, or
+a platform's own cell positions. Images must be placed in the same frame
+without rotation, as the viewer only places images that are axis-aligned.
+Entries without `coordinateSystem`, such as an atlas, are opened as before.
+
+### Showing Sections
+
+With a section of a coordinate system open, the bar shows a `Show beside`
+toggle (two columns) on every other section of that coordinate system. Turn
+it on and the section opens in a panel beside the main view; turn it off, or
+close the panel with its ×, and it goes. Up to three panels show at once: two
+viewers sit side by side, three in a row, four in a 2 by 2 grid; under
+860 px they stack.
+
+- **Panels.** A panel draws the section's cells from its
+  [preview](#previews) data: every cell as a point 10 µm across, coloured as
+  the main view colours cells: by the selected genes on the `Gene scale`
+  (each section up to its own percentile, or a typed top shared by all), or
+  by the annotation set's classes, with hidden classes faded. Otherwise cells
+  are grey. Hovering a cell names it and its class, or gives its score. The
+  panel's name heads it, with its top (`top 32`) or highest score.
+- **What a panel does not show.** Images, cell boundaries, transcripts and
+  the tools (selection, Magic Lens, measuring, cards) are the main view's
+  only. To use them on a section, choose `Open` in its panel: it swaps places
+  with the main view's dataset, at the same view.
+- **One view.** Each viewer shows the same point at its centre at the same
+  scale. Fit, the zoom buttons, the minimap and the keyboard act on the main
+  view, and the panels follow.
+- **What is read.** A panel reads what a preview reads, whether the bar shows
+  previews or not, before the previews in view. Images, Visium HD and large
+  plain `.h5ad` files have no preview, so their panels say why instead.
+- **Opening another section.** Choosing another section of the coordinate
+  system in the bar keeps the view and the panels; choosing a panel's section
+  swaps it with the open one. A dataset outside the coordinate system closes
+  the panels and fits the view.
+
 ## The Address
 
 The address keeps `collection=` next to `dataset=`, so a copied link reopens
-the collection with the same dataset and view. It keeps the bar's `Expand`
+the collection with the same dataset and view, and a `compare=` for each
+section shown side by side, in order. It keeps the bar's `Expand`
 grid as `collectionView=grid` and `Previews` off as `collectionView=names`,
 so the bar opens the same way. Opening a dataset that is not
 in the collection, from the dataset menu or `Load Dataset`, closes the
@@ -334,8 +419,11 @@ errors as you type.
 
 ## Known Limitations
 
-- Datasets are shown one at a time. There are no side-by-side embedding and
-  spatial views yet.
+- Only sections registered to the open dataset, in one `coordinateSystem`,
+  can be shown beside it, and only their cells: no images or boundaries in
+  the panels, and no side-by-side embedding views.
+- Panels draw every cell at one size, 10 µm across, so Visium spots are
+  smaller than in the main view.
 - Class colours are kept while you switch datasets, not written into the
   address: a link restores the set and its hidden classes with the dataset's
   own colours.
