@@ -42,3 +42,128 @@ export function writeFeatureBarcodeMatrix(
   matrix.create_dataset({ name: 'indices', data: new Int32Array([0, 2, 0, 1]) })
   matrix.create_dataset({ name: 'data', data: new Int32Array([5, 99, 2, 3]) })
 }
+
+export interface LargeFeatureBarcodeMatrix {
+  readonly barcodes: readonly string[]
+  // The genes and counts of the cell in `row`, as the matrix holds them.
+  cell(row: number): { readonly geneNames: string[]; readonly counts: number[] }
+}
+
+const LARGE_MATRIX_GENES = Array.from({ length: 50 }, (_, index) => `Gene${index}`)
+const LARGE_MATRIX_PADDING_BYTES = 2 * 1024 * 1024
+
+// A feature-barcode matrix of many cells, with chunked gzip arrays like the
+// ones Cell Ranger and Xenium write, and 2 MiB of incompressible bytes that no
+// reader asks for, so a range-read file can be checked to skip them.
+export function writeLargeFeatureBarcodeMatrix(
+  file: H5wasmFile,
+  cellCount = 40_000,
+): LargeFeatureBarcodeMatrix {
+  const barcodes = Array.from(
+    { length: cellCount },
+    (_, row) => `cell${String(row).padStart(6, '0')}-1`,
+  )
+  const cell = (row: number) => {
+    const length = 1 + (row % 5)
+    const geneIndices = Array.from({ length }, (_, j) => (row * 7 + j * 13) % 50)
+
+    return {
+      geneIndices,
+      geneNames: geneIndices.map((index) => LARGE_MATRIX_GENES[index] ?? ''),
+      counts: geneIndices.map((_, j) => 1 + ((row + j) % 9)),
+    }
+  }
+  const indptr = new BigInt64Array(cellCount + 1)
+  const indices: number[] = []
+  const data: number[] = []
+
+  for (let row = 0; row < cellCount; row += 1) {
+    const { geneIndices, counts } = cell(row)
+    indices.push(...geneIndices)
+    data.push(...counts)
+    indptr[row + 1] = BigInt(indices.length)
+  }
+
+  const matrix = file.create_group('matrix')
+  const features = matrix.create_group('features')
+  const chunked = (length: number) => ({
+    chunks: [Math.min(length, 4096)],
+    compression: 'gzip' as const,
+  })
+
+  matrix.create_dataset({ name: 'barcodes', data: barcodes })
+  features.create_dataset({ name: 'name', data: LARGE_MATRIX_GENES })
+  features.create_dataset({
+    name: 'feature_type',
+    data: LARGE_MATRIX_GENES.map(() => 'Gene Expression'),
+  })
+  matrix.create_dataset({ name: 'indptr', data: indptr, ...chunked(indptr.length) })
+  matrix.create_dataset({
+    name: 'indices',
+    data: new Int32Array(indices),
+    ...chunked(indices.length),
+  })
+  matrix.create_dataset({
+    name: 'data',
+    data: new Int32Array(data),
+    ...chunked(data.length),
+  })
+
+  const padding = new Uint8Array(LARGE_MATRIX_PADDING_BYTES)
+  let state = 0x9e3779b9
+
+  for (let index = 0; index < padding.length; index += 1) {
+    state ^= state << 13
+    state ^= state >>> 17
+    state ^= state << 5
+    padding[index] = state & 0xff
+  }
+
+  file.create_dataset({ name: 'padding', data: padding })
+
+  return {
+    barcodes,
+    cell: (row) => {
+      const { geneNames, counts } = cell(row)
+      return { geneNames, counts }
+    },
+  }
+}
+
+// A Visium HD feature_slice.h5 at a 2 µm pitch: Actb, Gad1 and a control
+// probe, each a COO slice of 2 µm rows, columns and counts.
+export function writeTinyFeatureSlice(file: H5wasmFile): void {
+  file.create_attribute(
+    'metadata_json',
+    JSON.stringify({
+      nrows: 32,
+      ncols: 32,
+      spot_pitch: 2,
+    }),
+  )
+  const features = file.create_group('features')
+  features.create_dataset({
+    name: 'name',
+    data: ['Actb', 'Gad1', 'NegControlProbe_001'],
+  })
+  features.create_dataset({
+    name: 'feature_type',
+    data: ['Gene Expression', 'Gene Expression', 'Gene Expression'],
+  })
+
+  const featureSlices = file.create_group('feature_slices')
+  const actb = featureSlices.create_group('0')
+  actb.create_dataset({ name: 'row', data: new Int32Array([0, 7, 8, 9, 16]) })
+  actb.create_dataset({ name: 'col', data: new Int32Array([0, 0, 0, 1, 0]) })
+  actb.create_dataset({ name: 'data', data: new Int32Array([2, 3, 5, 7, 11]) })
+
+  const gad1 = featureSlices.create_group('1')
+  gad1.create_dataset({ name: 'row', data: new Int32Array([8]) })
+  gad1.create_dataset({ name: 'col', data: new Int32Array([0]) })
+  gad1.create_dataset({ name: 'data', data: new Int32Array([4]) })
+
+  const negative = featureSlices.create_group('2')
+  negative.create_dataset({ name: 'row', data: new Int32Array([0]) })
+  negative.create_dataset({ name: 'col', data: new Int32Array([0]) })
+  negative.create_dataset({ name: 'data', data: new Int32Array([99]) })
+}

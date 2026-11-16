@@ -7,25 +7,20 @@ import {
   gexFromCellMajorSparseArrays,
   gexFromCellFeatureMatrixH5,
   gexFromFeatureBarcodeMatrixH5,
-  gexFromFeatureBarcodeMatrixH5LazyRangeWorker,
   gexFromFeatureMajorSparseArrays,
   gexFromTranscriptsParquet,
   isGeneFeature,
   selectionToSql,
 } from './gex'
+import { createH5Bytes } from '../test/h5Fixtures'
 import { micrometers } from './coords'
 import type {
   ArrowTableLike,
   DuckDbPreparedStatementLike,
-  FeatureBarcodeMatrixWorkerLike,
   Selection,
   SqlParameter,
   TranscriptDuckDbConnection,
 } from './gex'
-import type {
-  FeatureBarcodeMatrixWorkerRequest,
-  FeatureBarcodeMatrixWorkerResponse,
-} from '../workers/featureBarcodeMatrixMessages'
 
 class FakeTable implements ArrowTableLike {
   constructor(private readonly rows: readonly Record<string, unknown>[]) {}
@@ -380,6 +375,36 @@ describe('GEX helpers', () => {
     }
   })
 
+  it('opens the H5 file again after a failed read, and reuses it after a good one', async () => {
+    const good = await createTinyH5CellFeatureMatrix(['AAAC-1'])
+    const bad = await createH5Bytes((file) => {
+      file.create_group('obs')
+    })
+    const fetcher = vi.fn(
+      async (url: RequestInfo | URL) =>
+        new Response(String(url).includes('bad') ? bad.slice() : good.slice()),
+    )
+    vi.stubGlobal('fetch', fetcher)
+
+    try {
+      const goodUrl = 'https://example.test/reuse/good_feature_bc_matrix.h5'
+      await gexFromFeatureBarcodeMatrixH5(goodUrl, ['AAAC-1'])
+      await gexFromFeatureBarcodeMatrixH5(goodUrl, ['AAAC-1'])
+      expect(fetcher).toHaveBeenCalledTimes(1)
+
+      const badUrl = 'https://example.test/reuse/bad_feature_bc_matrix.h5'
+      await expect(gexFromFeatureBarcodeMatrixH5(badUrl, ['AAAC-1'])).rejects.toThrow(
+        'Expected /matrix/barcodes to be an HDF5 dataset.',
+      )
+      await expect(gexFromFeatureBarcodeMatrixH5(badUrl, ['AAAC-1'])).rejects.toThrow(
+        'Expected /matrix/barcodes to be an HDF5 dataset.',
+      )
+      expect(fetcher).toHaveBeenCalledTimes(3)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('rejects oversized H5 matrices before fetching the full file', async () => {
     const originalFetch = globalThis.fetch
     const fetcher = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -411,158 +436,36 @@ describe('GEX helpers', () => {
     }
   })
 
-  it('reads generic barcode rows through the lazy range worker', async () => {
-    const originalFetch = globalThis.fetch
-    const fetcher = vi.fn(async () => {
-      throw new Error('Unexpected full matrix fetch')
-    })
-    const workers: FakeFeatureBarcodeMatrixWorker[] = []
-    const stageTimings: string[] = []
-
-    globalThis.fetch = fetcher
+  it('reports the range read, and keeps the file open when a read is cancelled', async () => {
+    const bytes = await createTinyH5CellFeatureMatrix(['AAAC-1'])
+    const fetcher = vi.fn(async () => new Response(bytes.slice()))
+    const url = 'https://example.test/cancel/filtered_feature_bc_matrix.h5'
+    const stages: string[] = []
+    vi.stubGlobal('fetch', fetcher)
 
     try {
-      const result = await gexFromFeatureBarcodeMatrixH5LazyRangeWorker(
-        'https://example.test/visium/filtered_feature_bc_matrix.h5',
-        ['TTGG-1', 'missing-barcode'],
-        {
-          maxFullFileBytes: 1,
-          workerFactory: () => {
-            const worker = new FakeFeatureBarcodeMatrixWorker()
-            workers.push(worker)
-            return worker
-          },
-          onStageTiming: (timing) => {
-            stageTimings.push(timing.stage)
-          },
+      const result = await gexFromFeatureBarcodeMatrixH5(url, ['AAAC-1'], {
+        onStageTiming: (timing) => {
+          stages.push(`${timing.stage}: ${timing.label}`)
         },
-      )
+      })
+      expect(result.cells.get('AAAC-1')).toEqual({ geneNames: ['Actb'], counts: [5] })
+      expect(stages).toEqual(['matrix-cell-major-ranges: Feature-barcode H5 range read'])
 
-      expect(fetcher).not.toHaveBeenCalled()
-      expect(workers).toHaveLength(1)
-      expect(workers[0]?.requests).toEqual([
-        {
-          id: expect.any(Number),
-          url: 'https://example.test/visium/filtered_feature_bc_matrix.h5',
-          elementIds: ['TTGG-1', 'missing-barcode'],
-        },
-      ])
-      expect(workers[0]?.terminated).toBe(true)
-      expect(stageTimings).toEqual(['matrix-cell-major-ranges'])
-      expect(result.geneNames).toEqual(['Actb'])
-      expect(result.cells.get('TTGG-1')).toEqual({
-        geneNames: ['Actb'],
-        counts: [4],
+      const controller = new AbortController()
+      const cancelled = gexFromFeatureBarcodeMatrixH5(url, ['AAAC-1'], {
+        signal: controller.signal,
       })
-      expect(result.cells.get('missing-barcode')).toEqual({
-        geneNames: [],
-        counts: [],
-      })
+      controller.abort()
+      await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+
+      await gexFromFeatureBarcodeMatrixH5(url, ['AAAC-1'])
+      expect(fetcher).toHaveBeenCalledTimes(1)
     } finally {
-      globalThis.fetch = originalFetch
+      vi.unstubAllGlobals()
     }
   })
-
-  it('retries transient lazy worker XMLHttpRequest failures', async () => {
-    const workers: (
-      | FakeFeatureBarcodeMatrixWorker
-      | FailingFeatureBarcodeMatrixWorker
-    )[] = []
-
-    const result = await gexFromFeatureBarcodeMatrixH5LazyRangeWorker(
-      'https://example.test/visium/filtered_feature_bc_matrix.h5',
-      ['TTGG-1'],
-      {
-        workerFactory: () => {
-          const worker =
-            workers.length === 0
-              ? new FailingFeatureBarcodeMatrixWorker(
-                  'NetworkError',
-                  "Failed to execute 'send' on 'XMLHttpRequest': Failed to load 'https://example.test/visium/filtered_feature_bc_matrix.h5'.",
-                )
-              : new FakeFeatureBarcodeMatrixWorker()
-          workers.push(worker)
-          return worker
-        },
-      },
-    )
-
-    expect(workers).toHaveLength(2)
-    expect(workers[0]?.terminated).toBe(true)
-    expect(workers[1]?.terminated).toBe(true)
-    expect(result.cells.get('TTGG-1')).toEqual({
-      geneNames: ['Actb'],
-      counts: [4],
-    })
-  })
 })
-
-class FakeFeatureBarcodeMatrixWorker implements FeatureBarcodeMatrixWorkerLike {
-  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null =
-    null
-  onerror: ((event: ErrorEvent) => void) | null = null
-  readonly requests: FeatureBarcodeMatrixWorkerRequest[] = []
-  terminated = false
-
-  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void {
-    this.requests.push(message)
-    queueMicrotask(() => {
-      this.onmessage?.(
-        new MessageEvent('message', {
-          data: {
-            id: message.id,
-            ok: true,
-            geneNames: ['Actb'],
-            cells: [
-              {
-                id: 'TTGG-1',
-                geneNames: ['Actb'],
-                counts: [4],
-              },
-            ],
-          },
-        }),
-      )
-    })
-  }
-
-  terminate(): void {
-    this.terminated = true
-  }
-}
-
-class FailingFeatureBarcodeMatrixWorker implements FeatureBarcodeMatrixWorkerLike {
-  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null =
-    null
-  onerror: ((event: ErrorEvent) => void) | null = null
-  readonly requests: FeatureBarcodeMatrixWorkerRequest[] = []
-  terminated = false
-
-  constructor(
-    private readonly errorName: string,
-    private readonly errorMessage: string,
-  ) {}
-
-  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void {
-    this.requests.push(message)
-    queueMicrotask(() => {
-      this.onmessage?.(
-        new MessageEvent('message', {
-          data: {
-            id: message.id,
-            ok: false,
-            errorName: this.errorName,
-            error: this.errorMessage,
-          },
-        }),
-      )
-    })
-  }
-
-  terminate(): void {
-    this.terminated = true
-  }
-}
 
 function cellIdsToUint32Pairs(cellIds: readonly string[]): Uint32Array {
   const values = new Uint32Array(cellIds.length * 2)

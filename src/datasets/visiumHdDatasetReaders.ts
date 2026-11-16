@@ -226,13 +226,13 @@ const readVisiumHdSegmentationIndexLazy = async (
   return readVisiumHdSegmentationIndexInWorker(baseUrl, options)
 }
 
-const gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy = async (
+const gexFromFeatureBarcodeMatrixH5Lazy = async (
   url: string,
   ids: readonly SpatialElementId[],
   options?: CellFeatureMatrixReadOptions,
 ): Promise<GexResult<SpatialElementId>> => {
-  const { gexFromFeatureBarcodeMatrixH5LazyRangeWorker } = await import('../data/gex')
-  return gexFromFeatureBarcodeMatrixH5LazyRangeWorker(url, ids, options)
+  const { gexFromFeatureBarcodeMatrixH5 } = await import('../data/gex')
+  return gexFromFeatureBarcodeMatrixH5(url, ids, options)
 }
 
 const gexFromVisiumFeatureSliceH5Lazy = async (
@@ -332,7 +332,7 @@ export class VisiumHdDatasetReaderController {
     this.segmentationIndexReader =
       options.segmentationIndexReader ?? readVisiumHdSegmentationIndexLazy
     this.featureMatrixReader =
-      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5LazyRangeWorkerLazy
+      options.featureMatrixReader ?? gexFromFeatureBarcodeMatrixH5Lazy
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
     this.featureSliceReader =
       options.featureSliceReader ?? gexFromVisiumFeatureSliceH5Lazy

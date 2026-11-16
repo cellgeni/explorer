@@ -319,8 +319,8 @@ export function useRoiWorkflow({
               ROI_GENE_STATS_PREVIEW_CELL_LIMIT,
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
-          // Only from the Zarr matrix: the H5 fallback reads the whole file
-          // (433 MB on the Xenium demo), which waits for an ROI.
+          // Only from the Zarr matrix: the H5 fallback waits for an ROI (see
+          // allowH5Fallback).
           const stats = await loadRoiGeneStats(readyDatasetUrl, cells, {
             signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,

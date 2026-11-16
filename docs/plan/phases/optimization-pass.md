@@ -108,6 +108,77 @@ task, a `Map` of all 598,222), converting numeric columns to number arrays
 (110–145 ms over 20 columns), counting the distinct values of string columns
 (about 110 ms), and the CSR scan for a gene.
 
+## Range-Read Xenium H5 Fallback (2026-11-15)
+
+The H5 file worker reads the Xenium `cell_feature_matrix.h5` fallback by HTTP
+range instead of downloading it (`h5RangeFile.ts`, `rangeBlockCache.ts`). The
+file is a node in h5wasm's file system whose reads come from synchronous range
+requests, which a worker may make; SharedArrayBuffer is not an option because
+GitHub Pages cannot send COOP/COEP. Emscripten's `createLazyFile`, which the
+Visium HD workers then used, was not reused: it reads range support from
+`Accept-Ranges`, which CELLxGENE's S3 and GEO hide from CORS, so there it
+downloads the whole file; it aborts the wasm module on a failed request; and
+it takes a 200 reply to a range request as the range. h5wasm ignores HDF5's
+read status, so a failed range read came back as uninitialised values (or a
+wasm trap for variable-length strings) in a test; the worker checks the range
+file's errors after every h5wasm call, and gex.ts opens the file in a new
+worker after a failed read. The block policy (64 KiB blocks, 1 MiB for a miss
+away from earlier reads, doubling to 16 MiB for sequential misses) was chosen
+by replaying h5py's read trace of the demo file: 4 requests for the barcodes and
+`indptr`, 6–11 per ROI, and 47 for 10,000 cells spread over the slide, where
+fixed 1 MiB blocks need 384. Measured in the browser pane against the demo
+bucket, one run each, reads in table order (after the open, the whole file's
+reads come from memory):
+
+| Read                               | Whole file (before) | By range               |
+| ---------------------------------- | ------------------- | ---------------------- |
+| Open                               | 47.9 s              | 1.1 s                  |
+| First cell (barcodes, `indptr`)    | 1.4 s               | 3.1 s (12 req., 14 MB) |
+| ROI, 2,311 cells within 150 µm     | 0.2 s               | 2.4 s (10 req., 17 MB) |
+| ROI, 10,000 of the cells in 500 µm | 0.7 s               | 2.2 s (9 req., 16 MB)  |
+| 10,000 cells spread over the slide | 28.7 s              | 75 s (47 req., 403 MB) |
+
+The values match h5py's for the cell checked. The first cell comes 4.2 s after
+the request instead of 49.3 s. The slide-wide sample still reads almost every
+chunk, and inflating them takes about 29 s either way: the whole sequence took
+78.9 s whole and 83.8 s by range. Bytes already in the worker's 128 MiB block
+cache are not fetched again, and nothing is kept across sessions: the IndexedDB
+byte-range cache is asynchronous. MEMFS now keeps the bytes of a whole file
+instead of copying them (`canOwn`), so the worker no longer holds two copies of
+an H5AD or Visium matrix.
+
+The Visium HD filtered matrices and `feature_slice.h5` moved onto the same
+worker the same day, one per file, kept open for the session; the two
+`createLazyFile` workers, created for each request, are gone. The worker reads
+a feature slice's metadata and gene index once, and requests go to it one at a
+time so that a request still waiting can be dropped when a viewer moves on.
+Measured in the browser pane against the reference dataset, 16 µm bins, the
+same inputs and identical values (one run each; times here varied with load on
+the machine):
+
+| Read                                   | Before | After  |
+| -------------------------------------- | ------ | ------ |
+| Matrix, 1,005-bin selection (first)    | 36.6 s | 19.0 s |
+| Matrix, 648 bins nearby                | 26.0 s | 2.5 s  |
+| Matrix, 1,240 bins elsewhere           | 62.9 s | 4.3 s  |
+| Feature Slice, 3 genes (first)         | 4.7 s  | 3.4 s  |
+| Feature Slice, same genes, moved view  | 2.6 s  | 0.16 s |
+| Feature Slice, same genes, other view  | 2.5 s  | 0.12 s |
+| Feature Slice, 3 genes with 2 new ones | 4.6 s  | 0.93 s |
+
+Space Ranger's filtered-matrix barcodes are not in spatial order: the first
+selection touched 709 of the 16 µm matrix's 1,182 chunks and fetched 120 MB of
+its 122 MB (20 requests), so the first read is bound by bandwidth; later ones
+fetch 0.4–0.6 MB from what the worker keeps. Replaying both files' read traces,
+every read-ahead policy tried fetched the same 120 MB for that selection, and
+the one in use needed the fewest requests. 2 µm stays bound by the network: a
+6,400-bin read of the 236 MB matrix fetched 247 MB in 31 requests (29.6 s here)
+and spent 12.3 s decoding, which an in-memory replay in Node puts at 12.5 s
+with or without the range file; before, the same read took 58.8 and 50.5 s.
+Its 3.4 million barcodes would take about 283 MB to keep indexed, so readers of
+more than 2 million barcodes are built for each request, as before; the Xenium
+demo's 1.4 million are kept.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

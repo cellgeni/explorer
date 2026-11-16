@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createH5Bytes, writeFeatureBarcodeMatrix } from '../test/h5Fixtures'
-import { createH5FileHandler } from './h5FileCore'
+import {
+  createH5Bytes,
+  writeFeatureBarcodeMatrix,
+  writeLargeFeatureBarcodeMatrix,
+  writeTinyFeatureSlice,
+  type LargeFeatureBarcodeMatrix,
+} from '../test/h5Fixtures'
+import { createH5FileHandler, type H5FileHandlerOptions } from './h5FileCore'
 import type { H5FileWorkerRequest, H5FileWorkerResponse } from './h5FileMessages'
 import { unpackGexResult } from './h5MatrixCellsPayload'
 
@@ -15,11 +21,11 @@ interface Reply {
   readonly transfer: readonly Transferable[]
 }
 
-function createHarness() {
+function createHarness(options: H5FileHandlerOptions = {}) {
   const replies: Reply[] = []
   const handler = createH5FileHandler((response, transfer) => {
     replies.push({ response, transfer })
-  })
+  }, options)
   let nextId = 1
 
   return {
@@ -55,6 +61,103 @@ async function createAnnDataLikeFile(): Promise<Uint8Array> {
     })
     file.create_soft_link('/obs/score', 'score_link')
   })
+}
+
+async function createLargeMatrixFile(): Promise<{
+  readonly bytes: Uint8Array
+  readonly matrix: LargeFeatureBarcodeMatrix
+}> {
+  let matrix: LargeFeatureBarcodeMatrix | null = null
+  const bytes = await createH5Bytes((file) => {
+    matrix = writeLargeFeatureBarcodeMatrix(file)
+  })
+
+  return { bytes, matrix: matrix as unknown as LargeFeatureBarcodeMatrix }
+}
+
+interface RangeServerOptions {
+  // Send Content-Range, which CORS hides on some hosts.
+  readonly contentRange?: boolean
+  readonly answersRange?: boolean
+  readonly answersHead?: boolean
+}
+
+// Stubs fetch with a server for `bytes`, and returns the requests it got.
+function stubRangeServer(bytes: Uint8Array, options: RangeServerOptions = {}) {
+  const requests: { readonly method: string; readonly range: string | null }[] = []
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      const range = new Headers(init?.headers).get('range')
+      requests.push({ method, range })
+
+      if (method === 'HEAD') {
+        return options.answersHead === false
+          ? new Response(null, { status: 403 })
+          : new Response(null, {
+              headers: { 'content-length': String(bytes.byteLength) },
+            })
+      }
+
+      const match = /^bytes=(\d+)-(\d+)$/.exec(range ?? '')
+
+      if (match === null || options.answersRange === false) {
+        return new Response(bytes.slice())
+      }
+
+      const start = Number(match[1])
+      const end = Math.min(Number(match[2]) + 1, bytes.byteLength)
+
+      return new Response(bytes.slice(start, end), {
+        status: 206,
+        headers:
+          options.contentRange === false
+            ? {}
+            : { 'content-range': `bytes ${start}-${end - 1}/${bytes.byteLength}` },
+      })
+    }),
+  )
+
+  return requests
+}
+
+// Synchronous range reads of `bytes` that record each range and can fail.
+function memoryRangeReads(bytes: Uint8Array) {
+  const reads: (readonly [number, number])[] = []
+  const state = { failing: false }
+  const options: H5FileHandlerOptions = {
+    createRangeRead: (url, label) => {
+      expect([url, label]).toEqual(['https://example.test/m.h5', 'm.h5'])
+
+      return (start, end) => {
+        reads.push([start, end])
+
+        if (state.failing) {
+          throw new Error(`m.h5 returned HTTP 503 for bytes ${start}-${end - 1}.`)
+        }
+
+        return bytes.slice(start, end)
+      }
+    },
+  }
+
+  return { reads, state, options }
+}
+
+const rangeSource = {
+  kind: 'url',
+  url: 'https://example.test/m.h5',
+  label: 'm.h5',
+} as const
+
+function cellsOf(reply: Reply) {
+  if (!reply.response.ok || reply.response.op !== 'matrix-cells') {
+    throw new Error(`Expected matrix cells, got ${JSON.stringify(reply.response)}.`)
+  }
+
+  return unpackGexResult<string>(reply.response.cells).cells
 }
 
 describe('createH5FileHandler', () => {
@@ -305,6 +408,210 @@ describe('createH5FileHandler', () => {
       })
     } finally {
       vi.unstubAllGlobals()
+    }
+  })
+
+  it('builds a matrix reader with too many barcodes to keep for each request', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const harness = createHarness({ maxKeptMatrixBarcodes: 10 })
+    await harness.send({ op: 'open', source: { kind: 'bytes', bytes }, tree: false })
+
+    for (const row of [3, 30_003]) {
+      const id = matrix.barcodes[row] ?? ''
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: [id] }))
+      expect(cells.get(id)).toEqual(matrix.cell(row))
+    }
+  })
+
+  it('reads Visium HD feature slices, indexing the file once', async () => {
+    const harness = createHarness()
+    await harness.send({
+      op: 'open',
+      source: { kind: 'bytes', bytes: await createH5Bytes(writeTinyFeatureSlice) },
+      tree: false,
+    })
+    const read = async (genes: readonly string[]) => {
+      const reply = await harness.send({
+        op: 'feature-slice',
+        targets: [
+          { id: 'BC-0', row: 0, col: 0 },
+          { id: 'BC-1', row: 1, col: 0 },
+        ],
+        genes,
+        binSizeMicrometers: 16,
+      })
+
+      if (!reply.response.ok || reply.response.op !== 'feature-slice') {
+        throw new Error(
+          `Expected a feature slice, got ${JSON.stringify(reply.response)}.`,
+        )
+      }
+
+      return unpackGexResult<string>(reply.response.cells)
+    }
+
+    const first = await read(['Actb', 'Gad1', 'Missing'])
+    expect(first.geneNames).toEqual(['Actb', 'Gad1', 'Missing'])
+    expect(first.cells.get('BC-1')).toEqual({
+      geneNames: ['Actb', 'Gad1'],
+      counts: [12, 4],
+    })
+
+    const second = await read(['Gad1'])
+    expect(second.cells.get('BC-0')).toEqual({ geneNames: [], counts: [] })
+    expect(second.cells.get('BC-1')).toEqual({ geneNames: ['Gad1'], counts: [4] })
+
+    await expect(
+      harness.send({
+        op: 'feature-slice',
+        targets: [{ id: 'BC-0', row: 0, col: 0 }],
+        genes: ['Actb'],
+        binSizeMicrometers: 3,
+      }),
+    ).resolves.toMatchObject({ response: { ok: false } })
+  })
+
+  it('reads a URL source by range when it can make range requests', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const requests = stubRangeServer(bytes)
+    const { reads, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      await expect(
+        harness.send({ op: 'open', source: rangeSource, tree: false }),
+      ).resolves.toMatchObject({ response: { ok: true, op: 'open' } })
+
+      const ids = [matrix.barcodes[5] ?? '', matrix.barcodes[39_000] ?? '']
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: ids }))
+      expect(cells.get(ids[0] ?? '')).toEqual(matrix.cell(5))
+      expect(cells.get(ids[1] ?? '')).toEqual(matrix.cell(39_000))
+
+      // One request for the start of the file, which gives its size.
+      expect(requests).toEqual([{ method: 'GET', range: 'bytes=0-1048575' }])
+      expect(reads.length).toBeGreaterThan(0)
+      const fetched =
+        1024 * 1024 + reads.reduce((sum, [start, end]) => sum + end - start, 0)
+      expect(fetched).toBeLessThan(bytes.byteLength)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reads the size from HEAD when CORS hides Content-Range', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const requests = stubRangeServer(bytes, { contentRange: false })
+    const { reads, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      await harness.send({ op: 'open', source: rangeSource, tree: false })
+      const id = matrix.barcodes[77] ?? ''
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: [id] }))
+
+      expect(cells.get(id)).toEqual(matrix.cell(77))
+      expect(requests).toEqual([
+        { method: 'GET', range: 'bytes=0-1048575' },
+        { method: 'HEAD', range: null },
+      ])
+      expect(reads.length).toBeGreaterThan(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('opens the whole file a server sends for a range request', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const requests = stubRangeServer(bytes, { answersRange: false })
+    const { reads, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      await harness.send({ op: 'open', source: rangeSource, tree: false })
+      const id = matrix.barcodes[1] ?? ''
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: [id] }))
+
+      expect(cells.get(id)).toEqual(matrix.cell(1))
+      expect(requests).toHaveLength(1)
+      expect(reads).toEqual([])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('fetches a file of unknown size whole', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const requests = stubRangeServer(bytes, { contentRange: false, answersHead: false })
+    const { reads, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      await harness.send({ op: 'open', source: rangeSource, tree: false })
+      const id = matrix.barcodes[2] ?? ''
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: [id] }))
+
+      expect(cells.get(id)).toEqual(matrix.cell(2))
+      expect(requests).toEqual([
+        { method: 'GET', range: 'bytes=0-1048575' },
+        { method: 'HEAD', range: null },
+        { method: 'GET', range: null },
+      ])
+      expect(reads).toEqual([])
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('answers with a failed range read, not the values h5wasm returned', async () => {
+    const { bytes } = await createLargeMatrixFile()
+    stubRangeServer(bytes)
+    const { state, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      await harness.send({ op: 'open', source: rangeSource, tree: false })
+      state.failing = true
+
+      await expect(
+        harness.send({ op: 'matrix-cells', elementIds: ['cell000003-1'] }),
+      ).resolves.toMatchObject({
+        response: {
+          ok: false,
+          error: expect.stringMatching(/^m\.h5 returned HTTP 503 for bytes \d+-\d+\.$/),
+        },
+      })
+      await expect(harness.send({ op: 'read', path: '/padding' })).resolves.toMatchObject(
+        {
+          response: {
+            ok: false,
+            error: expect.stringMatching(/^m\.h5 returned HTTP 503/),
+          },
+        },
+      )
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('opens bytes without copying them', async () => {
+    const h5wasm = (await import('h5wasm')).default
+    const { FS } = await h5wasm.ready
+    const writeFile = vi.spyOn(FS!, 'writeFile')
+    const bytes = await createAnnDataLikeFile()
+
+    try {
+      await createHarness().send({
+        op: 'open',
+        source: { kind: 'bytes', bytes },
+        tree: false,
+      })
+      expect(writeFile).toHaveBeenCalledWith(
+        expect.any(String),
+        bytes,
+        expect.objectContaining({ canOwn: true }),
+      )
+    } finally {
+      writeFile.mockRestore()
     }
   })
 

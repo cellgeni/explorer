@@ -57,10 +57,11 @@ the old feature-major arrays. It does not expose
 `cell_features/csc/data`.
 
 For ROI top-gene queries the app therefore cannot answer the query from older
-Zarr alone. It falls back to `cell_feature_matrix.h5`. In the browser, that
-means fetching and parsing the whole H5 file with `h5wasm`; one observed H5 is
-about 413 MiB. The observed 20-30 second ROI gene preview cost is that cold H5
-path, not the 32-cell preview sample.
+Zarr alone. It falls back to `cell_feature_matrix.h5`, which `h5wasm` reads by
+HTTP range in a worker: the barcodes, `indptr`, and the chunks that hold the
+requested cells. On the 433 MB Xenium demo file the first cells take about
+14 MB and 4 s, and each ROI after that 9–10 requests (about 2 s). A host that ignores
+Range sends the whole file, which took 52–65 s from Sanger.
 
 Newer datasets expose the CSC arrays. One observed Zarr layout included:
 
@@ -80,9 +81,10 @@ Use the cell-feature matrix in this order:
    `cell_features/csc/{indptr,indices,data}`. This is the normal fast path for
    XOA v3.1 and later output.
 2. For older output where Zarr is feature-major only, use
-   `cell_feature_matrix.h5` as the ROI gene-statistics fallback. This is slower
-   because browser-side H5 currently requires a full-file fetch and parse before
-   any ROI result can be produced. Only reads the user asks for (an ROI, a
+   `cell_feature_matrix.h5` as the ROI gene-statistics fallback. This is slower:
+   h5wasm reads synchronously, so its range requests go one at a time, and a
+   sample spread over the whole slide touches almost every chunk, about as
+   slow as reading the file whole. Only reads the user asks for (an ROI, a
    cell, the Magic Lens) use it; the viewport warm-up does not.
 3. If both native CSC Zarr and readable H5 are unavailable, report ROI gene
    statistics as unsupported by default. Transcript aggregation can remain an

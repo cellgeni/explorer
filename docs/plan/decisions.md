@@ -92,13 +92,17 @@ Later additions:
   the Xenium `cell_feature_matrix.h5` fallback, the standard Visium filtered
   matrix) is opened with h5wasm in its own worker (`h5File.worker.ts`), which
   answers reads by path. H5AD and Visium bytes are downloaded on the main
-  thread, as before, and transferred; the worker fetches the Xenium matrix
-  itself, so its 433 MB never reach the main thread. H5AD files send back their
+  thread, as before, and transferred; the worker reads the Xenium matrix
+  itself, so it never reaches the main thread, and since 2026-11-15 reads it
+  by range, so only the parts HDF5 reads are fetched. H5AD files send back their
   groups, datasets and attributes once, and the reader then reads datasets as
   before; the Xenium fallback's cell rows are read in the worker and come back
   packed in typed arrays. One worker per file, because h5wasm's heap cannot
   shrink: terminating it frees the file. An H5AD's worker ends when its
-  dataset is garbage collected (`FinalizationRegistry`).
+  dataset is garbage collected (`FinalizationRegistry`). Since 2026-11-15 the
+  Visium HD filtered matrices and `feature_slice.h5` are read the same way,
+  each kept open for the session, instead of in a worker per request through
+  Emscripten's `createLazyFile`.
 - **Cells overview worker (2026-11-13).** The Xenium `cells.parquet` overview
   is fetched and decoded in a worker of its own (`cellsOverview.worker.ts`).
   It reads hyparquet's column chunks instead of an object per row, and sends

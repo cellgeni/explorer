@@ -269,7 +269,7 @@ Testing:
 | Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                          |
 | Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes |
 | Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, OME-Zarr images, SpatialData stores                  |
-| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (lazy-range for Visium HD, whole-file H5 file workers otherwise); jsfive deferred     |
+| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (by range for Visium HD and Xenium H5, whole files otherwise); jsfive deferred        |
 | OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                        |
 | JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                       |
 | Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                         |
