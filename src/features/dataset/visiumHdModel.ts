@@ -131,6 +131,24 @@ export function visiumHdControlFailed(
       }
 }
 
+// The tier that bin reads use: selected-gene expression, ROI, Magic Lens and
+// the Bin card. A failed switch keeps the old tier drawn with the failed size
+// selected, so reads follow the drawn tier until the next switch. While a tier
+// loads they use the selected size: a switch has cleared the old expression and
+// selected bin, and zooming in with 2 µm selected loads its bins in this state
+// over the 16 µm view, where the drawn tier would swap reads to 16 µm and back.
+export function visiumHdActiveBinSize(
+  state: VisiumHdControlState,
+): VisiumHdBinSizeMicrometers | undefined {
+  if (state.status === 'idle') {
+    return undefined
+  }
+
+  return state.status === 'error'
+    ? (state.loadedBinSize ?? state.selectedBinSize)
+    : state.selectedBinSize
+}
+
 export function visiumHdBinSizeLabel(size: VisiumHdBinSizeMicrometers): string {
   return `${size} µm`
 }

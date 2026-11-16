@@ -19,6 +19,7 @@ import {
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
 import { visiumSelectionToShareable } from './features/dataset/visiumModel'
+import { visiumHdActiveBinSize } from './features/dataset/visiumHdModel'
 import { merscopeImageSelectionToShareable } from './features/dataset/merscopeImageModel'
 import { useMerscopeImageWorkflow } from './features/app-shell/useMerscopeImageWorkflow'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
@@ -843,7 +844,7 @@ export function App({ dependencies }: AppProps = {}) {
     visiumHdControlState.status === 'idle'
       ? undefined
       : visiumHdControlState.selectedBinSize
-  const activeVisiumHdBinSize = diagnosticsVisiumHdBinSize
+  const activeVisiumHdBinSize = visiumHdActiveBinSize(visiumHdControlState)
   const visiumHdBarcodeMappingRowBudget: number | undefined = undefined
   const activeVisiumHdRoiState = activeVisiumHdRoiStateForPlatform({
     activeBinSize: activeVisiumHdBinSize,
