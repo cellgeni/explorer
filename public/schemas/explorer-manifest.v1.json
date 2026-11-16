@@ -512,6 +512,13 @@
           ],
           "description": "The Gene scale control."
         },
+        "geneRange": {
+          "type": "array",
+          "prefixItems": [{ "type": ["number", "null"] }, { "type": ["number", "null"] }],
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "The Gene scale range, [min, max]. null leaves that end on Auto (0 at the bottom, the highest score at the top); max must be above min. Kept when the next dataset sets no range."
+        },
         "geneScoreMode": {
           "enum": ["sum", "mean", "z-score"],
           "description": "The Signature score control."

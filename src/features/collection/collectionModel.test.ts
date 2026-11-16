@@ -25,11 +25,18 @@ describe('collectionEntryLabel', () => {
 
 describe('collectionFirstOpening', () => {
   it('restores the defaults as a version 2 link, with genes colouring cells', () => {
-    expect(collectionFirstOpening({ genes: ['Aqp4'], geneColorScale: 'magma' })).toEqual({
+    expect(
+      collectionFirstOpening({
+        genes: ['Aqp4'],
+        geneColorScale: 'magma',
+        geneRange: [0, 25],
+      }),
+    ).toEqual({
       linkState: {
         linkVersion: 2,
         selectedGenes: ['Aqp4'],
         geneExpressionColorScale: 'magma',
+        geneExpressionScaleRange: '0,25',
         observationColorMode: 'gene-expression',
       },
       ignored: [],

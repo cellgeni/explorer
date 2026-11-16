@@ -202,8 +202,9 @@ each section (`-label.zarr`).
 ### Defaults
 
 The dataset manifest's cross-dataset display settings: `genes`,
-`colorCellsBy`, `geneColorScale`, `geneScoreMode`, and `cellPointScale`, with
-the [same values](./dataset-manifest.md#defaults). Layer toggles, opacities
+`colorCellsBy`, `geneColorScale`, `geneRange`, `geneScoreMode`, and
+`cellPointScale`, with the [same values](./dataset-manifest.md#defaults).
+`geneRange` puts every section's colours and previews on one fixed scale. Layer toggles, opacities
 and image channels belong to each dataset, so set them in that dataset's
 manifest.
 

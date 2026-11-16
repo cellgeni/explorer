@@ -15,6 +15,7 @@ describe('manifestDefaultsToShareableState', () => {
         genes: ['EPCAM'],
         colorCellsBy: 'annotations',
         geneColorScale: 'viridis',
+        geneRange: [-1.5, null],
         geneScoreMode: 'mean',
         cellBoundaries: false,
         nucleusBoundaries: true,
@@ -30,6 +31,8 @@ describe('manifestDefaultsToShareableState', () => {
         selectedGenes: ['EPCAM'],
         observationColorMode: 'annotations',
         geneExpressionColorScale: 'viridis',
+        // As a link writes it: `geneRange=-1.5,`.
+        geneExpressionScaleRange: '-1.5,',
         geneExpressionScoreMode: 'mean',
         showCellBoundaries: false,
         showNucleusBoundaries: true,

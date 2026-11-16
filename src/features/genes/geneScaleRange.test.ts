@@ -21,7 +21,9 @@ describe('gene scale range', () => {
   })
 
   it('reads and writes geneRange= values', () => {
-    expect(formatGeneScaleRange(AUTO_GENE_SCALE_RANGE)).toBeUndefined()
+    // Written only when it undoes a dataset manifest's range.
+    expect(formatGeneScaleRange(AUTO_GENE_SCALE_RANGE)).toBe(',')
+    expect(parseGeneScaleRange(',')).toEqual(AUTO_GENE_SCALE_RANGE)
     expect(formatGeneScaleRange({ min: 1.5, max: 20 })).toBe('1.5,20')
     expect(formatGeneScaleRange({ min: null, max: 20 })).toBe(',20')
     expect(parseGeneScaleRange('1.5,20')).toEqual({ min: 1.5, max: 20 })

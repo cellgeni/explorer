@@ -107,6 +107,8 @@ export interface DatasetManifestDefaults {
   readonly genes?: readonly string[]
   readonly colorCellsBy?: string
   readonly geneColorScale?: string
+  // The Gene scale's range, [min, max]; null leaves that end on Auto.
+  readonly geneRange?: readonly [number | null, number | null]
   readonly geneScoreMode?: string
   readonly cellBoundaries?: boolean
   readonly nucleusBoundaries?: boolean
@@ -759,6 +761,7 @@ export const DATASET_MANIFEST_DEFAULT_KEYS = [
   ...DEFAULT_BOOLEAN_KEYS,
   ...DEFAULT_OPACITY_KEYS,
   ...DEFAULT_POSITIVE_NUMBER_KEYS,
+  'geneRange',
 ] as const
 
 // The field checks below are shared with the collection parser
@@ -878,7 +881,33 @@ export function parseDefaults(
     defaults[key] = entry
   }
 
+  if (value.geneRange !== undefined) {
+    defaults.geneRange = parseGeneRange(value.geneRange, fail)
+  }
+
   return defaults as DatasetManifestDefaults
+}
+
+function parseGeneRange(
+  value: unknown,
+  fail: Fail,
+): readonly [number | null, number | null] {
+  const isEnd = (end: unknown): end is number | null =>
+    end === null || (typeof end === 'number' && Number.isFinite(end))
+
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    !isEnd(value[0]) ||
+    !isEnd(value[1]) ||
+    (value[0] !== null && value[1] !== null && value[1] <= value[0])
+  ) {
+    return fail(
+      '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min.',
+    )
+  }
+
+  return [value[0], value[1]]
 }
 
 function parseVisiumHdBins(

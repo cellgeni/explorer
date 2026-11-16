@@ -27,10 +27,9 @@ export function geneScaleMidpoint({ min, max }: GeneScaleBounds): number {
   return min + (max - min) / 4
 }
 
-// `geneRange=` in a link: "min,max", either end empty for Auto.
-export function formatGeneScaleRange(range: GeneScaleRange): string | undefined {
-  if (isAutoGeneScaleRange(range)) return undefined
-
+// `geneRange=` in a link: "min,max", either end empty for Auto. Auto is ","
+// so a link can turn a dataset manifest's range back to Auto.
+export function formatGeneScaleRange(range: GeneScaleRange): string {
   return `${range.min === null ? '' : String(range.min)},${range.max === null ? '' : String(range.max)}`
 }
 

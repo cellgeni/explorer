@@ -349,6 +349,7 @@ Display settings applied each time the dataset loads.
 | `genes`               | Gene selection          | Gene names; must match the gene panel exactly, including case                 |
 | `colorCellsBy`        | `Cell color`            | `gene-expression`, `transcript-count`, `cell-area`, `annotations`, `metadata` |
 | `geneColorScale`      | `Gene scale`            | `gold`, `magma`, `viridis`, `plasma`, `cividis`, `teal`, `rose`, `glasbey`    |
+| `geneRange`           | `Gene scale` range      | `[min, max]` in score units, such as `[0, 40]`; `null` for an Auto end        |
 | `geneScoreMode`       | `Combine genes`         | `sum`, `mean`, `z-score`                                                      |
 | `cellBoundaries`      | `Cell boundaries`       | `true` / `false`                                                              |
 | `nucleusBoundaries`   | `Nucleus boundaries`    | `true` / `false`                                                              |
@@ -373,8 +374,13 @@ How defaults combine with other settings:
   string opacity, stop the load.
 - `channels` entries that match no channel leave the platform's default
   channels on. An empty list turns every channel off.
-- Opacities and `transcripts` are app-wide controls: they keep their value when
-  another dataset without these defaults is loaded next.
+- Opacities, `transcripts` and `geneRange` are app-wide controls: they keep
+  their value when another dataset without these defaults is loaded next, so
+  sections compare on one scale. A link for a dataset whose manifest sets a
+  range writes `geneRange=,` once the range is reset to Auto.
+- `geneRange` is in the units of the selected `Combine genes` score, so a
+  range set for `sum` does not suit `mean` or `z-score`. Its max must be above
+  its min, or the load stops; `[0, null]` fixes only the bottom.
 - `colorCellsBy: "annotations"` takes effect once annotations are loaded.
 - `genes` without `colorCellsBy` colours cells by gene expression. With
   `colorCellsBy` set to another mode, the genes are selected (for transcripts,

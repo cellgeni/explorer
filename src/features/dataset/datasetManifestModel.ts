@@ -10,6 +10,7 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionScoreMode,
 } from '../genes/geneControlsModel'
+import { formatGeneScaleRange } from '../genes/geneScaleRange'
 
 // What the info drawer shows about a dataset described by a manifest.
 export type DatasetManifestAbout = Pick<
@@ -95,6 +96,13 @@ export function manifestDefaultsToShareableState(
     selectedGenes: defaults.genes,
     observationColorMode,
     geneExpressionColorScale,
+    geneExpressionScaleRange:
+      defaults.geneRange === undefined
+        ? undefined
+        : formatGeneScaleRange({
+            min: defaults.geneRange[0],
+            max: defaults.geneRange[1],
+          }),
     geneExpressionScoreMode,
     showCellBoundaries: defaults.cellBoundaries,
     showNucleusBoundaries: defaults.nucleusBoundaries,

@@ -786,6 +786,9 @@ export function useDatasetLifecycle({
     const geneExpressionScoreMode = parseGeneExpressionScoreMode(
       defaults.geneExpressionScoreMode,
     )
+    const geneExpressionScaleRange = parseGeneScaleRange(
+      defaults.geneExpressionScaleRange,
+    )
 
     if (defaults.selectedGenes !== undefined) {
       setSelectedGenes(defaults.selectedGenes)
@@ -797,6 +800,11 @@ export function useDatasetLifecycle({
 
     if (geneExpressionColorScale !== undefined) {
       setGeneExpressionColorScale(geneExpressionColorScale)
+    }
+
+    // Like the colours, kept when the next dataset's manifest sets no range.
+    if (geneExpressionScaleRange !== undefined) {
+      setGeneExpressionScaleRange(geneExpressionScaleRange)
     }
 
     if (geneExpressionScoreMode !== undefined) {

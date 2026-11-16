@@ -1,5 +1,5 @@
 import { act, render, waitFor } from '@testing-library/react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type SetStateAction } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type {
@@ -13,6 +13,7 @@ import type {
   VisiumHdBinSizeMicrometers,
 } from '../../datasets/visiumHdDataset'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
+import { AUTO_GENE_SCALE_RANGE, type GeneScaleRange } from '../genes/geneScaleRange'
 import {
   mergeMorphologyChannelSettings,
   useDatasetLifecycle,
@@ -50,6 +51,16 @@ function visiumBinDescriptor(
 }
 
 type LifecycleOptions = Parameters<typeof useDatasetLifecycle>[0]
+
+// A Gene scale range setter that keeps its value, as useState would.
+function geneScaleRangeState() {
+  const state = { range: AUTO_GENE_SCALE_RANGE }
+  const setGeneExpressionScaleRange = vi.fn((next: SetStateAction<GeneScaleRange>) => {
+    state.range = typeof next === 'function' ? next(state.range) : next
+  })
+
+  return { state, setGeneExpressionScaleRange }
+}
 
 function Probe({
   refs,
@@ -378,6 +389,55 @@ describe('useDatasetLifecycle', () => {
     expect(refs.cellDetailAbortRef.current).toBeNull()
     expect(refs.cellTranscriptDistributionAbortRef.current).toBeNull()
     expect(refs.customMorphologyLayerAbortRef.current).toBeNull()
+  })
+
+  it('keeps a manifest’s gene range for a later dataset that sets none', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef: LifecycleOptions['refs']['startDatasetLoadRef'] = {
+      current: null,
+    }
+    const withRange = 'https://example.test/with-range'
+    const withoutRange = 'https://example.test/without-range'
+    const detectSpatialDataset: LifecycleOptions['loaders']['detectSpatialDataset'] =
+      vi.fn(async (url: string) => ({
+        platform: 'xenium' as const,
+        baseUrl: url,
+        ...(url === withRange
+          ? {
+              manifest: {
+                platform: 'xenium' as const,
+                url: `${url}/explorer.json`,
+                rootUrl: url,
+                files: {},
+                defaults: { geneRange: [null, 40] as const },
+              },
+            }
+          : {}),
+        checked: [],
+      }))
+    const geneScaleRange = geneScaleRangeState()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={detectSpatialDataset}
+        startDatasetLoadRef={startDatasetLoadRef}
+        extraSetters={{
+          setGeneExpressionScaleRange: geneScaleRange.setGeneExpressionScaleRange,
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(withRange, false)
+    })
+    expect(geneScaleRange.state.range).toEqual({ min: null, max: 40 })
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(withoutRange, false)
+    })
+    expect(detectSpatialDataset).toHaveBeenCalledTimes(2)
+    expect(geneScaleRange.state.range).toEqual({ min: null, max: 40 })
   })
 
   describe('replacing an open dataset (15.1-F)', () => {
@@ -808,10 +868,12 @@ describe('useDatasetLifecycle', () => {
           imageOpacity: 0.4,
           colorCellsBy: 'cell-area',
           geneColorScale: 'rainbow',
+          geneRange: [0, 40] as const,
         },
       },
       checked: [],
     }))
+    const geneScaleRange = geneScaleRangeState()
     const appendFallbackNotice = vi.fn()
     const setImageLayerOpacity = vi.fn()
     const setObservationColorMode = vi.fn()
@@ -833,6 +895,7 @@ describe('useDatasetLifecycle', () => {
           setDatasetAbout,
           setDatasetManifestDefaults,
           setGeneExpressionColorScale,
+          setGeneExpressionScaleRange: geneScaleRange.setGeneExpressionScaleRange,
           setImageLayerOpacity,
           setObservationColorMode,
           setSelectedGenes,
@@ -841,6 +904,8 @@ describe('useDatasetLifecycle', () => {
           datasetUrl,
           selectedGenes: ['ACTB'],
           showCellBoundaries: true,
+          // The Gene scale reset to Auto, which the manifest's range would undo.
+          geneExpressionScaleRange: ',',
         }}
         setLoadState={setLoadState}
         setShowCellBoundaries={setShowCellBoundaries}
@@ -859,9 +924,10 @@ describe('useDatasetLifecycle', () => {
       source: { repository: 'BioImage Archive', accession: 'S-BIAD1' },
     })
 
-    // The shared link sets genes and cell boundaries, so those win.
+    // The shared link sets genes, cell boundaries and the range, so those win.
     expect(setSelectedGenes).toHaveBeenLastCalledWith(['ACTB'])
     expect(setShowCellBoundaries).toHaveBeenLastCalledWith(true)
+    expect(geneScaleRange.state.range).toEqual(AUTO_GENE_SCALE_RANGE)
     // The rest come from the manifest.
     expect(setShowNucleusBoundaries).toHaveBeenLastCalledWith(true)
     expect(setImageLayerOpacity).toHaveBeenCalledWith(0.4)
