@@ -60,7 +60,11 @@ and need no network. `npm run test:coverage` adds V8 coverage over `src/` with
 minimum thresholds; CI runs it too and uploads the report, in a job that is
 allowed to fail. The full Playwright suite, which adds the `@live` tests on
 hosted datasets and every example in `examples/`, runs on a weekday schedule
-(`.github/workflows/e2e-live.yml`).
+(`.github/workflows/e2e-live.yml`). `npm audit` runs on every pull request,
+on pushes to `main` and each weekday morning (`.github/workflows/audit.yml`):
+any advisory in a package the app ships fails it, and in the dev tools only
+high and critical ones do. It is a workflow of its own so that a newly
+published advisory cannot hold up the Pages deploy, which waits for CI.
 
 ## Load Pipeline
 
