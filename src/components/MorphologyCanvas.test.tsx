@@ -1,11 +1,12 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { micrometers } from '../data/coords'
+import { imagePixels, micrometers } from '../data/coords'
+import { TiffPyramidLoader } from '../tiff/loader'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import type { BBox, TileIndex } from '../data/coords'
 import type { OverviewViewState } from '../rendering/deckLayers'
 import type { ReadyTile, TileCacheEntry } from '../tiff/tileCache'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import type { TiffChunk, TiffLevelMeta } from '../tiff/loader'
 
 interface MockTileRequest {
   readonly key: string
@@ -325,6 +326,74 @@ describe('MorphologyCanvas', () => {
 
     expect(context.drawImage.mock.calls.slice(drawCountBeforeFallback)).toHaveLength(1)
   })
+
+  // The placed image is 1200 × 800 µm in 200 µm tiles. The canvas is 200 × 100
+  // px at zoom 0, and the prefetch margin adds 256 µm on each side.
+  it('requests the visible tiles of an image at a negative origin', async () => {
+    mockCanvasContext()
+
+    // The image spans x -600 to 600 and y -400 to 400. The view, x -400 to
+    // -200 and y -250 to -150, sees tiles (1, 0) and (1, 1). With the margin
+    // it reaches x -656 to 56 and y -506 to 106: columns 0-3, rows 0-2.
+    render(
+      <MorphologyCanvas
+        loader={placedLoader({ x: -600, y: -400 })}
+        viewState={{ ...viewState, target: [-300, 200, 0] }}
+        maxConcurrentTileRequests={64}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(requestedTileKeys().sort()).toEqual(
+        tileKeys({ cols: [0, 1, 2, 3], rows: [0, 1, 2] }),
+      )
+    })
+    expect(requestedTileKeys().slice(0, 2)).toEqual(['0:1:0', '0:1:1'])
+  })
+
+  it('requests tiles for a view wholly at negative coordinates', async () => {
+    mockCanvasContext()
+
+    // The view, x -550 to -350 and y -300 to -200, sees tiles (0, 0) and
+    // (1, 0). With the margin it reaches x -806 to -94 and y -556 to 56,
+    // still left of x = 0: columns 0-2, rows 0-2.
+    render(
+      <MorphologyCanvas
+        loader={placedLoader({ x: -600, y: -400 })}
+        viewState={{ ...viewState, target: [-450, 250, 0] }}
+        maxConcurrentTileRequests={64}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(requestedTileKeys().sort()).toEqual(
+        tileKeys({ cols: [0, 1, 2], rows: [0, 1, 2] }),
+      )
+    })
+    expect(requestedTileKeys().slice(0, 2)).toEqual(['0:0:0', '0:1:0'])
+  })
+
+  it('requests no tiles left of or above an image at the data origin', async () => {
+    mockCanvasContext()
+
+    // The view, x -50 to 150 and y -25 to 75, overhangs the image's top-left
+    // corner. With the margin it reaches x -306 to 406 and y -281 to 331, but
+    // only columns 0-2 and rows 0-1 of the image are requested.
+    render(
+      <MorphologyCanvas
+        loader={placedLoader({ x: 0, y: 0 })}
+        viewState={viewState}
+        maxConcurrentTileRequests={64}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(requestedTileKeys().sort()).toEqual(
+        tileKeys({ cols: [0, 1, 2], rows: [0, 1] }),
+      )
+    })
+    expect(requestedTileKeys()[0]).toBe('0:0:0')
+  })
 })
 
 const viewState: OverviewViewState = {
@@ -342,6 +411,52 @@ function canvasContext() {
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
   }
+}
+
+function mockCanvasContext() {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+    canvasContext() as unknown as CanvasRenderingContext2D,
+  )
+}
+
+// A one-level 1200 × 800 px image at 1 µm/px in 200 px tiles, with its
+// top-left corner at `origin`. Tile requests go to the mocked tile cache.
+function placedLoader(origin: { readonly x: number; readonly y: number }) {
+  return new TiffPyramidLoader({
+    url: 'https://example.test/placed.ome.tif',
+    chunkIndex: new Map<string, TiffChunk>(),
+    levelMeta: new Map<number, TiffLevelMeta>([
+      [0, { width: imagePixels(1200), height: imagePixels(800), nCols: 6, nRows: 4 }],
+    ]),
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(1),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    tileWidth: imagePixels(200),
+    tileHeight: imagePixels(200),
+    numLevels: 1,
+    imageWidth: imagePixels(1200),
+    imageHeight: imagePixels(800),
+    byteRangeCache: null,
+    origin,
+  })
+}
+
+function requestedTileKeys(): string[] {
+  return tileCacheMock.requests.map((request) => request.key)
+}
+
+function tileKeys(options: {
+  readonly cols: readonly number[]
+  readonly rows: readonly number[]
+}): readonly string[] {
+  return options.rows
+    .flatMap((row) => options.cols.map((col) => `0:${col.toString()}:${row.toString()}`))
+    .sort()
 }
 
 function mockLoader(

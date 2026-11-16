@@ -35,3 +35,13 @@ Fixes recorded:
       unchanged request key. The effect cleanup now clears the key of a read it
       stops while that read is still running, so the rerun starts it again; a
       cancelled read (15.3-D) keeps its key.
+- [x] Images placed at a negative origin (MERSCOPE mosaics, SpatialData
+      translations) did not load the tiles left of x = 0 or above y = 0
+      (fixed 2026-11-16). The morphology canvas clamped its prefetch bbox to
+      x, y ≥ 0, so a view over x −400 to −200 of an image at x −600 requested
+      only a tile at x 0–200, and a view whose prefetch bbox still ended left
+      of 0 became an inverted bbox with no tiles. The bbox is no longer
+      clamped: since the loaders' tile selection clips to the image itself
+      (`tilesForBboxOnAxes`), the clamp only hid negative-origin tiles. Large
+      raw LZW or uncompressed tiles have no prefetch margin and were not
+      affected.
