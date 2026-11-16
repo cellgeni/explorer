@@ -6,7 +6,7 @@ records are in [`docs/plan/`](docs/plan/):
 | File                                             | Contents                                                                           |
 | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
 | [Architecture decisions](docs/plan/decisions.md) | Decisions 4.1–4.11: stack, state, rendering, data sources, stores, units           |
-| [Data contracts](docs/plan/data-contracts.md)    | 5.1–5.7: what each input format must provide                                       |
+| [Data contracts](docs/plan/data-contracts.md)    | 5.1–5.8: what each input format must provide                                       |
 | [Phases](docs/plan/phases/)                      | One file per phase or track: tasks, product decisions, execution notes, known gaps |
 | [Open items](docs/plan/open-items.md)            | Open work across the plan, and what was not pursued                                |
 | [Engineering record](docs/plan/engineering.md)   | Refactor record, dataset hosting, testing and CI, tech stack, risks                |
@@ -39,9 +39,9 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 5.1](docs/plan/phases/05.1-transcripts.md)                                         | Transcript visualization with LOD                        | Done                                                             |
 | [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; low-res fallback and diagnostics fixed 2026-11-12      |
 | [Structural refactor](docs/plan/engineering.md#application-structure-and-refactor-record) | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
-| [Phase 7](docs/plan/phases/07-h5ad.md)                                                    | AnnData H5AD                                             | MVP done; hardening open                                         |
+| [Phase 7](docs/plan/phases/07-h5ad.md)                                                    | AnnData H5AD                                             | MVP done; AnnData Zarr stores 2026-11-14; hardening open         |
 | [Phase 8](docs/plan/phases/08-image-only-geojson.md)                                      | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
-| [Phase 9](docs/plan/phases/09-ome-zarr.md)                                                | OME-Zarr image pyramids                                  | Done (2026-07-10)                                                |
+| [Phase 9](docs/plan/phases/09-ome-zarr.md)                                                | OME-Zarr image pyramids                                  | Done (2026-07-10); z planes and bioformats2raw 2026-11-14        |
 | [Phase 10](docs/plan/phases/10-spatialdata.md)                                            | SpatialData stores                                       | Done (2026-11-06)                                                |
 | [Phase 11](docs/plan/phases/11-dataset-manifest.md)                                       | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
 | [Phase 12](docs/plan/phases/12-atera.md)                                                  | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
@@ -52,6 +52,8 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                                |
 | [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | Done: 18-A tables and boundaries, 18-B `.vzg` image (2026-11-14) |
 | [Phase 19](docs/plan/phases/19-ndpi.md)                                                   | NDPI (Hamamatsu) images                                  | Done (2026-11-15)                                                |
+| [Phase 20](docs/plan/phases/20-dataset-collections.md)                                    | Dataset collections: many datasets with previews         | Done (2026-11-14 to 2026-11-16)                                  |
+| [Phase 21](docs/plan/phases/21-structure-browser.md)                                      | Browse Store and Browse File (Zarr and Parquet)          | Done (2026-11-15 to 2026-11-16)                                  |
 
 ## Purpose And Scope
 
@@ -65,19 +67,20 @@ JPEG-2000 tiles.
 The brief started as Xenium-only, with seams for Visium. Scope grew by user
 request:
 
-| Platform       | Input                                                          | Planned in                   | Status                                      |
-| -------------- | -------------------------------------------------------------- | ---------------------------- | ------------------------------------------- |
-| Xenium         | XOA output folder                                              | Phases 1–5.1                 | Done                                        |
-| Visium HD      | Space Ranger `outs/` folder                                    | Phase 6                      | MVP done; hardening open                    |
-| AnnData H5AD   | Direct `.h5ad` file URL                                        | Phase 7                      | MVP done; hardening open; one item reopened |
-| Image-only     | Direct OME-TIFF/TIFF/NDPI URL, plus GeoJSON annotations        | Phase 8                      | Done (2026-07-09)                           |
-| QPTIFF image   | Direct Akoya `.qptiff` URL; also custom layers and manifests   | Phase 13                     | Done (2026-11-09)                           |
-| SVS image      | Direct Aperio `.svs` URL; also custom layers and manifests     | Phase 16                     | Done (2026-11-13)                           |
-| NDPI image     | Direct Hamamatsu `.ndpi` URL; also custom layers and manifests | Phase 19                     | Done (2026-11-15)                           |
-| OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)                           |
-| SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06)             |
-| Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)                           |
-| MERSCOPE       | Vizgen region folder (CSV tables, boundary GeoParquet, `.vzg`) | Phase 18                     | Done (2026-11-14)                           |
+| Platform       | Input                                                          | Planned in                   | Status                          |
+| -------------- | -------------------------------------------------------------- | ---------------------------- | ------------------------------- |
+| Xenium         | XOA output folder                                              | Phases 1–5.1                 | Done                            |
+| Visium HD      | Space Ranger `outs/` folder                                    | Phase 6                      | MVP done; hardening open        |
+| AnnData H5AD   | Direct `.h5ad` file URL, or an AnnData Zarr store              | Phase 7                      | MVP done; hardening open        |
+| Image-only     | Direct OME-TIFF/TIFF/NDPI URL, plus GeoJSON annotations        | Phase 8                      | Done (2026-07-09)               |
+| QPTIFF image   | Direct Akoya `.qptiff` URL; also custom layers and manifests   | Phase 13                     | Done (2026-11-09)               |
+| SVS image      | Direct Aperio `.svs` URL; also custom layers and manifests     | Phase 16                     | Done (2026-11-13)               |
+| NDPI image     | Direct Hamamatsu `.ndpi` URL; also custom layers and manifests | Phase 19                     | Done (2026-11-15)               |
+| OME-Zarr image | Direct OME-Zarr URL; also custom layers and SpatialData images | Phase 9 (recorded from git)  | Done (2026-07-10)               |
+| SpatialData    | Zarr store root with `spatialdata_attrs`                       | Phase 10 (recorded from git) | Done (2026-10-13 to 2026-11-06) |
+| Visium (spots) | Space Ranger `outs/` folder, or `.h5ad` with `uns/spatial`     | Phase 14 (original Phase 6)  | Done (2026-11-10)               |
+| MERSCOPE       | Vizgen region folder (CSV tables, boundary GeoParquet, `.vzg`) | Phase 18                     | Done (2026-11-14)               |
+| Collections    | A JSON list of datasets, opened with `collection=`             | Phase 20 (recorded from git) | Done (2026-11-14 to 2026-11-16) |
 
 ### Reference Datasets
 
@@ -92,6 +95,8 @@ request:
 | Visium (H5AD)         | `https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/60d5175f-f477-48b2-8396-ad76be2c3310.h5ad`    | CELLxGENE Census copy of GEO GSM6592057 (Visium v1); 8.9 MB; 370 spots under tissue of 4,992; 0.3236 µm/px from the spot grid |
 | Visium (Space Ranger) | `https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/` through a manifest ([example](docs/dataset-manifest.md#standard-visium)) | The same sample's GEO files, gzipped; same spots and scale as the H5AD                                                        |
 | MERSCOPE (vpt Baysor) | `examples/bia/S-BIAD2376.json` (BIA S-BIAD2376 D082 region 0)                                                                                    | 3,003 cells × 499 genes; boundaries 0.8 MB; CC BY 4.0                                                                         |
+| AnnData Zarr          | `https://hindlimb.cog.sanger.ac.uk/datasets/20230412_multimodal/integrated/0.0.1/hindlimb-scrnaseq-integrated-anndata.zarr`                      | Zarr v2 without consolidated metadata; 125,955 cells; dense `/X` chunked by gene, so cell profiles are refused                |
+| Collection            | `docs/collections/spcox.json`                                                                                                                    | 18 SPCOX Xenium sections (AnnData Zarr, each with an OME-Zarr image and label mask) and their snRNA-seq atlas; no licence     |
 
 The SpatialData stores are for manual testing; there is no E2E coverage for them
 yet. Two zipped SpatialData stores on the BioImage Archive are also used:

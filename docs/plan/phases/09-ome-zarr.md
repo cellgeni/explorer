@@ -16,9 +16,22 @@ Shipped on 2026-07-10 (`f9560ee`) with later fixes. Not planned in advance.
       (`10e3470`, 2026-11-06).
 - [x] Decode chunks in the Zarr decode worker pool, with a main-thread fallback
       (`92defed`, 2026-11-06).
+- [x] bioformats2raw stores (BioImage Archive): open the first series listed
+      in `OME/.zattrs`, or `0`, and start on `omero.rdefs.defaultZ` and
+      `defaultT` (`e6b8e66`, 2026-11-14, #96). S-BIAD493's plane 0 is nearly
+      empty; its `defaultZ` is the middle of 41.
+- [x] The `Z plane` control for OME-Zarr z-stacks, starting on `defaultZ` or
+      else the middle plane (`4144364`, 2026-11-14, #97).
+- [x] An image group inside a `.zarr` store, such as `sample.zarr/images/he`
+      or a bioformats2raw series `image.zarr/0`, is read as OME-Zarr: a path
+      below a `.zarr` folder whose last part has no dot (#114, 2026-11-15).
+      The group is read on its own, without a SpatialData store's
+      transformations.
 
 Known gaps:
 
-- [ ] Only `t = 0` and `z = 0` are shown.
+- [x] Only `t = 0` and `z = 0` are shown. Since 2026-11-14 z planes have
+      the `Z plane` control.
+- [ ] Only one `t` is shown: `omero.rdefs.defaultT`, else 0.
 - [ ] No IndexedDB caching of OME-Zarr chunks.
-- [ ] No E2E coverage.
+- [ ] No smoke test; the nightly examples test loads one OME-Zarr image.

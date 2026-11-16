@@ -30,10 +30,11 @@
       `README.md`.
 - [x] Magic Lens, ported from the POC: cursor, viewport, and ROI scopes; radius
       and QV controls; debounced scans; an in-view HUD.
-- [ ] **Reopened (2026-11-08):** the lens `Min QV` is part of the query key but
-      is not passed to the readers, so it does not change results. (Since the
-      feature-fix pass, lens totals come from cell `transcript_counts`, which
-      have no QV.)
+- [x] **Reopened (2026-11-08), closed (2026-11-12):** the lens `Min QV` is
+      part of the query key but is not passed to the readers, so it does not
+      change results. (Since the feature-fix pass, lens totals come from cell
+      `transcript_counts`, which have no QV.) The new shell hid it (15.2-D),
+      and 15.5-C removed it.
 
 ## Closed Open Items
 

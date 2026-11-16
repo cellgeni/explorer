@@ -34,6 +34,9 @@ post-Xenium skin scan in BioImage Archive `S-BIAD3788`
 - [x] Checked in the browser against the scan above: the IFD walk took about
       4.5 s (8 sequential 1 MiB reads); nuclei and Keratin 14 line up at full
       resolution with no tile seams.
+- [x] The gallery example is BIA S-BIAD2491's PhenoCycler-Fusion tonsil scan
+      since 2026-11-14 (#86): 19 channels, 13 GB, all 117 IFDs in the first
+      1.85 MB, CC BY 4.0. `examples/bia/S-BIAD3788.json` was removed.
 
 ## Known Gaps
 

@@ -67,6 +67,18 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
       (`0d67e06`, 2026-08-28).
 - [x] OME `Channel@Color` decoded as signed RGBA with red in the high byte;
       opaque red had been rendering as blue (`3e1a8d5`, 2026-11-07).
+- [x] Single-level TIFFs (#92, 2026-11-14): tiles decoded before the display
+      window was known each stretched their own contrast, drawing bright
+      tiles near the top-left corner; they now wait for the first decode's
+      window. Tiles drawn at under half size use high-quality canvas
+      smoothing, so the minimap no longer looks like a crop.
+- [x] Stripped TIFFs (#94, 2026-11-14), tifffile's default and the layout of
+      most microscope exports: shown as virtual tiles cut from bands of whole
+      rows (`src/tiff/strips.ts`), with a 256 MiB band cache shared by all
+      images. LZW is always decoded in-app, because geotiff 3.0.5 loops until
+      it runs out of memory on the code 4094 that imagecodecs writes.
+      Auto-contrast samples at most 64 tiles of the coarsest level, so an
+      image without a pyramid is no longer downloaded in full.
 
 ## Known Gaps
 

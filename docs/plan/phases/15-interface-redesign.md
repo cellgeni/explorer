@@ -1721,6 +1721,23 @@ Each PR updates the docs it affects. The full list:
 - **Effort:** these sizes add up to about 6 months for one developer working
   without help. M1 and M2 together are about 40% of the effort.
 
+## Additions After The Close-Out
+
+- [x] `Cell point size` in Cells, 0.5× to 32×, as deck.gl `radiusScale` and
+      `cellSize=` in links (#103, 2026-11-15). Cells without an area are
+      drawn 10–20 µm across, and minimum radii are 0.5 px for cell points and
+      1 px for gene expression points.
+- [x] The legend's "+N more in Cells › Clusters" opens the layer panel at the
+      full class list (#106, 2026-11-15).
+- [x] Help ends with the deployed commit (#107, 2026-11-15).
+- [x] Outlines with no cell colour are drawn in a dimmer neutral grey, not
+      mint over a green fill (#118, 2026-11-15). `docs/architecture.md` lists
+      where the default colours are set.
+
+Gene scale and annotation class changes are in
+[Phase 4](04-genes-annotations.md#gene-scale-and-annotation-classes-november-2026),
+and the collection bar in [Phase 20](20-dataset-collections.md).
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

@@ -48,6 +48,18 @@ no longer breaks loading, and so a dataset can say how it should be shown.
       error", instead of "Byte-range requests blocked" (`assertHttpRangeSupport`,
       `createStructuredLoadError`).
 
+## Later Additions
+
+- [x] `defaults.cellPointScale` sets the `Cell point size` slider (#103,
+      2026-11-15).
+- [x] H5AD manifests take `files.image`, `files.labels`,
+      `options.coordinates` and `options.labelColumn`, parsed by the same
+      `parseImageAttachment` as a collection entry, and `files.h5ad` accepts
+      an AnnData Zarr store or an Icechunk repository (#114, 2026-11-15).
+- [x] `defaults.geneRange`: `[min, max]` in score units, `null` for Auto, and
+      a top that may be a percentile such as `"p95"` (#128, 2026-11-16). A
+      link's own `geneRange=` wins.
+
 ## Known Gaps
 
 - [ ] Files cannot be declared absent, so optional standard names are still

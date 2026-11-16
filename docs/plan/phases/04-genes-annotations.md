@@ -31,7 +31,9 @@ Notes on genes and expression:
   points otherwise.
 - The colour scale uses a stable maximum per gene set across loaded regions,
   with numeric ticks. Plasma (default), Cividis, Teal, Rose, and Glasbey were
-  added.
+  added. **Superseded (2026-11-16):** the range can be set, and Auto tops at
+  the 99th percentile; see
+  [Gene Scale And Annotation Classes](#gene-scale-and-annotation-classes-november-2026).
 
 Notes on annotations:
 
@@ -75,6 +77,45 @@ Notes on the viewer:
 Definition of done: pick a marker panel, score a signature, import cell-type
 labels, and export an ROI's expression, all client-side. Verified with build,
 tests, typecheck, lint, and E2E.
+
+## Gene Scale And Annotation Classes (November 2026)
+
+Added from 2026-11-15 to 2026-11-16, mostly while browsing the SPCOX
+collection ([Phase 20](20-dataset-collections.md)).
+
+Gene scale (Cells › Cell color):
+
+- [x] Set the range (#111): the ends under the gradient are number fields,
+      each set on its own; scores outside take the end colours; one range for
+      the view, the legend and the collection previews, kept across genes and
+      datasets; `geneRange=min,max` in links. The middle label shows the
+      score at the gradient's middle, a quarter of the way up, since colours
+      follow the square root of the share.
+- [x] Auto tops at the 99th percentile of the selected genes' scores above 0
+      (nearest rank, by quickselect), not the highest score, so one outlier no
+      longer washes out the rest; the highest top seen is kept while panning
+      (#128). On the Xenium demo, SNAP25's top went from 11 to 4.
+- [x] A percentile top in links (`geneRange=,p95`), manifests and collections
+      (`[null, "p95"]`) follows each dataset (#128).
+- [x] The ends are always fields, read as labels until pointed at; the cog
+      added in #113 is gone, and `Reset` follows the label while a range is
+      set (#128).
+
+Annotation classes (Cells › Clusters and the legend):
+
+- [x] AnnData classes in category order, so the same categories get the same
+      colours in every dataset (#104).
+- [x] Alt-click a class to show only it, and again to show all (#104).
+- [x] Hidden classes, and cells in no shown class, fade to 15% opacity in the
+      view and the previews instead of turning solid grey (#106).
+- [x] Every class is listed, with the layer panel scrolling instead of an
+      8-row list. The set's eye button turns its colouring off; an
+      all-classes checkbox checks or unchecks them all. Unchecking every
+      class fades every cell instead of falling back to transcript count
+      (#110).
+- [x] Sets with more than 8 classes get a search box, and the all-classes
+      checkbox then acts on the matches. The Metadata tracks list shows
+      every track; past about 15 it had shown an empty gap (#112).
 
 ## Closed Open Items
 

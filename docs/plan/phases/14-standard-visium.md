@@ -94,6 +94,10 @@ have no `.h5`, so they could not be opened.
 - [x] Diagnostics check the two lists; JSON Schema and docs updated.
 - [x] Checked on GEO GSM10040779 (MI_CTL): 2,131 spots × 32,285 genes; the
       Nppa legend maximum (280) matches the raw file.
+- [x] The first GEO example, `examples/geo/GSM9080376.json` (#116): a
+      MEX-only sample, 871 spots × 36,601 genes over the high-res H&E. GEO
+      examples give the licence as "No restrictions (NCBI GEO)" and cite the
+      paper.
 
 ## Closed Open Items
 

@@ -309,6 +309,12 @@ Amendments made in later phases:
 - SpatialData requires consolidated metadata (`zarr.json` v3,
   `zmetadata`/`.zmetadata` v2), because the browser cannot list prefixes. OME-Zarr
   images use it when present.
+- **Stores without consolidated metadata (2026-11-14).** AnnData Zarr stores
+  and the store browser ([Phase 21](phases/21-structure-browser.md)) walk
+  from the root instead: children come from the host's listing where it
+  answers (S3 ListObjectsV2 or an index page,
+  `src/zarr/zarrFolderLister.ts`), else from the groups' encoding
+  attributes. Node names are percent-encoded before zarrita resolves them.
 - Non-range chunk reads go through a 256 MiB LRU per SpatialData store. Decoded
   OME-Zarr chunks share a separate 256 MiB cache.
 - Absent chunks read as fill values, so an interrupted upload loads silently with
