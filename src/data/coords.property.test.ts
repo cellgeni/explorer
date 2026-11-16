@@ -309,6 +309,27 @@ const tileCaseArb = tileScenarioArb.chain((scenario) => {
     }))
 })
 
+// The case's bbox moved outside the image so that it touches one edge.
+const touchingCaseArb = tileCaseArb.chain(({ scenario, bbox }) =>
+  fc.constantFrom('left', 'right', 'top', 'bottom').map((side) => {
+    const width = bbox.maxX - bbox.minX
+    const height = bbox.maxY - bbox.minY
+    const right = scenario.imageWidthMicrometers
+    const bottom = scenario.imageHeightMicrometers
+    const moved: BBox =
+      side === 'left'
+        ? { ...bbox, minX: micrometers(-width), maxX: micrometers(0) }
+        : side === 'right'
+          ? { ...bbox, minX: micrometers(right), maxX: micrometers(right + width) }
+          : side === 'top'
+            ? { ...bbox, minY: micrometers(-height), maxY: micrometers(0) }
+            : { ...bbox, minY: micrometers(bottom), maxY: micrometers(bottom + height) }
+
+    return { scenario, bbox: moved }
+  }),
+)
+
+// A bbox that only touches an edge of the image does not overlap it.
 function overlapsImage(bbox: BBox, scenario: TileScenario): boolean {
   return (
     bbox.maxX > 0 &&
@@ -412,20 +433,31 @@ describe('tilesForBbox and tileBounds (property)', () => {
     )
   })
 
-  // Fails today: the tile indices come from the bbox clamped to the tile grid,
-  // not to the image, so a bbox wholly outside the image still gets edge
-  // tiles whose tileBounds do not meet it:
-  // - left of or above the image (maxX < 0 or maxY < 0) gives column or row 0.
-  //   fast-check shrinks this to { minX: 0, maxX: 0, minY: -4.9e-319,
-  //   maxY: -4.9e-319 }, which gives [{ col: 0, row: 0 }].
-  // - past the right or bottom edge but inside the unused part of a partial
-  //   last tile gives that tile.
-  // With a 250 × 180 px level at 1 µm/px in 100 × 80 px tiles,
-  // { minX: -500, maxX: -100, minY: 0, maxY: 200 } gives column 0 of rows 0
-  // to 2, and { minX: 260, maxX: 280, minY: 0, maxY: 50 } gives
-  // { col: 2, row: 0 }, which tileBounds clips to x 200–250. The image loaders
-  // (tiff/loader.ts and zarr/omeZarrLoader.ts) compute tiles the same way.
-  it.todo('returns no tiles for a bbox that misses the image')
+  // Bboxes left of or above the image, past its right or bottom edge (over the
+  // unused part of a partial last tile), and zero-size ones on its top-left
+  // corner, which fast-check's edge values give often.
+  it('returns no tiles for a bbox that misses the image', () => {
+    fc.assert(
+      fc.property(
+        tileCaseArb.filter(({ bbox, scenario }) => !overlapsImage(bbox, scenario)),
+        ({ scenario, bbox }) => {
+          expect(
+            tilesForBbox(scenario.level, bbox, scenario.grid, scenario.units),
+          ).toEqual([])
+        },
+      ),
+    )
+  })
+
+  it('returns no tiles for a bbox that only touches an edge of the image', () => {
+    fc.assert(
+      fc.property(touchingCaseArb, ({ scenario, bbox }) => {
+        expect(tilesForBbox(scenario.level, bbox, scenario.grid, scenario.units)).toEqual(
+          [],
+        )
+      }),
+    )
+  })
 
   it('tiles a level without gaps or overlaps', () => {
     fc.assert(

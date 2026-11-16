@@ -58,3 +58,24 @@ Other gaps found in the review:
       [4.6](../decisions.md#46-data-source-abstraction--capability-based).
       Checking this found that dataset instances are never released, now an
       open item.
+
+Moved from [Open Items](../open-items.md) on 2026-11-16.
+
+Original-brief items with no outcome:
+
+- [x] `tilesForBbox` returned edge tiles for a bbox wholly outside the image
+      (fixed 2026-11-16). It clamped tile indices to the tile grid, not to the
+      image: on a 250 × 180 px level at 1 µm/px with 100 × 80 px tiles,
+      `{minX: -500, maxX: -100, minY: 0, maxY: 200}` gave column 0 of rows
+      0–2, and `{minX: 260, maxX: 280, minY: 0, maxY: 50}` gave
+      `{col: 2, row: 0}`, whose bounds stop at x 250. The TIFF and OME-Zarr
+      loaders had their own copies, so a view panned off the left or top of
+      an image requested that edge's tiles. Both loaders now call
+      `tilesForBboxOnAxes` in `coords.ts`, which `tilesForBbox` also uses.
+      A bbox that misses the image, only touches its edge, or only meets the
+      unused part of a partial last tile gets no tiles, and both examples now
+      give none. The `it.todo` in `coords.property.test.ts` is now two
+      properties, one for bboxes that miss the image and one for bboxes that
+      touch an edge. Example tests cover `coords.ts` and both loaders.
+      `coords.ts` now measures a level that has no full-resolution size from
+      its own pixels. Before, `tileBounds` measured it in level-0 pixels.

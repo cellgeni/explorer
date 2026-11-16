@@ -925,6 +925,45 @@ describe('TiffPyramidLoader', () => {
     ).toEqual([{ col: 0, row: 0 }])
     expect(loader.bestLevel(0.1)).toBe(3)
   })
+
+  it('selects no tiles for a bbox that misses the image', () => {
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/partial.ome.tif',
+      chunkIndex: new Map<string, TiffChunk>(),
+      levelMeta: new Map<number, TiffLevelMeta>([
+        [0, { width: imagePixels(250), height: imagePixels(180), nCols: 3, nRows: 3 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(80),
+      numLevels: 1,
+      imageWidth: imagePixels(250),
+      imageHeight: imagePixels(180),
+      origin: { x: 1000, y: 2000 },
+    })
+    const bbox = (minX: number, maxX: number, minY: number, maxY: number) => ({
+      minX: micrometers(minX),
+      maxX: micrometers(maxX),
+      minY: micrometers(minY),
+      maxY: micrometers(maxY),
+    })
+
+    // Left of and above the image.
+    expect(loader.tilesForBbox(0, bbox(500, 900, 2000, 2200))).toEqual([])
+    expect(loader.tilesForBbox(0, bbox(1000, 1100, 1500, 1900))).toEqual([])
+    // Past the right and bottom edges, over the unused part of the last tiles.
+    expect(loader.tilesForBbox(0, bbox(1260, 1280, 2000, 2050))).toEqual([])
+    expect(loader.tilesForBbox(0, bbox(1000, 1050, 2185, 2230))).toEqual([])
+    // Touching the left edge.
+    expect(loader.tilesForBbox(0, bbox(950, 1000, 2000, 2050))).toEqual([])
+    // Reaching onto the image from off its top-left and bottom-right corners.
+    expect(loader.tilesForBbox(0, bbox(500, 1010, 1500, 2010))).toEqual([
+      { col: 0, row: 0 },
+    ])
+    expect(loader.tilesForBbox(0, bbox(1240, 1500, 2170, 2500))).toEqual([
+      { col: 2, row: 2 },
+    ])
+  })
 })
 
 class MemoryByteRangeCache implements PersistentByteRangeCache {

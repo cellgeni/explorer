@@ -60,6 +60,20 @@ export interface TileIndex {
   readonly row: number
 }
 
+// One axis of a pyramid level's tile grid, placed in data micrometres.
+export interface TileAxis {
+  // Where the image starts on this axis.
+  readonly origin: number
+  // How far the image reaches from its origin. The unused part of a partial
+  // last tile lies past it.
+  readonly imageExtent: number
+  // This level's micrometres per pixel along the axis.
+  readonly micrometersPerPixel: number
+  // Pixels per tile along the axis.
+  readonly tileSize: number
+  readonly tileCount: number
+}
+
 export function micrometers(value: number): Micrometers {
   assertFiniteNumber(value, 'micrometers')
   return value as Micrometers
@@ -159,16 +173,13 @@ export function tileBounds(
   const right = (col + 1) * grid.tileWidth * levelScale
   const bottom = row * grid.tileHeight * levelScale
   const top = (row + 1) * grid.tileHeight * levelScale
-  const imageWidthMicrometers =
-    (grid.fullImageWidth ?? grid.imageWidth) * units.micrometersPerPixel
-  const imageHeightMicrometers =
-    (grid.fullImageHeight ?? grid.imageHeight) * units.micrometersPerPixel
+  const image = imageSizeMicrometers(level, grid, units)
 
   return {
     minX: micrometers(Math.max(0, left)),
-    maxX: micrometers(Math.min(imageWidthMicrometers, right)),
+    maxX: micrometers(Math.min(image.width, right)),
     minY: micrometers(Math.max(0, bottom)),
-    maxY: micrometers(Math.min(imageHeightMicrometers, top)),
+    maxY: micrometers(Math.min(image.height, top)),
   }
 }
 
@@ -179,34 +190,106 @@ export function tilesForBbox(
   units: UnitsDescriptor,
 ): readonly TileIndex[] {
   const levelScale = units.micrometersPerPixel * 2 ** level
-  const nCols = Math.ceil(grid.imageWidth / grid.tileWidth)
-  const nRows = Math.ceil(grid.imageHeight / grid.tileHeight)
-  const col0 = Math.max(
-    0,
-    Math.floor(Math.max(0, bbox.minX / levelScale) / grid.tileWidth),
-  )
-  const col1 = Math.min(
-    nCols - 1,
-    Math.floor(Math.max(0, bbox.maxX / levelScale - 1e-9) / grid.tileWidth),
-  )
-  const row0 = Math.max(
-    0,
-    Math.floor(Math.max(0, bbox.minY / levelScale) / grid.tileHeight),
-  )
-  const row1 = Math.min(
-    nRows - 1,
-    Math.floor(Math.max(0, bbox.maxY / levelScale - 1e-9) / grid.tileHeight),
-  )
+  const image = imageSizeMicrometers(level, grid, units)
 
+  return tilesForBboxOnAxes(
+    bbox,
+    {
+      origin: 0,
+      imageExtent: image.width,
+      micrometersPerPixel: levelScale,
+      tileSize: grid.tileWidth,
+      tileCount: Math.ceil(grid.imageWidth / grid.tileWidth),
+    },
+    {
+      origin: 0,
+      imageExtent: image.height,
+      micrometersPerPixel: levelScale,
+      tileSize: grid.tileHeight,
+      tileCount: Math.ceil(grid.imageHeight / grid.tileHeight),
+    },
+  )
+}
+
+// The tiles that a bbox meets on the image, row by row. A bbox that misses
+// the image, or only touches its edge, gets none, as does one that only meets
+// the unused part of a partial last tile. The image loaders call this with
+// their own level scales, tile counts and origins.
+export function tilesForBboxOnAxes(
+  bbox: BBox,
+  xAxis: TileAxis,
+  yAxis: TileAxis,
+): readonly TileIndex[] {
+  const cols = tileSpan(bbox.minX, bbox.maxX, xAxis)
+  const rows = tileSpan(bbox.minY, bbox.maxY, yAxis)
   const tiles: TileIndex[] = []
 
-  for (let row = row0; row <= row1; row += 1) {
-    for (let col = col0; col <= col1; col += 1) {
+  if (cols === null || rows === null) {
+    return tiles
+  }
+
+  for (let row = rows.first; row <= rows.last; row += 1) {
+    for (let col = cols.first; col <= cols.last; col += 1) {
       tiles.push({ col, row })
     }
   }
 
   return tiles
+}
+
+// The first and last tile along one axis that [min, max] meets on the image,
+// or null if it misses the image or only touches its edge. A span that ends
+// on an edge between two tiles does not reach the second, but a zero-length
+// span there still gets one tile.
+function tileSpan(
+  min: number,
+  max: number,
+  axis: TileAxis,
+): { readonly first: number; readonly last: number } | null {
+  if (axis.tileCount < 1) {
+    return null
+  }
+
+  const start = min - axis.origin
+  const end = max - axis.origin
+  // Where both the image and this level's tiles reach. A level whose size was
+  // rounded down can stop short of the image.
+  const extent = Math.min(
+    axis.imageExtent,
+    axis.tileCount * axis.tileSize * axis.micrometersPerPixel,
+  )
+
+  if (!(start <= end && end > 0 && start < extent)) {
+    return null
+  }
+
+  const lastTile = axis.tileCount - 1
+  const first = Math.min(
+    lastTile,
+    Math.floor(Math.max(0, start / axis.micrometersPerPixel) / axis.tileSize),
+  )
+  const last = Math.floor(
+    Math.max(0, Math.min(end, extent) / axis.micrometersPerPixel - 1e-9) / axis.tileSize,
+  )
+
+  return { first, last: Math.min(lastTile, Math.max(first, last)) }
+}
+
+// The full-resolution image size, or this level's size when the grid does not
+// give it.
+function imageSizeMicrometers(
+  level: number,
+  grid: TileGrid,
+  units: UnitsDescriptor,
+): { readonly width: number; readonly height: number } {
+  const levelScale = 2 ** level
+
+  return {
+    width:
+      (grid.fullImageWidth ?? grid.imageWidth * levelScale) * units.micrometersPerPixel,
+    height:
+      (grid.fullImageHeight ?? grid.imageHeight * levelScale) * units.micrometersPerPixel,
+  }
 }
 
 function assertFiniteNumber(value: number, label: string): void {
