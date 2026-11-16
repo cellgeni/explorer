@@ -23,7 +23,11 @@ import {
   geneScaleBounds,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
-import { collectionEntryLabel, type CollectionState } from './collectionModel'
+import {
+  collectionEntryLabel,
+  type CollectionState,
+  type CollectionView,
+} from './collectionModel'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
 import type { PreviewEntry } from './collectionPreviewStore'
@@ -68,6 +72,9 @@ interface CollectionBarProps {
   readonly pendingUrl: string | null
   readonly onSelect: (entry: DatasetCollectionEntry) => void
   readonly onClose: () => void
+  // Previews in a row, in a grid, or names only; kept in the link.
+  readonly view: CollectionView
+  readonly onViewChange: (view: CollectionView) => void
   // Without it, the bar lists names only.
   readonly previews?: CollectionBarPreviews
 }
@@ -84,6 +91,8 @@ export function CollectionBar({
   pendingUrl,
   onSelect,
   onClose,
+  view,
+  onViewChange,
   previews,
 }: CollectionBarProps) {
   const collection = state.status === 'ready' ? state.collection : null
@@ -91,10 +100,9 @@ export function CollectionBar({
     collection === null ? undefined : collectionEntryFor(collection, loadedUrl)
   const pendingEntry =
     collection === null ? undefined : collectionEntryFor(collection, pendingUrl)
-  const [showPreviews, setShowPreviews] = useState(true)
-  const [expandedState, setExpanded] = useState(false)
+  const showPreviews = view !== 'names'
   const previewsShown = previews !== undefined && showPreviews
-  const expanded = expandedState && previewsShown && collection !== null
+  const expanded = view === 'grid' && previewsShown && collection !== null
   const store = useCollectionPreviews({
     collection: previewsShown ? collection : null,
     loaders: previews?.loaders ?? NO_LOADERS,
@@ -158,7 +166,7 @@ export function CollectionBar({
       onKeyDown={(event) => {
         if (expanded && event.key === 'Escape') {
           event.stopPropagation()
-          setExpanded(false)
+          onViewChange('row')
         }
       }}
     >
@@ -181,7 +189,7 @@ export function CollectionBar({
                 disabled={!previewsShown}
                 icon={expanded ? <CollapseIcon /> : <ExpandIcon />}
                 onClick={() => {
-                  setExpanded((current) => !current)
+                  onViewChange(expanded ? 'row' : 'grid')
                 }}
               />
               <IconButton
@@ -195,7 +203,7 @@ export function CollectionBar({
                 aria-pressed={showPreviews}
                 icon={<ImageIcon />}
                 onClick={() => {
-                  setShowPreviews((current) => !current)
+                  onViewChange(showPreviews ? 'names' : 'row')
                 }}
               />
             </span>
@@ -312,7 +320,7 @@ export function CollectionBar({
                     data-preview-url={store === null ? undefined : entry.url}
                     onClick={() => {
                       if (!isLoaded && !isPending) onSelect(entry)
-                      setExpanded(false)
+                      if (view === 'grid') onViewChange('row')
                     }}
                   >
                     {store === null || previews === undefined ? (

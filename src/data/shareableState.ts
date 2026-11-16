@@ -15,6 +15,9 @@ export interface ShareableState {
   readonly linkVersion?: number
   // The dataset collection the dataset was opened from: `collection=`.
   readonly collectionUrl?: string
+  // How the collection bar shows its datasets when not in a row:
+  // `collectionView=grid` (expanded) or `names` (previews off).
+  readonly collectionView?: string
   readonly datasetUrl?: string
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
@@ -103,6 +106,7 @@ export function parseShareableState(hash: string): ShareableState {
   const state: MutableShareableState = {}
   const linkVersion = parsePositiveInteger(params.get('xv'))
   const collectionUrl = readString(params, 'collection')
+  const collectionView = readString(params, 'collectionView')
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readCsv(params, 'groups')
@@ -165,6 +169,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (collectionUrl !== undefined) {
     state.collectionUrl = collectionUrl
+  }
+
+  if (collectionView !== undefined) {
+    state.collectionView = collectionView
   }
 
   if (datasetUrl !== undefined) {
@@ -394,6 +402,8 @@ export function formatShareableState(state: ShareableState): string {
   if (state.collectionUrl !== undefined && state.collectionUrl.trim() !== '') {
     params.set('collection', state.collectionUrl.trim())
   }
+
+  setOptionalString(params, 'collectionView', state.collectionView)
 
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())

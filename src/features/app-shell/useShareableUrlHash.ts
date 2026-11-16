@@ -17,6 +17,8 @@ interface ShareableDatasetHashOptions {
   readonly customImageUrls: readonly string[]
   // The open dataset collection (collection=), if any.
   readonly collectionUrl?: string | undefined
+  // How its bar shows the datasets, when not in a row (collectionView=).
+  readonly collectionView?: string | undefined
   readonly datasetUrl: string
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
@@ -141,6 +143,7 @@ export function useShareableUrlHash({
     annotationGroupIds,
     annotationUrl,
     collectionUrl,
+    collectionView,
     customImageOpacities,
     customImageUrls,
     datasetDefaults,
@@ -229,6 +232,7 @@ export function useShareableUrlHash({
       withoutShareableDefaults(
         {
           ...(collectionUrl === undefined ? {} : { collectionUrl }),
+          ...(collectionView === undefined ? {} : { collectionView }),
           datasetUrl,
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
@@ -321,6 +325,7 @@ export function useShareableUrlHash({
     tool,
     annotationUrl,
     collectionUrl,
+    collectionView,
     boundaryCellLimit,
     cellMetadataTrackId,
     coordinateUnit,

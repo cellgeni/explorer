@@ -154,6 +154,22 @@ describe('shareableState', () => {
     })
   })
 
+  it("round-trips the collection bar's view after the collection", () => {
+    const hash = formatShareableState({
+      collectionUrl: 'https://example.test/c.json',
+      collectionView: 'grid',
+    })
+
+    expect(hash).toBe(
+      '#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&collectionView=grid',
+    )
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      collectionUrl: 'https://example.test/c.json',
+      collectionView: 'grid',
+    })
+  })
+
   it('round-trips the MERSCOPE stain and plane', () => {
     const hash = formatShareableState({ merscopeImage: 'Cellbound1_z3' })
 

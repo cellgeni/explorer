@@ -7,10 +7,12 @@ import {
   waitFor,
   within,
 } from '@testing-library/react'
+import { useState, type ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import { CollectionBar, type CollectionBarPreviews } from './CollectionBar'
+import type { CollectionView } from './collectionModel'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { useDatasetCollection } from './useDatasetCollection'
 
@@ -33,11 +35,32 @@ const SHAM_A = 'https://example.test/injury/sham-a.zarr'
 const SHAM_B = 'https://example.test/injury/sham-b.zarr'
 const DPI_A = 'https://example.test/injury/1dpi-a.zarr'
 
+type BarProps = Omit<ComponentProps<typeof CollectionBar>, 'view' | 'onViewChange'> & {
+  readonly initialView?: CollectionView
+  readonly onViewChange?: (view: CollectionView) => void
+}
+
+// The bar with its view in state, as App keeps it.
+function Bar({ initialView = 'row', onViewChange, ...props }: BarProps) {
+  const [view, setView] = useState(initialView)
+
+  return (
+    <CollectionBar
+      {...props}
+      view={view}
+      onViewChange={(next) => {
+        setView(next)
+        onViewChange?.(next)
+      }}
+    />
+  )
+}
+
 describe('CollectionBar', () => {
   it('lists the datasets by group and marks the open and loading ones', () => {
     const onSelect = vi.fn()
     render(
-      <CollectionBar
+      <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
         loadedUrl={SHAM_A}
         pendingUrl={DPI_A}
@@ -77,7 +100,7 @@ describe('CollectionBar', () => {
   it('says when the collection is being read or cannot be opened', () => {
     const onClose = vi.fn()
     const { rerender } = render(
-      <CollectionBar
+      <Bar
         state={{ status: 'loading', url: COLLECTION_URL }}
         loadedUrl={null}
         pendingUrl={null}
@@ -90,7 +113,7 @@ describe('CollectionBar', () => {
     expect(screen.getByText('collection.json')).toBeTruthy()
 
     rerender(
-      <CollectionBar
+      <Bar
         state={{
           status: 'error',
           url: COLLECTION_URL,
@@ -169,7 +192,7 @@ describe('CollectionBar previews', () => {
 
   function renderBar(previews: CollectionBarPreviews) {
     return render(
-      <CollectionBar
+      <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
         loadedUrl={SHAM_A}
         pendingUrl={null}
@@ -244,13 +267,15 @@ describe('CollectionBar previews', () => {
 
   it('expands into a grid over the view until a dataset is chosen', async () => {
     const onSelect = vi.fn()
+    const onViewChange = vi.fn()
     render(
-      <CollectionBar
+      <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
         loadedUrl={SHAM_A}
         pendingUrl={null}
         onSelect={onSelect}
         onClose={vi.fn()}
+        onViewChange={onViewChange}
         previews={{
           loaders: previewLoaders(),
           genes: ['Aqp4'],
@@ -290,6 +315,79 @@ describe('CollectionBar previews', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
     expect(bar).not.toHaveClass('is-expanded')
     expect(within(bar).getByRole('button', { name: 'Expand' })).toBeDisabled()
+
+    // Each change is reported, for the link.
+    expect(onViewChange.mock.calls.map(([view]) => view)).toEqual([
+      'grid',
+      'row',
+      'grid',
+      'row',
+      'grid',
+      'names',
+    ])
+
+    // Turned back on, the previews return to the row.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
+    expect(onViewChange).toHaveBeenLastCalledWith('row')
+    expect(bar).not.toHaveClass('is-expanded')
+  })
+
+  it("opens in the link's view", async () => {
+    const onSelect = vi.fn()
+    const onViewChange = vi.fn()
+    const previews: CollectionBarPreviews = {
+      loaders: previewLoaders(),
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      colorScale: 'plasma',
+      annotations: null,
+      paused: false,
+    }
+    const { unmount } = render(
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        initialView="grid"
+        previews={previews}
+      />,
+    )
+    const grid = screen.getByRole('navigation', { name: 'Collection' })
+    expect(grid).toHaveClass('is-expanded')
+    expect(within(grid).getByRole('button', { name: 'Collapse' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
+    expect(await within(grid).findByText('max 8')).toBeInTheDocument()
+    unmount()
+
+    render(
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={onSelect}
+        onClose={vi.fn()}
+        initialView="names"
+        onViewChange={onViewChange}
+        previews={previews}
+      />,
+    )
+    const names = screen.getByRole('navigation', { name: 'Collection' })
+    expect(within(names).getByRole('button', { name: 'Previews' })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    expect(within(names).getByRole('button', { name: 'Expand' })).toBeDisabled()
+    expect(names.querySelector('canvas')).toBe(null)
+
+    // Choosing a dataset keeps the names.
+    fireEvent.click(within(names).getByRole('button', { name: 'Sham B' }))
+    expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ url: SHAM_B }))
+    expect(onViewChange).not.toHaveBeenCalled()
+    expect(names.querySelector('canvas')).toBe(null)
   })
 
   it('previews the classes of an annotation set, counting the shown ones', async () => {
@@ -336,7 +434,7 @@ describe('CollectionBar previews', () => {
     expect(loaders.detectSpatialDataset).not.toHaveBeenCalled()
 
     rerender(
-      <CollectionBar
+      <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
         loadedUrl={SHAM_A}
         pendingUrl={null}
