@@ -1,4 +1,5 @@
-import type { GeneValues } from '../../data/geneValues'
+import { xeniumCellIdText } from '../../data/cellid'
+import type { GeneValues, GeneValuesRowIds } from '../../data/geneValues'
 
 // The numbers behind the plots (plan 22-B, 22-C), computed where the gene
 // values are: in the plot worker, or on this thread without one. Groups are
@@ -84,13 +85,25 @@ export class PlotStatsStore {
 
   // The dataset's matrix rows by cell ID. Another dataset drops the groups
   // and the genes.
-  setRows(rowIds: readonly string[]): void {
+  setRows(rowIds: GeneValuesRowIds): void {
     const rowById = new Map<string, number>()
-    rowIds.forEach((id, row) => {
+    const rowCount = 'kind' in rowIds ? rowIds.count : rowIds.length
+    const idAt =
+      'kind' in rowIds
+        ? (row: number) =>
+            xeniumCellIdText(
+              rowIds.pairs[row * rowIds.stride] ?? 0,
+              rowIds.pairs[row * rowIds.stride + 1] ?? 0,
+            )
+        : (row: number) => rowIds[row] ?? ''
+
+    for (let row = 0; row < rowCount; row += 1) {
+      const id = idAt(row)
       if (!rowById.has(id)) rowById.set(id, row)
-    })
+    }
+
     this.rowById = rowById
-    this.rowCount = rowIds.length
+    this.rowCount = rowCount
     this.groups = null
     this.genes.clear()
     this.geneBytes = 0

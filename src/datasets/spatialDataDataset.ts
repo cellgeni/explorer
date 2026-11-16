@@ -6,6 +6,11 @@ import {
   type UnitsDescriptor,
 } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
+import type {
+  GeneValuesRead,
+  GeneValuesReadEstimate,
+  GeneValuesRowIds,
+} from '../data/geneValues'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import type {
   ContinuousCellMetadataTrack,
@@ -420,6 +425,35 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return table === null
       ? { elements: [], genes, maxCount: 0 }
       : table.geneExpression(bbox, genes, options)
+  }
+
+  // The Plots panel reads the table's matrix (plan 22-A).
+  async geneValuesRowIds(): Promise<GeneValuesRowIds> {
+    return (await this.tableOrNull())?.geneValuesRowIds() ?? []
+  }
+
+  async estimateGeneValuesRead(
+    genes: readonly string[],
+  ): Promise<GeneValuesReadEstimate> {
+    const table = await this.tableOrNull()
+
+    return table === null
+      ? {
+          kind: 'unavailable',
+          reason: 'Plots read the expression matrix of a table, and this store has none.',
+        }
+      : table.estimateGeneValuesRead(genes)
+  }
+
+  async geneValues(
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly GeneValuesRead[]> {
+    const table = await this.tableOrNull()
+
+    return table === null
+      ? genes.map((gene) => ({ gene, error: 'This store has no table.' }))
+      : table.geneValues(genes, options)
   }
 
   async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {

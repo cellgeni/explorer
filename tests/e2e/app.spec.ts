@@ -1473,6 +1473,32 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
   await expect(page.getByRole('region', { name: 'Cell', exact: true })).toHaveCount(0)
 })
 
+// Plan 22, M2: the Plots panel reads SNAP25 in every cell of the demo from
+// cell_feature_matrix.zarr.zip and groups it by the graph clusters. The time
+// to the first plot goes into the report.
+test('plots SNAP25 by the Xenium graph clusters @live', async ({ page }, testInfo) => {
+  test.setTimeout(300_000)
+  const startedAt = Date.now()
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&groups=analysis:0&genes=SNAP25&panel=plots`,
+  )
+  const plots = page.getByRole('region', { name: 'Plots' })
+  await expect(
+    plots.getByRole('img', { name: /^Dot plot of SNAP25 across [1-9][0-9]* groups/ }),
+  ).toBeVisible({ timeout: XENIUM_LOAD_TIMEOUT_MS })
+  testInfo.annotations.push({
+    type: 'Time to first plot',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
+
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+  await expect(plots.getByRole('row', { name: /^Cluster 1 SNAP25/ })).toContainText(
+    /SNAP25[1-9][0-9,]*[0-9.]+%/,
+  )
+  await expectLogEntry(page, /Plots: read 1 gene \(about [0-9.]+ MiB\) in /)
+})
+
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({
   page,
 }) => {

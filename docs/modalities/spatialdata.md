@@ -170,6 +170,12 @@ table annotates regions in the chosen coordinate system:
 - Without region elements in the chosen system, the H5AD `obsm` key order is
   used.
 
+The Plots panel reads the table's `X` as for [AnnData over HTTP](./h5ad.md#feature-read-paths).
+A store without a table says Plots have nothing to read. The Visium example's
+CSR table (4,992 spots, 29.7 million stored values) is 227 MiB of values and
+indices, so the panel asks before reading it; it downloads 16 MB and plots in
+about 7 s.
+
 ## Shapes
 
 `readSpatialDataShapes` reads the whole `shapes.parquet` with

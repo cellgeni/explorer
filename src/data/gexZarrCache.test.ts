@@ -98,6 +98,43 @@ describe('Zarr cell feature matrix cache', () => {
     ).toHaveLength(1)
   })
 
+  it('reads each gene in every cell for the Plots panel (plan 22-A)', async () => {
+    const cellIdPairs = new Uint32Array([1, 1, 2, 1, 3, 1])
+    setupZarrMatrixMock({
+      cellIdPairs,
+      indptr: new Uint32Array([0, 1, 2, 3]),
+      featureIndptr: new Uint32Array([0, 2, 3]),
+      featureIndices: new Uint32Array([0, 2, 1]),
+      featureData: new Uint32Array([4, 6, 9]),
+    })
+    const gex = await import('./gex')
+    const url = 'https://example.test/xenium/plots/cell_feature_matrix.zarr.zip'
+
+    await expect(gex.cellFeatureMatrixRowIds(url)).resolves.toEqual({
+      kind: 'xenium',
+      pairs: cellIdPairs,
+      stride: 2,
+      count: 3,
+    })
+    // Gad1's one cell: a 4-byte row and a 4-byte count. Names match in any case.
+    await expect(
+      gex.estimateCellFeatureMatrixGeneValues(url, ['gad1', 'Nope']),
+    ).resolves.toEqual({ kind: 'read', bytes: 8, detail: expect.any(String) })
+    await expect(
+      gex.geneValuesFromCellFeatureMatrixZarr(url, ['Gad1', 'Nope', 'actb']),
+    ).resolves.toEqual([
+      { gene: 'Gad1', rows: new Uint32Array([1]), values: new Float32Array([9]) },
+      { gene: 'Nope', error: 'Nope is not a gene in the expression matrix.' },
+      { gene: 'actb', rows: new Uint32Array([0, 2]), values: new Float32Array([4, 6]) },
+    ])
+    // The feature pointers are read once.
+    expect(
+      zarrMock.get.mock.calls.filter(
+        ([target]) => target.path === 'cell_features/indptr',
+      ),
+    ).toHaveLength(1)
+  })
+
   it('returns no selected-gene rows without feature-major arrays', async () => {
     setupZarrMatrixMock({
       cellIdPairs: new Uint32Array([1, 1]),

@@ -221,6 +221,13 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
   kept for secondary analysis) is a 0/1 track.
 - `obsm/X_umap` and `obsm/X_pca` are embeddings.
 
+### Plots Panel
+
+`geneValues(genes)` reads each gene's column of the CSC matrix, four at a
+time, through the same 64-gene cache as the expression overlay. Rows are the
+matrix's, which the CSC shares. On the kidney run, three genes by
+`azimuth_coarse` (47 classes) plot in 2.3 s from opening the panel.
+
 ### Selected Cell And ROI
 
 - Cell profile: one CSR row of `cell_feature_matrix.zarr.zip`.

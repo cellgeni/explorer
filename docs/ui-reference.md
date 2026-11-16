@@ -678,6 +678,7 @@ Embedding panel's does.
 | `Colour`              | `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                               |
 | `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and mean. It is also the plot's text alternative                                                                                        |
 | `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                    |
+| `Read`                | Shown when a read is over 32 MiB: reads the genes. Its title gives the size                                                                                                                                    |
 | `Export SVG`          | The dot plot as `{dataset}-dot-plot-{set}.svg`, drawn from the same model with its colours and font written out, so it looks the same outside the app                                                          |
 | `Export CSV`          | One row per group and gene: set, group, group kind, gene, cells, cells expressing, % expressing, mean and mean log1p                                                                                           |
 
@@ -715,13 +716,37 @@ Method:
   rankings between groups ([Phase 15](plan/phases/15-interface-redesign.md)'s
   non-goal).
 
-The panel reads the expression matrix the dataset holds in memory after
-load: standard Visium, MERSCOPE, and `.h5ad` files read whole (up to
-300 MiB). For Xenium, Atera, SpatialData, and AnnData read over HTTP
-(references, Icechunk, AnnData Zarr) it says the panel is not available yet;
-those come in a later milestone. Gene values are kept in the panel's worker,
-up to 128 MiB, so changing `Group by`, `Scale` or `Colour` reads nothing
-again; a new gene is read once.
+Where the values come from:
+
+- Standard Visium, MERSCOPE, and `.h5ad` files read whole (up to 300 MiB):
+  the matrix in memory, so the panel reads nothing more.
+- Xenium: each gene's slice of the feature-major `cell_features` in
+  `cell_feature_matrix.zarr.zip`. A Xenium output without that file fails
+  with a message naming it.
+- Atera: each gene's column of the CSC matrix, the columns the expression
+  overlay reads.
+- AnnData read over HTTP (references, Icechunk, AnnData Zarr) and
+  SpatialData tables: a CSC `X` reads each gene's column; a dense `X` reads
+  every chunk that holds the gene; a CSR `X` reads all of `X` in batches of
+  rows, whichever genes are asked for.
+
+Before reading, the panel works out the size of the values and indices the
+read decodes (plan 22-D7). The download is often much smaller: the CSR table
+of the SpatialData Visium example is 227 MiB of values but 16 MB to
+download.
+
+- Up to 32 MiB, it reads at once.
+- From 32 to 256 MiB, it says the size and why ("The matrix is stored by cell
+  (CSR), so any gene reads all of it."), and waits for `Read`. A later read
+  no larger than one read with `Read` starts at once, so adding genes to a
+  CSR matrix asks once.
+- Over 256 MiB, the cell profile budget for dense Zarr, it says the size and
+  why, and reads nothing. Genes already plotted stay.
+
+Gene values are kept in the panel's worker, up to 128 MiB, so changing
+`Group by`, `Scale` or `Colour` reads nothing again; a new gene is read once.
+Xenium's 1.4 million row IDs go to the worker as the integers the matrix
+stores and are made text there, off the page's thread.
 
 ## Canvas
 
@@ -1112,7 +1137,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
 | Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
 | Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
-| Plots panel                                    | Not yet                 | Not yet          | ✓             | —                 | ✓                | Files read whole | Not yet          | —                |
+| Plots panel                                    | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
 | Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
 | SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
 | Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |

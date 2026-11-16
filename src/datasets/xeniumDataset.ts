@@ -40,6 +40,11 @@ import type {
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { DatasetRangeValidator } from '../data/datasetOverview'
 import type {
+  GeneValuesRead,
+  GeneValuesReadEstimate,
+  GeneValuesRowIds,
+} from '../data/geneValues'
+import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
@@ -66,6 +71,17 @@ type TranscriptReader = (
   minQv?: number,
 ) => Promise<GexResult>
 
+// The Plots panel's reads of cell_feature_matrix.zarr.zip (plan 22-A).
+export interface XeniumGeneValuesReader {
+  rowIds(url: string): Promise<GeneValuesRowIds>
+  estimate(url: string, genes: readonly string[]): Promise<GeneValuesReadEstimate>
+  values(
+    url: string,
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal },
+  ): Promise<readonly GeneValuesRead[]>
+}
+
 export interface XeniumDatasetOptions {
   readonly baseUrl: string
   readonly fetcher?: typeof fetch
@@ -78,6 +94,7 @@ export interface XeniumDatasetOptions {
   // matrix for every cell in the box.
   readonly selectedGeneRowsReader?: XeniumSelectedGeneRowsReader | null
   readonly transcriptReader?: TranscriptReader
+  readonly geneValuesReader?: XeniumGeneValuesReader
   readonly overviewReader?: (
     url: string,
     limit?: number,
@@ -220,6 +237,18 @@ const selectedGeneRowsFromCellFeatureMatrixZarrLazy: XeniumSelectedGeneRowsReade
     return selectedGeneRowsFromCellFeatureMatrixZarr(url, genes, options)
   }
 
+const geneValuesReaderLazy: XeniumGeneValuesReader = {
+  rowIds: async (url) => (await import('../data/gex')).cellFeatureMatrixRowIds(url),
+  estimate: async (url, genes) =>
+    (await import('../data/gex')).estimateCellFeatureMatrixGeneValues(url, genes),
+  values: async (url, genes, options) =>
+    (await import('../data/gex')).geneValuesFromCellFeatureMatrixZarr(
+      url,
+      genes,
+      options,
+    ),
+}
+
 const gexFromTranscriptsParquetLazy: TranscriptReader = async (
   conn,
   url,
@@ -241,6 +270,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   private readonly geneExpressionMatrixReader: GeneExpressionMatrixReader
   private readonly selectedGeneRowsReader: XeniumSelectedGeneRowsReader | null
   private readonly transcriptReader: TranscriptReader
+  private readonly geneValuesReader: XeniumGeneValuesReader
   private readonly overviewReader: (
     url: string,
     limit?: number,
@@ -276,6 +306,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
           ? selectedGeneRowsFromCellFeatureMatrixZarrLazy
           : null
     this.transcriptReader = options.transcriptReader ?? gexFromTranscriptsParquetLazy
+    this.geneValuesReader = options.geneValuesReader ?? geneValuesReaderLazy
     this.validateRangeSupport = options.validateRangeSupport ?? assertHttpRangeSupport
     this.overviewReader =
       options.overviewReader ??
@@ -488,6 +519,32 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     })
   }
 
+  // The Plots panel reads each gene's slice of the feature-major matrix in
+  // cell_feature_matrix.zarr.zip (plan 22-A). Without that file, the panel
+  // says why.
+  async geneValuesRowIds(): Promise<GeneValuesRowIds> {
+    return this.readGeneValues(() =>
+      this.geneValuesReader.rowIds(this.urlFor('cellFeatureMatrix')),
+    )
+  }
+
+  async estimateGeneValuesRead(
+    genes: readonly string[],
+  ): Promise<GeneValuesReadEstimate> {
+    return this.readGeneValues(() =>
+      this.geneValuesReader.estimate(this.urlFor('cellFeatureMatrix'), genes),
+    )
+  }
+
+  async geneValues(
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly GeneValuesRead[]> {
+    return this.readGeneValues(() =>
+      this.geneValuesReader.values(this.urlFor('cellFeatureMatrix'), genes, options),
+    )
+  }
+
   annotations(
     options: AnalysisAnnotationQueryOptions = {},
   ): Promise<readonly Annotation[]> {
@@ -584,6 +641,21 @@ export class XeniumDataset implements SpatialDataset<CellId> {
 
   private urlFor(role: DatasetFileRole): string {
     return datasetFileUrlFor(this.baseUrl, role)
+  }
+
+  // Names the file in a failed read, as the panel shows it.
+  private async readGeneValues<Result>(read: () => Promise<Result>): Promise<Result> {
+    try {
+      return await read()
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
+
+      const message = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `${datasetFileLabelFor(this.baseUrl, 'cellFeatureMatrix')} could not be read: ${message}`,
+        { cause: error },
+      )
+    }
   }
 }
 

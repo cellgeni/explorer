@@ -19,6 +19,11 @@ import type {
   LoadDatasetAnnotationsOptions,
 } from '../data/datasetAnnotations'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
+import {
+  columnSlicesReadBytes,
+  type GeneValuesRead,
+  type GeneValuesReadEstimate,
+} from '../data/geneValues'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { FallbackNotifier } from '../data/fallbackNotice'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
@@ -55,6 +60,7 @@ import {
 } from './ateraTranscripts'
 import {
   AnnDataH5adDataset,
+  zarrDataTypeByteSize,
   type AnnDataObsAccess,
   type H5adLoadProgressReporter,
 } from './h5adDataset'
@@ -152,6 +158,8 @@ const TABLE_TOP_LEVEL_GROUPS = new Set(['X', 'obs', 'obsm'])
 const HIDDEN_METADATA_COLUMNS = new Set(['cell_id', 'centroid_column', 'centroid_row'])
 const METADATA_FETCH_CONCURRENCY = 16
 const GENE_COLUMN_CACHE_LIMIT = 64
+// Gene columns the Plots panel reads at once.
+const GENE_VALUES_CONCURRENCY = 4
 const POLYGON_TILE_CACHE_LIMIT = 256
 const POLYGON_SET_INDEX: Readonly<Record<AteraSegmentationKind, number>> = {
   nucleus: 0,
@@ -353,6 +361,70 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     }
 
     return { elements, genes, maxCount }
+  }
+
+  // The Plots panel's rows are the matrix's, which the CSC matrix shares
+  // (plan 22-A).
+  async geneValuesRowIds(): Promise<readonly string[]> {
+    return (await this.table()).table.cellIds()
+  }
+
+  // Each gene is one column of the CSC matrix.
+  async estimateGeneValuesRead(
+    genes: readonly string[],
+  ): Promise<GeneValuesReadEstimate> {
+    const [{ columnByName, featureNames }, csc] = await Promise.all([
+      this.genes(),
+      this.csc(),
+    ])
+    const cols = genes.flatMap((gene) => {
+      const column = columnByName.get(gene)
+      return column === undefined ? [] : [column]
+    })
+
+    return {
+      kind: 'read',
+      bytes: columnSlicesReadBytes(
+        { indptr: csc.indptr, cols: featureNames.length },
+        cols,
+        zarrDataTypeByteSize(csc.indices.dtype) + zarrDataTypeByteSize(csc.data.dtype),
+      ),
+      detail: 'The matrix is stored by gene, so each gene is one slice.',
+    }
+  }
+
+  // Each gene's value in every cell, from the columns the expression
+  // overlay caches.
+  async geneValues(
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly GeneValuesRead[]> {
+    const { columnByName } = await this.genes()
+
+    return mapWithConcurrency(genes, GENE_VALUES_CONCURRENCY, async (gene) => {
+      throwIfAborted(options.signal)
+
+      if (!columnByName.has(gene)) {
+        return { gene, error: `${gene} is not in the expression matrix.` }
+      }
+
+      const column = await this.geneColumn(gene)
+      throwIfAborted(options.signal)
+      let stored = 0
+      for (const count of column.counts) if (count !== 0) stored += 1
+      const rows = new Uint32Array(stored)
+      const values = new Float32Array(stored)
+      let cursor = 0
+
+      column.counts.forEach((count, index) => {
+        if (count === 0) return
+        rows[cursor] = column.rows[index] ?? 0
+        values[cursor] = count
+        cursor += 1
+      })
+
+      return { gene, rows, values }
+    })
   }
 
   async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {

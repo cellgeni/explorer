@@ -164,6 +164,15 @@ function PlotsFooter({ plots }: { readonly plots: PlotsModel }) {
         </ul>
       )}
       <div className="plots-actions">
+        {plots.confirmReadTitle === null ? null : (
+          <Button
+            variant="primary"
+            title={plots.confirmReadTitle}
+            onClick={plots.onConfirmRead}
+          >
+            Read
+          </Button>
+        )}
         {plots.reading ? (
           <Button title="Stop reading the selected genes" onClick={plots.onCancel}>
             Cancel

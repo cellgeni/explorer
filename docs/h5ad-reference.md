@@ -365,13 +365,13 @@ user. A reference turns that into a one-off step.
 
 ### Choosing CSR Or CSC
 
-| `/X` | Colour by a gene                                   | Selected-cell profile and ROI gene stats |
-| ---- | -------------------------------------------------- | ---------------------------------------- |
-| CSR  | Reads every cell in view; all of `/X` at full view | Yes                                      |
-| CSC  | Reads one column per gene                          | No                                       |
+| `/X` | Colour by a gene                                   | Selected-cell profile and ROI gene stats | Plots panel                                                                               |
+| ---- | -------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
+| CSR  | Reads every cell in view; all of `/X` at full view | Yes                                      | Reads all of `/X`: asks first over 32 MiB of values and indices, and refuses over 256 MiB |
+| CSC  | Reads one column per gene                          | No                                       | Reads one column per gene                                                                 |
 
-For files where colouring by genes is the main use, CSC is much faster over a
-reference. To convert, before writing:
+For files where colouring by genes or plotting them is the main use, CSC is
+much faster over a reference. To convert, before writing:
 
 ```python
 adata.X = adata.X.tocsc()

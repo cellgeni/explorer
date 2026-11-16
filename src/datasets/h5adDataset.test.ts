@@ -1,6 +1,7 @@
 import type { Group as H5wasmGroup } from 'h5wasm'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
+import type { GeneValuesRead } from '../data/geneValues'
 import {
   ICECHUNK_FIXTURE_ORIGIN,
   icechunkFixtureFetcher,
@@ -1337,7 +1338,7 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
         fetcher: h5adFetcher(await createTinyH5ad(matrixKind)),
       })
 
-      await expect(dataset.estimateGeneValuesRead()).resolves.toEqual({
+      await expect(dataset.estimateGeneValuesRead(['Gapdh'])).resolves.toEqual({
         kind: 'read',
         bytes: 0,
       })
@@ -1377,16 +1378,149 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
     },
   )
 
-  it('says a matrix read over HTTP cannot be plotted yet', async () => {
+  // Each gene's (row, value) pairs, sorted by row, or its error.
+  function sortedReads(reads: readonly GeneValuesRead[]) {
+    return reads.map((read) =>
+      'error' in read
+        ? read.error
+        : [...read.rows]
+            .map((row, index) => [row, read.values[index]])
+            .sort((left, right) => (left[0] ?? 0) - (right[0] ?? 0)),
+    )
+  }
+
+  // The tiny matrix, oversized so it opens through its kerchunk reference,
+  // with the Range header of each read.
+  function referenceDataset(
+    matrixKind: MatrixKind,
+    denseChunking?: TinyDenseChunking,
+  ): { readonly dataset: AnnDataH5adDataset; readonly rangeRequests: string[] } {
+    if (matrixKind === 'dense') return denseReferenceDataset(denseChunking)
+
+    const chunks = new RemoteH5adReferenceChunks()
+    const spec = createTinyH5adReferenceSpec((value) => chunks.ref(value), matrixKind)
+    const fetcher = h5adRemoteReferenceFetcher(
+      350 * 1024 * 1024,
+      spec,
+      chunks.bytes(),
+      () => {
+        throw new Error('body should not be read')
+      },
+    )
+    const rangeRequests: string[] = []
     const dataset = new AnnDataH5adDataset({
-      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      url: `https://example.test/reference-${matrixKind}.h5ad`,
+      fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const range = request.headers.get('Range')
+        if (range !== null) rangeRequests.push(range)
+        return fetcher(request)
+      }) as typeof fetch,
+    })
+
+    return { dataset, rangeRequests }
+  }
+
+  // Gad1 alone: all of a CSR matrix's 8 values and indices at 4 bytes each,
+  // its own 2 under CSC, and the dense chunks that hold its column.
+  it.each([
+    { name: 'CSR', matrixKind: 'csr', gad1Bytes: 64, detail: /stored by cell/ },
+    { name: 'CSC', matrixKind: 'csc', gad1Bytes: 16, detail: /stored by gene/ },
+    {
+      name: 'dense in 2 × 3 chunks',
+      matrixKind: 'dense',
+      chunking: { chunks: [2, 3] },
+      gad1Bytes: 48,
+      detail: /chunks of 2 cells by 3 genes/,
+    },
+    {
+      name: 'dense in column-major 2 × 2 chunks',
+      matrixKind: 'dense',
+      chunking: { chunks: [2, 2], order: 'F' },
+      gad1Bytes: 32,
+      detail: /dense/,
+    },
+    {
+      name: 'dense in 3 × 2 chunks, padded past the last cell',
+      matrixKind: 'dense',
+      chunking: { chunks: [3, 2] },
+      gad1Bytes: 48,
+      detail: /dense/,
+    },
+    {
+      name: 'dense chunked by gene',
+      matrixKind: 'dense',
+      chunking: { chunks: [4, 1] },
+      gad1Bytes: 16,
+      detail: /dense/,
+    },
+  ] satisfies readonly {
+    name: string
+    matrixKind: MatrixKind
+    chunking?: TinyDenseChunking
+    gad1Bytes: number
+    detail: RegExp
+  }[])(
+    'reads every cell of each gene from a $name matrix over HTTP',
+    async ({ matrixKind, chunking, gad1Bytes, detail }) => {
+      const { dataset, rangeRequests } = referenceDataset(matrixKind, chunking)
+
+      await expect(dataset.estimateGeneValuesRead(['Gad1'])).resolves.toEqual({
+        kind: 'read',
+        bytes: gad1Bytes,
+        detail: expect.stringMatching(detail),
+      })
+      // Estimates read nothing.
+      rangeRequests.length = 0
+      await dataset.estimateGeneValuesRead(['Actb', 'Gapdh'])
+      expect(rangeRequests).toEqual([])
+
+      const reads = await dataset.geneValues(['Gapdh', 'Actb', 'Nope', 'Gad1'])
+
+      expect(sortedReads(reads)).toEqual([
+        expected.Gapdh,
+        expected.Actb,
+        'Nope is not in the expression matrix.',
+        expected.Gad1,
+      ])
+    },
+  )
+
+  it('reads only the chunks that hold the genes from a dense matrix', async () => {
+    const { dataset, rangeRequests } = referenceDataset('dense', { chunks: [4, 1] })
+    await dataset.geneValuesRowIds()
+    rangeRequests.length = 0
+
+    const [gad1] = await dataset.geneValues(['Gad1'])
+
+    expect(sortedReads([gad1 as GeneValuesRead])).toEqual([expected.Gad1])
+    expect(rangeRequests).toHaveLength(1)
+  })
+
+  it.each([
+    { name: 'dense Zarr v2 chunked by gene', store: 'tiny.zarr' },
+    { name: 'CSR Zarr v3', store: 'tiny.v3.zarr' },
+  ])('reads the same values as cell profiles from $name', async ({ store }) => {
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/${store}`,
       zarr: true,
       fetcher: annDataZarrFixtureFetcher(),
     })
+    const genes = ['Actb', 'Gad1', 'Gapdh', 'Sst']
+    const rowIds = (await dataset.geneValuesRowIds()) as readonly string[]
+    const reads = await dataset.geneValues(genes)
+    const profiles = await dataset.matrix(rowIds as never)
 
-    await expect(dataset.estimateGeneValuesRead()).resolves.toMatchObject({
-      kind: 'unavailable',
-    })
+    for (const [index, read] of reads.entries()) {
+      if ('error' in read) throw new Error(read.error)
+      const gene = genes[index] ?? ''
+      const fromProfiles = rowIds.flatMap((cellId, row) => {
+        const cell = profiles.cells.get(cellId as never)
+        const value = cell?.counts[cell.geneNames.indexOf(gene)] ?? 0
+        return value === 0 ? [] : [[row, value]]
+      })
+      expect(sortedReads([read])[0]).toEqual(fromProfiles)
+    }
   })
 })
 

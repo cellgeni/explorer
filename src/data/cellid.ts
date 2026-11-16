@@ -75,6 +75,24 @@ export function cellIdFromIntPair(pair: CellIdIntPair): CellId {
   return asCellId(`${shifted.join('')}-${pair.suffix}`)
 }
 
+// The ID intToCellId gives, built from character codes: the plot worker
+// makes every row of a matrix into text at once (plan 22-B), and the other
+// way takes about a microsecond per ID.
+export function xeniumCellIdText(prefix: number, suffix: number): string {
+  const value = prefix >>> 0
+
+  return `${String.fromCharCode(
+    97 + ((value >>> 28) & 15),
+    97 + ((value >>> 24) & 15),
+    97 + ((value >>> 20) & 15),
+    97 + ((value >>> 16) & 15),
+    97 + ((value >>> 12) & 15),
+    97 + ((value >>> 8) & 15),
+    97 + ((value >>> 4) & 15),
+    97 + (value & 15),
+  )}-${suffix >>> 0}`
+}
+
 export function intToCellId(prefix: number, suffix = 1): CellId {
   return cellIdFromIntPair({
     prefix: asCellIdPrefix(prefix),
