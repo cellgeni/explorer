@@ -57,7 +57,8 @@ Until a dataset opens, the canvas shows the start screen
 (`src/features/start/StartScreen.tsx`, 15.3-A), "Open a dataset":
 
 - The `Dataset or image URL` field, `Morphology image` and `Load Dataset`,
-  with `Browse Store` beside it for a Zarr store address. The field starts
+  with `Browse Store` beside it for a Zarr store address, or `Browse File`
+  for a Parquet file. The field starts
   empty. The boundary limit is in Settings.
 - "What can I open?", a link to [Loading data](user-guide.md#loading-data)
   in the user guide.
@@ -837,6 +838,7 @@ Examples below it, and shows on the [start screen](#start-screen)
 | `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                                                   |
 | `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then, or until the load is cancelled |
 | `Browse Store`                                               | Button    |                                        | Only for a Zarr store address (`isZarrStoreUrl`). Opens the [Store structure drawer](#store-structure-drawer) on it without loading it; from the dataset menu, the menu closes            |
+| `Browse File`                                                | Button    |                                        | Only for a Parquet file address (`isParquetUrl`). Opens the drawer on the file, as [Parquet file](#parquet-file-view), without loading it                                                 |
 
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,
@@ -878,6 +880,32 @@ Once read:
 | `Expand All` / `Collapse All` | Opens every group / closes all but the root                                                                                                                                                          |
 | Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
 | Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
+
+A Parquet file in a zip or a listed folder, and a SpatialData shapes group
+whose `shapes.parquet` is not listed (`parquetFileOf`), have `Browse File` in
+their details, with a note when the zip deflates the file. It opens the file
+in the drawer, titled "Parquet file", with `Back to Store` above it. Both
+views stay mounted, so going back keeps the store's open groups and
+selection.
+
+#### Parquet File View
+
+"Parquet file" (`ParquetStructureView.tsx`) shows one file, from
+`Browse File` on the start screen or in a store. `readParquetStructure`
+(`src/data/parquetStructure.ts`) reads only the footer, with hyparquet's
+`parquetMetadataAsync` (GeoParquet columns left as the file declares them),
+from the file's address or, in a zipped store, from the zip entry. While
+reading, it says "Reading the file's footer…". Failures show "No Parquet file
+at this address" (HTTP 403, 404 or 410, or not in the zip) or "Not a Parquet
+file" (no `PAR1` footer), with `Retry`. Once read, it has the same filter,
+`Expand All`, `Collapse All` and tree as the store view:
+
+| Part    | Shows                                                                                                                                                                                                                                                                 |
+| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary | Format version, "Written by" (`created_by`), "Written as" (GeoParquet, pandas, Arrow schema, Spark, from the key-value metadata), rows · columns · row groups, file and footer size                                                                                   |
+| Tree    | The schema: the file, then fields in schema order; structs, lists and maps hold their fields. Rows show the reader's type (`string`, `uint8`, `timestamp[us, UTC]`) and compressed size, and badges for GeoParquet geometry and pandas index columns                  |
+| File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length) |
+| Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics, dictionary, page index and bloom filter, and GeoParquet facts         |
 
 ### View Options
 

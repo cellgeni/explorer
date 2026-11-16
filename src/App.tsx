@@ -338,7 +338,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadTranscriptViewport,
     },
     genes: { loadGeneExpression },
-    diagnostics: { readStoreStructure, runDatasetDiagnostics },
+    diagnostics: { readParquetStructure, readStoreStructure, runDatasetDiagnostics },
   } = resolveAppDependencies(dependencies)
 
   // An old link's tab opens as panels, a tool or a card (15.2-H).
@@ -742,7 +742,10 @@ export function App({ dependencies }: AppProps = {}) {
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
   const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
   // Browse Store's drawer, opened from the dataset field (any of its forms).
-  const storeStructure = useStoreStructure({ read: readStoreStructure })
+  const storeStructure = useStoreStructure({
+    read: readStoreStructure,
+    readParquet: readParquetStructure,
+  })
   // Undo after a removal (15.3-C); another dataset ends the offer.
   const undoToast = useUndoToast()
   const { dismiss: dismissUndo, offerUndo } = undoToast
@@ -3591,7 +3594,7 @@ export function App({ dependencies }: AppProps = {}) {
     debugMode,
     diagnosticsState,
     fallbackNotices,
-    handleBrowseStore: storeStructure.browse,
+    handleBrowseStructure: storeStructure.browse,
     handleDatasetSubmit,
     handleDownloadDiagnostics,
     handleRunDatasetDiagnostics,

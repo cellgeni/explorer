@@ -91,6 +91,7 @@ export function appTestDependencies({
   loadTranscriptAggregates,
   loadTranscriptCapabilities,
   loadTranscriptViewport,
+  readParquetStructure,
   readStoreStructure,
   runDatasetDiagnostics,
   warmDatasetForRoi,
@@ -165,11 +166,17 @@ export function appTestDependencies({
   if (runDatasetDiagnostics !== undefined) {
     diagnostics.runDatasetDiagnostics = runDatasetDiagnostics
   }
-  // Never the network: a test that browses a store gives its structure.
+  // Never the network: a test that browses a store or file gives its
+  // structure.
   diagnostics.readStoreStructure =
     readStoreStructure ??
     (async (url) => {
       throw new Error(`No test store structure for ${url}.`)
+    })
+  diagnostics.readParquetStructure =
+    readParquetStructure ??
+    (async (file) => {
+      throw new Error(`No test Parquet structure for ${file.url}.`)
     })
 
   if (Object.keys(dataset).length > 0) dependencies.dataset = dataset

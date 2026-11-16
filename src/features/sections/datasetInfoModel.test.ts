@@ -20,7 +20,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     debugMode: false,
     diagnosticsState: { status: 'idle' },
     fallbackNotices: [],
-    handleBrowseStore: vi.fn(),
+    handleBrowseStructure: vi.fn(),
     handleDatasetSubmit: vi.fn(),
     handleDownloadDiagnostics: vi.fn(),
     handleRunDatasetDiagnostics: vi.fn(async () => {}),

@@ -8,6 +8,7 @@ import {
 } from '../../components/AppStatusPanels'
 import { Disclosure, InfoTip, Select } from '../../components/ui'
 import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
+import { isParquetUrl } from '../store-structure/parquetStructureModel'
 import { isZarrStoreUrl } from '../store-structure/storeStructureModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
@@ -113,13 +114,24 @@ export function OpenDatasetForm({
         {isZarrStoreUrl(open.datasetUrl) ? (
           <button
             type="button"
-            className="dataset-browse-store"
+            className="dataset-browse"
             title="Browse the groups and arrays in this Zarr store without loading it"
             onClick={() => {
-              open.onBrowseStore(open.datasetUrl.trim())
+              open.onBrowseStructure(open.datasetUrl.trim())
             }}
           >
             Browse Store
+          </button>
+        ) : isParquetUrl(open.datasetUrl) ? (
+          <button
+            type="button"
+            className="dataset-browse"
+            title="Browse the columns, row groups and metadata of this Parquet file without loading it"
+            onClick={() => {
+              open.onBrowseStructure(open.datasetUrl.trim())
+            }}
+          >
+            Browse File
           </button>
         ) : null}
       </div>

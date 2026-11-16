@@ -1,44 +1,68 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
-import { Button, ChevronRightIcon, Disclosure, Drawer } from '../../components/ui'
-import { classNames } from '../../components/ui/classNames'
+import { useId } from 'react'
+import { Button, Disclosure, Drawer } from '../../components/ui'
+import type { ParquetFileRef } from '../../data/parquetStructure'
 import type {
   ZarrStructure,
   ZarrStructureNode,
   ZarrStructureNodeKind,
 } from '../../zarr/zarrStructure'
+import { ParquetFileView } from './ParquetStructureView'
 import {
-  allBranchPaths,
-  filterStructure,
-  findNode,
   formatBytes,
   formatCount,
-  formatJson,
   formatShape,
   initiallyExpanded,
   nodeRole,
   nodeSummary,
   nodeUrl,
+  parquetFileOf,
   parquetNote,
   structureContentsLabel,
   structureFormatLabel,
   structureNotes,
   structureSourceLabel,
 } from './storeStructureModel'
+import {
+  Fact,
+  JsonBlock,
+  NodeAddress,
+  StructureAddress,
+  StructureBrowser,
+  type StructureNodeLabel,
+} from './StructureBrowser'
 import type { StoreStructureState, StoreStructureStore } from './useStoreStructure'
 
-// Browse Store's drawer: the groups and arrays of the Zarr store at the
-// address in the dataset field, read without opening it as a dataset. It sits
-// over the right of the canvas and is not modal.
+// The drawer of Browse Store and Browse File: the groups and arrays of the
+// Zarr store, or the columns of the Parquet file, at the address in the
+// dataset field, read without opening it as a dataset. A Parquet file in the
+// store opens in its place, with a way back. It sits over the right of the
+// canvas and is not modal.
 export function StoreStructureDrawer({ store }: { readonly store: StoreStructureStore }) {
+  const showingFile = store.view === 'file'
+
   return (
     <Drawer
-      title="Store structure"
+      title={showingFile ? 'Parquet file' : 'Store structure'}
       side="right"
       open={store.open}
       onClose={store.close}
       className="store-structure-drawer"
     >
-      <StoreStructureView state={store.state} onRetry={store.retry} />
+      {/* Both stay mounted, so going back keeps the store's open groups. */}
+      <div className="store-structure-view" hidden={showingFile}>
+        <StoreStructureView
+          state={store.store}
+          onRetry={store.retry}
+          onBrowseFile={store.browseFile}
+        />
+      </div>
+      <div className="store-structure-view" hidden={!showingFile}>
+        <ParquetFileView
+          state={store.file}
+          onRetry={store.retry}
+          {...(store.fileFromStore ? { onBack: store.back } : {})}
+        />
+      </div>
     </Drawer>
   )
 }
@@ -46,9 +70,11 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
 export function StoreStructureView({
   state,
   onRetry,
+  onBrowseFile,
 }: {
   readonly state: StoreStructureState
   readonly onRetry: () => void
+  readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
   switch (state.status) {
     case 'idle':
@@ -56,18 +82,18 @@ export function StoreStructureView({
     case 'loading':
       return (
         <div className="store-structure-status">
-          <StoreAddress url={state.url} />
+          <StructureAddress url={state.target} />
           <p role="status">
-            {state.nodesRead === 0
+            {state.progress === 0
               ? 'Reading the store…'
-              : `Reading the store… ${formatCount(state.nodesRead, 'node')} read`}
+              : `Reading the store… ${formatCount(state.progress, 'node')} read`}
           </p>
         </div>
       )
     case 'error':
       return (
         <div className="store-structure-status">
-          <StoreAddress url={state.url} />
+          <StructureAddress url={state.target} />
           <div className="store-structure-error" role="alert">
             <strong>{state.error.title}</strong>
             <p>{state.error.message}</p>
@@ -79,76 +105,47 @@ export function StoreStructureView({
         </div>
       )
     case 'ready':
-      return <StructureBrowser key={state.url} structure={state.structure} />
+      return (
+        <ZarrStructureBrowser
+          key={state.target}
+          structure={state.value}
+          onBrowseFile={onBrowseFile}
+        />
+      )
   }
 }
 
-function StoreAddress({ url }: { readonly url: string }) {
-  return (
-    <p className="store-structure-url" title={url}>
-      {url}
-    </p>
-  )
-}
-
-// Children shown at first under one group; more on request.
-const CHILD_PAGE_SIZE = 200
-
-function StructureBrowser({ structure }: { readonly structure: ZarrStructure }) {
-  const filterId = useId()
-  const [expanded, setExpanded] = useState(() => initiallyExpanded(structure))
-  const [selectedPath, setSelectedPath] = useState('')
-  const [query, setQuery] = useState('')
-  // Groups closed while a filter opens every match's ancestors.
-  const [filterCollapsed, setFilterCollapsed] = useState<ReadonlySet<string>>(new Set())
-  const [childLimits, setChildLimits] = useState<ReadonlyMap<string, number>>(new Map())
-  const filter = useMemo(
-    () => filterStructure(structure.root, query),
-    [query, structure.root],
-  )
-  const selected = findNode(structure.root, selectedPath) ?? structure.root
+function ZarrStructureBrowser({
+  structure,
+  onBrowseFile,
+}: {
+  readonly structure: ZarrStructure
+  readonly onBrowseFile: (file: ParquetFileRef) => void
+}) {
   const notes = structureNotes(structure)
 
-  // While filtering, the ancestors of matches are open unless closed since.
-  const isExpanded = (path: string) =>
-    filter?.expanded.has(path) === true ? !filterCollapsed.has(path) : expanded.has(path)
-
-  const toggle = (path: string) => {
-    if (filter?.expanded.has(path) === true) {
-      setFilterCollapsed((current) => toggled(current, path))
-      return
-    }
-
-    setExpanded((current) => toggled(current, path))
-  }
-
   return (
-    <div className="store-structure">
-      <div className="store-structure-header">
-        <StoreAddress url={structure.url} />
-        <dl className="store-structure-summary">
-          <div>
-            <dt>Format</dt>
-            <dd>{structureFormatLabel(structure)}</dd>
-          </div>
-          <div>
-            <dt>Listed from</dt>
-            <dd>{structureSourceLabel(structure)}</dd>
-          </div>
-          {structure.conventions.length === 0 ? null : (
-            <div>
-              <dt>Written as</dt>
-              <dd>{structure.conventions.join(', ')}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Contents</dt>
-            <dd>{structureContentsLabel(structure)}</dd>
-          </div>
-          {structure.zip === undefined ? null : (
-            <div>
-              <dt>Zip</dt>
-              <dd>
+    <StructureBrowser
+      root={structure.root}
+      initialExpanded={initiallyExpanded(structure)}
+      treeLabel="Store contents"
+      filterTitle="Show the groups, arrays and files whose name contains this text, or whose path does when the text has a /"
+      describe={describeZarrNode}
+      renderDetails={(node) => (
+        <NodeDetails structure={structure} node={node} onBrowseFile={onBrowseFile} />
+      )}
+      header={
+        <>
+          <StructureAddress url={structure.url} />
+          <dl className="store-structure-summary">
+            <Fact label="Format">{structureFormatLabel(structure)}</Fact>
+            <Fact label="Listed from">{structureSourceLabel(structure)}</Fact>
+            {structure.conventions.length === 0 ? null : (
+              <Fact label="Written as">{structure.conventions.join(', ')}</Fact>
+            )}
+            <Fact label="Contents">{structureContentsLabel(structure)}</Fact>
+            {structure.zip === undefined ? null : (
+              <Fact label="Zip">
                 {formatCount(structure.zip.fileCount, 'file')},{' '}
                 {formatBytes(structure.zip.bytes)}
                 {structure.zip.root === '' ? null : (
@@ -157,186 +154,17 @@ function StructureBrowser({ structure }: { readonly structure: ZarrStructure }) 
                     in <code>{structure.zip.root}</code>
                   </>
                 )}
-              </dd>
-            </div>
-          )}
-        </dl>
-        {notes.map((note) => (
-          <p key={note} className="store-structure-note">
-            {note}
-          </p>
-        ))}
-        <div className="store-structure-tools">
-          <label className="visually-hidden" htmlFor={filterId}>
-            Filter by name or path
-          </label>
-          <input
-            id={filterId}
-            type="search"
-            className="store-structure-filter"
-            placeholder="Filter by name or path"
-            title="Show the groups, arrays and files whose name contains this text, or whose path does when the text has a /"
-            autoComplete="off"
-            spellCheck={false}
-            value={query}
-            onChange={(event) => {
-              setQuery(event.currentTarget.value)
-              setFilterCollapsed(new Set())
-            }}
-          />
-          <Button
-            title="Open every group"
-            variant="ghost"
-            onClick={() => {
-              setExpanded(new Set(allBranchPaths(structure.root)))
-              setFilterCollapsed(new Set())
-            }}
-          >
-            Expand All
-          </Button>
-          <Button
-            title="Close every group but the root"
-            variant="ghost"
-            onClick={() => {
-              setExpanded(new Set(['']))
-              setFilterCollapsed(new Set(allBranchPaths(structure.root)))
-            }}
-          >
-            Collapse All
-          </Button>
-        </div>
-        {filter === null ? null : (
-          <p className="store-structure-match-count" role="status">
-            {filter.matchCount === 0
-              ? 'Nothing matches.'
-              : `${formatCount(filter.matchCount, 'match', 'matches')}.`}
-          </p>
-        )}
-      </div>
-      <div className="store-structure-tree">
-        <ul aria-label="Store contents">
-          <TreeItem
-            node={structure.root}
-            depth={0}
-            selectedPath={selected.path}
-            visible={filter?.visible ?? null}
-            isExpanded={isExpanded}
-            childLimits={childLimits}
-            onToggle={toggle}
-            onSelect={setSelectedPath}
-            onShowMore={(path, limit) => {
-              setChildLimits((current) => new Map(current).set(path, limit))
-            }}
-          />
-        </ul>
-      </div>
-      <NodeDetails structure={structure} node={selected} />
-    </div>
-  )
-}
-
-function toggled(set: ReadonlySet<string>, path: string): ReadonlySet<string> {
-  const next = new Set(set)
-  if (next.has(path)) next.delete(path)
-  else next.add(path)
-  return next
-}
-
-interface TreeItemProps {
-  readonly node: ZarrStructureNode
-  readonly depth: number
-  readonly selectedPath: string
-  // Paths shown while filtering; null shows every node.
-  readonly visible: ReadonlySet<string> | null
-  readonly isExpanded: (path: string) => boolean
-  readonly childLimits: ReadonlyMap<string, number>
-  readonly onToggle: (path: string) => void
-  readonly onSelect: (path: string) => void
-  readonly onShowMore: (path: string, limit: number) => void
-}
-
-function TreeItem(props: TreeItemProps) {
-  const { node, depth, selectedPath, visible, isExpanded, childLimits } = props
-  const children =
-    visible === null
-      ? node.children
-      : node.children.filter((child) => visible.has(child.path))
-  const hasChildren = children.length > 0
-  const open = hasChildren && isExpanded(node.path)
-  const limit = childLimits.get(node.path) ?? CHILD_PAGE_SIZE
-  const shown = children.slice(0, limit)
-  const role = nodeRole(node)
-  const label = node.path === '' ? 'the root' : node.name
-  const isSelected = node.path === selectedPath
-
-  return (
-    <li>
-      <div
-        className={classNames('store-structure-row', isSelected && 'is-selected')}
-        style={{ paddingLeft: `${depth * 14}px` }}
-      >
-        {hasChildren ? (
-          <button
-            type="button"
-            className="store-structure-toggle"
-            aria-expanded={open}
-            aria-label={`${open ? 'Collapse' : 'Expand'} ${label}`}
-            title={`${open ? 'Collapse' : 'Expand'} ${label}`}
-            onClick={() => {
-              props.onToggle(node.path)
-            }}
-          >
-            <ChevronRightIcon />
-          </button>
-        ) : (
-          <span className="store-structure-toggle" aria-hidden="true" />
-        )}
-        <button
-          type="button"
-          className="store-structure-node"
-          aria-current={isSelected ? 'true' : undefined}
-          title={`Show details of ${node.path === '' ? '/' : node.path}`}
-          onClick={() => {
-            props.onSelect(node.path)
-          }}
-        >
-          <NodeKindIcon kind={node.kind} />
-          <span className="store-structure-name">{node.name}</span>
-          {role === null ? null : <span className="store-structure-badge">{role}</span>}
-          {node.unlisted === true ? (
-            <span className="store-structure-badge is-warning">not listed</span>
-          ) : null}
-          <span className="store-structure-meta">{nodeSummary(node)}</span>
-        </button>
-      </div>
-      {open ? (
-        <ul>
-          {shown.map((child) => (
-            <TreeItem key={child.path} {...props} node={child} depth={depth + 1} />
+              </Fact>
+            )}
+          </dl>
+          {notes.map((note) => (
+            <p key={note} className="store-structure-note">
+              {note}
+            </p>
           ))}
-          {shown.length < children.length ? (
-            <li>
-              <div
-                className="store-structure-row"
-                style={{ paddingLeft: `${(depth + 1) * 14}px` }}
-              >
-                <span className="store-structure-toggle" aria-hidden="true" />
-                <Button
-                  title={`Show more of the ${children.length.toLocaleString()} items in ${label}`}
-                  variant="ghost"
-                  className="store-structure-more"
-                  onClick={() => {
-                    props.onShowMore(node.path, limit + CHILD_PAGE_SIZE * 5)
-                  }}
-                >
-                  Show More ({(children.length - shown.length).toLocaleString()} hidden)
-                </Button>
-              </div>
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-    </li>
+        </>
+      }
+    />
   )
 }
 
@@ -347,42 +175,34 @@ const KIND_LABELS: Readonly<Record<ZarrStructureNodeKind, string>> = {
   file: 'File',
 }
 
-function NodeKindIcon({ kind }: { readonly kind: ZarrStructureNodeKind }) {
-  return (
-    <>
-      <svg
-        className={`ui-icon store-structure-kind is-${kind}`}
-        viewBox="0 0 16 16"
-        aria-hidden="true"
-        focusable="false"
-      >
-        {kind === 'array' ? (
-          <path d="M2.5 2.5h11v11h-11zM2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11" />
-        ) : kind === 'file' ? (
-          <path d="M4 1.8h5l3 3v9.4H4zM9 1.8v3h3" />
-        ) : (
-          <path
-            d="M1.8 4.2v8.6h12.4V5.6H8L6.6 3.6H1.8z"
-            strokeDasharray={kind === 'folder' ? '2 1.5' : undefined}
-          />
-        )}
-      </svg>
-      <span className="visually-hidden">{KIND_LABELS[kind]}: </span>
-    </>
-  )
+function describeZarrNode(node: ZarrStructureNode): StructureNodeLabel {
+  const role = nodeRole(node)
+
+  return {
+    icon: node.kind,
+    kind: KIND_LABELS[node.kind],
+    badges: [
+      ...(role === null ? [] : [{ text: role }]),
+      ...(node.unlisted === true ? [{ text: 'not listed', warning: true }] : []),
+    ],
+    meta: nodeSummary(node),
+  }
 }
 
 function NodeDetails({
   structure,
   node,
+  onBrowseFile,
 }: {
   readonly structure: ZarrStructure
   readonly node: ZarrStructureNode
+  readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
   const headingId = useId()
   const role = nodeRole(node)
   const url = nodeUrl(structure, node)
   const note = parquetNote(node)
+  const parquetFile = parquetFileOf(structure, node)
   const attributes = Object.keys(node.attributes).length === 0 ? null : node.attributes
   const array = node.array
 
@@ -447,6 +267,9 @@ function NodeDetails({
         ) : null}
       </dl>
       {note === null ? null : <p className="store-structure-empty">{note}</p>}
+      {parquetFile === null ? null : (
+        <BrowseParquetFile node={node} file={parquetFile} onBrowseFile={onBrowseFile} />
+      )}
       {url === null ? null : <NodeAddress url={url} />}
       {attributes === null ? (
         <p className="store-structure-empty">No attributes.</p>
@@ -466,17 +289,34 @@ function NodeDetails({
   )
 }
 
-function Fact({
-  label,
-  children,
+function BrowseParquetFile({
+  node,
+  file,
+  onBrowseFile,
 }: {
-  readonly label: string
-  readonly children: ReactNode
+  readonly node: ZarrStructureNode
+  readonly file: ParquetFileRef
+  readonly onBrowseFile: (file: ParquetFileRef) => void
 }) {
+  const name = file.zipPath ?? file.url
+  const fileName = name.slice(name.lastIndexOf('/') + 1)
+
   return (
-    <div>
-      <dt>{label}</dt>
-      <dd>{children}</dd>
+    <div className="store-structure-browse-file">
+      <Button
+        title={`Show the columns, row groups and metadata of ${fileName}`}
+        onClick={() => {
+          onBrowseFile(file)
+        }}
+      >
+        Browse File
+      </Button>
+      {node.deflated === true && node.storedBytes !== undefined ? (
+        <p className="store-structure-empty">
+          The zip compresses this file, so reading its footer means downloading all of it
+          ({formatBytes(node.storedBytes)} uncompressed).
+        </p>
+      ) : null}
     </div>
   )
 }
@@ -505,75 +345,7 @@ function childCounts(node: ZarrStructureNode): string {
     counts.set(child.kind, (counts.get(child.kind) ?? 0) + 1)
   }
 
-  const nouns: Readonly<Record<ZarrStructureNodeKind, string>> = {
-    group: 'group',
-    array: 'array',
-    folder: 'folder',
-    file: 'file',
-  }
-
-  return Array.from(counts, ([kind, count]) => formatCount(count, nouns[kind])).join(
-    ' · ',
-  )
-}
-
-const COPY_STATUS_MS = 2000
-
-function NodeAddress({ url }: { readonly url: string }) {
-  const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
-
-  useEffect(() => {
-    if (status === 'idle') return
-    const timeout = window.setTimeout(() => {
-      setStatus('idle')
-    }, COPY_STATUS_MS)
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [status])
-
-  return (
-    <div className="store-structure-address">
-      <code title={url}>{url}</code>
-      <Button
-        title="Copy this node's address, to open it on its own or read it elsewhere"
-        variant="ghost"
-        onClick={() => {
-          navigator.clipboard.writeText(url).then(
-            () => {
-              setStatus('copied')
-            },
-            () => {
-              setStatus('failed')
-            },
-          )
-        }}
-      >
-        {status === 'copied' ? 'Copied' : status === 'failed' ? 'Copy Failed' : 'Copy'}
-      </Button>
-    </div>
-  )
-}
-
-function JsonBlock({
-  title,
-  value,
-}: {
-  readonly title?: string
-  readonly value: unknown
-}) {
-  const json = formatJson(value)
-
-  return (
-    <div className="store-structure-json">
-      {title === undefined ? null : <h4>{title}</h4>}
-      <pre>{json.text}</pre>
-      {json.cut ? (
-        <p className="store-structure-empty">
-          Showing the first {json.shown.toLocaleString()} of{' '}
-          {json.length.toLocaleString()} characters.
-        </p>
-      ) : null}
-    </div>
-  )
+  return Array.from(counts, ([kind, count]) =>
+    formatCount(count, KIND_LABELS[kind].toLowerCase()),
+  ).join(' · ')
 }

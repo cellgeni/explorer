@@ -38,6 +38,7 @@ import {
   type TranscriptPoint,
 } from '../../data/transcriptOverlay'
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
+import { readParquetStructure } from '../../data/parquetStructure'
 import { readZarrStructure } from '../../zarr/zarrStructure'
 import {
   cachedSpatialDataset,
@@ -227,6 +228,7 @@ export type DatasetWarmupLoader = (
 
 export type DatasetDiagnosticsRunner = typeof runDatasetDiagnostics
 export type StoreStructureReader = typeof readZarrStructure
+export type ParquetStructureReader = typeof readParquetStructure
 export type SpatialDatasetDetector = (
   baseUrl: string,
   options?: DetectSpatialDatasetOptions,
@@ -278,6 +280,7 @@ export interface AppDependencies {
   readonly diagnostics: {
     readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
     readonly readStoreStructure: StoreStructureReader
+    readonly readParquetStructure: ParquetStructureReader
   }
 }
 
@@ -305,6 +308,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly warmDatasetForRoi: DatasetWarmupLoader
   readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
   readonly readStoreStructure: StoreStructureReader
+  readonly readParquetStructure: ParquetStructureReader
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
@@ -358,6 +362,7 @@ export const defaultAppDependencies = {
   diagnostics: {
     runDatasetDiagnostics,
     readStoreStructure: readZarrStructure,
+    readParquetStructure,
   },
 } satisfies AppDependencies
 

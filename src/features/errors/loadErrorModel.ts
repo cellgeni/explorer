@@ -130,6 +130,35 @@ export function createStructuredLoadError(
     )
   }
 
+  // Thrown by Browse File (src/data/parquetStructure.ts).
+  if (error instanceof Error && error.name === 'ParquetFileNotFoundError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'not-found',
+        title: 'No Parquet file at this address',
+        message,
+        action:
+          'Check the address and that the file is publicly readable. Buckets that deny listing answer HTTP 403 for missing files, and a dataset written as a folder of parts, such as SpatialData points, is browsed one part at a time.',
+      },
+      detail,
+    )
+  }
+
+  if (error instanceof Error && error.name === 'NotParquetFileError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'decode',
+        title: 'Not a Parquet file',
+        message,
+        action:
+          'Parquet files end with the bytes PAR1. Check that the address is the file itself, not a page about it.',
+      },
+      detail,
+    )
+  }
+
   if (error instanceof Error && error.name === 'LikelyMissingFileError') {
     return withOptionalDetail(
       {

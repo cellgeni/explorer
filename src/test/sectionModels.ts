@@ -191,7 +191,7 @@ export function testDatasetInfoModel(
       onSubmit: vi.fn((event: { preventDefault: () => void }) => {
         event.preventDefault()
       }),
-      onBrowseStore: vi.fn(),
+      onBrowseStructure: vi.fn(),
       ...overrides.open,
     },
     share: {

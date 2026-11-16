@@ -72,6 +72,8 @@ export interface ZarrStructureNode {
   readonly storedBytes?: number
   // Chunk files stored, for an array in a zip.
   readonly storedChunks?: number
+  // A file deflated in the zip, so any read of it fetches all of it.
+  readonly deflated?: boolean
 }
 
 export interface ZarrStructure {
@@ -175,6 +177,7 @@ interface FlatNode {
   readonly unlisted?: boolean
   readonly storedBytes?: number
   readonly storedChunks?: number
+  readonly deflated?: boolean
 }
 
 async function readIcechunkStructure(
@@ -344,7 +347,12 @@ async function readZipStructure(
       continue
     }
 
-    files.push({ path, kind: 'file', storedBytes: size })
+    files.push({
+      path,
+      kind: 'file',
+      storedBytes: size,
+      ...(zip.entry(path)?.compressed === true ? { deflated: true } : {}),
+    })
   }
 
   const flat = zarrNodes.map((node) => {
@@ -887,6 +895,7 @@ export function structureFromFlatNodes(input: AssembleInput): ZarrStructure {
       ...(flat?.unlisted === true ? { unlisted: true } : {}),
       ...(flat?.storedBytes === undefined ? {} : { storedBytes: flat.storedBytes }),
       ...(flat?.storedChunks === undefined ? {} : { storedChunks: flat.storedChunks }),
+      ...(flat?.deflated === true ? { deflated: true } : {}),
     }
   }
 

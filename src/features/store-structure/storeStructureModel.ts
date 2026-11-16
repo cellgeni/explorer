@@ -1,3 +1,4 @@
+import { isParquetFileName, type ParquetFileRef } from '../../data/parquetStructure'
 import { isIcechunkUrl } from '../../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../../zarr/omeZarrUrl'
 import type { ZarrStructure, ZarrStructureNode } from '../../zarr/zarrStructure'
@@ -210,6 +211,33 @@ export function nodeUrl(
   return url.toString()
 }
 
+// The Parquet file a node is, or holds, for Browse File: a `.parquet` file
+// in a zip or a listed folder, or the shapes.parquet of a SpatialData shapes
+// element that the store's metadata does not list. Points are written as a
+// folder of parts, which only a listing names.
+export function parquetFileOf(
+  structure: ZarrStructure,
+  node: ZarrStructureNode,
+): ParquetFileRef | null {
+  if (node.kind === 'file' && isParquetFileName(node.name)) {
+    if (structure.source === 'zip') return { url: structure.url, zipPath: node.path }
+    const url = nodeUrl(structure, node)
+    return url === null ? null : { url }
+  }
+
+  const url = nodeUrl(structure, node)
+
+  if (
+    url === null ||
+    node.attributes['encoding-type'] !== 'ngff:shapes' ||
+    node.children.some((child) => child.name === 'shapes.parquet')
+  ) {
+    return null
+  }
+
+  return { url: `${url}/shapes.parquet` }
+}
+
 // Groups opened at first: the root, and its child groups when the store is
 // small enough to show them all.
 export function initiallyExpanded(structure: ZarrStructure): ReadonlySet<string> {
@@ -222,85 +250,6 @@ export function initiallyExpanded(structure: ZarrStructure): ReadonlySet<string>
   }
 
   return expanded
-}
-
-export function allBranchPaths(node: ZarrStructureNode): string[] {
-  return node.children.length === 0
-    ? []
-    : [node.path, ...node.children.flatMap(allBranchPaths)]
-}
-
-export interface StructureFilter {
-  // Nodes that match, their ancestors, and everything below a match.
-  readonly visible: ReadonlySet<string>
-  // Ancestors of matches, opened so the matches show.
-  readonly expanded: ReadonlySet<string>
-  readonly matchCount: number
-}
-
-// Nodes whose name contains the query, ignoring case, or whose path does
-// when the query has a '/'. Null for an empty query.
-export function filterStructure(
-  root: ZarrStructureNode,
-  query: string,
-): StructureFilter | null {
-  const needle = query.trim().toLowerCase()
-
-  if (needle === '') {
-    return null
-  }
-
-  const visible = new Set<string>()
-  const expanded = new Set<string>()
-  let matchCount = 0
-
-  const showAll = (node: ZarrStructureNode) => {
-    visible.add(node.path)
-    node.children.forEach(showAll)
-  }
-  const byPath = needle.includes('/')
-  const visit = (node: ZarrStructureNode): boolean => {
-    const matches =
-      node.path !== '' && (byPath ? node.path : node.name).toLowerCase().includes(needle)
-    let anyChild = false
-
-    for (const child of node.children) {
-      if (visit(child)) anyChild = true
-    }
-
-    if (matches) {
-      matchCount += 1
-      // A matching group's contents can be opened too.
-      showAll(node)
-    }
-
-    if (anyChild) {
-      visible.add(node.path)
-      expanded.add(node.path)
-    }
-
-    return matches || anyChild
-  }
-
-  visit(root)
-  visible.add('')
-  expanded.add('')
-  return { visible, expanded, matchCount }
-}
-
-export function findNode(
-  node: ZarrStructureNode,
-  path: string,
-): ZarrStructureNode | undefined {
-  if (node.path === path) return node
-
-  for (const child of node.children) {
-    if (path === child.path || path.startsWith(`${child.path}/`)) {
-      return findNode(child, path)
-    }
-  }
-
-  return undefined
 }
 
 // JSON for display, cut at `limit` characters.

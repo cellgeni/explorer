@@ -56,11 +56,27 @@ describe('OpenDatasetForm', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Browse Store' }))
 
-    expect(open.onBrowseStore).toHaveBeenCalledWith('https://bucket.test/sample.zarr/')
+    expect(open.onBrowseStructure).toHaveBeenCalledWith(
+      'https://bucket.test/sample.zarr/',
+    )
     expect(open.onSubmit).not.toHaveBeenCalled()
   })
 
-  it('leaves Browse Store out for other addresses', () => {
+  it('offers Browse File for Parquet file addresses', () => {
+    const { open } = testDatasetInfoModel({
+      open: { datasetUrl: 'https://bucket.test/run/cells.parquet' },
+    })
+    render(<OpenDatasetForm open={open} />)
+
+    expect(screen.queryByRole('button', { name: 'Browse Store' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Browse File' }))
+
+    expect(open.onBrowseStructure).toHaveBeenCalledWith(
+      'https://bucket.test/run/cells.parquet',
+    )
+  })
+
+  it('leaves the browse buttons out for other addresses', () => {
     render(
       <OpenDatasetForm
         open={
@@ -71,6 +87,7 @@ describe('OpenDatasetForm', () => {
 
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Browse Store' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Browse File' })).not.toBeInTheDocument()
   })
 })
 

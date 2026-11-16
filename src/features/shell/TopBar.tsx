@@ -222,8 +222,8 @@ function DatasetMenu({
             open.onSubmit(event)
             setMenuOpen(false)
           },
-          onBrowseStore: (url) => {
-            open.onBrowseStore(url)
+          onBrowseStructure: (url) => {
+            open.onBrowseStructure(url)
             setMenuOpen(false)
           },
         }}
