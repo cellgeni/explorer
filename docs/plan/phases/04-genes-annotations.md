@@ -128,3 +128,25 @@ Other gaps found in the review:
       accepted. When none of the imported cells are on the map, the import
       fails with "Imported cells not found"; when some are not, a notice under
       the import controls says how many.
+
+Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review):
+
+- [x] CSV exports (`annotations.csv` and the ROI cells, transcripts and
+      barcodes files) did not neutralise a leading `=`, `+`, `-` or `@`, so a
+      cell ID or label from a remote dataset or an `annotationUrl=` import
+      could run as a formula when the file was opened in a spreadsheet.
+      Since 2026-11-16 the three copies of `csvEscape` are one `formatCsv`
+      (`src/utils/csv.ts`), which puts a `'` before a field that starts with
+      one of those, a tab or a line break, unless it is a number, so
+      negative coordinates stay numbers. The annotation importer drops that
+      `'`, so an exported file imports unchanged.
+- [x] `annotationUrl=` and Import URL read the whole response with
+      `response.text()`, with no byte limit, unlike the H5AD and segmentation
+      loaders, and parse it on the main thread, so a link to a large file
+      could stall or crash the tab. Since 2026-11-16 they stop at 100 MB
+      (`readAnnotationUrlText` in `annotationUrlText.ts`): before reading
+      when Content-Length is over it, or as soon as the bytes read pass it,
+      and say "Annotation file too large". Parsing stays on the main thread;
+      it ran at about 40 MB/s here (2 million `cell_id,label` rows, 95 MB, in
+      2.5 s). Imports from disk are not limited, since the user picks the
+      file.

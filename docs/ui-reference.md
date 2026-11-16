@@ -109,8 +109,8 @@ the canvas, a `nav` named "Collection":
   The open dataset is highlighted (`aria-current`) and the one loading has
   a dashed border (`aria-busy`). Choosing another opens it, keeping the
   selected genes, the `Cell color` mode, `Combine genes`, the loaded
-  annotation set with its hidden classes and class colours, and the
-  metadata column.
+  annotation set with its hidden classes, class colours and whether it is
+  hidden, and the metadata column.
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
   expression. Each preview runs from 0 to its own percentile of its drawn
@@ -261,8 +261,8 @@ stay mounted while closed, so a gene search survives. `Hide layers (\)` (or
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. The link keeps
 them (`hidden=`) and the open sections (`panel=`). Hidden annotation classes
-are kept as `hiddenClasses=`. Alt-click on a class's checkbox shows only that
-class.
+are kept as `hiddenClasses=`, and sets hidden with their eye as `hiddenSets=`.
+Alt-click on a class's checkbox shows only that class.
 
 ### Image
 
@@ -340,14 +340,14 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 **Clusters** (Xenium, Atera, Visium, H5AD, SpatialData; D4)
 
-| Control                         | Type                         | Values / default                                                                                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| ------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Annotation set`                | Select                       | None, All, dataset groups; **graphclust** or the first group (Xenium, Atera), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                                                                                                                                                                                |
-| `Load Annotations`              | Button                       |                                                                                                           | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                                                                                                                                                                         |
-| `Clear Annotations`             | Button                       |                                                                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `Export Annotations`            | Button                       |                                                                                                           | Downloads `annotations.csv`                                                                                                                                                                                                                                                                                                                                                                                             |
-| `Import File`                   | File input (`.csv`, `.json`) |                                                                                                           | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs are any non-empty text matching the dataset's own (Xenium IDs, obs names, barcodes, SpatialData instance IDs). None on the map is an error; some missing gives a notice under the import controls |
-| `Annotation URL` + `Import URL` | URL form                     |                                                                                                           | Same formats from a URL; saved in the share URL                                                                                                                                                                                                                                                                                                                                                                         |
+| Control                         | Type                         | Values / default                                                                                          | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ------------------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Annotation set`                | Select                       | None, All, dataset groups; **graphclust** or the first group (Xenium, Atera), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip` or categorical `obs` columns. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                                                                                                                                                                                                                                                                          |
+| `Load Annotations`              | Button                       |                                                                                                           | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `Clear Annotations`             | Button                       |                                                                                                           |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `Export Annotations`            | Button                       |                                                                                                           | Downloads `annotations.csv`; a field a spreadsheet would run as a formula starts with `'` (see [Selection](#selection))                                                                                                                                                                                                                                                                                                                                                                                           |
+| `Import File`                   | File input (`.csv`, `.json`) |                                                                                                           | CSV: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; extra numeric columns become metadata tracks. JSON: rows or `{label: [ids]}` (`src/data/customAnnotations.ts`). Cell IDs are any non-empty text matching the dataset's own (Xenium IDs, obs names, barcodes, SpatialData instance IDs). None on the map is an error; some missing gives a notice under the import controls. A `'` that an export put before a formula is dropped, so exported files import unchanged |
+| `Annotation URL` + `Import URL` | URL form                     |                                                                                                           | Same formats from a URL, up to 100 MB: a larger file is refused, before it is read when the host sends its size, and is shown under Issues; saved in the share URL                                                                                                                                                                                                                                                                                                                                                |
 
 Loaded state:
 
@@ -593,6 +593,13 @@ Exports: `Export GeoJSON` (`{name}-roi.geojson`), `Export Cells`
 H5AD and SpatialData), or for Visium HD `Export Barcodes`
 (`{name}-barcodes.csv`, up to 50,000 bins).
 
+In these CSVs and `annotations.csv`, a field that starts with `=`, `+`, `-`,
+`@`, a tab or a line break and is not a number gets a leading `'`, so a
+spreadsheet shows it as text rather than running it as a formula. Cell IDs,
+labels and gene names come from the dataset or an imported file, so any of them
+could hold a formula. Negative coordinates stay numbers. Importing the file as
+annotations drops the `'` again (`src/utils/csv.ts`).
+
 On an image, Box and Lasso selection draw GeoJSON shapes: the New shape card
 names the next one (`Shape name`), and a finished shape joins the Annotations
 section; no cell or gene queries run.
@@ -727,6 +734,11 @@ Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
 - Embedding point: selects the cell or bin and recentres the view.
 - `Enter` on the focused view: the bin or cell at its centre (see
   [Navigation](#navigation)).
+
+A press counts as a click however long it is held, as long as the pointer
+stays within 9 px. deck.gl's 250 ms click limit is lifted, because it
+included the pick on pointerdown, which software WebGL can take that long
+to run.
 
 ### Hover Tooltips
 
@@ -1043,10 +1055,9 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 ## Shareable URL
 
 `src/data/shareableState.ts` writes the state to the URL hash (debounced
-160 ms, with `xv=2`); query-string values are also read on startup, and hash
-values win. Numbers are rounded to three decimals. Version 2 links leave out
-every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. For a dataset with a
+160 ms, with `xv=2`). Numbers are rounded to three decimals. Version 2 links
+leave out every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a
+missing parameter means the default. For a dataset with a
 [manifest](./dataset-manifest.md#defaults), the manifest's `defaults` take the
 place of the app's: a value equal to the manifest's is left out, and one set
 back to the app default is written, so the manifest does not bring its value
@@ -1056,6 +1067,12 @@ wrote every value, still open as before. `Share` in the top bar and
 `Copy Link` copy the link for the current state, which the address shows up
 to 160 ms later, and say "Link copied".
 
+The query string is read on startup too, except under a version 2 hash,
+which is the whole link; under any other hash, the hash's values win. Once the
+hash is written, the query string keeps only keys a link does not set, such as
+`debug=`, so a value the view no longer has, such as a closed compare panel,
+does not come back on reload.
+
 Opening another dataset adds a browser history entry; every other change
 replaces the current one (15.3-C). Back returns to the previous dataset, or to
 the start screen: when Back or Forward reaches an entry for another dataset,
@@ -1063,10 +1080,11 @@ the page reloads that entry's link, with its view and settings.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL. Read from the hash or the query string; once the hash is written, the query string's copy is dropped, so a closed collection stays closed on reload                                                                                                                     |
+| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL                                                                                                                                                                                                                                                                          |
 | `collectionView`                                                                                          | How the collection bar shows its datasets: `grid` (`Expand`) or `names` (`Previews` off). Left out for the previews in a row. Written only with `collection`                                                                                                                                                                           |
+| `compare`                                                                                                 | A section shown [side by side](#sections-side-by-side) with the open dataset, by its URL as in `dataset`; repeatable, in the panels' order. Once the collection is read and its dataset open, only the first three other sections in the open dataset's `coordinateSystem` stay. Written only with `collection`                        |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
-| `annotationUrl`                                                                                           | Annotation import URL (imported automatically)                                                                                                                                                                                                                                                                                         |
+| `annotationUrl`                                                                                           | Annotation import URL (imported automatically; with `groups`, after the set loads, whose labels it adds to)                                                                                                                                                                                                                            |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                             |
 | `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                    |
@@ -1078,6 +1096,7 @@ the page reloads that entry's link, with its view and settings.
 | `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |
 | `hiddenClasses`                                                                                           | Hidden annotation classes: comma-separated class IDs such as `analysis:leiden:3`; `%` and `,` inside an ID are written `%25` and `%2C`. Applied once the set loads                                                                                                                                                                     |
+| `hiddenSets`                                                                                              | Hidden annotation sets, as the set's eye hides them: comma-separated set IDs such as `analysis:leiden`, written as in `hiddenClasses`. Applied once the set loads                                                                                                                                                                      |
 | `scale`, `score`, `detail`, `cellColor`                                                                   | Gene scale, signature score, expression detail, cell colour mode. A version 1 link with `genes` opens in Gene expression whatever `cellColor` says, as such links looked before that mode existed                                                                                                                                      |
 | `geneRange`                                                                                               | The Gene scale's range when set: `min,max`, an end left empty for Auto, such as `,10`. The max may be a percentile of each dataset's scores above 0, such as `,p95`, which follows the data like Auto at that percentile. `,` is Auto, written only to undo a dataset manifest's `geneRange`                                           |
 | `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                                                                                                                                                                                                                                   |
@@ -1093,6 +1112,7 @@ the page reloads that entry's link, with its view and settings.
 | `sdTable`, `sdCs`, `sdImage`, `sdUm`                                                                      | SpatialData table, coordinate system, image, and µm-per-unit override                                                                                                                                                                                                                                                                  |
 | `mimg`                                                                                                    | MERSCOPE `.vzg` image as `<stain>_z<plane>`, or `none`                                                                                                                                                                                                                                                                                 |
 | `vimg`, `vlib`, `voff`                                                                                    | Visium tissue image (`hires`, `lowres`, `none`), library (only with several), and `1` when off-tissue spots are shown                                                                                                                                                                                                                  |
+| `debug`                                                                                                   | `1` turns on `Show debug info` in [Settings](#settings) when the page opens. Read from the query string or the hash, never written: `?debug=1` stays in the address and copied links; `#debug=1` goes when the hash is next written                                                                                                    |
 
 A link with `dataset` skips the [start screen](#start-screen).
 Dataset-specific values (genes, ROI, channels, z plane, boundaries, colour

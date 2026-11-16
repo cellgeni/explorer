@@ -857,9 +857,9 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       id: h5adMetadataTrackId(track),
       label: track.label,
       values: null,
-      cellCount: track.values.length,
-      min: track.min,
-      max: track.max,
+      ...(cache.visium === null
+        ? { cellCount: track.values.length, min: track.min, max: track.max }
+        : placedTrackSummary(cache, track)),
     }))
   }
 
@@ -3870,6 +3870,35 @@ function h5adAnnotationGroupId(track: H5adCategoricalTrack): string {
 
 function h5adMetadataTrackId(track: H5adContinuousTrack): string {
   return `h5ad:${slug(track.id)}`
+}
+
+// A Visium track's count and range over the spots on the map. Spots off the
+// tissue, while hidden, and other libraries' spots are not placed, and label
+// counts leave them out too; a Census file has 4,992 rows for 370 placed
+// spots. A track with no placed values keeps the whole column's range.
+function placedTrackSummary(
+  cache: H5adCache,
+  track: H5adContinuousTrack,
+): { readonly cellCount: number; readonly min: number; readonly max: number } {
+  let cellCount = 0
+  let min = Number.POSITIVE_INFINITY
+  let max = Number.NEGATIVE_INFINITY
+
+  track.values.forEach((value, index) => {
+    const position = cache.coordinates[index]
+
+    if (!Number.isFinite(value) || position === undefined || !isFinitePoint(position)) {
+      return
+    }
+
+    cellCount += 1
+    min = Math.min(min, value)
+    max = Math.max(max, value)
+  })
+
+  return cellCount === 0
+    ? { cellCount, min: track.min, max: track.max }
+    : { cellCount, min, max }
 }
 
 // Distinct non-empty labels, counted up to `limit`; a column with more

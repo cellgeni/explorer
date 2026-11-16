@@ -1,19 +1,37 @@
 # H5AD (AnnData) Modality
 
-How the viewer detects and reads a direct AnnData `.h5ad` file URL, and AnnData
-in an [Icechunk repository](#anndata-in-icechunk). For hosting requirements see
+How the viewer detects and reads a direct AnnData `.h5ad` file URL, an AnnData
+Zarr store, and AnnData in an [Icechunk repository](#anndata-in-icechunk). For
+hosting requirements see
 [Host your own data](../host-your-own-data.md#host-your-own-h5ad-data); for the
 shared load pipeline see [Architecture](../architecture.md).
 
 ## Detection
 
 `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) checks the URL
-before any other platform:
+before any other platform, once a `.json` URL has been ruled out as a dataset
+manifest:
 
 1. The URL, with trailing slashes stripped, must end in `.h5ad` (a query string
    or fragment may follow).
 2. A single `HEAD` request (15 s timeout) must return `2xx`. A host that rejects
    `HEAD` makes the file undetectable and the platform `unknown`.
+
+Two other addresses open as `h5ad` without the suffix (see the
+[detection order](../architecture.md#1-detection)):
+
+- **AnnData Zarr store** (as `adata.write_zarr` writes it): a store whose root
+  `zarr.json` or `.zattrs` has `encoding-type: anndata` (`zarrStoreContent`),
+  at a URL whose path ends in `.zarr` or names that metadata file, or at a
+  folder URL where no manifest, `experiment.xenium` or `experiment.spatial` is
+  found. Other Zarr roots open as SpatialData or as an image.
+  `openAnnDataZarrStore` (`src/datasets/annDataZarrStore.ts`) takes the
+  store's groups and arrays from consolidated metadata or, without it, walks
+  only the groups the viewer reads, with the host's folder listing for the
+  children of `obsm` and `uns/spatial`.
+- **Icechunk repository**: a URL whose path ends in `.icechunk` and whose root
+  has `encoding-type: anndata`, or `obs` and `var` groups; see
+  [AnnData in Icechunk](#anndata-in-icechunk).
 
 An `h5ad` [dataset manifest](../dataset-manifest.md) names the table in
 `files.h5ad` (`detectManifestAnnData`): an `.h5ad` file gets the same `HEAD`

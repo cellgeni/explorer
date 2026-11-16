@@ -199,6 +199,27 @@ An ROI drawn while the warm-up opens the file cancels the warm-up, which
 stops its worker, and opens the file again: its genes took 4.5 s, and the
 warm-up's 1 MB was spent for nothing.
 
+## Bundle Check (2026-11-16)
+
+A `vite build` at `bea26d2`, sizes from `gzip -c` in kB of 1,000 bytes. The
+entry chunk is 764 kB, up from the 427 kB recorded above. `index.html` also
+preloads `spatial-io-vendor`, 5.3 MB, so the start screen fetches 7.1 MB of
+JavaScript (1,783 kB gzip) before any dataset is chosen. 3.7 MB of that
+chunk's source is `h5wasm`, which inlines its WASM. The main thread imports
+`h5wasm` only lazily (`visiumFeatureSlice.ts`), but the `spatial-io-vendor`
+group in `vite.config.ts` puts it with zarrita, geotiff and hyparquet, which
+the entry imports statically. A build with `h5wasm` taken out of that group
+put it in its own lazy chunk and cut the start screen's JavaScript to
+2.3 MB (753 kB gzip). Applied the same day; see
+[Closed Open Items](#closed-open-items).
+
+| Chunk preloaded by `index.html` | Raw      | Gzip     |
+| ------------------------------- | -------- | -------- |
+| `spatial-io-vendor`             | 5,317 kB | 1,244 kB |
+| entry (`index`)                 | 764 kB   | 215 kB   |
+| `deck-vendor`                   | 665 kB   | 189 kB   |
+| `react-vendor`                  | 190 kB   | 59 kB    |
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -295,3 +316,26 @@ Original-brief items with no outcome:
   - Not done: reading cell rows from the feature-major Zarr. A cell's counts
     are spread over every gene's entries, so it means reading all of
     `indices`.
+
+Found by the 2026-11-16 review:
+
+- [x] The start screen preloaded `h5wasm` (2026-11-16). The
+      `spatial-io-vendor` group in `vite.config.ts` put it, 3.7 MB of source
+      with its WASM inlined, in one chunk with zarrita, geotiff and
+      hyparquet, which the entry imports statically, so `index.html`
+      preloaded it although the main thread imports `h5wasm` only lazily.
+      Left out of every group, it builds into its own chunk (`hdf5_hl`,
+      1,030 kB gzip) that loads on first import. The start screen's
+      JavaScript fell from 7.1 MB (1,783 kB gzip) to 2.3 MB (753 kB gzip);
+      in the browser it transferred 768 kB with no request for the chunk,
+      and importing the chunk then wrote and read back an HDF5 file in
+      144 ms. A test in `tests/config/viteConfig.test.ts` keeps `h5wasm` out
+      of the groups. Workers bundle their own copy, as before.
+- [x] The umbrella `deck.gl` package was a dependency but never imported
+      (2026-11-16). The app imports the `@deck.gl/*` packages it uses
+      directly. Removing it took 272 packages out of the lockfile, among
+      them `@deck.gl/carto`, `geo-layers` and `mesh-layers`. The production
+      audit (`npm audit --omit=dev`) went from 16 advisories (9 high) to
+      one, `qs` through duckdb-wasm. The bundle did not change. `h5wasm` is
+      pinned at 0.10.2, the version the lockfile already held, so every
+      dependency is now pinned.

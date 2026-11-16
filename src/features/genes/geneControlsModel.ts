@@ -160,28 +160,35 @@ export function genePanelStatusCopy<ErrorType>(
 
 export function geneExpressionStatusCopy<
   ErrorType extends GeneExpressionLoadErrorSummary,
->(geneExpressionState: GeneExpressionState<ErrorType>): string {
+>(
+  geneExpressionState: GeneExpressionState<ErrorType>,
+  // Plural: cells, spots or bins.
+  elementNoun = 'cells',
+): string {
   if (geneExpressionState.status === 'loading') {
-    return `${geneExpressionModeLabel(geneExpressionState.mode)}: ${geneExpressionState.genes.join(', ')}`
+    return `${geneExpressionModeLabel(geneExpressionState.mode, elementNoun)}: ${geneExpressionState.genes.join(', ')}`
   }
 
   if (geneExpressionState.status === 'ready') {
-    const noun = geneExpressionState.cellCount === 1 ? 'cell' : 'cells'
+    const noun =
+      geneExpressionState.cellCount === 1 ? elementNoun.replace(/s$/, '') : elementNoun
+    const positive = `${geneExpressionState.cellCount.toLocaleString()} positive ${noun}`
+    const across = geneExpressionState.visibleCellCount.toLocaleString()
 
     if (geneExpressionState.mode === 'exact-region') {
       return `Expression exact region: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
     }
 
     if (geneExpressionState.mode === 'overview-sampled') {
-      return `Expression overview: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
+      return `Expression overview: ${positive} across ${across} slide ${elementNoun}`
     }
 
     if (geneExpressionState.mode === 'all-cells') {
-      return `Expression all cells: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} slide cells`
+      return `Expression all ${elementNoun}: ${positive} across ${across} slide ${elementNoun}`
     }
 
     if (geneExpressionState.mode === 'sampled') {
-      return `Expression sample: ${geneExpressionState.cellCount.toLocaleString()} positive ${noun} across ${geneExpressionState.visibleCellCount.toLocaleString()} visible cells`
+      return `Expression sample: ${positive} across ${across} visible ${elementNoun}`
     }
 
     return `Expression: ${geneExpressionState.cellCount.toLocaleString()} ${noun}`
@@ -198,7 +205,11 @@ export function geneExpressionStatusCopy<
   return 'Expression: none'
 }
 
-export function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
+export function geneExpressionModeLabel(
+  mode: GeneExpressionLoadMode,
+  // Plural: cells, spots or bins.
+  elementNoun = 'cells',
+): string {
   if (mode === 'overview-sampled') {
     return 'Expression overview'
   }
@@ -212,7 +223,7 @@ export function geneExpressionModeLabel(mode: GeneExpressionLoadMode): string {
   }
 
   if (mode === 'all-cells') {
-    return 'Expression all cells'
+    return `Expression all ${elementNoun}`
   }
 
   return 'Expression'

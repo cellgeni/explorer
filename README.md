@@ -2,14 +2,16 @@
 
 Browser-based explorer for hosted spatial-omics and image data. The app loads
 10x Xenium and Atera output folders, standard Visium (55 µm spots) and Visium
-HD Space Ranger output folders, Vizgen MERSCOPE region folders, direct AnnData
-`.h5ad` files (including Visium
-AnnData with `uns/spatial`), SpatialData Zarr stores, and image-only
-OME-TIFF/TIFF/QPTIFF/SVS/OME-Zarr URLs from object storage.
+HD Space Ranger output folders, Vizgen MERSCOPE region folders, AnnData
+`.h5ad` files and AnnData Zarr stores (including Visium AnnData with
+`uns/spatial`), SpatialData Zarr stores, and image-only
+OME-TIFF/TIFF/QPTIFF/SVS/NDPI/OME-Zarr URLs from object storage, and dataset
+collections that list several of them to browse together.
 It renders spatial cells, spots, bins, image pyramids, morphology channels, expression
 overlays, transcript density/exact overlays, annotations, ROI queries,
 shareable view state, and dataset diagnostics without a server-side data
-service.
+service. `Browse Store` and `Browse File` show what a Zarr store or Parquet
+file holds without opening it as a dataset.
 
 The implementation is a Vite + React application. It uses deck.gl for spatial
 rendering, DuckDB WASM and Hyparquet for browser-side Parquet queries, GeoTIFF,
@@ -90,8 +92,9 @@ served over HTTP; opening `index.html` from disk does not work. See
   implementations for Xenium, Atera, standard Visium, Visium HD, MERSCOPE,
   H5AD, SpatialData, and image-only sources.
 - `src/features/` contains domain UI and workflow modules for the app shell,
-  genes, transcripts, annotations, ROI, morphology, cells, diagnostics, and
-  platform-specific behavior.
+  genes, transcripts, annotations, ROI, morphology, cells, diagnostics,
+  dataset collections, the store and file browser, and platform-specific
+  behaviour.
 - `src/rendering/` contains deck.gl layer creation, styling, aggregation,
   viewport logic, opacity handling, and morphology canvas helpers.
 - `src/tiff/`, `src/codecs/`, `src/zarr/`, and `src/workers/` handle tiled
@@ -126,7 +129,9 @@ Enter a source in the `Dataset or image URL` field:
   overlays.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
   `obsm` coordinate matrix. Files over 300 MiB need a `.h5ad.json` reference
-  or `.h5ad.icechunk` repository next to them.
+  or `.h5ad.icechunk` repository next to them. An AnnData Zarr store (v2 or
+  v3, as `adata.write_zarr` writes it) needs neither, as it is read chunk
+  by chunk; its root metadata must say `encoding-type: anndata`.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements;
   or the same store zipped as one `.zarr.zip` file.
@@ -140,10 +145,25 @@ the dataset folder (or any `.json` URL entered directly), can name the
 platform, point to renamed or moved files, and set the genes, layers, and image
 channels shown on first load. See [Dataset manifest](docs/dataset-manifest.md).
 
+A dataset collection is a JSON file that lists datasets to browse together,
+such as the sections of one study. Open it with `?collection=<url>` in the
+viewer's address: a bar under the canvas lists its datasets with previews of
+their cells, and choosing one opens it with the same genes and cell
+colouring. Sections registered to each other can be shown side by side with
+one view. See [Dataset collections](docs/dataset-collections.md).
+
 Because data is read directly by the browser, hosted datasets must support CORS
 and HTTP byte-range requests for large binary assets. The in-app
 `Diagnose Dataset` action checks the detected platform and the key assets for
 the active source.
+
+When the address is a Zarr store (a `.zarr` folder or a group inside one, a
+zipped store, or an Icechunk repository), `Browse Store` next to
+`Load Dataset` lists its groups and arrays with their shapes, data types,
+chunking, codecs and attributes. For a Parquet file, `Browse File` shows
+its schema, row groups, metadata and first rows, read from the footer and the
+first pages. Neither loads the dataset, so both work for stores and files the
+viewer cannot open.
 
 ## Examples
 
@@ -182,8 +202,16 @@ The full index is in [docs/README.md](docs/README.md).
 - [Dataset manifest](docs/dataset-manifest.md): the optional `explorer.json`
   that maps renamed files and sets first-load display defaults, with a JSON
   Schema in `public/schemas/`.
+- [Dataset collections](docs/dataset-collections.md): a JSON file listing
+  datasets to browse together, opened with `?collection=`, with previews and
+  registered sections side by side.
 - [Image-only and GeoJSON annotations](docs/image-only-and-geojson.md): direct
   image URL support, platform gating, and GeoJSON shape import/export rules.
+- [TIFF tile-offset sidecars](docs/zchunkstore.md): the optional
+  `.zchunkstore` next to a pyramidal OME-TIFF, and how to generate one.
+- [Large H5AD files](docs/h5ad-reference.md): the `.h5ad.json` kerchunk
+  reference or `.h5ad.icechunk` repository that H5AD files over 300 MiB need,
+  and how to generate one.
 - [S3/CORS hosting playbook](docs/s3-cors-playbook.md): exact CORS headers,
   object serving rules, byte-range validation, and CDN considerations.
 - [Cell-feature matrix compatibility](docs/cell-feature-matrix-compatibility.md):

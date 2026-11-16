@@ -342,6 +342,7 @@ export function testAnnotationsSectionModel(
       hiddenSetIds: [],
       hiddenIds: [],
       placedCellIds: null,
+      elementNoun: 'cells',
       onColorChange: vi.fn(),
       onSetVisibilityChange: vi.fn(),
       onVisibilityChange: vi.fn(),
@@ -351,6 +352,7 @@ export function testAnnotationsSectionModel(
     },
     metadataTracks: {
       tracks: [],
+      elementNoun: 'cells',
       onRemove: vi.fn(),
       ...overrides.metadataTracks,
     },

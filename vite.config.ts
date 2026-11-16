@@ -22,9 +22,12 @@ export const dependencyChunkGroups = [
     test: /node_modules[\\/]@duckdb[\\/]duckdb-wasm[\\/]/,
     priority: 35,
   },
+  // h5wasm is left out: it inlines its WASM (3.7 MB of source), and the main
+  // thread imports it only lazily. In this group, which the entry imports,
+  // the start screen would preload it; on its own it loads when imported.
   {
     name: 'spatial-io-vendor',
-    test: /node_modules[\\/](@zarrita|zarrita|geotiff|hyparquet|hyparquet-compressors|h5wasm)[\\/]/,
+    test: /node_modules[\\/](@zarrita|zarrita|geotiff|hyparquet|hyparquet-compressors)[\\/]/,
     priority: 30,
   },
   {

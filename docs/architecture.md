@@ -28,6 +28,7 @@ files. Parsing happens in the browser:
 
 | Directory                               | Contents                                                                                                                                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/main.tsx`                          | Entry point: installs the worker Zarr codecs and renders `App` inside `AppErrorBoundary`                                                                                                 |
 | `src/App.tsx`                           | Orchestration root: wires state, workflows, the section and card models, and the shell around the viewer                                                                                 |
 | `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                                     |
 | `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
@@ -37,18 +38,29 @@ files. Parsing happens in the browser:
 | `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, Embedding panel, link panel state, narrow layout                                                         |
 | `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
+| `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
+| `src/features/store-structure/`         | The Store structure drawer that `Browse Store` and `Browse File` open: a Zarr store's groups and arrays, or a Parquet file's schema, row groups and first rows                           |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
-| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs                                                                                                                                                    |
-| `src/workers/`                          | Tile decode pool, H5 file worker, cells overview worker, Visium HD matrix and Feature Slice workers                                                                                      |
+| `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs; Zarr stores (HTTP, zipped, Icechunk), `Browse Store`'s reader (`zarrStructure.ts`) and its folder lister (`zarrFolderLister.ts`)                  |
+| `src/workers/`                          | Worker entry points (`*.worker.ts`) with their handlers (`*Core.ts`) and messages, the decode pools, and the H5 range-read file; see [Workers](#workers)                                 |
+| `src/utils/`                            | Small shared helpers: `sharedLoad`, `abortable`, `createAsyncLimiter`, `mapWithConcurrency`, `slug`                                                                                      |
 | `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
-| `src/styles/`                           | CSS per UI area. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens                                         |
-| `tests/e2e/`                            | Playwright tests against hosted reference datasets                                                                                                                                       |
+| `src/styles/`                           | CSS per UI area, imported by `src/index.css`. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens            |
+| `src/test/`                             | Vitest setup, the App test harness, idle section models, and fixture builders; fixture files and the scripts that write them in `fixtures/`                                              |
+| `src/types/`                            | Type declarations for modules that ship none (`@cornerstonejs/codec-openjpeg`, hyparquet's `encoding.js`)                                                                                |
+| `tests/config/`                         | Vitest tests of `vite.config.ts`                                                                                                                                                         |
+| `tests/e2e/`                            | Playwright tests: `@smoke` tests run offline on fixtures; `@live` tests load hosted datasets and every example in `examples/`                                                            |
 
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
-`npm run test:coverage` adds V8 coverage over `src/` with minimum thresholds;
-CI runs it on every pull request and uploads the report, but only `npm test`
-blocks a merge.
+On every pull request, CI (`.github/workflows/ci.yml`) runs Prettier, ESLint,
+the typecheck, `npm test` and the build, and in a job of their own the
+`@smoke` E2E tests, which answer data requests from fixtures with `page.route`
+and need no network. `npm run test:coverage` adds V8 coverage over `src/` with
+minimum thresholds; CI runs it too and uploads the report, in a job that is
+allowed to fail. The full Playwright suite, which adds the `@live` tests on
+hosted datasets and every example in `examples/`, runs on a weekday schedule
+(`.github/workflows/e2e-live.yml`).
 
 ## Load Pipeline
 
@@ -78,12 +90,14 @@ match:
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
 | 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here                    | The manifest's `platform`                                          |
 | 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                                                | `h5ad`                                                             |
-| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`, or names a group inside a `.zarr` store; root metadata `HEAD` succeeds | `spatialdata` if root attrs have `spatialdata_attrs`, else `image` |
+| 1b    | URL path ends in `.icechunk`: open the repository and read its root group; errors stop here                                             | `h5ad` (AnnData), `spatialdata`, or `image`                        |
+| 1c    | URL path ends in `.zip`, and `HEAD` succeeds; a zipped store that is not SpatialData is an error                                        | `spatialdata`                                                      |
+| 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`, or names a group inside a `.zarr` store; root metadata `HEAD` succeeds | `spatialdata` or `h5ad` (AnnData) by root attributes, else `image` |
 | 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.svs`, `.ndpi`, and `HEAD` succeeds                                           | `image`                                                            |
 | 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                                                  | The manifest's `platform`                                          |
 | 4b    | `HEAD <url>/experiment.xenium` succeeds                                                                                                 | `xenium`                                                           |
 | 4c    | `HEAD <url>/experiment.spatial` succeeds                                                                                                | `atera`                                                            |
-| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                                      | `spatialdata` or `image`                                           |
+| 5     | `HEAD <url>/zarr.json` or `<url>/.zattrs` succeeds                                                                                      | `spatialdata`, `h5ad`, or `image`, as in 2                         |
 | 6     | `spatial/tissue_positions.csv` (or `…_list.csv`), `spatial/scalefactors_json.json`, `filtered_feature_bc_matrix.h5`                     | `visium`                                                           |
 | 6b    | `cell_by_gene.csv` and `cell_metadata.csv` (probed alongside 6, with `cell_boundaries.parquet`)                                         | `merscope`                                                         |
 | 7     | At least one complete `binned_outputs/square_*um` tier                                                                                  | `visium-hd`                                                        |
@@ -352,47 +366,64 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 
 | Cache                                                  | Scope                                                                                                                        | Limits                                        | File                                         |
 | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), Xenium matrix zip ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`       |
+| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`       |
 | Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure, else kept until reload    | `datasetFactory.ts`, `xeniumDatasetCache.ts` |
 | Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                   |
 | Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                            |
 | Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder     | `src/data/folderListing.ts`                  |
-| Matrix metadata and indices                            | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                            |
+| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                            |
+| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`                      | 128 MiB of blocks each; dropped on failure    | `gex.ts`, `visiumFeatureSlice.ts`            |
 | SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                     |
 | Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                      |
 | Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                   | `visiumHdDatasetReaders.ts`                  |
 
-The byte-range cache (database version 2) keeps each range's bytes, each
+The byte-range cache (database version 3) keeps each range's bytes, each
 range's size and last access, and the cache's totals in three object stores. A
 write stores the range and updates the totals in one transaction. Over a limit,
 the same transaction walks the access-time index from the oldest range and
 deletes ranges until the totals fit, so eviction never reads cached bytes. A
-read updates only the range's access time. Upgrading from version 1, which kept
-sizes next to the bytes, drops the cached ranges. While a tab of an older build
-holds the database open, the upgrade waits and the new tab reads without the
-cache; each connection closes when a newer version opens elsewhere.
+read updates only the range's access time. Upgrading from an older version
+drops the cached ranges: version 1 kept sizes next to the bytes, and version 2
+keyed ranges without the file's version. While a tab of an older build holds
+the database open, the upgrade waits and the new tab reads without the cache;
+each connection closes when a newer version opens elsewhere.
 
-The byte-range cache keys do not include an ETag, so replacing a file in place
-at the same URL can serve stale bytes until site data is cleared.
+A range's key is its namespace, URL, byte range and the file's version
+(`byteRangeFileVersion`): the file's size and its ETag, or its Last-Modified
+date when it has no ETag (`responseValidator`). A file replaced at the same
+URL therefore misses the ranges cached from the old one. Readers take the
+version from a response they already make, never a request of their own: the
+zip's `HEAD` (`src/zarr/cachedZipStore.ts`), the TIFF header read
+(`src/tiff/remoteTiff.ts`), and hyparquet's `HEAD` for Parquet footers
+(`fetchKeepingValidator`). Last-Modified is always readable cross-origin, but
+ETag only when the server exposes it. With neither, the key has only the size,
+so a replacement of the same size can still be served the old bytes; a TIFF
+whose host also hides `Content-Range` is cached by URL alone. A file the page
+has already opened, such as a zip store or a TIFF, keeps the version it was
+opened with until the page reloads.
 
-A load that several callers wait on (range probes, whole-file H5 matrices,
-Visium HD's `feature_slice.h5`) is a `sharedLoad`
-(`src/utils/sharedLoad.ts`). It runs under its own signal, aborted only when
-every caller waiting on it has aborted, and each caller stops waiting at its
-own signal. Before 15.5-E the first caller's signal ran the load, so its
-cancel failed the others with an `AbortError` they took for their own, and
-their cards stayed on "Loading".
+A load that several callers wait on (range probes, opening an H5 matrix or
+Visium HD's `feature_slice.h5` in its worker, Visium HD barcode mappings) is a
+`sharedLoad` (`src/utils/sharedLoad.ts`). It runs under its own signal,
+aborted only when every caller waiting on it has aborted, and each caller
+stops waiting at its own signal. Before 15.5-E the first caller's signal ran
+the load, so its cancel failed the others with an `AbortError` they took for
+their own, and their cards stayed on "Loading".
 
 ## Workers
 
-| Worker                        | Created by                      | Purpose                                                                                        |
-| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`        | `TileDecodeWorkerPool` (≤ 4)    | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                           |
-| DuckDB-WASM worker            | `src/data/duckdb.ts`            | One per DuckDB client                                                                          |
-| `zarrDecode.worker.ts`        | `ZarrDecodePool` (≤ 3)          | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
-| `h5File.worker.ts`            | `src/data/h5WorkerFile.ts`      | One HDF5 file each: H5AD and the standard Visium matrix whole; Xenium and Visium HD by range   |
-| `cellsOverview.worker.ts`     | `readCellsOverviewInWorker`     | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
-| `spatialDataShapes.worker.ts` | `readSpatialDataShapesInWorker` | SpatialData `shapes.parquet` files: decode them into transferred shape columns (one per read)  |
+| Worker                                | Created by                              | Purpose                                                                                                                    |
+| ------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                                                       |
+| DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                      |
+| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                             |
+| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: H5AD and the standard Visium matrix whole; Xenium and Visium HD by range                               |
+| `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                           |
+| `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read) |
+| `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                           |
+| `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                            |
+| `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                        |
+| `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                     |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
 Visium), writes them into its own h5wasm file system, and answers reads by
@@ -428,6 +459,16 @@ the zip store and its byte-range cache stay on the main thread. The worker
 ends once it has answered, or on abort. If it fails to start, or there is no
 `Worker`, the file is read on the main thread.
 
+The MERSCOPE table, MEX matrix and zip entry workers each fetch their files
+themselves and send back progress messages, then the result by transfer. The
+Visium HD segmentation index worker fetches nothing: the main thread fetches
+the GeoJSON, so custom fetchers and the full-file budget apply, and hands its
+body over chunk by chunk. Each ends once it has answered, or on abort. With a
+custom fetcher (except the segmentation index), with no `Worker`, or if the
+worker fails to run, the same reader runs on the main thread. See
+[MERSCOPE](./modalities/merscope.md), [Standard Visium](./modalities/visium.md)
+and [Visium HD](./modalities/visium-hd.md#caching-and-workers).
+
 Auto-contrast decodes and samples tiles off the main thread and gets back only
 the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile
 decode worker started for the run, which ends with the run or on abort. An
@@ -449,8 +490,8 @@ instead of zarrita's row-by-row copy. If a worker fails, the chunk is decoded
 on the main thread with zarrita's codec; with no `Worker` the registry is left
 alone. OME-Zarr image chunk bytes are fetched on the main thread and decoded
 whole in the Zarr decode workers, which fall back to the main thread if they
-fail. Other hyparquet reads (Visium HD positions and barcode mappings) run on
-the main thread.
+fail. Other hyparquet reads (Visium HD positions and barcode mappings, and
+`Browse File`'s footer and first rows) run on the main thread.
 
 ## Performance Budget
 
@@ -492,8 +533,10 @@ it in sync. The field list is in the
 ## Build
 
 - `vite.config.ts` splits vendor chunks (`react-vendor`, `deck-vendor`,
-  `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`) and serves
-  `Cross-Origin-Opener-Policy: same-origin` and
+  `duckdb-vendor`, `spatial-io-vendor`, `codec-vendor`); h5wasm, whose
+  WASM is inlined, stays out of them in a chunk of its own that loads on
+  first import, so the start screen does not preload it. The config also
+  serves `Cross-Origin-Opener-Policy: same-origin` and
   `Cross-Origin-Embedder-Policy: require-corp` in dev and preview. The app does not
   depend on cross-origin isolation: nothing uses `SharedArrayBuffer`, and
   DuckDB-WASM uses its non-threaded bundles. See

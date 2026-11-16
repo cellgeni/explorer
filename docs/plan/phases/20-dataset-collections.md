@@ -1,7 +1,7 @@
 # Phase 20 — Dataset Collections (Recorded From Git)
 
 Shipped from 2026-11-14 to 2026-11-16 (PRs #102, #104, #106, #108, #114,
-#127, #128). Not planned in advance. Requested to browse the sections of one
+#127, #128, #137). Not planned in advance. Requested to browse the sections of one
 study together, as the [SPCOX WebAtlas page](https://www.sciatlas.org/SPCOX/)
 shows one gene across 18 Xenium sections, without a backend.
 
@@ -62,6 +62,19 @@ Current behaviour is documented in
       pixels; a typed top is shared to compare levels (#128, 2026-11-16).
 - [x] `collectionView=grid` or `names` keeps the bar's Expand and Previews
       state in the link (#127, 2026-11-16).
+- [x] Registered sections side by side (#137, 2026-11-16). Entries with the
+      same `coordinateSystem` are registered to each other; the viewer
+      registers nothing itself. With one open, the bar gives the others a
+      `Show {label} beside` toggle, up to three panels beside the main view
+      (two viewers side by side, three in a row, four in a 2×2 grid, stacked
+      under 860 px). `LinkedViewChannel` (`src/components/linkedView.ts`)
+      gives every viewer one view, followed exactly rather than within
+      `equivalentViewState`'s tolerance. Panels (`LinkedSections`) draw the
+      collection preview data as 10 µm points, coloured as the main view
+      colours cells; `Open` swaps a panel with the main view at the same view.
+      `compare=` is written once per panel, in order. The preview store moved
+      to App so the bar and the panels share one set of reads, and previews
+      no longer drop cells.
 
 Measured in the browser:
 
@@ -82,3 +95,25 @@ Measured in the browser:
 - [ ] No embedding docked next to the spatial view.
 - [ ] `labels` needs an `image` to be placed on, and an image group inside a
       SpatialData store is read without the store's transformations.
+- [ ] Side-by-side panels show cells only: no image, boundaries, transcripts
+      or tools. Every cell is drawn 10 µm across, so Visium spots are smaller
+      than in the main view, and Visium HD and image-only datasets have no
+      preview, so they cannot be panels.
+- [ ] Side by side has unit and App tests but no E2E test, and has been
+      checked in the browser only on SPCOX sections marked as one coordinate
+      system, which are not truly registered.
+
+## Closed Open Items
+
+Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review):
+
+- [x] A `compare=` in a link's query string was not removed once the hash
+      was written (only `collection=` was), and the hash overrode the query
+      string only for the keys it set (`readShareableStateFromLocation`), so
+      closing that panel and reloading brought it back. Any value a version
+      2 hash leaves out as the default did the same, such as genes removed
+      from a `?genes=` link. Since 2026-11-16 a version 2 hash is read as the
+      whole link, and once the hash is written the query string keeps only
+      keys a link does not set, such as `debug=`
+      (`searchWithoutLinkState` in `useShareableUrlHash.ts`). The query
+      string's `dataset=` goes too, as the hash names the dataset.

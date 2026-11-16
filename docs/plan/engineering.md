@@ -191,6 +191,12 @@ From a run of `npm test` and the repository:
   Pages.
 - The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
   by hand against the dev server, not in CI.
+- Recount on 2026-11-16 (`bea26d2`): 292 Vitest files with 2,468 tests,
+  73 s locally. 14 smoke tests (the two MERSCOPE tests added) and 11 live
+  ones in `app.spec.ts`, plus the 9 examples and the gallery in
+  `examples.spec.ts`. The CELLxGENE Visium, PBMC3K and Atera live tests
+  skip after a 10 s preflight when their data does not answer; the Xenium
+  and Visium HD ones have no preflight, so they fail instead.
 
 ### Open
 
@@ -224,7 +230,15 @@ From a run of `npm test` and the repository:
       index (about 1 s locally, in a random test each run). Since 2026-11-15
       `fetch` fails every request in `App.test.tsx`, between tests too
       (`offlineFetch` in `src/test/appTestHarness.ts`), and the longest stall
-      in a full run is the tests' own 0.25 s of queries.
+      in a full run is the tests' own 0.25 s of queries. On 2026-11-16 the
+      coverage job had passed in all 87 completed CI runs of 2026-11-15 and
+      2026-11-16, so the condition is met. What is left: drop
+      `continue-on-error` and "(not required)" from `ci.yml`, and make the
+      job a required check, which needs a repository admin. `main` has no
+      branch protection or rulesets (checked 2026-11-16), so CI reports on
+      every PR but no check blocks a merge, `npm test` included; "required"
+      above means required by convention. Protecting `main` with the
+      existing checks would come first.
 - [x] Deeper Visium HD browser coverage: segmentation controls, Bin Info
       inspection, and loading the 2 µm tier when the environment allows.
       Done 2026-11-12; see [Closed Open Items](#closed-open-items).
@@ -240,6 +254,21 @@ From a run of `npm test` and the repository:
 - [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
       OME-Zarr and image-only TIFF. Only the nightly examples load an OME-Zarr
       and a QPTIFF image.
+- [ ] E2E for what shipped without it (checked 2026-11-16): dataset
+      collections (the bar, previews, the grid, side by side and `compare=`),
+      Browse Store and Browse File, SVS, NDPI and plain TIFF, GeoJSON import
+      and export, and load errors (404, CORS, `http://` data). Xenium, Atera,
+      Visium HD, SpatialData, QPTIFF and OME-Zarr have live tests only. Every
+      test runs in desktop Chromium; none at a narrow width. The axe walk does
+      not reach the collection bar, side-by-side panels or the structure
+      drawer.
+- [ ] Unit coverage is thin where it is hardest to see by eye (V8 report of
+      2026-11-12): `gridBinLayer.ts` (0% of branches), `viewerPicking.ts`
+      (28% of lines; the polygon hit test never runs), the chunk cache in
+      `zarrDecode.worker.ts` (0%), `visiumHdOverview.ts` (55% of branches)
+      and `omeZarrPixels.ts` (22% of branches). S3 listing pagination in
+      `zarrFolderLister.ts` (`IsTruncated`, `NextContinuationToken`) is not
+      tested.
 
 ### Closed Open Items
 
@@ -271,6 +300,9 @@ Testing:
     Bin card.
   - The Bin card's cell assignment: "Loaded" in about 1.3 s locally after
     Enter, from 4 requests (HEAD, two footer reads, one 300 KB range).
+  - Since 2026-11-16, the Bin card opened with a mouse click held for
+    400 ms, which mjolnir.js dropped before (see
+    [Phase 6](phases/06-visium-hd.md#closed-open-items)).
 - [x] Direct tests for small helpers. About 14 pure helpers have no test, for
       example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
       `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the
@@ -310,7 +342,7 @@ Testing:
 | Main-thread decode jank                   | Worker pool as a Phase 1 exit criterion                         | Tile decode in workers                                                        |
 | S3 misconfiguration breaks Range silently | "Diagnose dataset" check (CORS, Range, key files)               | Range probes and `Diagnose Dataset` shipped                                   |
 | DuckDB 40 MB start-up                     | hyparquet first paint and lazy DuckDB                           | Shipped                                                                       |
-| Coordinate and unit bugs                  | One tested `coords` module; property-test round trips           | One module; property tests not recorded                                       |
+| Coordinate and unit bugs                  | One tested `coords` module; property-test round trips           | One module; fast-check property tests since 2026-11-12                        |
 | Memory blow-up on huge slides             | Adaptive point caps, tile LRU, memory telemetry and eviction    | Performance budget and tile-cache eviction telemetry                          |
 | Large hosted H5 and GeoJSON files         | (Added in Phase 6/7)                                            | Lazy-range workers, streaming GeoJSON, H5AD size gate with kerchunk reference |
 | Sampling hides rare cells                 | (Found November 2026)                                           | Samples keep every expressing cell; overlay draws every expressing cell       |

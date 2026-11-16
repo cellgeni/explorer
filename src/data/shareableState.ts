@@ -44,6 +44,9 @@ export interface ShareableState {
   // Hidden annotation classes, such as `analysis:leiden:3`: `hiddenClasses=`,
   // comma-separated, with `%` and `,` in an ID written as `%25` and `%2C`.
   readonly hiddenAnnotationIds?: readonly string[]
+  // Hidden annotation sets, such as `analysis:leiden` (the set's eye):
+  // `hiddenSets=`, written as `hiddenClasses=` is.
+  readonly hiddenAnnotationSetIds?: readonly string[]
   readonly geneExpressionColorScale?: string
   // The Gene scale's range when set: `geneRange=min,max`, an end empty for
   // Auto.
@@ -126,6 +129,7 @@ export function parseShareableState(hash: string): ShareableState {
   const tool = readString(params, 'tool')
   const hiddenLayers = readCsv(params, 'hidden')
   const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
+  const hiddenAnnotationSetIds = readEscapedCsv(params, 'hiddenSets')
   const geneExpressionColorScale = readString(params, 'scale')
   const geneExpressionScaleRange = readString(params, 'geneRange')
   const geneExpressionScoreMode = readString(params, 'score')
@@ -237,6 +241,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (hiddenAnnotationIds !== undefined) {
     state.hiddenAnnotationIds = hiddenAnnotationIds
+  }
+
+  if (hiddenAnnotationSetIds !== undefined) {
+    state.hiddenAnnotationSetIds = hiddenAnnotationSetIds
   }
 
   if (geneExpressionColorScale !== undefined) {
@@ -470,13 +478,8 @@ export function formatShareableState(state: ShareableState): string {
     params.set('hidden', state.hiddenLayers.join(','))
   }
 
-  const hiddenAnnotationIds = (state.hiddenAnnotationIds ?? []).filter(
-    (annotationId) => annotationId.trim() !== '',
-  )
-
-  if (hiddenAnnotationIds.length > 0) {
-    params.set('hiddenClasses', hiddenAnnotationIds.map(escapeCsvEntry).join(','))
-  }
+  setEscapedCsv(params, 'hiddenClasses', state.hiddenAnnotationIds)
+  setEscapedCsv(params, 'hiddenSets', state.hiddenAnnotationSetIds)
   setOptionalString(params, 'scale', state.geneExpressionColorScale)
   setOptionalString(params, 'geneRange', state.geneExpressionScaleRange)
   setOptionalString(params, 'score', state.geneExpressionScoreMode)
@@ -691,6 +694,18 @@ function readEscapedCsv(
   name: string,
 ): readonly string[] | undefined {
   return readCsv(params, name)?.map(unescapeCsvEntry)
+}
+
+function setEscapedCsv(
+  params: URLSearchParams,
+  name: string,
+  entries: readonly string[] | undefined,
+): void {
+  const kept = (entries ?? []).filter((entry) => entry.trim() !== '')
+
+  if (kept.length > 0) {
+    params.set(name, kept.map(escapeCsvEntry).join(','))
+  }
 }
 
 function escapeCsvEntry(entry: string): string {
