@@ -200,15 +200,6 @@ Testing:
       [Testing And CI](engineering.md#testing-and-ci). `main` has no branch
       protection or rulesets, so today no check blocks a merge at all;
       protecting it with the existing checks comes first.
-- [ ] The Visium HD Bin card shows "Score 0" for a selected gene the bin
-      expresses unless cells are coloured by gene expression: bins only get
-      expression counts in that mode, and `activeSelectedGridCell`
-      (`App.tsx`) fills in 0. Found 2026-11-12.
-- [ ] Clicking a Visium HD bin selects nothing under software WebGL (headless
-      Chromium), because bin picking relies on deck.gl's picking, and bins have
-      no coordinate fallback as cells do. Enter at the crosshair works. Not
-      root-caused; found 2026-11-12. `gridCellAtPoint`
-      (`viewerKeyboardPick.ts`), which Enter uses, could back clicks too.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
       nightly examples test loads an OME-Zarr, a QPTIFF, and a SpatialData
       store (Zarr v2 with circle shapes). No smoke test covers these sources,
