@@ -146,6 +146,22 @@ export function createStructuredLoadError(
     )
   }
 
+  // Thrown when DuckDB cannot download one of its extensions
+  // (src/data/duckdb.ts).
+  if (error instanceof Error && error.name === 'DuckDbExtensionLoadError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'network',
+        title: 'DuckDB extension did not load',
+        message,
+        action:
+          'DuckDB downloads its extensions from extensions.duckdb.org. Check that this network can reach it, then try again.',
+      },
+      detail,
+    )
+  }
+
   // Thrown by Browse File (src/data/parquetStructure.ts).
   if (error instanceof Error && error.name === 'ParquetFileNotFoundError') {
     return withOptionalDetail(

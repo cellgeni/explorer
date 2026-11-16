@@ -321,23 +321,23 @@ Testing:
 
 ## Tech Stack
 
-| Concern             | Planned                                         | Outcome                                                                                                                        |
-| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Build               | Vite + strict TypeScript                        | As planned; vendor chunk groups added                                                                                          |
-| UI and state        | React + Zustand                                 | React state in domain bundles; Zustand for the viewer store only                                                               |
-| Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                                                 |
-| Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes and serves Browse File |
-| Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, AnnData Zarr, OME-Zarr images, SpatialData stores, Browse Store             |
-| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (by range for Visium HD and Xenium H5, whole files otherwise); jsfive deferred                               |
-| OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                                               |
-| JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                                              |
-| Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                                                |
-| JPEG XR             | WASM decoder                                    | **Dropped**                                                                                                                    |
-| CSV                 | papaparse                                       | Not adopted; not a dependency. CSV parsing is hand-written; `metrics_summary.csv` is not read                                  |
-| Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice                                     |
-| State sharing       | URL hash                                        | As planned                                                                                                                     |
-| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache                                    |
-| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry), keyed by file version                                     |
+| Concern             | Planned                                         | Outcome                                                                                                                                                                    |
+| ------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Build               | Vite + strict TypeScript                        | As planned; vendor chunk groups added                                                                                                                                      |
+| UI and state        | React + Zustand                                 | React state in domain bundles; Zustand for the viewer store only                                                                                                           |
+| Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                                                                                             |
+| Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` and `parquet` loaded at bootstrap, `spatial` on the first lasso; hyparquet also reads SpatialData shapes and serves Browse File |
+| Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, AnnData Zarr, OME-Zarr images, SpatialData stores, Browse Store                                                         |
+| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (by range for Visium HD and Xenium H5, whole files otherwise); jsfive deferred                                                                           |
+| OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                                                                                           |
+| JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                                                                                          |
+| Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                                                                                            |
+| JPEG XR             | WASM decoder                                    | **Dropped**                                                                                                                                                                |
+| CSV                 | papaparse                                       | Not adopted; not a dependency. CSV parsing is hand-written; `metrics_summary.csv` is not read                                                                              |
+| Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice                                                                                 |
+| State sharing       | URL hash                                        | As planned                                                                                                                                                                 |
+| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache                                                                                |
+| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry), keyed by file version                                                                                 |
 
 ## Risks And Mitigations
 

@@ -53,7 +53,7 @@ function makeDataset(
   conn: XeniumDuckDbConnection,
   overrides: Partial<ConstructorParameters<typeof XeniumDataset>[0]> = {},
 ) {
-  const duckDbClient: DuckDbClientLike = { conn }
+  const duckDbClient: DuckDbClientLike = { conn, loadSpatial: async () => {} }
 
   return new XeniumDataset({
     baseUrl: 'https://example.test/xenium/',
@@ -386,7 +386,9 @@ describe('XeniumDataset', () => {
         },
       ],
     ])
-    const createDuckDbClient = vi.fn(async (): Promise<DuckDbClientLike> => ({ conn }))
+    const createDuckDbClient = vi.fn(
+      async (): Promise<DuckDbClientLike> => ({ conn, loadSpatial: async () => {} }),
+    )
     const dataset = new XeniumDataset({
       baseUrl: 'https://example.test/xenium/',
       createDuckDbClient,
@@ -972,6 +974,94 @@ describe('XeniumDataset', () => {
       'POLYGON((10 20, 20 20, 20 30, 10 20))',
       75,
     ])
+  })
+
+  it('loads the spatial extension before lasso queries only', async () => {
+    const calls: string[] = []
+    const conn: XeniumDuckDbConnection = {
+      async prepare(sql) {
+        calls.push(sql.includes('ST_Within') ? 'polygon query' : 'query')
+        return new FakeStatement([])
+      },
+    }
+    const loadSpatial = vi.fn(async () => {
+      calls.push('load spatial')
+    })
+    const transcriptReader = vi.fn(
+      async (): Promise<GexResult> => ({ geneNames: [], cells: new Map() }),
+    )
+    const dataset = makeDataset(conn, {
+      duckDbClient: { conn, loadSpatial },
+      transcriptReader,
+    })
+    const bbox = {
+      minX: micrometers(10),
+      maxX: micrometers(20),
+      minY: micrometers(20),
+      maxY: micrometers(30),
+    }
+    const points = [
+      { x: micrometers(10), y: micrometers(20) },
+      { x: micrometers(20), y: micrometers(20) },
+      { x: micrometers(20), y: micrometers(30) },
+    ]
+
+    await dataset.cells(bbox)
+    await dataset.transcriptsForSelection({ kind: 'box', bbox })
+    await dataset.transcripts(
+      {
+        kind: 'circle',
+        cx: micrometers(15),
+        cy: micrometers(25),
+        radius: micrometers(5),
+      },
+      'cells-only',
+      20,
+    )
+
+    expect(calls).toEqual(['query', 'query', 'query'])
+    calls.length = 0
+
+    await dataset.cells({ kind: 'lasso', bbox, points })
+    await dataset.transcriptsForSelection({ kind: 'lasso', bbox, points })
+    await dataset.transcripts({ kind: 'polygon', points }, 'cells-only', 20)
+
+    expect(calls).toEqual([
+      'load spatial',
+      'polygon query',
+      'load spatial',
+      'polygon query',
+      'load spatial',
+      'polygon query',
+    ])
+  })
+
+  it('reports a spatial extension that did not load instead of querying', async () => {
+    const conn = new FakeConnection([])
+    const spatialError = new Error(
+      "Lasso selections need DuckDB's spatial extension, which did not load: Failed to fetch",
+    )
+    const dataset = makeDataset(conn, {
+      duckDbClient: { conn, loadSpatial: () => Promise.reject(spatialError) },
+    })
+
+    await expect(
+      dataset.cells({
+        kind: 'lasso',
+        bbox: {
+          minX: micrometers(0),
+          maxX: micrometers(10),
+          minY: micrometers(0),
+          maxY: micrometers(10),
+        },
+        points: [
+          { x: micrometers(0), y: micrometers(0) },
+          { x: micrometers(10), y: micrometers(0) },
+          { x: micrometers(10), y: micrometers(10) },
+        ],
+      }),
+    ).rejects.toBe(spatialError)
+    expect(conn.preparedSql).toEqual([])
   })
 
   it('loads annotations from analysis.zarr and cell-feature matrix row ids', async () => {

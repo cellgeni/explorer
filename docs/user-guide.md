@@ -342,8 +342,11 @@ current shapes as GeoJSON.
 Use the Box selection (`R`) or Lasso selection (`L`) tool to draw box or lasso
 regions. Each drawing is kept as a selection, named "ROI 1", "ROI 2" and so on,
 and the Selection card shows the newest: Xenium ROIs can be saved as
-annotations (`Save ROI`) and export selected cells or transcripts. Visium HD
-ROIs select bins and export barcodes. The card's Genes tab ranks the genes
+annotations (`Save ROI`) and export selected cells or transcripts. The first
+Xenium lasso downloads DuckDB's spatial extension from extensions.duckdb.org,
+which takes about a second; where that address is blocked, the lasso shows
+"DuckDB extension did not load" under Issues. Visium HD ROIs select bins and
+export barcodes. The card's Genes tab ranks the genes
 enriched in the selection against a sample of cells from the rest of the
 tissue, with the share of cells expressing each inside and outside and a
 minimum share filter; `Most abundant` ranks by count instead. Clicking a gene
