@@ -8,6 +8,7 @@ import {
 } from '../../components/AppStatusPanels'
 import { Disclosure, InfoTip, Select } from '../../components/ui'
 import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
+import { isZarrStoreUrl } from '../store-structure/storeStructureModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -105,9 +106,23 @@ export function OpenDatasetForm({
           {boundaryLimitField}
         </Disclosure>
       )}
-      <button type="submit" disabled={open.isLoading} title="Load dataset or image">
-        {open.isLoading ? 'Loading…' : 'Load Dataset'}
-      </button>
+      <div className="dataset-form-actions">
+        <button type="submit" disabled={open.isLoading} title="Load dataset or image">
+          {open.isLoading ? 'Loading…' : 'Load Dataset'}
+        </button>
+        {isZarrStoreUrl(open.datasetUrl) ? (
+          <button
+            type="button"
+            className="dataset-browse-store"
+            title="Browse the groups and arrays in this Zarr store without loading it"
+            onClick={() => {
+              open.onBrowseStore(open.datasetUrl.trim())
+            }}
+          >
+            Browse Store
+          </button>
+        ) : null}
+      </div>
     </form>
   )
 }

@@ -110,6 +110,11 @@ Features:
       Azimuth colours (see [Phase 12](phases/12-atera.md)).
 - [ ] SVS: show the thumbnail, label, and macro images, and draw the minimap
       from the thumbnail.
+- [ ] NDPI: files over 4 GB (64-bit offsets; test files and what support
+      needs in [Phase 19](phases/19-ndpi.md#64-bit-ndpi-files-over-4-gb)),
+      NDPI URLs without a `.ndpi` suffix, a `Z plane` control for other focal
+      planes, the macro image, and decoding blocks with the browser's JPEG
+      decoder (see [Phase 19](phases/19-ndpi.md#known-gaps)).
 - [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
 - [ ] The Zarr transcript estimate counts every transcript in a tile, so it
       ignores `Min QV` and `Gene-only calls` (87.5% of a sampled demo tile

@@ -55,6 +55,8 @@ import {
 } from './features/app-shell/useUndoableRemovals'
 import { useUndoToast } from './features/app-shell/useUndoToast'
 import { StartScreen } from './features/start/StartScreen'
+import { StoreStructureDrawer } from './features/store-structure/StoreStructureDrawer'
+import { useStoreStructure } from './features/store-structure/useStoreStructure'
 import {
   CollectionBar,
   type CollectionBarAnnotations,
@@ -336,7 +338,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadTranscriptViewport,
     },
     genes: { loadGeneExpression },
-    diagnostics: { runDatasetDiagnostics },
+    diagnostics: { readStoreStructure, runDatasetDiagnostics },
   } = resolveAppDependencies(dependencies)
 
   // An old link's tab opens as panels, a tool or a card (15.2-H).
@@ -739,6 +741,8 @@ export function App({ dependencies }: AppProps = {}) {
     loadState.status === 'error' ||
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
   const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
+  // Browse Store's drawer, opened from the dataset field (any of its forms).
+  const storeStructure = useStoreStructure({ read: readStoreStructure })
   // Undo after a removal (15.3-C); another dataset ends the offer.
   const undoToast = useUndoToast()
   const { dismiss: dismissUndo, offerUndo } = undoToast
@@ -3587,6 +3591,7 @@ export function App({ dependencies }: AppProps = {}) {
     debugMode,
     diagnosticsState,
     fallbackNotices,
+    handleBrowseStore: storeStructure.browse,
     handleDatasetSubmit,
     handleDownloadDiagnostics,
     handleRunDatasetDiagnostics,
@@ -4237,6 +4242,7 @@ export function App({ dependencies }: AppProps = {}) {
         panels={shellPanels}
         onPanelsChange={setShellPanels}
         layerReveal={layerReveal}
+        storeStructure={<StoreStructureDrawer store={storeStructure} />}
         collection={
           datasetCollection.state.status === 'idle' ? null : (
             <CollectionBar

@@ -13,6 +13,8 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
 - [x] Detect `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`, and `.ndpi` URLs. NDPI goes
       through the TIFF loader and renders only when it is tiled with `SubIFD`
       pyramids (see [5.4](../data-contracts.md#54-image-only-sources-phase-8)).
+      **Superseded** by [Phase 19](19-ndpi.md) (2026-11-15): NDPI slides are
+      read as the scanner writes them.
 - [x] Disable transcripts, gene expression, cell details, cell annotations,
       boundaries, Magic Lens, ROI gene stats, and ROI transcript export. The
       Genes, Transcripts, Magic Lens, and Cell tabs are hidden.
@@ -42,7 +44,8 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
       and export controls. GeoJSON shapes are available on every platform, not
       only image-only.
 - [x] Document converting unsupported NDPI to pyramidal OME-TIFF
-      (`docs/image-only-and-geojson.md`).
+      (`docs/image-only-and-geojson.md`). Since [Phase 19](19-ndpi.md), only
+      files over 4 GB need converting.
 
 ## Test Plan
 

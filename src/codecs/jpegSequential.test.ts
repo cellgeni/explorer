@@ -63,6 +63,33 @@ describe('decodeSequentialJpeg', () => {
     expect(maxDifference(image.data, reference).max).toBeLessThanOrEqual(2)
   })
 
+  it('decodes one sample per block, its mean, with dcOnly', () => {
+    const image = decodeSequentialJpeg(fixture('restart_8bit.jpg'), undefined, {
+      dcOnly: true,
+    })
+    const reference = fixture('restart_8bit.u8')
+
+    // 45 x 37 has a partial last block each way.
+    expect(image).toMatchObject({ width: 6, height: 5, components: 1, precision: 8 })
+
+    // The whole blocks match libjpeg's pixels averaged over the block.
+    for (let blockY = 0; blockY < 4; blockY += 1) {
+      for (let blockX = 0; blockX < 5; blockX += 1) {
+        let total = 0
+
+        for (let y = 0; y < 8; y += 1) {
+          for (let x = 0; x < 8; x += 1) {
+            total += reference[(blockY * 8 + y) * 45 + blockX * 8 + x] ?? 0
+          }
+        }
+
+        expect(
+          Math.abs((image.data[blockY * 6 + blockX] ?? 0) - total / 64),
+        ).toBeLessThan(1.5)
+      }
+    }
+  })
+
   it('decodes a MERSCOPE .vzg pyramid tile as libjpeg does', () => {
     const reference = JSON.parse(
       new TextDecoder().decode(fixture('merscope_tile.json')),

@@ -1812,8 +1812,8 @@ describe('deck layer factory', () => {
     ).toMatchObject([
       {
         id: 'cell-1',
-        fillColor: [32, 102, 83, 34],
-        lineColor: [174, 241, 214, 230],
+        fillColor: [96, 96, 96, 34],
+        lineColor: [176, 176, 176, 200],
         polygon: [
           [1, -2, 0],
           [3, -4, 0],

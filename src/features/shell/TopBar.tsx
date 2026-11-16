@@ -222,6 +222,10 @@ function DatasetMenu({
             open.onSubmit(event)
             setMenuOpen(false)
           },
+          onBrowseStore: (url) => {
+            open.onBrowseStore(url)
+            setMenuOpen(false)
+          },
         }}
       />
       {library.recent.length === 0 ? null : (
