@@ -1,6 +1,7 @@
 import { asAnyCellId } from './cellid'
 import type { CellId } from './cellid'
 import type { Annotation } from '../datasets/spatialDataset'
+import { withoutCsvFormulaGuard } from '../utils/csv'
 
 export interface ContinuousCellMetadataValue {
   readonly cellId: CellId
@@ -363,6 +364,8 @@ function isMissingCsvValue(value: string): boolean {
   return ['', 'na', 'n/a', 'nan', 'null', 'none'].includes(value.trim().toLowerCase())
 }
 
+// Drops the `'` our CSV exports put before a field a spreadsheet would run as a
+// formula (`formatCsv`), so an exported file imports as it was.
 function parseCsvRows(text: string): readonly (readonly string[])[] {
   const rows: string[][] = []
   let row: string[] = []
@@ -385,7 +388,7 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
     }
 
     if (char === ',' && !inQuotes) {
-      row.push(field)
+      row.push(withoutCsvFormulaGuard(field))
       field = ''
       continue
     }
@@ -395,7 +398,7 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
         index += 1
       }
 
-      row.push(field)
+      row.push(withoutCsvFormulaGuard(field))
       rows.push(row)
       row = []
       field = ''
@@ -405,7 +408,7 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
     field += char
   }
 
-  row.push(field)
+  row.push(withoutCsvFormulaGuard(field))
   rows.push(row)
 
   return rows.filter((candidate) => candidate.some((value) => value.trim().length > 0))

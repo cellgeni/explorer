@@ -3,6 +3,7 @@ import type { BBox } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
+import { formatCsv } from '../../utils/csv'
 
 export const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
 export const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000
@@ -276,7 +277,7 @@ export function roiCellsToCsv(cells: readonly DatasetCell[]): string {
     ]),
   ]
 
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+  return formatCsv(rows)
 }
 
 export function roiTranscriptsToCsv(transcripts: readonly DatasetTranscript[]): string {
@@ -303,7 +304,7 @@ export function roiTranscriptsToCsv(transcripts: readonly DatasetTranscript[]): 
     ]),
   ]
 
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+  return formatCsv(rows)
 }
 
 export type RoiGeoJsonPropertyValue = string | number | boolean | null
@@ -371,8 +372,4 @@ function roiSelectionToPolygonRing(selection: RoiSelection): readonly number[][]
   }
 
   return ring
-}
-
-function csvEscape(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 }
