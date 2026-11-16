@@ -97,9 +97,12 @@ and has `Diagnose Dataset`.
   answers ([4.10](decisions.md#410-zarr-store-access-phases-910)).
 - **H5AD over 300 MiB:** host the kerchunk `.h5ad.json` reference next to the
   file.
-- **Replacing files in place:** the IndexedDB byte-range cache is keyed by URL
-  and range without the `ETag`, so a file replaced at the same URL can serve
-  stale bytes until site data is cleared. Keep dataset paths immutable.
+- **Replacing files in place:** since 2026-11-16 the IndexedDB byte-range
+  cache keys each range by the file's size and ETag (or Last-Modified), so a
+  file replaced at the same URL misses it. Files already opened keep their
+  first version until the page reloads, and a server's `max-age` can still
+  pair an old TIFF header with new tiles, so serve rewritten files with
+  caching off (`http-server -c-1`).
 - **Plain `http://` data (2026-11-16, #129):** the hosted app is HTTPS.
   Chrome reads `http://localhost` or `127.0.0.1` once its local-network
   permission is granted, and a LAN address from the page but not from
@@ -297,7 +300,7 @@ Testing:
 | Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice                                     |
 | State sharing       | URL hash                                        | As planned                                                                                                                     |
 | Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache                                    |
-| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry)                                                            |
+| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry), keyed by file version                                     |
 
 ## Risks And Mitigations
 

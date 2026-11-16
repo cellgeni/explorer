@@ -26,6 +26,8 @@ Notes:
   level are drawn.
 - The IndexedDB byte-range cache stores TIFF tile ranges (before decode) and
   Parquet footer slices, with LRU eviction. Large column pages are not cached.
+  Since 2026-11-16 its keys include the file's version, so a file overwritten
+  at the same URL misses the cache.
 - Abort signals reach dataset loads, gene panels, image candidate checks, TIFF
   opening, Range probes, hyparquet reads, and boundary and expression probes.
   DuckDB and Zarr stages that cannot be aborted are checked between awaits.
@@ -52,3 +54,13 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
 - [x] Xenium image choice: fall back to the next `experiment.xenium` path when
       the first fails (2026-11-12). A notice names the paths passed over.
+
+Moved from Open Items on 2026-11-16. Other gaps found in the review:
+
+- [x] Byte-range cache keys omit the `ETag`. Since 2026-11-16 (#130) each key
+      carries the file's version: its size plus its ETag, or Last-Modified
+      when there is no ETag, taken from responses the readers already make
+      (the zip's `HEAD`, the TIFF header read, hyparquet's `HEAD`). A file
+      with neither keeps the URL-only key. The database moved to version 3,
+      which clears each user's cache once. Files already opened in a session
+      keep their first version until the page reloads.

@@ -29,7 +29,6 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 
 Other gaps found in the review:
 
-- [ ] Byte-range cache keys omit the `ETag`.
 - [ ] Range reads have no timeout or retry. On 2026-11-13, 3 of 6 loads of the
       460-plex zip from `ftp.ebi.ac.uk` had one or two range requests that
       took 55–90 s while the requests sent with them finished in under a
