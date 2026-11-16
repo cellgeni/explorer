@@ -1609,7 +1609,7 @@ listed them. Written down in 15.5 from the findings each one turned up:
       (Fixed 2026-11-12.)
     - Visium still says "cells" in the Clusters set total, Metadata track
       counts ("4,992 cells", every obs row) and the gene summary ("359
-      positive cells across 370 slide cells").
+      positive cells across 370 slide cells"). (Fixed 2026-11-16.)
     - No link parameter carries hidden classes, so the reopened view shows
       Cluster 1 again. (Fixed 2026-11-12: `hiddenClasses=`.)
 
@@ -1769,3 +1769,19 @@ Found by the [15.5-E](#155-close-out) re-run (2026-11-12):
       Since 2026-11-12 `hiddenClasses=<id>,<id>` carries them (`%` and `,`
       inside an ID are escaped); they are applied once the link's set or
       annotation URL loads, and IDs not in the loaded labels are dropped.
+- [x] Visium says "cells" in the Clusters set total, the Metadata track counts
+      (which also counted every obs row, 4,992 on the Census file, not the
+      370 placed spots) and the gene summary ("positive cells across 370
+      slide cells"). Since 2026-11-16 these use the platform's noun
+      (`labels.embeddingElementPlural`: spots for Visium, bins for Visium HD),
+      and a Visium track's count and range cover only the placed spots
+      (`placedTrackSummary` in `h5adDataset.ts`), as the class counts do.
+- [x] Links do not carry hidden annotation sets (the set's eye button), only
+      hidden classes. Since 2026-11-16 `hiddenSets=<id>,<id>` carries them,
+      escaped as `hiddenClasses=` is and applied once the set or import that
+      has them loads. Switching datasets in a collection keeps them too.
+- [x] A link with both `groups=` and `annotationUrl=` can lose the imported
+      labels: loading a set replaces all labels, so an import that finishes
+      first is dropped. Since 2026-11-16 the link's import waits for the
+      link's set to load or fail, then adds to it, the order in which such a
+      link is made.
