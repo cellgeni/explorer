@@ -1,5 +1,5 @@
 export const DEFAULT_BYTE_RANGE_CACHE_NAME = 'cellgeni-byte-range-cache'
-export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 2
+export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 3
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_BYTES = 256 * 1024 * 1024
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRIES = 20_000
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRY_BYTES = 8 * 1024 * 1024
@@ -21,6 +21,10 @@ const TOTALS_KEY = 'totals'
 export interface ByteRangeCacheKey {
   readonly namespace: string
   readonly url: string
+  // The version of the file the range was read from (see
+  // byteRangeFileVersion), so a file overwritten at the same URL misses the
+  // ranges cached from the one before.
+  readonly version: string
   readonly start: number
   readonly end: number
 }
@@ -60,6 +64,9 @@ export interface FetchByteRangeWithCacheOptions {
   readonly cache?: PersistentByteRangeCache | null
   readonly namespace: string
   readonly url: string
+  // From byteRangeFileVersion. Empty when the file's version is unknown, and
+  // its ranges are then cached by URL alone.
+  readonly version: string
   readonly start: number
   readonly end: number
   readonly signal?: AbortSignal
@@ -75,6 +82,9 @@ export interface CacheFooterByteRangesOptions {
   readonly cache?: PersistentByteRangeCache | null
   readonly namespace?: string
   readonly url: string
+  // The validator of a response already made for the file (see
+  // fetchKeepingValidator); with the file's size it versions the ranges.
+  readonly validator?: string | undefined
   readonly footerByteLength?: number
   readonly maxEntryBytes?: number
 }
@@ -129,6 +139,7 @@ export function cacheFooterByteRanges<T extends AsyncByteSource>(
   const footerByteLength = options.footerByteLength ?? DEFAULT_PARQUET_FOOTER_CACHE_BYTES
   const maxEntryBytes = options.maxEntryBytes ?? DEFAULT_BYTE_RANGE_CACHE_MAX_ENTRY_BYTES
   const cache = options.cache
+  const version = byteRangeFileVersion(file.byteLength, options.validator)
 
   if (cache === null || cache === undefined) {
     return file
@@ -154,6 +165,7 @@ export function cacheFooterByteRanges<T extends AsyncByteSource>(
         cache,
         namespace,
         url: options.url,
+        version,
         start,
         end,
         fetchRange: async () => new Uint8Array(await file.slice(start, end)),
@@ -165,7 +177,62 @@ export function cacheFooterByteRanges<T extends AsyncByteSource>(
 }
 
 export function byteRangeCacheRecordId(key: ByteRangeCacheKey): string {
-  return `${key.namespace}\n${key.url}\n${key.start}\n${key.end}`
+  return `${key.namespace}\n${key.url}\n${key.version}\n${key.start}\n${key.end}`
+}
+
+// Identifies the version of a file that ranges are read from: its size and,
+// when known, its validator (see responseValidator). Readers take both from
+// responses they already make, never a request of their own. Empty when
+// neither is known, so its ranges are cached by URL alone and can go stale if
+// the file is overwritten in place.
+export function byteRangeFileVersion(
+  size: number | null | undefined,
+  validator?: string,
+): string {
+  const sizePart =
+    size !== null && size !== undefined && Number.isSafeInteger(size) && size >= 0
+      ? String(size)
+      : ''
+
+  return validator === undefined ? sizePart : `${sizePart} ${validator}`
+}
+
+// A response's ETag, or its Last-Modified date when it has none. Undefined
+// when it has neither or CORS hides them: Last-Modified is always readable
+// cross-origin, but ETag only when the server exposes it.
+export function responseValidator(headers: Headers): string | undefined {
+  for (const name of ['etag', 'last-modified']) {
+    const value = headers.get(name)
+
+    if (value !== null && value !== '') {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+// Wraps a fetch to keep the validator of its first successful response, such
+// as the HEAD a Parquet reader makes for the file's size.
+export function fetchKeepingValidator(
+  fetcher: typeof fetch = (input, init) => fetch(input, init),
+): { readonly fetch: typeof fetch; validator(): string | undefined } {
+  let validator: string | undefined
+  let seen = false
+
+  return {
+    fetch: async (input, init) => {
+      const response = await fetcher(input, init)
+
+      if (!seen && response.ok) {
+        seen = true
+        validator = responseValidator(response.headers)
+      }
+
+      return response
+    },
+    validator: () => validator,
+  }
 }
 
 class IndexedDbByteRangeCache implements PersistentByteRangeCache {
@@ -320,6 +387,7 @@ function cacheKeyFromOptions(options: FetchByteRangeWithCacheOptions): ByteRange
   return {
     namespace: options.namespace,
     url: options.url,
+    version: options.version,
     start: options.start,
     end: options.end,
   }
@@ -356,29 +424,21 @@ async function openByteRangeDatabase(
     request.onupgradeneeded = () => {
       const db = request.result
 
-      // Version 1 kept each range's size and last access next to its bytes in
-      // one `byte-ranges` store. Its ranges are dropped, not migrated: their
-      // sizes could only be read with their bytes.
+      // Older versions' ranges are dropped, not migrated. Version 1 kept each
+      // range's size and last access next to its bytes in one `byte-ranges`
+      // store, so sizes could only be read with the bytes. Version 2 keyed
+      // ranges without the file's version, so a range could be from a file
+      // since overwritten at its URL.
       for (const name of Array.from(db.objectStoreNames)) {
-        if (!BYTE_RANGE_STORE_NAMES.includes(name)) {
-          db.deleteObjectStore(name)
-        }
+        db.deleteObjectStore(name)
       }
 
-      if (!db.objectStoreNames.contains(BYTES_STORE_NAME)) {
-        db.createObjectStore(BYTES_STORE_NAME, { keyPath: 'id' })
-      }
-
-      if (!db.objectStoreNames.contains(ENTRIES_STORE_NAME)) {
-        db.createObjectStore(ENTRIES_STORE_NAME, { keyPath: 'id' }).createIndex(
-          LAST_ACCESSED_INDEX_NAME,
-          'lastAccessed',
-        )
-      }
-
-      if (!db.objectStoreNames.contains(TOTALS_STORE_NAME)) {
-        db.createObjectStore(TOTALS_STORE_NAME)
-      }
+      db.createObjectStore(BYTES_STORE_NAME, { keyPath: 'id' })
+      db.createObjectStore(ENTRIES_STORE_NAME, { keyPath: 'id' }).createIndex(
+        LAST_ACCESSED_INDEX_NAME,
+        'lastAccessed',
+      )
+      db.createObjectStore(TOTALS_STORE_NAME)
     }
     // A tab still open at an older version holds up the upgrade until it
     // closes. Go without the cache rather than wait.

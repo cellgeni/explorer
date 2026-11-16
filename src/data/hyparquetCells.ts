@@ -10,6 +10,7 @@ import { micrometers } from './coords'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
+  fetchKeepingValidator,
 } from './persistentByteRangeCache'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
@@ -192,9 +193,10 @@ async function fileFromUrl(
     throw new Error('readCellsOverview requires either url or file.')
   }
 
+  const fetcher = fetchKeepingValidator(options.fetcher)
   const file = await asyncBufferFromUrl({
     url: options.url,
-    ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+    fetch: fetcher.fetch,
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const byteRangeCache =
@@ -205,6 +207,7 @@ async function fileFromUrl(
   return cacheFooterByteRanges(file, {
     cache: byteRangeCache,
     url: options.url,
+    validator: fetcher.validator(),
   }) as AsyncBuffer
 }
 

@@ -4,6 +4,7 @@ import { datasetFileUrlFor } from '../data/datasetFiles'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
+  fetchKeepingValidator,
 } from '../data/persistentByteRangeCache'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { waitForSharedLoad } from '../utils/sharedLoad'
@@ -54,9 +55,12 @@ export interface VisiumHdBarcodeMappingBinSelection {
   readonly binIds: readonly SpatialElementId[]
 }
 
-// The file's size and parsed footer, read once and shared by later bin reads.
+// The file's size and parsed footer, read once and shared by later bin reads,
+// with the validator of the HEAD that read the size, which versions the
+// file's cached footer ranges.
 export interface VisiumHdBarcodeMappingsSource {
   readonly byteLength: number
+  readonly validator?: string
   readonly metadata: FileMetaData
 }
 
@@ -131,7 +135,7 @@ export async function readVisiumHdBarcodeMappings(
     return readVisiumHdBarcodeMappingsForBins(url, options.bins, maxRows, options)
   }
 
-  const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options))
+  const file = options.file ?? (await barcodeMappingsFileFromUrl(url, options)).file
   const compressors =
     options.compressors ?? (await (options.loadCompressors ?? loadDefaultCompressors)())
   const rows = await (options.readObjects ?? readHyparquetObjects)({
@@ -375,7 +379,7 @@ async function barcodeMappingsFileWithMetadata(
           (signal) => readBarcodeMappingsSource(url, { ...options, signal }),
           options.signal,
         )
-  const file = await barcodeMappingsFileFromUrl(url, options, source.byteLength)
+  const { file } = await barcodeMappingsFileFromUrl(url, options, source)
 
   return { file, metadata: source.metadata }
 }
@@ -384,34 +388,45 @@ async function readBarcodeMappingsSource(
   url: string,
   options: BarcodeMappingsFileOptions,
 ): Promise<VisiumHdBarcodeMappingsSource> {
-  const file = await barcodeMappingsFileFromUrl(url, options)
+  const { file, validator } = await barcodeMappingsFileFromUrl(url, options)
 
-  return { byteLength: file.byteLength, metadata: await parquetMetadataAsync(file) }
+  return {
+    byteLength: file.byteLength,
+    ...(validator === undefined ? {} : { validator }),
+    metadata: await parquetMetadataAsync(file),
+  }
 }
 
 // Reads go through coalescingAsyncBuffer, which merges hyparquet's per-column
 // chunk reads and limits how many are in flight. The footer cache sits on
 // top so hyparquet's footer reads keep their exact ranges.
+// A source read before gives the size and validator without a HEAD request.
 async function barcodeMappingsFileFromUrl(
   url: string,
   options: BarcodeMappingsFileOptions,
-  byteLength?: number,
-): Promise<AsyncBuffer> {
+  source?: Pick<VisiumHdBarcodeMappingsSource, 'byteLength' | 'validator'>,
+): Promise<{ readonly file: AsyncBuffer; readonly validator: string | undefined }> {
+  const fetcher = fetchKeepingValidator(options.fetcher)
   const file = await asyncBufferFromUrl({
     url,
-    ...(byteLength === undefined ? {} : { byteLength }),
-    ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+    ...(source === undefined ? {} : { byteLength: source.byteLength }),
+    fetch: fetcher.fetch,
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
+  const validator = source === undefined ? fetcher.validator() : source.validator
   const byteRangeCache =
     options.byteRangeCache === undefined
       ? defaultPersistentByteRangeCache()
       : options.byteRangeCache
 
-  return cacheFooterByteRanges(coalescingAsyncBuffer(file, options.rangeRequests), {
-    cache: byteRangeCache,
-    url,
-  })
+  return {
+    file: cacheFooterByteRanges(coalescingAsyncBuffer(file, options.rangeRequests), {
+      cache: byteRangeCache,
+      url,
+      validator,
+    }),
+    validator,
+  }
 }
 
 async function readHyparquetObjects(

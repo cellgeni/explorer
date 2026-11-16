@@ -1,7 +1,9 @@
 import { ZipFileStore } from '@zarrita/storage'
 import {
+  byteRangeFileVersion,
   defaultPersistentByteRangeCache,
   fetchByteRangeWithCache,
+  responseValidator,
   ZARR_ZIP_CACHE_NAMESPACE,
   type PersistentByteRangeCache,
 } from '../data/persistentByteRangeCache'
@@ -42,8 +44,14 @@ export async function cachedZipFileStoreWithEntries(
   return { store, entryNames }
 }
 
+interface ZipFileHead {
+  readonly byteLength: number
+  // The zip's version in the byte-range cache, from the same HEAD response.
+  readonly version: string
+}
+
 export class CachedHttpRangeReader {
-  private byteLength: number | undefined
+  private head: ZipFileHead | undefined
 
   constructor(
     readonly url: string,
@@ -52,26 +60,7 @@ export class CachedHttpRangeReader {
   ) {}
 
   async getLength(): Promise<number> {
-    if (this.byteLength !== undefined) {
-      return this.byteLength
-    }
-
-    const response = await this.fetcher(this.url, { method: 'HEAD' })
-
-    if (!response.ok) {
-      throw new Error(
-        `failed http request ${this.url}, status: ${response.status}: ${response.statusText}`,
-      )
-    }
-
-    const byteLength = Number(response.headers.get('content-length'))
-
-    if (!Number.isFinite(byteLength)) {
-      throw new Error('could not get length')
-    }
-
-    this.byteLength = byteLength
-    return byteLength
+    return (await this.readHead()).byteLength
   }
 
   async read(offset: number, size: number): Promise<Uint8Array<ArrayBuffer>> {
@@ -79,10 +68,13 @@ export class CachedHttpRangeReader {
       return new Uint8Array(0)
     }
 
+    // unzipit reads the length before any range, so this makes no request.
+    const { version } = await this.readHead()
     const bytes = await fetchByteRangeWithCache({
       cache: this.cache,
       namespace: ZARR_ZIP_CACHE_NAMESPACE,
       url: this.url,
+      version,
       start: offset,
       end: offset + size,
       fetchRange: async () => {
@@ -105,5 +97,31 @@ export class CachedHttpRangeReader {
     const copy = new Uint8Array(bytes.byteLength)
     copy.set(bytes)
     return copy
+  }
+
+  private async readHead(): Promise<ZipFileHead> {
+    if (this.head !== undefined) {
+      return this.head
+    }
+
+    const response = await this.fetcher(this.url, { method: 'HEAD' })
+
+    if (!response.ok) {
+      throw new Error(
+        `failed http request ${this.url}, status: ${response.status}: ${response.statusText}`,
+      )
+    }
+
+    const byteLength = Number(response.headers.get('content-length'))
+
+    if (!Number.isFinite(byteLength)) {
+      throw new Error('could not get length')
+    }
+
+    this.head = {
+      byteLength,
+      version: byteRangeFileVersion(byteLength, responseValidator(response.headers)),
+    }
+    return this.head
   }
 }

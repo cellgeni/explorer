@@ -9,6 +9,7 @@ import {
   DEFAULT_PARQUET_FOOTER_CACHE_BYTES,
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
+  fetchKeepingValidator,
 } from './persistentByteRangeCache'
 import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
@@ -125,13 +126,16 @@ async function prefetchParquetFooter(
   url: string,
   options: { readonly signal?: AbortSignal },
 ): Promise<void> {
+  const fetcher = fetchKeepingValidator()
   const file = await asyncBufferFromUrl({
     url,
+    fetch: fetcher.fetch,
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const cachedFile = cacheFooterByteRanges(file, {
     cache: defaultPersistentByteRangeCache(),
     url,
+    validator: fetcher.validator(),
   }) as AsyncBuffer
   const start = Math.max(0, cachedFile.byteLength - DEFAULT_PARQUET_FOOTER_CACHE_BYTES)
 
