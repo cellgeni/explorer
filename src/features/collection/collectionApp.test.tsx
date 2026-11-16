@@ -506,6 +506,45 @@ describe('App with a dataset collection', () => {
       ).toHaveAttribute('aria-pressed', 'false')
       expect((await hashAfterWrite()).has('compare')).toBe(false)
     })
+
+    it('keeps a section closed on reload when the query string named it', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/?collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}&debug=1`,
+      )
+      const app = (
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />
+      )
+      const { unmount } = render(app)
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      fireEvent.click(within(panel).getByRole('button', { name: 'Close Section 2' }))
+      expect((await hashAfterWrite()).has('compare')).toBe(false)
+      // The hash holds the link; the query string keeps only what it is not.
+      expect(window.location.search).toBe('?debug=1')
+
+      // Reload.
+      unmount()
+      useViewerStore.setState(initialViewerState)
+      render(app)
+
+      const bar = await screen.findByRole('navigation', { name: 'Collection' })
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Section 1' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      expect(
+        within(bar).getByRole('button', { name: 'Show Section 2 beside' }),
+      ).toHaveAttribute('aria-pressed', 'false')
+      expect(screen.queryByRole('region', { name: 'Section 2' })).not.toBeInTheDocument()
+    })
   })
 
   it('opens a linked dataset over the image and labels its entry names', async () => {

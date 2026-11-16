@@ -293,11 +293,6 @@ Correctness and robustness:
       (`useAnnotationWorkflow.ts`), with no byte limit, unlike the H5AD and
       segmentation loaders, and parses it on the main thread, so a link to a
       large file can stall or crash the tab.
-- [ ] A `compare=` in a link's query string is not removed once the hash is
-      written (only `collection=` is, in `useShareableUrlHash.ts`), and the
-      hash overrides the query string only for the keys it sets
-      (`readShareableStateFromLocation`). Closing that panel and reloading
-      brings it back.
 
 Rendering:
 

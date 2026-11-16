@@ -2,6 +2,7 @@ import { act, render } from '@testing-library/react'
 import { useEffect } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
+import { readShareableStateFromLocation } from './appShellModel'
 import { useShareableUrlHash } from './useShareableUrlHash'
 
 function ShareableUrlHashProbe({
@@ -264,7 +265,46 @@ describe('useShareableUrlHash', () => {
     })
 
     expect(window.history.length).toBe(startLength)
-    expect(window.location.search).toBe('?dataset=https%3A%2F%2Fexample.test%2Fa')
+    // The hash names the dataset now.
+    expect(window.location.search).toBe('')
+    expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fa')
+  })
+
+  it("drops the query string's link values once the hash is written", () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/?dataset=https%3A%2F%2Fexample.test%2Fa&genes=Sox2&compare=https%3A%2F%2Fexample.test%2Fb&utm_source=mail&debug=1',
+    )
+    const latest: { shareUrl?: () => string } = {}
+    const { rerender } = render(
+      <ShareableUrlHashProbe
+        datasetUrl="https://example.test/a"
+        selectedGenes={['Sox2']}
+        onShareUrl={(next) => {
+          latest.shareUrl = next
+        }}
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    // Keys a link does not set stay.
+    expect(window.location.search).toBe('?utm_source=mail&debug=1')
+    expect(latest.shareUrl?.()).toBe(
+      `${window.location.origin}/?utm_source=mail&debug=1${window.location.hash}`,
+    )
+
+    // Removing the genes leaves them out, and a reload keeps them removed.
+    rerender(
+      <ShareableUrlHashProbe datasetUrl="https://example.test/a" selectedGenes={[]} />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(readShareableStateFromLocation().selectedGenes).toBeUndefined()
   })
 
   it('reloads when Back reaches another dataset, and writes nothing more', () => {

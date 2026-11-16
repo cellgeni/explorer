@@ -1055,10 +1055,9 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 ## Shareable URL
 
 `src/data/shareableState.ts` writes the state to the URL hash (debounced
-160 ms, with `xv=2`); query-string values are also read on startup, and hash
-values win. Numbers are rounded to three decimals. Version 2 links leave out
-every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a missing
-parameter means the default. For a dataset with a
+160 ms, with `xv=2`). Numbers are rounded to three decimals. Version 2 links
+leave out every value that is at its default (`DEFAULT_SHAREABLE_STATE`), so a
+missing parameter means the default. For a dataset with a
 [manifest](./dataset-manifest.md#defaults), the manifest's `defaults` take the
 place of the app's: a value equal to the manifest's is left out, and one set
 back to the app default is written, so the manifest does not bring its value
@@ -1068,6 +1067,12 @@ wrote every value, still open as before. `Share` in the top bar and
 `Copy Link` copy the link for the current state, which the address shows up
 to 160 ms later, and say "Link copied".
 
+The query string is read on startup too, except under a version 2 hash,
+which is the whole link; under any other hash, the hash's values win. Once the
+hash is written, the query string keeps only keys a link does not set, such as
+`debug=`, so a value the view no longer has, such as a closed compare panel,
+does not come back on reload.
+
 Opening another dataset adds a browser history entry; every other change
 replaces the current one (15.3-C). Back returns to the previous dataset, or to
 the start screen: when Back or Forward reaches an entry for another dataset,
@@ -1075,7 +1080,7 @@ the page reloads that entry's link, with its view and settings.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL. Read from the hash or the query string; once the hash is written, the query string's copy is dropped, so a closed collection stays closed on reload                                                                                                                     |
+| `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL                                                                                                                                                                                                                                                                          |
 | `collectionView`                                                                                          | How the collection bar shows its datasets: `grid` (`Expand`) or `names` (`Previews` off). Left out for the previews in a row. Written only with `collection`                                                                                                                                                                           |
 | `compare`                                                                                                 | A section shown [side by side](#sections-side-by-side) with the open dataset, by its URL as in `dataset`; repeatable, in the panels' order. Once the collection is read and its dataset open, only the first three other sections in the open dataset's `coordinateSystem` stay. Written only with `collection`                        |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                 |
