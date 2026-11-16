@@ -49,6 +49,8 @@ interface ShellLayoutProps {
   readonly collection?: ReactNode
   // Brings part of the layer panel into view, such as from the legend.
   readonly layerReveal?: LayerReveal | null
+  // Browse Store's drawer, over the right of the canvas.
+  readonly storeStructure?: ReactNode
   // The canvas, and the panels that sit over it.
   readonly children: ReactNode
 }
@@ -74,6 +76,7 @@ export function ShellLayout({
   onPanelsChange,
   collection,
   layerReveal = null,
+  storeStructure,
   children,
 }: ShellLayoutProps) {
   const { infoOpen, embeddingOpen } = panels
@@ -177,6 +180,7 @@ export function ShellLayout({
               }}
             />
             {children}
+            {storeStructure}
             <CardStack cards={cards} />
             {embedding === null ? null : (
               <EmbeddingWindow

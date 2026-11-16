@@ -1,3 +1,5 @@
+import { DEFAULT_CHANNEL_COLORS } from '../data/imagePyramid'
+
 export interface TiffChannelContrast {
   readonly min: number
   readonly max: number
@@ -38,13 +40,6 @@ export interface OmeTiffMetadata {
 }
 
 export const DEFAULT_MICROMETERS_PER_PIXEL = 0.2125
-const DEFAULT_CHANNEL_COLORS: readonly (readonly [number, number, number])[] = [
-  [88, 144, 255],
-  [32, 166, 122],
-  [240, 200, 75],
-  [215, 63, 124],
-  [255, 253, 247],
-]
 
 export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMetadata {
   const xml = description?.replace(/\0/g, '').trim()

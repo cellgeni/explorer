@@ -3,7 +3,9 @@
 // produce 8-bit samples; MERSCOPE `.vzg` pyramids store 12-bit tiles (SOF1),
 // which this decoder returns as 16-bit samples. Progressive, lossless,
 // hierarchical, and arithmetic-coded streams are refused. Components are
-// returned as coded, without colour conversion.
+// returned as coded, without colour conversion. With `dcOnly`, each 8 × 8
+// block decodes to one sample, its mean (the DC term), giving an image an
+// eighth of the size for the cost of reading the coefficients.
 
 export interface SequentialJpegImage {
   readonly width: number
@@ -39,7 +41,7 @@ interface FrameComponent {
   // The component's coded size in blocks, padded to whole MCUs.
   readonly blocksPerLine: number
   readonly blocksPerColumn: number
-  // Decoded samples, blocksPerLine * 8 wide.
+  // Decoded samples, blocksPerLine * 8 wide (blocksPerLine for dcOnly).
   readonly samples: Float32Array
   dcPredictor: number
   dcTable: number
@@ -57,7 +59,12 @@ interface Frame {
   readonly components: readonly FrameComponent[]
 }
 
+export interface SequentialJpegOptions {
+  readonly dcOnly?: boolean
+}
+
 interface DecoderState {
+  readonly dcOnly: boolean
   readonly quantTables: (Int32Array | undefined)[]
   readonly dcTables: (HuffmanTable | undefined)[]
   readonly acTables: (HuffmanTable | undefined)[]
@@ -103,8 +110,10 @@ const COSINES = (() => {
 export function decodeSequentialJpeg(
   bytes: Uint8Array,
   tables?: Uint8Array,
+  options: SequentialJpegOptions = {},
 ): SequentialJpegImage {
   const state: DecoderState = {
+    dcOnly: options.dcOnly === true,
     quantTables: [],
     dcTables: [],
     acTables: [],
@@ -122,7 +131,7 @@ export function decodeSequentialJpeg(
     throw new JpegDecodeError('the stream has no frame.')
   }
 
-  return outputImage(state.frame)
+  return outputImage(state.frame, state.dcOnly)
 }
 
 // The precision of a stream's frame, or undefined when it has none before
@@ -195,7 +204,7 @@ function readSegments(data: Uint8Array, state: DecoderState): void {
     const segment = data.subarray(position + 2, position + length)
 
     if (marker === SOF0 || marker === SOF1) {
-      state.frame = readFrame(segment)
+      state.frame = readFrame(segment, state.dcOnly)
     } else if (
       marker >= 0xc2 &&
       marker <= 0xcf &&
@@ -221,7 +230,7 @@ function readSegments(data: Uint8Array, state: DecoderState): void {
   }
 }
 
-function readFrame(segment: Uint8Array): Frame {
+function readFrame(segment: Uint8Array, dcOnly: boolean): Frame {
   const precision = segment[0]
 
   if (precision !== 8 && precision !== 12) {
@@ -265,7 +274,11 @@ function readFrame(segment: Uint8Array): Frame {
         ...spec,
         blocksPerLine,
         blocksPerColumn,
-        samples: new Float32Array(blocksPerLine * 8 * blocksPerColumn * 8),
+        samples: new Float32Array(
+          dcOnly
+            ? blocksPerLine * blocksPerColumn
+            : blocksPerLine * 8 * blocksPerColumn * 8,
+        ),
         dcPredictor: 0,
         dcTable: 0,
         acTable: 0,
@@ -490,6 +503,13 @@ function decodeBlock(
   }
 
   const shift = frame.precision === 12 ? 2048 : 128
+
+  if (state.dcOnly) {
+    component.samples[row * component.blocksPerLine + col] =
+      (coefficients[0] ?? 0) / 8 + shift
+    return
+  }
+
   const stride = component.blocksPerLine * 8
   const origin = row * 8 * stride + col * 8
 
@@ -542,8 +562,10 @@ function inverseDct(input: Float32Array, output: Float32Array): void {
   }
 }
 
-function outputImage(frame: Frame): SequentialJpegImage {
-  const { width, height, precision } = frame
+function outputImage(frame: Frame, dcOnly: boolean): SequentialJpegImage {
+  const { precision } = frame
+  const width = dcOnly ? Math.ceil(frame.width / 8) : frame.width
+  const height = dcOnly ? Math.ceil(frame.height / 8) : frame.height
   const count = frame.components.length
   const max = precision === 12 ? 4095 : 255
   const data =
@@ -552,7 +574,7 @@ function outputImage(frame: Frame): SequentialJpegImage {
       : new Uint8Array(width * height * count)
 
   frame.components.forEach((component, index) => {
-    const stride = component.blocksPerLine * 8
+    const stride = component.blocksPerLine * (dcOnly ? 1 : 8)
     const scaleX = component.h / frame.maxH
     const scaleY = component.v / frame.maxV
 

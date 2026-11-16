@@ -130,8 +130,8 @@ Enter a source in the `Dataset or image URL` field:
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements;
   or the same store zipped as one `.zarr.zip` file.
-- Image-only: direct OME-TIFF, TIFF, QPTIFF, SVS (Aperio H&E), OME-Zarr, or
-  validated NDPI URL.
+- Image-only: direct OME-TIFF, TIFF, QPTIFF, SVS (Aperio H&E), NDPI
+  (Hamamatsu), or OME-Zarr URL. NDPI files over 4 GB are not read.
 - Icechunk: a `.icechunk` repository URL holding AnnData, SpatialData (images,
   labels, and tables), or an OME-Zarr image.
 

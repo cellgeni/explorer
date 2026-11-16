@@ -14,6 +14,8 @@ export interface ZippedZarrStore {
   // empty when the root is at the top of the zip.
   readonly root: string
   readonly fileCount: number
+  // Every file in the store, relative to the root, with no leading slash.
+  paths(): readonly string[]
   // Size and zip compression of a file in the store, or undefined when the
   // zip lacks it. Paths are relative to the root, with no leading slash.
   entry(path: string): ZipFileInfo | undefined
@@ -135,6 +137,7 @@ async function readZippedZarrStore(
     store,
     root,
     fileCount: files.size,
+    paths: () => Array.from(files.keys()),
     entry: (path) => files.get(path),
     file: (path) => {
       const info = files.get(path)

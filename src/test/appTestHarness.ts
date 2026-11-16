@@ -91,6 +91,7 @@ export function appTestDependencies({
   loadTranscriptAggregates,
   loadTranscriptCapabilities,
   loadTranscriptViewport,
+  readStoreStructure,
   runDatasetDiagnostics,
   warmDatasetForRoi,
 }: AppTestDependencyProps = {}): AppDependencyOverrides {
@@ -164,6 +165,12 @@ export function appTestDependencies({
   if (runDatasetDiagnostics !== undefined) {
     diagnostics.runDatasetDiagnostics = runDatasetDiagnostics
   }
+  // Never the network: a test that browses a store gives its structure.
+  diagnostics.readStoreStructure =
+    readStoreStructure ??
+    (async (url) => {
+      throw new Error(`No test store structure for ${url}.`)
+    })
 
   if (Object.keys(dataset).length > 0) dependencies.dataset = dataset
   if (Object.keys(morphology).length > 0) dependencies.morphology = morphology

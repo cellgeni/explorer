@@ -38,6 +38,7 @@ import {
   type TranscriptPoint,
 } from '../../data/transcriptOverlay'
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
+import { readZarrStructure } from '../../zarr/zarrStructure'
 import {
   cachedSpatialDataset,
   detectSpatialDataset,
@@ -225,6 +226,7 @@ export type DatasetWarmupLoader = (
 ) => Promise<WarmDatasetForRoiResult | void>
 
 export type DatasetDiagnosticsRunner = typeof runDatasetDiagnostics
+export type StoreStructureReader = typeof readZarrStructure
 export type SpatialDatasetDetector = (
   baseUrl: string,
   options?: DetectSpatialDatasetOptions,
@@ -275,6 +277,7 @@ export interface AppDependencies {
   }
   readonly diagnostics: {
     readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+    readonly readStoreStructure: StoreStructureReader
   }
 }
 
@@ -301,6 +304,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly loadGeneExpression: GeneExpressionLoader
   readonly warmDatasetForRoi: DatasetWarmupLoader
   readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
+  readonly readStoreStructure: StoreStructureReader
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
@@ -353,6 +357,7 @@ export const defaultAppDependencies = {
   },
   diagnostics: {
     runDatasetDiagnostics,
+    readStoreStructure: readZarrStructure,
   },
 } satisfies AppDependencies
 

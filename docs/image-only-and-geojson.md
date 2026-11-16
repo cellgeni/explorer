@@ -14,7 +14,7 @@ Use `Dataset or image URL` with one of these direct URL forms:
   below
 - `.svs` (Aperio and Leica brightfield slides, usually H&E), see below
 - `.ome.zarr`, `.zarr`, `zarr.json`, or `.zattrs`
-- `.ndpi`, read with the same TIFF loader (see the requirements below)
+- `.ndpi` (Hamamatsu NanoZoomer brightfield slides), see below
 - A folder URL whose `zarr.json` or `.zattrs` holds OME multiscales metadata
 
 A Zarr root whose attributes contain `spatialdata_attrs` loads as
@@ -36,9 +36,15 @@ TIFF requirements:
   IFD order), and each plane needs its own `SubIFDs` pyramid. Only the first
   time point is shown.
 
-Most NDPI files do not meet these requirements; convert them to pyramidal
-OME-TIFF (for example with `bfconvert` or `bioformats2raw` + `raw2ometiff`)
-and host that output instead.
+NDPI slides are also read as they come from the scanner: each pyramid level
+is one large JPEG, which the viewer reads in bands of rows and decodes in
+blocks, using the restart offsets the scanner writes. The pixel size comes
+from the TIFF resolution tags, and a slide whose smallest level is still
+large gets an extra level an eighth its size for the whole-slide view. An
+NDPI saved under a `.tif` name is recognized from its NDPI tags. Files over
+4 GB are not read; convert them to pyramidal OME-TIFF (for example with
+`bfconvert`, or `bioformats2raw` and `raw2ometiff`). The macro image and
+other focal planes are not shown. See [NDPI](./modalities/image.md#ndpi).
 
 QPTIFF files are read as they come from the scanner: the pyramid levels stored
 as top-level IFDs are used, each channel is named by its biomarker and drawn in

@@ -3,6 +3,7 @@ import { FileNotListedError } from '../../data/folderListing'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { LikelyMissingFileError } from '../../data/hostResponses'
 import { assertHttpRangeSupport } from '../../data/rangeSupport'
+import { ZarrStructureNotFoundError } from '../../zarr/zarrStructure'
 import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
@@ -175,6 +176,16 @@ describe('loadErrorModel', () => {
       title: 'File most likely missing',
       message: readErrorMessage(likelyMissing),
       detail: 'LikelyMissingFileError',
+    })
+    expect(
+      createStructuredLoadError(
+        'Store structure',
+        new ZarrStructureNotFoundError('https://host.test/missing.zarr'),
+      ),
+    ).toMatchObject({
+      code: 'not-found',
+      title: 'No Zarr store at this address',
+      detail: 'ZarrStructureNotFoundError',
     })
   })
 
