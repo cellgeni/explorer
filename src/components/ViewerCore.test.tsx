@@ -30,6 +30,7 @@ type MockDeckViewStateChange = (info: { readonly viewState: OverviewViewState })
 const deckGlMock = vi.hoisted(() => ({
   onHover: undefined as MockDeckHover | undefined,
   onClick: undefined as MockDeckClick | undefined,
+  eventRecognizerOptions: undefined as unknown,
   onViewStateChange: undefined as MockDeckViewStateChange | undefined,
   layers: [] as readonly unknown[],
   viewState: undefined as OverviewViewState | undefined,
@@ -41,18 +42,21 @@ vi.mock('@deck.gl/react', () => ({
     layers = [],
     onHover,
     onClick,
+    eventRecognizerOptions,
     onViewStateChange,
     viewState,
   }: {
     readonly layers?: readonly unknown[]
     readonly onHover?: MockDeckHover
     readonly onClick?: MockDeckClick
+    readonly eventRecognizerOptions?: unknown
     readonly onViewStateChange?: MockDeckViewStateChange
     readonly viewState?: OverviewViewState
   }) => {
     deckGlMock.renderCount += 1
     deckGlMock.onHover = onHover
     deckGlMock.onClick = onClick
+    deckGlMock.eventRecognizerOptions = eventRecognizerOptions
     deckGlMock.onViewStateChange = onViewStateChange
     deckGlMock.layers = layers
     deckGlMock.viewState = viewState
@@ -138,6 +142,7 @@ function boundaryPathColorAt(pathIndex: number): readonly number[] {
 afterEach(() => {
   deckGlMock.onHover = undefined
   deckGlMock.onClick = undefined
+  deckGlMock.eventRecognizerOptions = undefined
   deckGlMock.onViewStateChange = undefined
   deckGlMock.layers = []
   deckGlMock.viewState = undefined
@@ -1343,6 +1348,15 @@ describe('ViewerCore', () => {
     })
 
     expect(onGridCellClick).toHaveBeenCalledWith(gridCell)
+  })
+
+  // deck.gl picks on pointerdown, before the click is recognised. Under
+  // software WebGL that pick can outlast the 250 ms mjolnir.js allows for a
+  // click, which then never reaches onClick.
+  it('takes a click however long deck.gl picks on pointerdown', () => {
+    render(<ViewerCore gridCells={[gridCellDatum()]} />)
+
+    expect(deckGlMock.eventRecognizerOptions).toEqual({ click: { time: Infinity } })
   })
 
   it('notifies when a segmented cell boundary is clicked', () => {

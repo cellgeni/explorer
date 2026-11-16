@@ -120,9 +120,7 @@ async function openVisiumHdReferenceTissueLink(page: Page) {
   return visiumPanel
 }
 
-// Enter opens the bin under the viewer's crosshair (15.5-D). A mouse click
-// does not select bins under headless Chromium's software WebGL, though it
-// does with a GPU.
+// Enter opens the bin under the viewer's crosshair (15.5-D).
 async function selectVisiumHdBinAtCentre(page: Page) {
   await page.getByRole('img', { name: 'Spatial viewer canvas area' }).focus()
   await page.keyboard.press('Enter')
@@ -1578,6 +1576,23 @@ test('opens a Visium HD bin card from the keyboard and again from its link @live
   await expect(binCard).toContainText('Selected bin')
   await expectVisiumHdBinDetails(binCard, barcode)
   await expectVisiumHdBinProfile(binCard)
+})
+
+// deck.gl picks the bin on pointerdown, and under headless Chromium's
+// software WebGL that pick can take over 250 ms, after which mjolnir.js
+// dropped the click. Holding the click for 400 ms does the same on any
+// machine.
+test('opens a Visium HD bin card with a click @live', async ({ page }) => {
+  test.setTimeout(300_000)
+
+  await openVisiumHdReferenceTissueLink(page)
+  await page
+    .getByRole('img', { name: 'Spatial viewer canvas area' })
+    .click({ delay: 400 })
+
+  const binCard = page.getByRole('region', { name: 'Bin', exact: true })
+  await expect(binCard).toContainText('Selected bin', { timeout: 30_000 })
+  await expect(binCard.getByText(/^s_016um_\d{5}_\d{5}-1$/)).toBeVisible()
 })
 
 // Reading all of barcode_mappings.parquet (110 MB, 1,123 row groups) sent
