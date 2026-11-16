@@ -6,17 +6,23 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   byteRangeCacheRecordId,
+  byteRangeFileVersion,
   cacheFooterByteRanges,
   createIndexedDbByteRangeCache,
   DEFAULT_BYTE_RANGE_CACHE_NAME,
   DEFAULT_BYTE_RANGE_CACHE_VERSION,
   fetchByteRangeWithCache,
+  fetchKeepingValidator,
+  responseValidator,
 } from './persistentByteRangeCache'
 import type {
+  AsyncByteSource,
   ByteRangeCacheKey,
   IndexedDbByteRangeCacheOptions,
   PersistentByteRangeCache,
 } from './persistentByteRangeCache'
+
+const FILE_VERSION = byteRangeFileVersion(4_096, '"etag-1"')
 
 describe('persistent byte range cache', () => {
   it('reuses cached byte ranges before calling the network fetcher', async () => {
@@ -26,6 +32,7 @@ describe('persistent byte range cache', () => {
       cache,
       namespace: 'tiles',
       url: 'https://example.test/image.ome.tif',
+      version: FILE_VERSION,
       start: 10,
       end: 14,
       fetchRange,
@@ -43,10 +50,93 @@ describe('persistent byte range cache', () => {
       byteRangeCacheRecordId({
         namespace: 'tiles',
         url: 'https://example.test/image.ome.tif',
+        version: FILE_VERSION,
         start: 10,
         end: 14,
       }),
     ])
+  })
+
+  it('refetches a range once the file at its URL changes size or validator', async () => {
+    const cache = new MemoryByteRangeCache()
+    const read = (version: string, value: number) =>
+      fetchByteRangeWithCache({
+        cache,
+        ...rangeKey(0),
+        version,
+        fetchRange: async () => filledBytes(value),
+      })
+
+    await expect(read(byteRangeFileVersion(4_096, '"etag-1"'), 1)).resolves.toEqual(
+      filledBytes(1),
+    )
+    await expect(read(byteRangeFileVersion(4_096, '"etag-1"'), 9)).resolves.toEqual(
+      filledBytes(1),
+    )
+    // Re-exported with a different size, or the same size and a new ETag or
+    // Last-Modified date.
+    await expect(read(byteRangeFileVersion(4_100, '"etag-1"'), 2)).resolves.toEqual(
+      filledBytes(2),
+    )
+    await expect(read(byteRangeFileVersion(4_096, '"etag-2"'), 3)).resolves.toEqual(
+      filledBytes(3),
+    )
+    await expect(
+      read(byteRangeFileVersion(4_096, 'Mon, 16 Nov 2026 10:00:00 GMT'), 4),
+    ).resolves.toEqual(filledBytes(4))
+    await expect(read(byteRangeFileVersion(4_096), 5)).resolves.toEqual(filledBytes(5))
+    expect(cache.keys()).toHaveLength(5)
+  })
+
+  it('caches ranges of a file whose version is unknown by URL alone', async () => {
+    const cache = new MemoryByteRangeCache()
+    const fetchRange = vi.fn(async () => filledBytes(1))
+    const options = {
+      cache,
+      ...rangeKey(0),
+      version: byteRangeFileVersion(null),
+      fetchRange,
+    }
+
+    await fetchByteRangeWithCache(options)
+    await fetchByteRangeWithCache(options)
+
+    expect(fetchRange).toHaveBeenCalledOnce()
+    expect(cache.keys()).toEqual([rangeId(0, '')])
+  })
+
+  it('takes the ETag, else the Last-Modified date, as the validator', () => {
+    const lastModified = 'Mon, 16 Nov 2026 10:00:00 GMT'
+
+    expect(
+      responseValidator(new Headers({ ETag: '"abc"', 'Last-Modified': lastModified })),
+    ).toBe('"abc"')
+    expect(responseValidator(new Headers({ 'Last-Modified': lastModified }))).toBe(
+      lastModified,
+    )
+    expect(responseValidator(new Headers())).toBeUndefined()
+    expect(byteRangeFileVersion(4_096, '"abc"')).toBe('4096 "abc"')
+    expect(byteRangeFileVersion(4_096)).toBe('4096')
+    expect(byteRangeFileVersion(undefined, '"abc"')).toBe(' "abc"')
+    expect(byteRangeFileVersion(Number.NaN)).toBe('')
+  })
+
+  it('keeps the validator of the first successful response', async () => {
+    const responses = [
+      new Response(null, { status: 403 }),
+      new Response(null, { status: 206, headers: { ETag: '"first"' } }),
+      new Response(null, { status: 206, headers: { ETag: '"second"' } }),
+    ]
+    const fetcher = fetchKeepingValidator(
+      async () => responses.shift() ?? Response.error(),
+    )
+
+    expect(fetcher.validator()).toBeUndefined()
+    await fetcher.fetch('https://example.test/cells.parquet', { method: 'HEAD' })
+    expect(fetcher.validator()).toBeUndefined()
+    await fetcher.fetch('https://example.test/cells.parquet')
+    await fetcher.fetch('https://example.test/cells.parquet')
+    expect(fetcher.validator()).toBe('"first"')
   })
 
   it('caches parquet footer-like slices while leaving data pages uncached', async () => {
@@ -64,6 +154,7 @@ describe('persistent byte range cache', () => {
         footerByteLength: 100,
         namespace: 'parquet-footer',
         url: 'https://example.test/cells.parquet',
+        validator: '"etag-1"',
       },
     )
 
@@ -81,10 +172,33 @@ describe('persistent byte range cache', () => {
       byteRangeCacheRecordId({
         namespace: 'parquet-footer',
         url: 'https://example.test/cells.parquet',
+        version: byteRangeFileVersion(1_000, '"etag-1"'),
         start: 900,
         end: 1_000,
       }),
     ])
+  })
+
+  it('misses footer ranges cached from a file of another size or validator', async () => {
+    const cache = new MemoryByteRangeCache()
+    const footer = async (byteLength: number, validator: string, value: number) => {
+      const source: AsyncByteSource = {
+        byteLength,
+        slice: async () => filledBytes(value).buffer,
+      }
+      const file = cacheFooterByteRanges(source, {
+        cache,
+        url: 'https://example.test/cells.parquet',
+        validator,
+      })
+
+      return Array.from(new Uint8Array(await file.slice(0, 4)))
+    }
+
+    await expect(footer(1_000, '"etag-1"', 1)).resolves.toEqual([1, 1, 1, 1])
+    await expect(footer(1_000, '"etag-1"', 9)).resolves.toEqual([1, 1, 1, 1])
+    await expect(footer(1_004, '"etag-1"', 2)).resolves.toEqual([2, 2, 2, 2])
+    await expect(footer(1_000, '"etag-2"', 3)).resolves.toEqual([3, 3, 3, 3])
   })
 
   it('falls back to the fetcher when cache reads fail', async () => {
@@ -101,6 +215,7 @@ describe('persistent byte range cache', () => {
         cache,
         namespace: 'tiles',
         url: 'https://example.test/image.ome.tif',
+        version: FILE_VERSION,
         start: 0,
         end: 1,
         fetchRange,
@@ -271,6 +386,39 @@ describe('IndexedDB byte range cache', () => {
     })
   })
 
+  it('misses ranges written for another version of the file', async () => {
+    const indexedDB = new FakeIDBFactory()
+    const cache = indexedDbCache(indexedDB)
+    const resized = byteRangeFileVersion(4_100, '"etag-1"')
+    const changed = byteRangeFileVersion(4_096, '"etag-2"')
+
+    await cache.write(rangeKey(0), filledBytes(1))
+
+    await expect(readValues(cache, rangeKey(0))).resolves.toEqual([1, 1, 1, 1])
+    await expect(cache.read(rangeKey(0, resized))).resolves.toBeNull()
+    await expect(cache.read(rangeKey(0, changed))).resolves.toBeNull()
+
+    await cache.write(rangeKey(0, changed), filledBytes(2))
+
+    await expect(readValues(cache, rangeKey(0, changed))).resolves.toEqual([2, 2, 2, 2])
+    await expect(readValues(cache, rangeKey(0))).resolves.toEqual([1, 1, 1, 1])
+  })
+
+  it('drops version 2 ranges, keyed without the file version, when it upgrades', async () => {
+    const indexedDB = new FakeIDBFactory()
+    const version2 = await openVersion2Database(indexedDB)
+    version2.close()
+
+    const cache = indexedDbCache(indexedDB)
+    await cache.write(rangeKey(10), filledBytes(7))
+
+    await expect(storedState(indexedDB)).resolves.toEqual({
+      byteIds: [rangeId(10)],
+      entryIds: [rangeId(10)],
+      totals: { entries: 1, bytes: 4 },
+    })
+  })
+
   it('drops version 1 ranges when it upgrades the database', async () => {
     const indexedDB = new FakeIDBFactory()
     const version1 = await openVersion1Database(indexedDB)
@@ -339,20 +487,21 @@ function clock(): () => number {
   return () => (time += 1)
 }
 
-function rangeKey(start: number): ByteRangeCacheKey {
+function rangeKey(start: number, version = FILE_VERSION): ByteRangeCacheKey {
   return {
     namespace: 'zarr-zip',
     url: 'https://example.test/data.zarr.zip',
+    version,
     start,
     end: start + 4,
   }
 }
 
-function rangeId(start: number): string {
-  return byteRangeCacheRecordId(rangeKey(start))
+function rangeId(start: number, version?: string): string {
+  return byteRangeCacheRecordId(rangeKey(start, version))
 }
 
-function filledBytes(value: number, length = 4): Uint8Array {
+function filledBytes(value: number, length = 4): Uint8Array<ArrayBuffer> {
   return new Uint8Array(length).fill(value)
 }
 
@@ -394,6 +543,23 @@ async function openVersion1Database(indexedDB: IDBFactory): Promise<IDBDatabase>
       lastAccessed: 1,
       bytes: filledBytes(9).buffer,
     })
+  })
+}
+
+// The version 2 schema, whose record ids had no file version.
+async function openVersion2Database(indexedDB: IDBFactory): Promise<IDBDatabase> {
+  const key = rangeKey(0)
+  const id = `${key.namespace}\n${key.url}\n${key.start}\n${key.end}`
+
+  return await openDatabase(indexedDB, 2, (db) => {
+    db.createObjectStore('range-bytes', { keyPath: 'id' }).put({
+      id,
+      bytes: filledBytes(9).buffer,
+    })
+    db.createObjectStore('range-entries', { keyPath: 'id' })
+      .createIndex('lastAccessed', 'lastAccessed')
+      .objectStore.put({ id, byteLength: 4, lastAccessed: 1 })
+    db.createObjectStore('range-totals').put({ entries: 1, bytes: 4 }, 'totals')
   })
 }
 

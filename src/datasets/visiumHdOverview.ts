@@ -6,6 +6,7 @@ import { micrometers } from '../data/coords'
 import {
   cacheFooterByteRanges,
   defaultPersistentByteRangeCache,
+  fetchKeepingValidator,
 } from '../data/persistentByteRangeCache'
 import { fitGridBasis, gridCellCenter } from './spatialGrid'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
@@ -596,9 +597,10 @@ async function visiumHdFileFromUrl(
     throw new Error('readVisiumHdTissuePositions requires either url or file.')
   }
 
+  const fetcher = fetchKeepingValidator(options.fetcher)
   const file = await asyncBufferFromUrl({
     url: options.url,
-    ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+    fetch: fetcher.fetch,
     ...(options.signal === undefined ? {} : { requestInit: { signal: options.signal } }),
   })
   const byteRangeCache =
@@ -609,6 +611,7 @@ async function visiumHdFileFromUrl(
   return cacheFooterByteRanges(file, {
     cache: byteRangeCache,
     url: options.url,
+    validator: fetcher.validator(),
   }) as AsyncBuffer
 }
 

@@ -1,4 +1,4 @@
-import { fromUrl } from 'geotiff'
+import { fromCustomClient } from 'geotiff'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
 import {
@@ -24,10 +24,10 @@ import type {
 } from '../data/persistentByteRangeCache'
 
 vi.mock('geotiff', () => ({
-  fromUrl: vi.fn(),
+  fromCustomClient: vi.fn(),
 }))
 
-const mockedFromUrl = vi.mocked(fromUrl)
+const mockedFromCustomClient = vi.mocked(fromCustomClient)
 
 const units: UnitsDescriptor = {
   dataUnit: 'micrometer',
@@ -38,7 +38,7 @@ const units: UnitsDescriptor = {
 }
 
 afterEach(() => {
-  mockedFromUrl.mockReset()
+  mockedFromCustomClient.mockReset()
   clearOpenTiffFiles()
   vi.unstubAllGlobals()
 })
@@ -509,11 +509,11 @@ describe('TiffPyramidLoader', () => {
       getWidth: () => 200,
     }
 
-    mockedFromUrl.mockResolvedValue({
+    mockedFromCustomClient.mockResolvedValue({
       getImage: vi.fn(async () => image),
       littleEndian: true,
       parser: { parseFileDirectoryAt: vi.fn() },
-    } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+    } as unknown as Awaited<ReturnType<typeof fromCustomClient>>)
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(null, { status: 404 })),
@@ -710,9 +710,9 @@ describe('TiffPyramidLoader', () => {
 
     const firstPlane = await openTiff('https://example.test/stack.ome.tif')
     const lastPlane = await openTiff('https://example.test/stack.ome.tif#ifd=2')
-    const file = await mockedFromUrl.mock.results[0]?.value
+    const file = await mockedFromCustomClient.mock.results[0]?.value
 
-    expect(mockedFromUrl).toHaveBeenCalledTimes(1)
+    expect(mockedFromCustomClient).toHaveBeenCalledTimes(1)
     expect(file.getImage).toHaveBeenCalledWith(2)
     expect(firstPlane.zStack).toEqual({ sizeZ: 3, micrometersPerPlane: 3 })
     expect(lastPlane.zStack).toEqual({ sizeZ: 3, micrometersPerPlane: 3 })
@@ -726,14 +726,14 @@ describe('TiffPyramidLoader', () => {
   it('reopens a TIFF file whose open or directory read failed', async () => {
     stubZchunkStoreFetch(null, { sidecarUrl: 'https://example.test/unused.zchunkstore' })
     mockTiff({ width: 300, height: 200, tileWidth: 100, tileHeight: 100 })
-    mockedFromUrl.mockRejectedValueOnce(new Error('HTTP 503'))
-    mockedFromUrl.mockResolvedValueOnce({
+    mockedFromCustomClient.mockRejectedValueOnce(new Error('HTTP 503'))
+    mockedFromCustomClient.mockResolvedValueOnce({
       getImage: vi.fn(async () => {
         throw new Error('IFD read failed')
       }),
       littleEndian: true,
       parser: { parseFileDirectoryAt: vi.fn() },
-    } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+    } as unknown as Awaited<ReturnType<typeof fromCustomClient>>)
 
     await expect(openTiff('https://example.test/sample.tif')).rejects.toThrow('HTTP 503')
     await expect(openTiff('https://example.test/sample.tif')).rejects.toThrow(
@@ -742,7 +742,7 @@ describe('TiffPyramidLoader', () => {
     await expect(openTiff('https://example.test/sample.tif')).resolves.toBeInstanceOf(
       TiffPyramidLoader,
     )
-    expect(mockedFromUrl).toHaveBeenCalledTimes(3)
+    expect(mockedFromCustomClient).toHaveBeenCalledTimes(3)
   })
 
   it('enumerates all tiles for a pyramid level, including partial edges', () => {
@@ -788,6 +788,7 @@ describe('TiffPyramidLoader', () => {
       numLevels: 1,
       imageWidth: imagePixels(300),
       imageHeight: imagePixels(200),
+      sourceVersion: '4096 "etag-1"',
       byteRangeCache,
       fetcher: async (_input, init) => {
         fetches.push(init ?? {})
@@ -807,10 +808,49 @@ describe('TiffPyramidLoader', () => {
       byteRangeCacheRecordId({
         namespace: TIFF_TILE_CACHE_NAMESPACE,
         url: 'https://example.test/image.ome.tif',
+        version: '4096 "etag-1"',
         start: 10,
         end: 14,
       }),
     ])
+  })
+
+  it('refetches cached tiles once the TIFF is overwritten at its URL', async () => {
+    const byteRangeCache = new MemoryByteRangeCache()
+    const loaderFor = (sourceVersion: string | undefined, value: number) =>
+      new TiffPyramidLoader({
+        url: 'https://example.test/image.ome.tif',
+        chunkIndex: new Map([['0/0/0', { offset: 10, length: 4 }]]),
+        levelMeta: new Map([
+          [0, { width: imagePixels(100), height: imagePixels(100), nCols: 1, nRows: 1 }],
+        ]),
+        units,
+        tileWidth: imagePixels(100),
+        tileHeight: imagePixels(100),
+        numLevels: 1,
+        imageWidth: imagePixels(100),
+        imageHeight: imagePixels(100),
+        ...(sourceVersion === undefined ? {} : { sourceVersion }),
+        byteRangeCache,
+        fetcher: async () => new Response(new Uint8Array(4).fill(value), { status: 206 }),
+      })
+
+    await loaderFor('4096 "etag-1"', 1).fetchTileBytes(0, 0, 0)
+
+    await expect(loaderFor('4096 "etag-1"', 9).fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array(4).fill(1),
+    )
+    await expect(loaderFor('4096 "etag-2"', 2).fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array(4).fill(2),
+    )
+    // Without a version the tile is cached by URL alone.
+    await expect(loaderFor(undefined, 3).fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array(4).fill(3),
+    )
+    await expect(loaderFor(undefined, 4).fetchTileBytes(0, 0, 0)).resolves.toEqual(
+      new Uint8Array(4).fill(3),
+    )
+    expect(byteRangeCache.keys()).toHaveLength(3)
   })
 
   it('selects intermediate pyramid levels by source pixel screen size', () => {
@@ -944,11 +984,11 @@ function mockTiff(size: {
     getWidth: () => size.width,
   }
 
-  mockedFromUrl.mockResolvedValue({
+  mockedFromCustomClient.mockResolvedValue({
     getImage: vi.fn(async () => image),
     littleEndian: true,
     parser: { parseFileDirectoryAt: vi.fn() },
-  } as unknown as Awaited<ReturnType<typeof fromUrl>>)
+  } as unknown as Awaited<ReturnType<typeof fromCustomClient>>)
 }
 
 // A one-level sidecar listing every tile of the given channels. Tile (row 1,

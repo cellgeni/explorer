@@ -1,4 +1,4 @@
-import { fromArrayBuffer, fromUrl } from 'geotiff'
+import { fromArrayBuffer } from 'geotiff'
 import type {
   BlockedSourceOptions,
   GeoTIFF,
@@ -14,6 +14,7 @@ import {
 import { imagePixels, micrometers } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
+import { openRemoteTiff, remoteTiffVersion } from './remoteTiff'
 import { parseOmeTiffMetadata } from './omeMetadata'
 import {
   isQptiffDescription,
@@ -109,6 +110,9 @@ export type TiffChunkIndex = ReadonlyMap<string, TiffChunkIndexEntry>
 export interface TiffPyramidLoaderOptions {
   readonly url: string
   readonly sourceUrl?: string
+  // The source file's version (see byteRangeFileVersion), which its tiles are
+  // cached under. Tiles of a file without one are cached by URL alone.
+  readonly sourceVersion?: string
   // The tile index, or a function that reads one level's index when that
   // level's first tile is fetched.
   readonly chunkIndex: TiffChunkIndex | ((level: number) => Promise<TiffChunkIndex>)
@@ -181,7 +185,7 @@ function openTiffFile(sourceUrl: string): Promise<GeoTIFF> {
   let file = openTiffFiles.get(sourceUrl)
 
   if (file === undefined) {
-    const opened = fromUrl(sourceUrl, { allowFullFile: false })
+    const opened = openRemoteTiff(sourceUrl, { allowFullFile: false })
     opened.catch(() => {
       forgetTiffFile(sourceUrl, opened)
     })
@@ -347,6 +351,7 @@ async function openTiffImage(
     return new TiffPyramidLoader({
       url,
       sourceUrl: selection.sourceUrl,
+      sourceVersion: remoteTiffVersion(tiff),
       ...decodeMetadata,
       ...zchunkStoreOptions,
       ...loaderSourceOptions(options),
@@ -460,6 +465,7 @@ async function openTiffImage(
   return new TiffPyramidLoader({
     url,
     sourceUrl: selection.sourceUrl,
+    sourceVersion: remoteTiffVersion(tiff),
     ...decodeMetadata,
     ...loaderSourceOptions(options),
     chunkIndex,
@@ -594,8 +600,6 @@ const PAGE_PYRAMID_FORMAT: TopLevelPyramidFormat = {
   read: (tiff, options) => readPagePyramidFile(tiff, options),
 }
 
-// fromUrl hands the block options to its BlockedSource, though its type
-// leaves them out.
 type BlockedRemoteSourceOptions = RemoteSourceOptions & BlockedSourceOptions
 
 async function openTopLevelPyramid(
@@ -615,7 +619,7 @@ async function openTopLevelPyramid(
       const tiff =
         openedTiff ??
         (options.bytes === undefined
-          ? await fromUrl(selection.sourceUrl, format.sourceOptions)
+          ? await openRemoteTiff(selection.sourceUrl, format.sourceOptions)
           : await fromArrayBuffer(wholeArrayBuffer(options.bytes)))
       return format.read(tiff, options)
     }),
@@ -650,6 +654,7 @@ async function openTopLevelPyramid(
   return new TiffPyramidLoader({
     url,
     sourceUrl: selection.sourceUrl,
+    sourceVersion: remoteTiffVersion(file.tiff),
     ...decodeMetadata,
     ...loaderSourceOptions(options),
     levelDecodeMetadata,
@@ -728,6 +733,7 @@ function sharedPyramidFile<T>(
 // An NDPI's levels (see ndpi.ts) as the loader reads them: levels with
 // restart offsets by block, and small levels without them by strip.
 interface NdpiFile {
+  readonly sourceVersion: string
   readonly levelMeta: ReadonlyMap<number, TiffLevelMeta>
   readonly ndpiLevels: ReadonlyMap<number, NdpiLevelRead>
   readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
@@ -766,7 +772,7 @@ async function openNdpi(
       const tiff =
         openedTiff ??
         (options.bytes === undefined
-          ? await fromUrl(selection.sourceUrl, NDPI_SOURCE_OPTIONS)
+          ? await openRemoteTiff(selection.sourceUrl, NDPI_SOURCE_OPTIONS)
           : await fromArrayBuffer(wholeArrayBuffer(options.bytes)))
       return readNdpiFile(tiff)
     }),
@@ -776,6 +782,7 @@ async function openNdpi(
   return new TiffPyramidLoader({
     url,
     sourceUrl: selection.sourceUrl,
+    sourceVersion: file.sourceVersion,
     ...loaderSourceOptions(options),
     chunkIndex: new Map(),
     levelMeta: file.levelMeta,
@@ -917,6 +924,7 @@ async function readNdpiFile(tiff: GeoTIFF): Promise<NdpiFile> {
   }
 
   return {
+    sourceVersion: remoteTiffVersion(tiff),
     levelMeta,
     ndpiLevels,
     stripLevels,
@@ -1575,6 +1583,7 @@ export class TiffPyramidLoader {
   private readonly ndpiGeometries = new Map<number, Promise<NdpiLevelGeometry>>()
   private readonly fetcher: typeof fetch
   private readonly sourceUrl: string
+  private readonly sourceVersion: string
   private readonly byteRangeCache: PersistentByteRangeCache | null
   // The image's top-left corner in data micrometres.
   private readonly originX: number
@@ -1583,6 +1592,7 @@ export class TiffPyramidLoader {
   constructor(options: TiffPyramidLoaderOptions) {
     this.url = options.url
     this.sourceUrl = options.sourceUrl ?? options.url
+    this.sourceVersion = options.sourceVersion ?? ''
     if (typeof options.chunkIndex === 'function') {
       this.loadLevelChunks = options.chunkIndex
     } else {
@@ -1851,6 +1861,7 @@ export class TiffPyramidLoader {
           cache: this.byteRangeCache,
           namespace: TIFF_TILE_CACHE_NAMESPACE,
           url: this.sourceUrl,
+          version: this.sourceVersion,
           start: run.start,
           end: run.end,
           signal,
@@ -2010,6 +2021,7 @@ export class TiffPyramidLoader {
       cache: this.byteRangeCache,
       namespace: TIFF_TILE_CACHE_NAMESPACE,
       url: this.sourceUrl,
+      version: this.sourceVersion,
       start,
       end,
       ...(signal === undefined ? {} : { signal }),
@@ -2065,6 +2077,7 @@ export class TiffPyramidLoader {
       cache: this.byteRangeCache,
       namespace: TIFF_TILE_CACHE_NAMESPACE,
       url: this.sourceUrl,
+      version: this.sourceVersion,
       start,
       end,
       ...(signal === undefined ? {} : { signal }),
