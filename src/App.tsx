@@ -1445,13 +1445,16 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setSpatialFocusRequest],
   )
-  const geneExpressionCopy = geneExpressionStatusCopy(geneExpressionState)
+  const geneExpressionCopy = geneExpressionStatusCopy(
+    geneExpressionState,
+    embeddingElementLabel,
+  )
   const roiCopy = roiStatusCopy(roiState, roiMode)
   const visiumHdRoiCopy = visiumHdRoiStatusCopy(activeVisiumHdRoiState, roiMode)
   const roiGeneStatsCopy = roiGeneStatsStatusCopy(roiGeneStatsState)
   const analysisHeaderCopy =
     geneExpressionState.status === 'loading'
-      ? geneExpressionModeLabel(geneExpressionState.mode)
+      ? geneExpressionModeLabel(geneExpressionState.mode, embeddingElementLabel)
       : genePanelCopy
   const annotationHeaderCopy =
     annotationGroupState.status === 'loading' ? 'Loading sets' : annotationCopy
@@ -2262,7 +2265,7 @@ export function App({ dependencies }: AppProps = {}) {
         geneExpressionState,
         geneExpressionLoadingLabel:
           geneExpressionState.status === 'loading'
-            ? geneExpressionModeLabel(geneExpressionState.mode)
+            ? geneExpressionModeLabel(geneExpressionState.mode, embeddingElementLabel)
             : undefined,
         visiumHdExpressionProjectionState,
         genePanelState,
@@ -2297,6 +2300,7 @@ export function App({ dependencies }: AppProps = {}) {
       activeVisiumHdExpressionProfileState,
       datasetWarmupState,
       diagnosticsState,
+      embeddingElementLabel,
       geneExpressionState,
       genePanelState,
       visiumHdExpressionProjectionState,
@@ -3979,6 +3983,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationPlacedCellIds,
     annotationState,
     cellMetadataTracks,
+    elementNoun: embeddingElementLabel,
     geometricAnnotationImportError,
     geometricAnnotations,
     geometricAnnotationsEnabled:

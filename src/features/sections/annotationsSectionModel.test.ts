@@ -18,6 +18,7 @@ function input(
     annotationPlacedCellIds: null,
     annotationState: { status: 'idle' },
     cellMetadataTracks: [],
+    elementNoun: 'cells',
     geometricAnnotationImportError: null,
     geometricAnnotations: [],
     geometricAnnotationsEnabled: false,

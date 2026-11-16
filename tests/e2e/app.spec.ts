@@ -918,7 +918,7 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   await genesPanel.getByLabel('Gene selection').fill('GeneB')
   await genesPanel.getByRole('button', { name: 'GeneB', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 0 positive cells across 70 slide cells/,
+    /Expression all spots: 0 positive spots across 70 slide spots/,
   )
 
   // The library switch reloads from the link, which follows within 160 ms.
@@ -930,7 +930,7 @@ test('switches Visium libraries and off-tissue spots and keeps them in the link 
   // The gene selection survives the reload.
   await openControls(page, 'genes')
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 70 positive cells across 70 slide cells/,
+    /Expression all spots: 70 positive spots across 70 slide spots/,
   )
 
   const spots = await openControls(page, 'spot-options')
@@ -987,7 +987,7 @@ test('loads a Space Ranger Visium folder as 55 um spots with its tissue image @s
   await genesPanel.getByLabel('Gene selection').fill('Gad1')
   await genesPanel.getByRole('button', { name: 'Gad1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: 18 positive cells across 36 slide cells/,
+    /Expression all spots: 18 positive spots across 36 slide spots/,
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
 })
@@ -1170,7 +1170,7 @@ test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live
   await genesPanel.getByLabel('Gene selection').fill('MALAT1')
   await genesPanel.getByRole('button', { name: 'MALAT1', exact: true }).click()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: [1-9][0-9,]* positive cells across 370 slide cells/,
+    /Expression all spots: [1-9][0-9,]* positive spots across 370 slide spots/,
     { timeout: H5AD_HOSTED_LOAD_TIMEOUT_MS },
   )
 })
@@ -1475,7 +1475,7 @@ test('exercises Visium HD tiers, Feature Slice genes, ROI export, and advanced c
   await genesPanel.getByRole('button', { name: 'A2M', exact: true }).click()
   await expect(genesPanel.getByTitle('Remove A2M')).toBeVisible()
   await expect(genesPanel.locator('.analysis-status')).toContainText(
-    /Expression all cells: [1-9][0-9,]* positive cells across 54,504 slide cells/,
+    /Expression all bins: [1-9][0-9,]* positive bins across 54,504 slide bins/,
     { timeout: 60_000 },
   )
 

@@ -191,6 +191,7 @@ export function AnnotationLabelLists({ sets }: { readonly sets: AnnotationSetsMo
       hiddenAnnotationIds={sets.hiddenIds}
       hiddenAnnotationSetIds={sets.hiddenSetIds}
       placedCellIds={sets.placedCellIds}
+      elementNoun={sets.elementNoun}
       onAnnotationColorChange={sets.onColorChange}
       onAnnotationSetVisibilityChange={sets.onSetVisibilityChange}
       onAnnotationVisibilityChange={sets.onVisibilityChange}
@@ -201,7 +202,7 @@ export function AnnotationLabelLists({ sets }: { readonly sets: AnnotationSetsMo
 }
 
 export function MetadataTracksPanel({
-  metadataTracks: { onRemove, tracks },
+  metadataTracks: { elementNoun, onRemove, tracks },
 }: {
   readonly metadataTracks: MetadataTracksModel
 }) {
@@ -215,7 +216,11 @@ export function MetadataTracksPanel({
         <h5 id="metadata-track-heading">Metadata tracks</h5>
         <small>{tracks.length.toLocaleString()} loaded</small>
       </div>
-      <MetadataTrackList tracks={tracks} onRemoveCellMetadataTrack={onRemove} />
+      <MetadataTrackList
+        tracks={tracks}
+        elementNoun={elementNoun}
+        onRemoveCellMetadataTrack={onRemove}
+      />
     </section>
   )
 }
@@ -371,6 +376,7 @@ function AnnotationSetLists({
   hiddenAnnotationIds,
   hiddenAnnotationSetIds,
   placedCellIds,
+  elementNoun,
   onAnnotationColorChange,
   onAnnotationSetVisibilityChange,
   onAnnotationVisibilityChange,
@@ -382,6 +388,7 @@ function AnnotationSetLists({
   readonly hiddenAnnotationIds: readonly string[]
   readonly hiddenAnnotationSetIds: readonly string[]
   readonly placedCellIds: PlacedCellIds | null
+  readonly elementNoun: string
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
   readonly onAnnotationVisibilityChange: (
@@ -425,6 +432,7 @@ function AnnotationSetLists({
           annotationColors={annotationColors}
           hiddenAnnotationIdSet={hiddenAnnotationIdSet}
           visible={!hiddenAnnotationSetIdSet.has(plot.id)}
+          elementNoun={elementNoun}
           onAnnotationColorChange={onAnnotationColorChange}
           onAnnotationSetVisibilityChange={onAnnotationSetVisibilityChange}
           onAnnotationVisibilityChange={onAnnotationVisibilityChange}
@@ -442,6 +450,7 @@ function AnnotationSetList({
   annotationColors,
   hiddenAnnotationIdSet,
   visible,
+  elementNoun,
   onAnnotationColorChange,
   onAnnotationSetVisibilityChange,
   onAnnotationVisibilityChange,
@@ -456,6 +465,7 @@ function AnnotationSetList({
   readonly annotationColors: Readonly<Record<string, string>>
   readonly hiddenAnnotationIdSet: ReadonlySet<string>
   readonly visible: boolean
+  readonly elementNoun: string
   readonly onAnnotationColorChange: (annotationId: string, color: string) => void
   readonly onAnnotationSetVisibilityChange: (setId: string, visible: boolean) => void
   readonly onAnnotationVisibilityChange: (
@@ -502,8 +512,8 @@ function AnnotationSetList({
         <IconButton
           title={
             visible
-              ? `Hide ${plot.label}: draw the cells without its colours, keeping the classes checked below`
-              : `Show ${plot.label}: colour the cells by its classes again`
+              ? `Hide ${plot.label}: draw the ${elementNoun} without its colours, keeping the classes checked below`
+              : `Show ${plot.label}: colour the ${elementNoun} by its classes again`
           }
           aria-label={`${plot.label} visible`}
           aria-pressed={visible}
@@ -530,7 +540,7 @@ function AnnotationSetList({
           }}
         />
         <h5>{plot.label}</h5>
-        <small>{plot.totalCellAssignments.toLocaleString()} cells</small>
+        <small>{countOf(plot.totalCellAssignments, elementNoun)}</small>
       </div>
       {searchable ? (
         <div className="annotation-set-search">
@@ -643,9 +653,11 @@ function AnnotationSetList({
 // Every track is listed; the layer panel scrolls.
 function MetadataTrackList({
   tracks,
+  elementNoun,
   onRemoveCellMetadataTrack,
 }: {
   readonly tracks: readonly ContinuousCellMetadataTrack[]
+  readonly elementNoun: string
   readonly onRemoveCellMetadataTrack: (trackId: string) => void
 }) {
   return (
@@ -654,7 +666,7 @@ function MetadataTrackList({
         <li key={track.id}>
           <span>{track.label}</span>
           <small>
-            {track.cellCount.toLocaleString()} cells | {formatMetadataTrackDomain(track)}
+            {countOf(track.cellCount, elementNoun)} | {formatMetadataTrackDomain(track)}
           </small>
           <button
             type="button"
@@ -671,6 +683,11 @@ function MetadataTrackList({
       ))}
     </ul>
   )
+}
+
+// `noun` is plural: cells, spots or bins.
+function countOf(count: number, noun: string): string {
+  return `${count.toLocaleString()} ${count === 1 ? noun.replace(/s$/, '') : noun}`
 }
 
 function formatMetadataTrackDomain(track: ContinuousCellMetadataTrack): string {
