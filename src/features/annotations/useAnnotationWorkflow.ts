@@ -43,6 +43,7 @@ import {
   removeHiddenAnnotationIdsByPrefix,
   type AnnotationState,
 } from './annotationModel'
+import { AnnotationUrlTooLargeError, readAnnotationUrlText } from './annotationUrlText'
 
 interface MutableRef<T> {
   current: T
@@ -409,7 +410,7 @@ export function useAnnotationWorkflow({
           throw new Error(`Annotation URL returned HTTP ${response.status}.`)
         }
 
-        const text = await response.text()
+        const text = await readAnnotationUrlText(response, sourceName)
 
         if (loadRequestIdRef.current !== requestId) {
           return false
@@ -672,6 +673,17 @@ function annotationImportError(error: unknown): StructuredLoadError {
       title: 'Imported cells not found',
       message: error.message,
       action: "Check that the file's cell IDs come from this dataset.",
+    }
+  }
+
+  if (error instanceof AnnotationUrlTooLargeError) {
+    return {
+      source: 'Annotations',
+      code: 'size-limit',
+      title: 'Annotation file too large',
+      message: error.message,
+      action:
+        'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
     }
   }
 

@@ -417,6 +417,49 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Imported URL annotations: 1 labels')
   })
 
+  it('refuses an annotation URL over the size limit', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response('cell_id,label\n', {
+            headers: { 'content-length': String(Math.round(250.5 * 1024 * 1024)) },
+          }),
+      ),
+    )
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      const imported = await api.handleImportAnnotationUrl(
+        'https://example.test/labels/all-cells.csv',
+      )
+      expect(imported).toBe(false)
+    })
+
+    expect(snapshot.annotationState).toEqual({
+      status: 'error',
+      url: 'https://example.test/output',
+      error: {
+        source: 'Annotations',
+        code: 'size-limit',
+        title: 'Annotation file too large',
+        message: 'all-cells.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
+        action:
+          'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
+      },
+    })
+    expect(snapshot.debugMessages).toContain('Annotation URL import failed')
+  })
+
   it('imports continuous CSV values as metadata tracks and activates metadata coloring', async () => {
     const cellId = asCellId('aaaaaaaa-1')
     const file = new File([`cell_id,confidence\n${cellId},0.82`], 'scores.csv', {
