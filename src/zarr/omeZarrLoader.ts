@@ -2,6 +2,7 @@ import * as zarr from 'zarrita'
 import {
   imagePixels,
   micrometers,
+  tilesForBboxOnAxes,
   type BBox,
   type ImagePixels,
   type TileIndex,
@@ -440,45 +441,28 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     return 0
   }
 
-  tilesForBbox(level: number, imageBbox: BBox): readonly TileIndex[] {
+  tilesForBbox(level: number, bbox: BBox): readonly TileIndex[] {
     const meta = this.levelMetaFor(level)
-    const bbox = {
-      minX: imageBbox.minX - this.originX,
-      maxX: imageBbox.maxX - this.originX,
-      minY: imageBbox.minY - this.originY,
-      maxY: imageBbox.maxY - this.originY,
-    }
-    const nCols = Math.ceil(meta.width / meta.tileWidth)
-    const nRows = Math.ceil(meta.height / meta.tileHeight)
-    const col0 = Math.max(
-      0,
-      Math.floor(Math.max(0, bbox.minX / meta.xMicrometersPerPixel) / meta.tileWidth),
-    )
-    const col1 = Math.min(
-      nCols - 1,
-      Math.floor(
-        Math.max(0, bbox.maxX / meta.xMicrometersPerPixel - 1e-9) / meta.tileWidth,
-      ),
-    )
-    const row0 = Math.max(
-      0,
-      Math.floor(Math.max(0, bbox.minY / meta.yMicrometersPerPixel) / meta.tileHeight),
-    )
-    const row1 = Math.min(
-      nRows - 1,
-      Math.floor(
-        Math.max(0, bbox.maxY / meta.yMicrometersPerPixel - 1e-9) / meta.tileHeight,
-      ),
-    )
-    const tiles: TileIndex[] = []
+    // The image extent is the one tileBounds clips tiles to.
+    const baseLevel = this.levelMetaFor(0)
 
-    for (let row = row0; row <= row1; row += 1) {
-      for (let col = col0; col <= col1; col += 1) {
-        tiles.push({ col, row })
-      }
-    }
-
-    return tiles
+    return tilesForBboxOnAxes(
+      bbox,
+      {
+        origin: this.originX,
+        imageExtent: baseLevel.width * baseLevel.xMicrometersPerPixel,
+        micrometersPerPixel: meta.xMicrometersPerPixel,
+        tileSize: meta.tileWidth,
+        tileCount: Math.ceil(meta.width / meta.tileWidth),
+      },
+      {
+        origin: this.originY,
+        imageExtent: baseLevel.height * baseLevel.yMicrometersPerPixel,
+        micrometersPerPixel: meta.yMicrometersPerPixel,
+        tileSize: meta.tileHeight,
+        tileCount: Math.ceil(meta.height / meta.tileHeight),
+      },
+    )
   }
 
   tilesForLevel(level: number): readonly TileIndex[] {

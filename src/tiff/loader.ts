@@ -11,7 +11,7 @@ import {
   fetchByteRangeWithCache,
   TIFF_TILE_CACHE_NAMESPACE,
 } from '../data/persistentByteRangeCache'
-import { imagePixels, micrometers } from '../data/coords'
+import { imagePixels, micrometers, tilesForBboxOnAxes } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import { openRemoteTiff, remoteTiffVersion } from './remoteTiff'
@@ -1664,34 +1664,25 @@ export class TiffPyramidLoader {
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[] {
     const meta = this.levelMetaFor(level)
     const scale = this.levelScaleFor(meta)
-    const levelScaleX = this.units.micrometersPerPixel * scale.x
-    const levelScaleY = this.units.micrometersPerPixel * scale.y
-    const minX = bbox.minX - this.originX
-    const maxX = bbox.maxX - this.originX
-    const minY = bbox.minY - this.originY
-    const maxY = bbox.maxY - this.originY
-    const col0 = Math.max(0, Math.floor(Math.max(0, minX / levelScaleX) / this.tileWidth))
-    const col1 = Math.min(
-      meta.nCols - 1,
-      Math.floor(Math.max(0, maxX / levelScaleX - 1e-9) / this.tileWidth),
-    )
-    const row0 = Math.max(
-      0,
-      Math.floor(Math.max(0, minY / levelScaleY) / this.tileHeight),
-    )
-    const row1 = Math.min(
-      meta.nRows - 1,
-      Math.floor(Math.max(0, maxY / levelScaleY - 1e-9) / this.tileHeight),
-    )
-    const tiles: TileIndex[] = []
 
-    for (let row = row0; row <= row1; row += 1) {
-      for (let col = col0; col <= col1; col += 1) {
-        tiles.push({ col, row })
-      }
-    }
-
-    return tiles
+    // The image extent is the one tileBounds clips tiles to.
+    return tilesForBboxOnAxes(
+      bbox,
+      {
+        origin: this.originX,
+        imageExtent: this.imageWidth * this.units.micrometersPerPixel,
+        micrometersPerPixel: this.units.micrometersPerPixel * scale.x,
+        tileSize: this.tileWidth,
+        tileCount: meta.nCols,
+      },
+      {
+        origin: this.originY,
+        imageExtent: this.imageHeight * this.units.micrometersPerPixel,
+        micrometersPerPixel: this.units.micrometersPerPixel * scale.y,
+        tileSize: this.tileHeight,
+        tileCount: meta.nRows,
+      },
+    )
   }
 
   tilesForLevel(level: number): readonly TileIndex[] {

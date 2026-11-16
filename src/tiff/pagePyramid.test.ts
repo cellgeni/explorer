@@ -57,6 +57,9 @@ describe('TIFF page pyramids in memory', () => {
     ])
     expect(
       loader.tilesForBbox(0, { minX: 0, minY: 0, maxX: 999, maxY: 1999 } as never),
+    ).toEqual([])
+    expect(
+      loader.tilesForBbox(0, { minX: 0, minY: 0, maxX: 1001, maxY: 2001 } as never),
     ).toEqual([{ col: 0, row: 0 }])
 
     const decoded = await decodeTiffTilePixels(

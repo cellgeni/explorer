@@ -126,14 +126,6 @@ Features:
 Original-brief items with no outcome:
 
 - [ ] `metrics_summary.csv` QC display (not read; papaparse not adopted).
-- [ ] `tilesForBbox` returns edge tiles for a bbox wholly outside the image,
-      because it clamps tile indices to the grid rather than to the image. For
-      `{minX: -500, maxX: -100}` on a 250 × 180 px level with 100 × 80 px tiles
-      it returns column 0. The loaders have their own copies
-      (`src/tiff/loader.ts:801`, `src/zarr/omeZarrLoader.ts:369`), so a view
-      panned off the left or top of an image still requests that edge's
-      tiles. Found by the property tests (an `it.todo` in
-      `coords.property.test.ts`).
 - [ ] Memory ceiling with eviction telemetry beyond tile caches. Partly done:
       budgets scale with device memory, and the tile LRU (with eviction
       telemetry), the OME-Zarr chunk cache and the IndexedDB cache each evict

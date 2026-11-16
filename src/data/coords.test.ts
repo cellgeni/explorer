@@ -116,4 +116,102 @@ describe('tile math', () => {
       { col: 2, row: 2 },
     ])
   })
+
+  it('lists no tiles for a bbox that misses the image', () => {
+    // Left of the image: the grid's column 0 of rows 0 to 2 before 2026-11-16.
+    expect(
+      tilesForBbox(
+        0,
+        {
+          minX: micrometers(-500),
+          maxX: micrometers(-100),
+          minY: micrometers(0),
+          maxY: micrometers(200),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([])
+    // Past the right edge, in the unused part of the last column's tiles,
+    // which tileBounds clips to x 200–250: { col: 2, row: 0 } before.
+    expect(
+      tilesForBbox(
+        0,
+        {
+          minX: micrometers(260),
+          maxX: micrometers(280),
+          minY: micrometers(0),
+          maxY: micrometers(50),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([])
+    // Touching the left edge.
+    expect(
+      tilesForBbox(
+        0,
+        {
+          minX: micrometers(-50),
+          maxX: micrometers(0),
+          minY: micrometers(0),
+          maxY: micrometers(50),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([])
+  })
+
+  it('lists the edge tiles a bbox reaches from off the image', () => {
+    expect(
+      tilesForBbox(
+        0,
+        {
+          minX: micrometers(-500),
+          maxX: micrometers(10),
+          minY: micrometers(170),
+          maxY: micrometers(400),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([{ col: 0, row: 2 }])
+    expect(
+      tilesForBbox(
+        0,
+        {
+          minX: micrometers(240),
+          maxX: micrometers(280),
+          minY: micrometers(-50),
+          maxY: micrometers(10),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([{ col: 2, row: 0 }])
+  })
+
+  it('measures a coarser level without a full-resolution size from its own pixels', () => {
+    // Level 1 of the 250 × 180 px grid spans 500 × 360 µm.
+    expect(tileBounds(1, 2, 2, grid, oneToOneUnits)).toEqual({
+      minX: micrometers(400),
+      maxX: micrometers(500),
+      minY: micrometers(320),
+      maxY: micrometers(360),
+    })
+    expect(
+      tilesForBbox(
+        1,
+        {
+          minX: micrometers(450),
+          maxX: micrometers(600),
+          minY: micrometers(340),
+          maxY: micrometers(400),
+        },
+        grid,
+        oneToOneUnits,
+      ),
+    ).toEqual([{ col: 2, row: 2 }])
+  })
 })

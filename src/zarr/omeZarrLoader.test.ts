@@ -285,6 +285,61 @@ describe('OME-Zarr image loader', () => {
     ).toEqual([{ col: 0, row: 1 }])
   })
 
+  it('selects no tiles for a bbox that misses the image', async () => {
+    const rootPath = '/images/partial.zarr'
+    const files = new Map([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            {
+              axes: [
+                { name: 'y', type: 'space' },
+                { name: 'x', type: 'space' },
+              ],
+              datasets: [{ path: '0' }],
+            },
+          ],
+        }),
+      ],
+      // 250 × 180 px in 100 × 80 px chunks.
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([180, 250], [80, 100]))],
+    ])
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(files),
+      planarTransform: { scaleX: 1, scaleY: 1, translateX: 1000, translateY: 2000 },
+    })
+    const bbox = (minX: number, maxX: number, minY: number, maxY: number): BBox => ({
+      minX: micrometers(minX),
+      maxX: micrometers(maxX),
+      minY: micrometers(minY),
+      maxY: micrometers(maxY),
+    })
+
+    expect(loader.tileBounds(0, 2, 2)).toEqual({
+      minX: 1200,
+      maxX: 1250,
+      minY: 2160,
+      maxY: 2180,
+    })
+    // Left of and above the image.
+    expect(loader.tilesForBbox(0, bbox(500, 900, 2000, 2200))).toEqual([])
+    expect(loader.tilesForBbox(0, bbox(1000, 1100, 1500, 1900))).toEqual([])
+    // Past the right and bottom edges, over the unused part of the last tiles.
+    expect(loader.tilesForBbox(0, bbox(1260, 1280, 2000, 2050))).toEqual([])
+    expect(loader.tilesForBbox(0, bbox(1000, 1050, 2185, 2230))).toEqual([])
+    // Touching the top edge.
+    expect(loader.tilesForBbox(0, bbox(1000, 1050, 1950, 2000))).toEqual([])
+    // Reaching onto the image from off its top-left and bottom-right corners.
+    expect(loader.tilesForBbox(0, bbox(500, 1010, 1500, 2010))).toEqual([
+      { col: 0, row: 0 },
+    ])
+    expect(loader.tilesForBbox(0, bbox(1240, 1500, 2170, 2500))).toEqual([
+      { col: 2, row: 2 },
+    ])
+  })
+
   it('samples a virtual tile in the worker that holds its chunk', async () => {
     const rootPath = '/images/sampled.zarr'
     const size = 600
