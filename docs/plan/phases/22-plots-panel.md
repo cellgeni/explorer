@@ -18,8 +18,9 @@ The user decided on 2026-11-16:
 - SVG for the dot plot and violin, which is accessible and exports for
   figures; canvas for the heatmap.
 
-The plan rests on a code map made on 2026-11-16 at `bea26d2`. It is cited below
-as `file:line`; line numbers drift as the code changes.
+The plan rests on a code map made on 2026-11-16 at `bea26d2`, rechecked the
+same day at `4038ada`. It is cited below as `file:line`; line numbers drift as
+the code changes.
 
 Sizes are for one developer: **S** ≤ 1 day, **M** 2–4 days, **L** 1–2 weeks.
 
@@ -56,14 +57,14 @@ Non-goals:
 What the panel can take as it is:
 
 - **Selected genes.** `selectedGenes` is React state
-  (`useAppDomainState.ts:487`), kept sorted by `toggleGene` (`App.tsx:2077`),
+  (`useAppDomainState.ts:487`), kept sorted by `toggleGene` (`App.tsx:2092`),
   in the link as `genes=`.
 - **Annotation classes.** `annotationState` holds the loaded classes and the
   set's `groupId`. `annotationStyleColors` (`useViewerLayerData.ts:167`) gives
   `{ id, label, cellIds, color }` per class with the legend's colours, and
-  `visibleAnnotationState` (`App.tsx:855`) leaves out hidden sets and classes
+  `visibleAnnotationState` (`App.tsx:876`) leaves out hidden sets and classes
   (`hiddenClasses=`). The Embedding panel already takes these
-  (`App.tsx:4089`). Labels arrive as one list of cell IDs per class
+  (`App.tsx:4156`). Labels arrive as one list of cell IDs per class
   (`Annotation`, `spatialDataset.ts:145`). Imported files (`custom:…`) and
   saved selections (`roi:…`) join the same state as their own sets.
 - **Active selection.** `roiCellIds`, from `platformRoiElementIds`
@@ -125,7 +126,7 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   (`groups=`). Classes of a set are matched by the `${groupId}:` id prefix,
   not by
   `annotationSetIdForAnnotation`, which gives a different id for Xenium
-  (`annotationModel.ts:332`). Classes keep the legend's order and colours.
+  (`annotationModel.ts:165`). Classes keep the legend's order and colours.
   Hidden classes are left out, and the panel says how many. Dot plot and
   violin show up to 60 classes and the heatmap up to 500. Over that, the
   panel shows the first ones in legend order and says to hide classes to
@@ -154,7 +155,7 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   matrix row (`Uint16Array`, or `Uint32Array` above 65,535 classes) plus a
   member list for the selection. Where a dataset already holds labels by row,
   as Xenium graph clusters (`analysisAnnotations.ts:92`) and H5AD categorical
-  codes (`h5adDataset.ts:271`) do, they are used as they are. Imported files
+  codes (`h5adDataset.ts:282`) do, they are used as they are. Imported files
   and the selection come as cell IDs. They are mapped to rows in the worker,
   because building a `Map` of a million IDs on the main thread took 1–2 s
   during load. Statistics are computed in a new plot worker. The main thread
