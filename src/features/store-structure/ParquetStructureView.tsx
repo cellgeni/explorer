@@ -1,5 +1,5 @@
 import { useId, useState, type ReactNode } from 'react'
-import { Button } from '../../components/ui'
+import { Button, Segmented } from '../../components/ui'
 import type {
   ParquetFileRef,
   ParquetRowGroupSummary,
@@ -22,7 +22,9 @@ import {
   parquetNodeSummary,
   parquetPhysicalLabel,
   parquetTypeLabel,
+  previewReadBound,
 } from './parquetStructureModel'
+import { ParquetRowsPanel } from './ParquetRowsPanel'
 import { formatBytes, formatCount } from './storeStructureModel'
 import {
   Fact,
@@ -32,17 +34,24 @@ import {
   StructureBrowser,
   type StructureNodeLabel,
 } from './StructureBrowser'
+import {
+  AUTO_READ_ROWS_BYTES,
+  useParquetRows,
+  type ParquetRowsReader,
+} from './useParquetRows'
 import type { ParquetFileState } from './useStoreStructure'
 
 // The structure drawer's view of one Parquet file: its schema as a tree, and
 // for the selected column its type, compression and statistics, all from the
-// file's footer.
+// file's footer; or its first rows, read on request.
 export function ParquetFileView({
   state,
+  readRows,
   onRetry,
   onBack,
 }: {
   readonly state: ParquetFileState
+  readonly readRows: ParquetRowsReader
   readonly onRetry: () => void
   // Set when the file was opened from a store's tree.
   readonly onBack?: () => void
@@ -95,6 +104,7 @@ export function ParquetFileView({
         <ParquetStructureBrowser
           key={`${state.target.url}\n${state.target.zipPath ?? ''}`}
           structure={state.value}
+          readRows={readRows}
           back={back}
         />
       )
@@ -114,50 +124,92 @@ function FileAddress({ file }: { readonly file: ParquetFileRef }) {
   )
 }
 
+type FileTab = 'columns' | 'rows'
+
+const FILE_TABS = [
+  {
+    value: 'columns',
+    label: 'Columns',
+    title: "Show the file's schema, column by column",
+  },
+  { value: 'rows', label: 'Rows', title: "Show the file's first rows" },
+] as const
+
 function ParquetStructureBrowser({
   structure,
+  readRows,
   back,
 }: {
   readonly structure: ParquetStructure
+  readonly readRows: ParquetRowsReader
   readonly back: ReactNode
 }) {
   const conventions = parquetConventions(structure)
+  const [tab, setTab] = useState<FileTab>('columns')
+  const rows = useParquetRows(structure, readRows)
+  const bound = previewReadBound(structure)
 
   return (
-    <StructureBrowser
-      root={structure.root}
-      initialExpanded={initiallyExpandedParquet(structure)}
-      treeLabel="File columns"
-      filterTitle="Show the columns and fields whose name contains this text, or whose path does when the text has a /"
-      describe={(node) => describeParquetNode(structure, node)}
-      renderDetails={(node) =>
-        node.path === '' ? (
-          <FileDetails structure={structure} />
-        ) : (
-          <FieldDetails structure={structure} node={node} />
-        )
-      }
-      header={
-        <>
-          {back}
-          <FileAddress file={structure.ref} />
-          <dl className="store-structure-summary">
-            <Fact label="Format">{parquetFormatLabel(structure)}</Fact>
-            {structure.createdBy === null ? null : (
-              <Fact label="Written by">{structure.createdBy}</Fact>
-            )}
-            {conventions.length === 0 ? null : (
-              <Fact label="Written as">{conventions.join(', ')}</Fact>
-            )}
-            <Fact label="Contents">{parquetContentsLabel(structure)}</Fact>
-            <Fact label="Size">
-              {formatBytes(structure.byteLength)}, of which the footer is{' '}
-              {formatBytes(structure.footerBytes)}
-            </Fact>
-          </dl>
-        </>
-      }
-    />
+    <div className="store-structure">
+      <div className="store-structure-header">
+        {back}
+        <FileAddress file={structure.ref} />
+        <dl className="store-structure-summary">
+          <Fact label="Format">{parquetFormatLabel(structure)}</Fact>
+          {structure.createdBy === null ? null : (
+            <Fact label="Written by">{structure.createdBy}</Fact>
+          )}
+          {conventions.length === 0 ? null : (
+            <Fact label="Written as">{conventions.join(', ')}</Fact>
+          )}
+          <Fact label="Contents">{parquetContentsLabel(structure)}</Fact>
+          <Fact label="Size">
+            {formatBytes(structure.byteLength)}, of which the footer is{' '}
+            {formatBytes(structure.footerBytes)}
+          </Fact>
+        </dl>
+        <Segmented
+          title="Show the file's columns or its first rows"
+          label="File view"
+          className="store-structure-tabs"
+          value={tab}
+          options={FILE_TABS}
+          onChange={(next) => {
+            setTab(next)
+            // Cheap enough to read without asking.
+            if (
+              next === 'rows' &&
+              rows.state.status === 'idle' &&
+              bound !== null &&
+              bound <= AUTO_READ_ROWS_BYTES
+            ) {
+              rows.read()
+            }
+          }}
+        />
+      </div>
+      {/* The tree stays mounted, so its open fields and selection survive. */}
+      <div className="store-structure-view" hidden={tab !== 'columns'}>
+        <StructureBrowser
+          root={structure.root}
+          initialExpanded={initiallyExpandedParquet(structure)}
+          treeLabel="File columns"
+          filterTitle="Show the columns and fields whose name contains this text, or whose path does when the text has a /"
+          describe={(node) => describeParquetNode(structure, node)}
+          renderDetails={(node) =>
+            node.path === '' ? (
+              <FileDetails structure={structure} />
+            ) : (
+              <FieldDetails structure={structure} node={node} />
+            )
+          }
+          header={null}
+        />
+      </div>
+      {tab === 'rows' ? (
+        <ParquetRowsPanel structure={structure} state={rows.state} onRead={rows.read} />
+      ) : null}
+    </div>
   )
 }
 

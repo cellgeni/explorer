@@ -38,6 +38,7 @@ import {
   type TranscriptPoint,
 } from '../../data/transcriptOverlay'
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
+import { readParquetRows } from '../../data/parquetRows'
 import { readParquetStructure } from '../../data/parquetStructure'
 import { readZarrStructure } from '../../zarr/zarrStructure'
 import {
@@ -229,6 +230,7 @@ export type DatasetWarmupLoader = (
 export type DatasetDiagnosticsRunner = typeof runDatasetDiagnostics
 export type StoreStructureReader = typeof readZarrStructure
 export type ParquetStructureReader = typeof readParquetStructure
+export type ParquetRowsReader = typeof readParquetRows
 export type SpatialDatasetDetector = (
   baseUrl: string,
   options?: DetectSpatialDatasetOptions,
@@ -281,6 +283,7 @@ export interface AppDependencies {
     readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
     readonly readStoreStructure: StoreStructureReader
     readonly readParquetStructure: ParquetStructureReader
+    readonly readParquetRows: ParquetRowsReader
   }
 }
 
@@ -309,6 +312,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly runDatasetDiagnostics: DatasetDiagnosticsRunner
   readonly readStoreStructure: StoreStructureReader
   readonly readParquetStructure: ParquetStructureReader
+  readonly readParquetRows: ParquetRowsReader
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
@@ -363,6 +367,7 @@ export const defaultAppDependencies = {
     runDatasetDiagnostics,
     readStoreStructure: readZarrStructure,
     readParquetStructure,
+    readParquetRows,
   },
 } satisfies AppDependencies
 

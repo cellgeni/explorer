@@ -907,6 +907,22 @@ file" (no `PAR1` footer), with `Retry`. Once read, it has the same filter,
 | File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length) |
 | Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics, dictionary, page index and bloom filter, and GeoParquet facts         |
 
+`Columns` / `Rows` (a segmented control under the summary) switch between
+the tree and the file's first rows; the tree stays mounted, so its selection
+survives. `readParquetRows` (`src/data/parquetRows.ts`) reads up to 20 rows
+from the first row group that holds rows. Flat columns are read from the
+start of their chunk page by page, from the page headers, until the pages hold
+enough values, and decoded with hyparquet's `readColumn`; nested columns go
+through `parquetReadObjects` with `useOffsetIndex`. The ranges are fetched in
+parallel with `cache: 'no-store'`, and the footer is not read again.
+
+| State   | Shows                                                                                                                                                                                                    |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Asking  | When the row group's compressed size is over 8 MB (`AUTO_READ_ROWS_BYTES`): which row group, that only first pages are read, the most it can read, and `Read Rows`. Smaller files read on opening `Rows` |
+| Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                              |
+| Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                  |
+| Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON)              |
+
 ### View Options
 
 | Control                        | Type             | Values / default                                | Notes                                                                                                                                  |

@@ -91,6 +91,7 @@ export function appTestDependencies({
   loadTranscriptAggregates,
   loadTranscriptCapabilities,
   loadTranscriptViewport,
+  readParquetRows,
   readParquetStructure,
   readStoreStructure,
   runDatasetDiagnostics,
@@ -177,6 +178,11 @@ export function appTestDependencies({
     readParquetStructure ??
     (async (file) => {
       throw new Error(`No test Parquet structure for ${file.url}.`)
+    })
+  diagnostics.readParquetRows =
+    readParquetRows ??
+    (async (structure) => {
+      throw new Error(`No test Parquet rows for ${structure.ref.url}.`)
     })
 
   if (Object.keys(dataset).length > 0) dependencies.dataset = dataset

@@ -91,6 +91,16 @@ was. A file that the zip compresses must be downloaded whole to read its
 footer, and its details say so. SpatialData points are a folder of Parquet
 parts; browse one part from a listed folder.
 
+`Rows`, beside `Columns` under the summary, shows the file's first 20 rows
+from its first row group that holds rows, with each column's type under its
+name. Nulls show as `null`, WKB geometry as its type and size (`Polygon, 25
+points`, `Point (4131, 4636)`), other binary as its length and first bytes,
+and lists and structs as JSON. Only the first pages of each column are read:
+20 rows of a 14 MB shapes file written by pyarrow take about 1.3 MB. Writers
+that store each column chunk as one page, as fastparquet does, make that the
+whole row group, so when the row group is over 8 MB the view says how much it
+may read and waits for `Read Rows`.
+
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.

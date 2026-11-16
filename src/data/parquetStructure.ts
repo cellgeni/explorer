@@ -86,6 +86,8 @@ export interface ParquetStructure {
   readonly compressedBytes: number
   readonly uncompressedBytes: number
   readonly keyValueMetadata: readonly ParquetKeyValue[]
+  // The footer as hyparquet parsed it, to read rows without reading it again.
+  readonly metadata: FileMetaData
 }
 
 export interface ReadParquetStructureOptions {
@@ -159,11 +161,24 @@ export function parquetFileAddress(ref: ParquetFileRef): string {
   return ref.zipPath === undefined ? ref.url : `${ref.zipPath} in ${ref.url}`
 }
 
-async function openParquetFile(
+export interface OpenParquetFileOptions extends ReadParquetStructureOptions {
+  // Known from an earlier read, so the size probe is skipped.
+  readonly byteLength?: number
+  // Ranges read in parallel: Chromium runs parallel Range requests to one
+  // URL one at a time while they may be cached.
+  readonly parallel?: boolean
+}
+
+// Byte source for a Parquet file, at its address or in a zipped store.
+export async function openParquetFile(
   ref: ParquetFileRef,
-  options: ReadParquetStructureOptions,
+  options: OpenParquetFileOptions = {},
 ): Promise<AsyncBuffer> {
-  const { fetcher, signal } = options
+  const { fetcher, signal, byteLength, parallel = false } = options
+  const requestInit: RequestInit = {
+    ...(signal === undefined ? {} : { signal }),
+    ...(parallel ? { cache: 'no-store' as const } : {}),
+  }
 
   if (ref.zipPath !== undefined) {
     const { openZippedZarrStore } = await import('../zarr/zarrZipStore')
@@ -184,8 +199,9 @@ async function openParquetFile(
     return await abortable(
       asyncBufferFromUrl({
         url: ref.url,
+        ...(byteLength === undefined ? {} : { byteLength }),
         ...(fetcher === undefined ? {} : { fetch: fetcher }),
-        ...(signal === undefined ? {} : { requestInit: { signal } }),
+        ...(Object.keys(requestInit).length === 0 ? {} : { requestInit }),
       }),
       signal,
     )
@@ -253,6 +269,7 @@ export function parquetStructureFromMetadata(
         ? { key, value: value ?? null }
         : { key, value: value ?? null, json }
     }),
+    metadata,
   }
 }
 
