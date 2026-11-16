@@ -2,9 +2,10 @@ import type { SchemaElement } from 'hyparquet'
 import { describe, expect, it } from 'vitest'
 import { readParquetStructure } from '../../data/parquetStructure'
 import { spatialDataShapesFixtureBytes } from '../../test/spatialDataShapesFixtures'
-import { rangeFetcher } from '../../test/xeniumCellsFixtures'
+import { rangeFetcher, xeniumCellsFixtureBytes } from '../../test/xeniumCellsFixtures'
 import {
   compressionLabel,
+  formatPreviewValue,
   formatStatValue,
   geoColumnFacts,
   isParquetUrl,
@@ -15,6 +16,7 @@ import {
   parquetConventions,
   parquetNodeSummary,
   parquetTypeLabel,
+  previewReadBound,
 } from './parquetStructureModel'
 import { findNode } from './structureTree'
 
@@ -142,5 +144,50 @@ describe('parquet structure model', () => {
     expect(compressionLabel(5_100, 52_800_000)).toBe(
       '5.1 KB (52.8 MB uncompressed, 10,353×)',
     )
+  })
+
+  it('formats previewed values, with WKB as geometry', () => {
+    const point = new Uint8Array(21)
+    const view = new DataView(point.buffer)
+    point[0] = 1
+    view.setUint32(1, 1, true)
+    view.setFloat64(5, 4131.5, true)
+    view.setFloat64(13, -2, true)
+    const polygon = new Uint8Array(9 + 4 + 5 * 16)
+    const polygonView = new DataView(polygon.buffer)
+    polygon[0] = 1
+    polygonView.setUint32(1, 3, true)
+    polygonView.setUint32(5, 1, true)
+    polygonView.setUint32(9, 5, true)
+
+    expect(formatPreviewValue(null)).toBeNull()
+    expect(formatPreviewValue(undefined)).toBeNull()
+    expect(formatPreviewValue('a'.repeat(70))).toBe(`${'a'.repeat(60)}…`)
+    expect(formatPreviewValue(1234567)).toBe('1234567')
+    expect(formatPreviewValue(9_007_199_254_740_993n)).toBe('9007199254740993')
+    expect(formatPreviewValue(new Date(Date.UTC(2024, 0, 1, 0, 0, 1)))).toBe(
+      '2024-01-01T00:00:01.000Z',
+    )
+    expect(formatPreviewValue(Uint8Array.of(1, 2, 255))).toBe('3 bytes: 0x0102ff')
+    expect(formatPreviewValue(point, { wkb: true })).toBe('Point (4131.5, -2)')
+    expect(formatPreviewValue(polygon, { wkb: true })).toBe('Polygon, 5 points')
+    // Not WKB after all: shown as bytes.
+    expect(formatPreviewValue(Uint8Array.of(9, 9), { wkb: true })).toBe('2 bytes: 0x0909')
+    expect(formatPreviewValue({ x: 1n, tags: ['a'] })).toBe('{"x":"1","tags":["a"]}')
+  })
+
+  it('bounds what a row preview reads by its row group', async () => {
+    const structure = await readParquetStructure(
+      { url: 'https://bucket.test/cells.parquet' },
+      { fetcher: rangeFetcher(xeniumCellsFixtureBytes('cells.parquet')) },
+    )
+
+    expect(previewReadBound(structure)).toBe(structure.rowGroups[0]?.compressedBytes)
+    expect(
+      previewReadBound({
+        ...structure,
+        metadata: { ...structure.metadata, row_groups: [] },
+      }),
+    ).toBeNull()
   })
 })

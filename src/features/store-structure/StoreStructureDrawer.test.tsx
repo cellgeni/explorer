@@ -10,6 +10,11 @@ import {
   type ParquetStructure,
   type ReadParquetStructureOptions,
 } from '../../data/parquetStructure'
+import {
+  readParquetRows as readRows,
+  type ParquetRowPreview,
+  type ReadParquetRowsOptions,
+} from '../../data/parquetRows'
 import { spatialDataShapesFixtureBytes } from '../../test/spatialDataShapesFixtures'
 import { rangeFetcher, xeniumCellsFixtureBytes } from '../../test/xeniumCellsFixtures'
 import {
@@ -24,6 +29,10 @@ const STORE_URL = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
 const fixtureFetcher = annDataZarrFixtureFetcher()
 
 type Reader = (url: string, options: ReadZarrStructureOptions) => Promise<ZarrStructure>
+type RowsReader = (
+  structure: ParquetStructure,
+  options: ReadParquetRowsOptions,
+) => Promise<ParquetRowPreview>
 type ParquetReader = (
   file: ParquetFileRef,
   options: ReadParquetStructureOptions,
@@ -33,15 +42,18 @@ function Harness({
   url = STORE_URL,
   read,
   readParquet,
+  readParquetRows,
 }: {
   readonly url?: string
   readonly read?: Reader
   readonly readParquet?: ParquetReader
+  readonly readParquetRows?: RowsReader
 }) {
   const store = useStoreStructure({
     fetcher: fixtureFetcher,
     ...(read === undefined ? {} : { read }),
     ...(readParquet === undefined ? {} : { readParquet }),
+    ...(readParquetRows === undefined ? {} : { readParquetRows }),
   })
 
   return (
@@ -262,5 +274,82 @@ describe('StoreStructureDrawer', () => {
       screen.getByTitle('Show details of shapes/cells/shapes.parquet'),
     ).toHaveAttribute('aria-current', 'true')
     expect(read).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows the first rows of a file, read as soon as they are cheap', async () => {
+    const fetcher = rangeFetcher(spatialDataShapesFixtureBytes('cell_boundaries.parquet'))
+    const readParquetRows = vi.fn<RowsReader>((structure, options) =>
+      readRows(structure, { ...options, fetcher }),
+    )
+    render(
+      <Harness
+        url="https://bucket.test/shapes.parquet"
+        readParquet={(file, options) =>
+          readParquetStructure(file, { ...options, fetcher })
+        }
+        readParquetRows={readParquetRows}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Browse' }))
+    const dialog = screen.getByRole('dialog', { name: 'Parquet file' })
+    await within(dialog).findByText('4 rows · 2 columns · 1 row group')
+    fireEvent.click(screen.getByTitle('Show details of geometry'))
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rows' }))
+    const table = await within(dialog).findByRole('table', { name: 'First rows' })
+    expect(readParquetRows).toHaveBeenCalledTimes(1)
+    expect(
+      within(dialog).getByText(/^First 4 rows of 4, from row group 0; read /),
+    ).toBeInTheDocument()
+    const [header, first] = within(table).getAllByRole('row')
+    expect(header?.textContent).toBe('Rowgeometrybinary__index_level_0__string')
+    expect(within(first ?? table).getByText('Polygon, 5 points')).toBeInTheDocument()
+    expect(within(first ?? table).getByText('aaaa-1')).toBeInTheDocument()
+
+    // The tree keeps its selection, and the rows are not read again.
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Columns' }))
+    expect(screen.getByTitle('Show details of geometry')).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rows' }))
+    expect(within(dialog).getByRole('table', { name: 'First rows' })).toBeInTheDocument()
+    expect(readParquetRows).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks before reading rows that may cost a large row group', async () => {
+    const fetcher = rangeFetcher(xeniumCellsFixtureBytes('cells.parquet'))
+    const readParquetRows = vi.fn<RowsReader>((structure, options) =>
+      readRows(structure, { ...options, fetcher }),
+    )
+    // The first row group's chunks as if they were 20 MB.
+    const readParquet = vi.fn<ParquetReader>(async (file, options) => {
+      const structure = await readParquetStructure(file, { ...options, fetcher })
+      return {
+        ...structure,
+        rowGroups: structure.rowGroups.map((group, index) =>
+          index === 0 ? { ...group, compressedBytes: 20_000_000 } : group,
+        ),
+      }
+    })
+    render(
+      <Harness
+        url="https://bucket.test/cells.parquet"
+        readParquet={readParquet}
+        readParquetRows={readParquetRows}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Browse' }))
+    const dialog = screen.getByRole('dialog', { name: 'Parquet file' })
+    await within(dialog).findByText('10 rows · 8 columns · 3 row groups')
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Rows' }))
+    expect(within(dialog).getByText(/up to 20 MB/)).toBeInTheDocument()
+    expect(readParquetRows).not.toHaveBeenCalled()
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Read Rows' }))
+    const table = await within(dialog).findByRole('table', { name: 'First rows' })
+    expect(within(table).getAllByRole('row')).toHaveLength(5)
+    expect(within(table).getAllByText('null')).toHaveLength(1)
   })
 })

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  readParquetRows,
+  type ParquetRowPreview,
+  type ReadParquetRowsOptions,
+} from '../../data/parquetRows'
+import {
   readParquetStructure,
   type ParquetFileRef,
   type ParquetStructure,
@@ -48,6 +53,11 @@ export interface StoreStructureStore {
   // Opens a Parquet file from the store's tree.
   readonly browseFile: (file: ParquetFileRef) => void
   readonly back: () => void
+  // Reads the first rows of a file that has been read.
+  readonly readRows: (
+    structure: ParquetStructure,
+    signal: AbortSignal,
+  ) => Promise<ParquetRowPreview>
   // Closes the drawer; a read under way stops.
   readonly close: () => void
   readonly retry: () => void
@@ -62,12 +72,17 @@ interface UseStoreStructureOptions {
     file: ParquetFileRef,
     options: ReadParquetStructureOptions,
   ) => Promise<ParquetStructure>
+  readonly readParquetRows?: (
+    structure: ParquetStructure,
+    options: ReadParquetRowsOptions,
+  ) => Promise<ParquetRowPreview>
   readonly fetcher?: typeof fetch
 }
 
 export function useStoreStructure({
   read = readZarrStructure,
   readParquet = readParquetStructure,
+  readParquetRows: readRowsOf = readParquetRows,
   fetcher,
 }: UseStoreStructureOptions = {}): StoreStructureStore {
   const [open, setOpen] = useState(false)
@@ -82,6 +97,11 @@ export function useStoreStructure({
     (file: ParquetFileRef, signal: AbortSignal) =>
       readParquet(file, { signal, ...(fetcher === undefined ? {} : { fetcher }) }),
     [fetcher, readParquet],
+  )
+  const readRows = useCallback(
+    (structure: ParquetStructure, signal: AbortSignal) =>
+      readRowsOf(structure, { signal, ...(fetcher === undefined ? {} : { fetcher }) }),
+    [fetcher, readRowsOf],
   )
   const store = useStructureRead(readStore, sameStore)
   const file = useStructureRead(readFile, sameParquetFile)
@@ -144,6 +164,7 @@ export function useStoreStructure({
     browse,
     browseFile,
     back,
+    readRows,
     close,
     retry,
   }

@@ -338,7 +338,12 @@ export function App({ dependencies }: AppProps = {}) {
       loadTranscriptViewport,
     },
     genes: { loadGeneExpression },
-    diagnostics: { readParquetStructure, readStoreStructure, runDatasetDiagnostics },
+    diagnostics: {
+      readParquetRows,
+      readParquetStructure,
+      readStoreStructure,
+      runDatasetDiagnostics,
+    },
   } = resolveAppDependencies(dependencies)
 
   // An old link's tab opens as panels, a tool or a card (15.2-H).
@@ -745,6 +750,7 @@ export function App({ dependencies }: AppProps = {}) {
   const storeStructure = useStoreStructure({
     read: readStoreStructure,
     readParquet: readParquetStructure,
+    readParquetRows,
   })
   // Undo after a removal (15.3-C); another dataset ends the offer.
   const undoToast = useUndoToast()

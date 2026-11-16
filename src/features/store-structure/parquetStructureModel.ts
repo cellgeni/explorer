@@ -1,4 +1,6 @@
 import type { SchemaElement } from 'hyparquet'
+import { wkbToGeojson } from 'hyparquet/src/wkb.js'
+import { previewRowGroup } from '../../data/parquetRows'
 import {
   isParquetFileName,
   type ParquetFileRef,
@@ -394,4 +396,102 @@ function recordOrNull(value: unknown): Readonly<Record<string, unknown>> | null 
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null
+}
+
+// The most a row preview can read: the row group it reads from, when every
+// column chunk is one page. Null when the file has no rows.
+export function previewReadBound(structure: ParquetStructure): number | null {
+  const group = previewRowGroup(structure.metadata)
+  return group === null ? null : (structure.rowGroups[group.index]?.compressedBytes ?? 0)
+}
+
+// Whether a top-level column holds GeoParquet WKB geometry.
+export function isWkbColumn(structure: ParquetStructure, name: string): boolean {
+  const node = structure.root.children.find((child) => child.name === name)
+  return node !== undefined && geoColumnFacts(structure, node)?.encoding === 'WKB'
+}
+
+const PREVIEW_TEXT_LIMIT = 60
+
+// A previewed value as shown in its cell, or null for a null.
+export function formatPreviewValue(
+  value: unknown,
+  { wkb = false }: { readonly wkb?: boolean } = {},
+): string | null {
+  if (value === null || value === undefined) return null
+  if (value instanceof Uint8Array) return wkb ? wkbSummary(value) : bytesSummary(value)
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? String(value) : value.toISOString()
+  }
+
+  switch (typeof value) {
+    case 'string':
+      return truncate(value)
+    case 'number':
+    case 'bigint':
+    case 'boolean':
+      return String(value)
+    default:
+      return truncate(
+        JSON.stringify(value, (_key, item: unknown) =>
+          typeof item === 'bigint'
+            ? item.toString()
+            : item instanceof Uint8Array
+              ? bytesSummary(item)
+              : item,
+        ),
+      )
+  }
+}
+
+function truncate(text: string): string {
+  return text.length > PREVIEW_TEXT_LIMIT ? `${text.slice(0, PREVIEW_TEXT_LIMIT)}…` : text
+}
+
+function bytesSummary(bytes: Uint8Array): string {
+  const hex = Array.from(bytes.subarray(0, 8), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+  return `${formatCount(bytes.byteLength, 'byte')}: 0x${hex}${bytes.byteLength > 8 ? '…' : ''}`
+}
+
+// A geometry by its type and size, as `Polygon, 5 points`, or a point by its
+// coordinates.
+function wkbSummary(bytes: Uint8Array): string {
+  try {
+    const geometry = wkbToGeojson({
+      view: new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+      offset: 0,
+    }) as {
+      readonly type: string
+      readonly coordinates?: unknown
+      readonly geometries?: unknown
+    }
+
+    if (geometry.type === 'Point' && Array.isArray(geometry.coordinates)) {
+      return `Point (${geometry.coordinates.map((value) => coordinateText(Number(value))).join(', ')})`
+    }
+
+    return `${geometry.type}, ${formatCount(countPositions(geometry), 'point')}`
+  } catch {
+    return bytesSummary(bytes)
+  }
+}
+
+// Without digit grouping, which would read as more coordinates.
+function coordinateText(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 6, useGrouping: false })
+}
+
+function countPositions(value: unknown): number {
+  if (!Array.isArray(value)) {
+    const record = recordOrNull(value)
+    return record === null
+      ? 0
+      : countPositions(record.coordinates ?? record.geometries ?? null)
+  }
+
+  return value.length > 0 && typeof value[0] === 'number'
+    ? 1
+    : value.reduce((total: number, item) => total + countPositions(item), 0)
 }

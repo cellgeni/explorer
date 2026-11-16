@@ -59,6 +59,7 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
       <div className="store-structure-view" hidden={!showingFile}>
         <ParquetFileView
           state={store.file}
+          readRows={store.readRows}
           onRetry={store.retry}
           {...(store.fileFromStore ? { onBack: store.back } : {})}
         />

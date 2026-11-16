@@ -419,3 +419,74 @@
   color: var(--text-2);
   font-weight: 600;
 }
+
+/* A Parquet file's Columns / Rows switch, and its first rows. */
+.store-structure-tabs {
+  justify-self: start;
+}
+
+.store-structure-rows-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.store-structure-rows-panel > [role='status'],
+.store-structure-rows-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.store-structure-rows {
+  flex: 1 1 0;
+  align-self: stretch;
+  min-height: 120px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+}
+
+.store-structure-rows-table {
+  width: max-content;
+  min-width: 100%;
+}
+
+.store-structure-rows-table th,
+.store-structure-rows-table td {
+  max-width: 240px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.store-structure-rows-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface-1);
+  vertical-align: bottom;
+}
+
+.store-structure-rows-table tbody th {
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.store-structure-rows-type {
+  display: block;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-weight: 400;
+}
+
+.store-structure-rows-table td.is-null {
+  color: var(--text-3);
+  font-style: italic;
+}
