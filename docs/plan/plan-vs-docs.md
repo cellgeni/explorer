@@ -48,8 +48,10 @@ below are as found on 2026-11-08. The plan status column in
   [Worker Moves](phases/optimization-pass.md#worker-moves-2026-11-13)).
   Segmentation GeoJSON is read once per file since 2026-11-14 (see
   [Phase 6](phases/06-visium-hd.md#closed-open-items)). Still open in
-  [Open Items](open-items.md): the remaining main-thread work and byte-range
-  cache keys without the `ETag`. Xenium loading through free functions instead of one
+  [Open Items](open-items.md): the remaining main-thread work. Byte-range
+  cache keys carry the file's size and `ETag` or `Last-Modified` since #130
+  (2026-11-16; see
+  [Phase 2](phases/02-robust-io-caching.md#closed-open-items)). Xenium loading through free functions instead of one
   `XeniumDataset` was closed without a code change on 2026-11-14 and recorded
   as amendments to
   [4.6](decisions.md#46-data-source-abstraction--capability-based).
