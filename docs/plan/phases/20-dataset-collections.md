@@ -102,3 +102,18 @@ Measured in the browser:
 - [ ] Side by side has unit and App tests but no E2E test, and has been
       checked in the browser only on SPCOX sections marked as one coordinate
       system, which are not truly registered.
+
+## Closed Open Items
+
+Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review):
+
+- [x] A `compare=` in a link's query string was not removed once the hash
+      was written (only `collection=` was), and the hash overrode the query
+      string only for the keys it set (`readShareableStateFromLocation`), so
+      closing that panel and reloading brought it back. Any value a version
+      2 hash leaves out as the default did the same, such as genes removed
+      from a `?genes=` link. Since 2026-11-16 a version 2 hash is read as the
+      whole link, and once the hash is written the query string keeps only
+      keys a link does not set, such as `debug=`
+      (`searchWithoutLinkState` in `useShareableUrlHash.ts`). The query
+      string's `dataset=` goes too, as the hash names the dataset.

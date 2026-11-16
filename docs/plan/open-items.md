@@ -326,11 +326,6 @@ Correctness and robustness:
       as a formula when the file is opened in a spreadsheet. `csvEscape` has
       three copies (`roiModel.ts`, `visiumHdRoiModel.ts`,
       `annotationModel.ts`).
-- [ ] A `compare=` in a link's query string is not removed once the hash is
-      written (only `collection=` is, in `useShareableUrlHash.ts`), and the
-      hash overrides the query string only for the keys it sets
-      (`readShareableStateFromLocation`). Closing that panel and reloading
-      brings it back.
 
 Rendering:
 
