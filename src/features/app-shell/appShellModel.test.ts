@@ -35,6 +35,25 @@ describe('appShellModel', () => {
     })
   })
 
+  it('reads a version 2 hash as the whole link', () => {
+    // A link copied before the query string's values were dropped: the
+    // compare panel was closed, so the hash leaves it out.
+    window.history.pushState(
+      null,
+      '',
+      '/?dataset=https%3A%2F%2Fexample.test%2Fa&compare=https%3A%2F%2Fexample.test%2Fb&genes=Actb#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&dataset=https%3A%2F%2Fexample.test%2Fa',
+    )
+
+    const state = readShareableStateFromLocation()
+    expect(state).toMatchObject({
+      linkVersion: 2,
+      collectionUrl: 'https://example.test/c.json',
+      datasetUrl: 'https://example.test/a',
+    })
+    expect(state.compareUrls).toBeUndefined()
+    expect(state.selectedGenes).toBeUndefined()
+  })
+
   it('reads the gene expression colour mode', () => {
     expect(isObservationColorMode('gene-expression')).toBe(true)
     expect(parseObservationColorMode('gene-expression')).toBe('gene-expression')

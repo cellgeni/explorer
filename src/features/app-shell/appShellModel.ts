@@ -2,14 +2,24 @@ import type { ViewerCoordinateUnit } from '../../components/ViewerCore'
 import { parseShareableState, type ShareableState } from '../../data/shareableState'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 
+// The link in the address. A version 2 hash leaves out every value at its
+// default, so it is the whole link: a value it leaves out is the default, not
+// the query string's, which may be one the view no longer has, such as a
+// closed compare panel. Any other hash is read over the query string.
 export function readShareableStateFromLocation(): ShareableState {
   if (typeof window === 'undefined') {
     return {}
   }
 
+  const hashState = parseShareableState(window.location.hash)
+
+  if ((hashState.linkVersion ?? 0) >= 2) {
+    return hashState
+  }
+
   return {
     ...parseShareableState(window.location.search),
-    ...parseShareableState(window.location.hash),
+    ...hashState,
   }
 }
 
