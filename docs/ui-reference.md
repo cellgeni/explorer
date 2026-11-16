@@ -728,6 +728,11 @@ Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
 - `Enter` on the focused view: the bin or cell at its centre (see
   [Navigation](#navigation)).
 
+A press counts as a click however long it is held, as long as the pointer
+stays within 9 px. deck.gl's 250 ms click limit is lifted, because it
+included the pick on pointerdown, which software WebGL can take that long
+to run.
+
 ### Hover Tooltips
 
 `src/components/viewerHoverTooltips.tsx`. Suppressed while the cursor lens is
