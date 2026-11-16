@@ -144,7 +144,7 @@ describe('CollectionPreviewStore', () => {
     expect(fake.overviewCalls).toEqual([A, B, C])
   })
 
-  it('reads the genes for each preview and shares one scale', async () => {
+  it('reads the genes for each preview', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS.slice(0, 2), fake.loaders)
     store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
@@ -161,16 +161,11 @@ describe('CollectionPreviewStore', () => {
       [B, ['Aqp4']],
     ])
     fake.finishExpression(A, 3)
-    // 199 cells at 2 and one outlier at 50: the 99th percentile is 2.
     fake.finishExpression(B, [...Array.from({ length: 199 }, () => 2), 50])
     await flush()
 
     expect(store.entry(A).scores?.maxScore).toBe(3)
     expect(store.entry(B).scores?.maxScore).toBe(50)
-    // The highest of the previews' 99th percentiles, not the outlier.
-    expect(store.scaleMax()).toBe(3)
-    // At the 100th, the highest score, B's top is the outlier.
-    expect(store.scaleMax(100)).toBe(50)
   })
 
   it('reads new genes without reading the cells again', async () => {
@@ -192,7 +187,6 @@ describe('CollectionPreviewStore', () => {
 
     expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4'], ['Gfap']])
     expect(store.entry(A).scores).toBe(null)
-    expect(store.scaleMax()).toBe(0)
     expect(fake.overviewCalls).toEqual([A])
 
     fake.expressions.splice(0, 1)

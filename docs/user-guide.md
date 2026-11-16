@@ -152,12 +152,12 @@ together, such as the sections of one study. Open one with
 `?collection=<url>` in the address. The viewer opens its first dataset and
 lists the others in a bar under the canvas, grouped by time point, donor or
 whatever the collection groups them by. Each has a preview of its cells
-coloured by the selected genes, all on one scale, so you can see where a
-gene is high before opening anything. To fix that scale, click the
-numbers at the ends of the `Gene scale` gradient in Cells and type a score
-(`Reset`, after the `Gene scale` label, puts them back): the view,
-the legend and every preview then use it, as you move between sections and
-genes. With cells coloured by an annotation
+coloured by the selected genes, each up to its own 99th percentile, so you
+can see where a gene is high in every section before opening anything. To
+compare levels instead, put them all on one scale: click the number at the
+top end of the `Gene scale` gradient in Cells and type a score (`Reset`,
+after the `Gene scale` label, puts it back): the view, the legend and every
+preview then use it, as you move between sections and genes. With cells coloured by an annotation
 set, previews show its classes instead: Alt-click (Option-click) a class's
 checkbox in the legend to show only that class and see where that cell type
 is in each section. To show a group of classes, such as every

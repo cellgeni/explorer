@@ -94,13 +94,15 @@ the canvas, a `nav` named "Collection":
 
 - On the left, "Collection" with two icon buttons, then the collection's
   `name` (or its file name) and the number of datasets. With genes
-  selected, the gene (or "N genes") and the previews' shared scale, from 0
-  to the highest of their 99th percentiles read so far. With cells coloured by an annotation
+  selected, the gene (or "N genes") and the previews' scale: `0 – p99`
+  (each its own percentile), or the range typed in Gene scale, which they
+  share. With cells coloured by an annotation
   set, the set's name and "N hidden". Under 860 px only "Collection" and
   its buttons stay.
 - A button per dataset, in groups labelled with their `group`, in one row
   that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
-  label and its highest score (`max 92`), or with hidden classes the cells
+  label and its own top (`top 32`, with the highest score in its title),
+  or its highest score (`max 92`) on a shared scale, or with hidden classes the cells
   of the shown ones (`1,204 cells`); the button's name is the label.
   The open dataset is highlighted (`aria-current`) and the one loading has
   a dashed border (`aria-busy`). Choosing another opens it, keeping the
@@ -109,8 +111,9 @@ the canvas, a `nav` named "Collection":
   metadata column.
 - A preview draws every cell in grey and the cells scoring above zero in the
   `Gene scale`, the highest score per pixel, when `Cell color` is gene
-  expression. The previews share one scale: 0 to the highest of their
-  99th percentiles, or the Gene scale's range when one is set. When it is annotations, the cells of each class in its
+  expression. Each preview runs from 0 to its own percentile of its drawn
+  pixels' scores above 0 (the 99th, or the one a link or manifest sets),
+  or all share the Gene scale's range when its top is a score. When it is annotations, the cells of each class in its
   colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
   MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview

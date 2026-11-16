@@ -1,5 +1,4 @@
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
-import { AUTO_GENE_SCALE_PERCENTILE, geneScoreSpread } from '../genes/geneScaleRange'
 import {
   openPreviewSource,
   PreviewUnavailableError,
@@ -60,11 +59,6 @@ export class CollectionPreviewStore {
   // Cell positions do not depend on the genes, so only stopping stops them.
   private lifetime = new AbortController()
   private scores = new Map<string, PreviewScores>()
-  // Each preview's top at the last percentile asked for.
-  private readonly tops = new WeakMap<
-    PreviewScores,
-    { readonly percentile: number; readonly top: number }
-  >()
   private classes = new Map<string, PreviewClasses>()
   private request: PreviewRequest = {
     genes: [],
@@ -98,26 +92,6 @@ export class CollectionPreviewStore {
 
   entry(url: string): PreviewEntry {
     return this.entries.get(url) ?? EMPTY_ENTRY
-  }
-
-  // The score drawn at full colour: the highest of the previews' tops at
-  // `percentile` (of each one's scores above 0) read so far, so every preview
-  // uses one scale, as the view keeps the highest top it has seen.
-  scaleMax(percentile: number = AUTO_GENE_SCALE_PERCENTILE): number {
-    let max = 0
-
-    for (const scores of this.scores.values()) {
-      let cached = this.tops.get(scores)
-
-      if (cached?.percentile !== percentile) {
-        cached = { percentile, top: geneScoreSpread(scores.scores, percentile).top }
-        this.tops.set(scores, cached)
-      }
-
-      max = Math.max(max, cached.top)
-    }
-
-    return max
   }
 
   setRequest(request: PreviewRequest): void {
