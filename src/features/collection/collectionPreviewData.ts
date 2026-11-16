@@ -17,7 +17,8 @@ import type {
 // and the selected genes' scores per gene selection, or the classes of the
 // selected annotation set. Datasets open through
 // the same per-URL caches as the main view, so a previewed dataset opens
-// faster when chosen.
+// faster when chosen. The panels of sections shown side by side draw the
+// same data.
 
 export interface CollectionPreviewLoaders {
   readonly detectSpatialDataset: SpatialDatasetDetector
@@ -88,9 +89,6 @@ export type PreviewUnavailable =
 // A plain .h5ad under the reader's 300 MiB limit is downloaded whole. A
 // preview leaves a large one to be opened.
 export const PREVIEW_MAX_WHOLE_FILE_BYTES = 64 * 1024 * 1024
-
-// Beyond this many cells, every Nth is drawn: more do not change a preview.
-export const PREVIEW_MAX_CELLS = 200_000
 
 export class PreviewUnavailableError extends Error {
   readonly unavailable: PreviewUnavailable
@@ -212,28 +210,24 @@ function previewCells(
     throw new PreviewUnavailableError({ reason: 'no-cells' })
   }
 
-  const stride = Math.max(1, Math.ceil(cells.length / PREVIEW_MAX_CELLS))
-  const positions = new Float32Array(Math.ceil(cells.length / stride) * 2)
-  const cellIds: string[] = []
-  let offset = 0
+  // Every cell: a panel beside the main view draws them all when zoomed in.
+  // The previews skip cells instead (PREVIEW_MAX_DRAWN_CELLS).
+  const positions = new Float32Array(cells.length * 2)
+  const cellIds = new Array<string>(cells.length)
 
-  for (let index = 0; index < cells.length; index += stride) {
-    const cell = cells[index]
-    if (cell === undefined) continue
-    positions[offset] = cell.position.x
-    positions[offset + 1] = cell.position.y
-    cellIds.push(cell.cellId ?? '')
-    offset += 2
-  }
+  cells.forEach((cell, index) => {
+    positions[index * 2] = cell.position.x
+    positions[index * 2 + 1] = cell.position.y
+    cellIds[index] = cell.cellId ?? ''
+  })
 
-  const sampled = positions.subarray(0, offset)
-  const bounds = previewBounds(sampled)
+  const bounds = previewBounds(positions)
 
   if (bounds === null) {
     throw new PreviewUnavailableError({ reason: 'no-cells' })
   }
 
-  return { positions: sampled, cellIds, bounds }
+  return { positions, cellIds, bounds }
 }
 
 export function previewBounds(positions: Float32Array): PreviewBounds | null {

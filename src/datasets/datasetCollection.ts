@@ -1,9 +1,9 @@
 // Dataset collection: a JSON file listing datasets to browse together, such
 // as the sections of one study. The viewer opens it with `collection=<url>`
-// and shows one dataset at a time; each entry is anything `dataset=` opens (a
-// dataset folder, file or store, or a dataset manifest). The format is
-// described in docs/dataset-collections.md and
-// public/schemas/explorer-collection.v1.json.
+// and opens one dataset at a time, with sections registered to it shown
+// beside it; each entry is anything `dataset=` opens (a dataset folder, file
+// or store, or a dataset manifest). The format is described in
+// docs/dataset-collections.md and public/schemas/explorer-collection.v1.json.
 
 import {
   checkKeys,
@@ -42,6 +42,7 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'coordinates',
   'labels',
   'labelColumn',
+  'coordinateSystem',
 ] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
@@ -75,6 +76,10 @@ export interface DatasetCollectionEntry {
   readonly name?: string
   readonly group?: string
   readonly image?: DatasetImageAttachment
+  // A name the collection gives to registered coordinates: entries with the
+  // same one put a point at the same place in each, so they can be shown
+  // side by side with one view.
+  readonly coordinateSystem?: string
 }
 
 export interface DatasetCollection {
@@ -200,6 +205,7 @@ function parseEntries(
     const name = optionalString(entry, 'name', prefix, fail)
     const group = optionalString(entry, 'group', prefix, fail)
     const image = parseEntryImage(entry, rootUrl, prefix, fail)
+    const coordinateSystem = optionalString(entry, 'coordinateSystem', prefix, fail)
 
     return {
       path,
@@ -207,6 +213,7 @@ function parseEntries(
       ...(name === undefined ? {} : { name }),
       ...(group === undefined ? {} : { group }),
       ...(image === undefined ? {} : { image }),
+      ...(coordinateSystem === undefined ? {} : { coordinateSystem }),
     }
   })
 }

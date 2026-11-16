@@ -171,6 +171,14 @@ same gene or cell type. `Share` copies a link with the collection and
 the open dataset. Close the bar with its ×, or by opening a dataset that is
 not in the collection.
 
+When a collection marks consecutive sections as registered to each other
+(the same `coordinateSystem`), each of them shows a `Show beside` toggle (two
+columns) on its preview. Turn it on for up to three sections to see them
+beside the open one, with one view: pan or zoom any of them and all follow.
+The panels show cells only, coloured like the main view; choose `Open` in a
+panel to swap that section into the main view, with its image and tools, at
+the same place. See [Side by Side](./dataset-collections.md#side-by-side).
+
 ## Spatial Navigation
 
 Use mouse pan and zoom for normal navigation. The spatial view is also keyboard

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import {
   ViewerCore,
   type RoiDrawMode,
@@ -69,7 +76,20 @@ import {
   type CollectionView,
 } from './features/collection/collectionModel'
 import { useDatasetCollection } from './features/collection/useDatasetCollection'
-import { collectionEntryFor } from './datasets/datasetCollection'
+import { LinkedSections } from './features/collection/LinkedSections'
+import {
+  compareUrlsAfterOpening,
+  keepsViewOnOpening,
+  linkedSectionEntries,
+  toggledCompareUrls,
+} from './features/collection/linkedSectionsModel'
+import { useCollectionPreviewStore } from './features/collection/useCollectionPreviews'
+import { LinkedViewChannel } from './components/linkedView'
+import type { InitialViewStateOverride } from './components/viewerCoreTypes'
+import {
+  collectionEntryFor,
+  type DatasetCollectionEntry,
+} from './datasets/datasetCollection'
 import type { DatasetLibraryModel } from './features/start/datasetLibraryModel'
 import { EXAMPLES_INDEX_URL } from './features/start/examplesIndex'
 import { useRecentDatasets } from './features/start/recentDatasets'
@@ -365,6 +385,17 @@ export function App({ dependencies }: AppProps = {}) {
   const [collectionView, setCollectionView] = useState<CollectionView>(() =>
     collectionViewFromLink(initialShareableState),
   )
+  // Registered sections of the collection shown beside the open dataset
+  // (compare=), and the view they share with it.
+  const [compareUrls, setCompareUrls] = useState<readonly string[]>(
+    () => initialShareableState.compareUrls ?? [],
+  )
+  const [linkedViewChannel] = useState(() => new LinkedViewChannel())
+  // The view kept when a registered section opens in place of another.
+  const [carriedView, setCarriedView] = useState<{
+    readonly url: string
+    readonly view: InitialViewStateOverride
+  } | null>(null)
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
@@ -718,6 +749,18 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl,
     datasetAbout?.name ?? collectionEntry?.name,
   )
+  const readyCollection =
+    datasetCollection.state.status === 'ready' ? datasetCollection.state.collection : null
+  const linkedSections = useMemo(
+    () => linkedSectionEntries(readyCollection, loadedDatasetUrl, compareUrls),
+    [compareUrls, loadedDatasetUrl, readyCollection],
+  )
+  // Until the collection is read and its dataset open, the link's compare=
+  // stays as it was.
+  const linkCompareUrls =
+    readyCollection === null || loadedDatasetUrl === null
+      ? compareUrls
+      : linkedSections.map((entry) => entry.url)
   // A link's view is for the dataset it names. Once another dataset loads,
   // datasets open fitted to their extent again.
   const [linkViewApplies, setLinkViewApplies] = useState(
@@ -3441,6 +3484,7 @@ export function App({ dependencies }: AppProps = {}) {
         : {
             collectionUrl: datasetCollection.state.url,
             collectionView: collectionViewForLink(collectionView),
+            compareUrls: linkCompareUrls,
           }),
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
@@ -3739,6 +3783,58 @@ export function App({ dependencies }: AppProps = {}) {
     loadedAnnotationGroupId,
     observationColorMode,
   ])
+  const collectionPreviewGenes =
+    observationColorMode === 'gene-expression' ? selectedGenes : NO_PREVIEW_GENES
+  // Read by the bar's previews and by the sections shown side by side.
+  const collectionPreviewStore = useCollectionPreviewStore({
+    collection: readyCollection,
+    loaders: collectionPreviewLoaders,
+    genes: collectionPreviewGenes,
+    scoreMode: geneExpressionScoreMode,
+    annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
+    paused: isLoading,
+  })
+  const linkedSectionsKey = linkedSections.map((entry) => entry.url).join('\n')
+  useEffect(() => {
+    collectionPreviewStore?.setLinked(
+      linkedSectionsKey === '' ? [] : linkedSectionsKey.split('\n'),
+    )
+  }, [collectionPreviewStore, linkedSectionsKey])
+  // Opens a dataset of the collection, keeping the genes and colouring. A
+  // section registered to the open one keeps the view and the sections shown
+  // beside it; opening one of those swaps it with the open dataset.
+  const handleSelectCollectionEntry = (entry: DatasetCollectionEntry) => {
+    const view = linkedViewChannel.getView()
+
+    setCarriedView(
+      view !== null && keepsViewOnOpening(readyCollection, loadedDatasetUrl, entry.url)
+        ? {
+            url: entry.url,
+            view: { target: [view.target[0], view.target[1], 0], zoom: view.zoom },
+          }
+        : null,
+    )
+    setCompareUrls(
+      compareUrlsAfterOpening(
+        readyCollection,
+        loadedDatasetUrl,
+        linkedSections,
+        entry.url,
+      ),
+    )
+    handleOpenCollectionDataset(
+      entry.url,
+      collectionSwitchOpening({
+        selectedGenes,
+        observationColorMode,
+        geneExpressionScoreMode,
+        annotationGroupId: loadedAnnotationGroupId ?? null,
+        hiddenAnnotationIds,
+        annotationColors,
+        cellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
+      }),
+    )
+  }
   const datasetLibrary = useMemo(
     (): DatasetLibraryModel => ({
       examples: examplesIndex.state,
@@ -4118,130 +4214,186 @@ export function App({ dependencies }: AppProps = {}) {
     zoomToBbox,
   })
 
+  // The view to open the loaded dataset with: one carried from the registered
+  // section it replaced, else the link's.
+  const viewerInitialView =
+    carriedView !== null &&
+    loadState.status !== 'idle' &&
+    loadState.url === carriedView.url
+      ? carriedView.view
+      : linkViewApplies
+        ? initialShareableState.viewState
+        : undefined
+  const viewerTileCount = 1 + linkedSections.length
   const viewerRegion = (
     <section className="viewer-region" aria-labelledby="viewer-heading">
       <h2 id="viewer-heading" className="visually-hidden">
         Spatial View
       </h2>
 
-      <ViewerCore
-        cells={styledOverviewCells}
-        expressionElements={viewerGeneExpressionElements}
-        geneExpressionActive={geneExpressionColorsReady}
-        geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
-        boundaries={expressionStyledBoundaryLayerData}
-        nucleusBoundaries={visibleNucleusBoundaryLayerData}
-        cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
-          showCellBoundaries,
+      <div
+        className="viewer-tiles"
+        style={
+          {
+            '--viewer-tile-columns': viewerTileCount === 4 ? 2 : viewerTileCount,
+          } as CSSProperties
+        }
+      >
+        <div className="viewer-tile viewer-main-tile">
+          <ViewerCore
+            cells={styledOverviewCells}
+            expressionElements={viewerGeneExpressionElements}
+            geneExpressionActive={geneExpressionColorsReady}
+            geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
+            boundaries={expressionStyledBoundaryLayerData}
+            nucleusBoundaries={visibleNucleusBoundaryLayerData}
+            cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
+              showCellBoundaries,
+            )}
+            hoverTooltipsEnabled={showHoverTooltips}
+            overviewCellSourceLabel={
+              platformAdapter.kind === 'h5ad'
+                ? 'H5AD'
+                : platformAdapter.kind === 'visium'
+                  ? 'Visium'
+                  : platformAdapter.kind === 'spatialdata'
+                    ? 'SpatialData'
+                    : platformAdapter.kind === 'atera' ||
+                        platformAdapter.kind === 'merscope'
+                      ? PLATFORM_NAMES[platformAdapter.kind]
+                      : 'Xenium'
+            }
+            gridCells={viewerGridCells}
+            fitGridCells={spatialGridCells}
+            fitImageExtent={imageFitExtent}
+            transcriptAggregateBins={transcriptLayerAggregateBins}
+            transcriptPoints={transcriptLayerPoints}
+            geometricAnnotations={
+              layerVisibility.annotations
+                ? geometricAnnotationLayerData
+                : NO_GEOMETRY_LAYERS
+            }
+            imageLoader={morphologyImage?.loader ?? null}
+            imageChannels={morphologyCanvasChannels}
+            flatImage={flatMorphologyImage}
+            imageOpacity={
+              morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1
+            }
+            cellLayersVisible={layerVisibility.cells}
+            cellFillOpacity={cellFillOpacity}
+            cellPointScale={cellPointScale}
+            cellBoundaryOpacity={
+              // H5AD points have no outline unless the table has label boundaries.
+              platformAdapter.kind === 'h5ad' && !showCellBoundaries
+                ? 0
+                : cellBoundaryOpacity
+            }
+            pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+            trueSizePoints={platformAdapter.trueSizePoints}
+            transcriptOpacity={transcriptOpacity}
+            transcriptPointSize={transcriptPointSize}
+            observationColorMode={viewerObservationColorMode}
+            annotationStyleColors={annotationStyleColors}
+            cellMetadataTrack={activeCellMetadataTrack}
+            loadingTasks={loadingTasks}
+            onCancelLoadingTask={handleCancelLoadingTask}
+            legendSections={legendSections}
+            showZoomLevel={debugMode}
+            selectionHighlight={selectionHighlight}
+            onClearSelection={handleClearSelection}
+            onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
+            onLegendShowMore={handleLegendShowMore}
+            coordinateUnit={coordinateUnit}
+            measurementEnabled={measurementEnabled}
+            measurementUnit={measurementUnit}
+            measurementResetKey={measurementResetKey}
+            status={loadState.status}
+            imageStatus={viewerImageStatus}
+            boundaryStatus={boundaryState.status}
+            overviewRenderCellLimit={viewerOverviewRenderCellLimit}
+            clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
+            maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
+            tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
+            roiMode={roiMode}
+            roiSelection={activeRoiSelection}
+            selectionOutlines={viewerSelectionOutlines}
+            magicLensActive={magicLensIsCursorActive}
+            magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+            magicLensStatus={magicLensViewerStatus}
+            magicLensSummary={magicLensViewerSummary}
+            viewResetKey={viewerViewResetKey}
+            focusRequest={spatialFocusRequest}
+            navigationControls
+            minimap={showMinimap}
+            axes={showAxes}
+            fitRequestKey={fitRequestKey}
+            onImageTileError={handleImageTileError}
+            onTileCacheEviction={handleTileCacheEviction}
+            onViewportCellCountChange={setViewportCellCount}
+            onViewportChange={handleViewportChange}
+            onTranscriptHover={setHoveredTranscript}
+            onTranscriptClick={handlePinTranscript}
+            onCellClick={handleViewerCellClick}
+            onCellBoundaryClick={handleViewerCellBoundaryClick}
+            onGridCellClick={handleViewerGridCellClick}
+            onRoiComplete={
+              platformAdapter.kind === 'image'
+                ? handleImageRoiComplete
+                : selectionList.onDrawn
+            }
+            onMagicLensMove={handleMagicLensMove}
+            onMagicLensLeave={handleMagicLensLeave}
+            linkedView={linkedViewChannel}
+            {...(viewerInitialView === undefined
+              ? {}
+              : { initialViewStateOverride: viewerInitialView })}
+            {...(loadState.status === 'error'
+              ? { errorMessage: formatStructuredError(loadState.error) }
+              : {})}
+            {...(viewerImageError === null
+              ? {}
+              : { imageErrorMessage: formatStructuredError(viewerImageError) })}
+            {...(viewerMicrometersPerPixel === undefined
+              ? {}
+              : {
+                  micrometersPerPixel: viewerMicrometersPerPixel,
+                })}
+            {...(spatialDataControlState.status !== 'idle' &&
+            spatialDataControlState.units.source === 'unknown'
+              ? { physicalUnitLabel: 'units' }
+              : {})}
+            {...(boundaryState.status === 'error'
+              ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
+              : {})}
+          />
+          {linkedSections.length === 0 ? null : (
+            <div className="viewer-tile-header">
+              <span className="viewer-tile-name" title={loadedDatasetName ?? undefined}>
+                {loadedDatasetName}
+              </span>
+            </div>
+          )}
+        </div>
+        {linkedSections.length === 0 ? null : (
+          <LinkedSections
+            entries={linkedSections}
+            store={collectionPreviewStore}
+            channel={linkedViewChannel}
+            coloring={{
+              genes: collectionPreviewGenes,
+              colorScale: geneExpressionColorScale,
+              scaleRange: geneExpressionScaleRange,
+              annotations: collectionPreviewAnnotations,
+            }}
+            cellPointScale={cellPointScale}
+            pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+            onOpen={handleSelectCollectionEntry}
+            onClose={(entry) => {
+              setCompareUrls(toggledCompareUrls(linkedSections, entry))
+            }}
+          />
         )}
-        hoverTooltipsEnabled={showHoverTooltips}
-        overviewCellSourceLabel={
-          platformAdapter.kind === 'h5ad'
-            ? 'H5AD'
-            : platformAdapter.kind === 'visium'
-              ? 'Visium'
-              : platformAdapter.kind === 'spatialdata'
-                ? 'SpatialData'
-                : platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
-                  ? PLATFORM_NAMES[platformAdapter.kind]
-                  : 'Xenium'
-        }
-        gridCells={viewerGridCells}
-        fitGridCells={spatialGridCells}
-        fitImageExtent={imageFitExtent}
-        transcriptAggregateBins={transcriptLayerAggregateBins}
-        transcriptPoints={transcriptLayerPoints}
-        geometricAnnotations={
-          layerVisibility.annotations ? geometricAnnotationLayerData : NO_GEOMETRY_LAYERS
-        }
-        imageLoader={morphologyImage?.loader ?? null}
-        imageChannels={morphologyCanvasChannels}
-        flatImage={flatMorphologyImage}
-        imageOpacity={morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1}
-        cellLayersVisible={layerVisibility.cells}
-        cellFillOpacity={cellFillOpacity}
-        cellPointScale={cellPointScale}
-        cellBoundaryOpacity={
-          // H5AD points have no outline unless the table has label boundaries.
-          platformAdapter.kind === 'h5ad' && !showCellBoundaries ? 0 : cellBoundaryOpacity
-        }
-        pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
-        trueSizePoints={platformAdapter.trueSizePoints}
-        transcriptOpacity={transcriptOpacity}
-        transcriptPointSize={transcriptPointSize}
-        observationColorMode={viewerObservationColorMode}
-        annotationStyleColors={annotationStyleColors}
-        cellMetadataTrack={activeCellMetadataTrack}
-        loadingTasks={loadingTasks}
-        onCancelLoadingTask={handleCancelLoadingTask}
-        legendSections={legendSections}
-        showZoomLevel={debugMode}
-        selectionHighlight={selectionHighlight}
-        onClearSelection={handleClearSelection}
-        onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
-        onLegendShowMore={handleLegendShowMore}
-        coordinateUnit={coordinateUnit}
-        measurementEnabled={measurementEnabled}
-        measurementUnit={measurementUnit}
-        measurementResetKey={measurementResetKey}
-        status={loadState.status}
-        imageStatus={viewerImageStatus}
-        boundaryStatus={boundaryState.status}
-        overviewRenderCellLimit={viewerOverviewRenderCellLimit}
-        clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
-        maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
-        tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
-        roiMode={roiMode}
-        roiSelection={activeRoiSelection}
-        selectionOutlines={viewerSelectionOutlines}
-        magicLensActive={magicLensIsCursorActive}
-        magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-        magicLensStatus={magicLensViewerStatus}
-        magicLensSummary={magicLensViewerSummary}
-        viewResetKey={viewerViewResetKey}
-        focusRequest={spatialFocusRequest}
-        navigationControls
-        minimap={showMinimap}
-        axes={showAxes}
-        fitRequestKey={fitRequestKey}
-        onImageTileError={handleImageTileError}
-        onTileCacheEviction={handleTileCacheEviction}
-        onViewportCellCountChange={setViewportCellCount}
-        onViewportChange={handleViewportChange}
-        onTranscriptHover={setHoveredTranscript}
-        onTranscriptClick={handlePinTranscript}
-        onCellClick={handleViewerCellClick}
-        onCellBoundaryClick={handleViewerCellBoundaryClick}
-        onGridCellClick={handleViewerGridCellClick}
-        onRoiComplete={
-          platformAdapter.kind === 'image'
-            ? handleImageRoiComplete
-            : selectionList.onDrawn
-        }
-        onMagicLensMove={handleMagicLensMove}
-        onMagicLensLeave={handleMagicLensLeave}
-        {...(initialShareableState.viewState === undefined || !linkViewApplies
-          ? {}
-          : { initialViewStateOverride: initialShareableState.viewState })}
-        {...(loadState.status === 'error'
-          ? { errorMessage: formatStructuredError(loadState.error) }
-          : {})}
-        {...(viewerImageError === null
-          ? {}
-          : { imageErrorMessage: formatStructuredError(viewerImageError) })}
-        {...(viewerMicrometersPerPixel === undefined
-          ? {}
-          : {
-              micrometersPerPixel: viewerMicrometersPerPixel,
-            })}
-        {...(spatialDataControlState.status !== 'idle' &&
-        spatialDataControlState.units.source === 'unknown'
-          ? { physicalUnitLabel: 'units' }
-          : {})}
-        {...(boundaryState.status === 'error'
-          ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
-          : {})}
-      />
+      </div>
       {showStartScreen ? (
         <StartScreen
           open={datasetInfo.open}
@@ -4295,34 +4447,22 @@ export function App({ dependencies }: AppProps = {}) {
               state={datasetCollection.state}
               loadedUrl={loadedDatasetUrl}
               pendingUrl={isLoading ? datasetUrl : null}
-              onSelect={(entry) => {
-                handleOpenCollectionDataset(
-                  entry.url,
-                  collectionSwitchOpening({
-                    selectedGenes,
-                    observationColorMode,
-                    geneExpressionScoreMode,
-                    annotationGroupId: loadedAnnotationGroupId ?? null,
-                    hiddenAnnotationIds,
-                    annotationColors,
-                    cellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
-                  }),
-                )
-              }}
+              onSelect={handleSelectCollectionEntry}
               onClose={datasetCollection.close}
               view={collectionView}
               onViewChange={setCollectionView}
               previews={{
-                loaders: collectionPreviewLoaders,
-                genes:
-                  observationColorMode === 'gene-expression'
-                    ? selectedGenes
-                    : NO_PREVIEW_GENES,
-                scoreMode: geneExpressionScoreMode,
+                store: collectionPreviewStore,
+                genes: collectionPreviewGenes,
                 colorScale: geneExpressionColorScale,
                 scaleRange: geneExpressionScaleRange,
                 annotations: collectionPreviewAnnotations,
-                paused: isLoading,
+              }}
+              beside={{
+                shown: linkedSections,
+                onToggle: (entry) => {
+                  setCompareUrls(toggledCompareUrls(linkedSections, entry))
+                },
               }}
             />
           )

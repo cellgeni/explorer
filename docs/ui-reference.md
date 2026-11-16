@@ -22,7 +22,9 @@ bar, the canvas, and the layer panel docked on the right.
     └── .shell-body
         ├── .shell-main
         │   ├── .shell-canvas
-        │   │   ├── section.viewer-region → ViewerCore   src/components/ViewerCore.tsx
+        │   │   ├── section.viewer-region → .viewer-tiles
+        │   │   │   ├── LinkedSections, sections side by side   src/features/collection/LinkedSections.tsx
+        │   │   │   └── .viewer-main-tile → ViewerCore   src/components/ViewerCore.tsx
         │   │   │   ├── MorphologyCanvas (image tiles)   src/components/MorphologyCanvas.tsx
         │   │   │   ├── deck.gl canvas (cells, bins, boundaries, transcripts, ROI, shapes)
         │   │   │   ├── ROI drawing, measurement and Magic Lens overlays, hover tooltip
@@ -129,8 +131,13 @@ the canvas, a `nav` named "Collection":
 - `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
   previews off, leaving the labels, and back on in the row. Its tooltip
   says what it does. The link keeps it as `collectionView=names`.
-- `Close Collection` (×) removes the bar, `collection=` and
-  `collectionView=` from the address; the open dataset stays.
+- `Show {label} beside` (two columns, `aria-pressed`), on the top right of
+  each preview (after the label without previews), on the sections in the
+  open dataset's `coordinateSystem`: shows the section in a panel beside the
+  main view, or closes it. Disabled, with a tooltip saying so, while three
+  are shown. A shown section's button has an accent border.
+- `Close Collection` (×) removes the bar, `collection=`,
+  `collectionView=` and `compare=` from the address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
@@ -146,6 +153,24 @@ Previews are read by `CollectionPreviewStore`
 time, none while the main view loads. `openPreviewSource`
 (`collectionPreviewData.ts`) reads positions, scores and classes with the
 main view's loaders, and `rasterizePreview` (`collectionPreviewRaster.ts`) draws them.
+
+### Sections Side by Side
+
+With sections shown beside the open dataset, `.viewer-tiles` splits the canvas
+into one tile per viewer: two in a row, three in a row, or 2 by 2, stacked
+under 860 px. The main view keeps its overlays (legend, minimap, zoom
+buttons, scale bar) in its own tile, with its dataset's name in a pill at the
+top centre. Each panel (`LinkedSections`, a `region` named after the section)
+has a pill at its top centre with the name, its top or highest score, `Open`
+and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
+preview, or "Could not be read". Hovering a cell shows a small label with its
+ID and class, or the gene and score.
+
+The main view and the panels share one camera through `LinkedViewChannel`
+(`src/components/linkedView.ts`): each publishes its view as it changes and
+follows the others exactly. Panels are drawn by `linkedSectionLayers`
+(`linkedSectionLayers.ts`) from the preview store's data, which reads the
+shown sections first (`setLinked`).
 
 ## Top Bar
 

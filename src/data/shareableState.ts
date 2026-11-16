@@ -18,6 +18,9 @@ export interface ShareableState {
   // How the collection bar shows its datasets when not in a row:
   // `collectionView=grid` (expanded) or `names` (previews off).
   readonly collectionView?: string
+  // Registered sections of the collection shown beside the dataset, one
+  // `compare=` each.
+  readonly compareUrls?: readonly string[]
   readonly datasetUrl?: string
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
@@ -107,6 +110,7 @@ export function parseShareableState(hash: string): ShareableState {
   const linkVersion = parsePositiveInteger(params.get('xv'))
   const collectionUrl = readString(params, 'collection')
   const collectionView = readString(params, 'collectionView')
+  const compareUrls = readStrings(params, 'compare')
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readCsv(params, 'groups')
@@ -173,6 +177,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (collectionView !== undefined) {
     state.collectionView = collectionView
+  }
+
+  if (compareUrls !== undefined) {
+    state.compareUrls = compareUrls
   }
 
   if (datasetUrl !== undefined) {
@@ -404,6 +412,12 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'collectionView', state.collectionView)
+
+  if (state.compareUrls !== undefined) {
+    for (const compareUrl of state.compareUrls) {
+      setOptionalString(params, 'compare', compareUrl, 'append')
+    }
+  }
 
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())

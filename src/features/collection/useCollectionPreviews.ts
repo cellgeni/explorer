@@ -4,7 +4,7 @@ import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { CollectionPreviewStore } from './collectionPreviewStore'
 
-interface UseCollectionPreviewsOptions {
+interface UseCollectionPreviewStoreOptions {
   // Null while there is nothing to preview.
   readonly collection: DatasetCollection | null
   readonly loaders: CollectionPreviewLoaders
@@ -15,15 +15,18 @@ interface UseCollectionPreviewsOptions {
   readonly paused: boolean
 }
 
-// The previews of a collection's datasets, read while the bar shows them.
-export function useCollectionPreviews({
+// The previews of a collection's datasets, which the bar and the panels of
+// sections shown side by side read from. Each marks the datasets it shows;
+// only those are read. The caller is not re-rendered as previews arrive:
+// what draws them subscribes with useCollectionPreviewUpdates.
+export function useCollectionPreviewStore({
   collection,
   loaders,
   genes,
   scoreMode,
   annotationGroupId,
   paused,
-}: UseCollectionPreviewsOptions): CollectionPreviewStore | null {
+}: UseCollectionPreviewStoreOptions): CollectionPreviewStore | null {
   const store = useMemo(
     () =>
       collection === null
@@ -36,16 +39,12 @@ export function useCollectionPreviews({
   )
   const genesKey = genes.join('\u0000')
 
-  useSyncExternalStore(store?.subscribe ?? noSubscription, store?.getVersion ?? noVersion)
-
+  // The request and pause come first, so the start reads nothing before
+  // them. What shows the previews is a child, whose effects run before these
+  // and mark the datasets it shows.
   useEffect(() => {
-    if (store === null) return
-
-    store.start()
-    return () => {
-      store.stop()
-    }
-  }, [store])
+    store?.setPaused(paused)
+  }, [paused, store])
 
   useEffect(() => {
     store?.setRequest({
@@ -56,10 +55,20 @@ export function useCollectionPreviews({
   }, [annotationGroupId, genesKey, scoreMode, store])
 
   useEffect(() => {
-    store?.setPaused(paused)
-  }, [paused, store])
+    if (store === null) return
+
+    store.start()
+    return () => {
+      store.stop()
+    }
+  }, [store])
 
   return store
+}
+
+// Re-renders the caller whenever a preview changes.
+export function useCollectionPreviewUpdates(store: CollectionPreviewStore | null): void {
+  useSyncExternalStore(store?.subscribe ?? noSubscription, store?.getVersion ?? noVersion)
 }
 
 function noSubscription(): () => void {

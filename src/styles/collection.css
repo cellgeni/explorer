@@ -151,6 +151,40 @@
   cursor: progress;
 }
 
+/* A section registered to the open dataset, with its Show beside toggle. */
+.collection-bar-item {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
+.collection-bar-beside {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  margin-left: 2px;
+}
+
+.collection-bar-beside[aria-pressed='true'] {
+  color: var(--accent);
+}
+
+/* With previews, over the preview's top right corner. */
+.collection-bar.has-previews .collection-bar-beside {
+  position: absolute;
+  top: calc(var(--space-1) + 2px);
+  right: calc(var(--space-1) + 2px);
+  margin-left: 0;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+.collection-bar-dataset[data-beside='true'] {
+  border-color: var(--accent-border);
+}
+
 .collection-bar-close {
   flex: 0 0 auto;
   margin-left: auto;

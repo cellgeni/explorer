@@ -5,6 +5,7 @@ import {
   ExpandIcon,
   IconButton,
   ImageIcon,
+  SideBySideIcon,
 } from '../../components/ui'
 import {
   collectionEntryFor,
@@ -12,10 +13,7 @@ import {
   type DatasetCollectionEntry,
 } from '../../datasets/datasetCollection'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
-import type {
-  GeneExpressionColorScale,
-  GeneExpressionScoreMode,
-} from '../../rendering/deckLayerTypes'
+import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
@@ -30,10 +28,10 @@ import {
   type CollectionState,
   type CollectionView,
 } from './collectionModel'
-import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
-import type { PreviewEntry } from './collectionPreviewStore'
-import { useCollectionPreviews } from './useCollectionPreviews'
+import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
+import { canShowBeside, MAX_LINKED_SECTIONS } from './linkedSectionsModel'
+import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 
 // The preview's size in CSS px.
 export const PREVIEW_WIDTH = 112
@@ -44,17 +42,22 @@ const PREVIEW_READ_AHEAD = '0px 240px'
 const GRID_READ_AHEAD = '240px 0px'
 
 export interface CollectionBarPreviews {
-  readonly loaders: CollectionPreviewLoaders
+  // Shared with the panels of sections shown side by side; null until the
+  // collection is read. The bar marks the datasets in view, which it reads.
+  readonly store: CollectionPreviewStore | null
   // The genes the cells are coloured by; none shows the tissue only.
   readonly genes: readonly string[]
-  readonly scoreMode: GeneExpressionScoreMode
   readonly colorScale: GeneExpressionColorScale
   // The Gene scale's range; Auto ends use the highest score among previews.
   readonly scaleRange?: GeneScaleRange
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotations: CollectionBarAnnotations | null
-  // While the main view loads a dataset, previews wait.
-  readonly paused: boolean
+}
+
+// Registered sections shown side by side with the open dataset.
+export interface CollectionBarBeside {
+  readonly shown: readonly DatasetCollectionEntry[]
+  readonly onToggle: (entry: DatasetCollectionEntry) => void
 }
 
 export interface CollectionBarAnnotations {
@@ -79,6 +82,8 @@ interface CollectionBarProps {
   readonly onViewChange: (view: CollectionView) => void
   // Without it, the bar lists names only.
   readonly previews?: CollectionBarPreviews
+  // Without it, no section can be shown beside the open one.
+  readonly beside?: CollectionBarBeside
 }
 
 const NO_GENES: readonly string[] = []
@@ -96,6 +101,7 @@ export function CollectionBar({
   view,
   onViewChange,
   previews,
+  beside,
 }: CollectionBarProps) {
   const collection = state.status === 'ready' ? state.collection : null
   const loadedEntry =
@@ -105,14 +111,10 @@ export function CollectionBar({
   const showPreviews = view !== 'names'
   const previewsShown = previews !== undefined && showPreviews
   const expanded = view === 'grid' && previewsShown && collection !== null
-  const store = useCollectionPreviews({
-    collection: previewsShown ? collection : null,
-    loaders: previews?.loaders ?? NO_LOADERS,
-    genes: previews?.genes ?? NO_GENES,
-    scoreMode: previews?.scoreMode ?? 'sum',
-    annotationGroupId: previews?.annotations?.groupId ?? null,
-    paused: previews?.paused ?? false,
-  })
+  const store = previewsShown && collection !== null ? (previews.store ?? null) : null
+  useCollectionPreviewUpdates(store)
+  const shownBeside = beside?.shown ?? NO_ENTRIES
+  const besideFull = shownBeside.length >= MAX_LINKED_SECTIONS
   const groupsRef = useRef<HTMLDivElement>(null)
   const scaleRange = previews?.scaleRange ?? AUTO_GENE_SCALE_RANGE
   // A top score puts every preview on one scale, to compare levels; a top
@@ -326,7 +328,10 @@ export function CollectionBar({
                         }
                       : null
 
-                return (
+                const canBeside =
+                  beside !== undefined && canShowBeside(loadedEntry, entry)
+                const isBeside = canBeside && shownBeside.includes(entry)
+                const card = (
                   <button
                     key={entry.url}
                     type="button"
@@ -337,6 +342,7 @@ export function CollectionBar({
                     aria-label={label}
                     aria-current={isLoaded ? 'true' : undefined}
                     aria-busy={isPending || undefined}
+                    data-beside={isBeside || undefined}
                     data-preview-url={store === null ? undefined : entry.url}
                     onClick={() => {
                       if (!isLoaded && !isPending) onSelect(entry)
@@ -364,6 +370,31 @@ export function CollectionBar({
                       </>
                     )}
                   </button>
+                )
+
+                return !canBeside ? (
+                  card
+                ) : (
+                  <span key={entry.url} className="collection-bar-item">
+                    {card}
+                    <IconButton
+                      className="collection-bar-beside"
+                      title={
+                        isBeside
+                          ? `${label} is shown beside the open dataset, with one view. Click to close it`
+                          : besideFull
+                            ? `Up to ${MAX_LINKED_SECTIONS} sections can be shown beside the open dataset; close one first`
+                            : `Show ${label} beside the open dataset, with one view: it is registered to it`
+                      }
+                      aria-label={`Show ${label} beside`}
+                      aria-pressed={isBeside}
+                      disabled={!isBeside && besideFull}
+                      icon={<SideBySideIcon />}
+                      onClick={() => {
+                        beside.onToggle(entry)
+                      }}
+                    />
+                  </span>
                 )
               })}
             </div>
@@ -543,10 +574,4 @@ function collectionFileName(url: string): string {
   }
 }
 
-const NO_LOADERS: CollectionPreviewLoaders = {
-  detectSpatialDataset: () => Promise.reject(new Error('No preview loaders.')),
-  getSpatialDataset: () => Promise.reject(new Error('No preview loaders.')),
-  loadDatasetOverview: () => Promise.reject(new Error('No preview loaders.')),
-  loadGeneExpression: () => Promise.reject(new Error('No preview loaders.')),
-  loadAnnotations: () => Promise.reject(new Error('No preview loaders.')),
-}
+const NO_ENTRIES: readonly DatasetCollectionEntry[] = []

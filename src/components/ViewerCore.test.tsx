@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { LinkedViewChannel } from './linkedView'
 import { ViewerCore, type ViewerViewportDetail } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
 import type {
@@ -285,6 +286,50 @@ describe('ViewerCore', () => {
       | undefined
 
     expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1', 'BC-far'])
+  })
+
+  it('shares its view with the panels of registered sections beside it', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const channel = new LinkedViewChannel()
+
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 4 }}
+        linkedView={channel}
+      />,
+    )
+
+    // Its view is published as soon as it has one.
+    await waitFor(() => {
+      expect(channel.getView()).toEqual({ target: [0, 0], zoom: 4 })
+    })
+
+    act(() => {
+      deckGlMock.onViewStateChange?.({
+        viewState: { target: [8, -8, 0], zoom: 5, minZoom: -10, maxZoom: 10 },
+      })
+    })
+    expect(channel.getView()).toEqual({ target: [8, -8], zoom: 5 })
+
+    // A panel moves the view by less than equivalentViewState's tolerance; the
+    // viewer follows it exactly.
+    act(() => {
+      channel.publish({ target: [8.25, -8], zoom: 7.5 }, 'panel')
+    })
+    expect(deckGlMock.viewState?.target).toEqual([8.25, -8, 0])
+    expect(deckGlMock.viewState?.zoom).toBe(7.5)
+    // Following it publishes nothing new.
+    expect(channel.source).toBe('panel')
+
+    // Beyond the viewer's zoom limits, the viewer stops at its limit and the
+    // panels follow that.
+    act(() => {
+      channel.publish({ target: [8.25, -8], zoom: 14 }, 'panel')
+    })
+    expect(deckGlMock.viewState?.zoom).toBe(10)
+    expect(channel.getView()?.zoom).toBe(10)
   })
 
   it('keeps overview point render data stable when viewport clipping is disabled', async () => {

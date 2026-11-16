@@ -11,9 +11,11 @@ import { useState, type ComponentProps } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { parseDatasetCollection } from '../../datasets/datasetCollection'
+import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import { CollectionBar, type CollectionBarPreviews } from './CollectionBar'
 import type { CollectionView } from './collectionModel'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
+import { useCollectionPreviewStore } from './useCollectionPreviews'
 import { useDatasetCollection } from './useDatasetCollection'
 
 const COLLECTION_URL = 'https://example.test/injury/collection.json'
@@ -35,14 +37,40 @@ const SHAM_A = 'https://example.test/injury/sham-a.zarr'
 const SHAM_B = 'https://example.test/injury/sham-b.zarr'
 const DPI_A = 'https://example.test/injury/1dpi-a.zarr'
 
-type BarProps = Omit<ComponentProps<typeof CollectionBar>, 'view' | 'onViewChange'> & {
-  readonly initialView?: CollectionView
-  readonly onViewChange?: (view: CollectionView) => void
+// The previews as the tests give them: the bar's, and what App reads them
+// with.
+type TestPreviews = Omit<CollectionBarPreviews, 'store'> & {
+  readonly loaders: CollectionPreviewLoaders
+  readonly scoreMode: GeneExpressionScoreMode
+  // While the main view loads a dataset, previews wait.
+  readonly paused: boolean
 }
 
-// The bar with its view in state, as App keeps it.
-function Bar({ initialView = 'row', onViewChange, ...props }: BarProps) {
+type BarProps = Omit<
+  ComponentProps<typeof CollectionBar>,
+  'view' | 'onViewChange' | 'previews'
+> & {
+  readonly initialView?: CollectionView
+  readonly onViewChange?: (view: CollectionView) => void
+  readonly previews?: TestPreviews
+}
+
+const NO_LOADERS = {} as CollectionPreviewLoaders
+
+// The bar with its view and its previews' store in state, as App keeps them.
+function Bar({ initialView = 'row', onViewChange, previews, ...props }: BarProps) {
   const [view, setView] = useState(initialView)
+  const store = useCollectionPreviewStore({
+    collection:
+      previews !== undefined && props.state.status === 'ready'
+        ? props.state.collection
+        : null,
+    loaders: previews?.loaders ?? NO_LOADERS,
+    genes: previews?.genes ?? [],
+    scoreMode: previews?.scoreMode ?? 'sum',
+    annotationGroupId: previews?.annotations?.groupId ?? null,
+    paused: previews?.paused ?? false,
+  })
 
   return (
     <CollectionBar
@@ -52,6 +80,19 @@ function Bar({ initialView = 'row', onViewChange, ...props }: BarProps) {
         setView(next)
         onViewChange?.(next)
       }}
+      {...(previews === undefined
+        ? {}
+        : {
+            previews: {
+              store,
+              genes: previews.genes,
+              colorScale: previews.colorScale,
+              ...(previews.scaleRange === undefined
+                ? {}
+                : { scaleRange: previews.scaleRange }),
+              annotations: previews.annotations,
+            },
+          })}
     />
   )
 }
@@ -95,6 +136,65 @@ describe('CollectionBar', () => {
     expect(onSelect).not.toHaveBeenCalled()
     fireEvent.click(within(sham).getByRole('button', { name: 'Sham B' }))
     expect(onSelect).toHaveBeenCalledWith(COLLECTION.datasets[1])
+  })
+
+  it('offers registered sections beside the open one, up to the limit', () => {
+    const registered = parseDatasetCollection(
+      {
+        version: 1,
+        datasets: ['s1', 's2', 's3', 's4', 's5'].map((name) => ({
+          dataset: `${name}.zarr`,
+          name,
+          coordinateSystem: 'cord',
+        })),
+      },
+      COLLECTION_URL,
+    )
+    const [s1, s2, s3, s4, s5] = registered.datasets
+    const onToggle = vi.fn()
+    const { rerender } = render(
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: registered }}
+        loadedUrl={s1!.url}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        beside={{ shown: [s2!], onToggle }}
+      />,
+    )
+
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    // Not on the open section itself.
+    expect(
+      within(bar).queryByRole('button', { name: 'Show s1 beside' }),
+    ).not.toBeInTheDocument()
+    expect(within(bar).getByRole('button', { name: 'Show s2 beside' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(within(bar).getByRole('button', { name: 's2' })).toHaveAttribute(
+      'data-beside',
+      'true',
+    )
+    fireEvent.click(within(bar).getByRole('button', { name: 'Show s3 beside' }))
+    expect(onToggle).toHaveBeenCalledWith(s3)
+
+    // With three shown, the others wait until one closes.
+    rerender(
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: registered }}
+        loadedUrl={s1!.url}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        beside={{ shown: [s2!, s3!, s4!], onToggle }}
+      />,
+    )
+    const full = within(bar).getByRole('button', { name: 'Show s5 beside' })
+    expect(full).toBeDisabled()
+    expect(full).toHaveAttribute('title', expect.stringContaining('Up to 3 sections'))
+    expect(within(bar).getByRole('button', { name: 'Show s4 beside' })).toBeEnabled()
+    expect(s5).toBeDefined()
   })
 
   it('says when the collection is being read or cannot be opened', () => {
@@ -190,7 +290,7 @@ describe('CollectionBar previews', () => {
     }
   }
 
-  function renderBar(previews: CollectionBarPreviews) {
+  function renderBar(previews: TestPreviews) {
     return render(
       <Bar
         state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
@@ -360,7 +460,7 @@ describe('CollectionBar previews', () => {
   it("opens in the link's view", async () => {
     const onSelect = vi.fn()
     const onViewChange = vi.fn()
-    const previews: CollectionBarPreviews = {
+    const previews: TestPreviews = {
       loaders: previewLoaders(),
       genes: ['Aqp4'],
       scoreMode: 'sum',

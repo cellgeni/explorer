@@ -6,6 +6,11 @@ import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { geneScoreSpread } from '../genes/geneScaleRange'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 
+// Beyond this many cells, a preview draws every Nth of them, in grey or in
+// its class colour: more do not change a preview of this size. Scored cells
+// are all drawn, so none that express a gene is missed.
+export const PREVIEW_MAX_DRAWN_CELLS = 200_000
+
 // A collection preview as pixels: every cell in grey, so the tissue shows,
 // and over them either the cells that score above zero in the gene colour
 // scale, or the cells of the shown classes in their class colours. A pixel
@@ -75,8 +80,9 @@ export function rasterizePreview(
   const forEachPixel = (
     positions: Float32Array,
     visit: (pixel: number, index: number) => void,
+    stride = 1,
   ) => {
-    for (let index = 0; index * 2 < positions.length; index += 1) {
+    for (let index = 0; index * 2 < positions.length; index += stride) {
       const left = Math.floor((positions[index * 2] ?? 0) * scale + offsetX)
       const top = Math.floor((positions[index * 2 + 1] ?? 0) * scale + offsetY)
 
@@ -94,22 +100,34 @@ export function rasterizePreview(
   }
 
   const tissue = overlay?.kind === 'classes' ? FADED_TISSUE_RGBA : TISSUE_RGBA
+  const cellStride = Math.max(
+    1,
+    Math.ceil(cells.positions.length / 2 / PREVIEW_MAX_DRAWN_CELLS),
+  )
 
-  forEachPixel(cells.positions, (pixel) => {
-    pixels.set(tissue, pixel * 4)
-  })
+  forEachPixel(
+    cells.positions,
+    (pixel) => {
+      pixels.set(tissue, pixel * 4)
+    },
+    cellStride,
+  )
 
   if (overlay?.kind === 'classes') {
     const colors = overlay.colors.map(hexRgb)
 
-    forEachPixel(cells.positions, (pixel, index) => {
-      const color = colors[overlay.classOf[index] ?? -1]
-      if (color === undefined || color === null) return
-      pixels[pixel * 4] = color[0]
-      pixels[pixel * 4 + 1] = color[1]
-      pixels[pixel * 4 + 2] = color[2]
-      pixels[pixel * 4 + 3] = 255
-    })
+    forEachPixel(
+      cells.positions,
+      (pixel, index) => {
+        const color = colors[overlay.classOf[index] ?? -1]
+        if (color === undefined || color === null) return
+        pixels[pixel * 4] = color[0]
+        pixels[pixel * 4 + 1] = color[1]
+        pixels[pixel * 4 + 2] = color[2]
+        pixels[pixel * 4 + 3] = 255
+      },
+      cellStride,
+    )
 
     return { pixels, scaleMax: 0 }
   }
@@ -147,7 +165,8 @@ export function rasterizePreview(
   return { pixels, scaleMax }
 }
 
-function hexRgb(color: string | null): readonly [number, number, number] | null {
+// A class colour as RGB, or null for a hidden class or one without a colour.
+export function hexRgb(color: string | null): readonly [number, number, number] | null {
   if (color === null || !/^#[0-9a-f]{6}$/i.test(color)) return null
 
   const value = Number.parseInt(color.slice(1), 16)

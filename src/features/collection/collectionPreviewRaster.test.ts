@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { geneExpressionColor } from '../../rendering/deckLayerColors'
 import { previewBounds, type PreviewCells } from './collectionPreviewData'
-import { rasterizePreview, type PreviewRasterOptions } from './collectionPreviewRaster'
+import {
+  PREVIEW_MAX_DRAWN_CELLS,
+  rasterizePreview,
+  type PreviewRasterOptions,
+} from './collectionPreviewRaster'
 
 const OPTIONS: PreviewRasterOptions = {
   width: 10,
@@ -167,6 +171,37 @@ describe('rasterizePreview', () => {
       [0, 3],
       [9, 6],
     ])
+  })
+
+  it('draws every Nth cell beyond the drawn-cell limit, but every scored cell', () => {
+    // Every cell sits on the first column; past the limit the stride is 2, so
+    // only even rows are drawn in grey.
+    const count = PREVIEW_MAX_DRAWN_CELLS + 1
+    const points = Array.from(
+      { length: count },
+      (_value, index) => [0, index % 10] as const,
+    )
+    // One more cell, far right, holds the bounds open.
+    const many = cells([...points, [9, 0]])
+    const greyOnly = rasterizePreview(many, null, OPTIONS)
+
+    expect(pixel(greyOnly.pixels, 0, 0)[3]).toBeGreaterThan(0)
+    expect(pixel(greyOnly.pixels, 0, 1)[3]).toBe(0)
+
+    // A scored cell on an odd row is still drawn.
+    const scored = rasterizePreview(
+      many,
+      {
+        kind: 'scores',
+        scores: {
+          positions: new Float32Array([0, 1]),
+          scores: new Float32Array([4]),
+          maxScore: 4,
+        },
+      },
+      OPTIONS,
+    )
+    expect(pixel(scored.pixels, 0, 1)[3]).toBeGreaterThan(0)
   })
 
   it('leaves a preview without room empty', () => {

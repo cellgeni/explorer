@@ -11,8 +11,10 @@ import {
 
 // The previews of a collection's datasets. Each dataset's cell positions are
 // read once; the scores for the selected genes, or the classes of the
-// selected annotation set, are read again when the selection changes. Only datasets in view are read, a few at a time, and
-// none start while the main view loads a dataset.
+// selected annotation set, are read again when the selection changes. Only
+// datasets in view in the bar, and those shown side by side, are read, a few
+// at a time, the side by side ones first; none start while the main view
+// loads a dataset.
 
 export interface PreviewEntry {
   readonly cells: PreviewCells | null
@@ -55,6 +57,8 @@ export class CollectionPreviewStore {
   private readonly errors = new Map<string, string>()
   private readonly running = new Map<string, AbortController>()
   private readonly visible = new Set<string>()
+  // Shown side by side with the main view, so read whether in the bar or not.
+  private linked: readonly string[] = []
   private readonly listeners = new Set<() => void>()
   // Cell positions do not depend on the genes, so only stopping stops them.
   private lifetime = new AbortController()
@@ -121,6 +125,19 @@ export class CollectionPreviewStore {
     }
   }
 
+  setLinked(urls: readonly string[]): void {
+    const next = urls.filter((url) => this.urls.includes(url))
+    if (
+      next.length === this.linked.length &&
+      next.every((url, i) => url === this.linked[i])
+    ) {
+      return
+    }
+
+    this.linked = next
+    this.pump()
+  }
+
   setPaused(paused: boolean): void {
     if (paused === this.paused) return
 
@@ -157,9 +174,13 @@ export class CollectionPreviewStore {
   private pump(): void {
     if (this.stopped || this.paused) return
 
-    for (const url of this.urls) {
+    for (const url of [...this.linked, ...this.urls]) {
       if (this.running.size >= this.concurrency) return
-      if (this.visible.has(url) && !this.running.has(url) && this.needsWork(url)) {
+      if (
+        (this.visible.has(url) || this.linked.includes(url)) &&
+        !this.running.has(url) &&
+        this.needsWork(url)
+      ) {
         void this.run(url)
       }
     }

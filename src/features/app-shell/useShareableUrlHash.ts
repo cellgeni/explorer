@@ -19,6 +19,8 @@ interface ShareableDatasetHashOptions {
   readonly collectionUrl?: string | undefined
   // How its bar shows the datasets, when not in a row (collectionView=).
   readonly collectionView?: string | undefined
+  // Its registered sections shown beside the dataset (compare=).
+  readonly compareUrls?: readonly string[] | undefined
   readonly datasetUrl: string
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
@@ -150,6 +152,8 @@ export function useShareableUrlHash({
     datasetUrl,
     hiddenAnnotationIds,
   } = dataset
+  // As a string, so a new array with the same URLs writes nothing.
+  const compareKey = dataset.compareUrls?.join('\n') ?? ''
   const spatialDataTable = dataset.spatialDataSelection?.spatialDataTable
   const spatialDataCoordinateSystem =
     dataset.spatialDataSelection?.spatialDataCoordinateSystem
@@ -233,6 +237,7 @@ export function useShareableUrlHash({
         {
           ...(collectionUrl === undefined ? {} : { collectionUrl }),
           ...(collectionView === undefined ? {} : { collectionView }),
+          ...(compareKey === '' ? {} : { compareUrls: compareKey.split('\n') }),
           datasetUrl,
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
@@ -326,6 +331,7 @@ export function useShareableUrlHash({
     annotationUrl,
     collectionUrl,
     collectionView,
+    compareKey,
     boundaryCellLimit,
     cellMetadataTrackId,
     coordinateUnit,

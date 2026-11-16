@@ -1,4 +1,5 @@
 import type { LegendCategoryVisibilityChange } from './ViewerLegend'
+import type { LinkedViewChannel } from './linkedView'
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { ViewerLegendSection } from './viewerLegendTypes'
@@ -105,6 +106,9 @@ export interface ViewerCoreProps {
   readonly initialViewStateOverride?: InitialViewStateOverride
   readonly viewResetKey?: string | number
   readonly focusRequest?: ViewerFocusRequest | null
+  // The view shared with the panels of registered sections shown beside this
+  // one: each change is published to it, and the panels' changes followed.
+  readonly linkedView?: LinkedViewChannel | null
   // The zoom −, + and Fit buttons (plan 15.2-E).
   readonly navigationControls?: boolean
   // The minimap at the bottom right (15.4-D).

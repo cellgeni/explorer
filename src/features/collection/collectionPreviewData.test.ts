@@ -4,7 +4,6 @@ import { micrometers } from '../../data/coords'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
 import {
   openPreviewSource,
-  PREVIEW_MAX_CELLS,
   PREVIEW_MAX_WHOLE_FILE_BYTES,
   PreviewUnavailableError,
   type CollectionPreviewLoaders,
@@ -188,10 +187,8 @@ describe('openPreviewSource', () => {
     expect([...classes.classOf]).toEqual([-1, 0])
   })
 
-  it('draws every Nth cell beyond the cell limit', async () => {
-    const many = Array.from({ length: PREVIEW_MAX_CELLS * 2 + 1 }, (_, index) =>
-      point(index, 0),
-    )
+  it('keeps every cell, however many', async () => {
+    const many = Array.from({ length: 250_001 }, (_, index) => point(index, 0))
     const source = await openPreviewSource(
       URL_A,
       loaders(
@@ -209,9 +206,9 @@ describe('openPreviewSource', () => {
     )
 
     const cells = await source.cells()
-    expect(cells.positions.length / 2).toBe(Math.ceil(many.length / 3))
-    // The last cell drawn is the last multiple of the stride.
-    expect(cells.bounds.maxX).toBe(Math.floor((many.length - 1) / 3) * 3)
+    expect(cells.positions.length / 2).toBe(many.length)
+    expect(cells.cellIds).toHaveLength(many.length)
+    expect(cells.bounds.maxX).toBe(many.length - 1)
   })
 
   it('has no preview for images, Visium HD or a dataset without cells', async () => {

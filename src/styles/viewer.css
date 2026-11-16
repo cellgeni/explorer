@@ -9,6 +9,126 @@
   overflow: hidden;
 }
 
+/* The main viewer and, beside it, the panels of registered sections of a
+   collection (Side by side): one column per viewer, or 2 by 2 for four.
+   With one viewer the grid is the whole region, as before. */
+.viewer-tiles {
+  display: grid;
+  grid-template-columns: repeat(var(--viewer-tile-columns, 1), minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+  gap: 1px;
+  width: 100%;
+  height: 100%;
+  background: var(--border);
+}
+
+.viewer-tile {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--canvas);
+}
+
+/* Each viewer's name at the top centre, clear of the cards on the left and
+   the Embedding panel on the right. */
+.viewer-tile-header {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  top: var(--space-2);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  max-width: calc(100% - 2 * var(--space-2));
+  padding: 2px 2px 2px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-1);
+  color: var(--text-1);
+  font-size: var(--font-control);
+  transform: translateX(-50%);
+}
+
+.viewer-main-tile > .viewer-tile-header {
+  padding-right: var(--space-2);
+  border-color: var(--accent-border);
+}
+
+.viewer-tile-name {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.viewer-tile-stat {
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.viewer-tile-action {
+  flex: 0 0 auto;
+  min-height: 22px;
+  padding-block: 0;
+}
+
+.viewer-tile-action.ui-icon-button {
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+}
+
+.linked-section[data-loading]::after {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  inset: 0 0 auto;
+  height: 2px;
+  background: var(--accent);
+  animation: collection-preview-loading 1.2s ease-in-out infinite;
+  content: '';
+}
+
+.linked-section-status {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--text-3);
+  font-size: var(--font-body);
+  text-align: center;
+}
+
+.linked-section-tooltip {
+  position: absolute;
+  z-index: var(--z-canvas-overlay);
+  max-width: min(320px, calc(100% - 18px));
+  overflow: hidden;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+  color: var(--text-1);
+  font-size: var(--font-control);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(10px, 10px);
+}
+
+/* Narrow, the viewers stack. */
+@media (max-width: 860px) {
+  .viewer-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .viewport-frame {
   position: relative;
   min-height: 0;
