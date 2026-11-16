@@ -215,7 +215,7 @@ export function CollectionBar({
             className="collection-bar-scale"
             title={
               scaleRange.max === null
-                ? 'Every preview uses this scale, up to the highest score among them'
+                ? 'Every preview uses this scale, up to the highest of their 99th percentiles; cells above it get the top colour'
                 : 'Every preview uses this scale, the range set in Gene scale'
             }
           >

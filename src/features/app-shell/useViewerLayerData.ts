@@ -14,7 +14,7 @@ import { styleOverviewCellsByObservation } from '../../rendering/cellStyling'
 import {
   boundaryElementsToLayerData,
   geneExpressionElementsToLayerData,
-  geneExpressionScoreDomainMax,
+  geneExpressionScoreSpread,
   styleGeneExpressionElementsByScale,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
@@ -28,6 +28,7 @@ import {
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { overviewCellsToBbox } from '../cells/cellDetailModel'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   geneExpressionScaleKeyFor,
   type GeneExpressionScaleDomain,
 } from '../genes/geneControlsModel'
@@ -49,6 +50,7 @@ import type { AnnotationState } from '../annotations/annotationModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import {
   AUTO_GENE_SCALE_RANGE,
+  EMPTY_GENE_SCORE_SPREAD,
   geneScaleBounds,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
@@ -208,26 +210,30 @@ export function useViewerLayerData({
       ),
     [geneExpressionScaleDatasetUrl, geneExpressionScoreMode, selectedGenes],
   )
-  const currentGeneExpressionScaleMax = useMemo(
+  const currentGeneExpressionScoreSpread = useMemo(
     () =>
       geneExpressionBatch === null
-        ? 0
-        : geneExpressionScoreDomainMax(
+        ? EMPTY_GENE_SCORE_SPREAD
+        : geneExpressionScoreSpread(
             geneExpressionBatch.elements,
             geneExpressionBatch.genes,
             geneExpressionScoreMode,
           ),
     [geneExpressionBatch, geneExpressionScoreMode],
   )
-  const storedGeneExpressionScaleMax =
+  const storedGeneExpressionScaleDomain =
     geneExpressionScaleDomain.key === geneExpressionScaleKey
-      ? geneExpressionScaleDomain.max
-      : 0
-  // Auto keeps the highest score seen for these genes, so the scale does not
+      ? geneExpressionScaleDomain
+      : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
+  // Auto keeps the highest top seen for these genes, so the scale does not
   // shrink as the view moves.
   const geneExpressionAutoScaleMax = Math.max(
-    storedGeneExpressionScaleMax,
-    currentGeneExpressionScaleMax,
+    storedGeneExpressionScaleDomain.top,
+    currentGeneExpressionScoreSpread.top,
+  )
+  const geneExpressionHighestScore = Math.max(
+    storedGeneExpressionScaleDomain.highest,
+    currentGeneExpressionScoreSpread.highest,
   )
   const { min: geneExpressionScaleMin, max: geneExpressionScaleMax } = geneScaleBounds(
     geneExpressionScaleRange,
@@ -371,6 +377,7 @@ export function useViewerLayerData({
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
     geneExpressionAutoScaleMax,
+    geneExpressionHighestScore,
     geneExpressionScaleKey,
     geneExpressionScaleMax,
     geneExpressionScaleMin,

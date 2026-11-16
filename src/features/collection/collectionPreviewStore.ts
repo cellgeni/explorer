@@ -94,13 +94,14 @@ export class CollectionPreviewStore {
     return this.entries.get(url) ?? EMPTY_ENTRY
   }
 
-  // The score drawn at full colour: the highest of the previews read so far,
-  // so every preview uses one scale.
+  // The score drawn at full colour: the highest Auto top (99th percentile) of
+  // the previews read so far, so every preview uses one scale, as the view
+  // keeps the highest it has seen.
   scaleMax(): number {
     let max = 0
 
     for (const scores of this.scores.values()) {
-      max = Math.max(max, scores.maxScore)
+      max = Math.max(max, scores.topScore)
     }
 
     return max

@@ -15,7 +15,7 @@ import {
   createGeneExpressionElementStyleIndex,
   createOverviewLayers,
   geneExpressionElementsToLayerData,
-  geneExpressionScoreDomainMax,
+  geneExpressionScoreSpread,
   gridCellBatchesToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
@@ -1721,7 +1721,7 @@ describe('deck layer factory', () => {
     expect(datum?.expressionCount).toBe(4)
     expect(datum?.fillColor).toEqual([221, 127, 75, 196])
     expect(
-      geneExpressionScoreDomainMax(
+      geneExpressionScoreSpread(
         [
           {
             id: intToCellId(1, 2),
@@ -1732,7 +1732,7 @@ describe('deck layer factory', () => {
         ['Gad1', 'Actb'],
         'mean',
       ),
-    ).toBe(3)
+    ).toEqual({ top: 3, highest: 3 })
   })
 
   it('restyles existing expression layer data without changing positions', () => {

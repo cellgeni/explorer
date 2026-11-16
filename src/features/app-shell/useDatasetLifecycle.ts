@@ -92,6 +92,7 @@ import type {
   GenePanelState,
 } from '../genes/geneControlsModel'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   IDLE_GENE_PANEL_STATE,
   genePanelLoadFailed,
@@ -1051,7 +1052,7 @@ export function useDatasetLifecycle({
           setOverviewCells([])
           setSpatialGridCells([])
           setGeneExpressionBatch(null)
-          setGeneExpressionScaleDomain({ key: '', max: 0 })
+          setGeneExpressionScaleDomain(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
           setMorphologyImage(null)
           setFlatMorphologyImage(null)
           setCustomMorphologyLayers([])

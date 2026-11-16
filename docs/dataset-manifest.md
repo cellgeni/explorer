@@ -379,7 +379,8 @@ How defaults combine with other settings:
   sections compare on one scale. A link for a dataset whose manifest sets a
   range writes `geneRange=,` once the range is reset to Auto.
 - `geneRange` is in the units of the selected `Combine genes` score, so a
-  range set for `sum` does not suit `mean` or `z-score`. Its max must be above
+  range set for `sum` does not suit `mean` or `z-score`. An Auto end is 0 at
+  the bottom and, at the top, the 99th percentile of the scores above 0. Its max must be above
   its min, or the load stops; `[0, null]` fixes only the bottom.
 - `colorCellsBy: "annotations"` takes effect once annotations are loaded.
 - `genes` without `colorCellsBy` colours cells by gene expression. With

@@ -451,7 +451,7 @@ function viewerLayerOptions({
       geneExpressionBatch: expressionBatch,
       geneExpressionColorScale: 'plasma',
       geneExpressionScaleDatasetUrl: 'https://example.test/output',
-      geneExpressionScaleDomain: { key: '', max: 0 },
+      geneExpressionScaleDomain: { key: '', top: 0, highest: 0 },
       geneExpressionScoreMode: 'sum',
       selectedGenes: ['Actb'],
       ...geneExpression,

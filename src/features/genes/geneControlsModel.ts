@@ -64,9 +64,20 @@ export interface SavedGeneSet {
   readonly scoreMode: GeneExpressionScoreMode
 }
 
+// What the Gene scale's Auto top has seen for one dataset, score mode and
+// gene selection (`key`): it keeps the highest, so the scale does not shrink
+// as the view moves.
 export interface GeneExpressionScaleDomain {
   readonly key: string
-  readonly max: number
+  // The highest Auto top (99th percentile) of the batches read.
+  readonly top: number
+  readonly highest: number
+}
+
+export const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = {
+  key: '',
+  top: 0,
+  highest: 0,
 }
 
 export const IDLE_GENE_EXPRESSION_STATE: GeneExpressionState<never> = {

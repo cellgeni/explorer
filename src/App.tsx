@@ -207,6 +207,7 @@ import {
   type CellMetadataTrackValuesLoader,
 } from './features/annotations/useCellMetadataTrackValues'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -237,7 +238,7 @@ import type { FallbackNotice } from './data/fallbackNotice'
 import { normalizeLayerOpacity } from './rendering/layerOpacity'
 import {
   geometricAnnotationsToLayerData,
-  geneExpressionScoreDomainMax,
+  geneExpressionScoreSpread,
   styleCellBoundariesByGeneExpression,
   styleGridCellsByGeneExpression,
 } from './rendering/deckLayers'
@@ -936,6 +937,7 @@ export function App({ dependencies }: AppProps = {}) {
     geneExpressionLayerDataDurationMs,
     geneExpressionRestyleDurationMs,
     geneExpressionAutoScaleMax,
+    geneExpressionHighestScore,
     geneExpressionScaleKey,
     geneExpressionScaleMax,
     geneExpressionScaleMin,
@@ -1765,20 +1767,24 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const rememberGeneExpressionScaleMax = useCallback(
     (key: string, batch: GeneExpressionBatch, scoreMode: GeneExpressionScoreMode) => {
-      const max = geneExpressionScoreDomainMax(batch.elements, batch.genes, scoreMode)
+      const spread = geneExpressionScoreSpread(batch.elements, batch.genes, scoreMode)
 
-      if (max <= 0) {
+      if (spread.highest <= 0) {
         return
       }
 
       setGeneExpressionScaleDomain((current) => {
-        const currentMax = current.key === key ? current.max : 0
+        const seen = current.key === key ? current : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
 
-        if (currentMax >= max) {
+        if (seen.top >= spread.top && seen.highest >= spread.highest) {
           return current
         }
 
-        return { key, max }
+        return {
+          key,
+          top: Math.max(seen.top, spread.top),
+          highest: Math.max(seen.highest, spread.highest),
+        }
       })
     },
     [setGeneExpressionScaleDomain],
@@ -1790,7 +1796,7 @@ export function App({ dependencies }: AppProps = {}) {
     })
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', max: 0 })
+    setGeneExpressionScaleDomain(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
     setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
   }, [setGeneExpressionBatch, setGeneExpressionScaleDomain, setGeneExpressionState])
   const loadActiveAnnotations = useCallback<AnnotationLoader>(
@@ -3759,6 +3765,7 @@ export function App({ dependencies }: AppProps = {}) {
     geneExpressionScaleMin,
     geneExpressionScaleMax,
     geneExpressionAutoScaleMax,
+    geneExpressionHighestScore,
     geneExpressionScaleRange,
     geneExpressionScoreMode,
     geneExpressionState,

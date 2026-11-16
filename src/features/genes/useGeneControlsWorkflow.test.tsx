@@ -40,7 +40,7 @@ function GeneControlsProbe() {
   const [geneExpressionDetailMode, setGeneExpressionDetailMode] =
     React.useState<GeneExpressionDetailMode>('auto')
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =
-    React.useState<GeneExpressionScaleDomain>({ key: 'active', max: 12 })
+    React.useState<GeneExpressionScaleDomain>({ key: 'active', top: 12, highest: 20 })
   const [geneExpressionScoreMode, setGeneExpressionScoreMode] =
     React.useState<GeneExpressionScoreMode>('sum')
   const [geneExpressionState, setGeneExpressionState] = React.useState<
@@ -71,7 +71,7 @@ function GeneControlsProbe() {
     geneExpressionRequestIdRef.current += 1
     geneExpressionViewportKeyRef.current = null
     setGeneExpressionBatch(null)
-    setGeneExpressionScaleDomain({ key: '', max: 0 })
+    setGeneExpressionScaleDomain({ key: '', top: 0, highest: 0 })
     setGeneExpressionState({ status: 'idle' })
   }, [])
 
@@ -138,7 +138,11 @@ describe('useGeneControlsWorkflow', () => {
     expect(geneControlsSnapshot.transcriptViewportKey).toBeNull()
     expect(geneControlsSnapshot.geneExpressionState).toEqual({ status: 'idle' })
     expect(geneControlsSnapshot.geneExpressionBatch).toBeNull()
-    expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({ key: '', max: 0 })
+    expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({
+      key: '',
+      top: 0,
+      highest: 0,
+    })
     expect(geneControlsSnapshot.geneExpressionViewportKey).toBeNull()
     expect(geneControlsSnapshot.expressionRequestId).toBe(4)
     expect(geneControlsSnapshot.expressionAbortWasAborted).toBe(true)
@@ -167,7 +171,11 @@ describe('useGeneControlsWorkflow', () => {
 
     expect(geneControlsSnapshot.geneExpressionScoreMode).toBe('z-score')
     // Without a batch the remembered scale resets.
-    expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({ key: '', max: 0 })
+    expect(geneControlsSnapshot.geneExpressionScaleDomain).toEqual({
+      key: '',
+      top: 0,
+      highest: 0,
+    })
     expect(geneControlsSnapshot.geneExpressionColorScale).toBe('viridis')
     expect(geneControlsSnapshot.geneExpressionDetailMode).toBe('all-cells')
     expect(geneControlsSnapshot.observationColorMode).toBe('cell-area')

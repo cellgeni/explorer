@@ -517,7 +517,7 @@
           "prefixItems": [{ "type": ["number", "null"] }, { "type": ["number", "null"] }],
           "minItems": 2,
           "maxItems": 2,
-          "description": "The Gene scale range, [min, max]. null leaves that end on Auto (0 at the bottom, the highest score at the top); max must be above min. Kept when the next dataset sets no range."
+          "description": "The Gene scale range, [min, max]. null leaves that end on Auto (0 at the bottom, the 99th percentile of the scores above 0 at the top); max must be above min. Kept when the next dataset sets no range."
         },
         "geneScoreMode": {
           "enum": ["sum", "mean", "z-score"],

@@ -5,6 +5,7 @@ import {
   formatGeneScaleRange,
   geneScaleBounds,
   geneScaleMidpoint,
+  geneScoreSpread,
   parseGeneScaleRange,
 } from './geneScaleRange'
 
@@ -13,6 +14,40 @@ describe('gene scale range', () => {
     expect(geneScaleBounds(AUTO_GENE_SCALE_RANGE, 92)).toEqual({ min: 0, max: 92 })
     expect(geneScaleBounds({ min: 5, max: null }, 92)).toEqual({ min: 5, max: 92 })
     expect(geneScaleBounds({ min: null, max: 20 }, 92)).toEqual({ min: 0, max: 20 })
+  })
+
+  it('puts the Auto top at the 99th percentile of the scores above 0', () => {
+    // 990 cells at 1 to 10 and 10 outliers at 100: the 990th of 1,000.
+    const scores = [
+      ...Array.from({ length: 990 }, (_value, index) => (index % 10) + 1),
+      ...Array.from({ length: 10 }, () => 100),
+      // Zeros do not count: otherwise a sparse gene's top would be 0.
+      ...Array.from({ length: 50_000 }, () => 0),
+    ]
+    expect(geneScoreSpread(scores)).toEqual({ top: 10, highest: 100 })
+    expect(geneScoreSpread(scores.slice().reverse())).toEqual({ top: 10, highest: 100 })
+    // With 100 or fewer cells, the highest score.
+    expect(geneScoreSpread([0, 2, 7, 3])).toEqual({ top: 7, highest: 7 })
+    expect(geneScoreSpread([0, -1.5, 0])).toEqual({ top: 0, highest: 0 })
+    expect(geneScoreSpread([])).toEqual({ top: 0, highest: 0 })
+  })
+
+  it('matches a sort on many tied and spread scores', () => {
+    let seed = 7
+    const random = () => {
+      seed = (seed * 16_807) % 2_147_483_647
+      return seed / 2_147_483_647
+    }
+
+    for (const size of [101, 1_000, 30_001]) {
+      const scores = Array.from({ length: size }, () =>
+        random() < 0.5 ? Math.floor(random() * 6) : random() * 40,
+      )
+      const positive = scores.filter((score) => score > 0).sort((a, b) => a - b)
+      const expected = positive[Math.ceil(0.99 * positive.length) - 1]
+
+      expect(geneScoreSpread(scores).top).toBe(expected)
+    }
   })
 
   it('puts the gradient middle a quarter of the way up the range', () => {

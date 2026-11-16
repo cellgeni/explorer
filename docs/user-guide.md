@@ -153,9 +153,9 @@ together, such as the sections of one study. Open one with
 lists the others in a bar under the canvas, grouped by time point, donor or
 whatever the collection groups them by. Each has a preview of its cells
 coloured by the selected genes, all on one scale, so you can see where a
-gene is high before opening anything. To fix that scale, type the ends
-under the `Gene scale` gradient in Cells, after pressing the cog next to
-`Gene scale` (`Reset` puts them back): the view,
+gene is high before opening anything. To fix that scale, click the
+numbers at the ends of the `Gene scale` gradient in Cells and type a score
+(`Reset`, after the `Gene scale` label, puts them back): the view,
 the legend and every preview then use it, as you move between sections and
 genes. With cells coloured by an annotation
 set, previews show its classes instead: Alt-click (Option-click) a class's

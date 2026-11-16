@@ -259,9 +259,11 @@ bar's left side names the set and how many classes are hidden. A set is read
 once per dataset and selection, like a gene.
 
 - **One scale.** Every preview uses the same scale, from 0 to the highest
-  score among the previews read so far. The bar's left side shows the gene
-  and that maximum, and each preview its own highest score (`max 92`). The
-  scale can rise as more previews are read.
+  99th percentile of the previews read so far (of each one's scores above
+  0, as the main view's Auto `Gene scale`), so one outlier cell does not
+  wash the rest out. The bar's left side shows the gene and that top, and
+  each preview its own highest score (`max 92`). The scale can rise as more
+  previews are read.
 - **What is read.** A preview reads every cell's position once per dataset,
   then the selected genes' scores, or the annotation set's classes, whenever
   the selection changes. Positions

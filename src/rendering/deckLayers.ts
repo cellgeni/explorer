@@ -90,7 +90,7 @@ export {
   createGeneExpressionElementStyleIndex,
   expressingElementsByScore,
   geneExpressionElementsToLayerData,
-  geneExpressionScoreDomainMax,
+  geneExpressionScoreSpread,
   styleCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
   styleGridCellsByGeneExpression,

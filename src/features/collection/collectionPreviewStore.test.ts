@@ -96,14 +96,18 @@ function fakeDatasets() {
         },
       ])
     },
-    finishExpression(url: string, count: number) {
+    // One cell per count.
+    finishExpression(url: string, count: number | readonly number[]) {
+      const counts = typeof count === 'number' ? [count] : count
       const call = expressions.find((entry) => entry.url === url)
       call?.done.resolve({
         genes: call.genes,
-        maxCount: count,
-        elements: [
-          { id: 'a', position: { x: micrometers(0), y: micrometers(0) }, count },
-        ],
+        maxCount: Math.max(...counts),
+        elements: counts.map((cellCount, index) => ({
+          id: `c${index}`,
+          position: { x: micrometers(index), y: micrometers(0) },
+          count: cellCount,
+        })),
       })
     },
   }
@@ -157,11 +161,14 @@ describe('CollectionPreviewStore', () => {
       [B, ['Aqp4']],
     ])
     fake.finishExpression(A, 3)
-    fake.finishExpression(B, 8)
+    // 199 cells at 2 and one outlier at 50: the 99th percentile is 2.
+    fake.finishExpression(B, [...Array.from({ length: 199 }, () => 2), 50])
     await flush()
 
     expect(store.entry(A).scores?.maxScore).toBe(3)
-    expect(store.scaleMax()).toBe(8)
+    expect(store.entry(B).scores).toMatchObject({ maxScore: 50, topScore: 2 })
+    // The highest of the previews' 99th percentiles, not the outlier.
+    expect(store.scaleMax()).toBe(3)
   })
 
   it('reads new genes without reading the cells again', async () => {
