@@ -171,7 +171,7 @@ export function useCustomMorphologyLayerWorkflow({
         setCustomLayerLoadState(
           customMorphologyLayerLoadFailed(
             normalizedUrl,
-            createStructuredLoadError('Morphology image', error),
+            createStructuredLoadError('Morphology image', error, { url: normalizedUrl }),
           ),
         )
         appendDebugEvent('Custom layer failed')

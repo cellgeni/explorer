@@ -2160,7 +2160,9 @@ export function useDatasetLifecycle({
           return
         }
 
-        const loadError = createStructuredLoadError('Dataset overview', error)
+        const loadError = createStructuredLoadError('Dataset overview', error, {
+          url: requestedUrl,
+        })
 
         // The dataset on screen stays; the failed load is reported instead.
         if (load.datasetRequestId === null) {

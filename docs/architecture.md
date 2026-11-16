@@ -338,6 +338,13 @@ All screen↔data conversions go through `coords.ts`.
   `src/zarr/zarrStores.ts`), Icechunk repository files
   (`src/zarr/icechunkStore.ts`), and `.zchunkstore` sidecars. Other `403`s are
   errors.
+- **Plain-http data from an HTTPS page.** A read that gets no response
+  (detection's "Request blocked", a network error, or a Range probe without a
+  response) from an HTTPS page to an `http://` address gets advice for that
+  case instead of the CORS advice (`src/features/errors/insecureRequest.ts`).
+  The advice depends on whether the address is on this computer, on the local
+  network, or elsewhere. See
+  [Serve data from your computer](./host-your-own-data.md#serve-data-from-your-computer).
 
 See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 

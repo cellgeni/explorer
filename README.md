@@ -177,9 +177,8 @@ The full index is in [docs/README.md](docs/README.md).
   RGW-style storage, configure edge headers, and validate production.
 - [Host your own data](docs/host-your-own-data.md): required and optional files
   for Xenium, Atera, standard Visium, Visium HD, MERSCOPE, H5AD, SpatialData, and
-  image-only sources, plus HTTP
-  requirements
-  and quick validation commands.
+  image-only sources, plus HTTP requirements, serving data from your own
+  computer, and quick validation commands.
 - [Dataset manifest](docs/dataset-manifest.md): the optional `explorer.json`
   that maps renamed files and sets first-load display defaults, with a JSON
   Schema in `public/schemas/`.
