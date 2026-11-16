@@ -517,13 +517,15 @@ function clearCacheRecords(records: Map<string, ChannelCacheRecord>): void {
   records.clear()
 }
 
+// Not clamped to x, y >= 0: an image can sit at a negative origin (MERSCOPE
+// mosaics, SpatialData translations), and tilesForBbox clips to the image.
 function expandBboxByScreenPixels(bbox: BBox, zoom: number, screenPixels: number): BBox {
   const margin = screenPixels / scaleFromZoom(zoom)
 
   return {
-    minX: micrometers(Math.max(0, bbox.minX - margin)),
+    minX: micrometers(bbox.minX - margin),
     maxX: micrometers(bbox.maxX + margin),
-    minY: micrometers(Math.max(0, bbox.minY - margin)),
+    minY: micrometers(bbox.minY - margin),
     maxY: micrometers(bbox.maxY + margin),
   }
 }
