@@ -4,7 +4,9 @@ Every unchecked item in this plan. On 2026-11-12 each item was checked against
 the code at `35479d6`. None of the items open on 2026-11-09 had been finished;
 where part of one exists, a note says which part. Four small items were closed
 the same day, and later that day the items sized as half a day or less, except
-deploy previews.
+deploy previews. On 2026-11-16 the PRs merged since the split (#82 to #129)
+were checked against the plan. The gaps in work it had missed are listed
+here and in Phases 7, 20 and 21.
 
 This page lists open work only. When an item closes, it moves under Closed Open
 Items in the phase or track file it belongs to. The items closed before the
@@ -68,8 +70,8 @@ Found by the [15.5-E](phases/15-interface-redesign.md#155-close-out) re-run (202
       placed spots) and the gene summary ("positive cells across 370 slide
       cells"). The Visium adapter already has the noun "spots"
       (`labels.embeddingElementPlural`); these strings do not use it.
-- [ ] Links do not carry hidden annotation sets (the per-set visibility
-      checkbox), only hidden classes. Found 2026-11-12.
+- [ ] Links do not carry hidden annotation sets (the set's eye button, a
+      checkbox until 2026-11-15), only hidden classes. Found 2026-11-12.
 - [ ] A link with both `groups=` and `annotationUrl=` can lose the imported
       labels: loading a set replaces all labels, so an import that finishes
       first is dropped. Found by reading the code on 2026-11-12.
@@ -96,6 +98,9 @@ Features:
       kerchunk and Icechunk companions (`6971ceb`, `b71ffc8`), on the main
       thread. Only `/X` is read, and diagnostics check only that the file
       answers Range requests or the repository opens.
+- [ ] AnnData Zarr: stores without a root `encoding-type`, zipped stores,
+      node names with `#` or `?`, and an abort signal for `matrix()` (see
+      [Phase 7](phases/07-h5ad.md#anndata-zarr-stores-2026-11-14)).
 - [ ] SpatialData: images that are not axis-aligned, `points` (transcripts),
       nucleus boundaries, and viewport-scoped shape reads (see
       [Phase 10](phases/10-spatialdata.md#known-gaps)). Partly done: the info
@@ -108,6 +113,12 @@ Features:
       bounding-box column.
 - [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
       Azimuth colours (see [Phase 12](phases/12-atera.md)).
+- [ ] Collections: list them in the start-screen gallery and `Load Dataset`,
+      previews by metadata, class colours in links, and an embedding beside
+      the view (see [Phase 20](phases/20-dataset-collections.md#known-gaps)).
+- [ ] Store and file browser: non-Zarr files in consolidated stores read over
+      HTTP, and SpatialData points as one table rather than part by part (see
+      [Phase 21](phases/21-structure-browser.md#known-gaps)).
 - [ ] SVS: show the thumbnail, label, and macro images, and draw the minimap
       from the thumbnail.
 - [ ] NDPI: files over 4 GB (64-bit offsets; test files and what support

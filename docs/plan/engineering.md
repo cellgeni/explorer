@@ -92,12 +92,31 @@ and has `Diagnose Dataset`.
   15 s timeout; a host that rejects `HEAD` makes every source undetectable.
 - **Zarr stores (Phases 9–10):** publish consolidated metadata, because the
   browser cannot list prefixes. Buckets that answer `403` for missing keys are
-  tolerated for metadata keys only.
+  tolerated for metadata keys only. Since 2026-11-14 AnnData Zarr stores and
+  Browse Store walk a store without it, using the bucket's listing where it
+  answers ([4.10](decisions.md#410-zarr-store-access-phases-910)).
 - **H5AD over 300 MiB:** host the kerchunk `.h5ad.json` reference next to the
   file.
 - **Replacing files in place:** the IndexedDB byte-range cache is keyed by URL
   and range without the `ETag`, so a file replaced at the same URL can serve
   stale bytes until site data is cleared. Keep dataset paths immutable.
+- **Plain `http://` data (2026-11-16, #129):** the hosted app is HTTPS.
+  Chrome reads `http://localhost` or `127.0.0.1` once its local-network
+  permission is granted, and a LAN address from the page but not from
+  workers; any other `http://` address, and every one in Safari, is blocked
+  as mixed content. These failures get no response, so their errors now give
+  advice for the address's scope instead of CORS advice
+  (`src/features/errors/insecureRequest.ts`). `docs/host-your-own-data.md`
+  lists file servers that work (rclone, http-server, serve) and why Python's
+  `http.server` does not (it ignores `Range`).
+
+## Licence And Deploys
+
+- MIT licence, copyright Genome Research Ltd (#105, 2026-11-15). The release
+  zip carries `LICENSE`. The package is named `spatial-omics-explorer`
+  (`015580d`).
+- `pages.yml` builds with `VITE_COMMIT_SHA`, so Help shows the deployed
+  commit and `index.html` has a `build-commit` meta tag (#107, 2026-11-15).
 
 ## Testing And CI
 
@@ -262,23 +281,23 @@ Testing:
 
 ## Tech Stack
 
-| Concern             | Planned                                         | Outcome                                                                                                 |
-| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Build               | Vite + strict TypeScript                        | As planned; vendor chunk groups added                                                                   |
-| UI and state        | React + Zustand                                 | React state in domain bundles; Zustand for the viewer store only                                        |
-| Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                          |
-| Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes |
-| Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, OME-Zarr images, SpatialData stores                  |
-| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (by range for Visium HD and Xenium H5, whole files otherwise); jsfive deferred        |
-| OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                        |
-| JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                       |
-| Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                         |
-| JPEG XR             | WASM decoder                                    | **Dropped**                                                                                             |
-| CSV                 | papaparse                                       | Not adopted; not a dependency. CSV parsing is hand-written; `metrics_summary.csv` is not read           |
-| Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice              |
-| State sharing       | URL hash                                        | As planned                                                                                              |
-| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache             |
-| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry)                                     |
+| Concern             | Planned                                         | Outcome                                                                                                                        |
+| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Build               | Vite + strict TypeScript                        | As planned; vendor chunk groups added                                                                                          |
+| UI and state        | React + Zustand                                 | React state in domain bundles; Zustand for the viewer store only                                                               |
+| Rendering           | deck.gl 9 (orthographic) + Canvas2D underlay    | As planned; GPU-resident overview and instanced Visium HD bins (November 2026)                                                 |
+| Parquet             | DuckDB-WASM (`spatial`) + hyparquet             | As planned; non-threaded bundles; `httpfs` loaded at bootstrap; hyparquet also reads SpatialData shapes and serves Browse File |
+| Zarr                | zarrita + `@zarrita/storage`                    | Matrix, analysis, transcript LOD, H5AD references, AnnData Zarr, OME-Zarr images, SpatialData stores, Browse Store             |
+| HDF5                | h5wasm, jsfive fallback                         | h5wasm in workers (by range for Visium HD and Xenium H5, whole files otherwise); jsfive deferred                               |
+| OME-TIFF            | geotiff.js (IFD/SubIFD + Range)                 | As planned; `.zchunkstore` sidecar; geotiff.js decoders for non-JPEG-2000 codecs                                               |
+| JPEG-2000           | OpenJPEG-WASM (`@cornerstonejs/codec-openjpeg`) | In decode workers                                                                                                              |
+| Multi-channel blend | Viv `XRLayer`                                   | **Superseded** by Canvas2D additive compositing                                                                                |
+| JPEG XR             | WASM decoder                                    | **Dropped**                                                                                                                    |
+| CSV                 | papaparse                                       | Not adopted; not a dependency. CSV parsing is hand-written; `metrics_summary.csv` is not read                                  |
+| Workers             | Decode pool                                     | TIFF decode pool (≤ 4), Zarr decode pool (≤ 3), DuckDB, Visium HD matrix and Feature Slice                                     |
+| State sharing       | URL hash                                        | As planned                                                                                                                     |
+| Tests               | Vitest + Playwright, golden fixtures            | Vitest + Playwright; fixtures generated in tests; `fake-indexeddb` for the byte-range cache                                    |
+| Persistent cache    | OPFS or IndexedDB                               | IndexedDB byte-range LRU (256 MiB, 20,000 entries, 8 MiB per entry)                                                            |
 
 ## Risks And Mitigations
 

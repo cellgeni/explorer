@@ -98,8 +98,8 @@ matrices.
 ## 5.3 AnnData H5AD
 
 - `/obs`: cell IDs and observations. Categorical and string columns are
-  annotation tracks. Numeric columns are parsed as continuous tracks and shown
-  as Cell Info values (not yet as colour tracks; see Phase 7). Category sidecars
+  annotation tracks. Numeric columns are parsed as continuous tracks, shown
+  as Cell Info values and offered as `Metadata` colour tracks. Category sidecars
   such as `/obs/__categories/leiden` are supported. Boolean columns load as 0/1
   on every backend.
 - `/var`: gene names.
@@ -107,7 +107,10 @@ matrices.
 - `/obsm`: coordinates. The first present key of `X_spatial`, `spatial`,
   `X_umap`, `umap`, `X_tsne`, `X_tSNE`, `tsne`, `X_pca` is used, as
   micrometres. Fail with a schema error if none is usable or a value is not
-  finite. Every valid numeric 2D `obsm` matrix is offered as an embedding.
+  finite. Valid numeric 2D `obsm` matrices named as embeddings (`X_<name>`,
+  or a bare `spatial`, `umap`, `tsne` or `pca`) are offered as embeddings.
+  A manifest or collection can declare the coordinates `image-pixels` of an
+  attached image instead of micrometres (Phases 11 and 20).
 - Duplicate or missing obs/var names are normalized deterministically.
 - **Size gate.** Files up to 300 MiB (314,572,800 bytes) are downloaded whole
   and opened with h5wasm. Larger files need a sibling `DATASET.h5ad.json`
@@ -116,6 +119,11 @@ matrices.
   and indices stay lazy. `scripts/make_h5ad_reference.py` writes either. The
   H5AD URL's query string is carried to the reference URL, so presigned URLs
   need a matching presigned reference.
+- **AnnData Zarr stores** (2026-11-14): a Zarr v2 or v3 store whose root has
+  `encoding-type: anndata` is read through zarrita, from consolidated
+  metadata when present, else by walking `X`, `obs`, `var`, `obsm` and
+  `uns/spatial`. A dense `/X` whose chunks holding one cell decode to over
+  256 MiB gives no cell profiles or ROI gene stats.
 - Planned, not done: `/layers/*` and `/raw/X` as selectable expression sources.
 
 ## 5.4 Image-Only Sources (Phase 8)
@@ -140,7 +148,9 @@ matrices.
 ## 5.5 OME-Zarr Images (Phase 9)
 
 - Zarr v2 or v3; `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`.
-  `x` and `y` axes are required; only `t = 0` and `z = 0` are shown.
+  `x` and `y` axes are required. Z planes are chosen with the `Z plane`
+  control, starting at `omero.rdefs.defaultZ` or the middle plane; one `t` is
+  shown, `defaultT` or 0. A bioformats2raw store opens its first series.
 - µm/px is the product of multiscale and dataset `scale` values for `x`, with
   unit conversion; a missing scale gives 1 µm/px.
 - `omero.channels` gives names, colours, and windows. Three channels with no
@@ -187,10 +197,26 @@ matrices.
   files left out keep their standard names. H5AD, SpatialData, and image
   manifests must name their one source file.
 - `options`: Visium HD `binSize`; SpatialData `table`, `coordinateSystem`,
-  `image`, `micrometersPerUnit`.
-- `defaults`: genes, cell colour, gene scale and score, boundary toggles, image
-  channels, three opacities, and the transcript overlay. A shared link's own
-  fields take precedence.
+  `image`, `micrometersPerUnit`; H5AD `coordinates` and `labelColumn`.
+- H5AD manifests may also name an `image` and a `labels` mask, and
+  `files.h5ad` may be an AnnData Zarr store or an Icechunk repository.
+- `defaults`: genes, cell colour, gene scale, range and score, boundary
+  toggles, image channels, three opacities, cell point size, and the
+  transcript overlay. A shared link's own fields take precedence.
 - Validation is strict: unknown fields and wrong types are errors. A probed
   file that is missing, not JSON, or has neither `platform` nor `version` means
   no manifest.
+
+## 5.8 Dataset Collection (Phase 20)
+
+- A JSON file opened with `collection=<url>`. Full reference:
+  [`docs/dataset-collections.md`](../dataset-collections.md); schema:
+  [`public/schemas/explorer-collection.v1.json`](../../public/schemas/explorer-collection.v1.json).
+- Each entry is anything `dataset=` opens (a folder, file, store or
+  manifest), with an optional `name` and `group`. An AnnData entry may add
+  `image`, `labels`, `coordinates` and `labelColumn`, as an H5AD manifest
+  does.
+- Optional `defaults` use the manifest's cross-dataset keys (genes, cell
+  colour, gene scale, range and score, cell point size) and apply to the first
+  dataset opened.
+- Validation is strict, with the manifest's field checks.
