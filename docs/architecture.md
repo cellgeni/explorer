@@ -363,6 +363,14 @@ All screen↔data conversions go through `coords.ts`.
   The advice depends on whether the address is on this computer, on the local
   network, or elsewhere. See
   [Serve data from your computer](./host-your-own-data.md#serve-data-from-your-computer).
+- **DuckDB extensions.** DuckDB-WASM downloads its extensions from
+  `extensions.duckdb.org` (`src/data/duckdb.ts`): `httpfs` and `parquet` when
+  a client starts, and `spatial` on the first lasso. They are not in
+  `package-lock.json`; the URL carries DuckDB's version, and unsigned
+  extensions are refused. A `parquet` or `spatial` load that fails throws
+  `DuckDbExtensionLoadError` ("DuckDB extension did not load"), and the next
+  lasso loads `spatial` again. Without `httpfs`, reads go through DuckDB-WASM's
+  own HTTP file system, which is slower, and a console warning says so.
 
 See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 

@@ -281,12 +281,6 @@ Correctness and robustness:
       (`ateraDataset.ts`). Catching only zarrita's `NotFoundError`, as
       `ateraDataset.ts` already does for feature types, would keep transient
       failures visible.
-- [ ] DuckDB extension failures are dropped: `createDuckDbClient` calls
-      `configureDuckDb(conn)` without `onHttpfsLoadError` or
-      `onSpatialLoadError` (`duckdb.ts`). If `LOAD spatial` fails, nothing
-      says so, and the polygon ROI, the one spatial query (`gexSelection.ts`),
-      fails later with a catalog error. The extensions are fetched from
-      DuckDB's extension repository at run time, outside the lockfile.
 - [ ] When a Zarr decode worker fails, its chunks decode on the main thread
       with no notice (`workerZarrCodecs.ts`).
 
