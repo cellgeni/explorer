@@ -1,7 +1,9 @@
 import { transferablesOf } from '../workers/h5FileTransfer'
 import { unpackGexResult } from '../workers/h5MatrixCellsPayload'
+import type { SharedLoad } from '../utils/sharedLoad'
 import type { GexResult } from './gexTypes'
 import type {
+  H5FileFeatureSliceTarget,
   H5FileSource,
   H5FileWorkerRequest,
   H5FileWorkerResponse,
@@ -38,6 +40,14 @@ export interface H5WorkerFile {
   // Rows of a 10x feature-barcode matrix (`/matrix`) by barcode.
   matrixCells<ElementId extends string>(
     elementIds: readonly ElementId[],
+    signal?: AbortSignal,
+  ): Promise<GexResult<ElementId>>
+  // Selected genes of a Visium HD feature_slice.h5 for bins of one size.
+  featureSlice<ElementId extends string>(
+    targets: readonly (H5FileFeatureSliceTarget & { readonly id: ElementId })[],
+    genes: readonly string[],
+    binSizeMicrometers: number,
+    signal?: AbortSignal,
   ): Promise<GexResult<ElementId>>
   close(): void
 }
@@ -60,6 +70,27 @@ export function h5TreeNodeAt(group: H5TreeGroup, path: string): H5TreeNode | und
   }
 
   return current
+}
+
+// Closes `file` and removes it from a cache of files kept open per URL, so the
+// next read opens the file in a new worker. A read that fails partway, such as
+// a range request, can leave h5wasm's module in a bad state.
+export function dropSharedH5WorkerFile(
+  cache: Map<string, SharedLoad<H5WorkerFile>>,
+  url: string,
+  file: H5WorkerFile,
+): void {
+  const entry = cache.get(url)
+
+  if (entry !== undefined) {
+    void entry.promise.then((cached) => {
+      if (cached === file && cache.get(url) === entry) {
+        cache.delete(url)
+      }
+    })
+  }
+
+  file.close()
 }
 
 // Terminates a worker whose file is no longer referenced, for readers such as
@@ -121,14 +152,40 @@ function createH5WorkerFile(
       const response = await connection.request((id) => ({ id, op: 'read', path }), [])
       return response.op === 'read' ? response.value : undefined
     },
-    async matrixCells(elementIds) {
+    async matrixCells(elementIds, signal) {
       const response = await connection.request(
         (id) => ({ id, op: 'matrix-cells', elementIds: [...elementIds] }),
         [],
+        signal,
       )
 
       if (response.op !== 'matrix-cells') {
         throw new Error('The H5 file worker answered a matrix read with another reply.')
+      }
+
+      return unpackGexResult(response.cells)
+    },
+    async featureSlice(targets, genes, binSizeMicrometers, signal) {
+      const response = await connection.request(
+        (id) => ({
+          id,
+          op: 'feature-slice',
+          targets: targets.map((target) => ({
+            id: target.id,
+            row: target.row,
+            col: target.col,
+          })),
+          genes: [...genes],
+          binSizeMicrometers,
+        }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'feature-slice') {
+        throw new Error(
+          'The H5 file worker answered a Feature Slice read with another reply.',
+        )
       }
 
       return unpackGexResult(response.cells)
@@ -143,16 +200,22 @@ function createH5WorkerFile(
   return file
 }
 
+interface QueuedRequest {
+  readonly message: (id: number) => H5FileWorkerRequest
+  readonly transfer: Transferable[]
+  readonly resolve: (response: H5FileWorkerSuccess) => void
+  readonly reject: (error: Error) => void
+}
+
 // Holds no reference to the file object, so the registry above can collect it.
+// Requests go to the worker one at a time. Its reads block, by range on a
+// remote file, so a request still waiting here can be cancelled, and a viewer
+// that moves on does not leave the reads it no longer wants ahead of its next.
 class H5WorkerConnection {
   private readonly worker: H5WorkerLike
-  private readonly pending = new Map<
-    number,
-    {
-      readonly resolve: (response: H5FileWorkerSuccess) => void
-      readonly reject: (error: Error) => void
-    }
-  >()
+  private readonly waiting: QueuedRequest[] = []
+  // `request` is null once its caller has stopped waiting for the reply.
+  private sent: { readonly id: number; request: QueuedRequest | null } | null = null
   private nextRequestId = 1
   private failure: Error | null = null
 
@@ -160,22 +223,23 @@ class H5WorkerConnection {
     this.worker = worker
     worker.onmessage = (event) => {
       const response = event.data
-      const entry = this.pending.get(response.id)
+      const sent = this.sent
 
-      if (entry === undefined) {
+      if (sent === null || sent.id !== response.id) {
         return
       }
 
-      this.pending.delete(response.id)
+      this.sent = null
 
       if (response.ok) {
-        entry.resolve(response)
-        return
+        sent.request?.resolve(response)
+      } else {
+        const error = new Error(response.error)
+        error.name = response.errorName ?? 'H5FileWorkerError'
+        sent.request?.reject(error)
       }
 
-      const error = new Error(response.error)
-      error.name = response.errorName ?? 'H5FileWorkerError'
-      entry.reject(error)
+      this.sendNext()
     }
     worker.onerror = (event) => {
       this.fail(new Error(event.message || 'The H5 file worker failed.'))
@@ -195,20 +259,27 @@ class H5WorkerConnection {
       return Promise.reject(abortError(signal))
     }
 
-    const id = this.nextRequestId
-    this.nextRequestId += 1
-
     return new Promise<H5FileWorkerSuccess>((resolve, reject) => {
       const handleAbort = () => {
-        if (signal !== undefined && this.pending.delete(id)) {
-          reject(abortError(signal))
+        const index = this.waiting.indexOf(request)
+
+        if (index >= 0) {
+          this.waiting.splice(index, 1)
+        } else if (this.sent?.request === request) {
+          // The worker finishes it; the next request waits for that.
+          this.sent.request = null
+        } else {
+          return
         }
+
+        request.reject(abortError(signal as AbortSignal))
       }
       const cleanup = () => {
         signal?.removeEventListener('abort', handleAbort)
       }
-
-      this.pending.set(id, {
+      const request: QueuedRequest = {
+        message,
+        transfer,
         resolve: (response) => {
           cleanup()
           resolve(response)
@@ -217,16 +288,11 @@ class H5WorkerConnection {
           cleanup()
           reject(error)
         },
-      })
-      signal?.addEventListener('abort', handleAbort, { once: true })
-
-      try {
-        this.worker.postMessage(message(id), transfer)
-      } catch (cause) {
-        this.pending.delete(id)
-        cleanup()
-        reject(cause instanceof Error ? cause : new Error(String(cause)))
       }
+
+      signal?.addEventListener('abort', handleAbort, { once: true })
+      this.waiting.push(request)
+      this.sendNext()
     })
   }
 
@@ -235,14 +301,39 @@ class H5WorkerConnection {
     this.worker.terminate()
   }
 
-  private fail(error: Error): void {
-    this.failure ??= error
-
-    for (const entry of this.pending.values()) {
-      entry.reject(error)
+  private sendNext(): void {
+    if (this.sent !== null || this.failure !== null) {
+      return
     }
 
-    this.pending.clear()
+    const request = this.waiting.shift()
+
+    if (request === undefined) {
+      return
+    }
+
+    const id = this.nextRequestId
+    this.nextRequestId += 1
+    this.sent = { id, request }
+
+    try {
+      this.worker.postMessage(request.message(id), request.transfer)
+    } catch (cause) {
+      this.sent = null
+      request.reject(cause instanceof Error ? cause : new Error(String(cause)))
+      this.sendNext()
+    }
+  }
+
+  private fail(error: Error): void {
+    this.failure ??= error
+    const sent = this.sent?.request ?? null
+    this.sent = null
+    sent?.reject(error)
+
+    for (const request of this.waiting.splice(0)) {
+      request.reject(error)
+    }
   }
 }
 

@@ -8,12 +8,11 @@ import { coalesceCellMajorRanges, emptyCellsFor } from './featureBarcodeMatrixH5
 import { createGeneFeatureIndex } from './geneFeatures'
 import { selectionToSql } from './gexSelection'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
-import { openH5WorkerFileFromUrl, type H5WorkerFile } from './h5WorkerFile'
-import type {
-  FeatureBarcodeMatrixWorkerRequest,
-  FeatureBarcodeMatrixWorkerResponse,
-  FeatureBarcodeMatrixWorkerSuccess,
-} from '../workers/featureBarcodeMatrixMessages'
+import {
+  dropSharedH5WorkerFile,
+  openH5WorkerFileFromUrl,
+  type H5WorkerFile,
+} from './h5WorkerFile'
 import type { CellId } from './cellid'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 import type {
@@ -35,11 +34,7 @@ export type {
 } from './gexSelection'
 export { selectionToSql } from './gexSelection'
 export { createGeneFeatureIndex, isGeneFeature } from './geneFeatures'
-export {
-  gexFromCellMajorSparseArrays,
-  gexFromFeatureBarcodeMatrixH5File,
-  type H5FileLike,
-} from './featureBarcodeMatrixH5'
+export { gexFromCellMajorSparseArrays, type H5FileLike } from './featureBarcodeMatrixH5'
 
 export interface AggregatedGene {
   readonly gene: string
@@ -99,10 +94,8 @@ const CELL_MAJOR_FULL_INDPTR_MAX_LENGTH = 6_000_000
 const CELL_MAJOR_ROI_WARMUP_ROW_COUNT = 128
 const SELECTED_GENE_CELL_MAJOR_CELL_THRESHOLD = 2_000
 const SELECTED_GENE_CELL_MAJOR_GENE_THRESHOLD = 32
-const FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS = 3
-const FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS = 250
-// Each matrix file stays open in its worker for the session, as it did on the
-// main thread.
+// Each matrix file stays open in its worker for the session, read by range,
+// so its barcodes are read once and a chunk read once is not fetched again.
 const h5MatrixCache = new Map<string, SharedLoad<H5WorkerFile>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
@@ -116,22 +109,6 @@ const zarrCellMajorIndptrCache = new WeakMap<
   ZarrArray<DataType, ZipFileStore>,
   CellMajorIndptrCacheEntry
 >()
-let nextFeatureBarcodeMatrixWorkerRequestId = 1
-let featureBarcodeMatrixWorkerQueue: Promise<void> = Promise.resolve()
-
-export interface FeatureBarcodeMatrixWorkerLike {
-  onmessage: ((event: MessageEvent<FeatureBarcodeMatrixWorkerResponse>) => void) | null
-  onerror: ((event: ErrorEvent) => void) | null
-  postMessage(message: FeatureBarcodeMatrixWorkerRequest): void
-  terminate(): void
-}
-
-export type FeatureBarcodeMatrixWorkerFactory = () => FeatureBarcodeMatrixWorkerLike
-
-export interface FeatureBarcodeMatrixLazyRangeReadOptions extends CellFeatureMatrixReadOptions {
-  readonly workerFactory?: FeatureBarcodeMatrixWorkerFactory
-}
-
 export async function warmCellFeatureMatrixZarr(
   url: string,
 ): Promise<CellFeatureMatrixZarrCapability> {
@@ -432,290 +409,30 @@ export async function gexFromFeatureBarcodeMatrixH5<ElementId extends string>(
     }
   }
 
+  const startedAt = Date.now()
   const file = await loadH5Matrix(url, options)
   throwIfAborted(options.signal)
   let result: GexResult<ElementId>
 
   try {
-    result = await file.matrixCells(elementIds)
+    result = await file.matrixCells(elementIds, options.signal)
   } catch (error) {
-    dropH5Matrix(url, file)
+    if (!isAbortError(error)) {
+      dropSharedH5WorkerFile(h5MatrixCache, url, file)
+    }
+
     throw error
   }
 
-  throwIfAborted(options.signal)
+  options.onStageTiming?.(
+    geneExpressionStageTiming(
+      'matrix-cell-major-ranges',
+      'Feature-barcode H5 range read',
+      startedAt,
+      `${elementIds.length.toLocaleString()} elements`,
+    ),
+  )
   return result
-}
-
-// A read that fails partway, such as a range request, can leave h5wasm's
-// module in a bad state, so the next read opens the file in a new worker.
-function dropH5Matrix(url: string, file: H5WorkerFile): void {
-  const entry = h5MatrixCache.get(url)
-
-  if (entry !== undefined) {
-    void entry.promise.then((cached) => {
-      if (cached === file && h5MatrixCache.get(url) === entry) {
-        h5MatrixCache.delete(url)
-      }
-    })
-  }
-
-  file.close()
-}
-
-export async function gexFromFeatureBarcodeMatrixH5LazyRangeWorker<
-  ElementId extends string,
->(
-  url: string,
-  elementIds: readonly ElementId[],
-  options: FeatureBarcodeMatrixLazyRangeReadOptions = {},
-): Promise<GexResult<ElementId>> {
-  return enqueueFeatureBarcodeMatrixWorkerRead(options.signal, () =>
-    gexFromFeatureBarcodeMatrixH5LazyRangeWorkerWithRetries(url, elementIds, options),
-  )
-}
-
-async function gexFromFeatureBarcodeMatrixH5LazyRangeWorkerWithRetries<
-  ElementId extends string,
->(
-  url: string,
-  elementIds: readonly ElementId[],
-  options: FeatureBarcodeMatrixLazyRangeReadOptions,
-): Promise<GexResult<ElementId>> {
-  if (elementIds.length === 0) {
-    return {
-      geneNames: [],
-      cells: emptyCellsFor(elementIds),
-    }
-  }
-
-  let lastError: unknown
-
-  for (
-    let attempt = 1;
-    attempt <= FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS;
-    attempt += 1
-  ) {
-    throwIfAborted(options.signal)
-
-    try {
-      return await gexFromFeatureBarcodeMatrixH5LazyRangeWorkerAttempt(
-        url,
-        elementIds,
-        options,
-      )
-    } catch (error) {
-      lastError = error
-
-      if (
-        !shouldRetryFeatureBarcodeMatrixWorkerError(error) ||
-        attempt >= FEATURE_BARCODE_MATRIX_WORKER_MAX_ATTEMPTS
-      ) {
-        throw error
-      }
-
-      await delay(FEATURE_BARCODE_MATRIX_WORKER_RETRY_DELAY_MS * attempt, options.signal)
-    }
-  }
-
-  throw lastError
-}
-
-async function gexFromFeatureBarcodeMatrixH5LazyRangeWorkerAttempt<
-  ElementId extends string,
->(
-  url: string,
-  elementIds: readonly ElementId[],
-  options: FeatureBarcodeMatrixLazyRangeReadOptions,
-): Promise<GexResult<ElementId>> {
-  const worker = (options.workerFactory ?? createDefaultFeatureBarcodeMatrixWorker)()
-  const requestId = nextFeatureBarcodeMatrixWorkerRequestId
-  nextFeatureBarcodeMatrixWorkerRequestId += 1
-  const startedAt = Date.now()
-  const request: FeatureBarcodeMatrixWorkerRequest = {
-    id: requestId,
-    url,
-    elementIds: [...elementIds],
-  }
-  const signal = options.signal
-
-  if (signal?.aborted === true) {
-    worker.terminate()
-    throw abortError(signal)
-  }
-
-  return new Promise((resolve, reject) => {
-    let settled = false
-
-    const cleanup = () => {
-      if (signal !== undefined) {
-        signal.removeEventListener('abort', handleAbort)
-      }
-
-      worker.terminate()
-    }
-    const settle = (callback: () => void) => {
-      if (settled) {
-        return
-      }
-
-      settled = true
-      cleanup()
-      callback()
-    }
-    const handleAbort = () => {
-      if (signal === undefined) {
-        return
-      }
-
-      settle(() => {
-        reject(abortError(signal))
-      })
-    }
-
-    worker.onmessage = (event) => {
-      const response = event.data
-
-      if (response.id !== requestId) {
-        return
-      }
-
-      if (response.ok) {
-        settle(() => {
-          options.onStageTiming?.(
-            geneExpressionStageTiming(
-              'matrix-cell-major-ranges',
-              'Feature-barcode H5 lazy range read',
-              startedAt,
-              `${elementIds.length.toLocaleString()} elements`,
-            ),
-          )
-          resolve(gexResultFromFeatureBarcodeWorkerResponse(response, elementIds))
-        })
-        return
-      }
-
-      settle(() => {
-        const error = new Error(response.error)
-        error.name = response.errorName ?? 'FeatureBarcodeMatrixLazyRangeWorkerError'
-        reject(error)
-      })
-    }
-    worker.onerror = (event) => {
-      settle(() => {
-        reject(new Error(event.message || 'Feature-barcode H5 worker failed.'))
-      })
-    }
-
-    if (signal !== undefined) {
-      signal.addEventListener('abort', handleAbort, { once: true })
-    }
-
-    try {
-      worker.postMessage(request)
-    } catch (cause) {
-      settle(() => {
-        reject(cause instanceof Error ? cause : new Error(String(cause)))
-      })
-    }
-  })
-}
-
-function gexResultFromFeatureBarcodeWorkerResponse<ElementId extends string>(
-  response: FeatureBarcodeMatrixWorkerSuccess,
-  elementIds: readonly ElementId[],
-): GexResult<ElementId> {
-  const cells = emptyMutableCellsFor(elementIds)
-
-  for (const cell of response.cells) {
-    cells.set(cell.id as ElementId, {
-      geneNames: [...cell.geneNames],
-      counts: [...cell.counts],
-    })
-  }
-
-  return {
-    geneNames: [...response.geneNames],
-    cells,
-  }
-}
-
-function createDefaultFeatureBarcodeMatrixWorker(): FeatureBarcodeMatrixWorkerLike {
-  if (typeof Worker === 'undefined') {
-    throw new Error('Feature-barcode H5 lazy range reads require browser Worker support.')
-  }
-
-  return new Worker(
-    new URL('../workers/featureBarcodeMatrix.worker.ts', import.meta.url),
-    {
-      type: 'module',
-    },
-  )
-}
-
-async function enqueueFeatureBarcodeMatrixWorkerRead<T>(
-  signal: AbortSignal | undefined,
-  task: () => Promise<T>,
-): Promise<T> {
-  const previous = featureBarcodeMatrixWorkerQueue
-  let releaseTurn: () => void = () => {}
-  const turn = new Promise<void>((resolve) => {
-    releaseTurn = resolve
-  })
-
-  featureBarcodeMatrixWorkerQueue = previous.catch(() => undefined).then(() => turn)
-
-  try {
-    await previous.catch(() => undefined)
-    throwIfAborted(signal)
-    return await task()
-  } finally {
-    releaseTurn()
-  }
-}
-
-function shouldRetryFeatureBarcodeMatrixWorkerError(error: unknown): boolean {
-  if (!(error instanceof Error)) {
-    return false
-  }
-
-  if (error.name === 'AbortError') {
-    return false
-  }
-
-  const message = error.message.toLowerCase()
-  const name = error.name.toLowerCase()
-
-  return (
-    name.includes('network') ||
-    message.includes('xmlhttprequest') ||
-    message.includes('failed to load') ||
-    message.includes('err_insufficient_resources')
-  )
-}
-
-function delay(milliseconds: number, signal: AbortSignal | undefined): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted === true) {
-      reject(abortError(signal))
-      return
-    }
-
-    const timeout = setTimeout(() => {
-      cleanup()
-      resolve()
-    }, milliseconds)
-    const handleAbort = () => {
-      clearTimeout(timeout)
-      cleanup()
-      reject(signal === undefined ? new Error('Request aborted.') : abortError(signal))
-    }
-    const cleanup = () => {
-      signal?.removeEventListener('abort', handleAbort)
-    }
-
-    signal?.addEventListener('abort', handleAbort, { once: true })
-  })
 }
 
 export async function gexFromCellFeatureMatrixZarrSelectedGenes(
@@ -1694,6 +1411,10 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
   if (signal?.aborted) {
     throw abortError(signal)
   }
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError'
 }
 
 function abortError(signal: AbortSignal): Error {

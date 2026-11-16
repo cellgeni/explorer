@@ -2,6 +2,12 @@ import {
   featureBarcodeMatrixH5Reader,
   type H5FileLike,
 } from '../data/featureBarcodeMatrixH5'
+import {
+  createVisiumFeatureSliceCache,
+  gexFromVisiumFeatureSliceLoadedH5,
+  type H5FileLike as FeatureSliceH5FileLike,
+  type VisiumFeatureSliceCache,
+} from '../data/visiumFeatureSliceH5'
 import { transferablesOf } from './h5FileTransfer'
 import { gexPayloadTransferables, packGexResult } from './h5MatrixCellsPayload'
 import {
@@ -46,7 +52,14 @@ export interface H5FileHandlerOptions {
   // Synchronous range reads, which only a worker can make. Without them a URL
   // source is fetched whole.
   readonly createRangeRead?: (url: string, label: string) => SyncRangeRead
+  readonly maxKeptMatrixBarcodes?: number
 }
+
+// A matrix reader indexes every barcode in a Map: about 283 MB for the 3.4
+// million of a Visium HD 2 µm matrix. One with more barcodes than this is built
+// again for each request, as the per-request workers before did, rather than
+// kept for the session; the Xenium demo's 1.4 million are kept.
+const MAX_KEPT_MATRIX_BARCODES = 2_000_000
 
 interface OpenH5File {
   readonly h5wasm: H5wasm
@@ -76,6 +89,7 @@ export function createH5FileHandler(
 ): H5FileHandler {
   let open: OpenH5File | null = null
   let matrixReader: MatrixReader | null = null
+  let featureSlice: VisiumFeatureSliceCache | null = null
   // Requests run one at a time, in order, so a read sent right after `open`
   // waits for the file.
   let queue: Promise<void> = Promise.resolve()
@@ -131,11 +145,37 @@ export function createH5FileHandler(
             matrixReader ??
             featureBarcodeMatrixH5Reader(current.file as unknown as H5FileLike)
           throwRangeError(current)
-          matrixReader = reader
+          matrixReader =
+            reader.barcodeCount <=
+            (options.maxKeptMatrixBarcodes ?? MAX_KEPT_MATRIX_BARCODES)
+              ? reader
+              : null
           const cells = packGexResult(reader(request.elementIds))
           throwRangeError(current)
           respond(
             { id: request.id, ok: true, op: 'matrix-cells', cells },
+            gexPayloadTransferables(cells),
+          )
+          return
+        }
+        case 'feature-slice': {
+          const current = expectOpen()
+          // Its metadata and gene index, kept once known to be good.
+          const slice =
+            featureSlice ??
+            createVisiumFeatureSliceCache(
+              current.file as unknown as FeatureSliceH5FileLike,
+            )
+          throwRangeError(current)
+          featureSlice = slice
+          const cells = packGexResult(
+            gexFromVisiumFeatureSliceLoadedH5(slice, request.targets, request.genes, {
+              binSizeMicrometers: request.binSizeMicrometers,
+            }),
+          )
+          throwRangeError(current)
+          respond(
+            { id: request.id, ok: true, op: 'feature-slice', cells },
             gexPayloadTransferables(cells),
           )
           return
@@ -168,6 +208,7 @@ export function createH5FileHandler(
       const current = open
       open = null
       matrixReader = null
+      featureSlice = null
 
       if (current !== null) {
         closeH5File(current)

@@ -3,6 +3,7 @@ import {
   createH5Bytes,
   writeFeatureBarcodeMatrix,
   writeLargeFeatureBarcodeMatrix,
+  writeTinyFeatureSlice,
   type LargeFeatureBarcodeMatrix,
 } from '../test/h5Fixtures'
 import { createH5FileHandler, type H5FileHandlerOptions } from './h5FileCore'
@@ -408,6 +409,66 @@ describe('createH5FileHandler', () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it('builds a matrix reader with too many barcodes to keep for each request', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    const harness = createHarness({ maxKeptMatrixBarcodes: 10 })
+    await harness.send({ op: 'open', source: { kind: 'bytes', bytes }, tree: false })
+
+    for (const row of [3, 30_003]) {
+      const id = matrix.barcodes[row] ?? ''
+      const cells = cellsOf(await harness.send({ op: 'matrix-cells', elementIds: [id] }))
+      expect(cells.get(id)).toEqual(matrix.cell(row))
+    }
+  })
+
+  it('reads Visium HD feature slices, indexing the file once', async () => {
+    const harness = createHarness()
+    await harness.send({
+      op: 'open',
+      source: { kind: 'bytes', bytes: await createH5Bytes(writeTinyFeatureSlice) },
+      tree: false,
+    })
+    const read = async (genes: readonly string[]) => {
+      const reply = await harness.send({
+        op: 'feature-slice',
+        targets: [
+          { id: 'BC-0', row: 0, col: 0 },
+          { id: 'BC-1', row: 1, col: 0 },
+        ],
+        genes,
+        binSizeMicrometers: 16,
+      })
+
+      if (!reply.response.ok || reply.response.op !== 'feature-slice') {
+        throw new Error(
+          `Expected a feature slice, got ${JSON.stringify(reply.response)}.`,
+        )
+      }
+
+      return unpackGexResult<string>(reply.response.cells)
+    }
+
+    const first = await read(['Actb', 'Gad1', 'Missing'])
+    expect(first.geneNames).toEqual(['Actb', 'Gad1', 'Missing'])
+    expect(first.cells.get('BC-1')).toEqual({
+      geneNames: ['Actb', 'Gad1'],
+      counts: [12, 4],
+    })
+
+    const second = await read(['Gad1'])
+    expect(second.cells.get('BC-0')).toEqual({ geneNames: [], counts: [] })
+    expect(second.cells.get('BC-1')).toEqual({ geneNames: ['Gad1'], counts: [4] })
+
+    await expect(
+      harness.send({
+        op: 'feature-slice',
+        targets: [{ id: 'BC-0', row: 0, col: 0 }],
+        genes: ['Actb'],
+        binSizeMicrometers: 3,
+      }),
+    ).resolves.toMatchObject({ response: { ok: false } })
   })
 
   it('reads a URL source by range when it can make range requests', async () => {

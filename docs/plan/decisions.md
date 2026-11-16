@@ -99,7 +99,10 @@ Later additions:
   before; the Xenium fallback's cell rows are read in the worker and come back
   packed in typed arrays. One worker per file, because h5wasm's heap cannot
   shrink: terminating it frees the file. An H5AD's worker ends when its
-  dataset is garbage collected (`FinalizationRegistry`).
+  dataset is garbage collected (`FinalizationRegistry`). Since 2026-11-15 the
+  Visium HD filtered matrices and `feature_slice.h5` are read the same way,
+  each kept open for the session, instead of in a worker per request through
+  Emscripten's `createLazyFile`.
 - **Cells overview worker (2026-11-13).** The Xenium `cells.parquet` overview
   is fetched and decoded in a worker of its own (`cellsOverview.worker.ts`).
   It reads hyparquet's column chunks instead of an object per row, and sends

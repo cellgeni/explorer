@@ -1,9 +1,14 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createH5Bytes, writeFeatureBarcodeMatrix } from '../test/h5Fixtures'
+import {
+  createH5Bytes,
+  writeFeatureBarcodeMatrix,
+  writeTinyFeatureSlice,
+} from '../test/h5Fixtures'
 import { createH5FileHandler, type H5FileHandler } from '../workers/h5FileCore'
 import type {
   H5FileWorkerRequest,
   H5FileWorkerResponse,
+  H5MatrixCellsPayload,
   H5TreeGroup,
 } from '../workers/h5FileMessages'
 import {
@@ -59,6 +64,40 @@ class SilentH5Worker implements H5WorkerLike {
   }
 }
 
+// Answers only when the test replies, like a worker busy with blocking reads.
+class ManualH5Worker implements H5WorkerLike {
+  onmessage: ((event: MessageEvent<H5FileWorkerResponse>) => void) | null = null
+  onerror: ((event: ErrorEvent) => void) | null = null
+  readonly posted: H5FileWorkerRequest[] = []
+
+  postMessage(message: H5FileWorkerRequest): void {
+    this.posted.push(message)
+  }
+
+  reply(response: H5FileWorkerResponse): void {
+    this.onmessage?.(new MessageEvent('message', { data: response }))
+  }
+
+  terminate(): void {}
+}
+
+const noCells: H5MatrixCellsPayload = {
+  geneNames: [],
+  names: [],
+  ids: [],
+  offsets: new Uint32Array([0]),
+  nameIndices: new Uint32Array(),
+  counts: new Float64Array(),
+}
+
+async function openManualFile() {
+  const worker = new ManualH5Worker()
+  const opening = openH5WorkerFile(new Uint8Array(8), { workerFactory: () => worker })
+  worker.reply({ id: 1, ok: true, op: 'open', tree: null })
+
+  return { worker, file: await opening }
+}
+
 async function createSmallFile(): Promise<Uint8Array> {
   return createH5Bytes((file) => {
     file.create_attribute('library_ids', ['lib-1'])
@@ -109,6 +148,71 @@ describe('openH5WorkerFile', () => {
       ['TTGG-1', { geneNames: ['Actb', 'Gad1'], counts: [2, 3] }],
     ])
     file.close()
+  })
+
+  it('reads Visium HD feature slices', async () => {
+    const file = await openH5WorkerFile(await createH5Bytes(writeTinyFeatureSlice), {
+      workerFactory: () => new CloningH5Worker(),
+    })
+
+    const result = await file.featureSlice(
+      [
+        { id: 'BC-0', row: 0, col: 0 },
+        { id: 'BC-1', row: 1, col: 0 },
+      ],
+      ['Actb', 'Gad1'],
+      16,
+    )
+
+    expect(result.geneNames).toEqual(['Actb', 'Gad1'])
+    expect(Array.from(result.cells)).toEqual([
+      ['BC-0', { geneNames: ['Actb'], counts: [5] }],
+      ['BC-1', { geneNames: ['Actb', 'Gad1'], counts: [12, 4] }],
+    ])
+    file.close()
+  })
+
+  it('sends one request at a time, and never sends one cancelled while waiting', async () => {
+    const { worker, file } = await openManualFile()
+    const controller = new AbortController()
+    const first = file.matrixCells(['a'])
+    const cancelled = file.matrixCells(['b'], controller.signal)
+    const last = file.featureSlice([{ id: 'c', row: 0, col: 0 }], ['Actb'], 16)
+
+    expect(worker.posted.map((message) => message.op)).toEqual(['open', 'matrix-cells'])
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+
+    worker.reply({ id: 2, ok: true, op: 'matrix-cells', cells: noCells })
+    await expect(first).resolves.toMatchObject({ geneNames: [] })
+    expect(worker.posted.map((message) => [message.id, message.op])).toEqual([
+      [1, 'open'],
+      [2, 'matrix-cells'],
+      [3, 'feature-slice'],
+    ])
+
+    worker.reply({ id: 3, ok: true, op: 'feature-slice', cells: noCells })
+    await expect(last).resolves.toMatchObject({ geneNames: [] })
+  })
+
+  it('rejects a cancelled request at once, and sends the next once the worker answers it', async () => {
+    const { worker, file } = await openManualFile()
+    const controller = new AbortController()
+    const cancelled = file.matrixCells(['a'], controller.signal)
+    const next = file.matrixCells(['b'])
+
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+    expect(worker.posted).toHaveLength(2)
+
+    worker.reply({ id: 2, ok: true, op: 'matrix-cells', cells: noCells })
+    expect(worker.posted.map((message) => message.op)).toEqual([
+      'open',
+      'matrix-cells',
+      'matrix-cells',
+    ])
+    worker.reply({ id: 3, ok: true, op: 'matrix-cells', cells: noCells })
+    await expect(next).resolves.toMatchObject({ geneNames: [] })
   })
 
   it('opens a URL the worker fetches', async () => {

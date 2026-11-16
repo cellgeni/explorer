@@ -23,6 +23,7 @@ export type H5FileWorkerRequest =
   | H5FileOpenRequest
   | H5FileReadRequest
   | H5FileMatrixCellsRequest
+  | H5FileFeatureSliceRequest
 
 export interface H5FileOpenRequest {
   readonly id: number
@@ -52,10 +53,27 @@ export interface H5FileMatrixCellsRequest {
   readonly elementIds: readonly string[]
 }
 
+// Selected genes of a Visium HD feature_slice.h5 for bins of one size. A
+// target's row and col are in that size's grid.
+export interface H5FileFeatureSliceRequest {
+  readonly id: number
+  readonly op: 'feature-slice'
+  readonly targets: readonly H5FileFeatureSliceTarget[]
+  readonly genes: readonly string[]
+  readonly binSizeMicrometers: number
+}
+
+export interface H5FileFeatureSliceTarget {
+  readonly id: string
+  readonly row: number
+  readonly col: number
+}
+
 export type H5FileWorkerResponse =
   | H5FileOpenResponse
   | H5FileReadResponse
   | H5FileMatrixCellsResponse
+  | H5FileFeatureSliceResponse
   | H5FileWorkerFailure
 
 export interface H5FileOpenResponse {
@@ -76,6 +94,13 @@ export interface H5FileMatrixCellsResponse {
   readonly id: number
   readonly ok: true
   readonly op: 'matrix-cells'
+  readonly cells: H5MatrixCellsPayload
+}
+
+export interface H5FileFeatureSliceResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'feature-slice'
   readonly cells: H5MatrixCellsPayload
 }
 

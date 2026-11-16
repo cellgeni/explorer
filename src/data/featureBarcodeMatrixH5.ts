@@ -35,28 +35,23 @@ interface H5MatrixCache {
   readonly dataDataset: SliceableNumericDataset
 }
 
-export function gexFromFeatureBarcodeMatrixH5File<ElementId extends string>(
-  file: H5FileLike,
-  elementIds: readonly ElementId[],
-): GexResult<ElementId> {
-  if (elementIds.length === 0) {
-    return {
-      geneNames: [],
-      cells: emptyCellsFor(elementIds),
-    }
-  }
-
-  return gexFromLoadedH5Matrix(createH5MatrixCache(file), elementIds)
+export interface FeatureBarcodeMatrixH5Reader {
+  <ElementId extends string>(elementIds: readonly ElementId[]): GexResult<ElementId>
+  readonly barcodeCount: number
 }
 
 // Reads rows of one open matrix file, reading its barcodes and features once.
 // The H5 file worker keeps one per file.
 export function featureBarcodeMatrixH5Reader(
   file: H5FileLike,
-): <ElementId extends string>(elementIds: readonly ElementId[]) => GexResult<ElementId> {
+): FeatureBarcodeMatrixH5Reader {
   const matrix = createH5MatrixCache(file)
 
-  return (elementIds) => gexFromLoadedH5Matrix(matrix, elementIds)
+  return Object.assign(
+    <ElementId extends string>(elementIds: readonly ElementId[]) =>
+      gexFromLoadedH5Matrix(matrix, elementIds),
+    { barcodeCount: matrix.barcodeRows.size },
+  )
 }
 
 function gexFromLoadedH5Matrix<ElementId extends string>(

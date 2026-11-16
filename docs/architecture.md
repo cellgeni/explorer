@@ -362,29 +362,31 @@ their cards stayed on "Loading".
 
 ## Workers
 
-| Worker                           | Created by                       | Purpose                                                                                        |
-| -------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`           | `TileDecodeWorkerPool` (≤ 4)     | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                           |
-| DuckDB-WASM worker               | `src/data/duckdb.ts`             | One per DuckDB client                                                                          |
-| `featureBarcodeMatrix.worker.ts` | `src/data/gex.ts`                | Visium HD filtered matrix reads (per request)                                                  |
-| `visiumFeatureSlice.worker.ts`   | `src/data/visiumFeatureSlice.ts` | Visium HD Feature Slice reads (per request)                                                    |
-| `zarrDecode.worker.ts`           | `ZarrDecodePool` (≤ 3)           | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
-| `h5File.worker.ts`               | `src/data/h5WorkerFile.ts`       | One HDF5 file each: H5AD and the standard Visium matrix whole, the Xenium H5 fallback by range |
-| `cellsOverview.worker.ts`        | `readCellsOverviewInWorker`      | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
-| `spatialDataShapes.worker.ts`    | `readSpatialDataShapesInWorker`  | SpatialData `shapes.parquet` files: decode them into transferred shape columns (one per read)  |
+| Worker                        | Created by                      | Purpose                                                                                        |
+| ----------------------------- | ------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `tileDecode.worker.ts`        | `TileDecodeWorkerPool` (≤ 4)    | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                           |
+| DuckDB-WASM worker            | `src/data/duckdb.ts`            | One per DuckDB client                                                                          |
+| `zarrDecode.worker.ts`        | `ZarrDecodePool` (≤ 3)          | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads |
+| `h5File.worker.ts`            | `src/data/h5WorkerFile.ts`      | One HDF5 file each: H5AD and the standard Visium matrix whole; Xenium and Visium HD by range   |
+| `cellsOverview.worker.ts`     | `readCellsOverviewInWorker`     | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)               |
+| `spatialDataShapes.worker.ts` | `readSpatialDataShapesInWorker` | SpatialData `shapes.parquet` files: decode them into transferred shape columns (one per read)  |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
 Visium), writes them into its own h5wasm file system, and answers reads by
-path. The Xenium H5 fallback it reads itself: the file sits in h5wasm's file
-system as a range-read file (`h5RangeFile.ts`) whose blocks come from
-synchronous range requests with read-ahead (`rangeBlockCache.ts`), so HDF5
-fetches only what it reads, and its cell rows are read inside the worker. A
-host that ignores Range, or hides the file's size, sends the file whole. An H5AD file's worker stays open for reads after
-load (embeddings, tissue images) and ends when the dataset is garbage
-collected; the Xenium matrix's stays open for the session, as the file did on
-the main thread; the standard Visium matrix's ends once it is read. Where
-there is no `Worker` (Vitest's jsdom), the same handler runs on the main
-thread.
+path. The Xenium H5 fallback, the Visium HD filtered matrices and
+`feature_slice.h5` it reads itself: the file sits in h5wasm's file system as a
+range-read file (`h5RangeFile.ts`) whose blocks come from synchronous range
+requests with read-ahead (`rangeBlockCache.ts`), so HDF5 fetches only what it
+reads, and matrix rows and Feature Slice genes are read inside the worker. A
+host that ignores Range, or hides the file's size, sends the file whole. An
+H5AD file's worker stays open for reads after load (embeddings, tissue images)
+and ends when the dataset is garbage collected; a range-read file's stays open
+for the session, keeping its barcode index (up to 2 million barcodes) and up to
+128 MiB of blocks; the standard Visium matrix's ends once it is read. Requests
+go to a worker one at a time, so a request still waiting is dropped when it is
+cancelled, and after a failed read the next one opens the file in a new
+worker. Where there is no `Worker` (Vitest's jsdom), the same handler runs on
+the main thread.
 
 A cells overview worker fetches `cells.parquet` and decodes the overview
 columns from hyparquet's column chunks, without an object per row. The columns

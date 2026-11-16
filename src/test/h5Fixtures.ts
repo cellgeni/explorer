@@ -129,3 +129,41 @@ export function writeLargeFeatureBarcodeMatrix(
     },
   }
 }
+
+// A Visium HD feature_slice.h5 at a 2 µm pitch: Actb, Gad1 and a control
+// probe, each a COO slice of 2 µm rows, columns and counts.
+export function writeTinyFeatureSlice(file: H5wasmFile): void {
+  file.create_attribute(
+    'metadata_json',
+    JSON.stringify({
+      nrows: 32,
+      ncols: 32,
+      spot_pitch: 2,
+    }),
+  )
+  const features = file.create_group('features')
+  features.create_dataset({
+    name: 'name',
+    data: ['Actb', 'Gad1', 'NegControlProbe_001'],
+  })
+  features.create_dataset({
+    name: 'feature_type',
+    data: ['Gene Expression', 'Gene Expression', 'Gene Expression'],
+  })
+
+  const featureSlices = file.create_group('feature_slices')
+  const actb = featureSlices.create_group('0')
+  actb.create_dataset({ name: 'row', data: new Int32Array([0, 7, 8, 9, 16]) })
+  actb.create_dataset({ name: 'col', data: new Int32Array([0, 0, 0, 1, 0]) })
+  actb.create_dataset({ name: 'data', data: new Int32Array([2, 3, 5, 7, 11]) })
+
+  const gad1 = featureSlices.create_group('1')
+  gad1.create_dataset({ name: 'row', data: new Int32Array([8]) })
+  gad1.create_dataset({ name: 'col', data: new Int32Array([0]) })
+  gad1.create_dataset({ name: 'data', data: new Int32Array([4]) })
+
+  const negative = featureSlices.create_group('2')
+  negative.create_dataset({ name: 'row', data: new Int32Array([0]) })
+  negative.create_dataset({ name: 'col', data: new Int32Array([0]) })
+  negative.create_dataset({ name: 'data', data: new Int32Array([99]) })
+}

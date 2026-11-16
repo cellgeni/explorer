@@ -7,7 +7,7 @@ The original brief's Phase 6 covered both standard Visium and Visium HD.
 | `VisiumHDDataset` implementing `SpatialDataset`                    | Done (`VisiumHdDataset`)                                    |
 | `VisiumDataset` (spots, `tissue_positions.csv`, `circle` geometry) | Done in [Phase 14](14-standard-visium.md)                   |
 | `scalefactors_json.json` + tissue PNGs → `image()` as `flat`       | Done for Visium HD                                          |
-| `filtered_feature_bc_matrix.h5` → `matrix()` via h5wasm            | Done, through a lazy-range worker                           |
+| `filtered_feature_bc_matrix.h5` → `matrix()` via h5wasm            | Done, read by range in an H5 file worker                    |
 | `analysis/` → `annotations()`                                      | Embeddings only; Visium HD cluster annotations not recorded |
 | `capabilities.transcripts = false`, `pyramidImage = false`         | Done                                                        |
 | Spot/square render layer                                           | Done as an affine grid layer                                |
