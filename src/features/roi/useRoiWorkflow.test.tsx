@@ -627,10 +627,11 @@ describe('useRoiWorkflow', () => {
       api.handleRoiComplete(selection)
     })
 
-    // The preview and the reference keep the H5 fallback.
+    // The preview and the reference fall back to the H5 even from a host
+    // that ignores Range.
     expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
     for (const [, , options] of loadRoiGeneStats.mock.calls) {
-      expect(options?.allowH5Fallback).toBeUndefined()
+      expect(options?.h5Fallback).toBeUndefined()
       expect(options?.onFallback).toEqual(expect.any(Function))
     }
   })
@@ -749,7 +750,7 @@ describe('useRoiWorkflow', () => {
     }
   })
 
-  it('reads the warm-up sample and reference from the Zarr matrix only', async () => {
+  it('lets the warm-up sample and reference fall back to H5 range reads only', async () => {
     vi.useFakeTimers()
     const loadRoiCells = roiCellsLoader()
     const loadRoiGeneStats = roiGeneStatsLoader()
@@ -771,19 +772,19 @@ describe('useRoiWorkflow', () => {
         await vi.advanceTimersByTimeAsync(ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS)
       })
 
-      // cell_feature_matrix.h5 is read whole, so the warm-up never asks for it.
+      // A host that ignores Range would send the whole cell_feature_matrix.h5.
       expect(loadRoiGeneStats).toHaveBeenCalledTimes(2)
       expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
         1,
         'https://example.test/output',
         warmupCells,
-        expect.objectContaining({ allowH5Fallback: false }),
+        expect.objectContaining({ h5Fallback: 'range-read' }),
       )
       expect(loadRoiGeneStats).toHaveBeenNthCalledWith(
         2,
         'https://example.test/output',
         referenceCells,
-        expect.objectContaining({ allowH5Fallback: false }),
+        expect.objectContaining({ h5Fallback: 'range-read' }),
       )
       view.unmount()
     } finally {
@@ -791,12 +792,13 @@ describe('useRoiWorkflow', () => {
     }
   })
 
-  it('skips the matrix sample and reference when only the H5 matrix can serve cells', async () => {
+  it('skips the matrix sample and reference when the H5 matrix cannot be range-read', async () => {
     vi.useFakeTimers()
     const loadRoiCells = roiCellsLoader()
     const loadRoiGeneStats = vi.fn<RoiGeneStatsLoader>(async () => {
       throw new RoiGeneStatsH5FallbackSkippedError(
         new Error('cell_feature_matrix.zarr.zip does not expose cell-major csc/indptr'),
+        new Error('cell_feature_matrix.h5 cannot be range-read.'),
       )
     })
     const referenceCells: readonly DatasetCell[] = [

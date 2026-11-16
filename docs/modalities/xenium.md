@@ -259,10 +259,11 @@ or exact points.
   unsupported.
 - Warm-up (`useRoiWorkflow`): after load, reads up to 5,000 cells in the view
   and a 32-cell gene sample, then the enriched-genes reference sample, so the
-  first ROI is quicker. It reads genes only from CSC Zarr
-  (`allowH5Fallback: false`), so without CSC arrays the first ROI opens the
-  H5 fallback. That reads by range: about 14 MB for the first cells of the
-  433 MB demo file, then 9–10 requests per ROI.
+  first ROI is quicker. Without CSC arrays it reads both from the H5
+  fallback by range (`h5Fallback: 'range-read'`): on the demo, 35 requests
+  and 37 MB of the 433 MB file, after which the first ROI's genes took 0.8 s
+  instead of 4.9 s. A host that ignores Range would send the whole file, so
+  there the warm-up stops at the Zarr matrix and the first ROI reads the H5.
 - Exports: cells CSV (from memory), GeoJSON, and transcripts CSV (DuckDB on
   `transcripts.parquet`, up to 100,000 rows, QV ≥ 20).
 

@@ -22,7 +22,11 @@ import {
   loadMorphologyImage,
 } from '../../data/morphologyImage'
 import { loadDatasetRoiCells } from '../../data/roiCells'
-import { loadDatasetRoiGeneStats, type RoiGeneStats } from '../../data/roiGeneStats'
+import {
+  loadDatasetRoiGeneStats,
+  type RoiGeneStats,
+  type RoiGeneStatsH5Fallback,
+} from '../../data/roiGeneStats'
 import { loadDatasetRoiTranscripts } from '../../data/roiTranscripts'
 import {
   loadDatasetCellTranscriptDistribution,
@@ -139,7 +143,7 @@ export type RoiGeneStatsLoader = (
     readonly cellLimit?: number
     readonly geneLimit?: number
     readonly sampleStrategy?: 'stratified' | 'head'
-    readonly allowH5Fallback?: boolean
+    readonly h5Fallback?: RoiGeneStatsH5Fallback
     readonly onFallback?: FallbackNotifier
   },
 ) => Promise<RoiGeneStats>

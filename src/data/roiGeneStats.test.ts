@@ -266,7 +266,47 @@ describe('ROI gene stats', () => {
     )
   })
 
-  it('stops at the Zarr matrix when the H5 fallback is not allowed', async () => {
+  it('range-reads the H5 matrix after a Range probe of it', async () => {
+    const cellId = intToCellId(1, 1)
+    const cells: readonly DatasetCell[] = [
+      { id: cellId, position: { x: micrometers(1), y: micrometers(2) } },
+    ]
+    const dataset = {
+      matrix: vi.fn(async (): Promise<GexResult> => {
+        throw new Error('cell_features/csc/indptr not found')
+      }),
+    }
+    const validateRangeSupport = vi.fn(async () => undefined)
+    const readH5Matrix = vi.fn(
+      async (): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map([[cellId, { geneNames: ['Actb'], counts: [6] }]]),
+      }),
+    )
+    const onFallback = vi.fn()
+
+    const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
+      getDataset: () => dataset,
+      onFallback,
+      validateRangeSupport,
+      h5Fallback: 'range-read',
+      readH5Matrix,
+    })
+
+    expect(validateRangeSupport).toHaveBeenLastCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.h5',
+      { label: 'cell_feature_matrix.h5' },
+    )
+    expect(readH5Matrix).toHaveBeenCalledTimes(1)
+    expect(stats.genes[0]).toMatchObject({ gene: 'Actb', count: 6 })
+    expect(onFallback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining('switched to cell_feature_matrix.h5'),
+      }),
+    )
+  })
+
+  it('stops at the Zarr matrix when the H5 matrix cannot be range-read', async () => {
     const cellId = intToCellId(1, 1)
     const cells: readonly DatasetCell[] = [
       {
@@ -277,6 +317,9 @@ describe('ROI gene stats', () => {
     ]
     const zarrError = new Error(
       'cell_feature_matrix.zarr.zip does not expose cell-major csc/indptr, csc/indices, and csc/data arrays.',
+    )
+    const rangeError = new Error(
+      'cell_feature_matrix.h5 cannot be range-read. Expected HTTP 206 for Range: bytes=0-0, received HTTP 200.',
     )
     const dataset = {
       matrix: vi.fn(async (): Promise<GexResult> => {
@@ -289,6 +332,11 @@ describe('ROI gene stats', () => {
         throw new Error('transcripts should not be queried')
       }),
     }
+    const validateRangeSupport = vi.fn(async (url: string) => {
+      if (url.endsWith('.h5')) {
+        throw rangeError
+      }
+    })
     const readH5Matrix = vi.fn(async (): Promise<GexResult> => {
       throw new Error('cell_feature_matrix.h5 should not be read')
     })
@@ -297,21 +345,23 @@ describe('ROI gene stats', () => {
     const result = loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
       onFallback,
-      validateRangeSupport: vi.fn(async () => undefined),
-      allowH5Fallback: false,
+      validateRangeSupport,
+      h5Fallback: 'range-read',
       allowTranscriptFallback: true,
       readH5Matrix,
     })
 
     await expect(result).rejects.toBeInstanceOf(RoiGeneStatsH5FallbackSkippedError)
-    await expect(result).rejects.toMatchObject({ cause: zarrError })
+    await expect(result).rejects.toMatchObject({
+      cause: { zarr: zarrError, h5: rangeError },
+    })
     expect(dataset.matrixForCells).toHaveBeenCalledWith(cells)
     expect(readH5Matrix).not.toHaveBeenCalled()
     expect(dataset.transcriptsForCellIds).not.toHaveBeenCalled()
     expect(onFallback).not.toHaveBeenCalled()
   })
 
-  it('reads the Zarr matrix as usual when the H5 fallback is not allowed', async () => {
+  it('reads the Zarr matrix without probing the H5 matrix', async () => {
     const cellId = intToCellId(1, 1)
     const cells: readonly DatasetCell[] = [
       {
@@ -324,6 +374,7 @@ describe('ROI gene stats', () => {
       cells: new Map([[cellId, { geneNames: ['Actb'], counts: [4] }]]),
     }
     const dataset = { matrix: vi.fn(async () => zarrMatrix) }
+    const validateRangeSupport = vi.fn(async () => undefined)
     const readH5Matrix = vi.fn(async (): Promise<GexResult> => {
       throw new Error('cell_feature_matrix.h5 should not be read')
     })
@@ -332,12 +383,17 @@ describe('ROI gene stats', () => {
     const stats = await loadDatasetRoiGeneStats('https://example.test/xenium', cells, {
       getDataset: () => dataset,
       onFallback,
-      validateRangeSupport: vi.fn(async () => undefined),
-      allowH5Fallback: false,
+      validateRangeSupport,
+      h5Fallback: 'range-read',
       readH5Matrix,
     })
 
     expect(stats.genes[0]).toMatchObject({ gene: 'Actb', count: 4, detectedCells: 1 })
+    expect(validateRangeSupport).toHaveBeenCalledTimes(1)
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_feature_matrix.zarr.zip',
+      expect.anything(),
+    )
     expect(readH5Matrix).not.toHaveBeenCalled()
     expect(onFallback).not.toHaveBeenCalled()
   })
