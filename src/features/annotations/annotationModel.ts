@@ -4,6 +4,7 @@ import {
 } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
+import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
 
 export type AnnotationState<ErrorType = unknown> =
@@ -134,7 +135,7 @@ export function annotationsToCsv(annotations: readonly Annotation[]): string {
     ),
   ]
 
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+  return formatCsv(rows)
 }
 
 export function filterAnnotationsByVisibleSets(
@@ -319,14 +320,6 @@ export function removeHiddenAnnotationIdsByPrefix(
 
 export function customAnnotationFilePrefix(fileName: string): string {
   return `custom:${slug(fileName)}:`
-}
-
-function csvEscape(value: string): string {
-  if (/[",\n\r]/.test(value)) {
-    return `"${value.replaceAll('"', '""')}"`
-  }
-
-  return value
 }
 
 function annotationSizeGrouping(annotation: Annotation): {

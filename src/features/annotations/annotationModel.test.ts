@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { asCellId } from '../../data/cellid'
+import { asAnyCellId, asCellId } from '../../data/cellid'
+import { parseCustomAnnotations } from '../../data/customAnnotations'
 import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
@@ -164,6 +165,35 @@ describe('annotationModel', () => {
         'custom:labels:quoted,"Layer ""A"", region",cccccccc-3',
       ].join('\n'),
     )
+  })
+
+  it('exports labels and IDs a spreadsheet would run as formulas as text, and imports them back', () => {
+    const exported = [
+      {
+        id: 'custom:labels:formula',
+        label: '=HYPERLINK("https://example.org","x")',
+        cellIds: [asAnyCellId('+1+cell'), asAnyCellId('-12')],
+      },
+      { id: 'custom:labels:dash', label: '-', cellIds: [asAnyCellId('@cell')] },
+      { id: 'custom:labels:quote', label: "'=quoted", cellIds: [asAnyCellId('cell-4')] },
+    ]
+    const csv = annotationsToCsv(exported)
+
+    expect(csv).toBe(
+      [
+        'annotation_id,label,cell_id',
+        `custom:labels:formula,"'=HYPERLINK(""https://example.org"",""x"")",'+1+cell`,
+        `custom:labels:formula,"'=HYPERLINK(""https://example.org"",""x"")",-12`,
+        `custom:labels:dash,'-,'@cell`,
+        `custom:labels:quote,''=quoted,cell-4`,
+      ].join('\n'),
+    )
+    expect(
+      parseCustomAnnotations(csv, 'annotations.csv').map(({ label, cellIds }) => ({
+        label,
+        cellIds,
+      })),
+    ).toEqual(exported.map(({ label, cellIds }) => ({ label, cellIds })))
   })
 
   it('summarizes annotation size plots by analysis grouping', () => {

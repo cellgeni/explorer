@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { asCellId } from '../../data/cellid'
+import { asAnyCellId, asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import {
@@ -243,6 +243,22 @@ describe('roiModel', () => {
       [
         'cell_id,feature_name,x_location,y_location,z_location,qv,overlaps_nucleus,is_gene',
         'aaaaaaaa-1,"Gene, ""A""",1,2,3,40,true,false',
+      ].join('\n'),
+    )
+  })
+
+  it('exports IDs a spreadsheet would run as formulas as text', () => {
+    expect(
+      roiCellsToCsv([
+        {
+          id: asAnyCellId('=HYPERLINK("https://example.org")'),
+          position: { x: micrometers(-12.5), y: micrometers(4) },
+        },
+      ]),
+    ).toBe(
+      [
+        'cell_id,x_centroid,y_centroid,transcript_counts,cell_area',
+        `"'=HYPERLINK(""https://example.org"")",-12.5,4,,`,
       ].join('\n'),
     )
   })

@@ -3,6 +3,7 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import { formatCsv } from '../../utils/csv'
 
 export const VISIUM_HD_ROI_BIN_EXPORT_LIMIT = 50_000
 
@@ -185,7 +186,7 @@ export function visiumHdRoiBinsToCsv(bins: readonly VisiumHdRoiBin[]): string {
     ]),
   ]
 
-  return rows.map((row) => row.map(csvEscape).join(',')).join('\n')
+  return formatCsv(rows)
 }
 
 export function gridCellDatumCenter(cell: GridCellDatum): DataPoint {
@@ -326,8 +327,4 @@ function pointOnSegment(point: DataPoint, start: DataPoint, end: DataPoint): boo
     (end.x - start.x) * (end.x - start.x) + (end.y - start.y) * (end.y - start.y)
 
   return dot <= lengthSquared
-}
-
-function csvEscape(value: string): string {
-  return /[",\n\r]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
 }
