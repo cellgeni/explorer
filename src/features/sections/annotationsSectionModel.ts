@@ -68,6 +68,8 @@ export interface AnnotationSetsModel {
   // Set when some cells are not on the map (Visium spots off the tissue),
   // so label counts leave them out.
   readonly placedCellIds: PlacedCellIds | null
+  // What the counts count, plural: cells, spots or bins.
+  readonly elementNoun: string
   readonly onColorChange: (annotationId: string, color: string) => void
   readonly onSetVisibilityChange: (setId: string, visible: boolean) => void
   // `only`: show only this class (an Alt-click).
@@ -86,6 +88,7 @@ export interface AnnotationSetsModel {
 
 export interface MetadataTracksModel {
   readonly tracks: readonly ContinuousCellMetadataTrack[]
+  readonly elementNoun: string
   readonly onRemove: (trackId: string) => void
 }
 
@@ -112,6 +115,7 @@ export interface AnnotationsSectionModelInput {
   readonly annotationPlacedCellIds: PlacedCellIds | null
   readonly annotationState: AnnotationState
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
+  readonly elementNoun: string
   readonly geometricAnnotationImportError: string | null
   readonly geometricAnnotations: readonly GeometricAnnotationFeature[]
   readonly geometricAnnotationsEnabled: boolean
@@ -165,6 +169,7 @@ export function useAnnotationsSectionModel({
   annotationPlacedCellIds,
   annotationState,
   cellMetadataTracks,
+  elementNoun,
   geometricAnnotationImportError,
   geometricAnnotations,
   geometricAnnotationsEnabled,
@@ -240,6 +245,7 @@ export function useAnnotationsSectionModel({
       hiddenSetIds: hiddenAnnotationSetIds,
       hiddenIds: hiddenAnnotationIds,
       placedCellIds: annotationPlacedCellIds,
+      elementNoun,
       onColorChange: handleAnnotationColorChange,
       onSetVisibilityChange: handleAnnotationSetVisibilityChange,
       onVisibilityChange: handleAnnotationVisibilityChange,
@@ -248,6 +254,7 @@ export function useAnnotationsSectionModel({
     },
     metadataTracks: {
       tracks: cellMetadataTracks,
+      elementNoun,
       onRemove: handleRemoveCellMetadataTrack,
     },
     selections: {

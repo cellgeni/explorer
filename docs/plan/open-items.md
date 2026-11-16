@@ -86,18 +86,6 @@ Found by the [15.5-E](phases/15-interface-redesign.md#155-close-out) re-run (202
       open the canvas is 664 px wide and the card stack 360 px, so no position
       clears the card, the legend and the minimap at once. Under 860 px a
       toast still sits over the card sheet. Found 2026-11-12.
-- [ ] Visium says "cells" in the Clusters set total, the Metadata track counts
-      (which also count every obs row, 4,992 on the Census file, not the 370
-      placed spots) and the gene summary ("positive cells across 370 slide
-      cells"). The Visium adapter already has the noun "spots"
-      (`labels.embeddingElementPlural`); these strings do not use it. They are
-      hard-coded in `AnnotationsSectionBlocks.tsx` (set total, track counts)
-      and `geneControlsModel.ts` (gene summary). Rechecked 2026-11-16.
-- [ ] Links do not carry hidden annotation sets (the set's eye button, a
-      checkbox until 2026-11-15), only hidden classes. Found 2026-11-12.
-- [ ] A link with both `groups=` and `annotationUrl=` can lose the imported
-      labels: loading a set replaces all labels, so an import that finishes
-      first is dropped. Found by reading the code on 2026-11-12.
 - [ ] The Xenium demo blocks the main thread for up to 4 s at a time in the
       first 30 s after load; see the main-thread exceptions above. 15.5-E put
       this on the viewport warm-up ("Preparing cell feature matrix"). CPU
