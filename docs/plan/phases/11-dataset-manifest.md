@@ -66,4 +66,8 @@ no longer breaks loading, and so a dataset can say how it should be shown.
       probed.
 - [ ] Not configurable yet: H5AD coordinate key, annotation set to select,
       channel colours and contrast, initial camera.
-- [ ] No E2E test; the hosted fixtures are folders without manifests.
+- [x] No E2E test; the hosted fixtures are folders without manifests. Found
+      closed on 2026-11-16: the smoke test that opens a gallery example
+      answers its manifest with one naming the tiny H5AD fixture
+      (`tests/e2e/app.spec.ts`), and the nightly run opens every example in
+      `examples/` through its manifest (`tests/e2e/examples.spec.ts`).

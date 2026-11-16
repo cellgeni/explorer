@@ -278,8 +278,9 @@ not passed to the readers, so it does not change the result.
 
 - IndexedDB byte-range cache (`src/data/persistentByteRangeCache.ts`): Parquet
   footers, `cell_feature_matrix.zarr.zip` ranges, and TIFF tiles. Entries are
-  keyed by URL and byte range without an ETag, so replacing a file at the same
-  URL can serve stale bytes until the cache is cleared.
+  keyed by URL, byte range, and the file's size and ETag (or Last-Modified), so
+  a file replaced at the same URL misses the cache; see
+  [Caching](../architecture.md#caching) for hosts that send neither.
 - In-memory: range-probe results, Zarr matrix metadata and `cell_id` index,
   H5 matrices, transcript Zarr metadata, and `XeniumDataset` instances.
 - DuckDB-WASM runs in a worker per client; each `XeniumDataset` creates its own

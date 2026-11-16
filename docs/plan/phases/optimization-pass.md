@@ -199,6 +199,26 @@ An ROI drawn while the warm-up opens the file cancels the warm-up, which
 stops its worker, and opens the file again: its genes took 4.5 s, and the
 warm-up's 1 MB was spent for nothing.
 
+## Bundle Check (2026-11-16)
+
+A `vite build` at `bea26d2`, sizes from `gzip -c` in kB of 1,000 bytes. The
+entry chunk is 764 kB, up from the 427 kB recorded above. `index.html` also
+preloads `spatial-io-vendor`, 5.3 MB, so the start screen fetches 7.1 MB of
+JavaScript (1,783 kB gzip) before any dataset is chosen. 3.7 MB of that
+chunk's source is `h5wasm`, which inlines its WASM. The main thread imports
+`h5wasm` only lazily (`visiumFeatureSlice.ts`), but the `spatial-io-vendor`
+group in `vite.config.ts` puts it with zarrita, geotiff and hyparquet, which
+the entry imports statically. A build with `h5wasm` taken out of that group
+put it in its own lazy chunk and cut the start screen's JavaScript to
+2.3 MB (753 kB gzip). Not yet applied; see [Open Items](../open-items.md).
+
+| Chunk preloaded by `index.html` | Raw      | Gzip     |
+| ------------------------------- | -------- | -------- |
+| `spatial-io-vendor`             | 5,317 kB | 1,244 kB |
+| entry (`index`)                 | 764 kB   | 215 kB   |
+| `deck-vendor`                   | 665 kB   | 189 kB   |
+| `react-vendor`                  | 190 kB   | 59 kB    |
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

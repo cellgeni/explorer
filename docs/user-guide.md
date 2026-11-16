@@ -12,6 +12,7 @@ top bar, which has the same form, recent datasets and examples. A link that
 names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 
 - Xenium output folders containing `experiment.xenium`.
+- Atera output folders containing `experiment.spatial`.
 - Standard Visium (55 µm spots) Space Ranger `outs/` folders.
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Vizgen MERSCOPE region folders containing `cell_by_gene.csv` and
@@ -19,15 +20,21 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   The image comes from the run's `.vzg`: pick the stain and z plane in the
   Image section. Each is a separate download, shown with its size.
 - Direct AnnData `.h5ad` file URLs, including Visium files from scanpy,
-  squidpy, or CELLxGENE.
+  squidpy, or CELLxGENE, and AnnData Zarr stores written by
+  `adata.write_zarr`.
 - SpatialData Zarr store URLs, such as `sample.sdata.zarr`, or a zipped store
   such as `sample.zarr.zip`.
+- Icechunk repository URLs ending in `.icechunk` that hold AnnData,
+  SpatialData, or an OME-Zarr image.
 - Direct OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr image URLs.
   An OME-Zarr written by bioformats2raw (as in the BioImage Archive) opens
   its first image series. An OME-Zarr z-stack opens on the plane its OMERO
   rendering settings name (`defaultZ`), or the middle plane; `#z=N` on the
   image URL opens plane N, as `#c=N` opens channel N.
 - A [dataset manifest](./dataset-manifest.md) URL ending in `.json`.
+- A [dataset collection](./dataset-collections.md) of any of these, opened
+  with `?collection=<url>` in the viewer's address rather than in the form
+  (see [Collections](#collections)).
 
 ### Browsing A Zarr Store
 
@@ -177,7 +184,8 @@ columns) on its preview. Turn it on for up to three sections to see them
 beside the open one, with one view: pan or zoom any of them and all follow.
 The panels show cells only, coloured like the main view; choose `Open` in a
 panel to swap that section into the main view, with its image and tools, at
-the same place. See [Side by Side](./dataset-collections.md#side-by-side).
+the same place. A link from `Share` opens with the same sections beside the
+dataset. See [Side by Side](./dataset-collections.md#side-by-side).
 
 ## Spatial Navigation
 
@@ -416,9 +424,10 @@ Files up to 300 MiB are downloaded whole and opened with the browser HDF5
 reader. Larger hosted H5AD files need a sibling kerchunk reference JSON named
 `DATASET.h5ad.json`, or an Icechunk repository named `DATASET.h5ad.icechunk`;
 [Large H5AD files](./h5ad-reference.md) explains how to generate one. An
-Icechunk repository holding AnnData, SpatialData, or an OME-Zarr image opens
-from its `.icechunk` URL. See [H5AD](./modalities/h5ad.md) for the exact layout the reader
-expects.
+AnnData Zarr store opens from its URL and is read a chunk at a time, so it
+needs no reference. An Icechunk repository holding AnnData, SpatialData, or
+an OME-Zarr image opens from its `.icechunk` URL. See
+[H5AD](./modalities/h5ad.md) for the exact layout the reader expects.
 
 ## SpatialData
 

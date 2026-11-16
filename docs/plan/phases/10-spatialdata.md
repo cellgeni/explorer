@@ -88,8 +88,11 @@ matter on real stores.
       2026-11-13 (see
       [4.5](../decisions.md#45-rendering--decision-two-canvases-decode-off-the-main-thread)).
 - [ ] Labels are drawn only as traced outlines, not as a raster layer.
-- [ ] Only `z = 0` and `t = 0` of images and labels are shown (shared with the
-      OME-Zarr `t`/`z` item in [Open Items](../open-items.md)).
+- [ ] Labels show only their first z plane, and neither images nor labels
+      have a `t` choice (shared with the OME-Zarr `t` item in
+      [Open Items](../open-items.md)). Since 2026-11-14 images open on
+      `omero.rdefs.defaultZ`, else the middle plane (`omeZarrLoader.ts`), as
+      other z-stacks do. Rechecked 2026-11-16.
 - [ ] Polygons keep only the outer ring of their largest part: holes and the
       other parts of a MultiPolygon are dropped. Fine for cells, wrong for
       tissue or region annotations.

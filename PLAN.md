@@ -37,12 +37,12 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Feature-fix pass](docs/plan/phases/feature-fix-pass.md)                                  | Correctness before optimization                          | Ongoing; individual fixes recorded                               |
 | [Optimization pass](docs/plan/phases/optimization-pass.md)                                | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
 | [Phase 5.1](docs/plan/phases/05.1-transcripts.md)                                         | Transcript visualization with LOD                        | Done                                                             |
-| [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; low-res fallback 2026-11-12, diagnostics 2026-11-16    |
+| [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; diagnostics 2026-11-16; hosted optimization open       |
 | [Structural refactor](docs/plan/engineering.md#application-structure-and-refactor-record) | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
 | [Phase 7](docs/plan/phases/07-h5ad.md)                                                    | AnnData H5AD                                             | MVP done; AnnData Zarr stores 2026-11-14; hardening open         |
 | [Phase 8](docs/plan/phases/08-image-only-geojson.md)                                      | Image-only viewer and GeoJSON annotations                | Done (2026-07-09)                                                |
 | [Phase 9](docs/plan/phases/09-ome-zarr.md)                                                | OME-Zarr image pyramids                                  | Done (2026-07-10); z planes and bioformats2raw 2026-11-14        |
-| [Phase 10](docs/plan/phases/10-spatialdata.md)                                            | SpatialData stores                                       | Done (2026-11-06)                                                |
+| [Phase 10](docs/plan/phases/10-spatialdata.md)                                            | SpatialData stores                                       | Done (2026-11-06); table select 2026-11-14                       |
 | [Phase 11](docs/plan/phases/11-dataset-manifest.md)                                       | Dataset manifest (`explorer.json`)                       | Done (2026-11-09)                                                |
 | [Phase 12](docs/plan/phases/12-atera.md)                                                  | 10x Atera output                                         | Done, with selected-gene transcripts (2026-11-09)                |
 | [Phase 13](docs/plan/phases/13-qptiff.md)                                                 | QPTIFF images                                            | Done (2026-11-09)                                                |
@@ -52,8 +52,12 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 17](docs/plan/phases/17-xenium-nucleus-boundaries.md)                              | Xenium nucleus boundaries                                | Done (2026-11-13)                                                |
 | [Phase 18](docs/plan/phases/18-merscope.md)                                               | Vizgen MERSCOPE output                                   | Done: 18-A tables and boundaries, 18-B `.vzg` image (2026-11-14) |
 | [Phase 19](docs/plan/phases/19-ndpi.md)                                                   | NDPI (Hamamatsu) images                                  | Done (2026-11-15)                                                |
-| [Phase 20](docs/plan/phases/20-dataset-collections.md)                                    | Dataset collections: many datasets with previews         | Done (2026-11-14 to 2026-11-16)                                  |
+| [Phase 20](docs/plan/phases/20-dataset-collections.md)                                    | Dataset collections: previews, sections side by side     | Done (2026-11-14 to 2026-11-16)                                  |
 | [Phase 21](docs/plan/phases/21-structure-browser.md)                                      | Browse Store and Browse File (Zarr and Parquet)          | Done (2026-11-15 to 2026-11-16)                                  |
+
+**Done** means a phase's tasks shipped. Most phase files also keep a Known
+Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)
+indexes all of them.
 
 ## Purpose And Scope
 
@@ -70,6 +74,7 @@ request:
 | Platform       | Input                                                          | Planned in                   | Status                          |
 | -------------- | -------------------------------------------------------------- | ---------------------------- | ------------------------------- |
 | Xenium         | XOA output folder                                              | Phases 1–5.1                 | Done                            |
+| Atera          | 10x Atera Onboard Analysis output folder                       | Phase 12                     | Done (2026-11-09)               |
 | Visium HD      | Space Ranger `outs/` folder                                    | Phase 6                      | MVP done; hardening open        |
 | AnnData H5AD   | Direct `.h5ad` file URL, or an AnnData Zarr store              | Phase 7                      | MVP done; hardening open        |
 | Image-only     | Direct OME-TIFF/TIFF/NDPI URL, plus GeoJSON annotations        | Phase 8                      | Done (2026-07-09)               |
@@ -98,8 +103,9 @@ request:
 | AnnData Zarr          | `https://hindlimb.cog.sanger.ac.uk/datasets/20230412_multimodal/integrated/0.0.1/hindlimb-scrnaseq-integrated-anndata.zarr`                      | Zarr v2 without consolidated metadata; 125,955 cells; dense `/X` chunked by gene, so cell profiles are refused                |
 | Collection            | `docs/collections/spcox.json`                                                                                                                    | 18 SPCOX Xenium sections (AnnData Zarr, each with an OME-Zarr image and label mask) and their snRNA-seq atlas; no licence     |
 
-The SpatialData stores are for manual testing; there is no E2E coverage for them
-yet. Two zipped SpatialData stores on the BioImage Archive are also used:
+The nightly examples run loads the SpatialData (shapes) store through its
+gallery manifest. The labels store, and the two zipped stores on the BioImage
+Archive below, are tested by hand, and no smoke test covers SpatialData:
 
 - `https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/898/S-BIAD2898/Files/460-plex/output-XETG00055__0027377__AT6-BRA-3-FO-4-S52-ii__20241031__140902_coarse.zarr.zip`:
   Xenium 460-plex, Zarr v3; 598,222 cells × 460 genes; `cell_boundaries`
