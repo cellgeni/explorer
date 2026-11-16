@@ -5,11 +5,11 @@ import type { LayerSectionId } from './layerPanelModel'
 import { TOOL_ORDER } from './shortcuts'
 
 // The shell's part of a share link (plan 15.2-H, D7):
-// `panel=` lists the open layer sections, `info` (the info drawer) and
-// `embedding`; `tool=` the active tool; `card=` a card to restore; `hidden=`
+// `panel=` lists the open layer sections, `info` (the info drawer),
+// `embedding` and `plots` (plan 22-D8); `tool=` the active tool; `card=` a card to restore; `hidden=`
 // the hidden layers. Each is left out at its default.
 
-export type ShellPanelId = LayerSectionId | 'info' | 'embedding'
+export type ShellPanelId = LayerSectionId | 'info' | 'embedding' | 'plots'
 
 const LAYER_SECTION_IDS: readonly LayerSectionId[] = [
   'image',
@@ -28,12 +28,14 @@ export interface ShellPanelState {
   readonly expanded: readonly LayerSectionId[] | null
   readonly infoOpen: boolean
   readonly embeddingOpen: boolean
+  readonly plotsOpen: boolean
 }
 
 export const DEFAULT_SHELL_PANELS: ShellPanelState = {
   expanded: null,
   infoOpen: false,
   embeddingOpen: false,
+  plotsOpen: false,
 }
 
 // The sections open until the user opens or closes one: Cells, or Image
@@ -113,16 +115,22 @@ export function panelsFromLink(state: ShareableState): ShellPanelState {
     expanded: LAYER_SECTION_IDS.filter((id) => state.panels?.includes(id)),
     infoOpen: state.panels.includes('info'),
     embeddingOpen: state.panels.includes('embedding'),
+    plotsOpen: state.panels.includes('plots'),
   }
 }
 
-// Left out at the default; with the drawer or embedding open, the default
-// sections are written out.
+// Left out at the default; with the drawer, Embedding or Plots open, the
+// default sections are written out.
 export function panelsForLink(
   panels: ShellPanelState,
   defaultExpanded: readonly LayerSectionId[],
 ): readonly ShellPanelId[] | undefined {
-  if (panels.expanded === null && !panels.infoOpen && !panels.embeddingOpen) {
+  if (
+    panels.expanded === null &&
+    !panels.infoOpen &&
+    !panels.embeddingOpen &&
+    !panels.plotsOpen
+  ) {
     return undefined
   }
 
@@ -130,6 +138,7 @@ export function panelsForLink(
     ...(panels.expanded ?? defaultExpanded),
     ...(panels.infoOpen ? (['info'] as const) : []),
     ...(panels.embeddingOpen ? (['embedding'] as const) : []),
+    ...(panels.plotsOpen ? (['plots'] as const) : []),
   ]
 }
 

@@ -1,6 +1,7 @@
 # Phase 22 — Plots Panel
 
-Planned 2026-11-16. Not started. Requested: exploratory plots like those in
+Planned 2026-11-16. M1 (dot plot on loaded data) implemented 2026-11-16; see
+[M1 Progress](#m1-progress). Requested: exploratory plots like those in
 Scanpy, Seurat and CELLxGENE VIP, client side. The scope is a floating Plots
 panel with three plots of the selected genes, grouped by the classes of an
 annotation set, with the active selection as an extra group:
@@ -207,7 +208,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
 
 ## Tasks
 
-- [ ] **A. Whole-dataset gene reader.** (L)
+- [ ] **A. Whole-dataset gene reader.** (L) In memory done (M1); HTTP and
+      Xenium, Atera in M2.
   - Add an optional dataset method, `geneValues(genes, { signal })`. It
     returns the matrix row count and, for each gene, `rows: Uint32Array` and
     `values: Float32Array` of its non-zero cells, with negative values kept.
@@ -226,7 +228,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   - Tests: each backend on the existing fixtures. A property test that values
     match `matrix(ids)` for sampled cells. Negative values kept. The budget
     refuses without a request.
-- [ ] **B. Groups by row.** (M)
+- [ ] **B. Groups by row.** (M) Done in M1 except row-indexed labels, moved
+      to M2; the selection is a row mask, not a sorted list.
   - `groupCodes(set)` returns a code per row and the classes in legend
     order. It uses row-indexed labels where a dataset has them (D6), and maps
     cell IDs to rows in the worker otherwise.
@@ -235,7 +238,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
     two classes of one imported set (counted in both).
   - Tests: Xenium graph clusters by row; H5AD codes; an imported CSV with
     missing and repeated IDs; a selection that overlaps classes.
-- [ ] **C. Plot statistics worker.** (M)
+- [ ] **C. Plot statistics worker.** (M) Counts and means done (M1);
+      quartiles and densities in M3.
   - A pure `plotStats` module and `plotStats.worker.ts`. Per gene and group:
     cells, cells expressing, % expressing, mean, median, quartiles, minimum,
     maximum, and a density on a 128-step grid. Zeros implied from the group
@@ -244,7 +248,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   - Tests, with fast-check: means and quartiles match a dense computation;
     % in 0–100; each density sums to 1; an empty group gives no density, not
     `NaN`.
-- [ ] **D. Plots window and wiring.** (M)
+- [ ] **D. Plots window and wiring.** (M) Done in M1 except `Plot` and
+      `plot=`, which wait for M3.
   - Extract the shared parts of `EmbeddingWindow` (resize grip, Escape,
     focus return, clamping) into a `FloatingWindow`, without changing the
     Embedding window's behaviour. Then build `PlotsWindow` on it.
@@ -257,7 +262,7 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
     `src/test/controlAreas.ts`, `src/test/appTestHarness.ts` and
     `tests/e2e/controls.ts`. Gate on the platform adapter's `cells` and
     `annotations` capabilities.
-- [ ] **E. Dot plot (SVG).** (M) Groups down, genes across, as in Scanpy. Dot
+- [x] **E. Dot plot (SVG).** (M) Groups down, genes across, as in Scanpy. Dot
       area for % expressing, with a size legend (20, 40, 60, 80, 100 %). Dot
       colour for mean, with a colour bar. Long labels are cut short with the
       full text in `<title>`. `Show numbers` table.
@@ -270,7 +275,7 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
       Colours from the tokens and the Gene scale palette, DOM labels, hover
       by hit test, and `Colour` shared or per gene (D8). It goes in the
       no-redraw test with the other overlays.
-- [ ] **H. Export.** (S) `downloadBlob` beside `downloadTextFile` for PNG.
+- [ ] **H. Export.** (S) SVG and CSV done (M1); PNG in M3. `downloadBlob` beside `downloadTextFile` for PNG.
       SVG, PNG and CSV as in D10. Tests check that an exported SVG parses and
       holds a mark per group and gene, and that the CSV matches the plot
       model.
@@ -297,6 +302,67 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   2026-11-16 before the code map. That estimate counted the panel and plots,
   but no read today gives a gene in every cell (task A).
 - Tag a release after M1 and after M3.
+
+## M1 Progress
+
+Implemented 2026-11-16 (branch `claude/plots-panel-m1`). The dot plot works on
+standard Visium, MERSCOPE and `.h5ad` files read whole. Other datasets say
+the panel is not available yet. Checked in the browser on the CELLxGENE
+Census Visium `.h5ad` (GSM6592057), plotting `pathologist_annotation` and a
+box selection.
+
+Built:
+
+- **A, in memory.** `geneValues`, `geneValuesRowIds` and
+  `estimateGeneValuesRead` on `AnnDataH5adDataset`, delegated by
+  `MerscopeDataset` (`src/data/geneValues.ts`). CSR is one scan for all the
+  genes, yielding every million stored values; CSC and dense are read per
+  gene. A matrix read over HTTP gives `{ kind: 'unavailable' }`.
+- **B and C, counts and means.** `PlotStatsStore` (`plotStats.ts`) maps class
+  and selection IDs to rows once per set, then sums each gene's stored values
+  into the groups of their rows. It runs in `plotStats.worker.ts` through
+  `createPlotStatsSession`, or on the main thread without a worker. It keeps
+  up to 128 MiB of gene values, least recently used first out.
+- **D.** `FloatingWindow`, extracted from `EmbeddingWindow` with no change to
+  the Embedding window's behaviour. `PlotsWindow` opens from Cells ›
+  `Show Plots`, sits left of an open Embedding window, and under 860 px
+  closes the other window. The link keeps it as `panel=plots`.
+  `usePlotsWorkflow` reads only genes the worker lacks. `usePlotsModel`
+  holds `Group by`, `Scale`, `Colour` and `Show numbers`.
+- **E.** The dot plot is built as an SVG node tree (`dotPlot.ts`,
+  `svgMarkup.ts`). React renders that tree in the panel, and the same tree
+  is written out for export.
+- **H, SVG and CSV.** `Export SVG` writes colours and the font out from the
+  tokens. `Export CSV` holds both means.
+- **I, in part.** The UI reference, user guide and architecture docs. A
+  `plots` control area. An `App.test.tsx` test (link, numbers, no re-read,
+  a drawn selection). A smoke E2E test that exports the CSV. The axe smoke
+  test covers Plots empty and with a dot plot; the baseline stays `{}`.
+
+Changed from the plan while building:
+
+- **Sets are grouped as the Clusters lists group them**
+  (`annotationSetGrouping`), not by the `${groupId}:` prefix (D2). The lists
+  already give one id per set on every platform, Xenium included, and
+  hidden sets use the same ids. The default is the first set with a class
+  that is not a saved selection, since `Save ROI` puts its class first.
+- **Codes are 16-bit with a map of further classes** for cells that two
+  classes list (D6). Plots cap classes far below 65,535, so `Uint32Array`
+  codes are not needed.
+- **Row-indexed labels are not used yet** (B). Every set's IDs are mapped in
+  the worker, which is fast at the sizes M1 reads. Using Xenium graph
+  clusters and H5AD codes by row moves to M2, with the Xenium reader.
+- **Both sums are kept.** The worker sums the stored values and their log1p
+  together, so changing `Scale` computes nothing.
+- **`Plot` and `plot=` wait for M3.** There is only one plot until then.
+- **`downloadBlob` waits for PNG (M3).** SVG and CSV are text.
+- **Cells › Embedding became Cells › Panels.** It holds `Show Embedding` and
+  `Show Plots` side by side. Visium HD, whose bins have no sets, has no
+  `Show Plots`.
+
+Left for M2 and M3 as planned: the Xenium, Atera and HTTP AnnData readers, and
+the D7 budget (M2); quartiles, densities, the violin, the heatmap and PNG
+export (M3); the nightly live test (I).
 
 ## Testing
 

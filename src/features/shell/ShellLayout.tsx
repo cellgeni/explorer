@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useEffectEvent,
   useRef,
@@ -16,10 +17,13 @@ import type { EmbeddingModel } from '../sections/embeddingModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
+import type { PlotsModel } from '../plots/usePlotsModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { EmbeddingWindow } from './EmbeddingWindow'
+import { EMBEDDING_WINDOW_SIZE, plotsWindowRightOffset } from './floatingWindowModel'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
+import { PlotsWindow } from './PlotsWindow'
 import type { LayerPanelModel, LayerReveal } from './layerPanelModel'
 import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
@@ -41,8 +45,10 @@ interface ShellLayoutProps {
   readonly cards: CardStackModel
   // Null where the platform has no cells (images).
   readonly embedding: EmbeddingModel | null
-  // Open sections, the info drawer and the Embedding panel, which the link
-  // keeps (15.2-H).
+  // Null where the cells have no annotation sets (images, Visium HD).
+  readonly plots?: PlotsModel | null
+  // Open sections, the info drawer and the Embedding and Plots panels, which
+  // the link keeps (15.2-H, 22-D8).
   readonly panels: ShellPanelState
   readonly onPanelsChange: (panels: ShellPanelState) => void
   // The open collection's datasets, under the canvas.
@@ -56,8 +62,8 @@ interface ShellLayoutProps {
 }
 
 // The shell (plan 15.2): the top bar, the canvas with ⓘ's
-// dataset info drawer and the cards over it, the Embedding panel at its top
-// right, the collection bar under it when a collection is open, and the
+// dataset info drawer and the cards over it, the Embedding and Plots panels
+// at its top right, the collection bar under it when a collection is open, and the
 // layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).
 export function ShellLayout({
@@ -72,6 +78,7 @@ export function ShellLayout({
   annotations,
   cards,
   embedding,
+  plots = null,
   panels,
   onPanelsChange,
   collection,
@@ -79,14 +86,31 @@ export function ShellLayout({
   storeStructure,
   children,
 }: ShellLayoutProps) {
-  const { infoOpen, embeddingOpen } = panels
+  const { infoOpen, embeddingOpen, plotsOpen } = panels
+  const narrow = useNarrowScreen()
   const setInfoOpen = (open: boolean) => {
     onPanelsChange({ ...panels, infoOpen: open })
   }
+  // Under 860 px each window is full width, so opening one closes the other
+  // (22-D8).
   const setEmbeddingOpen = (open: boolean) => {
-    onPanelsChange({ ...panels, embeddingOpen: open })
+    onPanelsChange({
+      ...panels,
+      embeddingOpen: open,
+      ...(open && narrow ? { plotsOpen: false } : {}),
+    })
   }
-  const narrow = useNarrowScreen()
+  const setPlotsOpen = (open: boolean) => {
+    onPanelsChange({
+      ...panels,
+      plotsOpen: open,
+      ...(open && narrow ? { embeddingOpen: false } : {}),
+    })
+  }
+  const [embeddingWidth, setEmbeddingWidth] = useState(EMBEDDING_WINDOW_SIZE.width)
+  const handleEmbeddingSizeChange = useCallback((size: { readonly width: number }) => {
+    setEmbeddingWidth(size.width)
+  }, [])
   const canvasRef = useRef<HTMLDivElement>(null)
   useCanvasCornerSizes(canvasRef, narrow)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
@@ -134,6 +158,8 @@ export function ShellLayout({
       }}
       embeddingOpen={embeddingOpen}
       onEmbeddingOpenChange={setEmbeddingOpen}
+      plotsOpen={plotsOpen}
+      onPlotsOpenChange={plots === null ? undefined : setPlotsOpen}
       reveal={layerReveal}
       sheet={
         narrow
@@ -189,6 +215,22 @@ export function ShellLayout({
                 open={embeddingOpen}
                 onClose={() => {
                   setEmbeddingOpen(false)
+                }}
+                onSizeChange={handleEmbeddingSizeChange}
+              />
+            )}
+            {plots === null ? null : (
+              <PlotsWindow
+                plots={plots}
+                fullWidth={narrow}
+                rightOffset={plotsWindowRightOffset(
+                  embedding !== null && embeddingOpen,
+                  embeddingWidth,
+                  narrow,
+                )}
+                open={plotsOpen}
+                onClose={() => {
+                  setPlotsOpen(false)
                 }}
               />
             )}

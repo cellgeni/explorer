@@ -3,8 +3,8 @@ import { CONTROL_AREAS, type ControlArea } from '../../src/test/controlAreas'
 
 // Shows the controls for an area (see src/test/controlAreas.ts) and returns
 // the element that holds them: the start screen or the dataset menu, the info
-// drawer, a layer section, a popover or the Embedding panel, opened unless it
-// already is.
+// drawer, a layer section, a popover, or the Embedding or Plots panel, opened
+// unless it already is.
 export async function openControls(page: Page, area: ControlArea): Promise<Locator> {
   const place = CONTROL_AREAS[area]
 
@@ -40,6 +40,12 @@ export async function openControls(page: Page, area: ControlArea): Promise<Locat
       const show = cells.getByRole('button', { name: 'Show Embedding' })
       if ((await show.count()) > 0) await show.click()
       return page.getByRole('region', { name: 'Embedding' })
+    }
+    case 'plots': {
+      const cells = await openControls(page, 'genes')
+      const show = cells.getByRole('button', { name: 'Show Plots' })
+      if ((await show.count()) > 0) await show.click()
+      return page.getByRole('region', { name: 'Plots' })
     }
     case 'none':
       return page.locator('main')

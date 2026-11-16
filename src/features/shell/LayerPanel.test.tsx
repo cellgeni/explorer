@@ -79,6 +79,7 @@ function panelProps(): LayerPanelProps {
     expanded: null,
     onExpandedChange: vi.fn(),
     embeddingOpen: false,
+    plotsOpen: false,
     onEmbeddingOpenChange: vi.fn(),
   }
 }

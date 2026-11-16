@@ -40,6 +40,7 @@ import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
+import { usePlotsModel } from './features/plots/usePlotsModel'
 import {
   cardForLink,
   cardFromLink,
@@ -306,6 +307,7 @@ const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
+const EMPTY_ANNOTATIONS: readonly Annotation[] = []
 const loadNoBoundaryElements: BoundaryElementsLoader = async () => ({ elements: [] })
 
 export type {
@@ -4168,6 +4170,42 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedKind: setSelectedEmbeddingKind,
   })
 
+  // The Plots panel (plan 22): the selected genes by the classes of a set,
+  // with the active selection as an extra group.
+  const activeSavedSelection = selectionList.active
+  const plotsSelection = useMemo(
+    () =>
+      activeSavedSelection === null || roiCellIds.length === 0
+        ? null
+        : {
+            name: activeSavedSelection.name,
+            color: activeSavedSelection.color,
+            cellIds: roiCellIds,
+            hitCellLimit: roiState.status === 'ready' && roiState.hitCellLimit,
+          },
+    [activeSavedSelection, roiCellIds, roiState],
+  )
+  const plotsAvailable =
+    platformAdapter.capabilities.cells && platformAdapter.capabilities.annotations
+  const plots = usePlotsModel({
+    open: shellPanels.plotsOpen,
+    available: plotsAvailable,
+    datasetUrl: loadedDatasetUrl,
+    datasetReady: loadState.status === 'ready',
+    platformLabel: PLATFORM_NAMES[platformAdapter.kind],
+    getSpatialDataset,
+    annotations:
+      annotationState.status === 'ready'
+        ? annotationState.annotations
+        : EMPTY_ANNOTATIONS,
+    visibleClasses: annotationStyleColors,
+    selection: plotsSelection,
+    selectedGenes,
+    colorScale: geneExpressionColorScale,
+    elementNoun: platformAdapter.labels.embeddingElementPlural,
+    appendDebugEvent,
+  })
+
   // The cards (plan 15.2-D): Selection, Cell, Transcript and
   // Magic Lens.
   const elementPlural = platformAdapter.labels.embeddingElementPlural
@@ -4505,6 +4543,7 @@ export function App({ dependencies }: AppProps = {}) {
         annotations={annotationsSection}
         cards={cards}
         embedding={platformAdapter.capabilities.cells ? embedding : null}
+        plots={plotsAvailable ? plots : null}
         panels={shellPanels}
         onPanelsChange={setShellPanels}
         layerReveal={layerReveal}

@@ -25,6 +25,7 @@ import type {
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { FallbackNotifier } from '../data/fallbackNotice'
+import type { GeneValuesRead, GeneValuesReadEstimate } from '../data/geneValues'
 import type { ImagePyramidOpener } from '../data/imagePyramid'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { readZipDirectory, readZipEntry, type ZipDirectory } from '../data/zipArchive'
@@ -386,6 +387,22 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
 
   async cellIds(): Promise<readonly string[]> {
     return this.table.cellIds()
+  }
+
+  // The Plots panel reads the table, which is held in memory (plan 22-A).
+  async geneValuesRowIds(): Promise<readonly string[]> {
+    return this.table.geneValuesRowIds()
+  }
+
+  async estimateGeneValuesRead(): Promise<GeneValuesReadEstimate> {
+    return this.table.estimateGeneValuesRead()
+  }
+
+  async geneValues(
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly GeneValuesRead[]> {
+    return this.table.geneValues(genes, options)
   }
 
   // ROI cells, with the transcript counts the ROI summary averages.

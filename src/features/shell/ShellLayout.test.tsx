@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   testAnnotationsSectionModel,
@@ -8,12 +8,13 @@ import {
   testDatasetLibraryModel,
   testEmbeddingModel,
   testImageSectionModel,
+  testPlotsModel,
   testTopBarModel,
   testTranscriptsSectionModel,
   testViewSettingsModel,
 } from '../../test/sectionModels'
 import type { CardStackModel } from '../cards/cardModels'
-import { DEFAULT_SHELL_PANELS } from './shellLinkModel'
+import { DEFAULT_SHELL_PANELS, type ShellPanelState } from './shellLinkModel'
 import { ShellLayout } from './ShellLayout'
 import { NARROW_SCREEN_QUERY } from './useNarrowScreen'
 
@@ -376,5 +377,126 @@ describe('ShellLayout', () => {
     fireEvent.click(within(menu).getByRole('button', { name: /Lasso selection/ }))
     expect(topBar.tools.onSelect).toHaveBeenCalledWith('lasso')
     expect(screen.queryByRole('dialog', { name: 'Tools' })).not.toBeInTheDocument()
+  })
+
+  describe('the Plots window (plan 22-D8)', () => {
+    function PanelsHarness({ initial }: { readonly initial: ShellPanelState }) {
+      const [panels, setPanels] = useState(initial)
+      return (
+        <ShellLayout
+          topBar={testTopBarModel()}
+          info={testDatasetInfoModel()}
+          library={testDatasetLibraryModel()}
+          settings={testViewSettingsModel()}
+          layerPanel={{
+            sections: [
+              {
+                id: 'cells',
+                title: 'Cells',
+                visible: true,
+                onVisibleChange: vi.fn(),
+                visibilityDisabled: false,
+                summary: 'graphclust',
+                loading: false,
+              },
+            ],
+          }}
+          image={testImageSectionModel()}
+          cells={testCellsSectionModel()}
+          transcripts={testTranscriptsSectionModel()}
+          annotations={testAnnotationsSectionModel()}
+          cards={NO_CARDS}
+          embedding={testEmbeddingModel()}
+          plots={testPlotsModel()}
+          panels={panels}
+          onPanelsChange={setPanels}
+        >
+          <div>canvas</div>
+        </ShellLayout>
+      )
+    }
+
+    function plotsWindow(): HTMLElement {
+      return screen.getByRole('region', { name: 'Plots' })
+    }
+
+    it('opens from Cells beside an open Embedding window', () => {
+      stubScreenWidth(false)
+      render(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], embeddingOpen: true }}
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show Plots' }))
+
+      expect(plotsWindow()).toBeVisible()
+      expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
+      // To the left of the 360 px Embedding window, with a gap.
+      expect(plotsWindow().style.right).toBe('380px')
+      expect(plotsWindow().style.width).toBe('480px')
+      expect(screen.getByRole('button', { name: 'Hide Plots' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+
+    it('shows one window at a time under 860 px', () => {
+      stubScreenWidth(true)
+      render(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], embeddingOpen: true }}
+        />,
+      )
+      expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
+
+      fireEvent.click(screen.getByRole('button', { name: /^Layers/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Show Plots' }))
+
+      expect(plotsWindow()).toBeVisible()
+      expect(plotsWindow().style.right).toBe('')
+      expect(screen.queryByRole('region', { name: 'Embedding' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Close plots' }))
+      expect(screen.queryByRole('region', { name: 'Plots' })).toBeNull()
+    })
+
+    it('leaves Show Plots out where cells have no annotation sets', () => {
+      stubScreenWidth(false)
+      render(
+        <ShellLayout
+          topBar={testTopBarModel()}
+          info={testDatasetInfoModel()}
+          library={testDatasetLibraryModel()}
+          settings={testViewSettingsModel()}
+          layerPanel={{
+            sections: [
+              {
+                id: 'cells',
+                title: 'Bins',
+                visible: true,
+                onVisibleChange: vi.fn(),
+                visibilityDisabled: false,
+                summary: 'bins',
+                loading: false,
+              },
+            ],
+          }}
+          image={testImageSectionModel()}
+          cells={testCellsSectionModel()}
+          transcripts={testTranscriptsSectionModel()}
+          annotations={testAnnotationsSectionModel()}
+          cards={NO_CARDS}
+          embedding={testEmbeddingModel()}
+          plots={null}
+          panels={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }}
+          onPanelsChange={vi.fn()}
+        >
+          <div>canvas</div>
+        </ShellLayout>,
+      )
+
+      expect(screen.getByRole('button', { name: 'Show Embedding' })).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'Show Plots' })).toBeNull()
+    })
   })
 })

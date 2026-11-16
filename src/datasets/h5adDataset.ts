@@ -22,6 +22,13 @@ import type {
 } from '../data/customAnnotations'
 import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import {
+  geneValuesFromCsc,
+  geneValuesFromCsr,
+  geneValuesFromDense,
+  type GeneValuesRead,
+  type GeneValuesReadEstimate,
+} from '../data/geneValues'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 import type { DatasetImageCoordinates } from './datasetManifest'
@@ -785,6 +792,65 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       genes,
       maxCount,
     }
+  }
+
+  // Each matrix row's cell ID, for the Plots panel's groups (plan 22-B).
+  async geneValuesRowIds(): Promise<readonly string[]> {
+    return (await this.cache()).cellIds
+  }
+
+  // A matrix read into memory at load reads nothing more. Matrices read
+  // over HTTP come in a later milestone (22-A, M2).
+  async estimateGeneValuesRead(): Promise<GeneValuesReadEstimate> {
+    const { matrix } = await this.cache()
+
+    return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
+      ? { kind: 'read', bytes: 0 }
+      : {
+          kind: 'unavailable',
+          reason:
+            'Plots read an expression matrix held in memory: an .h5ad file up to 300 MiB, standard Visium or MERSCOPE. This dataset reads its matrix over HTTP.',
+        }
+  }
+
+  // Each gene's value in every cell (22-A). One scan of a CSR matrix reads
+  // every gene asked for.
+  async geneValues(
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly GeneValuesRead[]> {
+    const { matrix, geneNames } = await this.cache()
+    throwIfAborted(options.signal)
+    const colByGene = new Map<string, number>()
+    geneNames.forEach((gene, col) => {
+      if (!colByGene.has(gene)) colByGene.set(gene, col)
+    })
+    const found = genes.filter((gene) => colByGene.has(gene))
+    const cols = found.map((gene) => colByGene.get(gene) ?? -1)
+    const scanOptions = { signal: options.signal }
+    const columns =
+      found.length === 0
+        ? []
+        : matrix.kind === 'csr'
+          ? await geneValuesFromCsr(matrix, cols, scanOptions)
+          : matrix.kind === 'csc'
+            ? await geneValuesFromCsc(matrix, cols, scanOptions)
+            : matrix.kind === 'dense'
+              ? await geneValuesFromDense(matrix, cols, scanOptions)
+              : null
+
+    if (columns === null) {
+      throw new Error('Plots cannot read this expression matrix yet.')
+    }
+
+    const byGene = new Map(found.map((gene, index) => [gene, columns[index]]))
+
+    return genes.map((gene) => {
+      const column = byGene.get(gene)
+      return column === undefined
+        ? { gene, error: `${gene} is not in the expression matrix.` }
+        : { gene, ...column }
+    })
   }
 
   async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {

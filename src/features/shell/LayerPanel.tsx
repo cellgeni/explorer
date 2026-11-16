@@ -69,6 +69,10 @@ interface LayerPanelProps {
   // Cells › Show Embedding opens the Embedding panel (15.2-G).
   readonly embeddingOpen: boolean
   readonly onEmbeddingOpenChange: (open: boolean) => void
+  // Cells › Show Plots opens the Plots panel (22-D8); left out where the
+  // cells have no annotation sets.
+  readonly plotsOpen?: boolean | undefined
+  readonly onPlotsOpenChange?: ((open: boolean) => void) | undefined
   // Under 860 px the panel is a bottom sheet (15.2-I): a handle that names
   // what colours the cells, instead of the collapse button.
   readonly sheet?: LayerSheetProps | undefined
@@ -98,6 +102,8 @@ export function LayerPanel({
   onExpandedChange,
   embeddingOpen,
   onEmbeddingOpenChange,
+  plotsOpen = false,
+  onPlotsOpenChange,
   sheet,
   reveal = null,
 }: LayerPanelProps) {
@@ -119,6 +125,8 @@ export function LayerPanel({
         viewOptions={viewOptions}
         embeddingOpen={embeddingOpen}
         onEmbeddingOpenChange={onEmbeddingOpenChange}
+        plotsOpen={plotsOpen}
+        onPlotsOpenChange={onPlotsOpenChange}
       />
     ),
     transcripts: <TranscriptsSection transcripts={transcripts} />,
@@ -363,12 +371,16 @@ function CellsSection({
   viewOptions,
   embeddingOpen,
   onEmbeddingOpenChange,
+  plotsOpen,
+  onPlotsOpenChange,
 }: {
   readonly cells: CellsSectionModel
   readonly annotations: AnnotationsSectionModel
   readonly viewOptions: DatasetViewOptionsModel
   readonly embeddingOpen: boolean
   readonly onEmbeddingOpenChange: (open: boolean) => void
+  readonly plotsOpen: boolean
+  readonly onPlotsOpenChange: ((open: boolean) => void) | undefined
 }) {
   return (
     <>
@@ -399,18 +411,35 @@ function CellsSection({
         <AnnotationLabelLists sets={annotations.sets} />
         <MetadataTracksPanel metadataTracks={annotations.metadataTracks} />
 
-        <SubHeading>Embedding</SubHeading>
-        <Button
-          title={
-            embeddingOpen ? 'Hide the embedding panel' : 'Show the UMAP or t-SNE panel'
-          }
-          aria-pressed={embeddingOpen}
-          onClick={() => {
-            onEmbeddingOpenChange(!embeddingOpen)
-          }}
-        >
-          {embeddingOpen ? 'Hide Embedding' : 'Show Embedding'}
-        </Button>
+        <SubHeading>Panels</SubHeading>
+        <div className="shell-panel-buttons">
+          <Button
+            title={
+              embeddingOpen ? 'Hide the embedding panel' : 'Show the UMAP or t-SNE panel'
+            }
+            aria-pressed={embeddingOpen}
+            onClick={() => {
+              onEmbeddingOpenChange(!embeddingOpen)
+            }}
+          >
+            {embeddingOpen ? 'Hide Embedding' : 'Show Embedding'}
+          </Button>
+          {onPlotsOpenChange === undefined ? null : (
+            <Button
+              title={
+                plotsOpen
+                  ? 'Hide the plots panel'
+                  : 'Show a dot plot of the selected genes by class'
+              }
+              aria-pressed={plotsOpen}
+              onClick={() => {
+                onPlotsOpenChange(!plotsOpen)
+              }}
+            >
+              {plotsOpen ? 'Hide Plots' : 'Show Plots'}
+            </Button>
+          )}
+        </div>
 
         <Disclosure title="Advanced cell options" summary="Advanced">
           <ExpressionDetailControl colour={cells.colour} />
