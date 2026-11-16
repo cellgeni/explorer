@@ -705,6 +705,9 @@ export function App({ dependencies }: AppProps = {}) {
       ? null
       : pendingAnnotationGroupsFor(initialShareableState),
   )
+  // The link's set while it loads, which the link's annotationUrl= import
+  // waits for.
+  const linkAnnotationSetLoadRef = useRef<Promise<void> | null>(null)
   const initialSharedRoiSelectionRef = useRef<RoiSelection | null>(
     initialShareableState.roiSelection ?? null,
   )
@@ -2681,31 +2684,11 @@ export function App({ dependencies }: AppProps = {}) {
       setRoiName,
     ],
   )
+  // The link's import runs after its set loads, with the handler current then.
+  const handleImportAnnotationUrlRef = useRef(handleImportAnnotationUrl)
   useEffect(() => {
-    if (loadedDatasetUrl === null) {
-      return
-    }
-
-    const initialAnnotationUrl = initialAnnotationImportUrlRef.current
-
-    if (initialAnnotationUrl === null) {
-      return
-    }
-
-    initialAnnotationImportUrlRef.current = null
-    void handleImportAnnotationUrl(initialAnnotationUrl, {
-      hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
-    }).then((imported) => {
-      if (imported) {
-        setAnnotationImportUrl(initialAnnotationUrl)
-      }
-    })
-  }, [
-    handleImportAnnotationUrl,
-    initialShareableState.hiddenAnnotationIds,
-    loadedDatasetUrl,
-    setAnnotationImportUrl,
-  ])
+    handleImportAnnotationUrlRef.current = handleImportAnnotationUrl
+  })
   useEffect(() => {
     const pending = pendingAnnotationGroupsRef.current
 
@@ -2738,9 +2721,16 @@ export function App({ dependencies }: AppProps = {}) {
       // leaves out the default one. A hand-written link with no version and
       // no cellColor= colours cells by the set, as choosing it would.
       // The classes the link hides stay hidden once the set loads.
-      loadAnnotationGroup(groupId, {
+      const load = loadAnnotationGroup(groupId, {
         switchColorMode: pending.switchColorMode,
         hiddenAnnotationIds: pending.hiddenAnnotationIds,
+        hiddenAnnotationSetIds: pending.hiddenAnnotationSetIds,
+      })
+      linkAnnotationSetLoadRef.current = load
+      void load.then(() => {
+        if (linkAnnotationSetLoadRef.current === load) {
+          linkAnnotationSetLoadRef.current = null
+        }
       })
     }
   }, [
@@ -2748,6 +2738,63 @@ export function App({ dependencies }: AppProps = {}) {
     loadAnnotationGroup,
     loadedDatasetUrl,
     setSelectedAnnotationGroupId,
+  ])
+  // Declared after the effect above, which starts the link's set first.
+  useEffect(() => {
+    if (loadedDatasetUrl === null) {
+      return
+    }
+
+    const initialAnnotationUrl = initialAnnotationImportUrlRef.current
+
+    if (initialAnnotationUrl === null) {
+      return
+    }
+
+    // Loading a set replaces the labels shown, so an import that finished
+    // first was lost. The link's labels were made with the set loaded
+    // first, so its import waits for the set: while the dataset lists its
+    // sets, and then while the set loads.
+    if (
+      pendingAnnotationGroupsRef.current?.datasetUrl === loadedDatasetUrl &&
+      annotationGroupState.status === 'loading'
+    ) {
+      return
+    }
+
+    initialAnnotationImportUrlRef.current = null
+    const requestId = loadRequestId.current
+    const importLinkAnnotations = () => {
+      // Another dataset was opened while the set loaded.
+      if (loadRequestId.current !== requestId) {
+        return
+      }
+
+      void handleImportAnnotationUrlRef
+        .current(initialAnnotationUrl, {
+          hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
+          hiddenAnnotationSetIds: initialShareableState.hiddenAnnotationSetIds,
+        })
+        .then((imported) => {
+          if (imported) {
+            setAnnotationImportUrl(initialAnnotationUrl)
+          }
+        })
+    }
+    const setLoad = linkAnnotationSetLoadRef.current
+
+    if (setLoad === null) {
+      importLinkAnnotations()
+    } else {
+      void setLoad.then(importLinkAnnotations)
+    }
+  }, [
+    annotationGroupState.status,
+    initialShareableState.hiddenAnnotationIds,
+    initialShareableState.hiddenAnnotationSetIds,
+    loadRequestId,
+    loadedDatasetUrl,
+    setAnnotationImportUrl,
   ])
 
   const {
@@ -3414,12 +3461,16 @@ export function App({ dependencies }: AppProps = {}) {
         : [loadedAnnotationGroupId],
     [linkAnnotationGroupIds, loadedAnnotationGroupId],
   )
-  // Hidden classes: until the link's set loads, the link keeps the ones it
-  // was opened with, as it keeps its sets.
+  // Hidden classes and sets: until the link's set loads, the link keeps the
+  // ones it was opened with, as it keeps its sets.
   const sharedHiddenAnnotationIds =
     linkAnnotationGroupIds === null
       ? hiddenAnnotationIds
       : (initialShareableState.hiddenAnnotationIds ?? hiddenAnnotationIds)
+  const sharedHiddenAnnotationSetIds =
+    linkAnnotationGroupIds === null
+      ? hiddenAnnotationSetIds
+      : (initialShareableState.hiddenAnnotationSetIds ?? hiddenAnnotationSetIds)
   const sharedPanels = useMemo(
     () => panelsForLink(shellPanels, defaultPanelIds),
     [defaultPanelIds, shellPanels],
@@ -3499,6 +3550,7 @@ export function App({ dependencies }: AppProps = {}) {
       datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
       hiddenAnnotationIds: sharedHiddenAnnotationIds,
+      hiddenAnnotationSetIds: sharedHiddenAnnotationSetIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
       merscopeSelection: merscopeImageSelectionToShareable(merscopeImageState),
@@ -3835,6 +3887,7 @@ export function App({ dependencies }: AppProps = {}) {
         geneExpressionScoreMode,
         annotationGroupId: loadedAnnotationGroupId ?? null,
         hiddenAnnotationIds,
+        hiddenAnnotationSetIds,
         annotationColors,
         cellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
       }),
@@ -4676,6 +4729,7 @@ interface PendingAnnotationGroups {
   readonly openUrl: string | null
   readonly groupIds: readonly string[]
   readonly hiddenAnnotationIds: readonly string[] | undefined
+  readonly hiddenAnnotationSetIds: readonly string[] | undefined
   readonly switchColorMode: boolean
 }
 
@@ -4688,6 +4742,7 @@ function pendingAnnotationGroupsFor(
     openUrl,
     groupIds: state.annotationGroupIds ?? [],
     hiddenAnnotationIds: state.hiddenAnnotationIds,
+    hiddenAnnotationSetIds: state.hiddenAnnotationSetIds,
     switchColorMode:
       state.linkVersion === undefined && state.observationColorMode === undefined,
   }

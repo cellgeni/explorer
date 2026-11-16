@@ -227,7 +227,8 @@ Choosing a dataset in the bar opens it the way a shared link would, with:
 - the selected genes,
 - the `Cell color` mode,
 - the `Combine genes` mode,
-- the loaded annotation set, its hidden classes and its class colours,
+- the loaded annotation set, its hidden classes and class colours, and
+  whether the set is hidden,
 - the metadata column cells are coloured by.
 
 The gene colour scale and the opacities stay as they are. A gene, set or
@@ -425,8 +426,8 @@ errors as you type.
 - Panels draw every cell at one size, 10 µm across, so Visium spots are
   smaller than in the main view.
 - Class colours are kept while you switch datasets, not written into the
-  address: a link restores the set and its hidden classes with the dataset's
-  own colours.
+  address: a link restores the set, its hidden classes and whether it is
+  hidden, with the dataset's own colours.
 - Previews do not show metadata colouring.
 - Previews are listed in the collection's order; they cannot be sorted by
   expression yet.

@@ -74,8 +74,8 @@ export function collectionFirstOpening(
 // The datasets of a collection share their genes and annotations, so every
 // colour mode means the same in each. Switching to another dataset keeps the
 // selected genes, the loaded annotation set with its hidden classes and
-// colours, the metadata column, and how cells are coloured. The gene colour
-// scale stays anyway.
+// colours and whether the set is hidden, the metadata column, and how cells
+// are coloured. The gene colour scale stays anyway.
 export function collectionSwitchOpening(current: {
   readonly selectedGenes: readonly string[]
   readonly observationColorMode: ObservationColorMode
@@ -83,6 +83,7 @@ export function collectionSwitchOpening(current: {
   // The loaded annotation set, if any.
   readonly annotationGroupId: string | null
   readonly hiddenAnnotationIds: readonly string[]
+  readonly hiddenAnnotationSetIds: readonly string[]
   readonly annotationColors: Readonly<Record<string, string>>
   readonly cellMetadataTrackId: string | null
 }): CollectionDatasetOpening {
@@ -97,6 +98,7 @@ export function collectionSwitchOpening(current: {
         : {
             annotationGroupIds: [current.annotationGroupId],
             hiddenAnnotationIds: current.hiddenAnnotationIds,
+            hiddenAnnotationSetIds: current.hiddenAnnotationSetIds,
           }),
       ...(current.cellMetadataTrackId === null
         ? {}

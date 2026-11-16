@@ -75,6 +75,7 @@ describe('collectionFirstOpening', () => {
 const NOTHING_LOADED = {
   annotationGroupId: null,
   hiddenAnnotationIds: [],
+  hiddenAnnotationSetIds: [],
   annotationColors: {},
   cellMetadataTrackId: null,
 } as const
@@ -96,7 +97,7 @@ describe('collectionSwitchOpening', () => {
     })
   })
 
-  it('keeps the annotation set, its hidden classes and colours, and the metadata column', () => {
+  it('keeps the annotation set, its hidden classes and colours, whether it is hidden, and the metadata column', () => {
     expect(
       collectionSwitchOpening({
         selectedGenes: [],
@@ -104,6 +105,7 @@ describe('collectionSwitchOpening', () => {
         geneExpressionScoreMode: 'sum',
         annotationGroupId: 'analysis:coarse_celltype',
         hiddenAnnotationIds: ['analysis:coarse_celltype:astrocytes'],
+        hiddenAnnotationSetIds: ['analysis:coarse_celltype'],
         annotationColors: { 'analysis:coarse_celltype:neurons': '#123456' },
         cellMetadataTrackId: 'h5ad:cell_area',
       }),
@@ -115,6 +117,7 @@ describe('collectionSwitchOpening', () => {
         geneExpressionScoreMode: 'sum',
         annotationGroupIds: ['analysis:coarse_celltype'],
         hiddenAnnotationIds: ['analysis:coarse_celltype:astrocytes'],
+        hiddenAnnotationSetIds: ['analysis:coarse_celltype'],
         cellMetadataTrackId: 'h5ad:cell_area',
       },
       annotationColors: { 'analysis:coarse_celltype:neurons': '#123456' },

@@ -1826,6 +1826,127 @@ describe('App', () => {
     })
   })
 
+  it('keeps a set a link hides hidden once it loads', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1&hiddenSets=analysis%3Akmeans-3%2Canalysis%3Aother',
+    )
+    const cellA = intToCellId(1, 1)
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 1 },
+      ],
+    )
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1:0', label: 'kmeans 3: Cluster 1', cellIds: [cellA] },
+      ],
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: cellA,
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    openControls('clusters')
+    const eye = await screen.findByRole('button', { name: 'kmeans 3 visible' })
+    expect(eye).toHaveAttribute('aria-pressed', 'false')
+    // The link keeps the set and drops the one that did not load.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('hiddenSets=analysis%3Akmeans-3')
+      expect(window.location.hash).not.toContain('analysis%3Aother')
+    })
+
+    fireEvent.click(eye)
+    await waitFor(() => {
+      expect(window.location.hash).not.toContain('hiddenSets=')
+    })
+    fireEvent.click(eye)
+    await waitFor(() => {
+      expect(window.location.hash).toContain('hiddenSets=analysis%3Akmeans-3')
+    })
+  })
+
+  it('keeps a link’s imported labels when its set loads after them', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1&annotationUrl=https%3A%2F%2Fexample.test%2Fannotations%2Fmanual.csv',
+    )
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(2, 1)
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 1 },
+      ],
+    )
+    // The set loads only when the test says, after the import could finish.
+    let finishSetLoad = () => {}
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(
+      () =>
+        new Promise((resolve) => {
+          finishSetLoad = () => {
+            resolve([
+              { id: 'analysis:1:0', label: 'kmeans 3: Cluster 1', cellIds: [cellA] },
+            ])
+          }
+        }),
+    )
+    const annotationUrl = 'https://example.test/annotations/manual.csv'
+    const fetchAnnotations = vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === annotationUrl
+        ? new Response(`cell_id,label\n${cellB},Manual annotation`)
+        : offlineFetch(input),
+    )
+    vi.stubGlobal('fetch', fetchAnnotations)
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: cellA,
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+          {
+            cellId: cellB,
+            position: { x: micrometers(30), y: micrometers(40) },
+            transcriptCount: 12,
+          },
+        ])}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(loadAnnotations).toHaveBeenCalled()
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    act(() => {
+      finishSetLoad()
+    })
+
+    openControls('clusters')
+    expect(await screen.findByLabelText('kmeans 3: Cluster 1 visible')).toBeChecked()
+    expect(await screen.findAllByText('Manual annotation')).not.toHaveLength(0)
+    expect(
+      fetchAnnotations.mock.calls.filter(([input]) => String(input) === annotationUrl),
+    ).toHaveLength(1)
+  })
+
   it('shares the chosen transcript filter, not All features shown without genes', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
