@@ -152,7 +152,9 @@ Visium HD has no transcript records.
    bin-size control in Bins › Appearance.
 4. If `Tissue image` is enabled, loads the hires PNG in the background.
 
-Changing the bin size runs `useVisiumHdBinWorkflow`.
+Changing the bin size runs `useVisiumHdBinWorkflow`. The drawn tier stays on
+screen until the new one is ready, and the `Active bins` row names it, as in
+"54,504 at 16 µm view; 2 µm selected"; after a failed load it still does.
 
 ## Caching And Workers
 

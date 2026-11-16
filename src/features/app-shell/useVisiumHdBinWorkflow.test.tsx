@@ -475,6 +475,76 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(getSpatialDataset).not.toHaveBeenCalled()
   })
 
+  it('keeps the drawn tier in the control state while a tier loads and after it fails', async () => {
+    const grid = visiumGrid(2)
+    const dataset = {
+      annotations: vi.fn(async () => []),
+      elements: vi.fn(async () => ({ elements: [] })),
+      image: vi.fn(async () => null),
+      matrix: vi.fn(async () => {
+        throw new Error('unused')
+      }),
+      meta: vi.fn(async () => visiumMeta(grid)),
+      readBinnedOverview: vi.fn(async (): Promise<VisiumHdBinnedOverview> => {
+        throw new Error('Read failed')
+      }),
+    }
+    const states: VisiumHdControlState[] = []
+    let controlState = visiumControlState()
+    const setVisiumHdControlState = vi.fn(
+      (
+        next:
+          | VisiumHdControlState
+          | ((current: VisiumHdControlState) => VisiumHdControlState),
+      ) => {
+        controlState = typeof next === 'function' ? next(controlState) : next
+        states.push(controlState)
+      },
+    )
+    const setSpatialGridCells = vi.fn()
+    let api: UseVisiumHdBinWorkflowResult | null = null
+
+    render(
+      <Probe
+        state={controlState}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        onReady={(nextApi) => {
+          api = nextApi
+        }}
+        currentViewportDetail={viewportDetail(3)}
+        setFlatMorphologyImage={vi.fn()}
+        setGenePanelState={vi.fn()}
+        setLoadState={vi.fn()}
+        setMorphologyState={vi.fn()}
+        setSelectedGridCell={vi.fn()}
+        setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={setVisiumHdControlState}
+      />,
+    )
+
+    await act(async () => {
+      await api?.handleVisiumHdBinSizeChange(2)
+    })
+
+    expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
+    expect(setSpatialGridCells).not.toHaveBeenCalled()
+    expect(states).toEqual([
+      expect.objectContaining({
+        status: 'loading',
+        selectedBinSize: 2,
+        loadedBinSize: 16,
+        binCount: 54_504,
+      }),
+      expect.objectContaining({
+        status: 'error',
+        selectedBinSize: 2,
+        loadedBinSize: 16,
+        binCount: 54_504,
+        error: 'Read failed',
+      }),
+    ])
+  })
+
   it('loads a 2 µm tier without a configured budget', async () => {
     const datasetUrl = 'https://example.test/visium'
     const grid = visiumGrid(2)

@@ -315,3 +315,12 @@ Testing:
     at a time.
   - The live test passes without `test.fail()`, and the Bin card and 2 µm
     live tests no longer block the file.
+- [x] While a Visium HD tier loads, `Active bins` shows the old count with the
+      new size ("54,504 at 2 µm"): `visiumHdControlLoading` keeps `binCount`
+      but drops `loadedBinSize`. Found 2026-11-12. Fixed 2026-11-16: the
+      loading state keeps the size of the tier still drawn, so the row reads
+      "54,504 at 16 µm view; 2 µm selected" until the new tier is ready. (The
+      zoom LOD's coarser view of 2 µm bins already kept its size this way.) A
+      failed load keeps that size, so the row still describes the drawn tier
+      beside the error. The ready state is built afresh, with the new count and
+      size and no leftover `loadedBinSize`.

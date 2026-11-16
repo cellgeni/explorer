@@ -63,6 +63,7 @@ describe('Visium HD controls model', () => {
       ...initialReady,
       status: 'loading',
       selectedBinSize: 8,
+      loadedBinSize: 16,
     })
 
     const switchedReady = visiumHdControlReadyFromOptions(
@@ -120,6 +121,90 @@ describe('Visium HD controls model', () => {
       status: 'error',
       error: 'Failed',
     })
+  })
+
+  it('keeps the drawn tier while the selected one loads', () => {
+    const url = 'https://example.test/visium'
+    const ready16 = visiumHdControlStateFromOverview(
+      url,
+      [16, 8, 2],
+      overview(16, ['BC-16-A', 'BC-16-B', 'BC-16-C']),
+    )
+
+    const loading2 = visiumHdControlLoading(ready16, 2)
+
+    expect(loading2).toMatchObject({
+      status: 'loading',
+      selectedBinSize: 2,
+      loadedBinSize: 16,
+      binCount: 3,
+    })
+    if (loading2.status === 'idle') {
+      throw new Error('Expected loading Visium HD control state.')
+    }
+
+    const ready2 = visiumHdControlReadyFromOptions(
+      url,
+      loading2.options,
+      overview(2, ['BC-2-A', 'BC-2-B', 'BC-2-C', 'BC-2-D', 'BC-2-E']),
+      2,
+    )
+
+    expect(ready2).toMatchObject({ status: 'ready', selectedBinSize: 2, binCount: 5 })
+    expect(ready2).not.toHaveProperty('loadedBinSize')
+
+    // A failed load leaves the old tier drawn.
+    expect(visiumHdControlFailed(loading2, 'Failed')).toMatchObject({
+      status: 'error',
+      selectedBinSize: 2,
+      loadedBinSize: 16,
+      binCount: 3,
+      error: 'Failed',
+    })
+  })
+
+  it('carries a coarser view of selected 2 µm bins into the loading state', () => {
+    const url = 'https://example.test/visium'
+    const viewOf2 = visiumHdControlReadyFromOptions(
+      url,
+      createVisiumHdBinOptions([16, 8, 2]),
+      overview(16, ['BC-16']),
+      2,
+    )
+
+    // Zooming in loads the 2 µm bins themselves.
+    expect(visiumHdControlLoading(viewOf2, 2)).toMatchObject({
+      status: 'loading',
+      selectedBinSize: 2,
+      loadedBinSize: 16,
+      binCount: 1,
+    })
+    // Selecting the tier already drawn needs no separate view size.
+    const loading16 = visiumHdControlLoading(viewOf2, 16)
+
+    expect(loading16).toMatchObject({
+      status: 'loading',
+      selectedBinSize: 16,
+      binCount: 1,
+    })
+    expect(loading16).not.toHaveProperty('loadedBinSize')
+
+    // 2 µm bins drawn and selected: zooming out still shows them while the
+    // 16 µm view loads.
+    const ready2 = visiumHdControlReadyFromOptions(
+      url,
+      createVisiumHdBinOptions([16, 8, 2]),
+      overview(2, ['BC-2-A', 'BC-2-B']),
+      2,
+    )
+    const zoomingOut = visiumHdControlLoading(ready2, 2)
+
+    expect(zoomingOut).toMatchObject({
+      status: 'loading',
+      selectedBinSize: 2,
+      binCount: 2,
+    })
+    expect(zoomingOut).not.toHaveProperty('loadedBinSize')
   })
 })
 

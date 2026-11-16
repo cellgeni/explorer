@@ -147,9 +147,6 @@ Testing:
       expresses unless cells are coloured by gene expression: bins only get
       expression counts in that mode, and `activeSelectedGridCell`
       (`App.tsx`) fills in 0. Found 2026-11-12.
-- [ ] While a Visium HD tier loads, `Active bins` shows the old count with the
-      new size ("54,504 at 2 µm"): `visiumHdControlLoading` keeps `binCount`
-      but drops `loadedBinSize`. Found 2026-11-12.
 - [ ] Clicking a Visium HD bin selects nothing under software WebGL (headless
       Chromium), because bin picking relies on deck.gl's picking, and bins have
       no coordinate fallback as cells do. Enter at the crosshair works. Not
