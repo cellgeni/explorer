@@ -120,8 +120,8 @@ export interface OpenDatasetModel {
   readonly onBoundaryCellLimitChange: (limit: number) => void
   readonly isLoading: boolean
   readonly onSubmit: FormEventHandler<HTMLFormElement>
-  // Opens the Store structure drawer on a Zarr store's address.
-  readonly onBrowseStore: (url: string) => void
+  // Opens the structure drawer on a Zarr store's or a Parquet file's address.
+  readonly onBrowseStructure: (url: string) => void
 }
 
 export interface ShareLinkModel {
@@ -191,7 +191,7 @@ export interface DatasetInfoModelInput {
   readonly debugMode: boolean
   readonly diagnosticsState: DatasetDiagnosticsState<StructuredLoadError>
   readonly fallbackNotices: readonly FallbackNoticeEntry[]
-  readonly handleBrowseStore: (url: string) => void
+  readonly handleBrowseStructure: (url: string) => void
   readonly handleDatasetSubmit: FormEventHandler<HTMLFormElement>
   readonly handleDownloadDiagnostics: () => void
   readonly handleRunDatasetDiagnostics: () => Promise<void>
@@ -232,7 +232,7 @@ export function useDatasetInfoModel({
   debugMode,
   diagnosticsState,
   fallbackNotices,
-  handleBrowseStore,
+  handleBrowseStructure,
   handleDatasetSubmit,
   handleDownloadDiagnostics,
   handleRunDatasetDiagnostics,
@@ -284,7 +284,7 @@ export function useDatasetInfoModel({
       },
       isLoading,
       onSubmit: handleDatasetSubmit,
-      onBrowseStore: handleBrowseStore,
+      onBrowseStructure: handleBrowseStructure,
     },
     share: {
       canCopyLink: isDatasetLoaded,

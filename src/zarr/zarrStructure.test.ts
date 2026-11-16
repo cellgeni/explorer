@@ -298,6 +298,7 @@ describe('Zarr store structure', () => {
             {
               name: 'sample.zarr/shapes/cells/shapes.parquet',
               data: new Uint8Array(300),
+              deflate: true,
             },
             {
               name: 'sample.zarr/labels/seg/0/.zarray',
@@ -341,7 +342,11 @@ describe('Zarr store structure', () => {
       storedChunks: 2,
       array: { dtype: 'uint32', codecs: ['zstd(level=3)'], chunkCount: 2 },
     })
-    expect(find(structure.root, 'shapes/cells/shapes.parquet')?.storedBytes).toBe(300)
+    expect(find(structure.root, 'shapes/cells/shapes.parquet')).toMatchObject({
+      storedBytes: 300,
+      deflated: true,
+    })
+    expect(find(structure.root, 'labels/seg/0')).not.toHaveProperty('deflated')
   })
 
   it('lists an Icechunk snapshot', async () => {

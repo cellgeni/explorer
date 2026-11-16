@@ -3,6 +3,10 @@ import { FileNotListedError } from '../../data/folderListing'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { LikelyMissingFileError } from '../../data/hostResponses'
 import { assertHttpRangeSupport } from '../../data/rangeSupport'
+import {
+  NotParquetFileError,
+  ParquetFileNotFoundError,
+} from '../../data/parquetStructure'
 import { ZarrStructureNotFoundError } from '../../zarr/zarrStructure'
 import {
   collectStructuredLoadErrors,
@@ -187,6 +191,25 @@ describe('loadErrorModel', () => {
       title: 'No Zarr store at this address',
       detail: 'ZarrStructureNotFoundError',
     })
+    expect(
+      createStructuredLoadError(
+        'Store structure',
+        new ParquetFileNotFoundError('https://host.test/missing.parquet', 404),
+      ),
+    ).toMatchObject({
+      code: 'not-found',
+      title: 'No Parquet file at this address',
+      message: 'https://host.test/missing.parquet could not be read (HTTP 404).',
+    })
+    expect(
+      createStructuredLoadError(
+        'Store structure',
+        new NotParquetFileError(
+          'https://host.test/page.parquet',
+          'parquet file invalid (footer != PAR1)',
+        ),
+      ),
+    ).toMatchObject({ code: 'decode', title: 'Not a Parquet file' })
   })
 
   it('classifies specialized manifest, decode, and unsupported matrix errors', () => {

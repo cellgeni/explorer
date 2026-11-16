@@ -1,6 +1,6 @@
-/* Browse Store: the button beside Load Dataset, and the Store structure
-   drawer over the right of the canvas, with the tree above the selected
-   node's details. */
+/* Browse Store and Browse File: the button beside Load Dataset, and the
+   structure drawer over the right of the canvas, with the tree of a Zarr
+   store or a Parquet file's schema above the selected node's details. */
 
 .dataset-form-actions {
   display: grid;
@@ -10,14 +10,14 @@
   gap: 5px;
 }
 
-.dataset-form .dataset-browse-store {
+.dataset-form .dataset-browse {
   padding: 4px 10px;
   border: 1px solid var(--accent-border);
   background: var(--accent-soft);
   color: var(--accent);
 }
 
-.dataset-form .dataset-browse-store:hover {
+.dataset-form .dataset-browse:hover {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -30,6 +30,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* The store's view and the file's view; the hidden one stays mounted. */
+.store-structure-view {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.store-structure-view[hidden] {
+  display: none;
 }
 
 .store-structure,
@@ -54,6 +66,22 @@
   font-size: var(--font-control);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.store-structure-back {
+  justify-self: start;
+  align-self: flex-start;
+}
+
+.store-structure-zip-path {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.store-structure-zip-path code {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
 }
 
 .store-structure-status [role='status'] {
@@ -346,4 +374,48 @@
 
 .store-structure-metadata > .ui-disclosure-body {
   padding-left: 0;
+}
+
+.store-structure-browse-file {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+}
+
+.store-structure-row-groups,
+.store-structure-key-values {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.store-structure-row-groups > h4,
+.store-structure-key-values > h4 {
+  margin: 0;
+  font-size: var(--font-control);
+  font-weight: 650;
+}
+
+.store-structure-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.store-structure-table th,
+.store-structure-table td {
+  padding: 2px var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: right;
+}
+
+.store-structure-table th:first-child,
+.store-structure-table td:first-child {
+  text-align: left;
+}
+
+.store-structure-table th {
+  color: var(--text-2);
+  font-weight: 600;
 }

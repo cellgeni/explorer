@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { structureFromFlatNodes, type ZarrStructure } from '../../zarr/zarrStructure'
 import {
-  filterStructure,
-  findNode,
   formatBytes,
   formatShape,
   isZarrStoreUrl,
   nodeRole,
   nodeSummary,
   nodeUrl,
+  parquetFileOf,
   parquetNote,
   structureNotes,
 } from './storeStructureModel'
+import { filterStructure, findNode } from './structureTree'
 
 function structure(
   flat: Parameters<typeof structureFromFlatNodes>[0]['flat'],
@@ -149,6 +149,57 @@ describe('store structure model', () => {
     )
     expect(nodeUrl(tree, tree.root)).toBe('https://bucket.test/sample.zarr')
     expect(nodeUrl({ ...tree, source: 'zip' }, tree.root)).toBeNull()
+  })
+
+  it('finds the Parquet files Browse File can open', () => {
+    const shapes = { 'encoding-type': 'ngff:shapes' }
+    const consolidated = structure([
+      { path: '', kind: 'group' },
+      { path: 'shapes/cells', kind: 'group', attributes: shapes },
+      {
+        path: 'points/tx',
+        kind: 'group',
+        attributes: { 'encoding-type': 'ngff:points' },
+      },
+    ])
+    const of = (tree: ZarrStructure, path: string) => {
+      const node = findNode(tree.root, path)
+      return node === undefined ? undefined : parquetFileOf(tree, node)
+    }
+
+    // Unlisted, but where SpatialData writes it.
+    expect(of(consolidated, 'shapes/cells')).toEqual({
+      url: 'https://bucket.test/sample.zarr/shapes/cells/shapes.parquet',
+    })
+    // Points are a folder of parts.
+    expect(of(consolidated, 'points/tx')).toBeNull()
+    expect(of({ ...consolidated, source: 'icechunk' }, 'shapes/cells')).toBeNull()
+
+    const listed = [
+      { path: '', kind: 'group' },
+      { path: 'shapes/cells', kind: 'group', attributes: shapes },
+      { path: 'shapes/cells/shapes.parquet', kind: 'file' },
+      { path: 'points/tx/points.parquet/part.0.parquet', kind: 'file' },
+      { path: 'notes.txt', kind: 'file' },
+    ] as const
+    const walked = structure([...listed], { source: 'walked' })
+    const zipped = structure([...listed], {
+      source: 'zip',
+      url: 'https://bucket.test/sample.zarr.zip',
+    })
+
+    expect(of(walked, 'shapes/cells')).toBeNull()
+    expect(of(walked, 'shapes/cells/shapes.parquet')).toEqual({
+      url: 'https://bucket.test/sample.zarr/shapes/cells/shapes.parquet',
+    })
+    expect(of(walked, 'points/tx/points.parquet/part.0.parquet')).toEqual({
+      url: 'https://bucket.test/sample.zarr/points/tx/points.parquet/part.0.parquet',
+    })
+    expect(of(walked, 'notes.txt')).toBeNull()
+    expect(of(zipped, 'shapes/cells/shapes.parquet')).toEqual({
+      url: 'https://bucket.test/sample.zarr.zip',
+      zipPath: 'shapes/cells/shapes.parquet',
+    })
   })
 
   it('says when the tree may be incomplete', () => {

@@ -60,6 +60,37 @@ Zip directories and folder listings also show files that are not Zarr, such
 as a SpatialData element's Parquet files, and a zip gives the stored size of
 each array's chunks. The walk stops after 5,000 nodes.
 
+### Browsing A Parquet File
+
+When the address is a Parquet file (ending in `.parquet`, `.parq` or `.pq`),
+`Browse File` appears next to `Load Dataset` instead. It opens the drawer on
+the file and reads only its footer, so a 1.4 million row `cells.parquet` takes
+a request for its size and one for its last 512 KB:
+
+- A summary: format version, the writer (`created_by`), what the key-value
+  metadata says wrote it (such as `GeoParquet 1.1.0`, `pandas 2.2.3` or
+  `Arrow schema`), the numbers of rows, columns and row groups, and the size
+  of the file and its footer.
+- The schema as a tree. Each column shows its type as a reader sees it
+  (`string`, `int64`, `timestamp[us, UTC]`, `list`) and its compressed size;
+  GeoParquet geometry columns and pandas index columns are marked.
+- The selected column's details: physical type and annotation, repetition,
+  compression and encodings, compressed and uncompressed size, values, nulls,
+  the least and greatest values from the row groups' statistics (left out for
+  binary columns such as WKB geometry), whether it has a dictionary, a page
+  index or a bloom filter, and for a GeoParquet column its geometry types,
+  CRS and bounding box.
+- For the file itself: its row groups with their rows and sizes, and its
+  key-value metadata, with JSON shown as JSON.
+
+In a store's tree, a Parquet file in a zip or a listed folder, and a
+SpatialData shapes element whose `shapes.parquet` the consolidated metadata
+does not list, have `Browse File` in their details. The file opens in the
+drawer in place of the store, and `Back to Store` returns to the tree as it
+was. A file that the zip compresses must be downloaded whole to read its
+footer, and its details say so. SpatialData points are a folder of Parquet
+parts; browse one part from a listed folder.
+
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays.
