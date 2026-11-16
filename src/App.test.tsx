@@ -1239,6 +1239,91 @@ describe('App', () => {
     }
   })
 
+  it('scores the selected Visium HD bin when bins are coloured by something else', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const viewport = installAppViewportFixture()
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M'],
+          cells: new Map([['BC-1', { geneNames: ['A2M'], counts: [7] }]]),
+        })),
+        // Only the 16 µm tier answers with the drawn bin's ID.
+        geneExpression: vi.fn(
+          async (
+            _bbox: unknown,
+            _genes: readonly string[],
+            options: { readonly binSizeMicrometers?: number } = {},
+          ) => ({
+            elements: [
+              {
+                id: options.binSizeMicrometers === 16 ? 'BC-1' : 'BC-8-1',
+                position: { x: micrometers(10), y: micrometers(5) },
+                count: 7,
+              },
+            ],
+            genes: ['A2M'],
+            maxCount: 7,
+          }),
+        ),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+      openControls('magic-lens')
+      await waitFor(
+        () => {
+          expect(screen.getByRole('button', { name: 'Summarise View' })).toBeEnabled()
+        },
+        { timeout: 3_000 },
+      )
+
+      openControls('cell-card')
+      fireEvent.click(screen.getByTestId('deck-layer-spatial-grid-cells'))
+      openControls('genes')
+      fireEvent.click(
+        await within(screen.getByRole('region', { name: /^Bins/ })).findByRole('button', {
+          name: 'A2M',
+        }),
+      )
+      openControls('cell-card')
+      const score = () =>
+        within(screen.getByRole('region', { name: 'Bin' })).getByText('Score')
+          .nextElementSibling
+      await waitFor(() => {
+        expect(score()).toHaveTextContent('7')
+      })
+
+      // The bins lose their expression colours, but the card keeps the score.
+      openControls('color-by')
+      fireEvent.change(screen.getByRole('combobox', { name: 'Cell color' }), {
+        target: { value: 'transcript-count' },
+      })
+      expect(screen.getByRole('combobox', { name: 'Cell color' })).toHaveValue(
+        'transcript-count',
+      )
+      openControls('cell-card')
+      expect(score()).toHaveTextContent('7')
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

@@ -1232,10 +1232,18 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionState.status === 'ready' &&
       cell.expressionCount === undefined
     ) {
+      // Bins carry their scores only while they are coloured by gene
+      // expression, so in another colour mode the card finds the bin in the
+      // batch. The batch lists only bins expressing a selected gene, so a bin
+      // missing from it scores 0, as the map colours it.
+      const expression = styledGeneExpressionElements.find(
+        (element) => element.id === cell.id,
+      )
+
       return {
         ...cell,
-        expressionCount: 0,
-        expressionGenes: selectedGenes,
+        expressionCount: expression?.expressionCount ?? 0,
+        expressionGenes: expression?.expressionGenes ?? selectedGenes,
       }
     }
 
@@ -1246,6 +1254,7 @@ export function App({ dependencies }: AppProps = {}) {
     isVisiumHdDataset,
     selectedGenes,
     selectedGridCell,
+    styledGeneExpressionElements,
   ])
   const activeVisiumHdExpressionProfileSelection = useMemo(
     () =>
