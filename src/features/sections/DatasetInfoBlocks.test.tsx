@@ -2,6 +2,11 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { testDatasetInfoModel } from '../../test/sectionModels'
 import {
+  visiumHdControlFailed,
+  visiumHdControlLoading,
+  type VisiumHdControlState,
+} from '../dataset/visiumHdModel'
+import {
   DatasetViewOptions,
   OpenDatasetForm,
   VisiumHdBinControls,
@@ -123,6 +128,36 @@ describe('Visium section blocks', () => {
       showOffTissue: true,
     })
     expect(VISIUM_VIEW_OPTIONS.visiumHd.onBinSizeChange).toHaveBeenCalledWith(8)
+  })
+
+  it('name the drawn tier in Active bins while another loads or after it fails', () => {
+    const ready16: VisiumHdControlState = {
+      status: 'ready',
+      url: 'https://example.test/visium-hd',
+      selectedBinSize: 16,
+      options: [
+        { size: 16, available: true, disabled: false, binCount: 54_504 },
+        { size: 8, available: true, disabled: false },
+        { size: 2, available: true, disabled: false },
+      ],
+      binCount: 54_504,
+    }
+    const loading2 = visiumHdControlLoading(ready16, 2)
+    const activeBins = (state: VisiumHdControlState) => {
+      const { visiumHd } = testDatasetInfoModel({
+        viewOptions: { visiumHd: { state } },
+      }).viewOptions
+      const { unmount } = render(<VisiumHdBinControls visiumHd={visiumHd} />)
+      const text = screen.getByText('Active bins').nextElementSibling?.textContent
+      unmount()
+      return text
+    }
+
+    expect(activeBins(ready16)).toBe('54,504 at 16 µm')
+    expect(activeBins(loading2)).toBe('54,504 at 16 µm view; 2 µm selected')
+    expect(activeBins(visiumHdControlFailed(loading2, 'Read failed'))).toBe(
+      '54,504 at 16 µm view; 2 µm selected',
+    )
   })
 
   it('render nothing for other platforms', () => {

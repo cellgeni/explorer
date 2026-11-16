@@ -17,8 +17,11 @@ export type VisiumHdControlState =
       readonly status: 'ready' | 'loading' | 'error'
       readonly url: string
       readonly selectedBinSize: VisiumHdBinSizeMicrometers
+      // The tier drawn, when it is not the selected one: a coarser view of
+      // zoomed-out 2 µm bins, or the old tier while the selected one loads.
       readonly loadedBinSize?: VisiumHdBinSizeMicrometers
       readonly options: readonly VisiumHdBinOption[]
+      // Bins in the drawn tier.
       readonly binCount?: number
       readonly error?: string
     }
@@ -58,17 +61,25 @@ export function updateVisiumHdBinOptionCount(
   )
 }
 
+// The drawn tier stays on screen until the selected one is ready, so the
+// loading state keeps its size beside its bin count.
 export function visiumHdControlLoading(
   current: VisiumHdControlState,
   selectedBinSize: VisiumHdBinSizeMicrometers,
 ): VisiumHdControlState {
-  return current.status === 'idle'
-    ? current
-    : {
-        ...current,
-        status: 'loading',
-        selectedBinSize,
-      }
+  if (current.status === 'idle') {
+    return current
+  }
+
+  const { loadedBinSize, ...rest } = current
+  const drawnBinSize = loadedBinSize ?? current.selectedBinSize
+
+  return {
+    ...rest,
+    status: 'loading',
+    selectedBinSize,
+    ...(drawnBinSize === selectedBinSize ? {} : { loadedBinSize: drawnBinSize }),
+  }
 }
 
 export function visiumHdControlReadyFromOptions(

@@ -103,6 +103,48 @@ describe('useVisiumHdGridLodWorkflow', () => {
     expect(setVisiumHdControlState.mock.calls[1]?.[0]).not.toHaveProperty('loadedBinSize')
   })
 
+  it('keeps the 16um view in the control state while zooming in loads 2um bins', async () => {
+    const viewState: VisiumHdControlState = {
+      status: 'ready',
+      url: 'https://example.test/visium',
+      selectedBinSize: 2,
+      loadedBinSize: 16,
+      options: [
+        { size: 16, available: true, disabled: false, binCount: 54_504 },
+        { size: 8, available: true, disabled: false },
+        { size: 2, available: true, disabled: false },
+      ],
+      binCount: 54_504,
+    }
+    const dataset = visiumDataset(visiumOverview(2, ['s_002um_000001_000002-1']))
+    const setVisiumHdControlState = vi.fn()
+
+    render(
+      <Probe
+        currentViewportDetail={viewportDetail(3)}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        spatialGridCells={[gridCellDatum(16)]}
+        setLoadState={vi.fn()}
+        setSpatialGridCells={vi.fn()}
+        setVisiumHdControlState={setVisiumHdControlState}
+        visiumHdControlState={viewState}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
+    })
+
+    const startLoading = setVisiumHdControlState.mock.calls[0]?.[0] as (
+      current: VisiumHdControlState,
+    ) => VisiumHdControlState
+
+    expect(startLoading(viewState)).toEqual({
+      ...viewState,
+      status: 'loading',
+    })
+  })
+
   it('restores a render-only 16um view when selected 2um is zoomed out', async () => {
     const overview = visiumOverview(16, ['s_016um_000001_000002-1'])
     const dataset = visiumDataset(overview)
