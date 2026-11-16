@@ -258,9 +258,9 @@ dev tool advisories are closed; see
 [Optimization Pass](phases/optimization-pass.md#closed-open-items)):
 
 - [ ] hyparquet stays at 1.26.0 for `patches/hyparquet+1.26.0.patch` while
-      1.33.0 is out. Nothing in CI audits dependencies, and there is no
-      Dependabot, so advisories pile up unseen: the dev tools had 21 (8 high)
-      by 2026-11-16, when they were cleared.
+      1.33.0 is out. There is no Dependabot, so updates are made by hand.
+      Since 2026-11-16 `audit.yml` flags advisories; the dev tools' 21 (8
+      high) had built up unseen before then.
 
 Correctness and robustness:
 

@@ -1,0 +1,38 @@
+name: npm audit
+
+# Checks package-lock.json against npm's advisory database. Kept out of ci.yml
+# so that a newly published advisory cannot stop main from deploying
+# (pages.yml waits for CI), and run on a schedule because advisories appear
+# without any change here.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      # npm audit reads the lockfile, so nothing is installed.
+      - name: Packages the app ships (any advisory fails)
+        run: npm audit --omit=dev
+      # Dev tools never reach the bundle; lower advisories show in the log.
+      - name: All packages (high and critical fail)
+        if: ${{ !cancelled() }}
+        run: npm audit --audit-level=high
