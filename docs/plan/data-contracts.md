@@ -117,11 +117,12 @@ matrices.
   opened by that worker from their URL and read by range (since 2026-11-17):
   only `X`, `obs`, `var`, `obsm`, `uns/spatial` and `uns/spatialdata_attrs`
   are walked, and `/X` is read whole. A host that ignores Range gets the file
-  downloaded whole, up to 300 MiB (314,572,800 bytes). Over 300 MiB, a sibling
-  `DATASET.h5ad.json` reference, read with the Zarrita `ReferenceStore`, or a
-  sibling `DATASET.h5ad.icechunk` repository, read with `icechunk-js`, is
-  used first; without one the file is read by range, and `/X` stays lazy
-  (sliced per request) when it decodes to more than 300 MiB.
+  downloaded whole, up to 300 MiB (314,572,800 bytes). Over 300 MiB the file
+  is read by range too, and `/X` stays lazy (sliced per request) when it
+  decodes to more than 300 MiB. Only when it cannot be read by range is a
+  sibling `DATASET.h5ad.json` reference, read with the Zarrita
+  `ReferenceStore`, or a sibling `DATASET.h5ad.icechunk` repository, read
+  with `icechunk-js`, used instead.
   `scripts/make_h5ad_reference.py` writes either reference. The H5AD URL's
   query string is carried to the reference URL, so presigned URLs need a
   matching presigned reference.

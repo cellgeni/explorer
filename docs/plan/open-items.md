@@ -111,7 +111,8 @@ Features:
       `/X` is read. Worker-backed lazy Range reads are done (2026-11-17): a
       plain `.h5ad` over 64 MiB is read by range in the H5 worker, walking
       only the groups the viewer reads, and one over 300 MiB opens without a
-      companion ([Phase 7](phases/07-h5ad.md#range-reads-2026-11-17)).
+      companion, which is read only when the file cannot be read by range
+      ([Phase 7](phases/07-h5ad.md#range-reads-2026-11-17)).
       Diagnostics check that the file answers Range requests, or, for an
       Icechunk repository or an AnnData Zarr store, read the first `/X`
       chunk.

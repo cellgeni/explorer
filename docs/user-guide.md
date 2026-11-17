@@ -465,8 +465,9 @@ reader. Larger files are read by range, so only the parts the viewer shows are
 fetched, not tissue images, `raw` or `layers`: the 226 MB CELLxGENE Visium
 heart example reads about 22 MB. This needs a host that answers Range
 requests; on one that does not, files up to 300 MiB are downloaded whole.
-Over 300 MiB, a sibling kerchunk reference JSON named `DATASET.h5ad.json`, or
-an Icechunk repository named `DATASET.h5ad.icechunk`, is used when present;
+A sibling kerchunk reference JSON named `DATASET.h5ad.json`, or an Icechunk
+repository named `DATASET.h5ad.icechunk`, is read only for a file over 300 MiB
+that cannot be read by range, for example on a host that hides its size;
 [Large H5AD files](./h5ad-reference.md) explains how to generate one. An
 AnnData Zarr store opens from its URL and is read a chunk at a time, so it
 needs no reference. An Icechunk repository holding AnnData, SpatialData, or
