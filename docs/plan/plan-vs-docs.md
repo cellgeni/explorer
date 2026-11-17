@@ -56,7 +56,8 @@ below are as found on 2026-11-08. The plan status column in
   as amendments to
   [4.6](decisions.md#46-data-source-abstraction--capability-based).
 - **Section 4** is a snapshot; the plan records the current values. One has
-  changed since: the diagnostics dump is now `<platform>-diagnostics.json`.
+  changed since: the diagnostics dump was named `<platform>-diagnostics.json`
+  from 2026-11-12, and `diagnostics-<timestamp>.json` since 2026-11-17.
 - **Section 5.** The recheck found two more places where `docs/` disagreed with
   the code, items 8 and 9, both fixed.
 

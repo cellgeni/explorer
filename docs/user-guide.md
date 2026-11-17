@@ -502,8 +502,8 @@ detected source and required byte-range reads, then summarizes optional assets
 for that platform. With a dataset manifest, it also reports whether the
 manifest is valid and checks files at the locations the manifest gives. The
 download button next to
-it writes a local JSON dump (`<platform>-diagnostics.json`, for example
-`visium-hd-diagnostics.json`)
+it writes a local JSON dump (`diagnostics-<timestamp>.json`, for example
+`diagnostics-2026-11-17T14-05-09Z.json`)
 with current controls, active errors, diagnostics, performance budget, and
 local telemetry events. Transcript diagnostics include detected
 transcript capabilities, native LOD availability, current transcript controls,

@@ -181,33 +181,12 @@ describe('createDiagnosticsDump', () => {
 })
 
 describe('diagnosticsDumpFileName', () => {
-  it('uses the loaded dataset platform first', () => {
-    expect(
-      diagnosticsDumpFileName('h5ad', {
-        status: 'ready',
-        url: 'https://example.test/output',
-        report,
-      }),
-    ).toBe('h5ad-diagnostics.json')
-  })
-
-  it('falls back to the platform diagnostics found, then to dataset', () => {
-    expect(
-      diagnosticsDumpFileName(null, {
-        status: 'ready',
-        url: 'https://example.test/output',
-        report,
-      }),
-    ).toBe('xenium-diagnostics.json')
-    expect(
-      diagnosticsDumpFileName(null, {
-        status: 'ready',
-        url: 'https://example.test/output',
-        report: { ...report, platform: 'unknown' },
-      }),
-    ).toBe('dataset-diagnostics.json')
-    expect(diagnosticsDumpFileName(null, { status: 'idle' })).toBe(
-      'dataset-diagnostics.json',
+  it('uses the UTC time to the second, without colons', () => {
+    expect(diagnosticsDumpFileName(new Date('2026-11-17T14:05:09.987Z'))).toBe(
+      'diagnostics-2026-11-17T14-05-09Z.json',
+    )
+    expect(diagnosticsDumpFileName(new Date('2026-01-02T03:04:05+05:00'))).toBe(
+      'diagnostics-2026-01-01T22-04-05Z.json',
     )
   })
 })

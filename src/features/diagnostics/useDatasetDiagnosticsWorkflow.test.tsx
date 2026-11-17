@@ -3,7 +3,6 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
 import type { TelemetryEvent } from '../../data/telemetry'
-import type { Platform } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import type { DatasetDiagnosticsState } from '../dataset/datasetLoadModel'
@@ -40,7 +39,6 @@ interface DiagnosticsSnapshot {
 }
 
 interface DiagnosticsProbeProps {
-  readonly datasetPlatform?: Platform | null
   readonly datasetUrl?: string
   readonly onReady: (
     api: ReturnType<typeof useDatasetDiagnosticsWorkflow>,
@@ -54,7 +52,6 @@ let diagnosticsApi: ReturnType<typeof useDatasetDiagnosticsWorkflow>
 let diagnosticsSnapshot: DiagnosticsSnapshot
 
 function DiagnosticsProbe({
-  datasetPlatform = null,
   datasetUrl = ' https://example.test/output ',
   onReady,
   runDatasetDiagnostics,
@@ -77,7 +74,6 @@ function DiagnosticsProbe({
       },
     },
     controls: {
-      datasetPlatform,
       ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
     },
     dump: {
@@ -356,20 +352,25 @@ describe('useDatasetDiagnosticsWorkflow', () => {
     expect(diagnosticsSnapshot.telemetryEvents).toEqual([])
   })
 
-  it('names the dump after the loaded dataset platform', () => {
+  it('names the dump after the time it was generated', async () => {
     const fileNames: string[] = []
+    const blobs: Blob[] = []
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-17T14:05:09.123Z'))
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
       this: HTMLAnchorElement,
     ) {
       fileNames.push(this.download)
     })
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:test')
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      blobs.push(blob as Blob)
+      return 'blob:test'
+    })
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
 
     try {
       render(
         <DiagnosticsProbe
-          datasetPlatform="visium-hd"
           onReady={(nextApi) => {
             diagnosticsApi = nextApi
           }}
@@ -381,8 +382,12 @@ describe('useDatasetDiagnosticsWorkflow', () => {
         diagnosticsApi.handleDownloadDiagnostics()
       })
 
-      expect(fileNames).toEqual(['visium-hd-diagnostics.json'])
+      expect(fileNames).toEqual(['diagnostics-2026-11-17T14-05-09Z.json'])
+      expect(JSON.parse(await blobs[0]!.text())).toMatchObject({
+        generatedAt: '2026-11-17T14:05:09.123Z',
+      })
     } finally {
+      vi.useRealTimers()
       vi.restoreAllMocks()
     }
   })

@@ -1777,7 +1777,6 @@ export function App({ dependencies }: AppProps = {}) {
       recordTelemetry,
     },
     controls: {
-      datasetPlatform,
       ...(diagnosticsVisiumHdBinSize === undefined
         ? {}
         : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),

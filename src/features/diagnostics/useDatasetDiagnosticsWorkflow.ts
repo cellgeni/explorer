@@ -1,7 +1,6 @@
 import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import { summarizeDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
-import type { Platform } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetDiagnosticsRunner } from '../app-shell/appDependencies'
 import {
@@ -41,7 +40,6 @@ interface DatasetDiagnosticsWorkflowCallbacks {
 }
 
 interface DatasetDiagnosticsWorkflowControls {
-  readonly datasetPlatform: Platform | null
   readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }
 
@@ -84,7 +82,7 @@ export function useDatasetDiagnosticsWorkflow({
   setters,
 }: UseDatasetDiagnosticsWorkflowOptions): UseDatasetDiagnosticsWorkflowResult {
   const { appendDebugEvent, recordTelemetry } = callbacks
-  const { datasetPlatform, visiumHdBinSizeMicrometers } = controls
+  const { visiumHdBinSizeMicrometers } = controls
   const { runDatasetDiagnostics } = loaders
   const { diagnosticsAbortRef } = refs
   const { setDiagnosticsState } = setters
@@ -208,48 +206,53 @@ export function useDatasetDiagnosticsWorkflow({
   }, [appendDebugEvent, diagnosticsAbortRef, setDiagnosticsState])
 
   const handleDownloadDiagnostics = useCallback(() => {
+    const generatedAt = new Date()
+
     downloadTextFile(
-      diagnosticsDumpFileName(datasetPlatform, diagnosticsState),
+      diagnosticsDumpFileName(generatedAt),
       JSON.stringify(
-        createDiagnosticsDump({
-          openPanels,
-          activeErrors,
-          boundaryCellLimit,
-          coordinateUnit,
-          datasetUrl,
-          debugLog,
-          diagnosticsState,
-          geneExpressionBatch,
-          geneExpressionColorScale,
-          geneExpressionDetailMode,
-          geneExpressionScoreMode,
-          geneExpressionState,
-          hoveredTranscript,
-          loadState,
-          manualTranscriptExactRequestKey,
-          measurementEnabled,
-          measurementUnit,
-          observationColorMode,
-          performanceBudget,
-          pinnedTranscript,
-          selectedGenes,
-          shareableViewState,
-          shouldLoadMorphology,
-          telemetryEvents,
-          showTranscriptOverlay,
-          transcriptCapabilityState,
-          transcriptDetailMode,
-          transcriptDensityColorScale,
-          transcriptExactPointLimit,
-          transcriptExactManualLoadRatio,
-          transcriptFeatureFilterMode,
-          transcriptGeneOnly,
-          transcriptLayerState,
-          transcriptMinQv,
-          transcriptOpacity,
-          transcriptPointColorMode,
-          transcriptPointSize,
-        }),
+        createDiagnosticsDump(
+          {
+            openPanels,
+            activeErrors,
+            boundaryCellLimit,
+            coordinateUnit,
+            datasetUrl,
+            debugLog,
+            diagnosticsState,
+            geneExpressionBatch,
+            geneExpressionColorScale,
+            geneExpressionDetailMode,
+            geneExpressionScoreMode,
+            geneExpressionState,
+            hoveredTranscript,
+            loadState,
+            manualTranscriptExactRequestKey,
+            measurementEnabled,
+            measurementUnit,
+            observationColorMode,
+            performanceBudget,
+            pinnedTranscript,
+            selectedGenes,
+            shareableViewState,
+            shouldLoadMorphology,
+            telemetryEvents,
+            showTranscriptOverlay,
+            transcriptCapabilityState,
+            transcriptDetailMode,
+            transcriptDensityColorScale,
+            transcriptExactPointLimit,
+            transcriptExactManualLoadRatio,
+            transcriptFeatureFilterMode,
+            transcriptGeneOnly,
+            transcriptLayerState,
+            transcriptMinQv,
+            transcriptOpacity,
+            transcriptPointColorMode,
+            transcriptPointSize,
+          },
+          generatedAt,
+        ),
         null,
         2,
       ),
@@ -262,7 +265,6 @@ export function useDatasetDiagnosticsWorkflow({
     appendDebugEvent,
     boundaryCellLimit,
     coordinateUnit,
-    datasetPlatform,
     datasetUrl,
     debugLog,
     diagnosticsState,
