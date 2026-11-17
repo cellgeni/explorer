@@ -5,11 +5,12 @@ import {
   writeTinyFeatureSlice,
 } from '../test/h5Fixtures'
 import { createH5FileHandler, type H5FileHandler } from '../workers/h5FileCore'
-import type {
-  H5FileWorkerRequest,
-  H5FileWorkerResponse,
-  H5MatrixCellsPayload,
-  H5TreeGroup,
+import {
+  H5_RANGE_UNSUPPORTED_ERROR,
+  type H5FileWorkerRequest,
+  type H5FileWorkerResponse,
+  type H5MatrixCellsPayload,
+  type H5TreeGroup,
 } from '../workers/h5FileMessages'
 import {
   createInProcessH5Worker,
@@ -93,7 +94,7 @@ const noCells: H5MatrixCellsPayload = {
 async function openManualFile() {
   const worker = new ManualH5Worker()
   const opening = openH5WorkerFile(new Uint8Array(8), { workerFactory: () => worker })
-  worker.reply({ id: 1, ok: true, op: 'open', tree: null })
+  worker.reply({ id: 1, ok: true, op: 'open', tree: null, range: null })
 
   return { worker, file: await opening }
 }
@@ -236,6 +237,106 @@ describe('openH5WorkerFile', () => {
     }
   })
 
+  it('reads a URL by range, walking only the paths asked for', async () => {
+    const bytes = await createSmallFile()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+        const range = /^bytes=(\d+)-(\d+)$/.exec(
+          new Headers(init?.headers).get('range') ?? '',
+        )
+        const start = Number(range?.[1] ?? 0)
+        const end = Math.min(Number(range?.[2] ?? 0) + 1, bytes.byteLength)
+        return new Response(bytes.slice(start, end), {
+          status: 206,
+          headers: { 'content-range': `bytes ${start}-${end - 1}/${bytes.byteLength}` },
+        })
+      }),
+    )
+
+    try {
+      // The fixture is smaller than the first range request, so it is read in
+      // that request and there are no range reads to report.
+      const file = await openH5WorkerFileFromUrl('https://example.test/a.h5', 'a.h5', {
+        tree: true,
+        treePaths: ['group/values'],
+        rangeOnly: true,
+        workerFactory: () =>
+          createInProcessH5Worker({
+            createRangeRead: () => (start, end) => bytes.slice(start, end),
+          }),
+      })
+
+      expect(file.tree?.children).toEqual([
+        [
+          'group',
+          {
+            kind: 'group',
+            attrs: [],
+            children: [
+              ['values', { kind: 'dataset', attrs: [], shape: [3], itemSize: 4 }],
+            ],
+          },
+        ],
+      ])
+      await expect(file.read('/group/values', { slice: [[1, 3]] })).resolves.toEqual(
+        new Int32Array([5, 6]),
+      )
+      expect(file.range).toBeNull()
+      await expect(file.rangeStats()).resolves.toBeNull()
+      file.close()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('fails a range-only open with the error name the worker reports', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(new Uint8Array(8))),
+    )
+
+    try {
+      // The in-process handler has no synchronous range reads.
+      await expect(
+        openH5WorkerFileFromUrl('https://example.test/a.h5', 'a.h5', {
+          rangeOnly: true,
+          workerFactory: createInProcessH5Worker,
+        }),
+      ).rejects.toMatchObject({ name: H5_RANGE_UNSUPPORTED_ERROR })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('sends slices and stats requests, and cancels a waiting read', async () => {
+    const { worker, file } = await openManualFile()
+    const controller = new AbortController()
+    const first = file.read('/X/data', { slice: [[2, 5]] })
+    const cancelled = file.read('/X/indices', {
+      slice: [[2, 5]],
+      signal: controller.signal,
+    })
+    const stats = file.rangeStats()
+
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+    worker.reply({ id: 2, ok: true, op: 'read', value: new Float32Array([1, 2, 3]) })
+    await expect(first).resolves.toEqual(new Float32Array([1, 2, 3]))
+    worker.reply({
+      id: 3,
+      ok: true,
+      op: 'stats',
+      range: { size: 100, requests: 2, fetchedBytes: 50 },
+    })
+    await expect(stats).resolves.toEqual({ size: 100, requests: 2, fetchedBytes: 50 })
+    expect(worker.posted).toEqual([
+      { id: 1, op: 'open', source: expect.anything(), tree: false },
+      { id: 2, op: 'read', path: '/X/data', slice: [[2, 5]] },
+      { id: 3, op: 'stats' },
+    ])
+  })
+
   it('terminates the worker when the bytes are not HDF5', async () => {
     const worker = new CloningH5Worker()
 
@@ -313,7 +414,9 @@ describe('h5TreeNodeAt', () => {
         {
           kind: 'group',
           attrs: [],
-          children: [['barcodes', { kind: 'dataset', attrs: [], shape: [2] }]],
+          children: [
+            ['barcodes', { kind: 'dataset', attrs: [], shape: [2], itemSize: 8 }],
+          ],
         },
       ],
     ],

@@ -49,24 +49,39 @@ the Visium platform once it is read; see
 
 ## Files Read
 
-| File                    | Required                                    | Read by                    | Library                                             | Notes                                                                           |
-| ----------------------- | ------------------------------------------- | -------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `sample.h5ad`           | Yes                                         | `readH5ad`                 | `h5wasm` (whole file) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                                           |
-| `sample.h5ad.json`      | Over 300 MiB, this or the repository        | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                 | Kerchunk reference; URL is the H5AD URL plus `.json`                            |
-| `sample.h5ad.icechunk/` | Over 300 MiB with no JSON, this or the JSON | `readH5adIcechunkOrThrow`  | `icechunk-js` and `zarrita`                         | Icechunk repository of virtual references; URL is the H5AD URL plus `.icechunk` |
+| File                    | Required                                    | Read by                    | Library                                                    | Notes                                                                           |
+| ----------------------- | ------------------------------------------- | -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `sample.h5ad`           | Yes                                         | `readH5ad`                 | `h5wasm` (by range or whole) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                                           |
+| `sample.h5ad.json`      | Over 300 MiB, this or the repository        | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                        | Kerchunk reference; URL is the H5AD URL plus `.json`                            |
+| `sample.h5ad.icechunk/` | Over 300 MiB with no JSON, this or the JSON | `readH5adIcechunkOrThrow`  | `icechunk-js` and `zarrita`                                | Icechunk repository of virtual references; URL is the H5AD URL plus `.icechunk` |
 
 ## Two Backends
 
 `readH5ad` picks a backend from the file size (`H5AD_MAX_FILE_BYTES` =
 300 MiB = 314,572,800 bytes):
 
-- **In-memory (`h5wasm`).** For files up to 300 MiB. The whole file is
-  downloaded with one plain `GET` (no byte ranges), transferred to an H5 file
-  worker (`src/workers/h5File.worker.ts`), written into its Emscripten
-  filesystem, and opened with `h5wasm.File` there. The worker sends back the
-  file's groups, datasets and attributes, then each dataset as it is read. If `Content-Length` is missing,
-  the body is streamed with a running byte count; going past 300 MiB cancels
-  the download and switches to the reference backend.
+- **HDF5 (`h5wasm`).** An H5 file worker (`src/workers/h5File.worker.ts`)
+  opens the file with `h5wasm.File` and sends back its groups, datasets and
+  attributes under `X`, `obs`, `var`, `obsm`, `uns/spatial` and
+  `uns/spatialdata_attrs` (`H5AD_TREE_PATHS`), then each dataset as it is
+  read. How the worker gets the file:
+  - **Up to 64 MiB** (`H5AD_RANGE_MIN_FILE_BYTES`): downloaded whole on the
+    main thread with one plain `GET` and transferred to the worker.
+  - **Over 64 MiB, or no `Content-Length`** (`readH5adByRange`): the worker
+    opens the URL itself and reads it by range with synchronous requests
+    (`h5RangeFile.ts`, `rangeBlockCache.ts`), so only what HDF5 reads is
+    fetched: object headers, those groups' arrays, and `/X`, read whole at
+    load. If the host ignores Range requests or hides the file's size, the
+    file is downloaded whole as above; without `Content-Length` the body is
+    streamed with a running byte count, and going past 300 MiB cancels the
+    download and switches to the reference backend.
+  - **Over 300 MiB without a reference:** read by range too. `/X` is read
+    whole if its arrays decode to at most 300 MiB
+    (`H5AD_RANGE_MATRIX_MAX_BYTES`); otherwise each request slices it in the
+    worker, as the reference backend does.
+
+  A custom `fetcher` (tests) keeps the whole download on the main thread.
+
 - **Kerchunk reference (`zarrita`).** For files over 300 MiB. The app fetches
   `<h5ad URL>.json`, rewrites every chunk reference to point at the H5AD URL
   (the URL stored in the JSON is ignored), and opens it as a Zarr v2 store with
@@ -359,8 +374,8 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 
 | Error                                        | Cause                                                                                  |
 | -------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `H5adReferenceFileUnavailableError`          | File is over 300 MiB and `<url>.json` is missing or not readable                       |
-| `H5adAllGeneCscMatrixUnsupportedError`       | All-gene read (selected-cell profile, ROI gene stats) on a reference-backed CSC matrix |
+| `H5adReferenceFileUnavailableError`          | File is over 300 MiB, has no readable reference, and its host does not answer Range    |
+| `H5adAllGeneCscMatrixUnsupportedError`       | All-gene read (selected-cell profile, ROI gene stats) on a CSC matrix read lazily      |
 | `H5adDenseCellProfileOverBudgetError`        | All-gene read on a dense Zarr `/X` whose chunks put one cell in over 256 MiB of values |
 | "Expected H5AD /obs/... to contain strings." | An obs dataset is neither numeric nor string                                           |
 
@@ -369,4 +384,5 @@ disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`
 - `Clear Annotations`, or a metadata track's `x`, also drops the tracks read
   from `obs`; reload the dataset to get them back.
 - Diagnostics do not check the `.h5ad.json` reference.
-- The in-memory backend downloads the whole file before anything renders.
+- A file up to 64 MiB, or on a host without Range support, is downloaded
+  whole before anything renders.

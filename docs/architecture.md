@@ -377,18 +377,18 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 
 ## Caching
 
-| Cache                                                  | Scope                                                                                                                        | Limits                                        | File                                         |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`       |
-| Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure, else kept until reload    | `datasetFactory.ts`, `xeniumDatasetCache.ts` |
-| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                   |
-| Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                            |
-| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder     | `src/data/folderListing.ts`                  |
-| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                            |
-| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`                      | 128 MiB of blocks each; dropped on failure    | `gex.ts`, `visiumFeatureSlice.ts`            |
-| SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                     |
-| Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                      |
-| Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                   | `visiumHdDatasetReaders.ts`                  |
+| Cache                                                  | Scope                                                                                                                        | Limits                                        | File                                                |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------- |
+| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`              |
+| Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure, else kept until reload    | `datasetFactory.ts`, `xeniumDatasetCache.ts`        |
+| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                          |
+| Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                                   |
+| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder     | `src/data/folderListing.ts`                         |
+| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                                   |
+| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB    | 128 MiB of blocks each; dropped on failure    | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts` |
+| SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                            |
+| Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                             |
+| Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                   | `visiumHdDatasetReaders.ts`                         |
 
 The byte-range cache (database version 3) keeps each range's bytes, each
 range's size and last access, and the cache's totals in three object stores. A
@@ -430,7 +430,7 @@ their own, and their cards stayed on "Loading".
 | `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                                                       |
 | DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                      |
 | `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                             |
-| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: H5AD and the standard Visium matrix whole; Xenium and Visium HD by range                               |
+| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range            |
 | `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                           |
 | `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read) |
 | `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                           |
@@ -439,14 +439,15 @@ their own, and their cards stayed on "Loading".
 | `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                     |
 | `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)       |
 
-An H5 file worker gets the downloaded bytes by transfer (H5AD, standard
-Visium), writes them into its own h5wasm file system, and answers reads by
-path. The Xenium H5 fallback, the Visium HD filtered matrices and
-`feature_slice.h5` it reads itself: the file sits in h5wasm's file system as a
+An H5 file worker gets the downloaded bytes by transfer (H5AD up to 64 MiB,
+standard Visium), writes them into its own h5wasm file system, and answers
+reads by path. The Xenium H5 fallback, the Visium HD filtered matrices,
+`feature_slice.h5` and larger H5AD files it reads itself: the file sits in h5wasm's file system as a
 range-read file (`h5RangeFile.ts`) whose blocks come from synchronous range
 requests with read-ahead (`rangeBlockCache.ts`), so HDF5 fetches only what it
 reads, and matrix rows and Feature Slice genes are read inside the worker. A
-host that ignores Range, or hides the file's size, sends the file whole. An
+host that ignores Range, or hides the file's size, sends the file whole; for an
+H5AD the main thread then downloads it within the 300 MiB limit. An
 H5AD file's worker stays open for reads after load (embeddings, tissue images)
 and ends when the dataset is garbage collected; a range-read file's stays open
 for the session, keeping its barcode index (up to 2 million barcodes) and up to

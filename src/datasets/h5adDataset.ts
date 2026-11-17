@@ -12,7 +12,12 @@ import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { normalizeRoiSelection } from '../data/roiSelection'
-import { openH5WorkerFile, type H5WorkerFile } from '../data/h5WorkerFile'
+import {
+  openH5WorkerFile,
+  openH5WorkerFileFromUrl,
+  type H5WorkerFactory,
+  type H5WorkerFile,
+} from '../data/h5WorkerFile'
 import { createAsyncLimiter } from '../utils/asyncLimiter'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { slug } from '../utils/slug'
@@ -29,7 +34,11 @@ import {
   type GeneValuesRead,
   type GeneValuesReadEstimate,
 } from '../data/geneValues'
-import type { H5TreeGroup } from '../workers/h5FileMessages'
+import {
+  H5_RANGE_UNSUPPORTED_ERROR,
+  type H5FileRangeStats,
+  type H5TreeGroup,
+} from '../workers/h5FileMessages'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 import type { DatasetImageCoordinates } from './datasetManifest'
 import type { SpatialDataLabelsReader } from './spatialDataLabels'
@@ -102,6 +111,12 @@ export interface AnnDataH5adDatasetOptions {
   readonly openImage?: ImagePyramidOpener
   // Opens `image.labelsUrl`; defaults to the OME-Zarr label reader.
   readonly openLabels?: AnnDataLabelsOpener
+  // Starts the H5 file worker that reads an .h5ad by range; for tests.
+  readonly h5WorkerFactory?: H5WorkerFactory
+  // An .h5ad read by range reads /X whole at load up to this many decoded
+  // bytes, and slices it per request above. Defaults to whole for a file
+  // within the 300 MiB limit, else H5AD_RANGE_MATRIX_MAX_BYTES.
+  readonly rangeMatrixMaxBytes?: number
 }
 
 // What cell boundaries need from a label image's reader.
@@ -332,21 +347,33 @@ type H5adMatrix =
       readonly cols: number
     }
   | {
-      readonly kind: 'csr-zarr'
-      readonly data: H5adZarrArray
-      readonly indices: H5adZarrArray
+      readonly kind: 'dense-h5'
+      readonly values: H5adWorkerArraySource
+      readonly rows: number
+      readonly cols: number
+    }
+  | {
+      readonly kind: 'csr-lazy'
+      readonly data: H5adVectorReader
+      readonly indices: H5adVectorReader
       readonly indptr: NumericArrayLike
       readonly rows: number
       readonly cols: number
     }
   | {
-      readonly kind: 'csc-zarr'
-      readonly data: H5adZarrArray
-      readonly indices: H5adZarrArray
+      readonly kind: 'csc-lazy'
+      readonly data: H5adVectorReader
+      readonly indices: H5adVectorReader
       readonly indptr: NumericArrayLike
       readonly rows: number
       readonly cols: number
     }
+
+// A 1-D numeric array read in slices when asked: a Zarr array, or a dataset of
+// an .h5ad file read by range in an H5 file worker.
+interface H5adVectorReader {
+  slice(start: number, end: number, signal?: AbortSignal): Promise<NumericArrayLike>
+}
 
 export type NumericArrayLike =
   | readonly number[]
@@ -392,6 +419,8 @@ interface H5adWorkerArraySource {
   readonly kind: 'h5-worker'
   readonly file: H5WorkerFile
   readonly path: string
+  // Bytes per decoded element.
+  readonly itemSize: number | null
 }
 
 type H5adZarrArray = zarr.Array<zarr.DataType, zarr.Readable>
@@ -432,9 +461,31 @@ const VISIUM_LIBRARY_COLUMNS = ['library_id', 'library', 'sample']
 
 const H5AD_FETCH_TIMEOUT_MS = 60_000
 const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
+// The groups an .h5ad file's tree walk visits. Layers, raw, the pairwise
+// matrices and uns other than the Visium layout and a SpatialData table's
+// instance key are never read, and in a file read by range each object visited
+// can cost a request.
+const H5AD_TREE_PATHS = [
+  'X',
+  'obs',
+  'var',
+  'obsm',
+  'uns/spatial',
+  'uns/spatialdata_attrs',
+]
+// Files up to this size are downloaded whole. Reading one by range takes about
+// 15 to 25 round trips, mostly to object headers spread through the file: from
+// the UK the 14 MB and 48 MB gallery files would load slower by range, while
+// the 226 MB Visium heart is ready in 8.8 s, against 16 to 27 s to download.
+const H5AD_RANGE_MIN_FILE_BYTES = 64 * 1024 * 1024
+// A file over the size limit read by range reads its /X whole at load only up
+// to this many decoded bytes, and otherwise slices it per request.
+const H5AD_RANGE_MATRIX_MAX_BYTES = 300 * 1024 * 1024
 const H5AD_REFERENCE_FETCH_CONCURRENCY = 6
-const CSR_ZARR_BATCH_MAX_VALUES = 4_000_000
-const CSR_ZARR_BATCH_MAX_GAP_VALUES = 262_144
+const CSR_LAZY_BATCH_MAX_VALUES = 4_000_000
+const CSR_LAZY_BATCH_MAX_GAP_VALUES = 262_144
+// The most decoded bytes of a dense /X one worker read returns.
+const DENSE_H5_READ_MAX_BYTES = 16 * 1024 * 1024
 // zarr's default chunks for a 125,955 x 12,963 float32 /X are 1,969 x 406, so
 // one cell's genes are in 32 chunks holding 98 MiB of values. Chunked by gene
 // as 125,955 x 10, one cell's genes are in all 1,297 chunks: 6.1 GiB.
@@ -497,7 +548,7 @@ export class H5adAllGeneCscMatrixUnsupportedError extends Error {
 
   constructor(rowCount: number, geneCount: number) {
     super(
-      `H5AD reference-backed CSC matrices cannot load all genes for selected cells without scanning the whole expression matrix (${rowCount.toLocaleString()} cells x ${geneCount.toLocaleString()} genes).`,
+      `H5AD CSC matrices read lazily (by range or through a reference) cannot load all genes for selected cells without scanning the whole expression matrix (${rowCount.toLocaleString()} cells x ${geneCount.toLocaleString()} genes).`,
     )
     this.name = 'H5adAllGeneCscMatrixUnsupportedError'
     this.rowCount = rowCount
@@ -565,6 +616,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly zarrStore: boolean
   private readonly visiumImageUrls: Readonly<Partial<Record<VisiumImageKind, string>>>
   private readonly denseCellProfileMaxBytes: number
+  private readonly h5WorkerFactory: H5WorkerFactory | undefined
+  private readonly rangeMatrixMaxBytes: number | undefined
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
   private cachePromise: Promise<H5adCache> | null = null
@@ -605,6 +658,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.visiumImageUrls = options.visiumImageUrls ?? {}
     this.denseCellProfileMaxBytes =
       options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
+    this.h5WorkerFactory = options.h5WorkerFactory
+    this.rangeMatrixMaxBytes = options.rangeMatrixMaxBytes
     this.attachedImage = options.image
     this.openImage = options.openImage
     this.openLabels = options.openLabels
@@ -754,6 +809,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       selectedCells.map((cell) => cell.id),
       genes,
       this.denseCellProfileMaxBytes,
+      options.signal,
     )
     // A sample keeps every cell with expression and every Nth cell without.
     const sampleStride = normalizeSampleStride(options.sampleStride)
@@ -800,16 +856,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // A matrix read into memory at load reads nothing more. Matrices read
-  // over HTTP come in a later milestone (22-A, M2).
+  // over HTTP or by range come in a later milestone (22-A, M2).
   async estimateGeneValuesRead(): Promise<GeneValuesReadEstimate> {
     const { matrix } = await this.cache()
 
-    return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
+    return isMatrixInMemory(matrix)
       ? { kind: 'read', bytes: 0 }
       : {
           kind: 'unavailable',
           reason:
-            'Plots read an expression matrix held in memory: an .h5ad file up to 300 MiB, standard Visium or MERSCOPE. This dataset reads its matrix over HTTP.',
+            'Plots read an expression matrix held in memory: one from an .h5ad file up to 300 MiB or whose /X decodes to 300 MiB or less, standard Visium or MERSCOPE. This dataset reads its matrix over HTTP.',
         }
   }
 
@@ -1418,6 +1474,15 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
               : this.zarrSource === undefined
                 ? readH5ad(this.url, {
                     fetcher: this.fetcher,
+                    // A custom fetcher, as tests pass, keeps the download on
+                    // this thread.
+                    byRange: this.storeFetcher === undefined,
+                    ...(this.h5WorkerFactory === undefined
+                      ? {}
+                      : { workerFactory: this.h5WorkerFactory }),
+                    ...(this.rangeMatrixMaxBytes === undefined
+                      ? {}
+                      : { rangeMatrixMaxBytes: this.rangeMatrixMaxBytes }),
                     ...(this.onProgress === undefined
                       ? {}
                       : { onProgress: this.onProgress }),
@@ -1571,18 +1636,26 @@ function visiumSpotArea(cache: H5adCache): number | undefined {
       : Math.PI * (diameter / 2) ** 2
 }
 
-async function readH5ad(
-  url: string,
-  options: {
-    readonly fetcher: typeof fetch
-    readonly onProgress?: H5adLoadProgressReporter
-  },
-): Promise<H5adCache> {
+interface ReadH5adOptions {
+  readonly fetcher: typeof fetch
+  // Read the file by range in an H5 file worker when its host answers range
+  // requests, rather than download it whole.
+  readonly byRange: boolean
+  readonly workerFactory?: H5WorkerFactory
+  readonly rangeMatrixMaxBytes?: number
+  readonly onProgress?: H5adLoadProgressReporter
+}
+
+// Small files are downloaded whole. Over the size limit, a companion reference
+// is preferred to reading by range. A host that does not answer range requests
+// gets the file downloaded whole, within the limit.
+async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCache> {
   const { fetcher, onProgress } = options
   reportH5adProgress(onProgress, 'H5AD size check started')
   const headResponse = await fetchH5adHead(url, fetcher).catch(() => null)
   const declaredByteLength =
     headResponse?.ok === true ? readContentLength(headResponse.headers) : null
+  const openByRange = options.byRange ? () => readH5adByRange(url, options) : null
 
   if (declaredByteLength !== null && declaredByteLength > H5AD_MAX_FILE_BYTES) {
     reportH5adProgress(
@@ -1591,7 +1664,35 @@ async function readH5ad(
         declaredByteLength,
       )}, above the ${formatByteCount(H5AD_MAX_FILE_BYTES)} browser limit`,
     )
-    return readH5adReferenceOrThrow(url, fetcher, declaredByteLength, onProgress)
+    return readH5adReferenceOrThrow(
+      url,
+      fetcher,
+      declaredByteLength,
+      onProgress,
+      openByRange,
+    )
+  }
+
+  if (
+    openByRange !== null &&
+    (declaredByteLength === null || declaredByteLength > H5AD_RANGE_MIN_FILE_BYTES)
+  ) {
+    reportH5adProgress(
+      onProgress,
+      declaredByteLength === null
+        ? 'H5AD size check unavailable; reading by range'
+        : `H5AD file is ${formatByteCount(declaredByteLength)}; reading by range`,
+    )
+    const cache = await openByRange()
+
+    if (cache !== null) {
+      return cache
+    }
+
+    reportH5adProgress(
+      onProgress,
+      'H5AD host does not answer range requests; downloading the whole file',
+    )
   }
 
   if (declaredByteLength === null) {
@@ -1626,7 +1727,8 @@ async function readH5ad(
           H5AD_MAX_FILE_BYTES,
         )}; looking for companion reference`,
       )
-      return readH5adReferenceOrThrow(url, fetcher, error.byteLength, onProgress)
+      // The host ignored range requests, or this is a custom fetcher.
+      return readH5adReferenceOrThrow(url, fetcher, error.byteLength, onProgress, null)
     }
 
     throw error
@@ -1636,7 +1738,13 @@ async function readH5ad(
 
   // The worker stays open for reads after load (embeddings, tissue images)
   // and ends when the dataset is no longer referenced.
-  const file = await openH5WorkerFile(bytes, { tree: true })
+  const file = await openH5WorkerFile(bytes, {
+    tree: true,
+    treePaths: H5AD_TREE_PATHS,
+    ...(options.workerFactory === undefined
+      ? {}
+      : { workerFactory: options.workerFactory }),
+  })
 
   try {
     return await readH5adCacheFromGroup(url, hydrateH5WorkerGroup(file))
@@ -1644,6 +1752,77 @@ async function readH5ad(
     file.close()
     throw error
   }
+}
+
+// Opens the file in an H5 file worker that reads it by range, so only the
+// groups the viewer reads are fetched, not tissue images, raw or layers. /X is
+// read whole at load, as from a downloaded file, unless the file is over the
+// size limit and /X decodes to more than H5AD_RANGE_MATRIX_MAX_BYTES; then it
+// is sliced per request. Null when the host does not answer range requests.
+async function readH5adByRange(
+  url: string,
+  options: ReadH5adOptions,
+): Promise<H5adCache | null> {
+  const { onProgress } = options
+  let file: H5WorkerFile
+
+  try {
+    file = await openH5WorkerFileFromUrl(url, 'H5AD file', {
+      tree: true,
+      treePaths: H5AD_TREE_PATHS,
+      rangeOnly: true,
+      ...(options.workerFactory === undefined
+        ? {}
+        : { workerFactory: options.workerFactory }),
+    })
+  } catch (error) {
+    if (error instanceof Error && error.name === H5_RANGE_UNSUPPORTED_ERROR) {
+      return null
+    }
+
+    throw error
+  }
+
+  try {
+    reportH5adProgress(
+      onProgress,
+      `H5AD file opened by range (${rangeReadLabel(file.range)}); reading AnnData arrays`,
+    )
+    const size = file.range?.size ?? 0
+    const lazyMatrixAboveBytes =
+      options.rangeMatrixMaxBytes ??
+      (size > H5AD_MAX_FILE_BYTES ? H5AD_RANGE_MATRIX_MAX_BYTES : undefined)
+    const cache = await readH5adCacheFromGroup(
+      url,
+      hydrateH5WorkerGroup(file),
+      undefined,
+      undefined,
+      lazyMatrixAboveBytes === undefined ? {} : { lazyMatrixAboveBytes },
+    )
+    reportH5adProgress(
+      onProgress,
+      `H5AD arrays read by range (${rangeReadLabel(await file.rangeStats())})${
+        isMatrixInMemory(cache.matrix) ? '' : '; /X is read by range when needed'
+      }`,
+    )
+    return cache
+  } catch (error) {
+    file.close()
+    throw error
+  }
+}
+
+// A file within the first range request is read whole in it.
+function rangeReadLabel(stats: H5FileRangeStats | null): string {
+  return stats === null
+    ? 'all in the first request'
+    : `${formatByteCount(stats.fetchedBytes)} of ${formatByteCount(
+        stats.size,
+      )} in ${countLabel(stats.requests, 'range request')}`
+}
+
+function isMatrixInMemory(matrix: H5adMatrix): boolean {
+  return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
 }
 
 function hydrateH5WorkerGroup(
@@ -1669,7 +1848,7 @@ function hydrateH5WorkerGroup(
       attrs: h5AttrsFromRecord(Object.fromEntries(node.attrs)),
       shape: node.shape,
       value: undefined,
-      source: { kind: 'h5-worker', file, path: childPath },
+      source: { kind: 'h5-worker', file, path: childPath, itemSize: node.itemSize },
     }
     children.set(name, dataset)
   }
@@ -1680,18 +1859,27 @@ function hydrateH5WorkerGroup(
   )
 }
 
+// `openByRange` opens the file without a companion, when its host allows.
 async function readH5adReferenceOrThrow(
   url: string,
   fetcher: typeof fetch,
   byteLength: number,
   onProgress: H5adLoadProgressReporter | undefined,
+  openByRange: (() => Promise<H5adCache | null>) | null,
 ): Promise<H5adCache> {
   const referenceUrl = h5adReferenceUrl(url)
   reportH5adProgress(onProgress, `Looking for H5AD reference ${referenceUrl}`)
   const response = await fetchH5adReferenceFile(referenceUrl, fetcher).catch(() => null)
 
   if (response?.ok !== true) {
-    return readH5adIcechunkOrThrow(url, fetcher, referenceUrl, byteLength, onProgress)
+    return readH5adIcechunkOrThrow(
+      url,
+      fetcher,
+      referenceUrl,
+      byteLength,
+      onProgress,
+      openByRange,
+    )
   }
 
   reportH5adProgress(onProgress, `Loading H5AD reference ${referenceUrl}`)
@@ -1725,6 +1913,7 @@ async function readH5adIcechunkOrThrow(
   referenceUrl: string,
   byteLength: number,
   onProgress: H5adLoadProgressReporter | undefined,
+  openByRange: (() => Promise<H5adCache | null>) | null,
 ): Promise<H5adCache> {
   const repositoryUrl = h5adIcechunkUrl(url)
   reportH5adProgress(onProgress, `Looking for H5AD Icechunk repository ${repositoryUrl}`)
@@ -1737,6 +1926,18 @@ async function readH5adIcechunkOrThrow(
     })
   } catch (error) {
     if (error instanceof IcechunkRepositoryUnavailableError && !error.found) {
+      if (openByRange !== null) {
+        reportH5adProgress(
+          onProgress,
+          'No H5AD reference or Icechunk repository; reading the file by range',
+        )
+        const cache = await openByRange()
+
+        if (cache !== null) {
+          return cache
+        }
+      }
+
       throw new H5adReferenceFileUnavailableError(
         url,
         referenceUrl,
@@ -2210,7 +2411,11 @@ async function readH5adCacheFromGroup(
   file: H5GroupLike,
   resolveCoordinates?: AnnDataCoordinateResolver,
   onUnreadableColumn?: (key: string, error: ZarrChunkUnavailableError) => void,
-  options: { readonly visiumLayout?: boolean } = {},
+  options: {
+    readonly visiumLayout?: boolean
+    // See `readMatrix`.
+    readonly lazyMatrixAboveBytes?: number
+  } = {},
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
   const varGroup = expectGroup(file.get('/var'), '/var')
@@ -2259,7 +2464,11 @@ async function readH5adCacheFromGroup(
     resolvedCoordinates ??
     visiumPlacement?.coordinates ??
     (coordinateEmbedding === null ? [] : embeddingToCoordinates(coordinateEmbedding))
-  const matrix = await readMatrix(file, cellIds.length, geneNames.length)
+  const matrix = await readMatrix(file, cellIds.length, geneNames.length, {
+    ...(options.lazyMatrixAboveBytes === undefined
+      ? {}
+      : { lazyAboveBytes: options.lazyMatrixAboveBytes }),
+  })
 
   return {
     url,
@@ -3285,12 +3494,32 @@ async function readObsColumnValues(
   return null
 }
 
+// A Zarr /X (reference, Icechunk, AnnData Zarr) is sliced per request. One in
+// an H5 file worker is read whole, unless its arrays decode to more than
+// `lazyAboveBytes`; then it too is sliced per request.
 async function readMatrix(
   file: H5GroupLike,
   rows: number,
   cols: number,
+  options: { readonly lazyAboveBytes?: number } = {},
 ): Promise<H5adMatrix> {
   const x = file.get('/X')
+  const readLazily = (...datasets: readonly H5DatasetLike[]) => {
+    const { lazyAboveBytes } = options
+    let bytes = 0
+
+    for (const dataset of datasets) {
+      const datasetBytes = h5WorkerDatasetBytes(dataset)
+
+      if (datasetBytes === null) {
+        return false
+      }
+
+      bytes += datasetBytes
+    }
+
+    return lazyAboveBytes !== undefined && bytes > lazyAboveBytes
+  }
 
   if (isDataset(x)) {
     const shape = x.shape
@@ -3310,6 +3539,10 @@ async function readMatrix(
         rows,
         cols,
       }
+    }
+
+    if (x.source?.kind === 'h5-worker' && readLazily(x)) {
+      return { kind: 'dense-h5', values: x.source, rows, cols }
     }
 
     return {
@@ -3341,18 +3574,34 @@ async function readMatrix(
     }
 
     const matrix = {
-      data: data.source.array,
-      indices: indices.source.array,
+      data: zarrVectorReader(data.source.array),
+      indices: zarrVectorReader(indices.source.array),
       indptr,
       rows,
       cols,
     }
 
-    if (encodingType === 'csc_matrix') {
-      return { kind: 'csc-zarr', ...matrix }
+    return encodingType === 'csc_matrix'
+      ? { kind: 'csc-lazy', ...matrix }
+      : { kind: 'csr-lazy', ...matrix }
+  }
+
+  if (
+    data.source?.kind === 'h5-worker' &&
+    indices.source?.kind === 'h5-worker' &&
+    readLazily(data, indices)
+  ) {
+    const matrix = {
+      data: h5WorkerVectorReader(data.source, '/X/data'),
+      indices: h5WorkerVectorReader(indices.source, '/X/indices'),
+      indptr,
+      rows,
+      cols,
     }
 
-    return { kind: 'csr-zarr', ...matrix }
+    return encodingType === 'csc_matrix'
+      ? { kind: 'csc-lazy', ...matrix }
+      : { kind: 'csr-lazy', ...matrix }
   }
 
   const matrix = {
@@ -3375,6 +3624,7 @@ async function h5adMatrixForCells(
   ids: readonly SpatialElementId[],
   genes: readonly string[],
   denseCellProfileMaxBytes: number,
+  signal?: AbortSignal,
 ): Promise<GexResult<SpatialElementId>> {
   const rowByCellId = new Map<string, number>()
   const colByGeneName = new Map<string, number>()
@@ -3422,6 +3672,7 @@ async function h5adMatrixForCells(
     cache.geneNames,
     includeZeroCounts,
     denseCellProfileMaxBytes,
+    signal,
   )
 
   return {
@@ -3437,6 +3688,7 @@ async function h5adMatrixCellsForRows(
   geneNames: readonly string[],
   includeZeroCounts: boolean,
   denseCellProfileMaxBytes: number,
+  signal: AbortSignal | undefined,
 ): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
   const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
   const allGenesRequested = requestedCols.length === matrix.cols
@@ -3465,6 +3717,13 @@ async function h5adMatrixCellsForRows(
     })
   }
 
+  if (matrix.kind === 'dense-h5') {
+    return denseH5CellsFromRows(matrix, rows, requestedCols, geneNames, {
+      includeZeroCounts,
+      signal,
+    })
+  }
+
   if (matrix.kind === 'csr') {
     for (const { id, row } of rows) {
       const start = Math.trunc(numericValue(matrix.indptr, row))
@@ -3489,13 +3748,14 @@ async function h5adMatrixCellsForRows(
     return cells
   }
 
-  if (matrix.kind === 'csr-zarr') {
-    for (const batch of csrZarrRowBatches(matrix.indptr, rows)) {
+  if (matrix.kind === 'csr-lazy') {
+    for (const batch of csrLazyRowBatches(matrix.indptr, rows)) {
+      throwIfAborted(signal)
       const [indices, data] =
         batch.end > batch.start
           ? await Promise.all([
-              zarrNumericVector(matrix.indices, batch.start, batch.end),
-              zarrNumericVector(matrix.data, batch.start, batch.end),
+              matrix.indices.slice(batch.start, batch.end, signal),
+              matrix.data.slice(batch.start, batch.end, signal),
             ])
           : [[], []]
 
@@ -3521,7 +3781,7 @@ async function h5adMatrixCellsForRows(
     return cells
   }
 
-  if (matrix.kind === 'csc-zarr' && allGenesRequested) {
+  if (matrix.kind === 'csc-lazy' && allGenesRequested) {
     throw new H5adAllGeneCscMatrixUnsupportedError(matrix.rows, matrix.cols)
   }
 
@@ -3531,10 +3791,11 @@ async function h5adMatrixCellsForRows(
     requestedCols,
     geneNames,
     includeZeroCounts,
+    signal,
   )
 }
 
-interface CsrZarrRowBatch {
+interface CsrLazyRowBatch {
   readonly start: number
   readonly end: number
   readonly rows: readonly {
@@ -3544,12 +3805,12 @@ interface CsrZarrRowBatch {
   }[]
 }
 
-// Groups CSR rows into contiguous value ranges so nearby rows share one zarr
-// read instead of re-reading the same chunks row by row.
-function csrZarrRowBatches(
+// Groups CSR rows into contiguous value ranges so nearby rows share one read
+// instead of re-reading the same chunks row by row.
+function csrLazyRowBatches(
   indptr: NumericArrayLike,
   rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
-): readonly CsrZarrRowBatch[] {
+): readonly CsrLazyRowBatch[] {
   const spans = rows
     .map(({ id, row }) => ({
       id,
@@ -3557,7 +3818,7 @@ function csrZarrRowBatches(
       end: Math.trunc(numericValue(indptr, row + 1)),
     }))
     .sort((left, right) => left.start - right.start)
-  const batches: CsrZarrRowBatch[] = []
+  const batches: CsrLazyRowBatch[] = []
   let current: {
     start: number
     end: number
@@ -3567,8 +3828,8 @@ function csrZarrRowBatches(
   for (const span of spans) {
     if (
       current !== null &&
-      span.start - current.end <= CSR_ZARR_BATCH_MAX_GAP_VALUES &&
-      Math.max(current.end, span.end) - current.start <= CSR_ZARR_BATCH_MAX_VALUES
+      span.start - current.end <= CSR_LAZY_BATCH_MAX_GAP_VALUES &&
+      Math.max(current.end, span.end) - current.start <= CSR_LAZY_BATCH_MAX_VALUES
     ) {
       current.end = Math.max(current.end, span.end)
       current.rows.push(span)
@@ -3728,11 +3989,12 @@ function groupByChunk<Item>(
 }
 
 async function h5adMatrixCellsFromColumns(
-  matrix: Extract<H5adMatrix, { readonly kind: 'csc' | 'csc-zarr' }>,
+  matrix: Extract<H5adMatrix, { readonly kind: 'csc' | 'csc-lazy' }>,
   rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
   requestedCols: readonly number[],
   geneNames: readonly string[],
   includeZeroCounts: boolean,
+  signal: AbortSignal | undefined,
 ): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
   const rowByIndex = new Map<number, SpatialElementId>()
   const valuesByCell = new Map<SpatialElementId, Map<number, number>>()
@@ -3750,14 +4012,15 @@ async function h5adMatrixCellsFromColumns(
       continue
     }
 
+    throwIfAborted(signal)
     const [indices, data] =
-      matrix.kind === 'csc-zarr'
+      matrix.kind === 'csc-lazy'
         ? await Promise.all([
-            zarrNumericVector(matrix.indices, start, end),
-            zarrNumericVector(matrix.data, start, end),
+            matrix.indices.slice(start, end, signal),
+            matrix.data.slice(start, end, signal),
           ])
         : [matrix.indices, matrix.data]
-    const offset = matrix.kind === 'csc-zarr' ? 0 : start
+    const offset = matrix.kind === 'csc-lazy' ? 0 : start
 
     for (let index = offset; index < offset + (end - start); index += 1) {
       const row = Math.trunc(numericValue(indices, index))
@@ -3785,6 +4048,75 @@ async function h5adMatrixCellsFromColumns(
         },
       ),
     )
+  }
+
+  return cells
+}
+
+// Rows of a dense /X read by range, as hyperslabs across the requested genes'
+// columns. Each read takes the sorted rows that fit in DENSE_H5_READ_MAX_BYTES
+// from its first, rows between them included, so nearby rows share a read.
+async function denseH5CellsFromRows(
+  matrix: Extract<H5adMatrix, { readonly kind: 'dense-h5' }>,
+  rows: readonly { readonly id: SpatialElementId; readonly row: number }[],
+  requestedCols: readonly number[],
+  geneNames: readonly string[],
+  options: {
+    readonly includeZeroCounts: boolean
+    readonly signal: AbortSignal | undefined
+  },
+): Promise<ReadonlyMap<SpatialElementId, { geneNames: string[]; counts: number[] }>> {
+  const cells = new Map<SpatialElementId, { geneNames: string[]; counts: number[] }>()
+  let firstCol = matrix.cols
+  let lastCol = -1
+
+  for (const col of requestedCols) {
+    firstCol = Math.min(firstCol, col)
+    lastCol = Math.max(lastCol, col)
+  }
+
+  const width = lastCol + 1 - firstCol
+  const rowBytes = width * (matrix.values.itemSize ?? 8)
+  const rowsPerRead = Math.max(1, Math.floor(DENSE_H5_READ_MAX_BYTES / rowBytes))
+  const sorted = [...rows].sort((left, right) => left.row - right.row)
+  let index = 0
+
+  while (index < sorted.length) {
+    throwIfAborted(options.signal)
+    const firstRow = sorted[index]?.row ?? 0
+    let end = index + 1
+
+    while (end < sorted.length && (sorted[end]?.row ?? 0) - firstRow < rowsPerRead) {
+      end += 1
+    }
+
+    const lastRow = sorted[end - 1]?.row ?? firstRow
+    const values = readNumericArray(
+      await matrix.values.file.read(matrix.values.path, {
+        slice: [
+          [firstRow, lastRow + 1],
+          [firstCol, lastCol + 1],
+        ],
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      }),
+      '/X',
+    )
+
+    for (const { id, row } of sorted.slice(index, end)) {
+      const countsByColumn = new Map<number, number>()
+      const rowStart = (row - firstRow) * width - firstCol
+
+      for (const col of requestedCols) {
+        countsByColumn.set(col, numericValue(values, rowStart + col))
+      }
+
+      cells.set(
+        id,
+        cellFromCountsByColumn(countsByColumn, requestedCols, geneNames, options),
+      )
+    }
+
+    index = end
   }
 
   return cells
@@ -4207,6 +4539,41 @@ function zarrChunkValue(value: unknown): unknown {
   }
 
   return value
+}
+
+function zarrVectorReader(array: H5adZarrArray): H5adVectorReader {
+  return { slice: (start, end) => zarrNumericVector(array, start, end) }
+}
+
+function h5WorkerVectorReader(
+  source: H5adWorkerArraySource,
+  label: string,
+): H5adVectorReader {
+  return {
+    async slice(start, end, signal) {
+      if (start >= end) {
+        return []
+      }
+
+      const value = await source.file.read(source.path, {
+        slice: [[start, end]],
+        ...(signal === undefined ? {} : { signal }),
+      })
+      return readNumericArray(value, label)
+    },
+  }
+}
+
+// The decoded size of a dataset in an H5 file worker; null for other datasets.
+function h5WorkerDatasetBytes(dataset: H5DatasetLike): number | null {
+  if (dataset.source?.kind !== 'h5-worker' || dataset.shape === null) {
+    return null
+  }
+
+  return (
+    dataset.shape.reduce((product, size) => product * size, 1) *
+    (dataset.source.itemSize ?? 8)
+  )
 }
 
 async function zarrNumericVector(

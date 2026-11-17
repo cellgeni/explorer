@@ -86,8 +86,9 @@ export type PreviewUnavailable =
   | { readonly reason: 'no-cells' }
   | { readonly reason: 'too-large'; readonly byteLength: number }
 
-// A plain .h5ad under the reader's 300 MiB limit is downloaded whole. A
-// preview leaves a large one to be opened.
+// A plain .h5ad up to 64 MiB is downloaded whole; a larger one is read by
+// range, at a cost that depends on its layout. A preview leaves a large one to
+// be opened.
 export const PREVIEW_MAX_WHOLE_FILE_BYTES = 64 * 1024 * 1024
 
 export class PreviewUnavailableError extends Error {

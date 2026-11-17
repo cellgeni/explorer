@@ -1,5 +1,5 @@
 import type { Group as H5wasmGroup } from 'h5wasm'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import {
   ICECHUNK_FIXTURE_ORIGIN,
@@ -17,6 +17,7 @@ import {
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
+import { createInProcessH5Worker } from '../data/h5WorkerFile'
 
 describe('AnnDataH5adDataset', () => {
   it('loads H5AD points, obs annotations, metadata tracks, and dense expression', async () => {
@@ -1390,6 +1391,274 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
   })
 })
 
+describe('AnnDataH5adDataset read by range', () => {
+  const allCells = ['cell-a', 'cell-b', 'cell-c', 'cell-d']
+  const wholeExtent = {
+    minX: micrometers(0),
+    maxX: micrometers(20),
+    minY: micrometers(0),
+    maxY: micrometers(20),
+  }
+  // A layer the viewer never reads, between the superblock and the groups it
+  // does, so a read of it would show in the bytes fetched. The first range
+  // request, 1 MiB from the start, takes some of it.
+  const padding = 4 * 1024 * 1024
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reads only the groups it uses, and /X whole, by range in the H5 worker', async () => {
+    const bytes = await createTinyH5ad('csr', { padding })
+    const host = stubH5adRangeHost(bytes)
+    const progress: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/sparse.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+      onProgress: (message) => progress.push(message),
+    })
+
+    await expect(dataset.matrix(['cell-c'])).resolves.toMatchObject({
+      cells: new Map([['cell-c', { geneNames: ['Gad1', 'Gapdh'], counts: [4, 6] }]]),
+    })
+    const expression = await dataset.geneExpression(wholeExtent, ['Gapdh'])
+    expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+      ['cell-a', 5],
+      ['cell-b', 0],
+      ['cell-c', 6],
+      ['cell-d', 8],
+    ])
+    // /X is held in memory, as from a downloaded file.
+    await expect(dataset.estimateGeneValuesRead()).resolves.toEqual({
+      kind: 'read',
+      bytes: 0,
+    })
+
+    expect(host.requests.filter(({ range }) => range === null)).toEqual([
+      { method: 'HEAD', range: null, url: 'https://example.test/sparse.h5ad' },
+    ])
+    expect(host.rangeReads.length).toBeGreaterThan(0)
+    expect(host.fetchedBytes()).toBeLessThan(bytes.byteLength - padding / 2)
+    expect(progress).toContainEqual(
+      expect.stringMatching(
+        /^H5AD arrays read by range \([\d.]+ [KM]B of [\d.]+ MB in \d+ range requests?\)$/,
+      ),
+    )
+  })
+
+  it.each(['dense', 'csr', 'csc'] as const)(
+    'slices a %s /X per request above the matrix budget',
+    async (matrixKind) => {
+      const host = stubH5adRangeHost(await createTinyH5ad(matrixKind, { padding }))
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/tiny.h5ad',
+        h5WorkerFactory: host.h5WorkerFactory,
+        rangeMatrixMaxBytes: 0,
+      })
+
+      const expression = await dataset.geneExpression(wholeExtent, ['Gapdh', 'Gad1'])
+      expect(expression.elements.map((element) => [element.id, element.count])).toEqual([
+        ['cell-a', 5],
+        ['cell-b', 3],
+        ['cell-c', 10],
+        ['cell-d', 8],
+      ])
+      await expect(dataset.estimateGeneValuesRead()).resolves.toMatchObject({
+        kind: 'unavailable',
+      })
+
+      // A CSC matrix read lazily cannot give every gene of a cell.
+      if (matrixKind === 'csc') {
+        await expect(dataset.matrix(['cell-c'])).rejects.toMatchObject({
+          name: 'H5adAllGeneCscMatrixUnsupportedError',
+        })
+        return
+      }
+
+      const matrix = await dataset.matrix(['cell-d', 'cell-a', 'cell-c'])
+      expect(matrix.cells).toEqual(
+        new Map([
+          ['cell-d', { geneNames: ['Actb', 'Gapdh'], counts: [7, 8] }],
+          ['cell-a', { geneNames: ['Actb', 'Gapdh'], counts: [1, 5] }],
+          ['cell-c', { geneNames: ['Gad1', 'Gapdh'], counts: [4, 6] }],
+        ]),
+      )
+    },
+  )
+
+  it('never sends a slice of /X still waiting when the request is aborted', async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'))
+    const controller = new AbortController()
+    const slices: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      rangeMatrixMaxBytes: 0,
+      h5WorkerFactory: () => {
+        const worker = host.h5WorkerFactory()
+        const postMessage = worker.postMessage.bind(worker)
+        worker.postMessage = (message, transfer) => {
+          if (message.op === 'read' && message.slice !== undefined) {
+            slices.push(message.path)
+            controller.abort()
+          }
+
+          postMessage(message, transfer)
+        }
+        return worker
+      },
+    })
+    await dataset.meta()
+
+    await expect(
+      dataset.geneExpression(wholeExtent, ['Gapdh'], { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    // The data slice queued behind the indices was dropped.
+    expect(slices).toEqual(['/X/indices'])
+  })
+
+  it('downloads a small file whole without range requests', async () => {
+    const bytes = await createTinyH5ad('csr')
+    const host = stubH5adRangeHost(bytes, { headByteLength: bytes.byteLength })
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+    })
+
+    await expect(dataset.cellIds()).resolves.toEqual(allCells)
+    expect(host.requests.map(({ method, range }) => [method, range])).toEqual([
+      ['HEAD', null],
+      ['GET', null],
+    ])
+  })
+
+  it('downloads the file whole when its host ignores range requests', async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'), { answersRange: false })
+    const progress: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+      onProgress: (message) => progress.push(message),
+    })
+
+    await expect(dataset.cellIds()).resolves.toEqual(allCells)
+    expect(host.requests.map(({ method, range }) => [method, range])).toEqual([
+      ['HEAD', null],
+      ['GET', 'bytes=0-1048575'],
+      ['GET', null],
+    ])
+    expect(host.rangeReads).toEqual([])
+    expect(progress).toContain(
+      'H5AD host does not answer range requests; downloading the whole file',
+    )
+  })
+
+  it('opens a file over the size limit by range when it has no companion', async () => {
+    // HEAD says 350 MiB; the range replies give the fixture's true size.
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'), {
+      headByteLength: 350 * 1024 * 1024,
+    })
+    const progress: string[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/oversized.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+      onProgress: (message) => progress.push(message),
+    })
+
+    await expect(dataset.cellIds()).resolves.toEqual(allCells)
+    expect(progress).toContain(
+      'No H5AD reference or Icechunk repository; reading the file by range',
+    )
+    // Companion lookups are not listed; the H5AD itself is never fetched whole.
+    expect(host.requests.filter(({ range }) => range === null)).toEqual([
+      { method: 'HEAD', range: null, url: 'https://example.test/oversized.h5ad' },
+    ])
+  })
+
+  it('names the missing companion when an oversized file cannot be read by range', async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'), {
+      headByteLength: 350 * 1024 * 1024,
+      answersRange: false,
+    })
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/oversized.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+    })
+
+    await expect(dataset.meta()).rejects.toMatchObject({
+      name: 'H5adReferenceFileUnavailableError',
+    })
+  })
+})
+
+interface H5adRangeHostOptions {
+  // HEAD's Content-Length; none by default, as when a HEAD fails.
+  readonly headByteLength?: number
+  readonly answersRange?: boolean
+}
+
+// Serves `bytes` at any .h5ad URL through a stubbed global fetch (other paths,
+// such as companion references, are 404), and starts in-process H5 workers that
+// read it by range as the real worker does.
+function stubH5adRangeHost(bytes: Uint8Array, options: H5adRangeHostOptions = {}) {
+  const requests: { method: string; range: string | null; url: string }[] = []
+  const rangeReads: (readonly [number, number])[] = []
+
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = init?.method ?? 'GET'
+      const range = new Headers(init?.headers).get('range')
+
+      if (!new URL(url).pathname.endsWith('.h5ad')) {
+        return new Response(null, { status: 404 })
+      }
+
+      requests.push({ method, range, url })
+
+      if (method === 'HEAD') {
+        return new Response(null, {
+          headers:
+            options.headByteLength === undefined
+              ? {}
+              : { 'content-length': String(options.headByteLength) },
+        })
+      }
+
+      const match = /^bytes=(\d+)-(\d+)$/.exec(range ?? '')
+
+      if (match === null || options.answersRange === false) {
+        return new Response(bytes.slice())
+      }
+
+      const start = Number(match[1])
+      const end = Math.min(Number(match[2]) + 1, bytes.byteLength)
+      return new Response(bytes.slice(start, end), {
+        status: 206,
+        headers: { 'content-range': `bytes ${start}-${end - 1}/${bytes.byteLength}` },
+      })
+    }),
+  )
+
+  return {
+    requests,
+    rangeReads,
+    // The first range request and the range reads after it.
+    fetchedBytes: () =>
+      requests
+        .filter(({ method, range }) => method === 'GET' && range !== null)
+        .reduce((sum) => sum + Math.min(1024 * 1024, bytes.byteLength), 0) +
+      rangeReads.reduce((sum, [start, end]) => sum + end - start, 0),
+    h5WorkerFactory: () =>
+      createInProcessH5Worker({
+        createRangeRead: () => (start, end) => {
+          rangeReads.push([start, end])
+          return bytes.slice(start, end)
+        },
+      }),
+  }
+}
+
 type MatrixKind = 'dense' | 'csr' | 'csc'
 type CategoricalEncoding = 'group' | 'dataframe-categories'
 
@@ -1415,6 +1684,9 @@ interface TinyH5adOptions {
   readonly clusterCodes?: readonly number[]
   // More obsm matrices, by name, with as many columns as their values allow.
   readonly extraObsm?: Readonly<Record<string, readonly number[]>>
+  // Bytes of a `layers/padding` dataset written before the groups the viewer
+  // reads.
+  readonly padding?: number
 }
 
 interface CategoricalFeatureNames {
@@ -1482,6 +1754,13 @@ async function createTinyH5ad(
   }
 
   const file = new h5wasm.File(fileName, 'w')
+
+  if (options.padding !== undefined) {
+    file
+      .create_group('layers')
+      .create_dataset({ name: 'padding', data: new Uint8Array(options.padding) })
+  }
+
   const obs = file.create_group('obs')
 
   if (options.nullableStrings === true) {

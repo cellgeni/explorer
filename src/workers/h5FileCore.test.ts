@@ -7,7 +7,11 @@ import {
   type LargeFeatureBarcodeMatrix,
 } from '../test/h5Fixtures'
 import { createH5FileHandler, type H5FileHandlerOptions } from './h5FileCore'
-import type { H5FileWorkerRequest, H5FileWorkerResponse } from './h5FileMessages'
+import {
+  H5_RANGE_UNSUPPORTED_ERROR,
+  type H5FileWorkerRequest,
+  type H5FileWorkerResponse,
+} from './h5FileMessages'
 import { unpackGexResult } from './h5MatrixCellsPayload'
 
 type RequestWithoutId = H5FileWorkerRequest extends infer Request
@@ -188,16 +192,56 @@ describe('createH5FileHandler', () => {
       ]),
     })
     expect(obs?.kind === 'group' ? obs.children : []).toEqual([
-      ['cell_id', { kind: 'dataset', attrs: [], shape: [3] }],
-      ['score', { kind: 'dataset', attrs: [], shape: [3] }],
+      [
+        'cell_id',
+        { kind: 'dataset', attrs: [], shape: [3], itemSize: expect.any(Number) },
+      ],
+      ['score', { kind: 'dataset', attrs: [], shape: [3], itemSize: 4 }],
     ])
     // A soft link to a dataset resolves to that dataset.
     expect(tree.children[2]?.[1]).toMatchObject({ kind: 'dataset', shape: [3] })
     expect(tree.children[1]?.[1]).toEqual({
       kind: 'group',
       attrs: [],
-      children: [['spatial', { kind: 'dataset', attrs: [], shape: [3, 2] }]],
+      children: [['spatial', { kind: 'dataset', attrs: [], shape: [3, 2], itemSize: 8 }]],
     })
+  })
+
+  it('walks only the tree paths asked for, and the groups above them', async () => {
+    const harness = createHarness()
+    const { response } = await harness.send({
+      op: 'open',
+      source: { kind: 'bytes', bytes: await createAnnDataLikeFile() },
+      tree: true,
+      // A path below one walked whole, and one that is missing, add nothing.
+      treePaths: ['obs/score', 'obsm', 'obsm/spatial', 'uns/spatial'],
+    })
+
+    if (!response.ok || response.op !== 'open' || response.tree === null) {
+      throw new Error('Expected a tree.')
+    }
+
+    expect(response.tree.attrs).toEqual([['encoding-type', 'anndata']])
+    expect(response.tree.children).toEqual([
+      [
+        'obs',
+        {
+          kind: 'group',
+          attrs: expect.arrayContaining([['_index', 'cell_id']]),
+          children: [['score', { kind: 'dataset', attrs: [], shape: [3], itemSize: 4 }]],
+        },
+      ],
+      [
+        'obsm',
+        {
+          kind: 'group',
+          attrs: [],
+          children: [
+            ['spatial', { kind: 'dataset', attrs: [], shape: [3, 2], itemSize: 8 }],
+          ],
+        },
+      ],
+    ])
   })
 
   it('opens without a tree when none is asked for', async () => {
@@ -208,7 +252,41 @@ describe('createH5FileHandler', () => {
       tree: false,
     })
 
-    expect(response).toEqual({ id: 1, ok: true, op: 'open', tree: null })
+    expect(response).toEqual({ id: 1, ok: true, op: 'open', tree: null, range: null })
+  })
+
+  it('reads a slice of a numeric dataset', async () => {
+    const harness = createHarness()
+    await harness.send({
+      op: 'open',
+      source: { kind: 'bytes', bytes: await createAnnDataLikeFile() },
+      tree: false,
+    })
+
+    const rows = await harness.send({
+      op: 'read',
+      path: '/obsm/spatial',
+      slice: [[1, 3], null],
+    })
+    const column = await harness.send({
+      op: 'read',
+      path: '/obsm/spatial',
+      slice: [
+        [0, 3],
+        [1, 2],
+      ],
+    })
+    const values = await harness.send({ op: 'read', path: '/obs/score', slice: [[2, 3]] })
+
+    expect(rows.response).toMatchObject({
+      ok: true,
+      value: new Float64Array([1, 1, 2, 2]),
+    })
+    expect(column.response).toMatchObject({
+      ok: true,
+      value: new Float64Array([0, 1, 2]),
+    })
+    expect(values.response).toMatchObject({ ok: true, value: new Float32Array([2.5]) })
   })
 
   it('reads datasets by path and transfers typed arrays', async () => {
@@ -493,6 +571,88 @@ describe('createH5FileHandler', () => {
       const fetched =
         1024 * 1024 + reads.reduce((sum, [start, end]) => sum + end - start, 0)
       expect(fetched).toBeLessThan(bytes.byteLength)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reports the range reads of a URL source at open and when asked', async () => {
+    const { bytes, matrix } = await createLargeMatrixFile()
+    stubRangeServer(bytes)
+    const { reads, options } = memoryRangeReads(bytes)
+
+    try {
+      const harness = createHarness(options)
+      const opened = await harness.send({ op: 'open', source: rangeSource, tree: false })
+      const readsAtOpen = reads.length
+
+      expect(opened.response).toMatchObject({
+        ok: true,
+        op: 'open',
+        range: { size: bytes.byteLength, requests: readsAtOpen },
+      })
+
+      await harness.send({ op: 'matrix-cells', elementIds: [matrix.barcodes[9] ?? ''] })
+      const stats = await harness.send({ op: 'stats' })
+
+      expect(reads.length).toBeGreaterThan(readsAtOpen)
+      expect(stats.response).toEqual({
+        id: 3,
+        ok: true,
+        op: 'stats',
+        range: {
+          size: bytes.byteLength,
+          requests: reads.length,
+          fetchedBytes: reads.reduce((sum, [start, end]) => sum + end - start, 0),
+        },
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('fails a range-only source that cannot be read by range', async () => {
+    const { bytes } = await createLargeMatrixFile()
+    const rangeOnly = { ...rangeSource, rangeOnly: true }
+    const unsupported = {
+      response: { ok: false, errorName: H5_RANGE_UNSUPPORTED_ERROR },
+    }
+
+    try {
+      // No synchronous range reads, as on the main thread: nothing is fetched.
+      let requests = stubRangeServer(bytes)
+      await expect(
+        createHarness().send({ op: 'open', source: rangeOnly, tree: false }),
+      ).resolves.toMatchObject(unsupported)
+      expect(requests).toEqual([])
+
+      // A server that ignores Range.
+      requests = stubRangeServer(bytes, { answersRange: false })
+      await expect(
+        createHarness(memoryRangeReads(bytes).options).send({
+          op: 'open',
+          source: rangeOnly,
+          tree: false,
+        }),
+      ).resolves.toMatchObject({
+        response: {
+          ok: false,
+          errorName: H5_RANGE_UNSUPPORTED_ERROR,
+          error: 'm.h5 ignored a range request (HTTP 200).',
+        },
+      })
+      expect(requests).toHaveLength(1)
+
+      // A file whose size neither Content-Range nor HEAD gives.
+      requests = stubRangeServer(bytes, { contentRange: false, answersHead: false })
+      await expect(
+        createHarness(memoryRangeReads(bytes).options).send({
+          op: 'open',
+          source: rangeOnly,
+          tree: false,
+        }),
+      ).resolves.toMatchObject(unsupported)
+      expect(requests.map(({ method }) => method)).toEqual(['GET', 'HEAD'])
     } finally {
       vi.unstubAllGlobals()
     }

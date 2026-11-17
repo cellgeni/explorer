@@ -128,7 +128,8 @@ Enter a source in the `Dataset or image URL` field:
   filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
   overlays.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
-  `obsm` coordinate matrix. Files over 300 MiB need a `.h5ad.json` reference
+  `obsm` coordinate matrix. Files over 64 MiB are read by range; over
+  300 MiB on a host without Range support they need a `.h5ad.json` reference
   or `.h5ad.icechunk` repository next to them. An AnnData Zarr store (v2 or
   v3, as `adata.write_zarr` writes it) needs neither, as it is read chunk
   by chunk; its root metadata must say `encoding-type: anndata`.
@@ -209,9 +210,9 @@ The full index is in [docs/README.md](docs/README.md).
   image URL support, platform gating, and GeoJSON shape import/export rules.
 - [TIFF tile-offset sidecars](docs/zchunkstore.md): the optional
   `.zchunkstore` next to a pyramidal OME-TIFF, and how to generate one.
-- [Large H5AD files](docs/h5ad-reference.md): the `.h5ad.json` kerchunk
-  reference or `.h5ad.icechunk` repository that H5AD files over 300 MiB need,
-  and how to generate one.
+- [Large H5AD files](docs/h5ad-reference.md): how large H5AD files are read
+  by range, and the optional `.h5ad.json` kerchunk reference or
+  `.h5ad.icechunk` repository, and how to generate one.
 - [S3/CORS hosting playbook](docs/s3-cors-playbook.md): exact CORS headers,
   object serving rules, byte-range validation, and CDN considerations.
 - [Cell-feature matrix compatibility](docs/cell-feature-matrix-compatibility.md):

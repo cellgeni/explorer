@@ -716,9 +716,11 @@ Method:
   non-goal).
 
 The panel reads the expression matrix the dataset holds in memory after
-load: standard Visium, MERSCOPE, and `.h5ad` files read whole (up to
-300 MiB). For Xenium, Atera, SpatialData, and AnnData read over HTTP
-(references, Icechunk, AnnData Zarr) it says the panel is not available yet;
+load: standard Visium, MERSCOPE, and `.h5ad` files whose `/X` is read whole
+(files up to 300 MiB, and larger ones whose `/X` decodes to 300 MiB or less).
+For Xenium, Atera, SpatialData, and AnnData read over HTTP (references,
+Icechunk, AnnData Zarr, an `.h5ad` whose `/X` is sliced per request) it says
+the panel is not available yet;
 those come in a later milestone. Gene values are kept in the panel's worker,
 up to 128 MiB, so changing `Group by`, `Scale` or `Colour` reads nothing
 again; a new gene is read once.

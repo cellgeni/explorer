@@ -396,7 +396,7 @@ export function createStructuredLoadError(
         title: 'H5AD cell profile unavailable',
         message,
         action:
-          'Use selected-gene expression for this H5AD, or provide a row-major CSR/dense matrix reference for full selected-cell profiles.',
+          'Use selected-gene expression for this H5AD, or write its /X as a row-major CSR or dense matrix for full selected-cell profiles.',
       },
       detail,
     )
@@ -431,7 +431,7 @@ export function createStructuredLoadError(
         title: 'H5AD reference file unavailable',
         message,
         action:
-          'Host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to the oversized H5AD file; scripts/make_h5ad_reference.py writes either.',
+          'Host the H5AD file where it answers Range requests, or host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to it; scripts/make_h5ad_reference.py writes either.',
       },
       detail,
     )
@@ -445,7 +445,7 @@ export function createStructuredLoadError(
         title: 'H5AD file too large',
         message,
         action:
-          'The file was not loaded. Use an H5AD file of 300 MB or smaller, or add a lazy H5AD reader before opening larger files.',
+          'The file was not loaded. Host it where it answers Range requests, or use an H5AD file of 300 MB or smaller.',
       },
       detail,
     )
@@ -605,7 +605,7 @@ function isH5adAllGeneCscMatrixUnsupportedError(
 ): boolean {
   return (
     (error instanceof Error && error.name === 'H5adAllGeneCscMatrixUnsupportedError') ||
-    (normalizedMessage.includes('h5ad reference-backed csc matrices') &&
+    (normalizedMessage.includes('h5ad csc matrices read lazily') &&
       normalizedMessage.includes('scanning the whole expression matrix'))
   )
 }

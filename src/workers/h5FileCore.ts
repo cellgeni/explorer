@@ -21,13 +21,16 @@ import {
   RangeBlockCache,
   type SyncRangeRead,
 } from './rangeBlockCache'
-import type {
-  H5FileSource,
-  H5FileWorkerRequest,
-  H5FileWorkerResponse,
-  H5TreeAttrs,
-  H5TreeGroup,
-  H5TreeNode,
+import {
+  H5_RANGE_UNSUPPORTED_ERROR,
+  type H5FileRangeStats,
+  type H5FileSlice,
+  type H5FileSource,
+  type H5FileWorkerRequest,
+  type H5FileWorkerResponse,
+  type H5TreeAttrs,
+  type H5TreeGroup,
+  type H5TreeNode,
 } from './h5FileMessages'
 
 // The H5 file worker's handler. It also runs on the main thread where there is
@@ -114,7 +117,9 @@ export function createH5FileHandler(
           let tree: H5TreeGroup | null
 
           try {
-            tree = request.tree ? h5TreeGroup(opened.h5wasm, opened.file) : null
+            tree = request.tree
+              ? h5TreeGroup(opened.h5wasm, opened.file, h5TreeScope(request.treePaths))
+              : null
             throwRangeError(opened)
           } catch (error) {
             closeH5File(opened)
@@ -122,7 +127,10 @@ export function createH5FileHandler(
           }
 
           open = opened
-          respond({ id: request.id, ok: true, op: 'open', tree }, [])
+          respond(
+            { id: request.id, ok: true, op: 'open', tree, range: rangeStats(opened) },
+            [],
+          )
           return
         }
         case 'read': {
@@ -133,9 +141,19 @@ export function createH5FileHandler(
             throw new Error(`H5 path ${request.path} is not a dataset.`)
           }
 
-          const value = entity.value
+          const value =
+            request.slice === undefined
+              ? entity.value
+              : entity.slice(h5wasmRanges(request.slice))
           throwRangeError(current)
           respond({ id: request.id, ok: true, op: 'read', value }, transferablesOf(value))
+          return
+        }
+        case 'stats': {
+          respond(
+            { id: request.id, ok: true, op: 'stats', range: rangeStats(expectOpen()) },
+            [],
+          )
           return
         }
         case 'matrix-cells': {
@@ -217,6 +235,17 @@ export function createH5FileHandler(
   }
 }
 
+function rangeStats(open: OpenH5File): H5FileRangeStats | null {
+  return open.range === null
+    ? null
+    : { size: open.range.cache.size, ...open.range.cache.stats() }
+}
+
+// h5wasm takes `[]` for a whole dimension.
+function h5wasmRanges(slice: H5FileSlice): ([] | [number, number])[] {
+  return slice.map((range) => (range === null ? [] : [range[0], range[1]]))
+}
+
 function throwRangeError(open: OpenH5File): void {
   const error = open.range?.takeError()
 
@@ -247,9 +276,21 @@ async function openSource(
     return openH5File(source.bytes)
   }
 
-  return options.createRangeRead === undefined
-    ? openH5File(await fetchWholeFile(source))
-    : openUrlByRange(source, options.createRangeRead)
+  if (options.createRangeRead === undefined) {
+    if (source.rangeOnly === true) {
+      throw rangeUnsupportedError(`${source.label} cannot be read by range here.`)
+    }
+
+    return openH5File(await fetchWholeFile(source))
+  }
+
+  return openUrlByRange(source, options.createRangeRead)
+}
+
+function rangeUnsupportedError(message: string): Error {
+  const error = new Error(message)
+  error.name = H5_RANGE_UNSUPPORTED_ERROR
+  return error
 }
 
 async function fetchWholeFile(source: UrlSource): Promise<Uint8Array> {
@@ -276,19 +317,29 @@ async function openUrlByRange(
     throw new Error(`${source.label} returned HTTP ${response.status}.`)
   }
 
-  const head = new Uint8Array(await response.arrayBuffer())
-
   // A server that ignores Range sends the whole file.
   if (response.status !== 206) {
-    return openH5File(head)
+    if (source.rangeOnly === true) {
+      await response.body?.cancel().catch(() => undefined)
+      throw rangeUnsupportedError(
+        `${source.label} ignored a range request (HTTP ${response.status}).`,
+      )
+    }
+
+    return openH5File(new Uint8Array(await response.arrayBuffer()))
   }
 
+  const head = new Uint8Array(await response.arrayBuffer())
   const size =
     contentRangeSize(response.headers.get('content-range')) ??
     (await headContentLength(source.url))
 
   // HDF5 needs the file's size, so a file of unknown size is read whole.
   if (size === null) {
+    if (source.rangeOnly === true) {
+      throw rangeUnsupportedError(`${source.label} did not give its size.`)
+    }
+
     return openH5File(await fetchWholeFile(source))
   }
 
@@ -379,11 +430,58 @@ function openFileSystemEntry(
   }
 }
 
-function h5TreeGroup(h5wasm: H5wasm, group: H5wasmGroup): H5TreeGroup {
+// The children a walk visits below a group: by name, each with its own scope.
+// Null visits every child, and theirs.
+type H5TreeScope = ReadonlyMap<string, H5TreeScope> | null
+
+type H5TreeScopeBuilder = Map<string, H5TreeScopeBuilder | null>
+
+function h5TreeScope(paths: readonly string[] | undefined): H5TreeScope {
+  if (paths === undefined) {
+    return null
+  }
+
+  const root: H5TreeScopeBuilder = new Map()
+
+  for (const path of paths) {
+    const parts = path.split('/').filter((part) => part.length > 0)
+    let scope = root
+
+    for (const [index, part] of parts.entries()) {
+      const child = scope.get(part)
+
+      if (index === parts.length - 1) {
+        scope.set(part, null)
+        break
+      }
+
+      // A path below one walked whole adds nothing.
+      if (child === null) {
+        break
+      }
+
+      const next: H5TreeScopeBuilder = child ?? new Map()
+      scope.set(part, next)
+      scope = next
+    }
+  }
+
+  return root
+}
+
+function h5TreeGroup(
+  h5wasm: H5wasm,
+  group: H5wasmGroup,
+  scope: H5TreeScope = null,
+): H5TreeGroup {
   const children: (readonly [string, H5TreeNode])[] = []
 
   for (const name of group.keys()) {
-    const child = h5TreeNode(h5wasm, group.get(name))
+    if (scope !== null && !scope.has(name)) {
+      continue
+    }
+
+    const child = h5TreeNode(h5wasm, group.get(name), scope?.get(name) ?? null)
 
     if (child !== null) {
       children.push([name, child])
@@ -395,21 +493,33 @@ function h5TreeGroup(h5wasm: H5wasm, group: H5wasmGroup): H5TreeGroup {
 
 // Links, committed datatypes and references are left out, as the readers only
 // walk groups and datasets.
-function h5TreeNode(h5wasm: H5wasm, entity: unknown): H5TreeNode | null {
+function h5TreeNode(
+  h5wasm: H5wasm,
+  entity: unknown,
+  scope: H5TreeScope,
+): H5TreeNode | null {
   if (entity instanceof h5wasm.Group) {
-    return h5TreeGroup(h5wasm, entity)
+    return h5TreeGroup(h5wasm, entity, scope)
   }
 
   if (entity instanceof h5wasm.Dataset) {
-    return { kind: 'dataset', attrs: h5TreeAttrs(entity), shape: datasetShape(entity) }
+    const metadata = datasetMetadata(entity)
+    return {
+      kind: 'dataset',
+      attrs: h5TreeAttrs(entity),
+      shape: metadata?.shape ?? null,
+      itemSize: metadata?.size ?? null,
+    }
   }
 
   return null
 }
 
-function datasetShape(dataset: H5wasmDataset): readonly number[] | null {
+function datasetMetadata(
+  dataset: H5wasmDataset,
+): { readonly shape: readonly number[] | null; readonly size: number } | null {
   try {
-    return dataset.shape
+    return dataset.metadata
   } catch {
     return null
   }

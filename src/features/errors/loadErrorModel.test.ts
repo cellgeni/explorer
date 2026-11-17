@@ -291,7 +291,7 @@ describe('loadErrorModel', () => {
       title: 'H5AD file too large',
       detail: 'H5adFileSizeLimitExceededError',
       action:
-        'The file was not loaded. Use an H5AD file of 300 MB or smaller, or add a lazy H5AD reader before opening larger files.',
+        'The file was not loaded. Host it where it answers Range requests, or use an H5AD file of 300 MB or smaller.',
     })
     const h5adReferenceUnavailable = new Error(
       'H5AD file is 350.0 MB, exceeding the browser load limit of 300.0 MB, and no readable kerchunk reference file was found at https://example.test/data.h5ad.json, nor an Icechunk repository at https://example.test/data.h5ad.icechunk.',
@@ -305,10 +305,10 @@ describe('loadErrorModel', () => {
       title: 'H5AD reference file unavailable',
       detail: 'H5adReferenceFileUnavailableError',
       action:
-        'Host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to the oversized H5AD file; scripts/make_h5ad_reference.py writes either.',
+        'Host the H5AD file where it answers Range requests, or host a DATASET.h5ad.json reference or a DATASET.h5ad.icechunk repository next to it; scripts/make_h5ad_reference.py writes either.',
     })
     const h5adCscCellProfileUnavailable = new Error(
-      'H5AD reference-backed CSC matrices cannot load all genes for selected cells without scanning the whole expression matrix (1,000 cells x 20,000 genes).',
+      'H5AD CSC matrices read lazily (by range or through a reference) cannot load all genes for selected cells without scanning the whole expression matrix (1,000 cells x 20,000 genes).',
     )
     h5adCscCellProfileUnavailable.name = 'H5adAllGeneCscMatrixUnsupportedError'
 
@@ -319,7 +319,7 @@ describe('loadErrorModel', () => {
       title: 'H5AD cell profile unavailable',
       detail: 'H5adAllGeneCscMatrixUnsupportedError',
       action:
-        'Use selected-gene expression for this H5AD, or provide a row-major CSR/dense matrix reference for full selected-cell profiles.',
+        'Use selected-gene expression for this H5AD, or write its /X as a row-major CSR or dense matrix for full selected-cell profiles.',
     })
     const denseChunkedByGene = new Error(
       "AnnData dense /X is chunked by gene, in chunks of 125,955 cells x 10 genes, so one cell's profile would read 1,297 chunks holding 6.1 GB of values, over the 256.0 MB limit.",
