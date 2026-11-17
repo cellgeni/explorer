@@ -185,6 +185,7 @@ export type TranscriptAggregateLoader = (
     readonly mode?: 'density'
     readonly featureNames?: readonly string[]
     readonly maxBins?: number
+    readonly minQv?: number
   },
 ) => Promise<TranscriptAggregateResult>
 

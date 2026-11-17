@@ -31,6 +31,7 @@ import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { VisiumControlState } from '../dataset/visiumModel'
 import type { MerscopeImageControlState } from '../dataset/merscopeImageModel'
+import type { AteraImageChoice, AteraImageControlState } from '../dataset/ateraImageModel'
 import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
@@ -162,6 +163,11 @@ export interface DatasetViewOptionsModel {
     readonly disabled: boolean
     readonly onImageChange: (choice: MerscopeImageChoice | null) => void
   }
+  readonly atera: {
+    readonly state: AteraImageControlState
+    readonly disabled: boolean
+    readonly onImageChange: (choice: AteraImageChoice) => void
+  }
 }
 
 export interface DatasetDiagnosticsModel {
@@ -225,6 +231,8 @@ export interface DatasetInfoModelInput {
   readonly visiumHdControlState: VisiumHdControlState
   readonly merscopeImageState: MerscopeImageControlState
   readonly handleMerscopeImageChange: (choice: MerscopeImageChoice | null) => void
+  readonly ateraImageState: AteraImageControlState
+  readonly handleAteraImageChange: (choice: AteraImageChoice) => void
 }
 
 export function useDatasetInfoModel({
@@ -262,6 +270,8 @@ export function useDatasetInfoModel({
   visiumHdControlState,
   merscopeImageState,
   handleMerscopeImageChange,
+  ateraImageState,
+  handleAteraImageChange,
 }: DatasetInfoModelInput): DatasetInfoModel {
   const zarrWorkerFailure = useSyncExternalStore(
     subscribeZarrCodecWorkerFailure,
@@ -333,6 +343,11 @@ export function useDatasetInfoModel({
         state: merscopeImageState,
         disabled: isLoading || merscopeImageState.status === 'loading',
         onImageChange: handleMerscopeImageChange,
+      },
+      atera: {
+        state: ateraImageState,
+        disabled: isLoading || ateraImageState.status === 'loading',
+        onImageChange: handleAteraImageChange,
       },
     },
     diagnostics: {

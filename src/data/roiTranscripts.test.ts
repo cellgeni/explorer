@@ -1,7 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
-import { ROI_TRANSCRIPT_EXPORT_LIMIT, loadDatasetRoiTranscripts } from './roiTranscripts'
+import {
+  ROI_TRANSCRIPT_EXPORT_LIMIT,
+  loadDatasetRoiTranscripts,
+  loadPerGeneRoiTranscripts,
+  type PerGeneTranscriptReader,
+} from './roiTranscripts'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { RoiSelection } from './roiSelection'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
@@ -121,5 +126,84 @@ describe('dataset ROI transcript loader', () => {
       limit: ROI_TRANSCRIPT_EXPORT_LIMIT,
       minQv: 20,
     })
+  })
+})
+
+describe('per-gene ROI transcript export (Atera)', () => {
+  const point = {
+    id: '0,0:4',
+    cellId: intToCellId(1, 1),
+    cellAssignment: 'known' as const,
+    featureName: 'UMOD',
+    fovName: null,
+    position: { x: micrometers(1.5), y: micrometers(3.5) },
+    zLocation: 2,
+    qv: 30,
+    overlapsNucleus: false,
+    isGene: true,
+  }
+
+  it('reads the selected genes in the box as export rows', async () => {
+    const readTranscripts = vi.fn(async () => ({
+      points: [point],
+      groups: [],
+      hitPointLimit: false,
+    }))
+
+    await expect(
+      loadPerGeneRoiTranscripts(readTranscripts, bbox, { featureNames: ['UMOD'] }),
+    ).resolves.toEqual([
+      {
+        cellId: point.cellId,
+        featureName: 'UMOD',
+        position: point.position,
+        zLocation: 2,
+        qv: 30,
+        overlapsNucleus: false,
+        isGene: true,
+      },
+    ])
+    expect(readTranscripts).toHaveBeenCalledWith(bbox, {
+      featureNames: ['UMOD'],
+      pointLimit: ROI_TRANSCRIPT_EXPORT_LIMIT,
+      groupLimit: 1,
+      minQv: 20,
+    })
+  })
+
+  it('keeps lasso points only, before the limit', async () => {
+    const readTranscripts = vi.fn<PerGeneTranscriptReader>(async () => ({
+      points: [],
+      groups: [],
+      hitPointLimit: false,
+    }))
+    const lasso: RoiSelection = {
+      kind: 'lasso',
+      bbox,
+      points: [
+        { x: micrometers(1), y: micrometers(3) },
+        { x: micrometers(2), y: micrometers(3) },
+        { x: micrometers(1), y: micrometers(4) },
+      ],
+    }
+
+    await loadPerGeneRoiTranscripts(readTranscripts, lasso, {
+      featureNames: ['UMOD'],
+      limit: 10,
+    })
+
+    const options = readTranscripts.mock.calls[0]?.[1]
+    expect(options).toMatchObject({ pointLimit: 10 })
+    expect(options?.contains?.({ x: micrometers(1.2), y: micrometers(3.2) })).toBe(true)
+    expect(options?.contains?.({ x: micrometers(1.9), y: micrometers(3.9) })).toBe(false)
+  })
+
+  it('asks for genes instead of reading every gene', async () => {
+    const readTranscripts = vi.fn()
+
+    await expect(
+      loadPerGeneRoiTranscripts(readTranscripts, bbox, { featureNames: [] }),
+    ).rejects.toThrow('Select genes to export their transcripts.')
+    expect(readTranscripts).not.toHaveBeenCalled()
   })
 })

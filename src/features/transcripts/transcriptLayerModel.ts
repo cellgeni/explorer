@@ -2,6 +2,7 @@ import { micrometers, type BBox } from '../../data/coords'
 import { estimateTranscriptZarrViewportCount } from '../../data/transcriptZarr'
 import type {
   TranscriptAggregateBin,
+  TranscriptAggregateResult,
   TranscriptCapabilities,
   TranscriptDetailMode,
   TranscriptFeatureFilterMode,
@@ -665,18 +666,29 @@ export function transcriptNativeAggregateMessage({
   selectedFeatureCount,
   binCount,
   sourceFile = 'transcripts.zarr.zip',
+  minQv,
+  qvOverBudget,
 }: {
   readonly mode: 'density'
   readonly selectedFeatureCount: number
   readonly binCount: number
   readonly sourceFile?: string | undefined
+  // Per-gene density (Atera): the QV the squares count from, and why it is
+  // not the one asked for.
+  readonly minQv?: number | undefined
+  readonly qvOverBudget?: TranscriptAggregateResult['qvOverBudget']
 }): string {
   const featureLabel =
     selectedFeatureCount > 0
       ? `${selectedFeatureCount.toLocaleString()} selected-feature`
       : 'all-transcript'
+  const qvLabel = minQv === undefined ? '' : ` at QV ${minQv.toLocaleString()}+`
+  const overBudgetNote =
+    qvOverBudget === undefined
+      ? ''
+      : ` Min QV ${qvOverBudget.minQv.toLocaleString()} needs ${qvOverBudget.rowCount.toLocaleString()} transcript rows here, more than the ${qvOverBudget.rowLimit.toLocaleString()} one view reads; zoom in or select fewer genes to apply it.`
 
-  return `Showing native ${featureLabel} density squares from ${sourceFile} (${binCount.toLocaleString()} squares).`
+  return `Showing native ${featureLabel} density squares${qvLabel} from ${sourceFile} (${binCount.toLocaleString()} squares).${overBudgetNote}`
 }
 
 // The selected-gene density was not read because the new genes need more of

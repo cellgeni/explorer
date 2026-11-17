@@ -84,6 +84,62 @@ describe('CellInfoPanel', () => {
     expect(screen.getByText('Gene expression')).toBeInTheDocument()
   })
 
+  it('names the genes a per-gene z histogram counts, and asks for genes', () => {
+    const distribution = {
+      bins: [{ minZ: 0, maxZ: 3, count: 4, percent: 100 }],
+      transcriptCount: 4,
+      zCount: 4,
+      missingZCount: 0,
+      minZ: 0,
+      maxZ: 3,
+      maxBinCount: 4,
+      hitTranscriptLimit: false,
+      minQv: 20,
+      featureNames: ['UMOD', 'NPHS1', 'PODXL', 'SLC34A1'],
+    }
+    const { rerender } = render(
+      <CellInfoPanel
+        cell={cellDatum()}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{
+          status: 'ready',
+          url: 'https://example.test/atera',
+          cellId: 'cell-1',
+          distribution,
+        }}
+      />,
+    )
+
+    expect(
+      screen.getByText('4 transcript rows · QV 20+ · UMOD, NPHS1, PODXL +1'),
+    ).toBeInTheDocument()
+
+    rerender(
+      <CellInfoPanel
+        cell={cellDatum()}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{
+          status: 'ready',
+          url: 'https://example.test/atera',
+          cellId: 'cell-1',
+          distribution: {
+            ...distribution,
+            bins: [],
+            transcriptCount: 0,
+            zCount: 0,
+            maxBinCount: 0,
+            featureNames: [],
+          },
+        }}
+      />,
+    )
+
+    expect(screen.getByText('Select genes')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Select genes to see their transcripts' z locations/),
+    ).toBeInTheDocument()
+  })
+
   it('shows only observation metadata in the observations variant', () => {
     render(
       <CellInfoPanel

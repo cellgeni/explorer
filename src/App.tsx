@@ -22,6 +22,8 @@ import { visiumSelectionToShareable } from './features/dataset/visiumModel'
 import { visiumHdActiveBinSize } from './features/dataset/visiumHdModel'
 import { merscopeImageSelectionToShareable } from './features/dataset/merscopeImageModel'
 import { useMerscopeImageWorkflow } from './features/app-shell/useMerscopeImageWorkflow'
+import { ateraImageSelectionToShareable } from './features/dataset/ateraImageModel'
+import { useAteraImageWorkflow } from './features/app-shell/useAteraImageWorkflow'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
 import { useGeneExpressionLayerTelemetry } from './features/genes/useGeneExpressionLayerTelemetry'
 import {
@@ -113,8 +115,10 @@ import {
   isAnnDataPlatform,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
+  loadPlatformCellTranscriptDistribution,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
+  loadPlatformRoiTranscripts,
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
@@ -133,6 +137,7 @@ import {
   type AnnotationLoader,
   type AppProps,
   type BoundaryElementsLoader,
+  type CellTranscriptDistributionLoader,
   type GeneExpressionLoader,
   type RoiCellsLoader,
   type RoiGeneStatsLoader,
@@ -342,6 +347,8 @@ export type {
 const NO_GEOMETRY_LAYERS: readonly GeometricAnnotationDatum[] = []
 // Previews show the tissue only unless cells are coloured by genes.
 const NO_PREVIEW_GENES: readonly string[] = []
+// Genes for per-gene transcript reads on platforms that do not have them.
+const NO_PER_GENE_TRANSCRIPT_GENES: readonly string[] = []
 
 export function App({ dependencies }: AppProps = {}) {
   const {
@@ -633,6 +640,7 @@ export function App({ dependencies }: AppProps = {}) {
     spatialData: { setSpatialDataControlState, spatialDataControlState },
     visium: { setVisiumControlState, visiumControlState },
     merscope: { merscopeImageState, setMerscopeImageState },
+    atera: { ateraImageState, setAteraImageState },
     visiumHd: {
       gridCellAssignmentState,
       overviewCells,
@@ -2054,26 +2062,43 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [getSpatialDataset, loadRoiGeneStats, platformAdapter],
   )
+  // Atera reads transcripts per gene, so its ROI export and cell histogram
+  // follow the selected genes; other platforms' loaders do not change with
+  // them.
+  const perGeneTranscriptGenes =
+    platformAdapter.kind === 'atera' ? selectedGenes : NO_PER_GENE_TRANSCRIPT_GENES
   const loadActiveRoiTranscripts = useCallback<RoiTranscriptsLoader>(
-    (...args) => {
-      if (!isAnnDataPlatform(platformAdapter)) {
-        return loadRoiTranscripts(...args)
-      }
-
-      return Promise.reject(
-        new Error(
-          `${
-            platformAdapter.kind === 'atera' || platformAdapter.kind === 'merscope'
-              ? PLATFORM_NAMES[platformAdapter.kind]
-              : platformAdapter.kind === 'visium'
-                ? 'Visium'
-                : 'H5AD and SpatialData'
-          } datasets do not support ROI transcript export.`,
-        ),
-      )
-    },
-    [loadRoiTranscripts, platformAdapter],
+    (...args) =>
+      loadPlatformRoiTranscripts(
+        platformAdapter,
+        {
+          getSpatialDataset,
+          loadRoiTranscripts,
+          selectedGenes: perGeneTranscriptGenes,
+        },
+        ...args,
+      ),
+    [getSpatialDataset, loadRoiTranscripts, perGeneTranscriptGenes, platformAdapter],
   )
+  const loadActiveCellTranscriptDistribution =
+    useCallback<CellTranscriptDistributionLoader>(
+      (...args) =>
+        loadPlatformCellTranscriptDistribution(
+          platformAdapter,
+          {
+            getSpatialDataset,
+            loadCellTranscriptDistribution,
+            selectedGenes: perGeneTranscriptGenes,
+          },
+          ...args,
+        ),
+      [
+        getSpatialDataset,
+        loadCellTranscriptDistribution,
+        perGeneTranscriptGenes,
+        platformAdapter,
+      ],
+    )
   const loadVisiumHdMagicLensSummary = useVisiumHdMagicLensSummary({
     controls: {
       selectedBinSize: activeVisiumHdBinSize,
@@ -2355,7 +2380,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     loaders: {
       loadBoundaryElements: loadActiveBoundaryElements,
-      loadCellTranscriptDistribution,
+      loadCellTranscriptDistribution: loadActiveCellTranscriptDistribution,
       loadRoiGeneStats: loadActiveRoiGeneStats,
     },
     refs: {
@@ -2972,8 +2997,8 @@ export function App({ dependencies }: AppProps = {}) {
       selectedGenes,
     },
     loaders: {
-      loadRoiCells,
-      loadRoiGeneStats,
+      loadRoiCells: loadActiveRoiCells,
+      loadRoiGeneStats: loadActiveRoiGeneStats,
       ...(platformAdapter.kind === 'visium-hd'
         ? { loadMagicLensSummary: loadVisiumHdMagicLensSummary }
         : {}),
@@ -3309,6 +3334,7 @@ export function App({ dependencies }: AppProps = {}) {
       setSpatialDataControlState,
       setVisiumControlState,
       setMerscopeImageState,
+      setAteraImageState,
       setViewportCellCount,
     },
   })
@@ -3391,6 +3417,14 @@ export function App({ dependencies }: AppProps = {}) {
     merscopeImageState,
     setMerscopeImageState,
     shouldLoadMorphology,
+    startDatasetLoadRef,
+  })
+  const { handleAteraImageChange } = useAteraImageWorkflow({
+    appendDebugEvent,
+    ateraImageState,
+    datasetUrl: loadState.status === 'idle' ? null : loadState.url,
+    initialShareableStateRef,
+    setAteraImageState,
     startDatasetLoadRef,
   })
   const { handleVisiumHdBinSizeChange } = useVisiumHdBinWorkflow({
@@ -3569,6 +3603,7 @@ export function App({ dependencies }: AppProps = {}) {
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
       merscopeSelection: merscopeImageSelectionToShareable(merscopeImageState),
+      ateraSelection: ateraImageSelectionToShareable(ateraImageState),
     },
     genes: {
       geneExpressionColorScale,
@@ -3776,6 +3811,8 @@ export function App({ dependencies }: AppProps = {}) {
     visiumHdControlState,
     merscopeImageState,
     handleMerscopeImageChange,
+    ateraImageState,
+    handleAteraImageChange,
   })
   // An example or recent dataset opens in place, like Load Dataset.
   const handleOpenDataset = useCallback(

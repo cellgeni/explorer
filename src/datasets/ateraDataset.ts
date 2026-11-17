@@ -540,6 +540,19 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return morphologyPath === undefined ? null : this.resolve(morphologyPath)
   }
 
+  // The 3D DAPI stack, offered instead of the 2D image; null when the
+  // output has none.
+  async morphology3dUrl(): Promise<string | null> {
+    const manifestImage = this.files.morphology3d
+
+    if (manifestImage !== undefined) {
+      return manifestImage
+    }
+
+    const { morphology3dPath } = await this.experiment()
+    return morphology3dPath === undefined ? null : this.resolve(morphology3dPath)
+  }
+
   async fileUrl(role: AteraFileRole): Promise<string> {
     const manifestFile = this.files[role]
 

@@ -55,6 +55,9 @@ export interface LoadMorphologyImageOptions {
   // Z plane to open a z-stack at; the image's default plane (the middle one
   // unless it names another) by default.
   readonly zPlane?: number
+  // The `.zchunkstore` sidecar; the dataset manifest's by default. Null skips
+  // the manifest's, for an image it does not cover.
+  readonly zchunkStoreUrl?: string | null
 }
 
 export interface LoadCustomMorphologyLayerOptions {
@@ -81,7 +84,10 @@ export async function loadMorphologyImage(
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   const openImage = options.openImage ?? openImagePyramid
   const manifestImage = xeniumManifestFileFor(baseUrl, 'morphology')
-  const zchunkStoreUrl = zchunkStoreUrlFor(baseUrl)
+  const zchunkStoreUrl =
+    options.zchunkStoreUrl === null
+      ? undefined
+      : (options.zchunkStoreUrl ?? zchunkStoreUrlFor(baseUrl))
   const candidates =
     options.candidates ??
     (manifestImage === undefined

@@ -43,20 +43,22 @@ warns.
 | `transcripts`          | `explorer_files.transcripts_zarr_filepath`      | `transcripts.zarr.zip`             |
 | `binnedTranscripts`    | `explorer_files.transcripts_viz_zarr_filepath`  | `binned_transcripts.zarr.zip`      |
 | `morphology`           | `images.morphology_2d_filepath`                 | —                                  |
+| `morphology3d`         | `images.morphology_3d_filepath`                 | —                                  |
 
 ## Files Read
 
-| File                               | Required        | Library                                     | What is read                                                                                                                                                                                      | Used for                                                                    |
-| ---------------------------------- | --------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `experiment.spatial`               | Yes             | fetch + JSON                                | `pixel_size`, `images.morphology_2d_filepath`, `explorer_files`, panel name, cell count                                                                                                           | Detection, file locations, units, diagnostics                               |
-| `cell_feature_matrix.zarr.zip`     | Yes             | `zarrita` + `ZipFileStore`, AnnData readers | `obs` (`barcode` index, `centroid_column`/`centroid_row` in µm, counts, areas, `filtered`, `leiden_res_*`, `azimuth_*`), `obsm/X_umap`, `X_pca`, `var/feature_name`, `feature_type`, CSR `X` rows | Overview, gene list, annotations, metadata tracks, embeddings, ROI and cell |
-| `csc_cell_feature_matrix.zarr.zip` | Yes             | `zarrita` + `ZipFileStore`                  | CSC `X/indptr`, then `X/indices` and `X/data` slices for each selected gene                                                                                                                       | Selected-gene overlay                                                       |
-| `cells.zarr.zip`                   | For boundaries  | `zarrita` + `ZipFileStore`                  | `bboxes`, `gridded_polygon_sets/{0,1}` tiles, `cell_summary` `nucleus_count` column, `polygon_sets/1/method`, root `segmentation_methods`                                                         | Cell and nucleus boundaries, nucleus counts, segmentation method            |
-| `morphology_2d/ch000N_*.ome.tif`   | For the image   | `geotiff` + range tile reads                | Multi-file OME-TIFF: OME-XML channel list with `TiffData/UUID FileName`, SubIFD pyramid, JPEG 2000 tiles                                                                                          | Image layer with one channel per stain                                      |
-| `binned_transcripts.zarr.zip`      | For transcripts | `zarrita` + `ZipFileStore`, nested zips     | Root `gene_names`, `grid_size`, `grid_keys`, `origin`; `gene/<index>.zip` for each selected gene: `grid/.zattrs`, then `grid/<x>,<y>/{indptr,indices,data}`                                       | Selected-gene density and the exact-point estimate                          |
-| `transcripts.zarr.zip`             | For transcripts | `zarrita` + `ZipFileStore`                  | Root `gene_names`, `grid/.zattrs`; per visible tile `gene_offset`, then each selected gene's rows of `location`, `quality_score`, `cell_id`, `overlaps_nucleus`                                   | Exact transcript points                                                     |
+| File                                   | Required        | Library                                     | What is read                                                                                                                                                                                                         | Used for                                                                             |
+| -------------------------------------- | --------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `experiment.spatial`                   | Yes             | fetch + JSON                                | `pixel_size`, `images.morphology_2d_filepath` and `morphology_3d_filepath`, `explorer_files`, panel name, cell count                                                                                                 | Detection, file locations, units, diagnostics                                        |
+| `cell_feature_matrix.zarr.zip`         | Yes             | `zarrita` + `ZipFileStore`, AnnData readers | `obs` (`barcode` index, `centroid_column`/`centroid_row` in µm, counts, areas, `filtered`, `leiden_res_*`, `azimuth_*` with their `color`), `obsm/X_umap`, `X_pca`, `var/feature_name`, `feature_type`, CSR `X` rows | Overview, gene list, annotations, metadata tracks, embeddings, ROI, cell, Magic Lens |
+| `csc_cell_feature_matrix.zarr.zip`     | Yes             | `zarrita` + `ZipFileStore`                  | CSC `X/indptr`, then `X/indices` and `X/data` slices for each selected gene                                                                                                                                          | Selected-gene overlay                                                                |
+| `cells.zarr.zip`                       | For boundaries  | `zarrita` + `ZipFileStore`                  | `bboxes`, `gridded_polygon_sets/{0,1}` tiles, `cell_summary` `nucleus_count` column, `polygon_sets/1/method`, root `segmentation_methods`                                                                            | Cell and nucleus boundaries, nucleus counts, segmentation method                     |
+| `morphology_2d/ch000N_*.ome.tif`       | For the image   | `geotiff` + range tile reads                | Multi-file OME-TIFF: OME-XML channel list with `TiffData/UUID FileName`, SubIFD pyramid, JPEG 2000 tiles                                                                                                             | Image layer with one channel per stain                                               |
+| `morphology_3d/ch0000_dapi_3d.ome.tif` | When chosen     | `geotiff` + range tile reads                | One OME-TIFF: one `TiffData` of 15 planes, so IFD N is plane N, each with its own SubIFD pyramid; `PhysicalSizeZ` 3 µm                                                                                               | 3D DAPI image with a `Z plane` control                                               |
+| `binned_transcripts.zarr.zip`          | For transcripts | `zarrita` + `ZipFileStore`, nested zips     | Root `gene_names`, `grid_size`, `grid_keys`, `origin`; `gene/<index>.zip` for each selected gene: `grid/.zattrs`, then `grid/<x>,<y>/{indptr,indices,data}`                                                          | Selected-gene density and the exact-point estimate                                   |
+| `transcripts.zarr.zip`                 | For transcripts | `zarrita` + `ZipFileStore`                  | Root `gene_names`, `grid/.zattrs`; per visible tile `gene_offset`, then each selected gene's rows of `location`, `quality_score`, `cell_id`, `overlaps_nucleus`                                                      | Exact points, density at a `Min QV` other than 20, ROI export, cell z histogram      |
 
-Not read: `morphology_3d/`, `diffexp_genes/`, the HTML summaries,
+Not read: `diffexp_genes/`, the HTML summaries,
 `panel_config.json`, `metrics_summary_*.csv`, the FOV location files, and
 `overview_scan.png`. In `transcripts.zarr.zip`, `codeword_identity` and the
 `codeword_*` and `gene_category` metadata are not read.
@@ -90,8 +92,9 @@ feature_id, feature_type}` in parallel (16 at a time). The hundreds of
    overview adds `transcript_counts` and `cell_area` from `obs`, and nucleus
    counts and segmentation methods from `cells.zarr.zip` when it can be read.
 3. The morphology image loads in the background through `loadMorphologyImage`
-   with the `experiment.spatial` 2D image as the only candidate, the same
-   path as a Xenium `morphology_focus` image.
+   with one candidate, the same path as a Xenium `morphology_focus` image: the
+   `experiment.spatial` 2D image, or the 3D DAPI stack when the link says
+   `aimg=3d` (see [Morphology Image](#morphology-image)).
 
 On the reference run (93,864 cells, 24,674 features) the dataset is ready in
 about 4 s from a cold cache.
@@ -164,10 +167,31 @@ The squares use the `Density color` scale. On the reference run a
 whole-slide UMOD request is 165 squares of 640 µm that sum to the stored
 1,914,072.
 
+**Density at another `Min QV`.** The binned store counts QV ≥ 20 only, so at
+any other `Min QV` the squares come from `transcripts.zarr.zip` instead
+(`AteraTranscripts.aggregates`):
+
+1. The square size is chosen as above, from 5 µm bins.
+2. Each selected gene's `[start, end)` rows in the tiles under the squares
+   are added up from `gene_offset`. Over `ATERA_QV_DENSITY_ROW_LIMIT`
+   (2,000,000 rows, about 28 MB of `location` and `quality_score`), the
+   binned QV ≥ 20 squares are shown instead, and the panel message names
+   the row count and asks for a closer view or fewer genes.
+3. Otherwise each range's `location` and `quality_score` are read whole
+   (both cached), and transcripts at `Min QV` or above are counted into the
+   squares; those inside the view are the estimate.
+
+The panel message says which QV the squares count from ("at QV 30+ from
+transcripts.zarr.zip"). On the reference run at QV 30, whole-slide NPHS1 is
+88 squares from `transcripts.zarr.zip`; whole-slide UMOD needs 2,142,840 rows,
+so it shows the QV ≥ 20 squares and says why. Xenium density does not follow
+`Min QV`.
+
 **Choosing density or points.** The estimate, not the all-transcript cell
 estimate, goes to `planTranscriptLod`: Auto shows exact points when it fits
 the `Exact budget`, density otherwise; the manual-load prompt at 80% of the
-budget applies as for Xenium. The `Exact points` meter shows this count.
+budget applies as for Xenium. The `Exact points` meter shows this count. It
+follows `Min QV` when the density does.
 
 **Exact points.** For each visible tile, `gene_offset` (`[genes, 2]` uint32)
 gives each selected gene's `[start, end)` rows; tiles are sorted by gene. The
@@ -203,6 +227,25 @@ features, the layer is cell-summary squares built from the overview's
 with the same request. All-gene native density or points would mean reading
 every gene's zip or rows.
 
+**ROI export and the cell z histogram.** Both read the selected genes through
+the exact-point reader (`loadPlatformRoiTranscripts` and
+`loadPlatformCellTranscriptDistribution` in `platformAdapter.ts`), which
+takes a `contains` test so that only points inside the lasso or the cell
+outline count toward the limit:
+
+- `Export Transcripts` reads the ROI's bounding box at QV ≥ 20, up to 100,000
+  rows, into the same CSV columns as Xenium. With no genes selected it fails
+  and asks for genes. A box of about 110 × 70 µm on UMOD-rich tubules gave
+  1,013 rows in 0.25 s, the tiles already read for exact points.
+- The Cell card's `Z-axis transcripts` histogram counts the selected genes'
+  transcripts inside the cell outline, at QV ≥ 20, and names the genes; with
+  none selected it asks for some. On the reference run an epithelial cell's
+  45 UMOD transcripts (z 18.8–21.8 µm) took 2.4–2.7 s after the cell opened.
+
+Xenium exports and bins every feature in the ROI or cell. Here every gene would
+mean reading every row of each tile (up to 52 million), so the selection is
+the gene filter, as for the transcript layer.
+
 ### Gene List
 
 `var/feature_name` rows whose `var/feature_type` is `Gene Expression`. Control
@@ -215,7 +258,9 @@ These come from the AnnData readers (see [H5AD](./h5ad.md)):
 
 - Categorical `obs` columns (`leiden_res_1.0`, `azimuth_broad`,
   `azimuth_coarse`, `azimuth_fine`, `azimuth_full_hierarchy`) are annotation
-  sets.
+  sets. The Azimuth columns keep a colour per category in `obs/<column>/color`
+  (int32 `0xRRGGBBAA`, alpha always 255), which classes take until the user
+  picks another; Leiden classes take the viewer palette.
 - Numeric `obs` columns are metadata tracks, except `cell_id`,
   `centroid_column`, and `centroid_row`. The boolean `filtered` column (cells
   kept for secondary analysis) is a 0/1 track.
@@ -228,14 +273,35 @@ time, through the same 64-gene cache as the expression overlay. Rows are the
 matrix's, which the CSC shares. On the kidney run, three genes by
 `azimuth_coarse` (47 classes) plot in 2.3 s from opening the panel.
 
-### Selected Cell And ROI
+### Selected Cell, ROI, And Magic Lens
 
 - Cell profile: one CSR row of `cell_feature_matrix.zarr.zip`.
+- Cell z histogram and ROI transcript export: the selected genes' transcripts
+  (see [Transcripts](#transcripts)).
 - ROI cells: AnnData bounding-box and lasso queries, with transcript counts
   and areas from the overview.
 - ROI gene stats: CSR rows for a sample of ROI cells (`matrix(ids)`), the same
   as H5AD. Matrix rows are ordered by cell id, which keeps nearby cells in
   nearby chunks.
+- Magic Lens: the same two reads, through the AnnData ROI loaders
+  (`loadActiveRoiCells` and `loadActiveRoiGeneStats` in `App.tsx`): the cells
+  in the lens (up to 25,000), then their CSR rows. The transcript total is the
+  sum of the cells' `transcript_counts`. A CSR chunk pair holds about 400
+  cells (1.8 MB compressed), so a cursor lens reads a few chunks; at 4 px/µm,
+  Summarise View over 368 cells took 3.4 s.
+
+### Morphology Image
+
+The 2D multi-focus image is shown by default. When `experiment.spatial` (or a
+manifest's `morphology3d`) also names the 3D DAPI stack, the Image section
+offers `Morphology`: `2D (all stains)` or `3D DAPI stack`. A change reloads
+the dataset with `aimg=3d` in the link, as a MERSCOPE stain change does
+(`useAteraImageWorkflow`); the matrix is not read again, and the view, genes,
+and layers carry over. The stack's 15 planes get the `Z plane` control,
+opening at the middle plane (8 of 15, z = 21 µm), and `z=` in the link keeps
+the plane. The stack opens without a manifest's `morphologyZchunkstore`,
+which covers the 2D channel files only. On the reference run the switch took
+1.7 s to show plane 8.
 
 ## Caching
 
@@ -249,7 +315,8 @@ matrix's, which the CSC shares. On the kidney run, three genes by
   genes' binned zips and their decoded tiles, each tile's `gene_offset`, and
   the last 48 gene-tile `location` ranges. Panning within loaded tiles reads
   only `quality_score`, `cell_id`, and `overlaps_nucleus` again, from the
-  byte-range cache.
+  byte-range cache. Density at a `Min QV` other than 20 also keeps the last 48
+  gene-tile `quality_score` ranges, decoded.
 
 ## Source Files
 
@@ -263,19 +330,17 @@ matrix's, which the CSC shares. On the kidney run, three genes by
 | `src/datasets/h5adDataset.ts`                       | AnnData readers used for the matrix                                                              |
 | `src/datasets/datasetFactory.ts`                    | `experiment.spatial` probe and construction                                                      |
 | `src/features/app-shell/platformAdapter.ts`         | `atera` adapter, boundary and transcript routing                                                 |
-| `src/features/app-shell/useDatasetLifecycle.ts`     | Atera load branch                                                                                |
+| `src/features/app-shell/useDatasetLifecycle.ts`     | Atera load branch, 2D or 3D image                                                                |
+| `src/features/app-shell/useAteraImageWorkflow.ts`   | `Morphology` choice: reload with `aimg`                                                          |
+| `src/data/roiTranscripts.ts`                        | `loadPerGeneRoiTranscripts`: selected-gene ROI export                                            |
+| `src/data/cellTranscripts.ts`                       | `loadPerGeneCellTranscriptDistribution`: selected-gene cell z histogram                          |
 | `src/data/datasetDiagnostics.ts`                    | Atera diagnostics                                                                                |
 
 ## Known Limitations
 
-- Transcripts are shown for selected genes only (see
-  [Transcripts](#transcripts)). ROI transcript export and the selected-cell z
-  histogram are unavailable.
-- Density always counts QV ≥ 20 transcripts, the binned store's threshold;
-  `Min QV` applies to exact points only.
-- Magic Lens is unavailable.
-- Azimuth category colours (`obs/<column>/color`) are not used; annotation
-  colours come from the viewer palette.
-- Only the 2D morphology image is shown; the 3D DAPI stack is not read. Enter
-  `morphology_3d/ch0000_dapi_3d.ome.tif` as an image URL to step through its
-  z planes.
+- Transcripts are shown, exported, and binned by z for selected genes only
+  (see [Transcripts](#transcripts)).
+- At a `Min QV` other than 20, a view whose selected genes have more than
+  2,000,000 rows in the tiles under it shows the QV ≥ 20 squares, and says so.
+- One morphology image at a time: the 2D image or the 3D DAPI stack.
+- Leiden classes have no stored colours; they take the viewer palette.

@@ -158,6 +158,7 @@ All entries are optional. Leave one out to use the path in
 | `binnedTranscripts`     | `binned_transcripts.zarr.zip`                     | Selected-gene transcript density                                                                                              |
 | `morphology`            | `images.morphology_2d_filepath` in the experiment | Any OME-TIFF or OME-Zarr image                                                                                                |
 | `morphologyZchunkstore` | Next to each TIFF                                 | [`.zchunkstore` sidecar](./zchunkstore.md) covering every `morphology_2d` channel file. Replaces the lookup next to the TIFFs |
+| `morphology3d`          | `images.morphology_3d_filepath` in the experiment | The 3D DAPI stack, offered under Image › `Morphology`. Opens without `morphologyZchunkstore`                                  |
 
 ### Standard Visium
 

@@ -12,9 +12,13 @@ import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { RoiState } from '../roi/roiModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from '../roi/visiumHdRoiModel'
 import type { AteraDataset } from '../../datasets/ateraDataset'
+import { loadPerGeneCellTranscriptDistribution } from '../../data/cellTranscripts'
+import { loadPerGeneRoiTranscripts } from '../../data/roiTranscripts'
 import type {
   BoundaryElementsLoader,
+  CellTranscriptDistributionLoader,
   GeneExpressionLoader,
+  RoiTranscriptsLoader,
   SpatialDatasetLoader,
   TranscriptAggregateLoader,
   TranscriptCapabilitiesLoader,
@@ -61,7 +65,7 @@ export interface AppPlatformCapabilities {
   readonly geometricAnnotations: boolean
   readonly nucleusBoundaries: boolean
   readonly transcripts: boolean
-  // Selected-cell transcript z histogram, read from transcripts.parquet.
+  // Selected-cell transcript z histogram, read from transcripts.zarr.zip.
   readonly cellTranscriptDistribution: boolean
   // The Transcripts section's gene-only filter; per-gene outputs only hold genes.
   readonly transcriptGeneOnlyFilter: boolean
@@ -160,7 +164,7 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     geometricAnnotations: true,
     nucleusBoundaries: true,
     transcripts: true,
-    cellTranscriptDistribution: false,
+    cellTranscriptDistribution: true,
     transcriptGeneOnlyFilter: false,
   },
   pointSizeFullViewScale: 1,
@@ -178,9 +182,8 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   },
   geneExpressionOverlayEnabled: () => true,
   cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
-  magicLensAvailability: () => ({
-    loadEnabled: false,
-    unavailableReason: 'Unavailable for Atera',
+  magicLensAvailability: (loadState) => ({
+    loadEnabled: loadState.status === 'ready',
   }),
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
@@ -743,6 +746,7 @@ export async function loadPlatformTranscriptAggregates(
   ).transcriptAggregates(bbox, {
     featureNames: options.featureNames ?? [],
     ...(options.maxBins === undefined ? {} : { maxBins: options.maxBins }),
+    ...(options.minQv === undefined ? {} : { minQv: options.minQv }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
 }
@@ -771,6 +775,84 @@ export async function loadPlatformTranscriptViewport(
     ...(options.minQv === undefined ? {} : { minQv: options.minQv }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+}
+
+// Atera exports the selected genes' transcripts from transcripts.zarr.zip;
+// the other AnnData platforms have no transcripts to export.
+export async function loadPlatformRoiTranscripts(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadRoiTranscripts: RoiTranscriptsLoader
+    readonly selectedGenes: readonly string[]
+  },
+  ...args: Parameters<RoiTranscriptsLoader>
+): ReturnType<RoiTranscriptsLoader> {
+  const [baseUrl, selection, options = {}] = args
+
+  if (adapter.kind === 'atera') {
+    const dataset = await perGeneTranscriptDataset(
+      dependencies.getSpatialDataset,
+      baseUrl,
+    )
+
+    return loadPerGeneRoiTranscripts(
+      (bbox, readOptions) => dataset.transcriptViewport(bbox, readOptions),
+      selection,
+      { ...options, featureNames: dependencies.selectedGenes },
+    )
+  }
+
+  if (!isAnnDataPlatform(adapter)) {
+    return dependencies.loadRoiTranscripts(baseUrl, selection, options)
+  }
+
+  throw new Error(
+    `${
+      adapter.kind === 'merscope'
+        ? PLATFORM_NAMES[adapter.kind]
+        : adapter.kind === 'visium'
+          ? 'Visium'
+          : 'H5AD and SpatialData'
+    } datasets do not support ROI transcript export.`,
+  )
+}
+
+// Atera's cell histogram counts the selected genes inside the cell outline.
+export async function loadPlatformCellTranscriptDistribution(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadCellTranscriptDistribution: CellTranscriptDistributionLoader
+    readonly selectedGenes: readonly string[]
+  },
+  ...args: Parameters<CellTranscriptDistributionLoader>
+): ReturnType<CellTranscriptDistributionLoader> {
+  const [baseUrl, cellId, options = {}] = args
+
+  if (adapter.kind !== 'atera') {
+    return dependencies.loadCellTranscriptDistribution(baseUrl, cellId, options)
+  }
+
+  const { boundaryPolygon } = options
+
+  if (boundaryPolygon === undefined) {
+    throw new Error('Atera cell transcript z distribution needs the cell outline.')
+  }
+
+  const dataset = await perGeneTranscriptDataset(dependencies.getSpatialDataset, baseUrl)
+
+  return loadPerGeneCellTranscriptDistribution(
+    (bbox, readOptions) => dataset.transcriptViewport(bbox, readOptions),
+    {
+      featureNames: dependencies.selectedGenes,
+      boundaryPolygon,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+      ...(options.limit === undefined ? {} : { limit: options.limit }),
+      ...(options.minQv === undefined ? {} : { minQv: options.minQv }),
+      ...(options.binCount === undefined ? {} : { binCount: options.binCount }),
+    },
+  )
 }
 
 async function perGeneTranscriptDataset(

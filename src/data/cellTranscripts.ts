@@ -5,6 +5,7 @@ import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
 import { micrometers, type BBox, type DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
+import type { PerGeneTranscriptReader } from './roiTranscripts'
 import type { TranscriptPoint } from './transcriptOverlay'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
 
@@ -29,6 +30,9 @@ export interface CellTranscriptZDistribution {
   readonly maxBinCount: number
   readonly hitTranscriptLimit: boolean
   readonly minQv: number
+  // The genes counted, when only some are (Atera counts the selected genes);
+  // absent when every feature in the cell is counted.
+  readonly featureNames?: readonly string[]
 }
 
 export interface LoadDatasetCellTranscriptDistributionOptions {
@@ -132,6 +136,65 @@ export async function loadDatasetCellTranscriptDistribution(
     minQv,
     binCount,
   })
+}
+
+export interface LoadPerGeneCellTranscriptDistributionOptions {
+  readonly featureNames: readonly string[]
+  readonly boundaryPolygon: readonly DataPoint[]
+  readonly signal?: AbortSignal
+  readonly limit?: number
+  readonly minQv?: number
+  readonly binCount?: number
+}
+
+// A cell's z distribution from a dataset that stores transcripts per gene
+// (Atera): the selected genes' transcripts inside the cell outline. Every
+// gene would mean reading every row of the tiles the cell touches. With no
+// genes selected, nothing is read and the distribution is empty.
+export async function loadPerGeneCellTranscriptDistribution(
+  readTranscripts: PerGeneTranscriptReader,
+  options: LoadPerGeneCellTranscriptDistributionOptions,
+): Promise<CellTranscriptZDistribution> {
+  const limit = normalizePositiveInteger(
+    options.limit,
+    CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
+  )
+  const minQv = normalizeMinQv(options.minQv)
+  const binCount = normalizePositiveInteger(
+    options.binCount,
+    CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT,
+  )
+  const { boundaryPolygon, featureNames } = options
+
+  if (featureNames.length === 0) {
+    return {
+      ...summarizeTranscriptPointZDistribution([], {
+        hitTranscriptLimit: false,
+        minQv,
+        binCount,
+      }),
+      featureNames,
+    }
+  }
+
+  const result = await readTranscripts(polygonBbox(boundaryPolygon), {
+    featureNames,
+    pointLimit: limit,
+    groupLimit: 1,
+    minQv,
+    contains: (point) => pointInPolygon(point, boundaryPolygon),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  throwIfAborted(options.signal)
+
+  return {
+    ...summarizeTranscriptPointZDistribution(result.points, {
+      hitTranscriptLimit: result.hitPointLimit,
+      minQv,
+      binCount,
+    }),
+    featureNames,
+  }
 }
 
 export function summarizeCellTranscriptZDistribution(

@@ -146,6 +146,9 @@ export interface Annotation<ElementId extends SpatialElementId = CellId> {
   readonly id: string
   readonly label: string
   readonly cellIds: readonly ElementId[]
+  // The class's colour as the dataset stores it (`#rrggbb`), used until the
+  // user picks another.
+  readonly color?: string
 }
 
 export interface SpatialDataset<ElementId extends SpatialElementId = SpatialElementId> {

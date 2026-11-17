@@ -54,6 +54,7 @@ interface ProbeOptions {
   readonly capabilities?: TranscriptCapabilities
   readonly detailMode?: TranscriptDetailMode
   readonly featureFilterMode?: TranscriptFeatureFilterMode
+  readonly minQv?: number
   readonly overviewCells?: readonly OverviewCellDatum[]
   readonly selectedGenes?: readonly string[]
   readonly showTranscriptOverlay?: boolean
@@ -147,7 +148,7 @@ function Probe({
       transcriptDetailMode: options.detailMode ?? 'auto',
       transcriptExactPointLimit: 100_000,
       transcriptGeneOnly: true,
-      transcriptMinQv: 20,
+      transcriptMinQv: options.minQv ?? 20,
       visibleTranscriptEstimate: options.visibleTranscriptEstimate ?? 0,
     },
     data: {
@@ -460,6 +461,46 @@ describe('useTranscriptWorkflow', () => {
     })
     expect(loaders.loadTranscriptAggregates).toHaveBeenCalledTimes(1)
     expect(loaders.loadTranscriptViewport).not.toHaveBeenCalled()
+  })
+
+  it('reads per-gene density again when Min QV changes', async () => {
+    const loaders = { ...defaultLoaders() }
+    loaders.loadTranscriptAggregates = vi.fn(async (_url, _bbox, options) => ({
+      ...perGeneAggregate(250_000),
+      minQv: options?.minQv ?? 20,
+      sourceFile:
+        options?.minQv === 30 ? 'transcripts.zarr.zip' : 'binned_transcripts.zarr.zip',
+    }))
+    const options: ProbeOptions = {
+      capabilities: PER_GENE_CAPABILITIES,
+      selectedGenes: ['UMOD'],
+      showTranscriptOverlay: true,
+      visibleTranscriptEstimate: 10,
+    }
+    const rerender = renderProbe(loaders, options)
+
+    await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+    expect(loaders.loadTranscriptAggregates).toHaveBeenLastCalledWith(
+      DATASET_URL,
+      viewportDetail.bbox,
+      expect.objectContaining({ featureNames: ['UMOD'], minQv: 20 }),
+    )
+
+    rerender({ ...options, minQv: 30 })
+
+    await waitFor(() =>
+      expect(snapshot.layerState).toMatchObject({
+        status: 'aggregate',
+        message:
+          'Showing native 1 selected-feature density squares at QV 30+ from transcripts.zarr.zip (1 squares).',
+      }),
+    )
+    expect(loaders.loadTranscriptAggregates).toHaveBeenCalledTimes(2)
+    expect(loaders.loadTranscriptAggregates).toHaveBeenLastCalledWith(
+      DATASET_URL,
+      viewportDetail.bbox,
+      expect.objectContaining({ minQv: 30 }),
+    )
   })
 
   it('loads exact per-gene points once the selected genes fit the budget', async () => {

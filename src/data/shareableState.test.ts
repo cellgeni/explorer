@@ -197,6 +197,13 @@ describe('shareableState', () => {
     expect(parseShareableState('#mimg=none').merscopeImage).toBe('none')
   })
 
+  it('round-trips the Atera image choice', () => {
+    const hash = formatShareableState({ ateraImage: '3d' })
+
+    expect(hash).toContain('aimg=3d')
+    expect(parseShareableState(hash)).toEqual({ linkVersion: 2, ateraImage: '3d' })
+  })
+
   it('round-trips the SpatialData table, coordinate system, image, and scale', () => {
     const hash = formatShareableState({
       spatialDataTable: 'square_008um',

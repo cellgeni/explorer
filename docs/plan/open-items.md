@@ -129,10 +129,6 @@ Features:
       `shapes.parquet` cannot be read by viewport: the 460-plex
       `cell_boundaries` is one row group of 598,222 rows with no per-shape
       bounding-box column.
-- [ ] Atera: ROI transcript export, the cell z histogram, Magic Lens, and
-      Azimuth colours; density that follows `Min QV` (it always counts
-      QV ≥ 20, the binned store's threshold); and the 3D DAPI stack shown with
-      the dataset (see [Phase 12](phases/12-atera.md#known-gaps)).
 - [ ] Collections: list them in the start-screen gallery and `Load Dataset`,
       previews by metadata and sorted by expression, class colours in links,
       an embedding beside the view, `labels` without an `image`, and the

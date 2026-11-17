@@ -9,7 +9,7 @@ export const TRANSCRIPT_DETAIL_HELP =
   'Level of detail (LOD). Auto shows each transcript as a point when the view holds fewer than the point budget, and density squares when it holds more. Density counts transcripts per square; Exact always reads points.'
 
 export const MIN_QV_HELP =
-  "Quality value: the decoder's confidence in each transcript, on the Phred scale. QV 20 means about 1 in 100 calls is wrong. Points below the minimum are hidden; density always counts QV 20 and above."
+  "Quality value: the decoder's confidence in each transcript, on the Phred scale. QV 20 means about 1 in 100 calls is wrong. Points below the minimum are hidden. Atera density follows it too; Xenium density always counts QV 20 and above."
 
 export const BOUNDARY_LIMIT_HELP =
   'The most cells in view for which cell and nucleus outlines are drawn. With more cells in view, cells show as points until you zoom in. Higher limits use more memory and time.'

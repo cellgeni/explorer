@@ -227,6 +227,12 @@ export function testDatasetInfoModel(
         onImageChange: vi.fn(),
         ...overrides.viewOptions?.merscope,
       },
+      atera: {
+        state: { status: 'idle' },
+        disabled: false,
+        onImageChange: vi.fn(),
+        ...overrides.viewOptions?.atera,
+      },
     },
     diagnostics: {
       state: { status: 'idle' },

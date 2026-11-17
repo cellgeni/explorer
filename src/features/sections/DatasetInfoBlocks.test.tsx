@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { testDatasetInfoModel } from '../../test/sectionModels'
 import {
   visiumHdControlFailed,
@@ -7,6 +7,7 @@ import {
   type VisiumHdControlState,
 } from '../dataset/visiumHdModel'
 import {
+  AteraImageSelect,
   DatasetViewOptions,
   OpenDatasetForm,
   VisiumHdBinControls,
@@ -167,6 +168,34 @@ describe('Visium section blocks', () => {
         <VisiumOffTissueToggle visium={testDatasetInfoModel().viewOptions.visium} />
         <VisiumHdBinControls visiumHd={testDatasetInfoModel().viewOptions.visiumHd} />
       </>,
+    )
+
+    expect(container).toBeEmptyDOMElement()
+  })
+})
+
+describe('AteraImageSelect', () => {
+  it('switches between the 2D image and the 3D DAPI stack', () => {
+    const onImageChange = vi.fn()
+    render(
+      <AteraImageSelect
+        atera={{
+          state: { status: 'ready', choice: '2d' },
+          disabled: false,
+          onImageChange,
+        }}
+      />,
+    )
+
+    const select = screen.getByLabelText('Morphology')
+    expect(select).toHaveValue('2d')
+    fireEvent.change(select, { target: { value: '3d' } })
+    expect(onImageChange).toHaveBeenCalledWith('3d')
+  })
+
+  it('renders nothing without a 3D stack', () => {
+    const { container } = render(
+      <AteraImageSelect atera={testDatasetInfoModel().viewOptions.atera} />,
     )
 
     expect(container).toBeEmptyDOMElement()

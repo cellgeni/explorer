@@ -217,6 +217,13 @@ function CellTranscriptZDistributionPanel({
   const errorState =
     matchingState !== null && matchingState.status === 'error' ? matchingState : null
   const distribution = readyState?.distribution ?? null
+  // Per-gene datasets (Atera) count the selected genes only.
+  const featureNames = distribution?.featureNames
+  const needsGenes = featureNames !== undefined && featureNames.length === 0
+  const geneCopy =
+    featureNames === undefined || featureNames.length === 0
+      ? ''
+      : formatGeneList(featureNames)
   const chartLabel =
     distribution === null ? undefined : cellTranscriptZDistributionAriaLabel(distribution)
   const statusCopy =
@@ -226,7 +233,9 @@ function CellTranscriptZDistributionPanel({
           ? 'Waiting'
           : 'Unavailable'
         : 'Loading'
-      : `${distribution.zCount.toLocaleString()} z records`
+      : needsGenes
+        ? 'Select genes'
+        : `${distribution.zCount.toLocaleString()} z records`
 
   return (
     <div className="cell-z-panel" aria-label="Cell transcript z-axis distribution">
@@ -247,10 +256,15 @@ function CellTranscriptZDistributionPanel({
         </p>
       )}
 
-      {distribution === null ? null : distribution.bins.length === 0 ? (
+      {distribution === null ? null : needsGenes ? (
         <p className="cell-expression-status">
-          No transcript z locations found at QV {formatNumber(distribution.minQv)} or
-          higher
+          Select genes to see their transcripts' z locations in this cell. This dataset
+          stores transcripts by gene.
+        </p>
+      ) : distribution.bins.length === 0 ? (
+        <p className="cell-expression-status">
+          No {geneCopy === '' ? '' : `${geneCopy} `}transcript z locations found at QV{' '}
+          {formatNumber(distribution.minQv)} or higher
         </p>
       ) : (
         <>
@@ -287,7 +301,7 @@ function CellTranscriptZDistributionPanel({
           </div>
           <p className="cell-z-caption">
             {distribution.transcriptCount.toLocaleString()} transcript rows · QV{' '}
-            {formatNumber(distribution.minQv)}+
+            {formatNumber(distribution.minQv)}+{geneCopy === '' ? '' : ` · ${geneCopy}`}
             {distribution.missingZCount === 0
               ? ''
               : ` · ${distribution.missingZCount.toLocaleString()} without z`}
@@ -299,6 +313,12 @@ function CellTranscriptZDistributionPanel({
       )}
     </div>
   )
+}
+
+// Up to three gene names, then how many more.
+function formatGeneList(genes: readonly string[]): string {
+  const shown = genes.slice(0, 3).join(', ')
+  return genes.length > 3 ? `${shown} +${genes.length - 3}` : shown
 }
 
 function cellTranscriptZBarHeight(bin: CellTranscriptZBin, maxBinCount: number): number {

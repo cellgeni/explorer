@@ -20,9 +20,14 @@ export const ATERA_FILE_DEFAULTS = {
 
 export type AteraFileRole = keyof typeof ATERA_FILE_DEFAULTS
 
-// The morphology image has no standard name; it comes from experiment.spatial,
-// and its `.zchunkstore` sidecar is looked for next to it.
-export const ATERA_OPTIONAL_FILES = ['morphology', 'morphologyZchunkstore'] as const
+// The morphology images have no standard name; they come from
+// experiment.spatial, and the 2D image's `.zchunkstore` sidecar is looked for
+// next to it.
+export const ATERA_OPTIONAL_FILES = [
+  'morphology',
+  'morphologyZchunkstore',
+  'morphology3d',
+] as const
 
 export type AteraManifestFileKey = AteraFileRole | (typeof ATERA_OPTIONAL_FILES)[number]
 
@@ -38,9 +43,10 @@ export const ATERA_GENE_FEATURE_TYPE = 'Gene Expression'
 
 export interface AteraExperiment {
   readonly micrometersPerPixel?: number
-  // 2D multi-focus morphology image (multi-file OME-TIFF). The 3D DAPI stack is
-  // not used: it is much larger and the viewer shows one plane.
+  // 2D multi-focus morphology image (multi-file OME-TIFF), shown by default.
   readonly morphologyPath?: string
+  // 3D DAPI stack: one OME-TIFF with an IFD per z plane, shown on request.
+  readonly morphology3dPath?: string
   readonly files: Readonly<Partial<Record<AteraFileRole, string>>>
   readonly cellCount?: number
   readonly transcriptCount?: number
@@ -69,6 +75,7 @@ export function parseAteraExperiment(json: unknown): AteraExperiment {
   const panel = isRecord(json.panel_wta) ? json.panel_wta : {}
   const micrometersPerPixel = positiveNumber(json.pixel_size)
   const morphologyPath = nonEmptyString(images.morphology_2d_filepath)
+  const morphology3dPath = nonEmptyString(images.morphology_3d_filepath)
   const cellCount = positiveNumber(json.num_cells)
   const transcriptCount = positiveNumber(json.num_transcripts)
   const panelName = nonEmptyString(panel.panel_name)
@@ -79,6 +86,7 @@ export function parseAteraExperiment(json: unknown): AteraExperiment {
     files,
     ...(micrometersPerPixel === undefined ? {} : { micrometersPerPixel }),
     ...(morphologyPath === undefined ? {} : { morphologyPath }),
+    ...(morphology3dPath === undefined ? {} : { morphology3dPath }),
     ...(cellCount === undefined ? {} : { cellCount }),
     ...(transcriptCount === undefined ? {} : { transcriptCount }),
     ...(panelName === undefined ? {} : { panelName }),
