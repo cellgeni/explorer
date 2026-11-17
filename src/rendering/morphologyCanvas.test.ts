@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
 import {
+  drawMorphologyTileChannels,
   drawMorphologyTiles,
   drawFlatImage,
   morphologyViewportBbox,
@@ -51,6 +52,69 @@ describe('morphology canvas projection', () => {
     drawMorphologyTiles(context, [tile], viewState, { width: 200, height: 100 })
 
     expect(drawImage).toHaveBeenCalledWith(image, 0, 0, 40, 40, 80, 30, 40, 40)
+  })
+
+  it('draws a placed tile with its axes swapped and flipped', () => {
+    const image = {} as ImageBitmap
+    const calls: unknown[][] = []
+    const record =
+      (name: string) =>
+      (...args: unknown[]) => {
+        calls.push([name, ...args])
+      }
+    const context = {
+      clearRect: vi.fn(),
+      drawImage: record('drawImage'),
+      save: record('save'),
+      restore: record('restore'),
+      translate: record('translate'),
+      transform: record('transform'),
+    } as unknown as CanvasRenderingContext2D
+    const tile: ReadyTile = {
+      id: '0:0:0',
+      level: 0,
+      image,
+      // A 40 x 20 frame bbox, placed at x 100-120, y 180-220.
+      bounds: {
+        minX: micrometers(0),
+        maxX: micrometers(40),
+        minY: micrometers(0),
+        maxY: micrometers(20),
+      },
+      sourceWidth: imagePixels(40),
+      sourceHeight: imagePixels(20),
+    }
+
+    drawMorphologyTileChannels(
+      context,
+      [
+        {
+          color: [255, 255, 255],
+          opacity: 1,
+          tiles: [tile],
+          placement: {
+            a: 0,
+            b: 1,
+            c: micrometers(100),
+            d: -1,
+            e: 0,
+            f: micrometers(220),
+          },
+        },
+      ],
+      viewState,
+      { width: 200, height: 100 },
+    )
+
+    // The tile's top-left source pixel lands at the target's bottom-left
+    // corner (100, 70): (-20, -10) turned by [0 1; -1 0] is (-10, 20).
+    expect(calls).toEqual([
+      ['save'],
+      ['translate', 110, 50],
+      ['transform', 0, -1, 1, 0, 0, 0],
+      ['drawImage', image, 0, 0, 40, 20, -20, -10, 40, 20],
+      ['restore'],
+    ])
   })
 
   it('snaps tile edges to whole pixels so neighbouring tiles meet', () => {

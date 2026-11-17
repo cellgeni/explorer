@@ -19,6 +19,17 @@ const H5AD_PBMC3K_REFERENCE_URL = 'https://mp33.cog.sanger.ac.uk/public/h5ad/pbm
 // uns/spatial). Census releases are pinned by date.
 const VISIUM_CENSUS_H5AD_URL =
   'https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/60d5175f-f477-48b2-8396-ad76be2c3310.h5ad'
+// STHELAR bone marrow (BioImage Archive S-BIAD2146): a zipped Zarr v2
+// SpatialData store whose `he` image is placed with x and y swapped and
+// flipped, and whose `nucleus_boundaries` shapes sit beside `cell_boundaries`.
+const STHELAR_BONE_MARROW_URL =
+  'https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/146/S-BIAD2146/Files/STHELAR/sdata_slides/sdata_bone_marrow_s0.zarr.zip'
+// About 30 s locally: the table, the 19 MB compressed cell shapes, then the
+// 19 MB nucleus shapes when nuclei are first shown.
+const STHELAR_LOAD_TIMEOUT_MS = 300_000
+// Bone marrow at four screen pixels per micrometre: about 1,900 cells and
+// nuclei in view at 1280 × 720.
+const STHELAR_TISSUE_VIEW = '5218,-1861,0,2'
 // 1 x 1 white PNG.
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC'
@@ -1639,6 +1650,47 @@ test('draws Xenium nucleus boundaries without reading cell outlines @live', asyn
   const log = page.getByRole('region', { name: 'Activity log' })
   await expect(log.getByText(/^Cell boundaries started/)).toHaveCount(0)
   await expect(log.getByText('Nucleus boundary load failed')).toHaveCount(0)
+  await expect(page.locator('.viewport-message-error')).toHaveCount(0)
+})
+
+test('draws STHELAR nuclei over its axis-swapped and flipped H&E @live', async ({
+  page,
+}) => {
+  test.setTimeout(600_000)
+
+  await page.goto(
+    `/#dataset=${encodeURIComponent(STHELAR_BONE_MARROW_URL)}&sdImage=he&view=${encodeURIComponent(STHELAR_TISSUE_VIEW)}&cellBounds=1&nucleusBounds=1`,
+  )
+
+  // The H&E is shown, and the nucleus shapes are not among the elements left
+  // out.
+  await expectLogEntry(
+    page,
+    /SpatialData view: coordinate system global; image he; table table_cells/,
+    { timeout: STHELAR_LOAD_TIMEOUT_MS },
+  )
+  const log = page.getByRole('region', { name: 'Activity log' })
+  await expect(log.getByText(/not shown .*shapes\/nucleus_boundaries/)).toHaveCount(0)
+  const cellsPanel = await openControls(page, 'cell-appearance')
+  await expect(cellsPanel.getByLabel('Nucleus boundaries')).toBeChecked()
+
+  // Every nucleus shares its index with a cell shape.
+  await expectLogEntry(
+    page,
+    /SpatialData shapes nucleus_boundaries: 225,906 of 225,906 nuclei match table rows/,
+    { timeout: STHELAR_LOAD_TIMEOUT_MS },
+  )
+  await expectLogEntry(page, /Cell boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms/, {
+    timeout: STHELAR_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(
+    page,
+    /Nucleus boundaries ready: [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    {
+      timeout: STHELAR_LOAD_TIMEOUT_MS,
+    },
+  )
+  await expect(log.getByText(/^(Cell|Nucleus) boundary load failed/)).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
 })
 

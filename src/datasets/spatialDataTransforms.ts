@@ -51,8 +51,30 @@ export function composeAffine(outer: Affine2D, inner: Affine2D): Affine2D {
   }
 }
 
-export function isAxisAlignedAffine(affine: Affine2D): boolean {
-  return affine.b === 0 && affine.d === 0 && affine.a > 0 && affine.e > 0
+// Off-axis terms smaller than this, relative to the scale, are dropped: a
+// turn or shear of under 1e-4 rad (0.006°). STHELAR's H&E registration turns
+// by 1.9e-5 rad on top of its x/y swap and flip; dropping it moves pixels of
+// the 37,252-pixel image by under one pixel.
+const AXIS_PERMUTATION_TOLERANCE = 1e-4
+
+// The affine with only its scales, flips, and axis swaps (turns by multiples
+// of 90°), so an image placed by it stays axis-aligned; null when it turns or
+// shears by more than AXIS_PERMUTATION_TOLERANCE.
+export function axisPermutingAffine(affine: Affine2D): Affine2D | null {
+  const { a, b, d, e } = affine
+  const negligible = (minor: number, major: number, otherMajor: number) =>
+    Math.abs(minor) <=
+    AXIS_PERMUTATION_TOLERANCE * Math.min(Math.abs(major), Math.abs(otherMajor))
+
+  if (a !== 0 && e !== 0 && negligible(b, a, e) && negligible(d, a, e)) {
+    return { ...affine, b: 0, d: 0 }
+  }
+
+  if (b !== 0 && d !== 0 && negligible(a, b, d) && negligible(e, b, d)) {
+    return { ...affine, a: 0, e: 0 }
+  }
+
+  return null
 }
 
 // Uniform scale factor of an affine, used to scale circle radii.

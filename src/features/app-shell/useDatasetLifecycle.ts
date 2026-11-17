@@ -1608,7 +1608,7 @@ export function useDatasetLifecycle({
           whenCommitted(() => {
             setDatasetPlatform('spatialdata')
             setShowCellBoundaries(restoreState.showCellBoundaries ?? true)
-            setShowNucleusBoundaries(false)
+            setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
             setGenePanelState(genePanelLoadStarted(requestedUrl))
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {

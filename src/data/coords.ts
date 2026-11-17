@@ -275,6 +275,58 @@ function tileSpan(
   return { first, last: Math.min(lastTile, Math.max(first, last)) }
 }
 
+// Where an image loader's own frame (the µm space of its tileBounds, x along
+// image columns and y along rows) sits in the dataset, when the image is
+// flipped, turned by a multiple of 90°, or has its axes swapped:
+//   x' = a * x + b * y + c
+//   y' = d * x + e * y + f
+// [a b; d e] is a signed permutation (each entry -1, 0 or 1, one non-zero per
+// row and column), so a frame bbox stays axis-aligned in the dataset. Scale
+// stays in the loader. SpatialData images placed this way set it (plan 10,
+// known gaps).
+export interface ImageFramePlacement {
+  readonly a: number
+  readonly b: number
+  readonly c: Micrometers
+  readonly d: number
+  readonly e: number
+  readonly f: Micrometers
+}
+
+// A frame bbox in dataset coordinates.
+export function placeFrameBbox(placement: ImageFramePlacement, bbox: BBox): BBox {
+  const { a, b, c, d, e, f } = placement
+  const x1 = a * bbox.minX + b * bbox.minY
+  const x2 = a * bbox.maxX + b * bbox.maxY
+  const y1 = d * bbox.minX + e * bbox.minY
+  const y2 = d * bbox.maxX + e * bbox.maxY
+
+  return {
+    minX: micrometers(Math.min(x1, x2) + c),
+    maxX: micrometers(Math.max(x1, x2) + c),
+    minY: micrometers(Math.min(y1, y2) + f),
+    maxY: micrometers(Math.max(y1, y2) + f),
+  }
+}
+
+// A dataset bbox in frame coordinates. A signed permutation's inverse is its
+// transpose.
+export function unplaceFrameBbox(placement: ImageFramePlacement, bbox: BBox): BBox {
+  const { a, b, c, d, e, f } = placement
+
+  return placeFrameBbox(
+    {
+      a,
+      b: d,
+      c: micrometers(-(a * c + d * f)),
+      d: b,
+      e,
+      f: micrometers(-(b * c + e * f)),
+    },
+    bbox,
+  )
+}
+
 // The full-resolution image size, or this level's size when the grid does not
 // give it.
 function imageSizeMicrometers(

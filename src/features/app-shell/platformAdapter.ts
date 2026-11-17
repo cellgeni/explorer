@@ -287,6 +287,10 @@ const MERSCOPE_PLATFORM_ADAPTER: AppPlatformAdapter = {
   canDrawRoi: ({ loadState }) => loadState.status === 'ready',
 }
 
+// Nuclei come from a nucleus shapes element (`nucleus_boundaries`); the
+// checkbox shows only for stores that have one
+// (`nucleusBoundaryControlsVisibleFor`). Cell outlines are read only while
+// shown, so nuclei alone do not wait for the cell shapes.
 const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
   kind: 'spatialdata',
   labels: { embeddingElementPlural: 'cells' },
@@ -295,7 +299,7 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     magicLens: true,
     annotations: true,
     geometricAnnotations: true,
-    nucleusBoundaries: false,
+    nucleusBoundaries: true,
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
@@ -374,6 +378,18 @@ export function appPlatformAdapterFor(
   }
 
   return XENIUM_PLATFORM_ADAPTER
+}
+
+// Whether the Cells section offers the `Nucleus boundaries` checkbox. A
+// SpatialData store offers it only when it has a nucleus shapes element.
+export function nucleusBoundaryControlsVisibleFor(
+  adapter: AppPlatformAdapter,
+  spatialDataNuclei: string | undefined,
+): boolean {
+  return (
+    adapter.capabilities.nucleusBoundaries &&
+    (adapter.kind !== 'spatialdata' || spatialDataNuclei !== undefined)
+  )
 }
 
 export function isVisiumHdPlatform(adapter: AppPlatformAdapter): boolean {
@@ -594,7 +610,8 @@ export async function loadPlatformNucleusBoundaryElements(
   if (
     adapter.kind !== 'visium-hd' &&
     adapter.kind !== 'atera' &&
-    adapter.kind !== 'xenium'
+    adapter.kind !== 'xenium' &&
+    adapter.kind !== 'spatialdata'
   ) {
     return { elements: [] }
   }

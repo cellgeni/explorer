@@ -80,8 +80,9 @@ stores from `src/zarr/zarrStores.ts`:
   read by range; deflated entries are read and inflated whole. The opened zip
   is returned as `zip` and kept in a four-entry cache, so detection, the
   dataset, and diagnostics share one central-directory read; diagnostics
-  check table chunks and `shapes.parquet` against the zip directory instead
-  of with requests. Consolidated metadata is still required.
+  check every table, image, and labels chunk and each `shapes.parquet`
+  against the zip directory instead of with requests. Consolidated metadata
+  is still required.
 
 ## Catalog And View Selection
 
@@ -106,14 +107,22 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
    declaration order. The `Coordinate system` select in the info drawer's View
    options overrides it (`sdCs` in the shareable URL).
 3. **Region shapes / labels**: region elements placed in that system.
-4. **Image**: images placed with an axis-aligned, positive-scale affine
-   (rotated, sheared, and flipped images are skipped); the one with the
-   smallest x scale (highest resolution) wins unless the View options `Image`
-   select picks another (`sdImage`).
+4. **Image**: images placed with an affine that only scales, flips, or swaps
+   x and y (`axisPermutingAffine`); rotated and sheared images are skipped.
+   Off-axis terms under 1e-4 of the scale are dropped first, so STHELAR's
+   H&E, an x/y swap and flip with a 1.9e-5 rad registration turn, is shown.
+   The one with the smallest pixel (highest resolution) wins unless the View
+   options `Image` select picks another (`sdImage`).
 5. **Boundary candidates**: non-region shapes whose name matches
    `/(?:^|[_-])cell[_-]?(?:boundar|segmentation|polygon)/i`, for example
    `cell_boundaries`.
-6. Everything else is reported as `skippedElements` in the activity log.
+6. **Nucleus candidates**: non-region shapes whose name matches
+   `/(?:^|[_-])nucle(?:us|i)[_-]?(?:boundar|segmentation|polygon)/i`, for
+   example spatialdata-io's Xenium `nucleus_boundaries`. A table that
+   annotates the nuclei itself (STHELAR's `table_nuclei`) draws them as its
+   cells instead.
+7. Everything else, including images other than the one shown, is reported
+   as `skippedElements` in the activity log.
 
 ### Supported Transforms
 
@@ -134,14 +143,14 @@ coordinate system.
 
 ## Files Read
 
-| Store path                               | Read by                                                         | Library                                              | Used for                              |
-| ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------- |
-| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                             |
-| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                     |
-| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita` + decode worker (codecs)                   | Cells, genes, annotations, embeddings |
-| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` in a worker (range reads, or zip slices) | Cell positions and boundaries         |
-| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                                            | Morphology layer                      |
-| `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker                            | Cell outlines                         |
+| Store path                               | Read by                                                         | Library                                              | Used for                                    |
+| ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
+| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                                   |
+| `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                           |
+| `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita` + decode worker (codecs)                   | Cells, genes, annotations, embeddings       |
+| `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` in a worker (range reads, or zip slices) | Cell positions, cell and nucleus boundaries |
+| `images/<name>/<level>/…`                | `openOmeZarrImageWithOptions` (`src/zarr/omeZarrLoader.ts`)     | `zarrita`                                            | Morphology layer                            |
+| `labels/<name>/<level>/…`                | `SpatialDataLabelsReader` (`src/datasets/spatialDataLabels.ts`) | `zarrita` + decode worker                            | Cell outlines                               |
 
 `points` (transcripts), extra images, and extra tables are not read. Label
 chunks in view are decoded and traced into cell outlines in the Zarr decode
@@ -219,6 +228,25 @@ columns and its bounds in µm; `elements(bbox)` is a linear bounds filter over
 them that builds polygon elements, scaled to µm, only for the cells it
 returns, reusing the previous request's elements for cells still in view.
 
+### Nucleus Boundaries
+
+The first nucleus candidate is drawn as the nucleus layer behind the
+`Nucleus boundaries` checkbox, which the Cells section offers only for a
+store that has one. `segmentationElements('nucleus', bbox)` reads the whole
+`shapes.parquet` the first time the checkbox is on, in the shapes worker, and
+filters it by bounds like the cell outlines. Nuclei are matched to table
+rows through the region shapes that share their index (spatialdata-io indexes
+`cell_boundaries` and `nucleus_boundaries` by cell id), or by the table's
+cell ids when the table annotates labels. A cell's first nucleus keeps its
+id and later ones get `<id>#nucleus-N`, as on Xenium; each matched nucleus
+names its cell (segmentation metadata `cellId`), so hovering it shows the
+cell and a click selects it. Nuclei that match no row are left out; when none
+match, every nucleus is drawn and the log says so. `meta().segmentations` lists the cell and nucleus outlines, and the cell
+outlines are read only while `Cell boundaries` is on, so nuclei alone do not
+wait for them. On STHELAR bone marrow, all 225,906 nuclei matched; the first
+view with nuclei took 17-21 s, most of it the 19.4 MB compressed zip entry
+from the BioImage Archive.
+
 ## Image
 
 The chosen image element is opened with `openOmeZarrImageWithOptions` using
@@ -226,6 +254,18 @@ the store and a planar transform from the element's affine. Per-level dataset
 scales are kept; the affine supplies the base scale and origin. Extra channels
 open as `#c=N` loaders through `openChannelLoader`, and other planes of a
 z-stack as `#z=N` loaders.
+
+A flipped or axis-swapped affine (`planarTransformFromAffine`) gives the
+loader the absolute scales and a `placement`, an `ImageFramePlacement` in
+`src/data/coords.ts`: a signed axis permutation and translation from the
+loader's frame (x along image columns, y along rows) to the coordinate
+system. Tiles keep their frame bounds. The morphology canvas
+(`MorphologyCanvas`, the minimap included) selects and caches tiles for the
+viewport mapped into the frame (`unplaceFrameBbox`), snaps each tile's placed
+bounds to whole pixels, and draws the tile turned into place about its
+centre. The extent uses the placed image bounds. STHELAR's `he` (37,252 ×
+11,024 px) lands landscape over the DAPI `morpho` image, with nuclei on the
+hematoxylin.
 
 Native RGB images (exactly three channels with no omero metadata, or channels
 labelled/coloured red, green, blue) keep their 0–255 window: the lifecycle
@@ -251,7 +291,9 @@ start with their first six channels on.
 
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`):
 
-1. Sets the platform to `spatialdata`; cell boundaries default to on.
+1. Sets the platform to `spatialdata`; cell boundaries default to on and
+   nucleus boundaries to off, unless the link says otherwise
+   (`nucleusBounds`).
 2. Logs `summary()`: coordinate system, image, table, skipped elements.
 3. Runs the shared `loadAnnDataOverview` (cells, gene panel, annotation sets,
    embedding options).
@@ -259,25 +301,26 @@ start with their first six channels on.
 
 Gating is in `SPATIALDATA_PLATFORM_ADAPTER`
 (`src/features/app-shell/platformAdapter.ts`): boundaries come from
-`dataset.elements(bbox)`; transcripts, nucleus boundaries, and Magic Lens are
-off.
+`dataset.elements(bbox)` and nuclei from `segmentationElements`, with the
+nucleus checkbox shown only when `summary().nuclei` names an element
+(`nucleusBoundaryControlsVisibleFor`); transcripts and Magic Lens are off.
 
 ## Source Files
 
-| File                                    | Role                                                                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                                                                      |
-| `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                                                             |
-| `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                                                       |
-| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader and shape columns, run in a worker by `spatialDataShapesWorker.ts` (`src/workers/`)       |
-| `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                                                           |
-| `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                                                                      |
-| `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table                                            |
-| `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                                                                 |
-| `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                                                               |
-| `src/zarr/zarrZipStore.ts`              | Zipped stores: central directory, store root, Parquet entries                                                            |
-| `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                                                            |
-| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, every table chunk, one chunk of the image and of each labels region, drawn `shapes.parquet` |
+| File                                    | Role                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                                                                |
+| `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                                                       |
+| `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                                                 |
+| `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader and shape columns, run in a worker by `spatialDataShapesWorker.ts` (`src/workers/`) |
+| `src/datasets/spatialDataLabels.ts`     | Label outline tracing and caching (`spatialDataLabelTrace.ts`)                                                     |
+| `src/datasets/spatialDataUnits.ts`      | µm-per-unit override, declared units, and estimates                                                                |
+| `src/datasets/spatialDataDataset.ts`    | `SpatialDataDataset`: coordinates, boundaries, image, delegation to the table                                      |
+| `src/datasets/h5adDataset.ts`           | AnnData table reader (`readAnnDataZarr`)                                                                           |
+| `src/zarr/zarrStores.ts`                | Fetch store, consolidated store, chunk LRU                                                                         |
+| `src/zarr/zarrZipStore.ts`              | Zipped stores: central directory, store root, Parquet entries                                                      |
+| `src/zarr/omeZarrLoader.ts`             | Image pyramid                                                                                                      |
+| `src/data/datasetDiagnostics.ts`        | Diagnostics: store, catalog, table chunks, image and labels chunks, drawn `shapes.parquet` and nucleus shapes      |
 
 ## Known Limitations
 
@@ -288,7 +331,15 @@ off.
   spatialdata's `blobs` example (labels, image, table).
 - `points` (transcripts), additional images, and additional tables are not
   shown. Labels elements are shown only as traced cell outlines, not as a
-  raster layer. `nucleus_boundaries` shapes are not drawn.
+  raster layer, and nucleus labels (`nucleus_labels`) are not traced.
+- `points` could be read by viewport only coarsely. In the 460-plex example
+  (503.5 million transcripts, 8.8 GB in 190 Parquet parts, stored in the zip)
+  every row group carries x/y min/max: parts are x strips 250-1,000 µm wide
+  and row groups are y bands of about a million rows within them. There is
+  no page index, so a 100 µm view still reads 6 row groups (4.7 million
+  rows, 23 MB of x, y, gene, and QV), a 500 µm view 45 MB, and the whole
+  slide 2.35 GB. STHELAR's `points/st` is one deflated zip entry (156 MB)
+  that would be read whole. Checked 2026-11-17 by reading every footer.
 - Only one coordinate system and one image are shown at a time. They are
   chosen automatically; the `Coordinate system` and `Image` selects in View
   options override the choice and reload the store.
@@ -297,10 +348,13 @@ off.
   `features_*` embeddings). Those place rows from `obsm` as an H5AD would, so
   they fail to load when `obsm` has none of the
   [coordinate keys](./h5ad.md#coordinates-obsm).
-- Images placed with a rotated, sheared, flipped, or axis-swapping affine are
-  skipped, for example the H&E in the STHELAR stores. They are listed only
-  among the skipped elements in the activity log.
-- Only `z = 0` and `t = 0` of images and labels are read.
+- Images placed with a rotated or sheared affine are skipped; they are
+  listed only among the skipped elements in the activity log. Flips, x/y
+  swaps, and turns by multiples of 90° are shown, and turns under 1e-4 rad
+  are dropped.
+- Labels read only `z = 0`, and neither images nor labels have a `t` choice.
+  Images open on `omero.rdefs.defaultZ`, else the middle plane, and have the
+  `Z plane` control like other z-stacks.
 - Polygon holes, and every part of a MultiPolygon but the largest, are
   dropped.
 - Shapes are read whole, not by viewport. spatialdata-io writes
@@ -310,6 +364,9 @@ off.
 - A zipped store needs consolidated metadata like any other. Deflated zip
   entries are read whole, so a compressed `shapes.parquet` is downloaded in
   full before any of it is parsed.
-- Diagnostics send a `HEAD` for every table chunk but check only the first
-  chunk of the coarsest level of the image and of each labels region, not
-  every chunk.
+- Over HTTP, diagnostics send a `HEAD` for the first 2,000 table chunks and
+  check only the first chunk of the coarsest level of the image and of each
+  labels region. A zipped store has every chunk checked against its
+  directory; image and labels chunks absent only from finer levels pass with
+  a note, as writers such as zarr-python 3 skip empty chunks (304 of 1,148 in
+  the 460-plex image).

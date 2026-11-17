@@ -394,6 +394,39 @@ describe('MorphologyCanvas', () => {
     })
     expect(requestedTileKeys()[0]).toBe('0:0:0')
   })
+
+  it('requests tiles in the frame of an image with swapped axes', async () => {
+    mockCanvasContext()
+    // x' = y, y' = 1200 - x: the 1200 × 800 frame covers x 0 to 800 and y 0
+    // to 1200. The view with its margin, x -306 to 406 and y -281 to 331, is
+    // frame x 869 to 1481 and y -306 to 406: columns 4-5, rows 0-2.
+    const loader = Object.assign(placedLoader({ x: 0, y: 0 }), {
+      placement: {
+        a: 0,
+        b: 1,
+        c: micrometers(0),
+        d: -1,
+        e: 0,
+        f: micrometers(1200),
+      },
+    })
+
+    render(
+      <MorphologyCanvas
+        loader={loader}
+        viewState={viewState}
+        maxConcurrentTileRequests={64}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(requestedTileKeys().sort()).toEqual(
+        tileKeys({ cols: [4, 5], rows: [0, 1, 2] }),
+      )
+    })
+    // The view's centre, frame (1175, 50), is in tile (5, 0).
+    expect(requestedTileKeys()[0]).toBe('0:5:0')
+  })
 })
 
 const viewState: OverviewViewState = {

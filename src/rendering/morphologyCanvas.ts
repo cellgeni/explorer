@@ -1,5 +1,5 @@
-import { micrometers, scaleFromZoom } from '../data/coords'
-import type { BBox } from '../data/coords'
+import { micrometers, placeFrameBbox, scaleFromZoom } from '../data/coords'
+import type { BBox, ImageFramePlacement } from '../data/coords'
 import type { TileIndex } from '../data/coords'
 import type { ReadyTile } from '../tiff/tileCache'
 import type { OverviewViewState } from './deckLayers'
@@ -20,6 +20,8 @@ export interface MorphologyChannelTileBatch {
   readonly color: readonly [number, number, number]
   readonly opacity: number
   readonly tiles: readonly ReadyTile[]
+  // The loader's placement; tile bounds are in its frame.
+  readonly placement?: ImageFramePlacement
 }
 
 export interface FlatImageCanvasSource {
@@ -72,7 +74,7 @@ export function drawMorphologyTileChannels(
   if (batches.length === 1 && isWhite(batches[0]?.color)) {
     for (const tile of batches[0]?.tiles ?? []) {
       context.globalAlpha = batches[0]?.opacity ?? 1
-      drawReadyTile(context, tile, viewState, viewport)
+      drawReadyTile(context, tile, viewState, viewport, batches[0]?.placement)
     }
     context.globalAlpha = 1
     return
@@ -83,7 +85,7 @@ export function drawMorphologyTileChannels(
     context.globalCompositeOperation = 'lighter'
 
     for (const tile of batch.tiles) {
-      drawReadyTile(context, tile, viewState, viewport)
+      drawReadyTile(context, tile, viewState, viewport, batch.placement)
     }
   }
 
@@ -186,29 +188,69 @@ function drawReadyTile(
   tile: ReadyTile,
   viewState: OverviewViewState,
   viewport: CssViewportSize,
+  placement?: ImageFramePlacement,
 ): void {
-  const target = tileTargetRect(tile, viewState, viewport)
+  const target = bboxTargetRect(
+    placement === undefined ? tile.bounds : placeFrameBbox(placement, tile.bounds),
+    viewState,
+    viewport,
+  )
 
   if (target === null) {
     return
   }
 
+  if (placement === undefined || isUnflippedPlacement(placement)) {
+    context.imageSmoothingQuality = tileSmoothingQuality(
+      tile,
+      target,
+      globalThis.devicePixelRatio || 1,
+    )
+    context.drawImage(
+      tile.image,
+      0,
+      0,
+      tile.sourceWidth,
+      tile.sourceHeight,
+      target.x,
+      target.y,
+      target.width,
+      target.height,
+    )
+    return
+  }
+
+  // The tile fills the snapped target, drawn about its centre with the frame
+  // axes turned to their screen directions (screen y runs with data y). With
+  // swapped axes, the tile's width runs down the screen.
+  const swapped = placement.a === 0
+  const width = swapped ? target.height : target.width
+  const height = swapped ? target.width : target.height
+
   context.imageSmoothingQuality = tileSmoothingQuality(
     tile,
-    target,
+    { width, height },
     globalThis.devicePixelRatio || 1,
   )
+  context.save()
+  context.translate(target.x + target.width / 2, target.y + target.height / 2)
+  context.transform(placement.a, placement.d, placement.b, placement.e, 0, 0)
   context.drawImage(
     tile.image,
     0,
     0,
     tile.sourceWidth,
     tile.sourceHeight,
-    target.x,
-    target.y,
-    target.width,
-    target.height,
+    -width / 2,
+    -height / 2,
+    width,
+    height,
   )
+  context.restore()
+}
+
+function isUnflippedPlacement(placement: ImageFramePlacement): boolean {
+  return placement.a === 1 && placement.e === 1
 }
 
 // Default smoothing samples a few source pixels per device pixel, so a tile
@@ -229,8 +271,8 @@ export function tileSmoothingQuality(
     : 'low'
 }
 
-function tileTargetRect(
-  tile: ReadyTile,
+function bboxTargetRect(
+  bounds: BBox,
   viewState: OverviewViewState,
   viewport: CssViewportSize,
 ): {
@@ -240,12 +282,12 @@ function tileTargetRect(
   readonly height: number
 } | null {
   const topLeft = deckDataToScreen(
-    { x: tile.bounds.minX, y: -tile.bounds.minY },
+    { x: bounds.minX, y: -bounds.minY },
     viewState,
     viewport,
   )
   const bottomRight = deckDataToScreen(
-    { x: tile.bounds.maxX, y: -tile.bounds.maxY },
+    { x: bounds.maxX, y: -bounds.maxY },
     viewState,
     viewport,
   )

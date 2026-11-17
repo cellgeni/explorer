@@ -1,6 +1,7 @@
 import * as zarr from 'zarrita'
 import {
-  isAxisAlignedAffine,
+  affineScale,
+  axisPermutingAffine,
   readElementCoordinateTransforms,
   type Affine2D,
   type SpatialDataCoordinateTransform,
@@ -67,6 +68,9 @@ export interface SpatialDataView {
   // Polygon shapes that can replace circle regions as drawn boundaries, such as
   // Xenium `cell_boundaries` sharing the `cell_circles` index.
   readonly boundaryCandidates: readonly SpatialDataPlacedElement[]
+  // Nucleus outline shapes that are not a region, such as spatialdata-io's
+  // Xenium `nucleus_boundaries`; drawn as the nucleus layer.
+  readonly nucleusCandidates: readonly SpatialDataPlacedElement[]
   readonly skippedElements: readonly SpatialDataElement[]
 }
 
@@ -130,6 +134,8 @@ const SPATIALDATA_ELEMENT_ATTRIBUTE_KEYS = [
 
 const BOUNDARY_SHAPES_NAME_PATTERN =
   /(?:^|[_-])cell[_-]?(?:boundar|segmentation|polygon)/i
+const NUCLEUS_SHAPES_NAME_PATTERN =
+  /(?:^|[_-])nucle(?:us|i)[_-]?(?:boundar|segmentation|polygon)/i
 
 // Root attributes carry `spatialdata_attrs`. Elements (images, labels, shapes,
 // points, tables) can carry it too, so element-only keys rule a group out.
@@ -306,11 +312,15 @@ export function selectSpatialDataView(
   const regionLabels = placed.filter(
     (entry) => entry.element.kind === 'labels' && regionNames.has(entry.element.name),
   )
+  // Images that stay axis-aligned, flipped or with swapped axes included;
+  // rotated and sheared ones are skipped.
   const images = placed
-    .filter(
-      (entry) => entry.element.kind === 'images' && isAxisAlignedAffine(entry.affine),
-    )
-    .sort((left, right) => left.affine.a - right.affine.a)
+    .flatMap((entry) => {
+      const affine =
+        entry.element.kind === 'images' ? axisPermutingAffine(entry.affine) : null
+      return affine === null ? [] : [{ element: entry.element, affine }]
+    })
+    .sort((left, right) => affineScale(left.affine) - affineScale(right.affine))
   const image = images.find((entry) => entry.element.name === options.image) ?? images[0]
   const boundaryCandidates = placed.filter(
     (entry) =>
@@ -318,10 +328,17 @@ export function selectSpatialDataView(
       !regionNames.has(entry.element.name) &&
       BOUNDARY_SHAPES_NAME_PATTERN.test(entry.element.name),
   )
+  const nucleusCandidates = placed.filter(
+    (entry) =>
+      entry.element.kind === 'shapes' &&
+      !regionNames.has(entry.element.name) &&
+      NUCLEUS_SHAPES_NAME_PATTERN.test(entry.element.name),
+  )
   const usedElements = new Set<SpatialDataElement>([
     ...regionShapes.map((entry) => entry.element),
     ...regionLabels.map((entry) => entry.element),
     ...boundaryCandidates.map((entry) => entry.element),
+    ...nucleusCandidates.map((entry) => entry.element),
     ...(image === undefined ? [] : [image.element]),
   ])
 
@@ -335,6 +352,7 @@ export function selectSpatialDataView(
     regionShapes,
     regionLabels,
     boundaryCandidates,
+    nucleusCandidates,
     skippedElements: catalog.elements.filter((element) =>
       element.kind === 'tables'
         ? element.name !== table?.name

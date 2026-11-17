@@ -31,6 +31,7 @@ import {
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
+  nucleusBoundaryControlsVisibleFor,
   platformActiveBoundaryCell,
   platformAnalysisEmbeddingOptions,
   platformBoundarySurfaceReserved,
@@ -455,6 +456,65 @@ describe('platformAdapter', () => {
       ),
     ).resolves.toEqual({ elements: nucleusElements })
     expect(dataset.segmentationElements).toHaveBeenCalledWith('nucleus', selection.bbox)
+  })
+
+  it('reads SpatialData nuclei only from stores with a nucleus shapes element', async () => {
+    const adapter = appPlatformAdapterFor(readyLoadState, 'spatialdata')
+    const nucleusElements = [
+      {
+        id: 'cell-a',
+        geometry: {
+          kind: 'polygon' as const,
+          rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+        },
+      },
+    ]
+    const datasetFor = (segmentations: readonly { readonly kind: string }[]) => ({
+      meta: vi.fn(async () => ({
+        capabilities: { cellBoundaries: true },
+        segmentations,
+      })),
+      segmentationElements: vi.fn(async () => nucleusElements),
+    })
+    const load = (dataset: ReturnType<typeof datasetFor>) =>
+      loadPlatformNucleusBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+        },
+        readyLoadState.url,
+        selection.bbox,
+      )
+    const withNuclei = datasetFor([{ kind: 'cell' }, { kind: 'nucleus' }])
+    const cellsOnly = datasetFor([{ kind: 'cell' }])
+
+    expect(adapter.capabilities.nucleusBoundaries).toBe(true)
+    expect(nucleusBoundaryControlsVisibleFor(adapter, 'nucleus_boundaries')).toBe(true)
+    expect(nucleusBoundaryControlsVisibleFor(adapter, undefined)).toBe(false)
+    expect(
+      nucleusBoundaryControlsVisibleFor(
+        appPlatformAdapterFor(readyLoadState, 'xenium'),
+        undefined,
+      ),
+    ).toBe(true)
+    expect(
+      nucleusBoundaryControlsVisibleFor(
+        appPlatformAdapterFor(readyLoadState, 'h5ad'),
+        'nucleus_boundaries',
+      ),
+    ).toBe(false)
+    // Nuclei alone load without the cell shapes.
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
+    await expect(load(withNuclei)).resolves.toEqual({ elements: nucleusElements })
+    expect(withNuclei.segmentationElements).toHaveBeenCalledWith(
+      'nucleus',
+      selection.bbox,
+    )
+    await expect(load(cellsOnly)).resolves.toEqual({ elements: [] })
+    expect(cellsOnly.segmentationElements).not.toHaveBeenCalled()
   })
 
   it('reads H5AD boundaries from the dataset only when it has label outlines', async () => {

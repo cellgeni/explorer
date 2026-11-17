@@ -228,11 +228,12 @@ picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr
 rendering settings name. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
-`nucleus_boundaries.parquet` and Atera nuclei, and Visium HD exposes cell and
-nucleus segmentation toggles when segmented outputs are detected. Each
-checkbox loads its own outlines, so cell outlines appear without waiting for
-nuclei. Hovering a nucleus shows its cell; clicking it selects the cell, and
-the Cell card lists the cell's nuclei with their area and circularity.
+`nucleus_boundaries.parquet`, Atera nuclei, and a SpatialData store's
+`nucleus_boundaries` shapes, and Visium HD exposes cell and nucleus
+segmentation toggles when segmented outputs are detected. Each checkbox loads
+its own outlines, so cell outlines appear without waiting for nuclei.
+Hovering a nucleus shows its cell; clicking it selects the cell, and the Cell
+card lists the cell's nuclei with their area and circularity.
 
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.
@@ -491,8 +492,11 @@ The info drawer's View options section shows the SpatialData view controls:
   unknown, distances are labelled as units.
 
 Genes, annotations, embeddings, selected-cell profiles, and ROI summaries work
-as they do for H5AD. Transcripts (`points`) and Magic Lens are not available for
-SpatialData yet. See [SpatialData](./modalities/spatialdata.md) for how the
+as they do for H5AD. A store with nucleus outlines (spatialdata-io's Xenium
+`nucleus_boundaries`) offers `Nucleus boundaries` under Cells › Appearance.
+Images that are flipped or have x and y swapped, such as the H&E in the
+STHELAR stores, are shown in place; rotated images are not. Transcripts
+(`points`) and Magic Lens are not available for SpatialData yet. See [SpatialData](./modalities/spatialdata.md) for how the
 coordinate system, table, shapes, labels, and image are chosen.
 
 ## Image-Only Sources

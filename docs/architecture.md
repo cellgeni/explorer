@@ -219,7 +219,7 @@ returns the Xenium adapter. The adapter decides:
 The `loadPlatform*` functions in the same file route readers by platform:
 boundaries and selected-gene expression go to the dataset for every platform
 but Xenium, nucleus boundaries go to the dataset's `segmentationElements` on
-Xenium, Atera, and Visium HD, and transcript capabilities, aggregates, and
+Xenium, Atera, Visium HD, and SpatialData, and transcript capabilities, aggregates, and
 viewports go to `AteraDataset` for Atera (see
 [Atera](./modalities/atera.md#transcripts)) and to the Xenium readers
 otherwise.
