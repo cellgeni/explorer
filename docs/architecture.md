@@ -64,8 +64,9 @@ hosted datasets and every example in `examples/`, runs on a weekday schedule
 (`.github/workflows/e2e-live.yml`). `npm audit` runs on every pull request,
 on pushes to `main` and each weekday morning (`.github/workflows/audit.yml`):
 any advisory in a package the app ships fails it, and in the dev tools only
-high and critical ones do. It is a workflow of its own so that a newly
-published advisory cannot hold up the Pages deploy, which waits for CI.
+critical ones do (high ones too once `picomatch` has a fix for
+GHSA-fc5q-39xc-vjpf). It is a workflow of its own so that a newly published
+advisory cannot hold up the Pages deploy, which waits for CI.
 
 ## Load Pipeline
 
