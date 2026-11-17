@@ -152,3 +152,35 @@ export function plotGroupsInput(groups: readonly PlotGroup[]): PlotGroupsInput {
 function uniqueGenes(genes: readonly string[]): readonly string[] {
   return [...new Set(genes)]
 }
+
+// The read budget (22-D7). Reads up to the prompt size start at once; larger
+// ones wait for Read, and over the limit, the size of the cell profile
+// budget for dense Zarr, the panel reads nothing.
+export const PLOT_READ_PROMPT_BYTES = 32 * 1024 * 1024
+export const PLOT_READ_MAX_BYTES = 256 * 1024 * 1024
+
+export type PlotReadDecision = 'read' | 'ask' | 'refuse'
+
+// `approvedBytes` is the largest read Read has allowed for the dataset: a
+// CSR matrix costs the same for every gene, so asking again for each gene
+// added would ask the same question.
+export function plotReadDecision(bytes: number, approvedBytes: number): PlotReadDecision {
+  if (bytes > PLOT_READ_MAX_BYTES) return 'refuse'
+  return bytes > PLOT_READ_PROMPT_BYTES && bytes > approvedBytes ? 'ask' : 'read'
+}
+
+// Sizes as the budget is set, in binary units.
+export function formatReadSize(bytes: number): string {
+  const mebibytes = bytes / (1024 * 1024)
+
+  if (mebibytes >= 1024) return `${(mebibytes / 1024).toFixed(1)} GiB`
+  if (mebibytes >= 10) return `${Math.round(mebibytes).toLocaleString()} MiB`
+  return mebibytes < 0.1 ? 'under 0.1 MiB' : `${mebibytes.toFixed(1)} MiB`
+}
+
+// "Gad1", "Gad1 and Sst", or "3 genes".
+export function plotGenesPhrase(genes: readonly string[]): string {
+  if (genes.length === 1) return genes[0] ?? '1 gene'
+  if (genes.length === 2) return `${genes[0] ?? ''} and ${genes[1] ?? ''}`
+  return `${genes.length.toLocaleString()} genes`
+}

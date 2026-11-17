@@ -3811,13 +3811,18 @@ describe('App', () => {
         'B cellGad120%0',
       ])
 
-      // Closing and opening again reads nothing more.
+      // Closing and opening again reads nothing more, and the link follows.
+      // The link this test starts from already names the panel, so the hash
+      // must lose it before the reopened panel counts.
       fireEvent.click(within(plots).getByRole('button', { name: 'Close plots' }))
+      await waitFor(() => {
+        expect(window.location.hash).not.toMatch(/panel=[^&]*plots/)
+      })
       openControls('plots')
       expect(screen.getByRole('region', { name: 'Plots' })).toBeVisible()
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
       await waitFor(() => {
-        expect(window.location.hash).toContain('panel=cells%2Cplots')
+        expect(window.location.hash).toMatch(/panel=[^&]*plots/)
       })
 
       // A selection is one more group, first, overlapping the classes.

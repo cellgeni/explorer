@@ -112,4 +112,19 @@ describe('PlotsPanel (plan 22-D, 22-E)', () => {
     expect(failed.onRetry).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Vim failed.')).toBeVisible()
   })
+
+  it('offers Read for a large read, titled with its size', () => {
+    const plots = testPlotsModel({
+      message:
+        'Reading Gad1 reads about 180 MiB of the matrix, uncompressed. Read to go ahead.',
+      confirmReadTitle: 'Read Gad1: about 180 MiB of the matrix',
+    })
+    render(<PlotsPanel plots={plots} />)
+
+    expect(screen.getByText(/reads about 180 MiB/)).toBeVisible()
+    const read = screen.getByRole('button', { name: 'Read' })
+    expect(read).toHaveAttribute('title', 'Read Gad1: about 180 MiB of the matrix')
+    fireEvent.click(read)
+    expect(plots.onConfirmRead).toHaveBeenCalledTimes(1)
+  })
 })

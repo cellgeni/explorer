@@ -16,12 +16,14 @@ import {
 } from '../app-shell/appRuntimeModel'
 import type { PlotGeneStats, PlotGroupsInput, PlotGroupsSummary } from './plotStats'
 import { createPlotStatsSession, type PlotStatsSession } from './plotStatsSession'
+import { formatReadSize, plotReadDecision } from './plotsPanelModel'
 
 // Reads what the Plots panel shows (plan 22-D6, 22-D12): a stats session
 // per dataset, given the dataset's rows once and the groups once per set.
 // Genes the session lacks are read from the dataset and handed to it; the
 // rest come from its cache, so changing the set reads nothing again.
-// Changing the genes, set or dataset cancels a read in flight.
+// Changing the genes, set or dataset cancels a read in flight. A large read
+// waits for Read, and one over the budget is refused (22-D7).
 
 export type PlotsSource =
   | { readonly kind: 'ready'; readonly source: GeneValuesSource }
@@ -39,7 +41,7 @@ export async function openPlotsSource(
   if (!isGeneValuesSource(dataset)) {
     return {
       kind: 'unavailable',
-      reason: `Plots are not available for ${platformLabel} yet. They read an expression matrix held in memory: an .h5ad file up to 300 MiB, standard Visium or MERSCOPE.`,
+      reason: `Plots are not available for ${platformLabel}: it has no expression matrix to read by gene.`,
     }
   }
 
@@ -61,8 +63,19 @@ export type PlotsDataStatus =
   | 'reading'
   | 'ready'
   | 'cancelled'
+  // A read waits for Read, or is over the budget (22-D7).
+  | 'confirm'
+  | 'too-large'
   | 'unavailable'
   | 'error'
+
+// The read behind 'confirm' and 'too-large'.
+export interface PlotsLargeRead {
+  readonly genes: readonly string[]
+  readonly bytes: number
+  // How the matrix's layout sets the size.
+  readonly detail: string | null
+}
 
 export interface PlotsData {
   readonly status: PlotsDataStatus
@@ -74,11 +87,14 @@ export interface PlotsData {
   readonly stats: ReadonlyMap<string, PlotGeneStats>
   readonly geneErrors: ReadonlyMap<string, string>
   readonly readingGenes: readonly string[]
+  readonly largeRead: PlotsLargeRead | null
 }
 
 export interface PlotsWorkflow extends PlotsData {
   readonly cancel: () => void
   readonly retry: () => void
+  // Reads the read waiting for Read.
+  readonly confirmRead: () => void
 }
 
 export interface PlotsWorkflowInput {
@@ -100,6 +116,7 @@ export const IDLE_PLOTS_DATA: PlotsData = {
   stats: new Map(),
   geneErrors: new Map(),
   readingGenes: [],
+  largeRead: null,
 }
 
 interface GroupsEntry {
@@ -117,6 +134,9 @@ interface DatasetEntry {
   opened: 'pending' | 'ready' | 'failed'
   readonly geneErrors: Map<string, string>
   groups: GroupsEntry | null
+  // The largest read Read has allowed, and the read waiting for it.
+  approvedBytes: number
+  askedBytes: number | null
 }
 
 export function usePlotsWorkflow({
@@ -197,7 +217,16 @@ export function usePlotsWorkflow({
     setRetryToken((current) => current + 1)
   }, [])
 
-  return { ...data, cancel, retry }
+  const confirmRead = useCallback(() => {
+    const entry = entryRef.current
+    if (entry === null || entry.askedBytes === null) return
+
+    entry.approvedBytes = Math.max(entry.approvedBytes, entry.askedBytes)
+    entry.askedBytes = null
+    setRetryToken((current) => current + 1)
+  }, [])
+
+  return { ...data, cancel, retry, confirmRead }
 }
 
 async function runPlots(
@@ -239,6 +268,8 @@ async function runPlots(
       opened: 'pending',
       geneErrors: new Map(),
       groups: null,
+      approvedBytes: 0,
+      askedBytes: null,
     }
     entry = created
     entryRef.current = entry
@@ -250,6 +281,7 @@ async function runPlots(
     summary: PlotGroupsSummary | null,
     readingGenes: readonly string[] = [],
     message: string | null = null,
+    largeRead: PlotsLargeRead | null = null,
   ): PlotsData => ({
     status,
     message,
@@ -258,6 +290,7 @@ async function runPlots(
     stats: new Map(groupsEntry?.stats ?? []),
     geneErrors: new Map(entry.geneErrors),
     readingGenes,
+    largeRead,
   })
 
   try {
@@ -301,14 +334,41 @@ async function runPlots(
       return
     }
 
-    publish(snapshot('reading', groupsEntry, summary, needed))
-    const startedAt = readTimestamp()
     const held = await entry.session.stats(needed)
     for (const stats of held.stats) groupsEntry.stats.set(stats.gene, stats)
     if (!request.isCurrent()) return
 
     if (held.missing.length > 0) {
+      const estimate = await opened.source.estimateGeneValuesRead(held.missing)
+      if (!request.isCurrent()) return
+
+      if (estimate.kind === 'unavailable') {
+        publish(snapshot('unavailable', groupsEntry, summary, [], estimate.reason))
+        return
+      }
+
+      const decision = plotReadDecision(estimate.bytes, entry.approvedBytes)
+      if (decision !== 'read') {
+        entry.askedBytes = decision === 'ask' ? estimate.bytes : null
+        publish(
+          snapshot(
+            decision === 'ask' ? 'confirm' : 'too-large',
+            groupsEntry,
+            summary,
+            [],
+            null,
+            {
+              genes: held.missing,
+              bytes: estimate.bytes,
+              detail: estimate.detail ?? null,
+            },
+          ),
+        )
+        return
+      }
+
       publish(snapshot('reading', groupsEntry, summary, held.missing))
+      const startedAt = readTimestamp()
       const reads = await opened.source.geneValues(held.missing, {
         signal: request.signal,
       })
@@ -331,7 +391,7 @@ async function runPlots(
       if (!request.isCurrent()) return
 
       appendDebugEvent(
-        `Plots: read ${readGenes.length.toLocaleString()} ${readGenes.length === 1 ? 'gene' : 'genes'} in ${formatElapsed(startedAt)}`,
+        `Plots: read ${readGenes.length.toLocaleString()} ${readGenes.length === 1 ? 'gene' : 'genes'}${estimate.bytes > 0 ? ` (about ${formatReadSize(estimate.bytes)})` : ''} in ${formatElapsed(startedAt)}`,
       )
     }
 

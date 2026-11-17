@@ -240,6 +240,21 @@ or exact points.
   `gene_expression_` prefix and `_clusters` suffix.
 - Embedding CSVs are tried in order; the first usable UMAP and t-SNE files win.
 
+### Plots Panel
+
+- `geneValues(genes)` reads each gene's slice of the feature-major
+  `cell_features/indices` and `data` in `cell_feature_matrix.zarr.zip`, four
+  genes at a time, after reading `cell_features/indptr` once
+  (`geneValuesFromCellFeatureMatrixZarr`, `src/data/gex.ts`). Gene names
+  match in any case, as in the gene list.
+- Row IDs are the `cell_features/cell_id` integer pairs, made text in the
+  plot worker (`xeniumCellIdText`), so a selection's and a set's cell IDs
+  join to matrix rows by ID. On the demo (1.4 million cells), SNAP25 by the
+  graph clusters plots 0.7 s after the clusters load, with no main-thread
+  task over 200 ms beyond the load's own.
+- Without a readable `cell_feature_matrix.zarr.zip`, the panel fails with a
+  message naming the file; the H5 is not read.
+
 ### Selected Cell
 
 - Gene profile: `loadRoiGeneStats` for one cell (CSC Zarr, else H5).

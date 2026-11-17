@@ -1,7 +1,8 @@
 # Phase 22 — Plots Panel
 
-Planned 2026-11-16. M1 (dot plot on loaded data) implemented 2026-11-16; see
-[M1 Progress](#m1-progress). Requested: exploratory plots like those in
+Planned 2026-11-16. M1 (dot plot on loaded data) and M2 (datasets read over
+HTTP) implemented 2026-11-16; see [M1 Progress](#m1-progress) and
+[M2 Progress](#m2-progress). Requested: exploratory plots like those in
 Scanpy, Seurat and CELLxGENE VIP, client side. The scope is a floating Plots
 panel with three plots of the selected genes, grouped by the classes of an
 annotation set, with the active selection as an extra group:
@@ -208,8 +209,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
 
 ## Tasks
 
-- [ ] **A. Whole-dataset gene reader.** (L) In memory done (M1); HTTP and
-      Xenium, Atera in M2.
+- [x] **A. Whole-dataset gene reader.** (L) In memory done (M1); HTTP,
+      Xenium, Atera and the budget done (M2).
   - Add an optional dataset method, `geneValues(genes, { signal })`. It
     returns the matrix row count and, for each gene, `rows: Uint32Array` and
     `values: Float32Array` of its non-zero cells, with negative values kept.
@@ -228,8 +229,9 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   - Tests: each backend on the existing fixtures. A property test that values
     match `matrix(ids)` for sampled cells. Negative values kept. The budget
     refuses without a request.
-- [ ] **B. Groups by row.** (M) Done in M1 except row-indexed labels, moved
-      to M2; the selection is a row mask, not a sorted list.
+- [x] **B. Groups by row.** (M) Done in M1; the selection is a row mask, not
+      a sorted list. Row-indexed labels were dropped in M2: joining by ID is
+      fast enough on 1.4 million cells (see [M2 Progress](#m2-progress)).
   - `groupCodes(set)` returns a code per row and the classes in legend
     order. It uses row-indexed labels where a dataset has them (D6), and maps
     cell IDs to rows in the worker otherwise.
@@ -279,7 +281,9 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
       SVG, PNG and CSV as in D10. Tests check that an exported SVG parses and
       holds a mark per group and gene, and that the CSV matches the plot
       model.
-- [ ] **I. Docs and end-to-end tests.** (M)
+- [ ] **I. Docs and end-to-end tests.** (M) Docs, smoke and axe tests for
+      M1 and M2, and the nightly Xenium test, done; switching plots waits for
+      M3.
   - Docs listed in [Docs To Update](#docs-to-update).
   - E2E on fixtures: open Plots on the H5AD fixture, switch the three plots,
     export a CSV. The axe smoke test opens Plots empty and loaded, and the
@@ -363,6 +367,75 @@ Changed from the plan while building:
 Left for M2 and M3 as planned: the Xenium, Atera and HTTP AnnData readers, and
 the D7 budget (M2); quartiles, densities, the violin, the heatmap and PNG
 export (M3); the nightly live test (I).
+
+## M2 Progress
+
+Implemented 2026-11-16 (branch `claude/plots-panel-m2`, on M1). The panel
+reads every platform but Visium HD: Xenium, Atera, and AnnData and
+SpatialData tables read over HTTP. Checked in the browser on the Xenium demo,
+the Atera kidney run, the SpatialData Visium store and the hindlimb AnnData
+Zarr store.
+
+Built:
+
+- **A, over HTTP.** Three readers in `geneValues.ts`, each given the
+  dataset's own reads: `geneValuesFromColumnSlices` (CSC over HTTP, Atera's
+  CSC, Xenium's feature-major `cell_features`), `geneValuesFromCsrBatches`
+  (all of a CSR `X`, in batches of whole rows, every gene in one pass) and
+  `geneValuesFromDenseChunks` (the dense Zarr chunks that hold the genes,
+  each read once). Each has an estimate beside it.
+- **Xenium.** `geneValuesFromCellFeatureMatrixZarr` and its estimate
+  (`gex.ts`) read `cell_features/indptr` once per dataset, then each gene's
+  slice. Row IDs go to the worker as the `cell_id` integer pairs
+  (`GeneValuesRowIds`), and the worker makes them text with
+  `xeniumCellIdText`, built from character codes.
+- **Atera** reads the CSC columns through the overlay's gene cache.
+  **SpatialData** delegates to its table.
+- **The budget (D7).** `estimateGeneValuesRead` gives the bytes a read
+  decodes and a sentence on how the layout sets them. The workflow reads up
+  to 32 MiB at once; to 256 MiB it waits for `Read`; over that it refuses,
+  keeping the genes already plotted. `plotReadDecision` holds the rule.
+- **I.** A nightly `@live` test plots SNAP25 by the Xenium graph clusters and
+  records the time to the first plot. Docs: UI reference, user guide,
+  architecture, the H5AD, Xenium, Atera and SpatialData modality pages and
+  the H5AD reference's CSR or CSC table.
+
+Measured in Chromium with the GPU (Playwright, from Sanger's network):
+
+| Dataset                                  | Read                                       | Time                     | Requests, download |
+| ---------------------------------------- | ------------------------------------------ | ------------------------ | ------------------ |
+| Xenium demo, 1.4 M cells, graph clusters | SNAP25, feature-major slice                | 0.7 s after the clusters | Included in load   |
+| Atera kidney, 93,864 cells, 47 classes   | 3 genes, CSC columns                       | 2.3 s from opening       | 262, 7.3 MB        |
+| SpatialData Visium, CSR, 29.7 M values   | 2 genes, all of `X` after `Read` (227 MiB) | 7.3 s                    | 525, 16 MB         |
+| Hindlimb AnnData Zarr, dense by gene     | 3 genes, one chunk each                    | 0.4 s                    | 7, 2.7 MB          |
+
+No run had a main-thread task over 200 ms that the same link without the
+panel did not have. On the Xenium demo a box selection's group held 5,303
+cells, as the Selection card did, with no unmatched IDs.
+
+Changed from the plan while building:
+
+- **Row-indexed labels are not used** (B, D6). Joining by cell ID in the
+  worker grouped 1.4 million Xenium cells within the 0.7 s above. The
+  Xenium IDs are what cost time, and the worker now makes them. Using
+  graph-cluster rows or H5AD codes directly would mean a second annotation
+  format through the app for no measured gain.
+- **Sizes are bytes decoded, not downloaded.** Chunk sizes on the server are
+  not known without a request per chunk. The panel says "uncompressed".
+  The SpatialData Visium table is 227 MiB of values and indices but 16 MB to
+  download.
+- **`Read` covers later reads up to its size.** A CSR matrix reads all of
+  `X` for any gene, so asking again for each gene added would repeat the
+  same question.
+- **No alignment check for Xenium rows.** The panel joins by cell ID, so
+  matrix rows and `cells.parquet` rows need not agree.
+- **A Xenium output without `cell_feature_matrix.zarr.zip` fails** with a
+  message naming the file (and `Try again`), rather than being hidden. The
+  file is missing only from hand-made outputs, and a network error looks the
+  same until it is retried.
+
+Left for M3 as planned: quartiles, densities, the violin, the heatmap, PNG
+export, and `Plot` with `plot=`.
 
 ## Testing
 

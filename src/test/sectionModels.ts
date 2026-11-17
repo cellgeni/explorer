@@ -458,6 +458,8 @@ export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel 
     geneErrors: [],
     reading: false,
     onCancel: vi.fn(),
+    confirmReadTitle: null,
+    onConfirmRead: vi.fn(),
     canRetry: false,
     onRetry: vi.fn(),
     onExportSvg: vi.fn(),

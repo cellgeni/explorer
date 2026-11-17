@@ -272,6 +272,36 @@ describe('AteraDataset', () => {
     expect(batch.elements[2]).toMatchObject({ transcriptCount: 7, nucleusCount: 1 })
   })
 
+  it('reads each gene in every cell for the Plots panel (plan 22-A)', async () => {
+    const { dataset } = createDataset()
+
+    await expect(dataset.geneValuesRowIds()).resolves.toEqual([
+      'aaaaaaaa-1',
+      'aaaaaaab-1',
+      'aaaaaaac-1',
+    ])
+    // GENEA's two values, each with an 8-byte index and a 4-byte count.
+    await expect(dataset.estimateGeneValuesRead(['GENEA', 'UNKNOWN'])).resolves.toEqual({
+      kind: 'read',
+      bytes: 24,
+      detail: expect.stringContaining('by gene'),
+    })
+    const reads = await dataset.geneValues(['GENEA', 'UNKNOWN', 'NegControlProbe_1'])
+
+    expect(
+      reads.map((read) =>
+        'error' in read ? read.error : [[...read.rows], [...read.values]],
+      ),
+    ).toEqual([
+      [
+        [0, 2],
+        [1, 3],
+      ],
+      'UNKNOWN is not in the expression matrix.',
+      [[2], [4]],
+    ])
+  })
+
   it('limits expression to the box and samples cells without expression', async () => {
     const { dataset } = createDataset()
     const box: BBox = {

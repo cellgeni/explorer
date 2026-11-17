@@ -391,8 +391,10 @@ selected genes by the classes of a loaded set:
    `Export CSV` the numbers behind it.
 
 The plot uses every cell of the dataset, not just the view, and compares
-nothing statistically. In this release it reads standard Visium, MERSCOPE and
-`.h5ad` files up to 300 MiB; see the
+nothing statistically. It works on every platform except Visium HD, whose bins
+have no sets. When a read would be over 32 MiB, as for an AnnData matrix
+stored by cell (CSR) and read over HTTP, the panel says how large it is and
+waits for `Read`; it reads nothing over 256 MiB. See the
 [UI reference](ui-reference.md#plots-panel).
 
 ## Standard Visium

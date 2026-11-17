@@ -394,8 +394,10 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
     return this.table.geneValuesRowIds()
   }
 
-  async estimateGeneValuesRead(): Promise<GeneValuesReadEstimate> {
-    return this.table.estimateGeneValuesRead()
+  async estimateGeneValuesRead(
+    genes: readonly string[],
+  ): Promise<GeneValuesReadEstimate> {
+    return this.table.estimateGeneValuesRead(genes)
   }
 
   async geneValues(

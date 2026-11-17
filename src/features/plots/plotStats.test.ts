@@ -1,5 +1,6 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import { intToCellId } from '../../data/cellid'
 import type { GeneValues } from '../../data/geneValues'
 import {
   plotGroupMean,
@@ -150,6 +151,29 @@ describe('plot statistics (plan 22-B, 22-C)', () => {
 
     expect(store.stats(['A', 'B', 'C']).missing).toEqual(['B'])
     expect(store.hasGene('A')).toBe(true)
+  })
+
+  it('joins classes to Xenium rows given as integer pairs', () => {
+    const store = new PlotStatsStore()
+    // Three rows, three integers each, as cell_features/cell_id may hold.
+    store.setRows({
+      kind: 'xenium',
+      pairs: new Uint32Array([1, 1, 0, 2, 1, 0, 3, 1, 0]),
+      stride: 3,
+      count: 3,
+    })
+    store.addGene(gene('Actb', [[2, 5]]))
+
+    const summary = store.setGroups({
+      classes: [[intToCellId(3, 1), intToCellId(1, 1), 'aaaaaaaa-9']],
+      selection: null,
+    })
+
+    expect(summary).toMatchObject({ classSizes: [2], unmatchedIds: 1 })
+    expect(store.stats(['Actb']).stats[0]?.groups[0]).toMatchObject({
+      cells: 2,
+      sum: 5,
+    })
   })
 
   it('needs groups before stats, and forgets genes for another dataset', () => {

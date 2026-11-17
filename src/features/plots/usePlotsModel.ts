@@ -14,7 +14,10 @@ import {
 import { documentPlotPaint, plotFileName, plotStatsCsv } from './plotExport'
 import type { PlotScale } from './plotStats'
 import {
+  formatReadSize,
   PLOT_MAX_GENES,
+  PLOT_READ_MAX_BYTES,
+  plotGenesPhrase,
   plotGroupsInput,
   plotsPanelGroups,
   type PlotSetOption,
@@ -48,6 +51,9 @@ export interface PlotsModel {
   readonly geneErrors: readonly string[]
   readonly reading: boolean
   readonly onCancel: () => void
+  // A large read waiting for Read (22-D7): what it fetches, for the button.
+  readonly confirmReadTitle: string | null
+  readonly onConfirmRead: () => void
   // After an error or a cancelled read.
   readonly canRetry: boolean
   readonly onRetry: () => void
@@ -178,6 +184,7 @@ export function usePlotsModel({
     [colorScale, colour, genes, panel.groups, panel.setLabel, scale, valueLabel],
   )
 
+  const largeRead = largeReadNotice(data)
   const message = plotsMessage({
     available,
     datasetReady,
@@ -187,8 +194,13 @@ export function usePlotsModel({
     hasPlot: plot !== null,
     platformLabel,
     elementNoun,
+    largeRead,
   })
-  const notes = plotsNotes(panel, data, elementNoun, log1pAvailable)
+  // With genes already plotted, the large read is a note under the plot.
+  const notes = [
+    ...(plot !== null && largeRead !== null ? [largeRead] : []),
+    ...plotsNotes(panel, data, elementNoun, log1pAvailable),
+  ]
   const geneErrors = panel.genes.flatMap((gene) => {
     const error = data.geneErrors.get(gene)
     return error === undefined ? [] : [error]
@@ -217,6 +229,14 @@ export function usePlotsModel({
     geneErrors,
     reading,
     onCancel: data.cancel,
+    confirmReadTitle:
+      data.status === 'confirm' && data.largeRead !== null
+        ? `Read ${plotGenesPhrase(data.largeRead.genes)}: about ${formatReadSize(data.largeRead.bytes)} of the matrix, uncompressed`
+        : null,
+    onConfirmRead: () => {
+      data.confirmRead()
+      appendDebugEvent('Plots: read allowed')
+    },
     canRetry:
       data.status === 'cancelled' || data.status === 'error' || geneErrors.length > 0,
     onRetry: data.retry,
@@ -251,6 +271,8 @@ function plotsStatus(
     return `Reading ${count.toLocaleString()} ${count === 1 ? 'gene' : 'genes'}`
   }
   if (data.status === 'preparing') return 'Preparing'
+  if (data.status === 'confirm') return 'Waiting for Read'
+  if (data.status === 'too-large') return 'Too large to read'
   if (geneCount === 0 || groupCount === 0) return 'Nothing to plot'
 
   const genes = `${geneCount.toLocaleString()} ${geneCount === 1 ? 'gene' : 'genes'}`
@@ -266,6 +288,7 @@ function plotsMessage({
   hasPlot,
   platformLabel,
   elementNoun,
+  largeRead,
 }: {
   readonly available: boolean
   readonly datasetReady: boolean
@@ -275,6 +298,7 @@ function plotsMessage({
   readonly hasPlot: boolean
   readonly platformLabel: string
   readonly elementNoun: string
+  readonly largeRead: string | null
 }): string | null {
   if (!available) {
     return `${platformLabel} ${elementNoun} have no annotation sets to group by.`
@@ -287,10 +311,29 @@ function plotsMessage({
   }
   if (data.status === 'error') return `Plots failed: ${data.message ?? 'unknown error'}`
   if (hasPlot) return null
+  if (largeRead !== null) return largeRead
   if (data.status === 'cancelled') return 'Reading cancelled.'
   return data.status === 'ready'
     ? 'No gene could be read.'
     : 'Reading the selected genes…'
+}
+
+// What a large read fetches, and why (22-D7).
+function largeReadNotice(data: PlotsData): string | null {
+  const read = data.largeRead
+  if (read === null) return null
+
+  const genes = plotGenesPhrase(read.genes)
+  const size = formatReadSize(read.bytes)
+  const detail = read.detail === null ? '' : ` ${read.detail}`
+
+  if (data.status === 'confirm') {
+    return `Reading ${genes} reads about ${size} of the matrix, uncompressed.${detail} Read to go ahead.`
+  }
+  if (data.status === 'too-large') {
+    return `Reading ${genes} would read about ${size} of the matrix, uncompressed: over the ${formatReadSize(PLOT_READ_MAX_BYTES)} the panel reads.${detail}`
+  }
+  return null
 }
 
 function plotsNotes(

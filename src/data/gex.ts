@@ -7,6 +7,13 @@ import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { coalesceCellMajorRanges, emptyCellsFor } from './featureBarcodeMatrixH5'
 import { createGeneFeatureIndex } from './geneFeatures'
 import { selectionToSql } from './gexSelection'
+import {
+  columnSlicesReadBytes,
+  geneValuesFromColumnSlices,
+  type GeneValuesRead,
+  type GeneValuesReadEstimate,
+  type GeneValuesRowIds,
+} from './geneValues'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import {
   dropSharedH5WorkerFile,
@@ -100,6 +107,7 @@ const h5MatrixCache = new Map<string, SharedLoad<H5WorkerFile>>()
 const zarrMatrixCache = new Map<string, Promise<ZarrMatrixCache>>()
 const zarrMatrixCellIdCache = new Map<string, Promise<ZarrMatrixCellIdCache>>()
 const zarrMatrixCellIdDataCache = new Map<string, Promise<Uint32Array>>()
+const featureMajorMatrixCache = new Map<string, Promise<FeatureMajorMatrix>>()
 interface CellMajorIndptrCacheEntry {
   readonly promise: Promise<Uint32Array>
   state: 'pending' | 'ready'
@@ -144,6 +152,12 @@ export function clearCellFeatureMatrixZarrCache(retainUrl?: string): void {
   for (const url of zarrMatrixCellIdCache.keys()) {
     if (url !== retainUrl) {
       zarrMatrixCellIdCache.delete(url)
+    }
+  }
+
+  for (const url of featureMajorMatrixCache.keys()) {
+    if (url !== retainUrl) {
+      featureMajorMatrixCache.delete(url)
     }
   }
 }
@@ -572,6 +586,149 @@ export async function selectedGeneRowsFromCellFeatureMatrixZarr(
     cellIdForRow: (row) =>
       intToCellId(cellIdData[row * stride] ?? 0, cellIdData[row * stride + 1] ?? 0),
   }
+}
+
+// The feature-major arrays with their pointers read, for the Plots panel
+// (plan 22-A): each gene is one slice of `indices` and `data`.
+interface FeatureMajorMatrix {
+  readonly metadata: ZarrMatrixCache
+  readonly indptr: Uint32Array
+  readonly indices: ZarrArray<DataType, ZipFileStore>
+  readonly data: ZarrArray<DataType, ZipFileStore>
+  // Gene features by lower-case name, as the gene list matches them.
+  readonly featureByGene: ReadonlyMap<string, number>
+}
+
+// A row's cell index and its count, both uint32.
+const FEATURE_MAJOR_VALUE_BYTES = 8
+const FEATURE_MAJOR_READ_CONCURRENCY = 4
+
+function loadFeatureMajorMatrix(url: string): Promise<FeatureMajorMatrix> {
+  const cached = featureMajorMatrixCache.get(url)
+
+  if (cached !== undefined) {
+    return cached
+  }
+
+  const promise = loadFeatureMajorMatrixUncached(url).catch((error: unknown) => {
+    if (featureMajorMatrixCache.get(url) === promise) {
+      featureMajorMatrixCache.delete(url)
+    }
+
+    throw error
+  })
+
+  featureMajorMatrixCache.set(url, promise)
+  return promise
+}
+
+async function loadFeatureMajorMatrixUncached(url: string): Promise<FeatureMajorMatrix> {
+  const metadata = await loadZarrMatrixMetadata(url)
+  const [indptrArray, indices, data] = await Promise.all(
+    ['indptr', 'indices', 'data'].map((name) =>
+      zarr.open(metadata.cellFeatures.resolve(name), { kind: 'array' }),
+    ),
+  )
+
+  if (indptrArray === undefined || indices === undefined || data === undefined) {
+    throw new Error('cell_features has no feature-major arrays.')
+  }
+
+  const featureByGene = new Map<string, number>()
+  metadata.geneNames.forEach((gene, index) => {
+    const key = gene.toLowerCase()
+    if (metadata.geneFeatureIndices.has(index) && !featureByGene.has(key)) {
+      featureByGene.set(key, index)
+    }
+  })
+
+  return {
+    metadata,
+    indptr: expectUint32Array(
+      (await zarr.get(indptrArray, [null])).data,
+      'cell_features/indptr',
+    ),
+    indices,
+    data,
+    featureByGene,
+  }
+}
+
+// Each matrix row's cell ID, as the matrix stores it; the plot worker makes
+// them text.
+export async function cellFeatureMatrixRowIds(url: string): Promise<GeneValuesRowIds> {
+  const [metadata, pairs] = await Promise.all([
+    loadZarrMatrixMetadata(url),
+    loadZarrMatrixCellIdData(url),
+  ])
+
+  return {
+    kind: 'xenium',
+    pairs,
+    stride: metadata.cellIdStride,
+    count: metadata.nCells,
+  }
+}
+
+export async function estimateCellFeatureMatrixGeneValues(
+  url: string,
+  genes: readonly string[],
+): Promise<GeneValuesReadEstimate> {
+  const matrix = await loadFeatureMajorMatrix(url)
+  const features = genes.flatMap((gene) => {
+    const feature = matrix.featureByGene.get(gene.toLowerCase())
+    return feature === undefined ? [] : [feature]
+  })
+
+  return {
+    kind: 'read',
+    bytes: columnSlicesReadBytes(
+      { indptr: matrix.indptr, cols: matrix.metadata.geneNames.length },
+      features,
+      FEATURE_MAJOR_VALUE_BYTES,
+    ),
+    detail: 'The matrix is stored by gene as well as by cell, so each gene is one slice.',
+  }
+}
+
+// Each gene's count in every cell, by matrix row, from the feature-major
+// arrays.
+export async function geneValuesFromCellFeatureMatrixZarr(
+  url: string,
+  genes: readonly string[],
+  options: { readonly signal?: AbortSignal } = {},
+): Promise<readonly GeneValuesRead[]> {
+  const matrix = await loadFeatureMajorMatrix(url)
+  throwIfAborted(options.signal)
+  const features = genes.map((gene) => matrix.featureByGene.get(gene.toLowerCase()))
+  const found = features.filter((feature) => feature !== undefined)
+  const columns = await geneValuesFromColumnSlices(
+    {
+      indptr: matrix.indptr,
+      rows: matrix.metadata.nCells,
+      cols: matrix.metadata.geneNames.length,
+      readValues: async (start, end) => {
+        const [indices, data] = await Promise.all([
+          zarr.get(matrix.indices, [zarr.slice(start, end)]),
+          zarr.get(matrix.data, [zarr.slice(start, end)]),
+        ])
+        return {
+          indices: expectUint32Array(indices.data, 'cell_features/indices'),
+          data: expectUint32Array(data.data, 'cell_features/data'),
+        }
+      },
+    },
+    found,
+    { signal: options.signal, concurrency: FEATURE_MAJOR_READ_CONCURRENCY },
+  )
+  const byFeature = new Map(found.map((feature, index) => [feature, columns[index]]))
+
+  return genes.map((gene, index) => {
+    const column = byFeature.get(features[index] ?? -1)
+    return column === undefined
+      ? { gene, error: `${gene} is not a gene in the expression matrix.` }
+      : { gene, ...column }
+  })
 }
 
 function shouldUseCellMajorSelectedGeneRead(

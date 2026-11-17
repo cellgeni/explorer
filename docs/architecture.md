@@ -488,11 +488,21 @@ dataset's `geneValues(genes)` (`src/data/geneValues.ts`): the rows with a
 stored value other than 0, and those values, as typed arrays. A matrix held
 in memory (standard Visium, MERSCOPE, an `.h5ad` read whole) is scanned on the
 main thread, yielding every million stored values; a CSR matrix is scanned
-once for all the genes asked for. The values go by transfer to the panel's
-plot worker, which the panel starts once per dataset and gives the dataset's
-row cell IDs. The worker maps each class's cell IDs, and the selection's, to
-rows once per set, then sums each gene's stored values into the groups of
-their rows; every other cell of a group counts as 0. It keeps gene values up
+once for all the genes asked for. A matrix read over HTTP goes through the
+same module with the dataset's own reads passed in:
+`geneValuesFromColumnSlices` for each gene's slice of a CSC matrix, Atera's
+CSC and Xenium's feature-major `cell_features`;
+`geneValuesFromCsrBatches` for all of a CSR `X`, in batches of whole rows
+with up to 4 million stored values; and `geneValuesFromDenseChunks` for the
+dense Zarr chunks that hold the genes. Four reads are in flight at once (six
+for H5AD). Before reading, `estimateGeneValuesRead(genes)` gives the bytes the
+read decodes, which the panel holds to its budget (plan 22-D7). The values go
+by transfer to the panel's plot worker, which the panel starts once per
+dataset and gives the dataset's row cell IDs; Xenium's are the
+`cell_features/cell_id` integer pairs, made text in the worker. The worker
+maps each class's cell IDs, and the selection's, to rows once per set, then
+sums each gene's stored values into the groups of their rows; every other
+cell of a group counts as 0. It keeps gene values up
 to 128 MiB, least recently used first out, and answers for genes it no longer
 holds with their names, which the panel reads again. If the worker fails, or
 there is no `Worker`, the same store runs on the main thread. See

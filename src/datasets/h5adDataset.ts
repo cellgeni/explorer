@@ -23,11 +23,18 @@ import type {
 import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import {
+  columnSlicesReadBytes,
+  csrReadBytes,
+  denseChunksReadBytes,
+  geneValuesFromColumnSlices,
   geneValuesFromCsc,
   geneValuesFromCsr,
+  geneValuesFromCsrBatches,
   geneValuesFromDense,
+  geneValuesFromDenseChunks,
   type GeneValuesRead,
   type GeneValuesReadEstimate,
+  type RangeReadSparseMatrix,
 } from '../data/geneValues'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
@@ -799,18 +806,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return (await this.cache()).cellIds
   }
 
-  // A matrix read into memory at load reads nothing more. Matrices read
-  // over HTTP come in a later milestone (22-A, M2).
-  async estimateGeneValuesRead(): Promise<GeneValuesReadEstimate> {
-    const { matrix } = await this.cache()
-
-    return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
-      ? { kind: 'read', bytes: 0 }
-      : {
-          kind: 'unavailable',
-          reason:
-            'Plots read an expression matrix held in memory: an .h5ad file up to 300 MiB, standard Visium or MERSCOPE. This dataset reads its matrix over HTTP.',
-        }
+  // What reading genes would fetch (22-D7): nothing for a matrix held in
+  // memory; for one read over HTTP, the values the layout makes a read take.
+  async estimateGeneValuesRead(
+    genes: readonly string[],
+  ): Promise<GeneValuesReadEstimate> {
+    const { matrix, geneNames } = await this.cache()
+    return h5adGeneValuesEstimate(matrix, geneColumns(geneNames, genes).cols)
   }
 
   // Each gene's value in every cell (22-A). One scan of a CSR matrix reads
@@ -821,28 +823,9 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<readonly GeneValuesRead[]> {
     const { matrix, geneNames } = await this.cache()
     throwIfAborted(options.signal)
-    const colByGene = new Map<string, number>()
-    geneNames.forEach((gene, col) => {
-      if (!colByGene.has(gene)) colByGene.set(gene, col)
-    })
-    const found = genes.filter((gene) => colByGene.has(gene))
-    const cols = found.map((gene) => colByGene.get(gene) ?? -1)
-    const scanOptions = { signal: options.signal }
+    const { found, cols } = geneColumns(geneNames, genes)
     const columns =
-      found.length === 0
-        ? []
-        : matrix.kind === 'csr'
-          ? await geneValuesFromCsr(matrix, cols, scanOptions)
-          : matrix.kind === 'csc'
-            ? await geneValuesFromCsc(matrix, cols, scanOptions)
-            : matrix.kind === 'dense'
-              ? await geneValuesFromDense(matrix, cols, scanOptions)
-              : null
-
-    if (columns === null) {
-      throw new Error('Plots cannot read this expression matrix yet.')
-    }
-
+      found.length === 0 ? [] : await h5adGeneValues(matrix, cols, options.signal)
     const byGene = new Map(found.map((gene, index) => [gene, columns[index]]))
 
     return genes.map((gene) => {
@@ -3370,6 +3353,123 @@ async function readMatrix(
   return { kind: 'csr', ...matrix }
 }
 
+// The matrix columns of the genes found, by first match.
+function geneColumns(
+  geneNames: readonly string[],
+  genes: readonly string[],
+): { readonly found: readonly string[]; readonly cols: readonly number[] } {
+  const colByGene = new Map<string, number>()
+  geneNames.forEach((gene, col) => {
+    if (!colByGene.has(gene)) colByGene.set(gene, col)
+  })
+  const found = genes.filter((gene) => colByGene.has(gene))
+
+  return { found, cols: found.map((gene) => colByGene.get(gene) ?? -1) }
+}
+
+function h5adGeneValues(
+  matrix: H5adMatrix,
+  cols: readonly number[],
+  signal: AbortSignal | undefined,
+) {
+  const options = { signal }
+
+  switch (matrix.kind) {
+    case 'csr':
+      return geneValuesFromCsr(matrix, cols, options)
+    case 'csc':
+      return geneValuesFromCsc(matrix, cols, options)
+    case 'dense':
+      return geneValuesFromDense(matrix, cols, options)
+    case 'csr-zarr':
+      return geneValuesFromCsrBatches(rangeReadMatrix(matrix), cols, options)
+    case 'csc-zarr':
+      return geneValuesFromColumnSlices(rangeReadMatrix(matrix), cols, {
+        ...options,
+        concurrency: H5AD_REFERENCE_FETCH_CONCURRENCY,
+      })
+    case 'dense-zarr':
+      return geneValuesFromDenseChunks(
+        {
+          rows: matrix.rows,
+          cols: matrix.cols,
+          chunkShape: denseZarrChunkShape(matrix),
+          readChunk: async (rowChunk, colChunk) => {
+            const chunk = await matrix.values.getChunk([rowChunk, colChunk])
+            return {
+              values: readNumericArray(zarrChunkValue(chunk), matrix.values.path),
+              stride: chunk.stride,
+            }
+          },
+        },
+        cols,
+        { ...options, concurrency: H5AD_REFERENCE_FETCH_CONCURRENCY },
+      )
+  }
+}
+
+function h5adGeneValuesEstimate(
+  matrix: H5adMatrix,
+  cols: readonly number[],
+): GeneValuesReadEstimate {
+  switch (matrix.kind) {
+    case 'csr':
+    case 'csc':
+    case 'dense':
+      return { kind: 'read', bytes: 0 }
+    case 'csr-zarr':
+      return {
+        kind: 'read',
+        bytes: cols.length === 0 ? 0 : csrReadBytes(matrix, sparseValueBytes(matrix)),
+        detail: 'The matrix is stored by cell (CSR), so any gene reads all of it.',
+      }
+    case 'csc-zarr':
+      return {
+        kind: 'read',
+        bytes: columnSlicesReadBytes(matrix, cols, sparseValueBytes(matrix)),
+        detail: 'The matrix is stored by gene (CSC), so each gene is one slice.',
+      }
+    case 'dense-zarr': {
+      const chunkShape = denseZarrChunkShape(matrix)
+      return {
+        kind: 'read',
+        bytes: denseChunksReadBytes(
+          { rows: matrix.rows, cols: matrix.cols, chunkShape },
+          cols,
+          zarrDataTypeByteSize(matrix.values.dtype),
+        ),
+        detail: `The matrix is dense, in chunks of ${chunkShape[0].toLocaleString()} cells by ${chunkShape[1].toLocaleString()} genes: each gene reads every chunk that holds it.`,
+      }
+    }
+  }
+}
+
+function rangeReadMatrix(
+  matrix: Extract<H5adMatrix, { readonly kind: 'csr-zarr' | 'csc-zarr' }>,
+): RangeReadSparseMatrix {
+  return {
+    indptr: matrix.indptr,
+    rows: matrix.rows,
+    cols: matrix.cols,
+    readValues: async (start, end) => {
+      const [indices, data] = await Promise.all([
+        zarrNumericVector(matrix.indices, start, end),
+        zarrNumericVector(matrix.data, start, end),
+      ])
+      return { indices, data }
+    },
+  }
+}
+
+// A stored value's bytes and its index's.
+function sparseValueBytes(
+  matrix: Extract<H5adMatrix, { readonly kind: 'csr-zarr' | 'csc-zarr' }>,
+): number {
+  return (
+    zarrDataTypeByteSize(matrix.data.dtype) + zarrDataTypeByteSize(matrix.indices.dtype)
+  )
+}
+
 async function h5adMatrixForCells(
   cache: H5adCache,
   ids: readonly SpatialElementId[],
@@ -3621,7 +3721,7 @@ function denseZarrChunkShape(
 }
 
 // Bytes per value: 'float32' is 4, 'bool' and 'uint8' are 1.
-function zarrDataTypeByteSize(dataType: string): number {
+export function zarrDataTypeByteSize(dataType: string): number {
   const bits = /(\d+)$/.exec(dataType)?.[1]
   return bits === undefined
     ? dataType === 'bool'
