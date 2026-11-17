@@ -80,6 +80,17 @@ export interface ImagePyramidTileRenderOptions
   readonly displayWindow?: DisplayWindow
 }
 
+// What a caller tells a tile fetch, so that tiles can share requests.
+export interface ImagePyramidTileFetchOptions {
+  // Other tiles of the same level the caller will fetch soon. A loader that
+  // reads tiles stored next to each other in one request (TIFF) adds those
+  // among them to this tile's request.
+  readonly upcoming?: readonly TileIndex[]
+  // Called when the tile's bytes come from a request made for another tile,
+  // so that the caller can stop counting it against its request limit.
+  readonly onSharedRead?: () => void
+}
+
 export interface ImagePyramidDecodedTile {
   readonly bitmap: ImageBitmap
   readonly width: number
@@ -119,6 +130,7 @@ export interface ImagePyramidLoader {
     col: number,
     row: number,
     signal?: AbortSignal,
+    options?: ImagePyramidTileFetchOptions,
   ): Promise<Uint8Array>
   tileDecodeOptions?(
     level?: number,
@@ -147,7 +159,28 @@ export interface ImagePyramidLoader {
     sampling: TileSampling,
     signal?: AbortSignal,
   ): Promise<TileSamples | null>
+  // A small picture of the whole image over the image's extent, such as an
+  // SVS slide's thumbnail, which the minimap draws instead of the coarsest
+  // level. It has the image's channels.
+  readonly overview?: ImagePyramidLoader
+  // Pictures stored beside the image, such as a slide scanner's label and
+  // macro (the whole glass slide), read when asked for.
+  associatedImages?(signal?: AbortSignal): Promise<readonly ImagePyramidAssociatedImage[]>
 }
+
+// An associated image (see ImagePyramidLoader.associatedImages): a one-level
+// loader in the image's own pixels, or why it cannot be read.
+export type ImagePyramidAssociatedImage = {
+  // As the file names it: 'thumbnail', 'label' or 'macro' in an SVS.
+  readonly name: string
+  // Opens it on its own, as `#ifd=N` on the file's URL.
+  readonly ifdIndex: number
+  readonly width: number
+  readonly height: number
+} & (
+  | { readonly loader: ImagePyramidLoader; readonly error?: never }
+  | { readonly error: string; readonly loader?: never }
+)
 
 export interface OpenImagePyramidOptions {
   // `.zchunkstore` sidecar named by the dataset manifest, tried instead of the

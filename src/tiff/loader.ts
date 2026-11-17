@@ -29,6 +29,7 @@ import {
   isSvsDescription,
   isSvsUrl,
   parseSvsDescription,
+  svsAssociatedImageName,
   svsChannelInfo,
   svsLayout,
 } from './svs'
@@ -84,7 +85,12 @@ import type {
   NdpiLevelSource,
 } from './ndpi'
 import type { OmeTiffZStack, TiffChannelInfo } from './omeMetadata'
-import type { OpenImagePyramidOptions } from '../data/imagePyramid'
+import type {
+  ImagePyramidAssociatedImage,
+  ImagePyramidLoader,
+  ImagePyramidTileFetchOptions,
+  OpenImagePyramidOptions,
+} from '../data/imagePyramid'
 import type { QptiffIfdSummary } from './qptiff'
 
 export interface TiffChunk {
@@ -137,9 +143,6 @@ export interface TiffPyramidLoaderOptions {
   // separate IFDs with their own tags (SVS levels each have JPEGTables).
   // Levels without an entry use the tags above.
   readonly levelDecodeMetadata?: readonly TiffTileDecodeMetadata[]
-  // Reads a tile together with the tiles stored next to it in the file that
-  // lie near it in the image (see readAdjacentTileRun).
-  readonly readAdjacentTiles?: boolean
   // Levels stored in strips, whose tiles are cut from bands of rows instead
   // of read from the tile index.
   readonly stripLevels?: ReadonlyMap<number, TiffStripLevel>
@@ -149,6 +152,12 @@ export interface TiffPyramidLoaderOptions {
   readonly byteRangeCache?: PersistentByteRangeCache | null
   // The image's top-left corner in data micrometres; 0, 0 by default.
   readonly origin?: { readonly x: number; readonly y: number }
+  // A small picture of the whole image for the minimap (an SVS thumbnail).
+  readonly overview?: ImagePyramidLoader
+  // Lists the images stored beside the pyramid (SVS label and macro).
+  readonly associatedImages?: (
+    signal?: AbortSignal,
+  ) => Promise<readonly ImagePyramidAssociatedImage[]>
 }
 export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 
@@ -156,10 +165,9 @@ export { parsePhysicalSizeMicrometersPerPixel } from './omeMetadata'
 const UNREADABLE_ZCHUNK_STORE = 'unreadable' as const
 
 // Adjacent tile reads: a run holds the tiles stored back to back with the
-// requested one (gaps up to ADJACENT_TILE_MAX_GAP) that lie within
-// ADJACENT_TILE_RADIUS tiles of it, up to a byte and tile limit. Tiles read
-// ahead wait in memory, at most PREFETCHED_TILE_LIMIT of them.
-const ADJACENT_TILE_RADIUS = 4
+// requested one (gaps up to ADJACENT_TILE_MAX_GAP) that the caller will fetch
+// next, up to a byte and tile limit. Tiles read ahead wait in memory, at most
+// PREFETCHED_TILE_LIMIT of them.
 const ADJACENT_TILE_MAX_GAP = 4096
 const ADJACENT_RUN_MAX_BYTES = 1024 * 1024
 const ADJACENT_RUN_MAX_TILES = 16
@@ -552,6 +560,16 @@ interface TopLevelPyramidFile {
   readonly imageHeight: ImagePixels
   readonly tileWidth: ImagePixels
   readonly tileHeight: ImagePixels
+  // Stripped images stored beside the pyramid (SVS): the thumbnail, read
+  // in the walk, and all of them, read on first use.
+  readonly thumbnail?: AssociatedImageIfd
+  readonly associatedImages?: () => Promise<readonly AssociatedImageIfd[]>
+}
+
+interface AssociatedImageIfd {
+  readonly name: string
+  readonly index: number
+  readonly directory: ImageFileDirectory
 }
 
 interface TopLevelPyramidFormat {
@@ -564,7 +582,6 @@ interface TopLevelPyramidFormat {
     tiff: GeoTIFF,
     options: OpenImagePyramidOptions,
   ) => Promise<TopLevelPyramidFile>
-  readonly readAdjacentTiles: boolean
 }
 
 // Akoya writes the IFDs together near the start of the file, so the walk
@@ -572,20 +589,16 @@ interface TopLevelPyramidFormat {
 const QPTIFF_FORMAT: TopLevelPyramidFormat = {
   name: 'QPTIFF',
   withArticle: 'a QPTIFF',
-  readAdjacentTiles: false,
   sourceOptions: { allowFullFile: false, blockSize: 1024 * 1024, cacheSize: 16 },
   read: (tiff, options) => readQptiffFile(tiff, options),
 }
 
 // Aperio writes each IFD after its image data, with the IFD's tag data
 // beside it, so the IFDs are spread through the file. Small blocks fetch
-// each IFD with its JPEGTables and tile offsets in one request. Its tiles
-// are small (240 or 256 pixels, a few KB of JPEG) and stored in runs, so
-// neighbouring tiles are read together.
+// each IFD with its JPEGTables and tile offsets in one request.
 const SVS_FORMAT: TopLevelPyramidFormat = {
   name: 'SVS',
   withArticle: 'an SVS',
-  readAdjacentTiles: true,
   sourceOptions: { allowFullFile: false, blockSize: 64 * 1024, cacheSize: 64 },
   read: (tiff, options) => readSvsFile(tiff, options),
 }
@@ -595,7 +608,6 @@ const SVS_FORMAT: TopLevelPyramidFormat = {
 const PAGE_PYRAMID_FORMAT: TopLevelPyramidFormat = {
   name: 'TIFF page pyramid',
   withArticle: 'a TIFF page pyramid',
-  readAdjacentTiles: false,
   sourceOptions: { allowFullFile: false, blockSize: 64 * 1024, cacheSize: 64 },
   read: (tiff, options) => readPagePyramidFile(tiff, options),
 }
@@ -628,8 +640,25 @@ async function openTopLevelPyramid(
   const baseline = file.levels[0] ?? []
   const channel =
     selection.ifdIndex === undefined ? 0 : baseline.indexOf(selection.ifdIndex)
+  const sourceOptions = loaderSourceOptions(options)
 
   if (channel < 0) {
+    // `#ifd=N` can name an associated image, such as an SVS label.
+    const associated = (
+      await abortable(file.associatedImages?.() ?? Promise.resolve([]), signal)
+    ).find((image) => image.index === selection.ifdIndex)
+
+    if (associated !== undefined) {
+      return associatedImageLoader(file.tiff, associated, {
+        url,
+        sourceUrl: selection.sourceUrl,
+        sourceOptions,
+        ...(options.micrometersPerPixel === undefined
+          ? {}
+          : { micrometersPerPixel: options.micrometersPerPixel }),
+      })
+    }
+
     throw new Error(
       `IFD ${String(selection.ifdIndex)} is not a full-resolution channel of the ${format.name}.`,
     )
@@ -650,36 +679,270 @@ async function openTopLevelPyramid(
     channelDirectories.map((directory) => readTileDecodeMetadata(file.tiff, directory)),
   )
   const decodeMetadata = levelDecodeMetadata[0] ?? {}
+  const units: UnitsDescriptor = {
+    dataUnit: 'micrometer',
+    imageUnit: 'pixel',
+    micrometersPerPixel: micrometers(
+      options.micrometersPerPixel ?? file.micrometersPerPixel,
+    ),
+    origin: 'top-left',
+    imageYAxis: 'down',
+  }
+  const overview = await overviewLoader(file, selection.sourceUrl, {
+    units,
+    sourceOptions,
+    onFallback,
+    format,
+  })
 
   return new TiffPyramidLoader({
     url,
     sourceUrl: selection.sourceUrl,
     sourceVersion: remoteTiffVersion(file.tiff),
     ...decodeMetadata,
-    ...loaderSourceOptions(options),
+    ...sourceOptions,
+    ...(overview === undefined ? {} : { overview }),
+    ...(file.associatedImages === undefined
+      ? {}
+      : {
+          associatedImages: associatedImageList(
+            file.tiff,
+            file.associatedImages,
+            selection.sourceUrl,
+            sourceOptions,
+          ),
+        }),
     levelDecodeMetadata,
-    readAdjacentTiles: format.readAdjacentTiles,
     // A level's tile offsets are read when its first tile is fetched, so
     // full-resolution offsets wait until the view zooms in, and channels
     // that stay hidden cost nothing.
     chunkIndex: (level) =>
       indexTopLevelPyramidLevel(file, channelDirectories, level, decodeMetadata),
     levelMeta: file.levelMeta,
-    units: {
-      dataUnit: 'micrometer',
-      imageUnit: 'pixel',
-      micrometersPerPixel: micrometers(
-        options.micrometersPerPixel ?? file.micrometersPerPixel,
-      ),
-      origin: 'top-left',
-      imageYAxis: 'down',
-    },
+    units,
     tileWidth: file.tileWidth,
     tileHeight: file.tileHeight,
     numLevels: file.levels.length,
     imageWidth: file.imageWidth,
     imageHeight: file.imageHeight,
     channels: file.channels,
+  })
+}
+
+// The thumbnail of an RGB slide, stretched over the slide, for the minimap
+// to draw instead of the coarsest level: one small read and decode rather
+// than every tile of that level. A thumbnail that cannot be read leaves the
+// minimap to the coarsest level, with a notice.
+async function overviewLoader(
+  file: TopLevelPyramidFile,
+  sourceUrl: string,
+  options: {
+    readonly units: UnitsDescriptor
+    readonly sourceOptions: Pick<
+      TiffPyramidLoaderOptions,
+      'origin' | 'fetcher' | 'byteRangeCache'
+    >
+    readonly onFallback: FallbackNotifier | undefined
+    readonly format: Pick<TopLevelPyramidFormat, 'name'>
+  },
+): Promise<TiffPyramidLoader | undefined> {
+  const [channel] = file.channels
+
+  if (
+    file.thumbnail === undefined ||
+    file.channels.length !== 1 ||
+    (channel?.samplesPerPixel ?? 1) < 3
+  ) {
+    return undefined
+  }
+
+  try {
+    return await stripImageLoader(file.tiff, file.thumbnail, {
+      url: tiffImageSelectionUrl(sourceUrl, file.thumbnail.index),
+      sourceUrl,
+      sourceOptions: options.sourceOptions,
+      units: options.units,
+      extent: { width: file.imageWidth, height: file.imageHeight },
+      channel,
+    })
+  } catch (cause) {
+    notifyFallback(options.onFallback, {
+      source: 'Morphology image',
+      message: `The ${options.format.name} thumbnail could not be read (${cause instanceof Error ? cause.message : String(cause)}), so the minimap draws the coarsest pyramid level.`,
+      action: 'The image loads normally.',
+      coalesceKey: `${options.format.name.toLowerCase()}-thumbnail:${sourceUrl}`,
+    })
+    return undefined
+  }
+}
+
+// Lists a file's associated images, each opened as a one-level loader in its
+// own pixels. The list is read once per loader; a failed read is retried.
+function associatedImageList(
+  tiff: GeoTIFF,
+  readIfds: () => Promise<readonly AssociatedImageIfd[]>,
+  sourceUrl: string,
+  sourceOptions: Pick<TiffPyramidLoaderOptions, 'fetcher' | 'byteRangeCache'>,
+): (signal?: AbortSignal) => Promise<readonly ImagePyramidAssociatedImage[]> {
+  let listing: Promise<readonly ImagePyramidAssociatedImage[]> | undefined
+
+  const list = async (): Promise<readonly ImagePyramidAssociatedImage[]> =>
+    Promise.all(
+      (await readIfds()).map(async (ifd): Promise<ImagePyramidAssociatedImage> => {
+        try {
+          const loader = await associatedImageLoader(tiff, ifd, {
+            url: tiffImageSelectionUrl(sourceUrl, ifd.index),
+            sourceUrl,
+            sourceOptions: {
+              ...(sourceOptions.fetcher === undefined
+                ? {}
+                : { fetcher: sourceOptions.fetcher }),
+              ...(sourceOptions.byteRangeCache === undefined
+                ? {}
+                : { byteRangeCache: sourceOptions.byteRangeCache }),
+            },
+          })
+
+          return {
+            name: ifd.name,
+            ifdIndex: ifd.index,
+            width: loader.imageWidth,
+            height: loader.imageHeight,
+            loader,
+          }
+        } catch (cause) {
+          const shape = await summarizeIfdShape(ifd.directory, ifd.index).catch(
+            () => undefined,
+          )
+
+          return {
+            name: ifd.name,
+            ifdIndex: ifd.index,
+            width: shape?.width ?? 0,
+            height: shape?.height ?? 0,
+            error: cause instanceof Error ? cause.message : String(cause),
+          }
+        }
+      }),
+    )
+
+  return (signal) => {
+    if (listing === undefined) {
+      const reading = list()
+      reading.catch(() => {
+        if (listing === reading) {
+          listing = undefined
+        }
+      })
+      listing = reading
+    }
+
+    return abortable(listing, signal)
+  }
+}
+
+// An associated image on its own, at 1 µm per pixel unless the caller gives
+// a pixel size: the label and macro have no scale of their own.
+function associatedImageLoader(
+  tiff: GeoTIFF,
+  ifd: AssociatedImageIfd,
+  options: {
+    readonly url: string
+    readonly sourceUrl: string
+    readonly sourceOptions: Pick<
+      TiffPyramidLoaderOptions,
+      'origin' | 'fetcher' | 'byteRangeCache'
+    >
+    readonly micrometersPerPixel?: number
+  },
+): Promise<TiffPyramidLoader> {
+  return stripImageLoader(tiff, ifd, {
+    ...options,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(options.micrometersPerPixel ?? 1),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+  })
+}
+
+// A stripped IFD as a one-level loader, cut into tiles like any stripped
+// level. `extent` stretches it over a larger image, as a thumbnail covers its
+// slide; `channel` replaces its own channel. Associated images are drawn as
+// stored: RGB, or grey.
+async function stripImageLoader(
+  tiff: GeoTIFF,
+  ifd: AssociatedImageIfd,
+  options: {
+    readonly url: string
+    readonly sourceUrl: string
+    readonly sourceOptions: Pick<
+      TiffPyramidLoaderOptions,
+      'origin' | 'fetcher' | 'byteRangeCache'
+    >
+    readonly units: UnitsDescriptor
+    readonly extent?: { readonly width: ImagePixels; readonly height: ImagePixels }
+    readonly channel?: TiffChannelInfo | undefined
+  },
+): Promise<TiffPyramidLoader> {
+  const [shape, decodeMetadata, stripTags] = await Promise.all([
+    summarizeIfdShape(ifd.directory, ifd.index),
+    readTileDecodeMetadata(tiff, ifd.directory),
+    readStripTags(ifd.directory),
+  ])
+
+  if (stripTags === undefined) {
+    throw new Error(`IFD ${ifd.index} is not stored in strips.`)
+  }
+
+  const width = imagePixels(shape.width)
+  const height = imagePixels(shape.height)
+  const tileSize = imagePixels(STRIP_TILE_SIZE)
+  const stripLevel = tiffStripLevel({
+    level: 0,
+    width,
+    height,
+    tags: stripTags,
+    decodeMetadata,
+    tileHeight: tileSize,
+  })
+  const imageWidth = options.extent?.width ?? width
+  const imageHeight = options.extent?.height ?? height
+  const channel = options.channel ?? {
+    ...svsChannelInfo(shape.samplesPerPixel, decodeMetadata.bitsPerSample?.[0]),
+    color: [255, 255, 255] as const,
+  }
+
+  return new TiffPyramidLoader({
+    url: options.url,
+    sourceUrl: options.sourceUrl,
+    sourceVersion: remoteTiffVersion(tiff),
+    ...decodeMetadata,
+    ...options.sourceOptions,
+    chunkIndex: new Map(),
+    levelMeta: new Map([
+      [
+        0,
+        tiffLevelMeta({
+          width,
+          height,
+          tileWidth: tileSize,
+          tileHeight: tileSize,
+          fullWidth: imageWidth,
+          fullHeight: imageHeight,
+        }),
+      ],
+    ]),
+    stripLevels: new Map([[0, stripLevel]]),
+    units: options.units,
+    tileWidth: tileSize,
+    tileHeight: tileSize,
+    numLevels: 1,
+    imageWidth,
+    imageHeight,
+    channels: [channel],
   })
 }
 
@@ -1105,7 +1368,6 @@ async function readSvsFile(
   tiff: GeoTIFF,
   options: OpenImagePyramidOptions,
 ): Promise<TopLevelPyramidFile> {
-  void options
   // The label and macro follow the last level, so the walk stops at the
   // label rather than reading the macro IFD too.
   const directories = await readIfdChain(
@@ -1135,17 +1397,99 @@ async function readSvsFile(
     readOptionalNumberTag(firstDirectory, 'ResolutionUnit'),
   ])
 
-  return topLevelPyramid({
-    tiff,
-    directories,
-    summaries,
-    levels: levelIfds.map((index) => [index]),
-    channels: [svsChannelInfo(first.samplesPerPixel, bitsPerSample[0])],
-    // Aperio states the pixel size as MPP; its resolution tags are often
-    // missing.
-    micrometersPerPixel:
-      parseSvsDescription(description).micrometersPerPixel ??
-      qptiffMicrometersPerPixel(xResolution, resolutionUnit),
+  const svsDescription = parseSvsDescription(description)
+  const thumbnailSummary = summaries.find(
+    (summary) =>
+      svsAssociatedImageName({ ...summary, tiled: summary.tileWidth !== undefined }) ===
+      'thumbnail',
+  )
+  const thumbnailDirectory =
+    thumbnailSummary === undefined ? undefined : directories[thumbnailSummary.index]
+  let associated: Promise<readonly AssociatedImageIfd[]> | undefined
+
+  return {
+    ...topLevelPyramid({
+      tiff,
+      directories,
+      summaries,
+      levels: levelIfds.map((index) => [index]),
+      channels: [
+        svsChannelInfo(
+          first.samplesPerPixel,
+          bitsPerSample[0],
+          options.channelName,
+          svsDescription,
+        ),
+      ],
+      // Aperio states the pixel size as MPP; its resolution tags are often
+      // missing.
+      micrometersPerPixel:
+        svsDescription.micrometersPerPixel ??
+        qptiffMicrometersPerPixel(xResolution, resolutionUnit),
+    }),
+    ...(thumbnailSummary === undefined || thumbnailDirectory === undefined
+      ? {}
+      : {
+          thumbnail: {
+            name: 'thumbnail',
+            index: thumbnailSummary.index,
+            directory: thumbnailDirectory,
+          },
+        }),
+    // The walk stopped at the label, so the macro's IFD is read only when
+    // the associated images are asked for. A failed read is retried.
+    associatedImages: () => {
+      if (associated === undefined) {
+        const reading = readSvsAssociatedImages(tiff, directories)
+        reading.catch(() => {
+          if (associated === reading) {
+            associated = undefined
+          }
+        })
+        associated = reading
+      }
+
+      return associated
+    },
+  }
+}
+
+// The thumbnail, label, and macro, in file order: the IFDs after the
+// walk's, then each stripped IFD named as OpenSlide names them.
+async function readSvsAssociatedImages(
+  tiff: GeoTIFF,
+  walked: readonly ImageFileDirectory[],
+): Promise<readonly AssociatedImageIfd[]> {
+  const directories = await readIfdChain(tiff, undefined, walked)
+  const named = await Promise.all(
+    directories.map(async (directory, index): Promise<AssociatedImageIfd | undefined> => {
+      if (index === 0 || directory.hasTag('TileWidth')) {
+        return undefined
+      }
+
+      const [subfileType, description] = await Promise.all([
+        readOptionalNumberTag(directory, 'NewSubfileType'),
+        readOptionalStringTag(directory, 'ImageDescription'),
+      ])
+      const name = svsAssociatedImageName({
+        index,
+        tiled: false,
+        subfileType: subfileType ?? 0,
+        description,
+      })
+
+      return name === undefined ? undefined : { name, index, directory }
+    }),
+  )
+  const seen = new Set<string>()
+
+  return named.filter((image): image is AssociatedImageIfd => {
+    if (image === undefined || seen.has(image.name)) {
+      return false
+    }
+
+    seen.add(image.name)
+    return true
   })
 }
 
@@ -1314,15 +1658,27 @@ function topLevelPyramid(options: {
 }
 
 // Walks the IFD chain until its end, a loop, or an IFD for which `isLast`
-// is true.
+// is true. A walk that stopped early continues from its IFDs (`walked`).
 async function readIfdChain(
   tiff: GeoTIFF,
   isLast?: (directory: ImageFileDirectory, index: number) => Promise<boolean>,
+  walked: readonly ImageFileDirectory[] = [],
 ): Promise<readonly ImageFileDirectory[]> {
-  const directories: ImageFileDirectory[] = []
-  const seenOffsets = new Set<number>()
+  const directories = [...walked]
+  const seenOffsets = new Set(
+    walked.slice(0, -1).map((directory) => directory.nextIFDByteOffset),
+  )
+  const lastNext = walked.at(-1)?.nextIFDByteOffset
 
-  for (let index = 0; index < TOP_LEVEL_PYRAMID_MAX_IFDS; index += 1) {
+  if (lastNext !== undefined) {
+    if (lastNext === 0 || seenOffsets.has(lastNext)) {
+      return directories
+    }
+
+    seenOffsets.add(lastNext)
+  }
+
+  for (let index = directories.length; index < TOP_LEVEL_PYRAMID_MAX_IFDS; index += 1) {
     const directory = await tiff.requestIFD(index)
     directories.push(directory)
 
@@ -1562,17 +1918,22 @@ export class TiffPyramidLoader {
   readonly channels: readonly TiffChannelInfo[]
   readonly zStack?: OmeTiffZStack
   readonly tilesFromSharedReads: boolean
+  readonly overview?: ImagePyramidLoader
+  readonly associatedImages?: (
+    signal?: AbortSignal,
+  ) => Promise<readonly ImagePyramidAssociatedImage[]>
   private readonly decodeMetadata: TiffTileDecodeMetadata
   private readonly levelDecodeMetadata: readonly TiffTileDecodeMetadata[]
   // The whole tile index, or each level's index once read.
   private readonly chunks: TiffChunkIndex | undefined
   private readonly levelChunks = new Map<number, TiffChunkIndex>()
   private readonly levelChunkRequests = new Map<number, Promise<TiffChunkIndex>>()
-  private readonly readAdjacentTiles: boolean
   // Each level's tiles in file order, built on its first adjacent read.
   private readonly levelFileOrder = new Map<number, LevelFileOrder>()
   // Tiles read with a neighbour, by chunk key, until fetched themselves.
-  private readonly prefetchedTiles = new Map<string, Promise<Uint8Array>>()
+  private readonly prefetchedTiles = new Map<string, PrefetchedTile>()
+  // Tiles being read by a run, by chunk key, so that no other run reads them.
+  private readonly tilesInRuns = new Map<string, TileRun>()
   private readonly loadLevelChunks:
     | ((level: number) => Promise<TiffChunkIndex>)
     | undefined
@@ -1611,6 +1972,14 @@ export class TiffPyramidLoader {
       this.zStack = options.zStack
     }
 
+    if (options.overview !== undefined) {
+      this.overview = options.overview
+    }
+
+    if (options.associatedImages !== undefined) {
+      this.associatedImages = options.associatedImages
+    }
+
     this.decodeMetadata = {
       ...(options.compression === undefined ? {} : { compression: options.compression }),
       ...(options.bitsPerSample === undefined
@@ -1630,7 +1999,6 @@ export class TiffPyramidLoader {
       ...(options.jpegTables === undefined ? {} : { jpegTables: options.jpegTables }),
     }
     this.levelDecodeMetadata = options.levelDecodeMetadata ?? []
-    this.readAdjacentTiles = options.readAdjacentTiles === true
     this.stripLevels = options.stripLevels ?? new Map()
     this.ndpiLevels = options.ndpiLevels ?? new Map()
     this.tilesFromSharedReads =
@@ -1755,6 +2123,7 @@ export class TiffPyramidLoader {
     col: number,
     row: number,
     signal?: AbortSignal,
+    options?: ImagePyramidTileFetchOptions,
   ): Promise<Uint8Array> {
     const stripLevel = this.stripLevels.get(level)
 
@@ -1802,11 +2171,7 @@ export class TiffPyramidLoader {
       return bytes
     }
 
-    return this.fetchChunkBytes(
-      chunk,
-      signal,
-      this.readAdjacentTiles ? { level, row, col, chunks } : undefined,
-    )
+    return this.fetchChunkBytes(chunk, signal, { level, row, col, chunks, options })
   }
 
   // A stripped level's tile, cut from the bands of rows across it.
@@ -2075,7 +2440,7 @@ export class TiffPyramidLoader {
       fetchRange: (rangeSignal) =>
         adjacent === undefined
           ? this.fetchRange(start, end, rangeSignal)
-          : abortable(this.adjacentTileBytes(adjacent), rangeSignal),
+          : this.adjacentTileBytes(adjacent, chunk, rangeSignal),
     })
   }
 
@@ -2109,35 +2474,81 @@ export class TiffPyramidLoader {
     return new Uint8Array(await response.arrayBuffer())
   }
 
-  // A tile read ahead with a neighbour is taken from memory; otherwise its
-  // run is read, which no single caller can cancel, since the run's other
-  // tiles may be waited on.
-  private adjacentTileBytes(adjacent: AdjacentTileContext): Promise<Uint8Array> {
+  // A tile read ahead with a neighbour is taken from memory. Otherwise it is
+  // read together with the upcoming tiles stored next to it, which wait in
+  // memory for their own fetch. A run is cancelled only when every tile that
+  // has asked for it has stopped waiting, and the tiles it was reading for
+  // later are then read again by their own fetch.
+  private adjacentTileBytes(
+    adjacent: AdjacentTileContext,
+    chunk: TiffChunk,
+    signal: AbortSignal | undefined,
+  ): Promise<Uint8Array> {
     const key = tiffChunkKey(adjacent.level, adjacent.row, adjacent.col)
     const prefetched = this.prefetchedTiles.get(key)
 
     if (prefetched !== undefined) {
       this.prefetchedTiles.delete(key)
-      return prefetched
+      prefetched.run.unclaimed.delete(key)
+      adjacent.options?.onSharedRead?.()
+      return this.waitForRun(prefetched.run, prefetched.bytes, signal)
     }
 
-    const run = readAdjacentTileRun(
+    const upcoming = new Set(
+      (adjacent.options?.upcoming ?? []).map((tile) =>
+        tiffChunkKey(adjacent.level, tile.row, tile.col),
+      ),
+    )
+
+    if (upcoming.size === 0) {
+      return this.fetchRange(chunk.offset, chunk.offset + chunk.length, signal)
+    }
+
+    const tiles = readAdjacentTileRun(
       this.fileOrder(adjacent.level, adjacent.chunks),
       key,
-      (candidate) => this.prefetchedTiles.has(candidate),
+      (candidate) =>
+        upcoming.has(candidate) &&
+        !this.prefetchedTiles.has(candidate) &&
+        !this.tilesInRuns.has(candidate),
     )
-    const first = run[0]
-    const last = run.at(-1)
+    const first = tiles[0]
+    const last = tiles.at(-1)
 
     if (first === undefined || last === undefined) {
       throw new Error(`No TIFF chunk for ${key}.`)
     }
 
+    if (tiles.length === 1) {
+      return this.fetchRange(chunk.offset, chunk.offset + chunk.length, signal)
+    }
+
+    const run: TileRun = {
+      controller: new AbortController(),
+      waiters: 0,
+      settled: false,
+      unclaimed: new Set(),
+    }
     const runStart = first.chunk.offset
-    const runBytes = this.fetchRange(runStart, last.chunk.offset + last.chunk.length)
+    const runBytes = this.fetchRange(
+      runStart,
+      last.chunk.offset + last.chunk.length,
+      run.controller.signal,
+    )
+    const settle = () => {
+      run.settled = true
+
+      for (const tile of tiles) {
+        if (this.tilesInRuns.get(tile.key) === run) {
+          this.tilesInRuns.delete(tile.key)
+        }
+      }
+    }
+    runBytes.then(settle, settle)
     let requested: Promise<Uint8Array> | undefined
 
-    for (const tile of run) {
+    for (const tile of tiles) {
+      this.tilesInRuns.set(tile.key, run)
       const tileStart = tile.chunk.offset - runStart
       const bytes = runBytes.then((data) =>
         data.slice(tileStart, tileStart + tile.chunk.length),
@@ -2150,22 +2561,68 @@ export class TiffPyramidLoader {
 
       // A failed run leaves nothing behind, so the tile is read again.
       bytes.catch(() => {
-        if (this.prefetchedTiles.get(tile.key) === bytes) {
+        if (this.prefetchedTiles.get(tile.key)?.bytes === bytes) {
           this.prefetchedTiles.delete(tile.key)
         }
       })
-      this.prefetchedTiles.set(tile.key, bytes)
+      this.prefetchedTiles.set(tile.key, { bytes, run })
+      run.unclaimed.add(tile.key)
     }
 
-    for (const oldest of this.prefetchedTiles.keys()) {
+    for (const [oldest, entry] of this.prefetchedTiles) {
       if (this.prefetchedTiles.size <= PREFETCHED_TILE_LIMIT) {
         break
       }
 
       this.prefetchedTiles.delete(oldest)
+      entry.run.unclaimed.delete(oldest)
     }
 
-    return requested ?? runBytes
+    return this.waitForRun(run, requested ?? runBytes, signal)
+  }
+
+  // Waits for a run's bytes until `signal` aborts; the run is cancelled when
+  // its last waiter leaves before it has finished.
+  private waitForRun(
+    run: TileRun,
+    bytes: Promise<Uint8Array>,
+    signal: AbortSignal | undefined,
+  ): Promise<Uint8Array> {
+    run.waiters += 1
+
+    if (signal === undefined) {
+      return bytes
+    }
+
+    const leave = () => {
+      run.waiters -= 1
+
+      if (run.waiters > 0 || run.settled) {
+        return
+      }
+
+      run.controller.abort()
+
+      for (const unclaimed of run.unclaimed) {
+        if (this.prefetchedTiles.get(unclaimed)?.run === run) {
+          this.prefetchedTiles.delete(unclaimed)
+        }
+      }
+
+      run.unclaimed.clear()
+    }
+
+    if (signal.aborted) {
+      leave()
+    } else {
+      signal.addEventListener('abort', leave, { once: true })
+      const stopListening = () => {
+        signal.removeEventListener('abort', leave)
+      }
+      bytes.then(stopListening, stopListening)
+    }
+
+    return abortable(bytes, signal)
   }
 
   private fileOrder(level: number, chunks: TiffChunkIndex): LevelFileOrder {
@@ -2243,6 +2700,22 @@ interface AdjacentTileContext {
   readonly row: number
   readonly col: number
   readonly chunks: TiffChunkIndex
+  readonly options: ImagePyramidTileFetchOptions | undefined
+}
+
+// One request for tiles stored back to back.
+interface TileRun {
+  readonly controller: AbortController
+  // Fetches waiting for the run's bytes.
+  waiters: number
+  settled: boolean
+  // The run's tiles that wait in memory for their own fetch.
+  readonly unclaimed: Set<string>
+}
+
+interface PrefetchedTile {
+  readonly bytes: Promise<Uint8Array>
+  readonly run: TileRun
 }
 
 interface FileOrderedTile {
@@ -2283,66 +2756,71 @@ function levelFileOrder(
   }
 }
 
-// The tile `key` and the tiles stored back to back with it that lie within
-// ADJACENT_TILE_RADIUS tiles of it in the image, in file order. Aperio writes
-// small tiles row by row, or in scan stripes, so a run covers the requested
-// tile's nearby neighbours. The run grows both ways in turn and stops at a
-// tile already read ahead.
+// The tile `key` and the tiles stored back to back with it that may join it,
+// in file order. Tiles are mostly stored row by row (Aperio writes small
+// tiles in scan stripes), so the tiles a view wants next to the requested
+// one usually lie beside it in the file. The run grows both ways in turn and
+// stops at a tile that may not join.
 export function readAdjacentTileRun(
   order: LevelFileOrder,
   key: string,
-  isPrefetched: (key: string) => boolean,
+  canJoin: (key: string) => boolean,
 ): readonly FileOrderedTile[] {
   const index = order.indexByKey.get(key)
-  const requested = index === undefined ? undefined : order.tiles[index]
 
-  if (index === undefined || requested === undefined) {
+  if (index === undefined || order.tiles[index] === undefined) {
     return []
   }
 
   let first = index
   let last = index
+  // `candidate` joins at the end of the run nearer `neighbour`.
   const joins = (
-    before: FileOrderedTile | undefined,
-    after: FileOrderedTile | undefined,
     candidate: FileOrderedTile | undefined,
-    runStart: number,
-    runEnd: number,
-  ): boolean => {
-    if (before === undefined || after === undefined || candidate === undefined) {
+    neighbour: FileOrderedTile | undefined,
+  ): candidate is FileOrderedTile => {
+    const runFirst = order.tiles[first]
+    const runLast = order.tiles[last]
+
+    if (
+      candidate === undefined ||
+      neighbour === undefined ||
+      runFirst === undefined ||
+      runLast === undefined
+    ) {
       return false
     }
 
+    const [before, after] =
+      candidate.chunk.offset < neighbour.chunk.offset
+        ? [candidate, neighbour]
+        : [neighbour, candidate]
     const gap = after.chunk.offset - (before.chunk.offset + before.chunk.length)
+    const runStart = Math.min(runFirst.chunk.offset, candidate.chunk.offset)
+    const runEnd = Math.max(
+      runLast.chunk.offset + runLast.chunk.length,
+      candidate.chunk.offset + candidate.chunk.length,
+    )
 
     return (
       gap >= 0 &&
       gap <= ADJACENT_TILE_MAX_GAP &&
-      Math.abs(candidate.row - requested.row) <= ADJACENT_TILE_RADIUS &&
-      Math.abs(candidate.col - requested.col) <= ADJACENT_TILE_RADIUS &&
-      !isPrefetched(candidate.key) &&
-      Math.max(runEnd, candidate.chunk.offset + candidate.chunk.length) -
-        Math.min(runStart, candidate.chunk.offset) <=
-        ADJACENT_RUN_MAX_BYTES
+      runEnd - runStart <= ADJACENT_RUN_MAX_BYTES &&
+      canJoin(candidate.key)
     )
   }
 
   while (last - first + 1 < ADJACENT_RUN_MAX_TILES) {
-    const runStart = order.tiles[first]?.chunk.offset ?? 0
-    const lastTile = order.tiles[last]
-    const runEnd = (lastTile?.chunk.offset ?? 0) + (lastTile?.chunk.length ?? 0)
-    const next = order.tiles[last + 1]
-    const previous = order.tiles[first - 1]
     let grew = false
 
-    if (joins(lastTile, next, next, runStart, runEnd)) {
+    if (joins(order.tiles[last + 1], order.tiles[last])) {
       last += 1
       grew = true
     }
 
     if (
       last - first + 1 < ADJACENT_RUN_MAX_TILES &&
-      joins(previous, order.tiles[first], previous, runStart, runEnd)
+      joins(order.tiles[first - 1], order.tiles[first])
     ) {
       first -= 1
       grew = true

@@ -3768,6 +3768,7 @@ export function App({ dependencies }: AppProps = {}) {
     boundaryCellLimit,
     cellFeatureMatrixCapabilityState,
     datasetAbout,
+    datasetImageLoader: morphologyImage?.loader ?? null,
     datasetFactsInput:
       loadState.status === 'ready'
         ? {

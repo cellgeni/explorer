@@ -493,6 +493,9 @@ files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
 TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF, SVS, and NDPI use
 their own layouts); see
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
+For an SVS slide, the info drawer's Slide images section shows the slide's
+label, its macro (a photograph of the whole glass slide), and its thumbnail;
+`Open` beside each opens it on its own in a new tab.
 
 For image-only sources, use the Image section for image channels and custom
 image layers, the Box and Lasso selection tools (with the New shape card) for
