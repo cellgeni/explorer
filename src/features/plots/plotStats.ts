@@ -1,4 +1,5 @@
-import type { GeneValues } from '../../data/geneValues'
+import { xeniumCellIdText } from '../../data/cellid'
+import type { GeneValues, GeneValuesRowIds } from '../../data/geneValues'
 
 // The numbers behind the plots (plan 22-B, 22-C), computed where the gene
 // values are: in the plot worker, or on this thread without one. Groups are
@@ -36,6 +37,34 @@ export interface PlotGroupStats {
   readonly sumLog1p: number
 }
 
+// The spread of one group's values on one scale (22-C), for the violin
+// (22-F) and the CSV. Quartiles are interpolated between values, as numpy's
+// default is, on the scale shown.
+export interface PlotDistribution {
+  // The values it describes: the group's cells, or its expressing cells.
+  readonly count: number
+  readonly min: number
+  readonly q1: number
+  readonly median: number
+  readonly q3: number
+  readonly max: number
+  // A smoothed histogram on the gene's grid, summing to 1; null when there
+  // are more groups than PLOT_DENSITY_MAX_GROUPS.
+  readonly density: Float32Array | null
+}
+
+// A gene's distributions on one scale.
+export interface PlotScaleDistributions {
+  // The grid every density of the gene is on: PLOT_DENSITY_STEPS points from
+  // its lowest value to its highest, 0 included when a cell holds none.
+  readonly low: number
+  readonly high: number
+  // Per group, null when it has no such cells: every cell, zeros counted,
+  // and the cells with a value above 0 (Include zeros off, 22-F).
+  readonly all: readonly (PlotDistribution | null)[]
+  readonly expressing: readonly (PlotDistribution | null)[]
+}
+
 export interface PlotGeneStats {
   readonly gene: string
   // The selection first when there is one, then the classes in order.
@@ -44,6 +73,11 @@ export interface PlotGeneStats {
   readonly wholeNumbers: boolean
   // Some stored value is below 0, as in a scaled matrix.
   readonly negative: boolean
+  // log1p is null when a value is below 0, where the panel turns it off.
+  readonly distributions: {
+    readonly stored: PlotScaleDistributions
+    readonly log1p: PlotScaleDistributions | null
+  }
 }
 
 export interface PlotStatsResult {
@@ -58,6 +92,11 @@ const NO_CLASS = 0xffff
 export const PLOT_MAX_CLASSES = NO_CLASS - 1
 // Gene values kept for reuse, by their bytes (22-D12).
 export const PLOT_GENE_CACHE_BYTES = 128 * 1024 * 1024
+// Densities are on this many points of a gene's range (22-C).
+export const PLOT_DENSITY_STEPS = 128
+// Densities are made for up to this many groups: the violin's classes and
+// the selection. The heatmap, which shows more classes, needs none.
+export const PLOT_DENSITY_MAX_GROUPS = 64
 
 interface PlotGroups {
   // Each row's first class, or NO_CLASS.
@@ -84,13 +123,25 @@ export class PlotStatsStore {
 
   // The dataset's matrix rows by cell ID. Another dataset drops the groups
   // and the genes.
-  setRows(rowIds: readonly string[]): void {
+  setRows(rowIds: GeneValuesRowIds): void {
     const rowById = new Map<string, number>()
-    rowIds.forEach((id, row) => {
+    const rowCount = 'kind' in rowIds ? rowIds.count : rowIds.length
+    const idAt =
+      'kind' in rowIds
+        ? (row: number) =>
+            xeniumCellIdText(
+              rowIds.pairs[row * rowIds.stride] ?? 0,
+              rowIds.pairs[row * rowIds.stride + 1] ?? 0,
+            )
+        : (row: number) => rowIds[row] ?? ''
+
+    for (let row = 0; row < rowCount; row += 1) {
+      const id = idAt(row)
       if (!rowById.has(id)) rowById.set(id, row)
-    })
+    }
+
     this.rowById = rowById
-    this.rowCount = rowIds.length
+    this.rowCount = rowCount
     this.groups = null
     this.genes.clear()
     this.geneBytes = 0
@@ -220,49 +271,40 @@ function geneStats(
   groups: PlotGroups,
   rowCount: number,
 ): PlotGeneStats {
-  const { codes, extraClasses, selection, summary } = groups
-  const offset = selection === null ? 0 : 1
-  const groupCount = summary.classSizes.length + offset
+  const { selection, summary } = groups
+  const groupCount = summary.classSizes.length + (selection === null ? 0 : 1)
   const expressing = new Float64Array(groupCount)
   const sum = new Float64Array(groupCount)
   const sumLog1p = new Float64Array(groupCount)
-  const hasExtra = extraClasses.size > 0
+  // Stored values per group, to place each group's values together below.
+  const stored = new Uint32Array(groupCount)
+  // Over every value read, in a group or not (22-D4).
   let wholeNumbers = true
   let negative = false
 
-  const add = (group: number, value: number, log1p: number) => {
-    sum[group] = (sum[group] ?? 0) + value
-    sumLog1p[group] = (sumLog1p[group] ?? 0) + log1p
-    if (value > 0) expressing[group] = (expressing[group] ?? 0) + 1
-  }
-
   for (let index = 0; index < values.rows.length; index += 1) {
-    const row = values.rows[index] ?? rowCount
-    if (row >= rowCount) continue
-
+    if ((values.rows[index] ?? rowCount) >= rowCount) continue
     const value = values.values[index] ?? 0
-    // log1p is undefined at -1 and below; the panel turns it off for
-    // negative values anyway (22-D4).
-    const log1p = value > -1 ? Math.log1p(value) : Number.NaN
-
     if (wholeNumbers && !Number.isInteger(value)) wholeNumbers = false
     if (value < 0) negative = true
-
-    if (selection !== null && selection[row] === 1) add(0, value, log1p)
-
-    const code = codes[row] ?? NO_CLASS
-    if (code === NO_CLASS) continue
-    add(code + offset, value, log1p)
-
-    if (hasExtra) {
-      for (const extra of extraClasses.get(row) ?? []) add(extra + offset, value, log1p)
-    }
   }
+
+  forEachGroupValue(values, groups, rowCount, (group, value) => {
+    sum[group] = (sum[group] ?? 0) + value
+    // log1p is undefined at -1 and below; the panel turns it off for
+    // negative values anyway (22-D4).
+    sumLog1p[group] =
+      (sumLog1p[group] ?? 0) + (value > -1 ? Math.log1p(value) : Number.NaN)
+    if (value > 0) expressing[group] = (expressing[group] ?? 0) + 1
+    stored[group] = (stored[group] ?? 0) + 1
+  })
 
   const sizes =
     selection === null
       ? summary.classSizes
       : [summary.selectionSize, ...summary.classSizes]
+  const sorted = sortedGroupValues(values, groups, rowCount, stored)
+  const withDensities = groupCount <= PLOT_DENSITY_MAX_GROUPS
 
   return {
     gene: values.gene,
@@ -274,7 +316,251 @@ function geneStats(
     })),
     wholeNumbers,
     negative,
+    distributions: {
+      stored: scaleDistributions(sorted, sizes, (value) => value, withDensities),
+      log1p: negative
+        ? null
+        : scaleDistributions(sorted, sizes, Math.log1p, withDensities),
+    },
   }
+}
+
+// Calls `visit` with each stored value of a row in the dataset, once for
+// each group its row is in: the selection (group 0 when there is one), its
+// class, and further classes that list it.
+function forEachGroupValue(
+  values: GeneValues,
+  groups: PlotGroups,
+  rowCount: number,
+  visit: (group: number, value: number) => void,
+): void {
+  const { codes, extraClasses, selection } = groups
+  const offset = selection === null ? 0 : 1
+  const hasExtra = extraClasses.size > 0
+
+  for (let index = 0; index < values.rows.length; index += 1) {
+    const row = values.rows[index] ?? rowCount
+    if (row >= rowCount) continue
+
+    const value = values.values[index] ?? 0
+    if (selection !== null && selection[row] === 1) visit(0, value)
+
+    const code = codes[row] ?? NO_CLASS
+    if (code === NO_CLASS) continue
+    visit(code + offset, value)
+
+    if (hasExtra) {
+      for (const extra of extraClasses.get(row) ?? []) visit(extra + offset, value)
+    }
+  }
+}
+
+// Each group's stored values in ascending order, as views of one array.
+function sortedGroupValues(
+  values: GeneValues,
+  groups: PlotGroups,
+  rowCount: number,
+  stored: Uint32Array,
+): readonly Float32Array[] {
+  const starts = new Uint32Array(stored.length + 1)
+  for (let group = 0; group < stored.length; group += 1) {
+    starts[group + 1] = (starts[group] ?? 0) + (stored[group] ?? 0)
+  }
+
+  const all = new Float32Array(starts[stored.length] ?? 0)
+  const next = starts.slice(0, stored.length)
+  forEachGroupValue(values, groups, rowCount, (group, value) => {
+    const index = next[group] ?? 0
+    all[index] = value
+    next[group] = index + 1
+  })
+
+  return [...stored].map((_, group) =>
+    all.subarray(starts[group] ?? 0, starts[group + 1] ?? 0).sort(),
+  )
+}
+
+// A group's values in order, with the cells that store none counted as 0.
+interface OrderedValues {
+  readonly count: number
+  at(index: number): number
+  // Each run of equal values in order, with how many cells hold it.
+  forEach(visit: (value: number, cells: number) => void): void
+}
+
+function everyCellValues(sorted: Float32Array, cells: number): OrderedValues {
+  const zeros = Math.max(0, cells - sorted.length)
+  const negatives = firstIndexWhere(sorted, (value) => value >= 0)
+
+  return {
+    count: sorted.length + zeros,
+    at: (index) =>
+      index < negatives
+        ? (sorted[index] ?? 0)
+        : index < negatives + zeros
+          ? 0
+          : (sorted[index - zeros] ?? 0),
+    forEach: (visit) => {
+      for (let index = 0; index < negatives; index += 1) visit(sorted[index] ?? 0, 1)
+      if (zeros > 0) visit(0, zeros)
+      for (let index = negatives; index < sorted.length; index += 1) {
+        visit(sorted[index] ?? 0, 1)
+      }
+    },
+  }
+}
+
+function expressingValues(sorted: Float32Array): OrderedValues {
+  const first = firstIndexWhere(sorted, (value) => value > 0)
+
+  return {
+    count: sorted.length - first,
+    at: (index) => sorted[first + index] ?? 0,
+    forEach: (visit) => {
+      for (let index = first; index < sorted.length; index += 1) {
+        visit(sorted[index] ?? 0, 1)
+      }
+    },
+  }
+}
+
+// The first index of an ascending array where `test` holds, or its length.
+function firstIndexWhere(sorted: Float32Array, test: (value: number) => boolean): number {
+  let low = 0
+  let high = sorted.length
+
+  while (low < high) {
+    const middle = (low + high) >>> 1
+    if (test(sorted[middle] ?? 0)) high = middle
+    else low = middle + 1
+  }
+
+  return low
+}
+
+function scaleDistributions(
+  sorted: readonly Float32Array[],
+  sizes: readonly number[],
+  transform: (value: number) => number,
+  withDensities: boolean,
+): PlotScaleDistributions {
+  const all = sorted.map((values, group) => everyCellValues(values, sizes[group] ?? 0))
+  let low = Number.POSITIVE_INFINITY
+  let high = Number.NEGATIVE_INFINITY
+
+  for (const values of all) {
+    if (values.count === 0) continue
+    low = Math.min(low, values.at(0))
+    high = Math.max(high, values.at(values.count - 1))
+  }
+
+  const grid = Number.isFinite(low)
+    ? { low: transform(low), high: transform(high) }
+    : { low: 0, high: 0 }
+  const describe = (values: OrderedValues) =>
+    distribution(values, transform, withDensities ? grid : null)
+
+  return {
+    ...grid,
+    all: all.map(describe),
+    expressing: sorted.map((values) => describe(expressingValues(values))),
+  }
+}
+
+function distribution(
+  values: OrderedValues,
+  transform: (value: number) => number,
+  grid: { readonly low: number; readonly high: number } | null,
+): PlotDistribution | null {
+  const { count } = values
+  if (count === 0) return null
+
+  // Linear between the two values either side, as numpy's default.
+  const quantile = (share: number) => {
+    const position = (count - 1) * share
+    const below = Math.floor(position)
+    const value = transform(values.at(below))
+    return position === below
+      ? value
+      : value + (position - below) * (transform(values.at(below + 1)) - value)
+  }
+
+  return {
+    count,
+    min: transform(values.at(0)),
+    q1: quantile(0.25),
+    median: quantile(0.5),
+    q3: quantile(0.75),
+    max: transform(values.at(count - 1)),
+    density: grid === null ? null : density(values, transform, grid.low, grid.high),
+  }
+}
+
+// A histogram on the grid, each value split between its two nearest points,
+// smoothed with a Gaussian kernel whose width follows Scott's rule, as
+// scipy's gaussian_kde, behind seaborn's and Scanpy's violins, does. The
+// grid stops at the gene's lowest and highest values, and the kernel is
+// reflected at both ends, so a spike of zeros at an end keeps its mass.
+function density(
+  values: OrderedValues,
+  transform: (value: number) => number,
+  low: number,
+  high: number,
+): Float32Array {
+  const steps = PLOT_DENSITY_STEPS
+  const span = high - low
+  const histogram = new Float64Array(steps)
+  let sum = 0
+  let sumSquares = 0
+
+  values.forEach((stored, cells) => {
+    const value = transform(stored)
+    sum += value * cells
+    sumSquares += value * value * cells
+
+    if (span <= 0) {
+      histogram[0] = (histogram[0] ?? 0) + cells
+      return
+    }
+
+    const position = ((value - low) / span) * (steps - 1)
+    const index = Math.min(steps - 2, Math.max(0, Math.floor(position)))
+    const above = Math.min(1, Math.max(0, position - index))
+    histogram[index] = (histogram[index] ?? 0) + cells * (1 - above)
+    histogram[index + 1] = (histogram[index + 1] ?? 0) + cells * above
+  })
+
+  const mean = sum / values.count
+  const deviation = Math.sqrt(Math.max(0, sumSquares / values.count - mean * mean))
+  const bandwidth = deviation * values.count ** -0.2
+  const sigma = span > 0 ? bandwidth / (span / (steps - 1)) : 0
+  const smoothed = sigma > 0 ? gaussianSmooth(histogram, sigma) : histogram
+  const total = smoothed.reduce((runningTotal, value) => runningTotal + value, 0)
+
+  return Float32Array.from(smoothed, (value) => (total > 0 ? value / total : 0))
+}
+
+function gaussianSmooth(histogram: Float64Array, sigma: number): Float64Array {
+  const steps = histogram.length
+  const radius = Math.min(steps - 1, Math.ceil(sigma * 4))
+  const kernel = Float64Array.from({ length: radius + 1 }, (_, distance) =>
+    Math.exp(-0.5 * (distance / sigma) ** 2),
+  )
+  const smoothed = new Float64Array(steps)
+
+  for (let source = 0; source < steps; source += 1) {
+    const mass = histogram[source] ?? 0
+    if (mass === 0) continue
+
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      let target = source + offset
+      if (target < 0) target = -target
+      else if (target >= steps) target = 2 * (steps - 1) - target
+      smoothed[target] = (smoothed[target] ?? 0) + mass * (kernel[Math.abs(offset)] ?? 0)
+    }
+  }
+
+  return smoothed
 }
 
 export type PlotScale = 'log1p' | 'stored'

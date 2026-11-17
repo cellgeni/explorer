@@ -40,6 +40,8 @@ import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
+import type { PlotKind } from './features/plots/plotModel'
+import { parsePlotKind } from './features/plots/plotsPanelModel'
 import { usePlotsModel } from './features/plots/usePlotsModel'
 import {
   cardForLink,
@@ -384,6 +386,9 @@ export function App({ dependencies }: AppProps = {}) {
   const [debugMode, setDebugMode] = useState(readDebugModeFromLocation)
   const [shellPanels, setShellPanels] = useState<ShellPanelState>(() =>
     panelsFromLink(initialShareableState),
+  )
+  const [plotKind, setPlotKind] = useState<PlotKind>(() =>
+    parsePlotKind(initialShareableState.plot),
   )
   const [collectionView, setCollectionView] = useState<CollectionView>(() =>
     collectionViewFromLink(initialShareableState),
@@ -1772,7 +1777,6 @@ export function App({ dependencies }: AppProps = {}) {
       recordTelemetry,
     },
     controls: {
-      datasetPlatform,
       ...(diagnosticsVisiumHdBinSize === undefined
         ? {}
         : { visiumHdBinSizeMicrometers: diagnosticsVisiumHdBinSize }),
@@ -3622,6 +3626,7 @@ export function App({ dependencies }: AppProps = {}) {
         boundaryId: selectedBoundaryCell?.id,
       }),
       tool: activeTool,
+      plot: plotKind,
       hiddenLayers: sharedHiddenLayers,
     },
   })
@@ -4189,6 +4194,8 @@ export function App({ dependencies }: AppProps = {}) {
     platformAdapter.capabilities.cells && platformAdapter.capabilities.annotations
   const plots = usePlotsModel({
     open: shellPanels.plotsOpen,
+    plotKind,
+    onPlotKindChange: setPlotKind,
     available: plotsAvailable,
     datasetUrl: loadedDatasetUrl,
     datasetReady: loadState.status === 'ready',

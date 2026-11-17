@@ -662,24 +662,28 @@ Opening the panel moves focus into it, and closing it returns focus to
 
 ## Plots Panel
 
-The Plots panel draws a dot plot of the selected genes by the classes of one
-annotation set, with the active selection as one more group
-([plan 22](plan/phases/22-plots-panel.md); `src/features/plots/`,
-`src/features/shell/PlotsWindow.tsx`). It opens from Cells › `Show Plots`
-and closes with `Close plots` or Esc. It sits at the top right of the canvas,
-480 × 420 px at first, or to the left of the Embedding panel when that is
-open. Its grip resizes it from 320 × 280 px up to the canvas, as the
-Embedding panel's does.
+The Plots panel plots the selected genes by the classes of one annotation
+set, with the active selection as one more group: a dot plot, a violin plot
+or a group-mean heatmap ([plan 22](plan/phases/22-plots-panel.md);
+`src/features/plots/`, `src/features/shell/PlotsWindow.tsx`). It opens from
+Cells › `Show Plots` and closes with `Close plots` or Esc. It sits at the top
+right of the canvas, 480 × 420 px at first, or to the left of the Embedding
+panel when that is open. Its grip resizes it from 320 × 280 px up to the
+canvas, as the Embedding panel's does.
 
-| Control               | Notes                                                                                                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Group by`            | The sets loaded in Cells › Clusters, as the lists there group them: the dataset's set, each imported file's sets, and selections kept with `Save ROI` ("Loaded annotations"). The dataset's set is the default |
-| `Scale`               | `log1p` or `As stored`. `log1p` is the default when every value read is a whole number, as counts are; it is off when the matrix holds negative values, which look scaled                                      |
-| `Colour`              | `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                               |
-| `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and mean. It is also the plot's text alternative                                                                                        |
-| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                    |
-| `Export SVG`          | The dot plot as `{dataset}-dot-plot-{set}.svg`, drawn from the same model with its colours and font written out, so it looks the same outside the app                                                          |
-| `Export CSV`          | One row per group and gene: set, group, group kind, gene, cells, cells expressing, % expressing, mean and mean log1p                                                                                           |
+| Control               | Notes                                                                                                                                                                                                                               |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Plot`                | `Dot plot`, `Violin` or `Heatmap`, kept in the link as `plot=`. Switching reads nothing again                                                                                                                                       |
+| `Group by`            | The sets loaded in Cells › Clusters, as the lists there group them: the dataset's set, each imported file's sets, and selections kept with `Save ROI` ("Loaded annotations"). The dataset's set is the default                      |
+| `Scale`               | `log1p` or `As stored`. `log1p` is the default when every value read is a whole number, as counts are; it is off when the matrix holds negative values, which look scaled                                                           |
+| `Colour`              | Dot plot and heatmap. `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                              |
+| `Include zeros`       | Violin, on by default: every cell, with the cells at 0. Off: only the cells expressing the gene, which the axis caption says                                                                                                        |
+| `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and the mean (dot plot, heatmap) or the median and quartiles shown (violin). It is also the plot's text alternative                                          |
+| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                                         |
+| `Read`                | Shown when a read is over 32 MiB: reads the genes. Its title gives the size                                                                                                                                                         |
+| `Export SVG`          | The plot as `{dataset}-{plot}-{set}.svg` (`dot-plot`, `violin` or `heatmap`), drawn from the same model with its colours and font written out, so it looks the same outside the app. The heatmap's file is drawn from its model too |
+| `Export PNG`          | The same drawing as a PNG at twice its size, `{dataset}-{plot}-{set}.png`                                                                                                                                                           |
+| `Export CSV`          | One row per group and gene, on the plot's scale (`values` says which): cells, cells expressing, % expressing, mean, median, quartiles, minimum and maximum over every cell, and the median and quartiles of the expressing cells    |
 
 The dot plot has groups down and genes across, as in Scanpy. A dot's area is
 the share of the group's cells expressing the gene (the key shows 20 to
@@ -688,13 +692,28 @@ Cells › Genes. Hovering a dot gives the group, the gene, the cells, %
 expressing and the mean. The selection comes first, in its colour, above a
 dashed rule.
 
+The violin plot has a row per gene and a violin per group, so several genes
+stack as in Scanpy's stacked violin, each gene on its own value axis. Every
+violin is as wide as the others at its widest and runs from the group's
+lowest value to its highest. A box spans the quartiles and a line in it marks
+the median. Sparse genes show a wide base at 0 with Include zeros on. Rows are
+taller with three genes or fewer. Hovering a violin gives the cells, %
+expressing, the median and the quartiles. The selection comes first, left of
+a dashed rule.
+
+The heatmap has groups down and genes across, each tile coloured by the
+group's mean as the dot plot's dots are; groups with no cells are blank. It
+is drawn on a canvas so that hundreds of classes stay quick, with the labels
+as text beside it and the colour bar under it. Hovering a tile gives its
+numbers.
+
 What it plots:
 
 - Up to 32 selected genes, in the order of the gene chips, each on its own;
   `Combine genes` does not apply. More are left out, with a note.
-- The set's shown classes in the legend's order and colours, up to 60. Hidden
-  classes are left out, with a note saying how many; hide some to plot
-  others.
+- The set's shown classes in the legend's order and colours: up to 60 in the
+  dot plot and violin, 500 in the heatmap. Hidden classes are left out, with
+  a note saying how many; hide some to plot others.
 - The active selection as an extra group, named and coloured as in the
   Selection card. Its cells stay in their classes too, so it overlaps them.
   A Xenium selection that stopped at 50,000 cells is those cells, with a note.
@@ -705,7 +724,15 @@ Method:
   not change as the view moves. Nothing is sampled.
 - Values are what the matrix stores: counts for standard Visium and MERSCOPE,
   whatever `X` holds for AnnData. Nothing is normalised by library size.
-  log1p is taken of each value before the mean.
+  log1p is taken of each value before the mean, the quartiles and the
+  violin's shape.
+- Quartiles and medians are interpolated between the two values either side,
+  as numpy's default is, on the scale shown. They count the cells without a
+  stored value as 0, unless Include zeros is off.
+- A violin's shape is a histogram of the group's values on 128 steps of the
+  gene's range, smoothed with a Gaussian kernel whose width follows Scott's
+  rule, as scipy's `gaussian_kde` behind seaborn's and Scanpy's violins does.
+  The kernel is reflected at the ends, so a spike of zeros keeps its size.
 - "% expressing" is the share of a group's cells with a stored value above 0,
   as in the Selection card. A group's mean counts its cells without a stored
   value as 0.
@@ -715,15 +742,42 @@ Method:
   rankings between groups ([Phase 15](plan/phases/15-interface-redesign.md)'s
   non-goal).
 
-The panel reads the expression matrix the dataset holds in memory after
-load: standard Visium, MERSCOPE, and `.h5ad` files whose `/X` is read whole
-(files up to 300 MiB, and larger ones whose `/X` decodes to 300 MiB or less).
-For Xenium, Atera, SpatialData, and AnnData read over HTTP (references,
-Icechunk, AnnData Zarr, an `.h5ad` whose `/X` is sliced per request) it says
-the panel is not available yet;
-those come in a later milestone. Gene values are kept in the panel's worker,
-up to 128 MiB, so changing `Group by`, `Scale` or `Colour` reads nothing
-again; a new gene is read once.
+Where the values come from:
+
+- Standard Visium, MERSCOPE, and `.h5ad` files whose `/X` is read whole at
+  load (files up to 300 MiB, and larger ones whose `/X` decodes to 300 MiB or
+  less): the matrix in memory, so the panel reads nothing more.
+- Xenium: each gene's slice of the feature-major `cell_features` in
+  `cell_feature_matrix.zarr.zip`. A Xenium output without that file fails
+  with a message naming it.
+- Atera: each gene's column of the CSC matrix, the columns the expression
+  overlay reads.
+- AnnData read over HTTP (references, Icechunk, AnnData Zarr, and `.h5ad`
+  files whose `/X` is sliced per request) and SpatialData tables: a CSC `X`
+  reads each gene's column; a dense `X` reads every chunk that holds the gene,
+  or for an `.h5ad` all of it in bands of whole cells; a CSR `X` reads all of
+  `X` in batches of rows, whichever genes are asked for.
+
+Before reading, the panel works out the size of the values and indices the
+read decodes (plan 22-D7). The download is often much smaller: the CSR table
+of the SpatialData Visium example is 227 MiB of values but 16 MB to
+download.
+
+- Up to 32 MiB, it reads at once.
+- From 32 to 256 MiB, it says the size and why ("The matrix is stored by cell
+  (CSR), so any gene reads all of it."), and waits for `Read`. A later read
+  no larger than one read with `Read` starts at once, so adding genes to a
+  CSR matrix asks once.
+- Over 256 MiB, the cell profile budget for dense Zarr, it says the size and
+  why, and reads nothing. Genes already plotted stay.
+
+Gene values are kept in the panel's worker, up to 128 MiB, so changing
+`Plot`, `Group by`, `Scale`, `Colour` or `Include zeros` reads nothing again;
+a new gene is read once. The worker works out the quartiles and the violins'
+shapes with the means, for up to 64 groups (the heatmap's longer lists get
+means only).
+Xenium's 1.4 million row IDs go to the worker as the integers the matrix
+stores and are made text there, off the page's thread.
 
 ## Canvas
 
@@ -1065,9 +1119,9 @@ deposit, followed by the licence and citation.
 ### Diagnostics
 
 `Diagnose Dataset` runs `runDatasetDiagnostics` for the URL; the download icon
-saves `<platform>-diagnostics.json`, named after the loaded dataset's platform
-(`xenium`, `visium-hd`, `h5ad`, …), or after the platform diagnostics found
-when nothing is loaded (`dataset` if neither is known). Then
+saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
+`generatedAt` in UTC to the second with `-` for `:` (for example
+`diagnostics-2026-11-17T14-05-09Z.json`). Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -1114,7 +1168,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
 | Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
 | Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
-| Plots panel                                    | Not yet                 | Not yet          | ✓             | —                 | ✓                | Files read whole | Not yet          | —                |
+| Plots panel                                    | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
 | Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
 | SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
 | Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |
@@ -1162,6 +1216,7 @@ the page reloads that entry's link, with its view and settings.
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
 | `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer), `embedding` and `plots`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                       |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                       |
+| `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                               |
 | `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |
 | `hiddenClasses`                                                                                           | Hidden annotation classes: comma-separated class IDs such as `analysis:leiden:3`; `%` and `,` inside an ID are written `%25` and `%2C`. Applied once the set loads                                                                                                                                                                     |

@@ -377,23 +377,29 @@ or embedding cell also opens the Cell card with metadata, expression, shape
 metrics when boundary geometry is available, and, for Xenium, a compact z-axis
 distribution of molecules/transcripts assigned to that cell.
 
-The Plots panel, opened from Cells › `Show Plots`, draws a dot plot of the
-selected genes by the classes of a loaded set:
+The Plots panel, opened from Cells › `Show Plots`, plots the selected genes
+by the classes of a loaded set:
 
 1. Select genes in Cells › Genes (up to 32 are plotted).
 2. Load an annotation set in Cells › Clusters.
-3. Choose `Show Plots`. Each dot's size is the share of the class's cells
-   expressing the gene, and its colour the class's mean, with zeros counted.
-4. Pick another loaded set under `Group by`, or draw a selection to add it as
+3. Choose `Show Plots`. The dot plot comes first: each dot's size is the
+   share of the class's cells expressing the gene, and its colour the class's
+   mean, with zeros counted.
+4. Under `Plot`, choose `Violin` for the spread of each gene's values in each
+   class, with a box for the quartiles and a line at the median, or `Heatmap`
+   for the class means as coloured tiles, which suits sets with hundreds of
+   classes. `Include zeros` off shows the violins of expressing cells only.
+5. Pick another loaded set under `Group by`, or draw a selection to add it as
    the first group. `Scale` switches between log1p and the stored values,
    and `Colour` between one range for every gene and one per gene.
-5. `Show numbers` lists the numbers; `Export SVG` saves the figure and
-   `Export CSV` the numbers behind it.
+6. `Show numbers` lists the numbers; `Export SVG` and `Export PNG` save the
+   figure and `Export CSV` the numbers behind it.
 
 The plot uses every cell of the dataset, not just the view, and compares
-nothing statistically. In this release it reads standard Visium, MERSCOPE and
-`.h5ad` files up to 300 MiB, or larger ones whose `/X` decodes to 300 MiB or
-less; see the
+nothing statistically. It works on every platform except Visium HD, whose bins
+have no sets. When a read would be over 32 MiB, as for an AnnData matrix
+stored by cell (CSR) and read over HTTP, the panel says how large it is and
+waits for `Read`; it reads nothing over 256 MiB. See the
 [UI reference](ui-reference.md#plots-panel).
 
 ## Standard Visium
@@ -500,8 +506,8 @@ detected source and required byte-range reads, then summarizes optional assets
 for that platform. With a dataset manifest, it also reports whether the
 manifest is valid and checks files at the locations the manifest gives. The
 download button next to
-it writes a local JSON dump (`<platform>-diagnostics.json`, for example
-`visium-hd-diagnostics.json`)
+it writes a local JSON dump (`diagnostics-<timestamp>.json`, for example
+`diagnostics-2026-11-17T14-05-09Z.json`)
 with current controls, active errors, diagnostics, performance budget, and
 local telemetry events. Transcript diagnostics include detected
 transcript capabilities, native LOD availability, current transcript controls,

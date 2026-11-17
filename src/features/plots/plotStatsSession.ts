@@ -1,4 +1,4 @@
-import type { GeneValues } from '../../data/geneValues'
+import type { GeneValues, GeneValuesRowIds } from '../../data/geneValues'
 import type {
   PlotStatsWorkerRequest,
   PlotStatsWorkerResponse,
@@ -17,7 +17,7 @@ import {
 // again, and genes it lacks come back as missing, to be read again.
 
 export interface PlotStatsSession {
-  setRows(rowIds: readonly string[]): void
+  setRows(rowIds: GeneValuesRowIds): void
   setGroups(groups: PlotGroupsInput): Promise<PlotGroupsSummary>
   // Hands the values' buffers over; they are empty here afterwards.
   addGene(values: GeneValues): void
@@ -59,7 +59,7 @@ export function createPlotStatsSession(
   let nextId = 0
   const pending = new Map<number, PendingRequest>()
   // What the store needs again if the worker fails.
-  let rows: readonly string[] | null = null
+  let rows: GeneValuesRowIds | null = null
   let groups: PlotGroupsInput | null = null
 
   function startWorker(factory: PlotStatsWorkerFactory): PlotStatsWorkerLike | null {

@@ -1,69 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
-  dotPlotModel,
-  dotPlotSvg,
-  dotRadius,
-  PANEL_PLOT_PAINT,
-  truncateLabel,
-  type DotPlotInput,
-} from './dotPlot'
-import { exportPlotPaint, plotFileName, plotStatsCsv } from './plotExport'
-import type { PlotGeneStats } from './plotStats'
+  plotTestInput as input,
+  testExportPaint as exportPaint,
+} from '../../test/plotFixtures'
+import { dotPlotModel, dotPlotSvg, dotRadius, meansPlotTable } from './dotPlot'
+import { heatmapModel, heatmapRowHeight, heatmapSvg } from './heatmap'
+import { plotFileName, plotStatsCsv } from './plotExport'
+import { PANEL_PLOT_PAINT, truncateLabel } from './plotModel'
 import { svgDocument, svgMarkup } from './svgMarkup'
-
-function stats(gene: string, groups: readonly [number, number, number][]): PlotGeneStats {
-  return {
-    gene,
-    groups: groups.map(([cells, expressing, sum]) => ({
-      cells,
-      expressing,
-      sum,
-      sumLog1p: Math.log1p(sum),
-    })),
-    wholeNumbers: true,
-    negative: false,
-  }
-}
-
-const input: DotPlotInput = {
-  groups: [
-    { id: 'selection', label: 'ROI 1', color: '#f0c84b', kind: 'selection' },
-    { id: 'analysis:cluster:a', label: 'A', color: '#1f77b4', kind: 'class' },
-    { id: 'analysis:cluster:b', label: 'B & <C>', color: '#ff7f0e', kind: 'class' },
-  ],
-  genes: [
-    {
-      gene: 'Actb',
-      stats: stats('Actb', [
-        [4, 2, 8],
-        [10, 5, 10],
-        [0, 0, 0],
-      ]),
-    },
-    {
-      gene: 'Gad1',
-      stats: stats('Gad1', [
-        [4, 0, 0],
-        [10, 1, 1],
-        [0, 0, 0],
-      ]),
-    },
-    { gene: 'Gapdh', stats: null },
-  ],
-  scale: 'stored',
-  colour: 'shared',
-  colorScale: 'viridis',
-  valueLabel: 'counts',
-  setLabel: 'cluster',
-}
-
-const exportPaint = exportPlotPaint({
-  text: '#111111',
-  muted: '#555555',
-  rule: '#999999',
-  background: '#ffffff',
-  font: 'Avenir Next, sans-serif',
-})
 
 function parse(markup: string): Document {
   return new DOMParser().parseFromString(markup, 'image/svg+xml')
@@ -133,21 +77,70 @@ describe('dot plot (plan 22-E)', () => {
   })
 })
 
+describe('heatmap (plan 22-G)', () => {
+  it('colours each group mean, and writes a tile for each group with cells', () => {
+    const model = heatmapModel(input)
+    const root = parse(
+      svgDocument(heatmapSvg(model, exportPaint, 'heatmap')),
+    ).documentElement
+    // A tile per gene read and group with cells: two genes by two groups.
+    // Swatches are the groups' hex colours; tiles are the palette's.
+    const tiles = root.querySelectorAll('rect[fill^="rgb"]')
+
+    expect(model.summary).toBe(
+      'Heatmap of Actb, Gad1 and Gapdh across 3 groups of cluster',
+    )
+    expect(
+      model.cells.find((cell) => cell.geneIndex === 0 && cell.groupIndex === 0),
+    ).toMatchObject({
+      mean: 2,
+      intensity: 1,
+    })
+    expect(root.querySelector('parsererror')).toBeNull()
+    expect(tiles).toHaveLength(4)
+    // No size legend: only the colour bar.
+    expect(root.querySelectorAll('circle')).toHaveLength(0)
+    expect(root.querySelectorAll('linearGradient')).toHaveLength(1)
+    expect(meansPlotTable(model).rows).toHaveLength(6)
+  })
+
+  it('makes rows shorter past the dot plot’s classes', () => {
+    expect(heatmapRowHeight(61)).toBe(22)
+    expect(heatmapRowHeight(500)).toBe(12)
+  })
+})
+
 describe('plot exports (plan 22-H)', () => {
-  it('writes each group and gene, with both means', () => {
+  it('writes each group and gene on the plot’s scale, with quartiles', () => {
     const csv = plotStatsCsv({
       setLabel: 'cluster',
       groups: input.groups,
       genes: input.genes,
+      scale: 'stored',
+      valueLabel: 'counts',
     })
 
     expect(csv.split('\n').slice(0, 3)).toEqual([
-      'set,group,group_kind,gene,cells,cells_expressing,percent_expressing,mean,mean_log1p',
-      ',ROI 1,selection,Actb,4,2,50,2,0.549306',
-      'cluster,A,class,Actb,10,5,50,1,0.23979',
+      'set,group,group_kind,gene,values,cells,cells_expressing,percent_expressing,mean,median,q1,q3,min,max,median_expressing,q1_expressing,q3_expressing',
+      ',ROI 1,selection,Actb,counts,4,2,50,2,2,0,4,0,4,4,4,4',
+      'cluster,A,class,Actb,counts,10,5,50,1,1,0,2,0,2,2,2,2',
     ])
-    expect(csv).toContain('cluster,B & <C>,class,Actb,0,0,,,')
+    expect(csv).toContain('cluster,B & <C>,class,Actb,counts,0,0,,,,,,,,,,')
     expect(csv).not.toContain('Gapdh')
+  })
+
+  it('writes log1p numbers when the plot shows log1p', () => {
+    const csv = plotStatsCsv({
+      setLabel: 'cluster',
+      groups: input.groups,
+      genes: input.genes,
+      scale: 'log1p',
+      valueLabel: 'log1p(counts)',
+    })
+
+    expect(csv.split('\n')[1]).toBe(
+      ',ROI 1,selection,Actb,log1p(counts),4,2,50,0.804719,0.804719,0,1.60944,0,1.60944,1.60944,1.60944,1.60944',
+    )
   })
 
   it('names files after the dataset, plot and set', () => {
@@ -159,8 +152,8 @@ describe('plot exports (plan 22-H)', () => {
         'svg',
       ),
     ).toBe('heart-dot-plot-cell-type.svg')
-    expect(plotFileName('https://example.test/run/', 'dot-plot', null, 'csv')).toBe(
-      'run-dot-plot.csv',
+    expect(plotFileName('https://example.test/run/', 'violin', null, 'png')).toBe(
+      'run-violin.png',
     )
   })
 })

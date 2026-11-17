@@ -3811,13 +3811,18 @@ describe('App', () => {
         'B cellGad120%0',
       ])
 
-      // Closing and opening again reads nothing more.
+      // Closing and opening again reads nothing more, and the link follows.
+      // The link this test starts from already names the panel, so the hash
+      // must lose it before the reopened panel counts.
       fireEvent.click(within(plots).getByRole('button', { name: 'Close plots' }))
+      await waitFor(() => {
+        expect(window.location.hash).not.toMatch(/panel=[^&]*plots/)
+      })
       openControls('plots')
       expect(screen.getByRole('region', { name: 'Plots' })).toBeVisible()
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
       await waitFor(() => {
-        expect(window.location.hash).toContain('panel=cells%2Cplots')
+        expect(window.location.hash).toMatch(/panel=[^&]*plots/)
       })
 
       // A selection is one more group, first, overlapping the classes.
@@ -3836,6 +3841,35 @@ describe('App', () => {
             .slice(1)
             .map((row) => row.textContent),
         ).toContain('ROI 1 (selection)Actb2100%1.04')
+      })
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+
+      // The violin and the heatmap use the same numbers, and the link keeps
+      // the plot.
+      fireEvent.change(within(reopened).getByRole('combobox', { name: 'Plot' }), {
+        target: { value: 'violin' },
+      })
+      expect(
+        within(reopened).getByRole('columnheader', { name: 'Median log1p(counts)' }),
+      ).toBeInTheDocument()
+      fireEvent.click(within(reopened).getByRole('switch', { name: 'Show numbers' }))
+      expect(
+        within(reopened).getByRole('img', {
+          name: /^Violin plot of Actb and Gad1 across 3 groups of cell_type/,
+        }),
+      ).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.location.hash).toContain('plot=violin')
+      })
+
+      fireEvent.change(within(reopened).getByRole('combobox', { name: 'Plot' }), {
+        target: { value: 'heatmap' },
+      })
+      expect(
+        within(reopened).getByRole('img', { name: /^Heatmap of Actb and Gad1/ }),
+      ).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.location.hash).toContain('plot=heatmap')
       })
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
     } finally {

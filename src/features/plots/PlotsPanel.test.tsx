@@ -1,36 +1,22 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { plotTestInput } from '../../test/plotFixtures'
 import { testPlotsModel } from '../../test/sectionModels'
 import { dotPlotModel } from './dotPlot'
+import { heatmapModel } from './heatmap'
 import { PlotsPanel } from './PlotsPanel'
+import type { PlotView } from './plotViews'
+import { violinPlotModel } from './violinPlot'
 
-const plot = dotPlotModel({
-  groups: [
-    { id: 'selection', label: 'ROI 1', color: '#f0c84b', kind: 'selection' },
-    { id: 'analysis:cluster:a', label: 'A', color: '#1f77b4', kind: 'class' },
-  ],
-  genes: [
-    {
-      gene: 'Actb',
-      stats: {
-        gene: 'Actb',
-        groups: [
-          { cells: 4, expressing: 2, sum: 8, sumLog1p: 3 },
-          { cells: 10, expressing: 0, sum: 0, sumLog1p: 0 },
-        ],
-        wholeNumbers: true,
-        negative: false,
-      },
-    },
-  ],
-  scale: 'log1p',
-  colour: 'shared',
-  colorScale: 'plasma',
-  valueLabel: 'log1p(counts)',
-  setLabel: 'cluster',
-})
+const input = { ...plotTestInput, scale: 'log1p' as const, valueLabel: 'log1p(counts)' }
+const plot: PlotView = { kind: 'dot', model: dotPlotModel(input) }
+const setOptions = [{ id: 'analysis:cluster', label: 'cluster', classCount: 2 }]
 
-describe('PlotsPanel (plan 22-D, 22-E)', () => {
+describe('PlotsPanel (plan 22-D to 22-G)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('says what is missing in place of the plot', () => {
     render(<PlotsPanel plots={testPlotsModel()} />)
 
@@ -43,14 +29,16 @@ describe('PlotsPanel (plan 22-D, 22-E)', () => {
     const plots = testPlotsModel({
       message: null,
       plot,
-      setOptions: [{ id: 'analysis:cluster', label: 'cluster', classCount: 1 }],
+      setOptions,
       setId: 'analysis:cluster',
       notes: ['1 hidden class left out.'],
     })
     const { rerender } = render(<PlotsPanel plots={plots} />)
 
     expect(
-      screen.getByRole('img', { name: /Dot plot of Actb across 2 groups of cluster/ }),
+      screen.getByRole('img', {
+        name: /Dot plot of Actb, Gad1 and Gapdh across 3 groups of cluster/,
+      }),
     ).toBeVisible()
     expect(screen.getByText('1 hidden class left out.')).toBeVisible()
     fireEvent.click(screen.getByRole('switch', { name: 'Show numbers' }))
@@ -66,8 +54,12 @@ describe('PlotsPanel (plan 22-D, 22-E)', () => {
         .map((row) => row.textContent),
     ).toEqual([
       'GroupGeneCells% expressingMean log1p(counts)',
-      'ROI 1 (selection)Actb450%0.75',
-      'AActb100%0',
+      'ROI 1 (selection)Actb450%0.805',
+      'AActb1050%0.549',
+      'B & <C>Actb0––',
+      'ROI 1 (selection)Gad140%0',
+      'AGad11010%0.0693',
+      'B & <C>Gad10––',
     ])
   })
 
@@ -111,5 +103,87 @@ describe('PlotsPanel (plan 22-D, 22-E)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(failed.onRetry).toHaveBeenCalledTimes(1)
     expect(screen.getByText('Vim failed.')).toBeVisible()
+  })
+
+  it('offers Read for a large read, titled with its size', () => {
+    const plots = testPlotsModel({
+      message:
+        'Reading Gad1 reads about 180 MiB of the matrix, uncompressed. Read to go ahead.',
+      confirmReadTitle: 'Read Gad1: about 180 MiB of the matrix',
+    })
+    render(<PlotsPanel plots={plots} />)
+
+    expect(screen.getByText(/reads about 180 MiB/)).toBeVisible()
+    const read = screen.getByRole('button', { name: 'Read' })
+    expect(read).toHaveAttribute('title', 'Read Gad1: about 180 MiB of the matrix')
+    fireEvent.click(read)
+    expect(plots.onConfirmRead).toHaveBeenCalledTimes(1)
+  })
+
+  it('switches plots, with Include zeros for the violin in place of Colour', () => {
+    const plots = testPlotsModel({
+      message: null,
+      plotKind: 'violin',
+      plot: { kind: 'violin', model: violinPlotModel({ ...input, includeZeros: true }) },
+      setOptions,
+      setId: 'analysis:cluster',
+    })
+    render(<PlotsPanel plots={plots} />)
+
+    expect(screen.getByRole('img', { name: /^Violin plot of Actb/ })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: 'Colour' })).toBeNull()
+    fireEvent.click(screen.getByRole('switch', { name: 'Include zeros' }))
+    fireEvent.change(screen.getByRole('combobox', { name: 'Plot' }), {
+      target: { value: 'heatmap' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Export PNG' }))
+
+    expect(plots.onIncludeZerosChange).toHaveBeenCalledWith(false)
+    expect(plots.onPlotKindChange).toHaveBeenCalledWith('heatmap')
+    expect(plots.onExportPng).toHaveBeenCalledTimes(1)
+  })
+
+  it('draws the heatmap on a canvas with text labels, and says what a tile holds', () => {
+    const fillRect = vi.fn()
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+      setTransform: vi.fn(),
+      clearRect: vi.fn(),
+      fillRect,
+      beginPath: vi.fn(),
+      moveTo: vi.fn(),
+      lineTo: vi.fn(),
+      stroke: vi.fn(),
+      setLineDash: vi.fn(),
+    } as unknown as CanvasRenderingContext2D)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+    } as DOMRect)
+    render(
+      <PlotsPanel
+        plots={testPlotsModel({
+          message: null,
+          plotKind: 'heatmap',
+          plot: { kind: 'heatmap', model: heatmapModel(input) },
+          setOptions,
+          setId: 'analysis:cluster',
+        })}
+      />,
+    )
+
+    const image = screen.getByRole('img', { name: /^Heatmap of Actb/ })
+    // Two genes read by the two groups with cells.
+    expect(fillRect).toHaveBeenCalledTimes(4)
+    expect(screen.getByText('B & <C>')).toBeInTheDocument()
+    expect(screen.getByText('Mean log1p(counts)')).toBeInTheDocument()
+
+    // The second gene's column, the first group's row.
+    const canvas = image.querySelector('canvas') as HTMLCanvasElement
+    fireEvent.pointerMove(canvas, { clientX: 30, clientY: 5 })
+    expect(
+      screen.getByText('ROI 1, Gad1: 4 cells, 0% expressing, mean log1p(counts) 0'),
+    ).toBeInTheDocument()
+    fireEvent.pointerLeave(canvas)
+    expect(screen.queryByText(/^ROI 1, Gad1:/)).toBeNull()
   })
 })

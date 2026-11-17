@@ -540,12 +540,23 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   await collectAxeFindings(page, 'H5AD fixture, dot plot', findings)
   await plots.getByRole('switch', { name: 'Show numbers' }).click()
   await collectAxeFindings(page, 'H5AD fixture, dot plot numbers', findings)
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+
+  // The violin and the heatmap (plan 22-F, 22-G).
+  for (const [option, name] of [
+    ['Violin', /^Violin plot of Actb/],
+    ['Heatmap', /^Heatmap of Actb/],
+  ] as const) {
+    await plots.getByRole('combobox', { name: 'Plot' }).selectOption({ label: option })
+    await expect(plots.getByRole('img', { name })).toBeVisible()
+    await collectAxeFindings(page, `H5AD fixture, ${option.toLowerCase()}`, findings)
+  }
 
   expectAxeFindingsMatchBaseline(findings)
 })
 
-// Plan 22, M1: select genes, load a set, open Plots, read the numbers and
-// export them.
+// Plan 22: select genes, load a set, open Plots, read the numbers and
+// export them, then switch to the violin and the heatmap and export a PNG.
 test('plots the selected genes by cluster and exports the numbers @smoke', async ({
   page,
 }) => {
@@ -590,9 +601,33 @@ test('plots the selected genes by cluster and exports the numbers @smoke', async
   const csv = await readFile(await (await download).path(), 'utf8')
   expect((await download).suggestedFilename()).toBe('h5ad-smoke-dot-plot-cluster.csv')
   expect(csv.split('\n').slice(0, 2)).toEqual([
-    'set,group,group_kind,gene,cells,cells_expressing,percent_expressing,mean,mean_log1p',
-    'cluster,A,class,Actb,2,1,50,0.5,0.346574',
+    'set,group,group_kind,gene,values,cells,cells_expressing,percent_expressing,mean,median,q1,q3,min,max,median_expressing,q1_expressing,q3_expressing',
+    'cluster,A,class,Actb,log1p(counts),2,1,50,0.346574,0.346574,0.173287,0.51986,0,0.693147,0.693147,0.693147,0.693147',
   ])
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+
+  // Each gene's violins on its own axis; the link keeps the plot.
+  await plots.getByRole('combobox', { name: 'Plot' }).selectOption({ label: 'Violin' })
+  const violin = plots.getByRole('img', {
+    name: /^Violin plot of Actb and Gad1 across 2 groups/,
+  })
+  await expect(violin).toBeVisible()
+  await expect(violin.locator('path')).toHaveCount(4)
+  await expect(page).toHaveURL(/[#&]plot=violin(&|$)/)
+
+  // The heatmap is a canvas; hovering a tile gives its numbers.
+  await plots.getByRole('combobox', { name: 'Plot' }).selectOption({ label: 'Heatmap' })
+  const heatmap = plots.getByRole('img', { name: /^Heatmap of Actb and Gad1/ })
+  await expect(heatmap).toBeVisible()
+  await heatmap.locator('canvas').hover({ position: { x: 5, y: 5 } })
+  await expect(plots.getByText('A, Actb: 2 cells, 50% expressing')).toBeVisible()
+  await expect(page).toHaveURL(/[#&]plot=heatmap(&|$)/)
+
+  const pngDownload = page.waitForEvent('download')
+  await plots.getByRole('button', { name: 'Export PNG' }).click()
+  const png = await readFile(await (await pngDownload).path())
+  expect((await pngDownload).suggestedFilename()).toBe('h5ad-smoke-heatmap-cluster.png')
+  expect([...png.subarray(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47])
 })
 
 // Presses Tab until the target has focus, as a keyboard user would, and
@@ -1471,6 +1506,32 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
 
   // The Cell card shows only once a cell is clicked.
   await expect(page.getByRole('region', { name: 'Cell', exact: true })).toHaveCount(0)
+})
+
+// Plan 22, M2: the Plots panel reads SNAP25 in every cell of the demo from
+// cell_feature_matrix.zarr.zip and groups it by the graph clusters. The time
+// to the first plot goes into the report.
+test('plots SNAP25 by the Xenium graph clusters @live', async ({ page }, testInfo) => {
+  test.setTimeout(300_000)
+  const startedAt = Date.now()
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&groups=analysis:0&genes=SNAP25&panel=plots`,
+  )
+  const plots = page.getByRole('region', { name: 'Plots' })
+  await expect(
+    plots.getByRole('img', { name: /^Dot plot of SNAP25 across [1-9][0-9]* groups/ }),
+  ).toBeVisible({ timeout: XENIUM_LOAD_TIMEOUT_MS })
+  testInfo.annotations.push({
+    type: 'Time to first plot',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
+
+  await plots.getByRole('switch', { name: 'Show numbers' }).click()
+  await expect(plots.getByRole('row', { name: /^Cluster 1 SNAP25/ })).toContainText(
+    /SNAP25[1-9][0-9,]*[0-9.]+%/,
+  )
+  await expectLogEntry(page, /Plots: read 1 gene \(about [0-9.]+ MiB\) in /)
 })
 
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({

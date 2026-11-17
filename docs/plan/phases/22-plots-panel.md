@@ -1,7 +1,9 @@
 # Phase 22 — Plots Panel
 
-Planned 2026-11-16. M1 (dot plot on loaded data) implemented 2026-11-16; see
-[M1 Progress](#m1-progress). Requested: exploratory plots like those in
+Planned 2026-11-16. M1 (dot plot on loaded data) and M2 (datasets read over
+HTTP) implemented 2026-11-16, M3 (violin and heatmap) 2026-11-17; see
+[M1 Progress](#m1-progress), [M2 Progress](#m2-progress) and
+[M3 Progress](#m3-progress). Requested: exploratory plots like those in
 Scanpy, Seurat and CELLxGENE VIP, client side. The scope is a floating Plots
 panel with three plots of the selected genes, grouped by the classes of an
 annotation set, with the active selection as an extra group:
@@ -208,8 +210,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
 
 ## Tasks
 
-- [ ] **A. Whole-dataset gene reader.** (L) In memory done (M1); HTTP and
-      Xenium, Atera in M2.
+- [x] **A. Whole-dataset gene reader.** (L) In memory done (M1); HTTP,
+      Xenium, Atera and the budget done (M2).
   - Add an optional dataset method, `geneValues(genes, { signal })`. It
     returns the matrix row count and, for each gene, `rows: Uint32Array` and
     `values: Float32Array` of its non-zero cells, with negative values kept.
@@ -228,8 +230,9 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   - Tests: each backend on the existing fixtures. A property test that values
     match `matrix(ids)` for sampled cells. Negative values kept. The budget
     refuses without a request.
-- [ ] **B. Groups by row.** (M) Done in M1 except row-indexed labels, moved
-      to M2; the selection is a row mask, not a sorted list.
+- [x] **B. Groups by row.** (M) Done in M1; the selection is a row mask, not
+      a sorted list. Row-indexed labels were dropped in M2: joining by ID is
+      fast enough on 1.4 million cells (see [M2 Progress](#m2-progress)).
   - `groupCodes(set)` returns a code per row and the classes in legend
     order. It uses row-indexed labels where a dataset has them (D6), and maps
     cell IDs to rows in the worker otherwise.
@@ -238,8 +241,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
     two classes of one imported set (counted in both).
   - Tests: Xenium graph clusters by row; H5AD codes; an imported CSV with
     missing and repeated IDs; a selection that overlaps classes.
-- [ ] **C. Plot statistics worker.** (M) Counts and means done (M1);
-      quartiles and densities in M3.
+- [x] **C. Plot statistics worker.** (M) Counts and means done (M1);
+      quartiles and densities done (M3).
   - A pure `plotStats` module and `plotStats.worker.ts`. Per gene and group:
     cells, cells expressing, % expressing, mean, median, quartiles, minimum,
     maximum, and a density on a 128-step grid. Zeros implied from the group
@@ -248,8 +251,8 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   - Tests, with fast-check: means and quartiles match a dense computation;
     % in 0–100; each density sums to 1; an empty group gives no density, not
     `NaN`.
-- [ ] **D. Plots window and wiring.** (M) Done in M1 except `Plot` and
-      `plot=`, which wait for M3.
+- [x] **D. Plots window and wiring.** (M) Done in M1; `Plot` and `plot=`
+      done (M3).
   - Extract the shared parts of `EmbeddingWindow` (resize grip, Escape,
     focus return, clamping) into a `FloatingWindow`, without changing the
     Embedding window's behaviour. Then build `PlotsWindow` on it.
@@ -266,20 +269,22 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
       area for % expressing, with a size legend (20, 40, 60, 80, 100 %). Dot
       colour for mean, with a colour bar. Long labels are cut short with the
       full text in `<title>`. `Show numbers` table.
-- [ ] **F. Violin (SVG).** (M) One row per gene, a violin per group, so
+- [x] **F. Violin (SVG).** (M) One row per gene, a violin per group, so
       several genes stack as in Scanpy's stacked violin. Every violin has the
       same maximum width. A box for the quartiles and a line at the median.
       `Include zeros` (on) shows the zero spike that dominates sparse genes;
       off shows expressing cells only and says so in the axis title.
-- [ ] **G. Group-mean heatmap (canvas).** (M) Groups down, genes across.
+- [x] **G. Group-mean heatmap (canvas).** (M) Groups down, genes across.
       Colours from the tokens and the Gene scale palette, DOM labels, hover
       by hit test, and `Colour` shared or per gene (D8). It goes in the
       no-redraw test with the other overlays.
-- [ ] **H. Export.** (S) SVG and CSV done (M1); PNG in M3. `downloadBlob` beside `downloadTextFile` for PNG.
+- [x] **H. Export.** (S) SVG and CSV done (M1); PNG done (M3). `downloadBlob` beside `downloadTextFile` for PNG.
       SVG, PNG and CSV as in D10. Tests check that an exported SVG parses and
       holds a mark per group and gene, and that the CSV matches the plot
       model.
-- [ ] **I. Docs and end-to-end tests.** (M)
+- [x] **I. Docs and end-to-end tests.** (M) Docs, smoke and axe tests for
+      M1 and M2, and the nightly Xenium test, done; switching plots and the
+      PNG done (M3).
   - Docs listed in [Docs To Update](#docs-to-update).
   - E2E on fixtures: open Plots on the H5AD fixture, switch the three plots,
     export a CSV. The axe smoke test opens Plots empty and loaded, and the
@@ -363,6 +368,143 @@ Changed from the plan while building:
 Left for M2 and M3 as planned: the Xenium, Atera and HTTP AnnData readers, and
 the D7 budget (M2); quartiles, densities, the violin, the heatmap and PNG
 export (M3); the nightly live test (I).
+
+## M2 Progress
+
+Implemented 2026-11-16 (branch `claude/plots-panel-m2`, on M1). The panel
+reads every platform but Visium HD: Xenium, Atera, and AnnData and
+SpatialData tables read over HTTP. Checked in the browser on the Xenium demo,
+the Atera kidney run, the SpatialData Visium store and the hindlimb AnnData
+Zarr store.
+
+Built:
+
+- **A, over HTTP.** Three readers in `geneValues.ts`, each given the
+  dataset's own reads: `geneValuesFromColumnSlices` (CSC over HTTP, Atera's
+  CSC, Xenium's feature-major `cell_features`), `geneValuesFromCsrBatches`
+  (all of a CSR `X`, in batches of whole rows, every gene in one pass) and
+  `geneValuesFromDenseChunks` (the dense Zarr chunks that hold the genes,
+  each read once). Each has an estimate beside it.
+- **Xenium.** `geneValuesFromCellFeatureMatrixZarr` and its estimate
+  (`gex.ts`) read `cell_features/indptr` once per dataset, then each gene's
+  slice. Row IDs go to the worker as the `cell_id` integer pairs
+  (`GeneValuesRowIds`), and the worker makes them text with
+  `xeniumCellIdText`, built from character codes.
+- **Atera** reads the CSC columns through the overlay's gene cache.
+  **SpatialData** delegates to its table.
+- **The budget (D7).** `estimateGeneValuesRead` gives the bytes a read
+  decodes and a sentence on how the layout sets them. The workflow reads up
+  to 32 MiB at once; to 256 MiB it waits for `Read`; over that it refuses,
+  keeping the genes already plotted. `plotReadDecision` holds the rule.
+- **I.** A nightly `@live` test plots SNAP25 by the Xenium graph clusters and
+  records the time to the first plot. Docs: UI reference, user guide,
+  architecture, the H5AD, Xenium, Atera and SpatialData modality pages and
+  the H5AD reference's CSR or CSC table.
+
+Measured in Chromium with the GPU (Playwright, from Sanger's network):
+
+| Dataset                                  | Read                                       | Time                     | Requests, download |
+| ---------------------------------------- | ------------------------------------------ | ------------------------ | ------------------ |
+| Xenium demo, 1.4 M cells, graph clusters | SNAP25, feature-major slice                | 0.7 s after the clusters | Included in load   |
+| Atera kidney, 93,864 cells, 47 classes   | 3 genes, CSC columns                       | 2.3 s from opening       | 262, 7.3 MB        |
+| SpatialData Visium, CSR, 29.7 M values   | 2 genes, all of `X` after `Read` (227 MiB) | 7.3 s                    | 525, 16 MB         |
+| Hindlimb AnnData Zarr, dense by gene     | 3 genes, one chunk each                    | 0.4 s                    | 7, 2.7 MB          |
+
+No run had a main-thread task over 200 ms that the same link without the
+panel did not have. On the Xenium demo a box selection's group held 5,303
+cells, as the Selection card did, with no unmatched IDs.
+
+Changed from the plan while building:
+
+- **Row-indexed labels are not used** (B, D6). Joining by cell ID in the
+  worker grouped 1.4 million Xenium cells within the 0.7 s above. The
+  Xenium IDs are what cost time, and the worker now makes them. Using
+  graph-cluster rows or H5AD codes directly would mean a second annotation
+  format through the app for no measured gain.
+- **Sizes are bytes decoded, not downloaded.** Chunk sizes on the server are
+  not known without a request per chunk. The panel says "uncompressed".
+  The SpatialData Visium table is 227 MiB of values and indices but 16 MB to
+  download.
+- **`Read` covers later reads up to its size.** A CSR matrix reads all of
+  `X` for any gene, so asking again for each gene added would repeat the
+  same question.
+- **No alignment check for Xenium rows.** The panel joins by cell ID, so
+  matrix rows and `cells.parquet` rows need not agree.
+- **A Xenium output without `cell_feature_matrix.zarr.zip` fails** with a
+  message naming the file (and `Try again`), rather than being hidden. The
+  file is missing only from hand-made outputs, and a network error looks the
+  same until it is retried.
+
+Left for M3 as planned: quartiles, densities, the violin, the heatmap, PNG
+export, and `Plot` with `plot=`.
+
+## M3 Progress
+
+Implemented 2026-11-17 (branch `claude/plots-panel-m3`, on M2). The panel
+draws all three plots. Checked in Chromium with the GPU on the Atera kidney
+run (3 genes by 47 classes) and the Xenium demo (2 genes by 24 graph clusters
+and a box selection), including each plot's PNG export.
+
+Built:
+
+- **C, quartiles and densities.** For each gene the worker sorts each
+  group's stored values once, places the implied zeros among them, and
+  gives the minimum, quartiles, median and maximum on both scales, for every
+  cell and for the expressing cells (`PlotDistribution`, `plotStats.ts`).
+  Quartiles are interpolated linearly, as numpy's default. Densities are 128
+  steps of the gene's range, each value split between its two nearest
+  steps, smoothed with a Gaussian of Scott's width (scipy's `gaussian_kde`,
+  behind seaborn's and Scanpy's violins) reflected at both ends. Tests check
+  them against a dense computation with fast-check, and that each density
+  sums to 1.
+- **D, `Plot` and `plot=`.** `Plot` (Dot plot, Violin, Heatmap) sits first
+  in the controls; App keeps it, seeded from `plot=` and written back with
+  the link. `Colour` shows for the dot plot and heatmap, `Include zeros` for
+  the violin. The class limit follows the plot: 60, 60 and 500.
+- **F.** `violinPlot.ts` builds the model, the SVG and the table. Rows are
+  96, 72 or 60 px tall for up to 3, 8 or more genes.
+- **G.** `HeatmapFigure` draws the tiles on a canvas for the device pixel
+  ratio, with the labels and colour bar as DOM text and hover by the tile
+  under the pointer. Its hover state stays in the component; a shell test
+  checks that hovering renders the viewer no more. Its SVG is the dot plot's
+  grid with tiles (`meansGridSvg`).
+- **H.** `Export PNG` draws the plot's SVG on a canvas at twice its size
+  (`svgPngBlob`, `downloadBlob`). The CSV is on the plot's scale with a
+  `values` column, and adds the median, quartiles, minimum and maximum, and
+  the median and quartiles of expressing cells.
+- **I.** The smoke E2E test switches to the violin and heatmap, hovers a
+  tile, checks `plot=` and exports a PNG; the axe test covers both plots and
+  the baseline stays `{}`. `App.test.tsx` switches plots without a second
+  read. Docs: UI reference (controls, method, `plot=`), user guide,
+  architecture.
+
+Measured in Chromium (Playwright, Metal):
+
+| Dataset                               | Switch to violin | Switch to heatmap | Stats after the read |
+| ------------------------------------- | ---------------- | ----------------- | -------------------- |
+| Atera kidney, 93,864 cells, 47 groups | 134 ms           | 32 ms             | —                    |
+| Xenium demo, 1.4 M cells, 25 groups   | 82 ms            | 85 ms             | 0.2 s for 2 genes    |
+
+The switch times include Playwright's round trips. On the Xenium demo the
+link with the panel had the same main-thread tasks over 200 ms as the link
+without it, all during the dataset's load.
+
+Changed from the plan while building:
+
+- **PNG for every plot**, not only the heatmap: the PNG is drawn from the
+  SVG, so it costs nothing more per plot.
+- **No whiskers.** A line from each group's lowest to highest value drew the
+  eye to single outlying cells on sparse genes; the plan's box and median
+  line remain, and the violin itself runs from the lowest to the highest
+  value.
+- **The CSV is on the plot's scale** with a `values` column, in place of
+  M1's `mean` and `mean_log1p`, so its medians and quartiles match the
+  plot.
+- **Densities for up to 64 groups.** The heatmap shows up to 500 classes
+  and needs no densities, so the worker skips them past 64 groups.
+- **Labels on the canvas side are DOM text, the canvas is `aria-hidden`**,
+  and the figure around it is the labelled image, so the canvas has no
+  native title competing with the hover text.
 
 ## Testing
 

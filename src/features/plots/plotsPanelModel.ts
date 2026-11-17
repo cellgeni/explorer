@@ -1,7 +1,8 @@
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import { annotationSetGrouping } from '../annotations/annotationModel'
-import type { PlotGroupsInput } from './plotStats'
+import type { PlotKind } from './plotModel'
+import { PLOT_DENSITY_MAX_GROUPS, type PlotGroupsInput } from './plotStats'
 
 // What the Plots panel plots (plan 22-D1 to 22-D3): the selected genes,
 // grouped by the classes of one annotation set, with the active selection
@@ -9,8 +10,51 @@ import type { PlotGroupsInput } from './plotStats'
 
 // The Xenium reader's limit, kept for every platform (22-D1).
 export const PLOT_MAX_GENES = 32
-// Classes a dot plot shows (22-D2).
+// Classes each plot shows (22-D2). The violin's, with the selection, stay
+// within the groups the worker makes densities for.
 export const DOT_PLOT_MAX_CLASSES = 60
+export const VIOLIN_MAX_CLASSES = Math.min(60, PLOT_DENSITY_MAX_GROUPS - 1)
+export const HEATMAP_MAX_CLASSES = 500
+
+export interface PlotKindInfo {
+  readonly value: PlotKind
+  readonly label: string
+  readonly maxClasses: number
+  // The plot's name in file names.
+  readonly fileName: string
+}
+
+const DOT_PLOT_KIND: PlotKindInfo = {
+  value: 'dot',
+  label: 'Dot plot',
+  maxClasses: DOT_PLOT_MAX_CLASSES,
+  fileName: 'dot-plot',
+}
+
+export const PLOT_KINDS: readonly PlotKindInfo[] = [
+  DOT_PLOT_KIND,
+  {
+    value: 'violin',
+    label: 'Violin',
+    maxClasses: VIOLIN_MAX_CLASSES,
+    fileName: 'violin',
+  },
+  {
+    value: 'heatmap',
+    label: 'Heatmap',
+    maxClasses: HEATMAP_MAX_CLASSES,
+    fileName: 'heatmap',
+  },
+]
+
+// `plot=` (22-D8); the dot plot when the link names none or another.
+export function parsePlotKind(value: string | undefined): PlotKind {
+  return PLOT_KINDS.find((kind) => kind.value === value)?.value ?? DOT_PLOT_KIND.value
+}
+
+export function plotKindInfo(kind: PlotKind): PlotKindInfo {
+  return PLOT_KINDS.find((info) => info.value === kind) ?? DOT_PLOT_KIND
+}
 
 export interface PlotSetOption {
   readonly id: string
@@ -151,4 +195,36 @@ export function plotGroupsInput(groups: readonly PlotGroup[]): PlotGroupsInput {
 
 function uniqueGenes(genes: readonly string[]): readonly string[] {
   return [...new Set(genes)]
+}
+
+// The read budget (22-D7). Reads up to the prompt size start at once; larger
+// ones wait for Read, and over the limit, the size of the cell profile
+// budget for dense Zarr, the panel reads nothing.
+export const PLOT_READ_PROMPT_BYTES = 32 * 1024 * 1024
+export const PLOT_READ_MAX_BYTES = 256 * 1024 * 1024
+
+export type PlotReadDecision = 'read' | 'ask' | 'refuse'
+
+// `approvedBytes` is the largest read Read has allowed for the dataset: a
+// CSR matrix costs the same for every gene, so asking again for each gene
+// added would ask the same question.
+export function plotReadDecision(bytes: number, approvedBytes: number): PlotReadDecision {
+  if (bytes > PLOT_READ_MAX_BYTES) return 'refuse'
+  return bytes > PLOT_READ_PROMPT_BYTES && bytes > approvedBytes ? 'ask' : 'read'
+}
+
+// Sizes as the budget is set, in binary units.
+export function formatReadSize(bytes: number): string {
+  const mebibytes = bytes / (1024 * 1024)
+
+  if (mebibytes >= 1024) return `${(mebibytes / 1024).toFixed(1)} GiB`
+  if (mebibytes >= 10) return `${Math.round(mebibytes).toLocaleString()} MiB`
+  return mebibytes < 0.1 ? 'under 0.1 MiB' : `${mebibytes.toFixed(1)} MiB`
+}
+
+// "Gad1", "Gad1 and Sst", or "3 genes".
+export function plotGenesPhrase(genes: readonly string[]): string {
+  if (genes.length === 1) return genes[0] ?? '1 gene'
+  if (genes.length === 2) return `${genes[0] ?? ''} and ${genes[1] ?? ''}`
+  return `${genes.length.toLocaleString()} genes`
 }

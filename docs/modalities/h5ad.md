@@ -343,19 +343,29 @@ and the image row shows about 2.7 s after the link opens.
 
 ## Feature Read Paths
 
-| Feature                 | Path                                                                                                                                                            |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Cell rendering          | Points from `overview()`, radius 2 px, scaled with `pointSizeFullViewScale: 0.5`; no overview cap or viewport clipping                                          |
-| Selected-gene colouring | `geneExpression(bbox, genes)` scans cells in the bbox in obs order, reads per-cell counts for the requested genes, and sums them for multi-gene signatures      |
-| Annotations             | `annotations({ groupId })` on demand when an annotation set is loaded                                                                                           |
-| Embeddings              | `embeddings({ kind })` re-reads the selected obsm matrix                                                                                                        |
-| Metadata colouring      | `metadataTrackValues(trackId)` for the selected track when `Cell color` is Metadata (`useCellMetadataTrackValues`), including a shared link that opens that way |
-| Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                                   |
-| ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                        |
-| ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                          |
+| Feature                 | Path                                                                                                                                                                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Cell rendering          | Points from `overview()`, radius 2 px, scaled with `pointSizeFullViewScale: 0.5`; no overview cap or viewport clipping                                                                                                           |
+| Selected-gene colouring | `geneExpression(bbox, genes)` scans cells in the bbox in obs order, reads per-cell counts for the requested genes, and sums them for multi-gene signatures                                                                       |
+| Annotations             | `annotations({ groupId })` on demand when an annotation set is loaded                                                                                                                                                            |
+| Embeddings              | `embeddings({ kind })` re-reads the selected obsm matrix                                                                                                                                                                         |
+| Metadata colouring      | `metadataTrackValues(trackId)` for the selected track when `Cell color` is Metadata (`useCellMetadataTrackValues`), including a shared link that opens that way                                                                  |
+| Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                                                                                                    |
+| ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                                                                                         |
+| ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                                                                                           |
+| Plots panel             | `geneValues(genes)`: every cell of each gene. In memory, one scan; over HTTP or by range, a CSC column per gene, the dense chunks that hold the gene (all of a dense `.h5ad` `/X`, in bands of whole cells), or all of a CSR `X` |
 
 Transcripts, Magic Lens, nucleus boundaries, and ROI transcript export are
 disabled by `H5AD_PLATFORM_ADAPTER` (`src/features/app-shell/platformAdapter.ts`).
+
+The Plots panel holds reads over HTTP to a budget ([plan 22-D7](../plan/phases/22-plots-panel.md)),
+counted as the values and indices a read decodes. A CSR `X` reads all of
+itself for any gene, so a table with more than about 4.2 million stored
+values (32 MiB of float32 values and int32 indices) asks before reading, and
+one with more than about 33.5 million is refused. A dense `X` reads every chunk that holds a gene:
+chunked by gene, one chunk; in zarr's default chunks for a large table, 64
+chunks of 1,969 × 406 values per gene, about 195 MiB. CSC reads only each
+gene's column. See [Choosing CSR or CSC](../h5ad-reference.md#choosing-csr-or-csc).
 
 ## Source Files
 

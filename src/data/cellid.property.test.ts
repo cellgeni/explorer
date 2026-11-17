@@ -1,6 +1,12 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { asCellId, cellIdToInt, cellIdToIntPair, intToCellId } from './cellid'
+import {
+  asCellId,
+  cellIdToInt,
+  cellIdToIntPair,
+  intToCellId,
+  xeniumCellIdText,
+} from './cellid'
 
 const uint32Arb = fc.integer({ min: 0, max: 0xffffffff })
 
@@ -21,6 +27,14 @@ describe('Xenium cell ID codec (property)', () => {
 
         expect(cellIdToIntPair(cellId)).toEqual({ prefix, suffix })
         expect(cellIdToInt(cellId)).toEqual({ prefix, suffix })
+      }),
+    )
+  })
+
+  it('writes the same text from character codes', () => {
+    fc.assert(
+      fc.property(uint32Arb, uint32Arb, (prefix, suffix) => {
+        expect(xeniumCellIdText(prefix, suffix)).toBe(intToCellId(prefix, suffix))
       }),
     )
   })

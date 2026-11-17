@@ -464,7 +464,11 @@ export function downloadTextFile(
   text: string,
   mimeType = 'text/csv;charset=utf-8',
 ): void {
-  const url = URL.createObjectURL(new Blob([text], { type: mimeType }))
+  downloadBlob(fileName, new Blob([text], { type: mimeType }))
+}
+
+export function downloadBlob(fileName: string, blob: Blob): void {
+  const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
 
   link.href = url

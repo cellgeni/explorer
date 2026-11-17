@@ -2,7 +2,6 @@ import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
 } from '../../data/datasetDiagnostics'
-import type { Platform } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
 
 interface DatasetLoadDiagnosticState {
@@ -119,9 +118,10 @@ export interface DiagnosticsDumpOptions {
 
 export function createDiagnosticsDump(
   options: DiagnosticsDumpOptions,
+  generatedAt = new Date(),
 ): Record<string, unknown> {
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt: generatedAt.toISOString(),
     datasetUrl: options.datasetUrl,
     location: readCurrentLocation(),
     performanceBudget: options.performanceBudget,
@@ -340,19 +340,12 @@ function summarizeDiagnosticsState(
   return { status: state.status }
 }
 
-// Named after the loaded dataset's platform, or the platform diagnostics found
-// when nothing is loaded.
-export function diagnosticsDumpFileName(
-  datasetPlatform: Platform | null,
-  diagnosticsState: DatasetDiagnosticsDiagnosticState,
-): string {
-  const platform =
-    datasetPlatform ??
-    (diagnosticsState.status === 'ready' && diagnosticsState.report.platform !== 'unknown'
-      ? diagnosticsState.report.platform
-      : 'dataset')
+// `diagnostics-2026-11-17T14-05-09Z.json`: the dump's `generatedAt` in UTC to
+// the second, with `-` for `:` so the name is valid on every file system.
+export function diagnosticsDumpFileName(generatedAt: Date): string {
+  const timestamp = generatedAt.toISOString().slice(0, 19).replaceAll(':', '-')
 
-  return `${platform}-diagnostics.json`
+  return `diagnostics-${timestamp}Z.json`
 }
 
 function readCurrentLocation(): string | undefined {

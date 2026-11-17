@@ -1,4 +1,4 @@
-import type { GeneValues } from '../data/geneValues'
+import type { GeneValues, GeneValuesRowIds } from '../data/geneValues'
 import type {
   PlotGroupsInput,
   PlotGroupsSummary,
@@ -10,7 +10,7 @@ import type {
 // for after `groups` use those groups. Gene values are transferred.
 
 export type PlotStatsWorkerRequest =
-  | { readonly type: 'rows'; readonly rowIds: readonly string[] }
+  | { readonly type: 'rows'; readonly rowIds: GeneValuesRowIds }
   | { readonly type: 'groups'; readonly id: number; readonly groups: PlotGroupsInput }
   | { readonly type: 'gene'; readonly values: GeneValues }
   | { readonly type: 'stats'; readonly id: number; readonly genes: readonly string[] }

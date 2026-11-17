@@ -1,155 +1,65 @@
-import { geneExpressionColor } from '../../rendering/deckLayerColors'
-import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import {
-  plotGroupMean,
-  plotGroupPercentExpressing,
-  type PlotGeneStats,
-  type PlotScale,
-} from './plotStats'
-import type { PlotGroup } from './plotsPanelModel'
+  formatPlotNumber,
+  intensityColour,
+  meanCellTitle,
+  plotMeans,
+  plotSummary,
+  plotTableGroupLabel,
+  selectionGroupTitle,
+  truncateLabel,
+  formatPercent,
+  type PlotMeanCell,
+  type PlotMeansInput,
+  type PlotPaint,
+  type PlotRange,
+  type PlotTable,
+} from './plotModel'
 import { svgNode, type SvgChild, type SvgNode } from './svgMarkup'
 
 // The dot plot (plan 22-E): groups down, genes across, as in Scanpy. A
 // dot's area is the share of the group's cells expressing the gene, and its
 // colour the group's mean, with zeros counted.
 
-// Mean colours: one range for every gene, or each gene's own lowest to
-// highest mean, like Scanpy's standard_scale='var' (22-D8).
-export type PlotColourMode = 'shared' | 'per-gene'
+export type DotPlotInput = PlotMeansInput
 
-export interface DotPlotGene {
-  readonly gene: string
-  // Null while the gene is read, or after it failed.
-  readonly stats: PlotGeneStats | null
-}
+// The dot plot and the heatmap: group means on a grid of groups down and
+// genes across.
+export type DotPlotModel = MeansPlotModel
 
-export interface DotPlotInput {
-  readonly groups: readonly Pick<PlotGroup, 'id' | 'label' | 'color' | 'kind'>[]
-  readonly genes: readonly DotPlotGene[]
-  readonly scale: PlotScale
-  readonly colour: PlotColourMode
-  readonly colorScale: GeneExpressionColorScale
-  // What the values are, for titles: "log1p(counts)", "X".
-  readonly valueLabel: string
-  readonly setLabel: string | null
-}
-
-export interface DotPlotCell {
-  readonly groupIndex: number
-  readonly geneIndex: number
-  readonly cells: number
-  readonly expressing: number
-  // 0 to 100; null for an empty group.
-  readonly percent: number | null
-  readonly mean: number | null
-  // Position on the colour scale, 0 to 1.
-  readonly intensity: number | null
-}
-
-export interface DotPlotModel extends DotPlotInput {
-  readonly cells: readonly DotPlotCell[]
+export interface MeansPlotModel extends PlotMeansInput {
+  readonly cells: readonly PlotMeanCell[]
   // The shared colour range; null per gene or without means.
-  readonly colourRange: { readonly low: number; readonly high: number } | null
+  readonly colourRange: PlotRange | null
   // The summary screen readers hear for the plot.
   readonly summary: string
   readonly description: string
 }
 
 export function dotPlotModel(input: DotPlotInput): DotPlotModel {
-  const cells: DotPlotCell[] = []
-
-  input.genes.forEach(({ stats }, geneIndex) => {
-    if (stats === null) return
-
-    input.groups.forEach((_, groupIndex) => {
-      const group = stats.groups[groupIndex]
-      if (group === undefined) return
-      cells.push({
-        groupIndex,
-        geneIndex,
-        cells: group.cells,
-        expressing: group.expressing,
-        percent: plotGroupPercentExpressing(group),
-        mean: plotGroupMean(group, input.scale),
-        intensity: null,
-      })
-    })
-  })
-
-  const colourRange = input.colour === 'shared' ? meanRange(cells) : null
-  const geneRanges = input.genes.map((_, geneIndex) =>
-    meanRange(cells.filter((cell) => cell.geneIndex === geneIndex)),
-  )
-  const coloured = cells.map((cell) => {
-    const range = colourRange ?? geneRanges[cell.geneIndex] ?? null
-    return { ...cell, intensity: intensityIn(cell.mean, range) }
-  })
-
   return {
     ...input,
-    cells: coloured,
-    colourRange,
-    summary: dotPlotSummary(input),
+    ...plotMeans(input),
+    summary: plotSummary('Dot plot', input),
     description: `Dot size is the share of each group's cells with the gene above 0. Colour is the mean ${input.valueLabel} over all the group's cells${input.colour === 'per-gene' ? ', scaled from each gene’s lowest to highest mean' : ''}.`,
   }
 }
 
-function meanRange(
-  cells: readonly DotPlotCell[],
-): { readonly low: number; readonly high: number } | null {
-  let low = 0
-  let high = Number.NEGATIVE_INFINITY
-
-  for (const { mean } of cells) {
-    if (mean === null) continue
-    low = Math.min(low, mean)
-    high = Math.max(high, mean)
+// The dot plot's and the heatmap's numbers.
+export function meansPlotTable(model: MeansPlotModel): PlotTable {
+  return {
+    caption: model.summary,
+    columns: ['Gene', 'Cells', '% expressing', `Mean ${model.valueLabel}`],
+    rows: model.cells.map((cell) => ({
+      key: `${cell.groupIndex}:${cell.geneIndex}`,
+      group: plotTableGroupLabel(model.groups[cell.groupIndex]),
+      values: [
+        model.genes[cell.geneIndex]?.gene ?? '',
+        cell.cells.toLocaleString(),
+        cell.percent === null ? '–' : formatPercent(cell.percent),
+        cell.mean === null ? '–' : formatPlotNumber(cell.mean),
+      ],
+    })),
   }
-
-  return Number.isFinite(high) ? { low, high } : null
-}
-
-function intensityIn(
-  mean: number | null,
-  range: { readonly low: number; readonly high: number } | null,
-): number | null {
-  if (mean === null || range === null) return null
-  const span = range.high - range.low
-  return span > 0 ? Math.min(1, Math.max(0, (mean - range.low) / span)) : 0
-}
-
-function dotPlotSummary({ genes, groups, setLabel }: DotPlotInput): string {
-  const geneNames = genes.map(({ gene }) => gene)
-  const geneText =
-    geneNames.length <= 3
-      ? listText(geneNames)
-      : `${geneNames.slice(0, 2).join(', ')} and ${geneNames.length - 2} more genes`
-  const groupText = `${groups.length.toLocaleString()} ${groups.length === 1 ? 'group' : 'groups'}`
-
-  return `Dot plot of ${geneText} across ${groupText}${setLabel === null ? '' : ` of ${setLabel}`}`
-}
-
-function listText(items: readonly string[]): string {
-  if (items.length <= 1) return items[0] ?? 'no genes'
-  return `${items.slice(0, -1).join(', ')} and ${items.at(-1) ?? ''}`
-}
-
-// Paints for the plot's text and lines: CSS classes in the panel, which
-// follow the theme, and colours written out in an exported file.
-export interface PlotPaint {
-  readonly root: Readonly<Record<string, string>>
-  readonly text: Readonly<Record<string, string>>
-  readonly muted: Readonly<Record<string, string>>
-  readonly rule: Readonly<Record<string, string>>
-  readonly background: string | null
-}
-
-export const PANEL_PLOT_PAINT: PlotPaint = {
-  root: { class: 'plot-svg' },
-  text: { class: 'plot-text' },
-  muted: { class: 'plot-muted' },
-  rule: { class: 'plot-rule' },
-  background: null,
 }
 
 const CELL = 22
@@ -173,6 +83,27 @@ export function dotPlotSvg(
   paint: PlotPaint,
   idPrefix: string,
 ): SvgNode {
+  return meansGridSvg(model, paint, idPrefix, {
+    mark: 'dot',
+    columnWidth: CELL,
+    rowHeight: CELL,
+  })
+}
+
+// Group means on a grid of groups down and genes across: a dot sized by the
+// share expressing, or a tile (the heatmap's file, 22-D10).
+export interface MeansGridLayout {
+  readonly mark: 'dot' | 'tile'
+  readonly columnWidth: number
+  readonly rowHeight: number
+}
+
+export function meansGridSvg(
+  model: MeansPlotModel,
+  paint: PlotPaint,
+  idPrefix: string,
+  { mark, columnWidth, rowHeight }: MeansGridLayout,
+): SvgNode {
   const groupLabels = model.groups.map((group) =>
     truncateLabel(group.label, GROUP_LABEL_MAX_CHARS),
   )
@@ -184,10 +115,13 @@ export function dotPlotSvg(
   const headerHeight =
     Math.max(4, ...geneLabels.map((label) => label.length)) * CHAR_WIDTH
   const top = PAD + headerHeight + 8
-  const gridWidth = model.genes.length * CELL
-  const gridHeight = model.groups.length * CELL
+  const gridWidth = model.genes.length * columnWidth
+  const gridHeight = model.groups.length * rowHeight
   const legendTop = top + gridHeight + 18
-  const width = Math.ceil(Math.max(left + gridWidth + PAD, LEGEND_WIDTH + 2 * PAD))
+  const legendWidth = mark === 'dot' ? LEGEND_WIDTH : COLOUR_BAR_WIDTH
+  const width = Math.ceil(Math.max(left + gridWidth + PAD, legendWidth + 2 * PAD))
+  const swatch = Math.min(SWATCH, rowHeight - 2)
+  const labelSize = rowHeight < 16 ? 10 : 11
   const height = Math.ceil(legendTop + 58 + PAD)
   const titleId = `${idPrefix}-title`
   const descId = `${idPrefix}-desc`
@@ -195,31 +129,35 @@ export function dotPlotSvg(
   const selectionRows = model.groups.filter((group) => group.kind === 'selection').length
 
   const rows: SvgChild[] = model.groups.map((group, groupIndex) => {
-    const y = top + groupIndex * CELL + CELL / 2
+    const y = top + groupIndex * rowHeight + rowHeight / 2
     return svgNode('g', {}, [
       svgNode('title', {}, [
-        group.kind === 'selection'
-          ? `${group.label}: the selection. Its cells are in their classes too.`
-          : group.label,
+        group.kind === 'selection' ? selectionGroupTitle(group.label) : group.label,
       ]),
       svgNode('rect', {
         x: left - 6 - SWATCH,
-        y: y - SWATCH / 2,
-        width: SWATCH,
-        height: SWATCH,
+        y: y - swatch / 2,
+        width: swatch,
+        height: swatch,
         rx: group.kind === 'selection' ? 0 : 2,
         fill: group.color,
       }),
       svgNode(
         'text',
-        { ...paint.text, x: left - 12 - SWATCH, y: y + 4, 'text-anchor': 'end' },
+        {
+          ...paint.text,
+          x: left - 12 - SWATCH,
+          y: y + labelSize * 0.36,
+          'text-anchor': 'end',
+          ...(labelSize === 11 ? {} : { 'font-size': labelSize }),
+        },
         [groupLabels[groupIndex] ?? ''],
       ),
     ])
   })
 
   const columns: SvgChild[] = model.genes.map(({ gene }, geneIndex) => {
-    const x = left + geneIndex * CELL + CELL / 2 + 4
+    const x = left + geneIndex * columnWidth + columnWidth / 2 + 4
     return svgNode(
       'text',
       { ...paint.text, transform: `translate(${x} ${top - 6}) rotate(-90)` },
@@ -227,25 +165,44 @@ export function dotPlotSvg(
     )
   })
 
-  const dots: SvgChild[] = model.cells.map((cell) => {
+  const marks: SvgChild[] = model.cells.map((cell) => {
     const group = model.groups[cell.groupIndex]
     const gene = model.genes[cell.geneIndex]?.gene ?? ''
-    const x = left + cell.geneIndex * CELL
-    const y = top + cell.groupIndex * CELL
+    const x = left + cell.geneIndex * columnWidth
+    const y = top + cell.groupIndex * rowHeight
+    const fill = intensityColour(model.colorScale, cell.intensity ?? 0)
     const radius = cell.percent === null ? 0 : dotRadius(cell.percent)
+    const shape =
+      mark === 'tile'
+        ? cell.mean === null
+          ? []
+          : [svgNode('rect', { x, y, width: columnWidth, height: rowHeight, fill })]
+        : radius > 0
+          ? [
+              svgNode('circle', {
+                cx: x + columnWidth / 2,
+                cy: y + rowHeight / 2,
+                r: radius,
+                fill,
+              }),
+            ]
+          : []
     return svgNode('g', {}, [
-      svgNode('title', {}, [dotTitle(group?.label ?? '', gene, cell, model.valueLabel)]),
-      svgNode('rect', { x, y, width: CELL, height: CELL, fill: 'transparent' }),
-      ...(radius > 0
+      svgNode('title', {}, [
+        meanCellTitle(group?.label ?? '', gene, cell, model.valueLabel),
+      ]),
+      ...(mark === 'dot'
         ? [
-            svgNode('circle', {
-              cx: x + CELL / 2,
-              cy: y + CELL / 2,
-              r: radius,
-              fill: intensityColour(model.colorScale, cell.intensity ?? 0),
+            svgNode('rect', {
+              x,
+              y,
+              width: columnWidth,
+              height: rowHeight,
+              fill: 'transparent',
             }),
           ]
         : []),
+      ...shape,
     ])
   })
 
@@ -257,8 +214,8 @@ export function dotPlotSvg(
             ...paint.rule,
             x1: PAD,
             x2: left + gridWidth,
-            y1: top + selectionRows * CELL,
-            y2: top + selectionRows * CELL,
+            y1: top + selectionRows * rowHeight,
+            y2: top + selectionRows * rowHeight,
           }),
         ]
       : []
@@ -282,10 +239,10 @@ export function dotPlotSvg(
         : [svgNode('rect', { x: 0, y: 0, width, height, fill: paint.background })]),
       svgNode('g', {}, rows),
       svgNode('g', {}, columns),
+      svgNode('g', {}, marks),
       svgNode('g', {}, selectionRule),
-      svgNode('g', {}, dots),
-      sizeLegend(PAD, legendTop, paint),
-      colourLegend(PAD + 180, legendTop, model, paint, gradientId),
+      ...(mark === 'dot' ? [sizeLegend(PAD, legendTop, paint)] : []),
+      colourLegend(mark === 'dot' ? PAD + 180 : PAD, legendTop, model, paint, gradientId),
     ],
   )
 }
@@ -318,7 +275,7 @@ function sizeLegend(x: number, y: number, paint: PlotPaint): SvgNode {
 function colourLegend(
   x: number,
   y: number,
-  model: DotPlotModel,
+  model: MeansPlotModel,
   paint: PlotPaint,
   gradientId: string,
 ): SvgNode {
@@ -368,37 +325,4 @@ function colourLegend(
       [highLabel],
     ),
   ])
-}
-
-function dotTitle(
-  group: string,
-  gene: string,
-  cell: DotPlotCell,
-  valueLabel: string,
-): string {
-  if (cell.percent === null) return `${group}, ${gene}: no cells`
-  return `${group}, ${gene}: ${cell.cells.toLocaleString()} cells, ${formatPercent(cell.percent)} expressing, mean ${valueLabel} ${formatPlotNumber(cell.mean ?? 0)}`
-}
-
-// The colour scale's colour at an intensity, opaque.
-export function intensityColour(
-  scale: GeneExpressionColorScale,
-  intensity: number,
-): string {
-  const [red = 0, green = 0, blue = 0] = geneExpressionColor(scale, intensity)
-  return `rgb(${red}, ${green}, ${blue})`
-}
-
-export function truncateLabel(label: string, maxChars: number): string {
-  return label.length <= maxChars ? label : `${label.slice(0, maxChars - 1)}…`
-}
-
-const PLOT_NUMBER = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 })
-
-export function formatPlotNumber(value: number): string {
-  return PLOT_NUMBER.format(value)
-}
-
-export function formatPercent(percent: number): string {
-  return `${percent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
 }

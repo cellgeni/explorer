@@ -11,6 +11,8 @@ import {
 
 const ROW_IDS = ['a', 'b', 'c', 'd']
 
+const MiB = 1024 * 1024
+
 function source(
   geneValues: GeneValuesSource['geneValues'] = async (genes) =>
     genes.map((gene) =>
@@ -18,10 +20,14 @@ function source(
         ? { gene, error: 'Bad is not in the expression matrix.' }
         : { gene, rows: new Uint32Array([0, 2]), values: new Float32Array([2, 4]) },
     ),
+  estimate: GeneValuesSource['estimateGeneValuesRead'] = async () => ({
+    kind: 'read',
+    bytes: 0,
+  }),
 ): GeneValuesSource & { readonly geneValues: ReturnType<typeof vi.fn> } {
   return {
     geneValuesRowIds: async () => ROW_IDS,
-    estimateGeneValuesRead: async () => ({ kind: 'read', bytes: 0 }),
+    estimateGeneValuesRead: estimate,
     geneValues: vi.fn(geneValues),
   }
 }
@@ -185,6 +191,69 @@ describe('usePlotsWorkflow (plan 22-D12)', () => {
     expect(result.current.stats.has('Actb')).toBe(true)
   })
 
+  it('waits for Read before a large read, then reads that size without asking', async () => {
+    // A CSR matrix over HTTP: every read fetches all of it.
+    const dataset = source(undefined, async (genes) => ({
+      kind: 'read',
+      bytes: genes.length === 0 ? 0 : 100 * MiB,
+      detail: 'Stored by cell.',
+    }))
+    const { result, rerender } = renderHook((props) => usePlotsWorkflow(props), {
+      initialProps: input(dataset),
+    })
+
+    await waitFor(() => {
+      expect(result.current.status).toBe('confirm')
+    })
+    expect(result.current.largeRead).toEqual({
+      genes: ['Actb', 'Gad1'],
+      bytes: 100 * MiB,
+      detail: 'Stored by cell.',
+    })
+    expect(dataset.geneValues).not.toHaveBeenCalled()
+
+    act(() => {
+      result.current.confirmRead()
+    })
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready')
+    })
+    expect(result.current.largeRead).toBeNull()
+
+    rerender(input(dataset, { genes: ['Actb', 'Gad1', 'Vim'] }))
+    await waitFor(() => {
+      expect(result.current.stats.has('Vim')).toBe(true)
+    })
+    expect(dataset.geneValues).toHaveBeenCalledTimes(2)
+  })
+
+  it('refuses a read over the budget, keeping the genes already plotted', async () => {
+    const dataset = source(undefined, async (genes) => ({
+      kind: 'read',
+      bytes: genes.includes('Huge') ? 300 * MiB : 0,
+    }))
+    const { result, rerender } = renderHook((props) => usePlotsWorkflow(props), {
+      initialProps: input(dataset),
+    })
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready')
+    })
+
+    rerender(input(dataset, { genes: ['Actb', 'Gad1', 'Huge'] }))
+    await waitFor(() => {
+      expect(result.current.status).toBe('too-large')
+    })
+
+    expect(result.current.largeRead?.genes).toEqual(['Huge'])
+    expect(result.current.stats.has('Actb')).toBe(true)
+    expect(dataset.geneValues).toHaveBeenCalledTimes(1)
+    // Read does nothing for a refused read.
+    act(() => {
+      result.current.confirmRead()
+    })
+    expect(result.current.status).toBe('too-large')
+  })
+
   it('reads nothing while the panel is closed', async () => {
     const dataset = source()
     renderHook((props) => usePlotsWorkflow(props), {
@@ -204,10 +273,10 @@ describe('openPlotsSource', () => {
       openPlotsSource(async () => dataset as never, 'https://example.test', 'H5AD'),
     ).resolves.toEqual({ kind: 'ready', source: dataset })
     await expect(
-      openPlotsSource(async () => ({}) as never, 'https://example.test', 'Xenium'),
+      openPlotsSource(async () => ({}) as never, 'https://example.test', 'Image'),
     ).resolves.toMatchObject({
       kind: 'unavailable',
-      reason: expect.stringContaining('Plots are not available for Xenium yet.'),
+      reason: expect.stringContaining('Plots are not available for Image:'),
     })
   })
 })

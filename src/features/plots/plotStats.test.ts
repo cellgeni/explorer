@@ -1,10 +1,14 @@
 import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
+import { intToCellId } from '../../data/cellid'
 import type { GeneValues } from '../../data/geneValues'
 import {
+  PLOT_DENSITY_MAX_GROUPS,
+  PLOT_DENSITY_STEPS,
   plotGroupMean,
   plotGroupPercentExpressing,
   PlotStatsStore,
+  type PlotDistribution,
   type PlotGroupStats,
 } from './plotStats'
 
@@ -152,6 +156,29 @@ describe('plot statistics (plan 22-B, 22-C)', () => {
     expect(store.hasGene('A')).toBe(true)
   })
 
+  it('joins classes to Xenium rows given as integer pairs', () => {
+    const store = new PlotStatsStore()
+    // Three rows, three integers each, as cell_features/cell_id may hold.
+    store.setRows({
+      kind: 'xenium',
+      pairs: new Uint32Array([1, 1, 0, 2, 1, 0, 3, 1, 0]),
+      stride: 3,
+      count: 3,
+    })
+    store.addGene(gene('Actb', [[2, 5]]))
+
+    const summary = store.setGroups({
+      classes: [[intToCellId(3, 1), intToCellId(1, 1), 'aaaaaaaa-9']],
+      selection: null,
+    })
+
+    expect(summary).toMatchObject({ classSizes: [2], unmatchedIds: 1 })
+    expect(store.stats(['Actb']).stats[0]?.groups[0]).toMatchObject({
+      cells: 2,
+      sum: 5,
+    })
+  })
+
   it('needs groups before stats, and forgets genes for another dataset', () => {
     const store = storeWith(gene('A', [[0, 1]]))
 
@@ -208,4 +235,167 @@ describe('plot statistics (plan 22-B, 22-C)', () => {
       { numRuns: 80 },
     )
   })
+
+  it('gives quartiles with the zeros counted, and of expressing cells only', () => {
+    const store = storeWith(
+      gene('Actb', [
+        [0, 3],
+        [2, 1],
+        [4, 7],
+      ]),
+    )
+    store.setGroups({ classes: [ROWS], selection: null })
+    const stored = store.stats(['Actb']).stats[0]?.distributions.stored
+
+    // Every cell: 0, 0, 0, 1, 3, 7.
+    expect(stored).toMatchObject({ low: 0, high: 7 })
+    expect(stored?.all[0]).toMatchObject({
+      count: 6,
+      min: 0,
+      q1: 0,
+      median: 0.5,
+      q3: 2.5,
+      max: 7,
+    })
+    // Expressing cells: 1, 3, 7.
+    expect(stored?.expressing[0]).toMatchObject({
+      count: 3,
+      min: 1,
+      q1: 2,
+      median: 3,
+      q3: 5,
+      max: 7,
+    })
+  })
+
+  it('has no distribution for an empty group, and no log1p below 0', () => {
+    const store = storeWith(
+      gene('Scaled', [
+        [0, -2],
+        [1, 0.5],
+      ]),
+    )
+    store.setGroups({ classes: [['a', 'b', 'c'], ['missing']], selection: null })
+    const { distributions } = store.stats(['Scaled']).stats[0] ?? {}
+
+    expect(distributions?.log1p).toBeNull()
+    // Negative values come before the zero of the cell that stores none.
+    expect(distributions?.stored.all[0]).toMatchObject({ min: -2, median: 0, max: 0.5 })
+    expect(distributions?.stored.all[1]).toBeNull()
+    expect(distributions?.stored.expressing[1]).toBeNull()
+  })
+
+  it('makes densities only for as many groups as a violin shows', () => {
+    const rows = Array.from(
+      { length: PLOT_DENSITY_MAX_GROUPS + 1 },
+      (_, row) => `r${row}`,
+    )
+    const store = new PlotStatsStore()
+    store.setRows(rows)
+    store.addGene(gene('Actb', [[0, 2]]))
+
+    store.setGroups({ classes: rows.slice(1).map((id) => [id]), selection: null })
+    expect(
+      store.stats(['Actb']).stats[0]?.distributions.stored.all[0]?.density,
+    ).toHaveLength(PLOT_DENSITY_STEPS)
+
+    store.setGroups({ classes: rows.map((id) => [id]), selection: null })
+    const many = store.stats(['Actb']).stats[0]?.distributions.stored
+    expect(many?.all[0]).toMatchObject({ median: 2, density: null })
+  })
+
+  it('matches dense quartiles, and densities sum to 1, for any values and groups', () => {
+    fc.assert(
+      fc.property(
+        fc.array(
+          fc.oneof(
+            fc.constant(0),
+            fc.integer({ min: 1, max: 40 }),
+            fc.float({ min: -5, max: 5, noNaN: true }).map(Math.fround),
+          ),
+          { minLength: 1, maxLength: 40 },
+        ),
+        fc.array(fc.integer({ min: -1, max: 3 }), { minLength: 40, maxLength: 40 }),
+        fc.boolean(),
+        (values, classOfRow, withSelection) => {
+          const rowIds = values.map((_, row) => `cell-${row}`)
+          const classes = [0, 1, 2, 3].map((classIndex) =>
+            rowIds.filter((_, row) => classOfRow[row] === classIndex),
+          )
+          const selection = withSelection
+            ? rowIds.filter((_, row) => row % 3 === 0)
+            : null
+          const store = new PlotStatsStore()
+          store.setRows(rowIds)
+          store.setGroups({ classes, selection })
+          store.addGene(
+            gene(
+              'G',
+              values.flatMap((value, row) =>
+                value === 0 ? [] : [[row, value] as const],
+              ),
+            ),
+          )
+          const stats = store.stats(['G']).stats[0]
+          const memberLists = [
+            ...(selection === null ? [] : [values.filter((_, row) => row % 3 === 0)]),
+            ...classes.map((_, classIndex) =>
+              values.filter((_, row) => classOfRow[row] === classIndex),
+            ),
+          ]
+          const negative = values.some((value) => value < 0)
+
+          expect(stats?.distributions.log1p === null).toBe(negative)
+
+          for (const [scale, transform] of [
+            ['stored', (value: number) => value],
+            ['log1p', Math.log1p],
+          ] as const) {
+            const distributions = stats?.distributions[scale]
+            if (distributions === null || distributions === undefined) continue
+
+            memberLists.forEach((members, group) => {
+              const every = members.map(transform).sort((a, b) => a - b)
+              const expressing = members
+                .filter((value) => value > 0)
+                .map(transform)
+                .sort((a, b) => a - b)
+              expectDistribution(distributions.all[group] ?? null, every)
+              expectDistribution(distributions.expressing[group] ?? null, expressing)
+            })
+          }
+        },
+      ),
+      { numRuns: 80 },
+    )
+  })
 })
+
+function denseQuantile(sorted: readonly number[], share: number): number {
+  const position = (sorted.length - 1) * share
+  const below = Math.floor(position)
+  const value = sorted[below] ?? 0
+  return value + (position - below) * ((sorted[below + 1] ?? value) - value)
+}
+
+function expectDistribution(
+  distribution: PlotDistribution | null,
+  sorted: readonly number[],
+): void {
+  if (sorted.length === 0) {
+    expect(distribution).toBeNull()
+    return
+  }
+
+  expect(distribution?.count).toBe(sorted.length)
+  expect(distribution?.min).toBeCloseTo(sorted[0] ?? 0, 5)
+  expect(distribution?.q1).toBeCloseTo(denseQuantile(sorted, 0.25), 5)
+  expect(distribution?.median).toBeCloseTo(denseQuantile(sorted, 0.5), 5)
+  expect(distribution?.q3).toBeCloseTo(denseQuantile(sorted, 0.75), 5)
+  expect(distribution?.max).toBeCloseTo(sorted.at(-1) ?? 0, 5)
+
+  const density = distribution?.density ?? new Float32Array()
+  expect(density).toHaveLength(PLOT_DENSITY_STEPS)
+  expect(density.every((value) => value >= 0 && Number.isFinite(value))).toBe(true)
+  expect(density.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1, 4)
+}
