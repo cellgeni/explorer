@@ -206,7 +206,7 @@ describes its button (`About {term}`) for screen readers. The texts are in
 | Cells › Advanced › `Expression detail`   | Level of detail (LOD): Auto LOD's samples, Exact region and All cells    |
 | Cells › `Combine genes`                  | Sum, Mean and Z-score                                                    |
 | Transcripts › `Detail`                   | Level of detail: when Auto shows points or density                       |
-| Transcripts › `Min QV`                   | The Phred-scaled quality value, and that density always counts QV ≥ 20   |
+| Transcripts › `Min QV`                   | The Phred-scaled quality value, and which density follows it             |
 | Settings and Advanced › `Boundary limit` | When outlines are drawn instead of points, and what a higher limit costs |
 
 One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.ts`,
@@ -225,11 +225,11 @@ tooltip does only that, and the tool stays.
 - **Measure**: drag in the view to measure; see
   [Distance measurement](#distance-measurement).
 - **Magic Lens** is the cursor lens (D14): a circle follows the mouse and the
-  Magic Lens card summarises the transcripts (Xenium) or expression (Visium
-  HD) under it; queries are debounced by 320 ms. It is not offered on images,
-  and says "Unavailable" where the platform cannot scan (Atera, Visium, H5AD,
-  SpatialData). It has no QV filter: the `Min QV` setting changed nothing
-  (F21) and was removed in 15.5-C.
+  Magic Lens card summarises the transcripts (Xenium, Atera) or expression
+  (Visium HD) under it; queries are debounced by 320 ms. It is not offered on
+  images, and says "Unavailable" where the platform cannot scan (Visium,
+  MERSCOPE, H5AD, SpatialData). It has no QV filter: the `Min QV` setting
+  changed nothing (F21) and was removed in 15.5-C.
 
 ### Settings
 
@@ -272,6 +272,7 @@ Alt-click on a class's checkbox shows only that class.
 | `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                              | When the dataset image is an OME-TIFF or OME-Zarr z-stack                              |
 | `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                       | Visium. Lists the images the dataset can place; switches in place; `vimg`              |
 | `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg` |
+| `Morphology`                      | Select: 2D (all stains), 3D DAPI stack                                     | 2D                                                      | Atera with both images. A change reloads the dataset; the stack gets `Z plane`; `aimg` |
 | Image channels                    | `MorphologyChannelControls`                                                | See below                                               | When the image has channels                                                            |
 | `Custom image URL` + `Load Layer` | URL form                                                                   |                                                         | Once a dataset is ready                                                                |
 | Custom layer rows                 | Name, channel count, `x` remove, opacity slider (100%)                     |                                                         | Per loaded custom layer                                                                |
@@ -361,7 +362,8 @@ Loaded state:
   lists only the classes whose name contains the text, with "N of M" beside
   it; the all-classes checkbox then checks or unchecks only those, so
   unchecking all and searching shows one family of classes. Escape clears it. Each row has a colour
-  picker, a visibility checkbox, the label without the set prefix, a bar of
+  picker (the colour the dataset stores for the class, such as Atera's
+  Azimuth colours, else the next palette colour), a visibility checkbox, the label without the set prefix, a bar of
   its size, its cell count and share of the set, and `×`. With the eye shut,
   cells, previews and the legend go back to the default colouring; with
   every class unchecked, all cells fade. Visium spots hidden off the tissue
@@ -405,7 +407,12 @@ Atera stores transcripts per gene (see
 - With All features, or no genes selected, the layer is cell-summary squares
   from cell transcript counts, and Exact waits for genes.
 - `Gene-only calls` is disabled, and transcripts have no FOV.
-- Density always counts QV ≥ 20; `Min QV` applies to exact points.
+- Density follows `Min QV`: at 20 it is the binned store's counts; at another
+  value it bins the selected genes' rows from `transcripts.zarr.zip`, unless
+  that is over 2,000,000 rows, when the squares count QV ≥ 20 and the message
+  says so.
+- `Export Transcripts` and the Cell card's z histogram cover the selected
+  genes, and ask for genes when none are selected.
 
 | Control              | Type             | Range / default                                | Notes                                                                                  |
 | -------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
@@ -419,7 +426,7 @@ Atera stores transcripts per gene (see
 | Gene list            | Rows             | See below                                      | With exact points coloured by Feature (Phase 15.4-C)                                   |
 | `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
 | `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
-| `Min QV`             | Number           | 0–40; 20                                       | Exact points                                                                           |
+| `Min QV`             | Number           | 0–40; 20                                       | Exact points; Atera density too                                                        |
 | `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
 | `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
 | `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
@@ -591,8 +598,8 @@ Method:
 
 Exports: `Export GeoJSON` (`{name}-roi.geojson`), `Export Cells`
 (`{name}-cells.csv`, up to 50,000 cells), `Export Transcripts`
-(`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, also shown for
-H5AD and SpatialData), or for Visium HD `Export Barcodes`
+(`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, the selected
+genes on Atera, also shown for H5AD and SpatialData), or for Visium HD `Export Barcodes`
 (`{name}-barcodes.csv`, up to 50,000 bins).
 
 In these CSVs and `annotations.csv`, a field that starts with `=`, `+`, `-`,
@@ -1153,25 +1160,25 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
 
 From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 
-| Feature                                        | Xenium                  | Atera            | Visium        | Visium HD         | MERSCOPE         | H5AD             | SpatialData      | Image            |
-| ---------------------------------------------- | ----------------------- | ---------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- | ---------------- |
-| Cells section                                  | ✓                       | ✓                | Spots         | Bins              | ✓                | ✓                | ✓                | —                |
-| Transcripts section                            | ✓                       | Selected genes   | —             | —                 | —                | —                | —                | —                |
-| All-feature transcripts                        | Native density + exact  | Cell summary     | —             | —                 | —                | —                | —                | —                |
-| ROI transcript export                          | ✓                       | —                | —             | —                 | —                | —                | —                | —                |
-| Magic Lens                                     | ✓                       | Unavailable      | Unavailable   | ✓                 | Unavailable      | Unavailable      | Unavailable      | —                |
-| Cell card                                      | Cell Info + Z histogram | Observations     | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
-| Cell-id annotations                            | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓                | —                |
-| GeoJSON shapes                                 | ✓                       | ✓                | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
-| Cell boundaries                                | ✓                       | ✓                | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
-| Nucleus boundaries                             | ✓                       | ✓                | —             | ✓                 | —                | —                | —                | —                |
-| Selection card                                 | Cells                   | Cells            | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
-| Plots panel                                    | ✓                       | ✓                | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
-| Bin size control                               | —                       | —                | —             | ✓                 | —                | —                | —                | —                |
-| SpatialData view options                       | —                       | —                | —             | —                 | —                | —                | ✓                | —                |
-| Visium image, library, and off-tissue controls | —                       | —                | ✓             | —                 | —                | —                | —                | —                |
-| Boundary limit                                 | ✓                       | ✓                | ✓             | Disabled          | ✓                | ✓                | ✓                | ✓                |
-| Morphology checkbox label                      | Morphology image        | Morphology image | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image | Morphology image |
+| Feature                                        | Xenium                  | Atera                                       | Visium        | Visium HD         | MERSCOPE         | H5AD             | SpatialData      | Image            |
+| ---------------------------------------------- | ----------------------- | ------------------------------------------- | ------------- | ----------------- | ---------------- | ---------------- | ---------------- | ---------------- |
+| Cells section                                  | ✓                       | ✓                                           | Spots         | Bins              | ✓                | ✓                | ✓                | —                |
+| Transcripts section                            | ✓                       | Selected genes                              | —             | —                 | —                | —                | —                | —                |
+| All-feature transcripts                        | Native density + exact  | Cell summary                                | —             | —                 | —                | —                | —                | —                |
+| ROI transcript export                          | ✓                       | Selected genes                              | —             | —                 | —                | —                | —                | —                |
+| Magic Lens                                     | ✓                       | ✓                                           | Unavailable   | ✓                 | Unavailable      | Unavailable      | Unavailable      | —                |
+| Cell card                                      | Cell Info + Z histogram | Observations + Z histogram (selected genes) | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
+| Cell-id annotations                            | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓                | —                |
+| GeoJSON shapes                                 | ✓                       | ✓                                           | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
+| Cell boundaries                                | ✓                       | ✓                                           | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
+| Nucleus boundaries                             | ✓                       | ✓                                           | —             | ✓                 | —                | —                | —                | —                |
+| Selection card                                 | Cells                   | Cells                                       | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
+| Plots panel                                    | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
+| Bin size control                               | —                       | —                                           | —             | ✓                 | —                | —                | —                | —                |
+| SpatialData view options                       | —                       | —                                           | —             | —                 | —                | —                | ✓                | —                |
+| Visium image, library, and off-tissue controls | —                       | —                                           | ✓             | —                 | —                | —                | —                | —                |
+| Boundary limit                                 | ✓                       | ✓                                           | ✓             | Disabled          | ✓                | ✓                | ✓                | ✓                |
+| Morphology checkbox label                      | Morphology image        | Morphology image                            | Tissue image  | Tissue image      | Morphology image | Morphology image | Morphology image | Morphology image |
 
 ## Shareable URL
 

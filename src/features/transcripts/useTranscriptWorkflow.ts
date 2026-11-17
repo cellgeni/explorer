@@ -57,6 +57,7 @@ import {
   transcriptLayerSlow,
   transcriptLayerUnavailable,
   transcriptLayerWaiting,
+  normalizeTranscriptMinQv,
   transcriptAggregateFallbackMessage,
   transcriptExactManualLoadMessage,
   transcriptGeneDensityMissingMessage,
@@ -456,11 +457,14 @@ export function useTranscriptWorkflow({
         return
       }
 
+      // Per-gene density follows Min QV (the binned store counts QV ≥ 20;
+      // other thresholds bin the genes' rows).
       const maxBins = TRANSCRIPT_NATIVE_DENSITY_MAX_BINS
+      const minQv = normalizeTranscriptMinQv(transcriptMinQv)
       const aggregateKey = transcriptAggregateRequestKey(
         loadState.url,
         currentViewportDetail.bbox,
-        { mode: 'density', featureNames, maxBins },
+        { mode: 'density', featureNames, maxBins, minQv },
       )
 
       if (geneAggregate?.key !== aggregateKey) {
@@ -497,6 +501,7 @@ export function useTranscriptWorkflow({
           mode: 'density',
           featureNames,
           maxBins,
+          minQv,
         })
           .then((result) => {
             if (!request.isCurrent() || request.signal.aborted) {
@@ -575,6 +580,8 @@ export function useTranscriptWorkflow({
                   selectedFeatureCount: result.selectedFeatureNames.length,
                   binCount: result.bins.length,
                   sourceFile: result.sourceFile,
+                  minQv: result.minQv,
+                  qvOverBudget: result.qvOverBudget,
                 }),
                 visibleTranscriptEstimate: geneEstimate,
                 scaleMax: result.scaleMax,

@@ -310,6 +310,10 @@
         "morphologyZchunkstore": {
           "$ref": "#/$defs/path",
           "description": "`.zchunkstore` tile-offset sidecar covering every morphology_2d channel file. Replaces the default lookup next to each TIFF (`<file>.zchunkstore`)."
+        },
+        "morphology3d": {
+          "$ref": "#/$defs/path",
+          "description": "3D DAPI stack, offered instead of the morphology image. Default: the morphology_3d image listed in experiment.spatial."
         }
       },
       "additionalProperties": false

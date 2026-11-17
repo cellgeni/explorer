@@ -203,6 +203,7 @@ function Probe({
     },
     setters: {
       setMerscopeImageState: noopSetter,
+      setAteraImageState: noopSetter,
       setAnalysisEmbeddingState: noopSetter,
       setAnnotationColors: noopSetter,
       setAnnotationGroupState: noopSetter,
@@ -1355,6 +1356,7 @@ describe('useDatasetLifecycle', () => {
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => []),
       morphologyUrl: vi.fn(async () => morphologyUrl),
+      morphology3dUrl: vi.fn(async () => null),
     }
     const loadMorphologyImage = vi.fn(async () => ({
       url: morphologyUrl,
@@ -1363,6 +1365,7 @@ describe('useDatasetLifecycle', () => {
       channelLoaders: [],
     }))
     const loadDatasetOverview = vi.fn(async () => [])
+    const setAteraImageState = vi.fn()
     const setDatasetPlatform = vi.fn()
     const setLoadState = vi.fn()
     const setShowCellBoundaries = vi.fn()
@@ -1391,7 +1394,7 @@ describe('useDatasetLifecycle', () => {
         setShowNucleusBoundaries={setShowNucleusBoundaries}
         startDatasetLoadRef={startDatasetLoadRef}
         warmDatasetForRoi={warmDatasetForRoi}
-        extraSetters={{ setSelectedAnnotationGroupId }}
+        extraSetters={{ setSelectedAnnotationGroupId, setAteraImageState }}
       />,
     )
 
@@ -1400,6 +1403,10 @@ describe('useDatasetLifecycle', () => {
     })
 
     expect(setDatasetPlatform).toHaveBeenCalledWith('atera')
+    // Without a 3D stack there is no image choice.
+    expect(setAteraImageState).not.toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'ready' }),
+    )
     expect(setShowCellBoundaries).toHaveBeenCalledWith(true)
     expect(setShowNucleusBoundaries).toHaveBeenCalledWith(false)
     // graphclust, as on Xenium (15.1-I, run on the AnnData path in 15.5-B).
@@ -1417,6 +1424,68 @@ describe('useDatasetLifecycle', () => {
     })
     expect(loadDatasetOverview).not.toHaveBeenCalled()
     expect(warmDatasetForRoi).not.toHaveBeenCalled()
+  })
+
+  it('opens the Atera 3D DAPI stack when the link asks for it', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const datasetUrl = 'https://example.test/atera'
+    const morphology3dUrl = `${datasetUrl}/morphology_3d/ch0000_dapi_3d.ome.tif`
+    const dataset = {
+      overview: vi.fn(async () => [
+        { cellId: 'aaaaaaaa-1', position: { x: micrometers(1), y: micrometers(2) } },
+      ]),
+      genePanel: vi.fn(async () => ['UMOD']),
+      annotationGroups: vi.fn(async () => []),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      morphologyUrl: vi.fn(async () => `${datasetUrl}/morphology_2d/ch0000_dapi.ome.tif`),
+      morphology3dUrl: vi.fn(async () => morphology3dUrl),
+    }
+    const loadMorphologyImage = vi.fn(async () => ({
+      url: morphology3dUrl,
+      loader: {} as never,
+      channels: [],
+      channelLoaders: [],
+    }))
+    const setAteraImageState = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'atera' as const,
+          baseUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(
+            async () => dataset,
+          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        loadMorphologyImage={loadMorphologyImage}
+        startDatasetLoadRef={startDatasetLoadRef}
+        extraSetters={{ setAteraImageState }}
+        initialShareableState={{ datasetUrl, ateraImage: '3d', morphologyZPlane: 7 }}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(datasetUrl, true)
+    })
+
+    expect(setAteraImageState).toHaveBeenLastCalledWith({ status: 'ready', choice: '3d' })
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalledWith(datasetUrl, {
+        candidates: [morphology3dUrl],
+        signal: expect.any(AbortSignal),
+        onFallback: expect.any(Function),
+        zPlane: 7,
+        zchunkStoreUrl: null,
+      })
+    })
   })
 
   it('loads Visium HD binned overview without starting Xenium loaders', async () => {

@@ -6,7 +6,7 @@
 import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { intToCellId } from '../data/cellid'
-import { micrometers, type BBox } from '../data/coords'
+import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type {
   TranscriptAggregateBin,
   TranscriptAggregateResult,
@@ -39,11 +39,16 @@ export interface AteraTranscriptsOptions {
   readonly binned: () => Promise<AteraTranscriptFile>
   readonly transcripts: () => Promise<AteraTranscriptFile>
   readonly openZipStore: (url: string) => Promise<{ readonly store: zarr.AsyncReadable }>
+  // ATERA_QV_DENSITY_ROW_LIMIT by default.
+  readonly qvDensityRowLimit?: number
 }
 
 export interface AteraTranscriptAggregateOptions {
   readonly featureNames: readonly string[]
   readonly maxBins?: number
+  // Squares count transcripts at this QV or above; QV 20 by default, the
+  // binned store's threshold.
+  readonly minQv?: number
   readonly signal?: AbortSignal
 }
 
@@ -52,6 +57,9 @@ export interface AteraTranscriptViewportOptions {
   readonly pointLimit?: number
   readonly groupLimit?: number
   readonly minQv?: number
+  // Keeps only points it accepts, before the point limit: an ROI lasso or a
+  // cell outline inside `bbox`.
+  readonly contains?: (point: DataPoint) => boolean
   readonly signal?: AbortSignal
 }
 
@@ -95,6 +103,12 @@ const DEFAULT_MAX_BINS = 1_500
 const DEFAULT_POINT_LIMIT = 100_000
 const DEFAULT_GROUP_LIMIT = 18
 const DEFAULT_MIN_QV = 20
+// binned_transcripts.zarr.zip counts QV ≥ 20 transcripts in 5 µm bins.
+const BINNED_MIN_QV = 20
+const BINNED_BIN_SIZE = 5
+// Rows of transcripts.zarr.zip one QV density view may bin: about 28 MB of
+// location and quality_score.
+export const ATERA_QV_DENSITY_ROW_LIMIT = 2_000_000
 const BINNED_GENE_CACHE_LIMIT = 32
 const LOCATION_CACHE_LIMIT = 48
 const READ_CONCURRENCY = 6
@@ -108,6 +122,7 @@ export class AteraTranscripts {
   private readonly tileArrays = new Map<string, Promise<ZarrArray>>()
   private readonly geneOffsets = new Map<string, Promise<ZarrChunk>>()
   private readonly locations = new Map<string, Promise<ZarrChunk>>()
+  private readonly qualities = new Map<string, Promise<Float32Array>>()
 
   constructor(options: AteraTranscriptsOptions) {
     this.options = options
@@ -136,8 +151,37 @@ export class AteraTranscripts {
   }
 
   // Density squares summing the selected genes, coarsened from 5 µm until the
-  // box spans at most `maxBins` squares, and the selected-gene count in the box.
+  // box spans at most `maxBins` squares, and the selected-gene count in the
+  // box. The binned store counts QV ≥ 20 transcripts; another `minQv` bins
+  // the genes' rows from transcripts.zarr.zip instead, unless that is more
+  // than ATERA_QV_DENSITY_ROW_LIMIT rows, when the QV ≥ 20 squares say so.
   async aggregates(
+    bbox: BBox,
+    options: AteraTranscriptAggregateOptions,
+  ): Promise<TranscriptAggregateResult> {
+    const minQv = options.minQv ?? BINNED_MIN_QV
+
+    if (minQv === BINNED_MIN_QV) {
+      return this.binnedAggregates(bbox, options)
+    }
+
+    const qvResult = await this.qvAggregates(bbox, options, minQv)
+
+    if ('bins' in qvResult) {
+      return qvResult
+    }
+
+    return {
+      ...(await this.binnedAggregates(bbox, options)),
+      qvOverBudget: {
+        minQv,
+        rowCount: qvResult.rowCount,
+        rowLimit: this.qvDensityRowLimit(),
+      },
+    }
+  }
+
+  private async binnedAggregates(
     bbox: BBox,
     options: AteraTranscriptAggregateOptions,
   ): Promise<TranscriptAggregateResult> {
@@ -155,13 +199,7 @@ export class AteraTranscripts {
       nativeBinSize,
       options.maxBins ?? DEFAULT_MAX_BINS,
     )
-    const covered: BBox = {
-      minX: micrometers(Math.floor(bbox.minX / binSize) * binSize),
-      minY: micrometers(Math.floor(bbox.minY / binSize) * binSize),
-      maxX: micrometers((Math.floor(bbox.maxX / binSize) + 1) * binSize),
-      maxY: micrometers((Math.floor(bbox.maxY / binSize) + 1) * binSize),
-    }
-    const tiles = ateraTranscriptGridTilesForBbox(binned.grid, covered)
+    const tiles = ateraTranscriptGridTilesForBbox(binned.grid, coveredBox(bbox, binSize))
     const geneTiles = await Promise.all(
       openedGenes.map(async (gene) => ({
         name: gene.name,
@@ -179,29 +217,103 @@ export class AteraTranscripts {
       bbox,
       binSize,
     })
-    const aggregateBins = [...bins.values()]
-      .sort((left, right) => left.binY - right.binY || left.binX - right.binX)
-      .map((bin) => densityBinToAggregateBin(bin, level, binSize))
 
-    return {
-      bins: aggregateBins,
-      level: {
-        level,
-        gridSizeMicrometers: binSize,
-        gridKeys: aggregateBins.map((bin) => `${bin.binX},${bin.binY}`),
-        transcriptCounts: aggregateBins.map((bin) => bin.count),
-      },
-      source: 'native-zarr',
-      selectedFeatureNames: genes.map((gene) => gene.name),
-      scaleMax: Math.max(1, ...aggregateBins.map((bin) => bin.count)),
-      visibleTranscriptCount: visibleCount,
+    return densityResult(bins, {
+      level,
+      binSize,
+      genes,
+      visibleCount,
       sourceFile: binned.label,
+      minQv: BINNED_MIN_QV,
+    })
+  }
+
+  // The selected genes' rows in the tiles under the squares, binned by
+  // location after the QV filter; only the row count when there are more
+  // rows than one view may bin.
+  private async qvAggregates(
+    bbox: BBox,
+    options: AteraTranscriptAggregateOptions,
+    minQv: number,
+  ): Promise<TranscriptAggregateResult | { readonly rowCount: number }> {
+    const transcripts = await this.transcripts()
+    throwIfAborted(options.signal)
+    const genes = ateraGeneIndexes(transcripts.geneNames, options.featureNames)
+    const { level, binSize } = ateraDensityBinSize(
+      bbox,
+      BINNED_BIN_SIZE,
+      options.maxBins ?? DEFAULT_MAX_BINS,
+    )
+    const ranges = await this.geneRanges(transcripts, coveredBox(bbox, binSize), genes)
+    throwIfAborted(options.signal)
+    const rowCount = ranges.reduce((total, range) => total + range.end - range.start, 0)
+
+    if (rowCount > this.qvDensityRowLimit()) {
+      return { rowCount }
     }
+
+    const minBinX = Math.floor(bbox.minX / binSize)
+    const maxBinX = Math.floor(bbox.maxX / binSize)
+    const minBinY = Math.floor(bbox.minY / binSize)
+    const maxBinY = Math.floor(bbox.maxY / binSize)
+    const bins = new Map<string, AteraDensityBin>()
+    let visibleCount = 0
+
+    await mapWithConcurrency(ranges, READ_CONCURRENCY, async (range) => {
+      throwIfAborted(options.signal)
+      const [location, qualities] = await Promise.all([
+        this.geneLocations(transcripts, range),
+        this.geneQualities(transcripts, range),
+      ])
+
+      for (let row = 0; row < range.end - range.start; row += 1) {
+        if ((qualities[row] ?? 0) < minQv) {
+          continue
+        }
+
+        const x = matrixValue(location, row, 0)
+        const y = matrixValue(location, row, 1)
+        const binX = Math.floor(x / binSize)
+        const binY = Math.floor(y / binSize)
+
+        if (binX < minBinX || binX > maxBinX || binY < minBinY || binY > maxBinY) {
+          continue
+        }
+
+        if (x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY) {
+          visibleCount += 1
+        }
+
+        const key = `${binX},${binY}`
+        let bin = bins.get(key)
+
+        if (bin === undefined) {
+          bin = { binX, binY, count: 0, featureCounts: new Map() }
+          bins.set(key, bin)
+        }
+
+        bin.count += 1
+        bin.featureCounts.set(
+          range.gene.name,
+          (bin.featureCounts.get(range.gene.name) ?? 0) + 1,
+        )
+      }
+    })
+    throwIfAborted(options.signal)
+
+    return densityResult(bins, {
+      level,
+      binSize,
+      genes,
+      visibleCount,
+      sourceFile: transcripts.label,
+      minQv,
+    })
   }
 
   // Exact points for the selected genes. Rows within a gene are not sorted
   // spatially, so each gene's whole row range in each visible tile is read,
-  // then filtered by box and QV. Cell ids and nucleus overlap are read only
+  // then filtered by box (and `contains`) and QV. Cell ids and nucleus overlap are read only
   // for the rows that remain. Over the point limit, the first `pointLimit`
   // points are returned, as the Xenium reader does.
   async viewport(
@@ -213,25 +325,8 @@ export class AteraTranscripts {
     const pointLimit = Math.max(1, Math.floor(options.pointLimit ?? DEFAULT_POINT_LIMIT))
     const minQv = options.minQv ?? DEFAULT_MIN_QV
     const genes = ateraGeneIndexes(transcripts.geneNames, options.featureNames)
-    const tiles = ateraTranscriptGridTilesForBbox(transcripts.grid, bbox)
-    const offsets = await Promise.all(
-      tiles.map((tile) => this.tileGeneOffsets(transcripts, tile)),
-    )
+    const ranges = await this.geneRanges(transcripts, bbox, genes)
     throwIfAborted(options.signal)
-    const ranges: GeneRange[] = []
-
-    tiles.forEach((tile, tileIndex) => {
-      const offset = offsets[tileIndex]
-
-      for (const gene of genes) {
-        const start = offset === undefined ? 0 : matrixValue(offset, gene.index, 0)
-        const end = offset === undefined ? 0 : matrixValue(offset, gene.index, 1)
-
-        if (end > start) {
-          ranges.push({ tile, gene, start, end })
-        }
-      }
-    })
 
     const inBox = await mapWithConcurrency(ranges, READ_CONCURRENCY, async (range) => {
       throwIfAborted(options.signal)
@@ -242,7 +337,14 @@ export class AteraTranscripts {
         const x = matrixValue(location, row, 0)
         const y = matrixValue(location, row, 1)
 
-        if (x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY) {
+        if (
+          x >= bbox.minX &&
+          x <= bbox.maxX &&
+          y >= bbox.minY &&
+          y <= bbox.maxY &&
+          (options.contains === undefined ||
+            options.contains({ x: micrometers(x), y: micrometers(y) }))
+        ) {
           rows.push(row)
         }
       }
@@ -527,6 +629,38 @@ export class AteraTranscripts {
     return promise
   }
 
+  private qvDensityRowLimit(): number {
+    return this.options.qvDensityRowLimit ?? ATERA_QV_DENSITY_ROW_LIMIT
+  }
+
+  // Each gene's non-empty [start, end) rows in each tile the box touches.
+  private async geneRanges(
+    transcripts: TranscriptStore,
+    bbox: BBox,
+    genes: readonly GeneRange['gene'][],
+  ): Promise<GeneRange[]> {
+    const tiles = ateraTranscriptGridTilesForBbox(transcripts.grid, bbox)
+    const offsets = await Promise.all(
+      tiles.map((tile) => this.tileGeneOffsets(transcripts, tile)),
+    )
+    const ranges: GeneRange[] = []
+
+    tiles.forEach((tile, tileIndex) => {
+      const offset = offsets[tileIndex]
+
+      for (const gene of genes) {
+        const start = offset === undefined ? 0 : matrixValue(offset, gene.index, 0)
+        const end = offset === undefined ? 0 : matrixValue(offset, gene.index, 1)
+
+        if (end > start) {
+          ranges.push({ tile, gene, start, end })
+        }
+      }
+    })
+
+    return ranges
+  }
+
   // `gene_offset` [genes, 2]: each gene's [start, end) rows in the tile.
   private tileGeneOffsets(
     transcripts: TranscriptStore,
@@ -569,6 +703,40 @@ export class AteraTranscripts {
       })
     this.locations.set(key, promise)
     evictOldest(this.locations, LOCATION_CACHE_LIMIT)
+    return promise
+  }
+
+  // A gene range's `quality_score`, decoded once, for QV density.
+  private geneQualities(
+    transcripts: TranscriptStore,
+    range: GeneRange,
+  ): Promise<Float32Array> {
+    const key = `${range.tile.key}/${range.gene.index}`
+    const cached = this.qualities.get(key)
+
+    if (cached !== undefined) {
+      this.qualities.delete(key)
+      this.qualities.set(key, cached)
+      return cached
+    }
+
+    const promise = this.tileArray(transcripts, range.tile, 'quality_score')
+      .then(async (array) => {
+        const chunk = await zarr.get(array, [zarr.slice(range.start, range.end), 0])
+        const values = numericData(chunk)
+        const halfFloat = transcripts.halfFloatArrays.has(array.path)
+
+        return Float32Array.from({ length: values.length }, (_value, index) => {
+          const value = values[index] ?? 0
+          return halfFloat ? halfFloatToNumber(value) : value
+        })
+      })
+      .catch((error: unknown) => {
+        this.qualities.delete(key)
+        throw error
+      })
+    this.qualities.set(key, promise)
+    evictOldest(this.qualities, LOCATION_CACHE_LIMIT)
     return promise
   }
 
@@ -635,6 +803,49 @@ function keepFirstRows<Entry extends { readonly rows: number[]; readonly qvs: nu
   }
 
   return kept
+}
+
+// Whole `binSize` squares covering the box, aligned to the origin.
+function coveredBox(bbox: BBox, binSize: number): BBox {
+  return {
+    minX: micrometers(Math.floor(bbox.minX / binSize) * binSize),
+    minY: micrometers(Math.floor(bbox.minY / binSize) * binSize),
+    maxX: micrometers((Math.floor(bbox.maxX / binSize) + 1) * binSize),
+    maxY: micrometers((Math.floor(bbox.maxY / binSize) + 1) * binSize),
+  }
+}
+
+function densityResult(
+  bins: ReadonlyMap<string, AteraDensityBin>,
+  options: {
+    readonly level: number
+    readonly binSize: number
+    readonly genes: readonly { readonly name: string }[]
+    readonly visibleCount: number
+    readonly sourceFile: string
+    readonly minQv: number
+  },
+): TranscriptAggregateResult {
+  const { level, binSize } = options
+  const aggregateBins = [...bins.values()]
+    .sort((left, right) => left.binY - right.binY || left.binX - right.binX)
+    .map((bin) => densityBinToAggregateBin(bin, level, binSize))
+
+  return {
+    bins: aggregateBins,
+    level: {
+      level,
+      gridSizeMicrometers: binSize,
+      gridKeys: aggregateBins.map((bin) => `${bin.binX},${bin.binY}`),
+      transcriptCounts: aggregateBins.map((bin) => bin.count),
+    },
+    source: 'native-zarr',
+    selectedFeatureNames: options.genes.map((gene) => gene.name),
+    scaleMax: Math.max(1, ...aggregateBins.map((bin) => bin.count)),
+    visibleTranscriptCount: options.visibleCount,
+    sourceFile: options.sourceFile,
+    minQv: options.minQv,
+  }
 }
 
 function densityBinToAggregateBin(

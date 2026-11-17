@@ -98,6 +98,8 @@ export interface ShareableState {
   // MERSCOPE: the .vzg stain and z plane shown, as `<stain>_z<plane>`, or
   // `none`.
   readonly merscopeImage?: string
+  // Atera: `3d` when the 3D DAPI stack is shown instead of the 2D image.
+  readonly ateraImage?: string
 }
 
 type MutableShareableState = {
@@ -172,6 +174,7 @@ export function parseShareableState(hash: string): ShareableState {
   const spatialDataMicrometersPerUnit = parsePositiveNumber(params.get('sdUm'))
   const visiumImage = readString(params, 'vimg')
   const merscopeImage = readString(params, 'mimg')
+  const ateraImage = readString(params, 'aimg')
   const visiumLibrary = readString(params, 'vlib')
   const visiumOffTissue = parseBoolean(params.get('voff'))
 
@@ -407,6 +410,10 @@ export function parseShareableState(hash: string): ShareableState {
     state.merscopeImage = merscopeImage
   }
 
+  if (ateraImage !== undefined) {
+    state.ateraImage = ateraImage
+  }
+
   if (visiumLibrary !== undefined) {
     state.visiumLibrary = visiumLibrary
   }
@@ -620,6 +627,7 @@ export function formatShareableState(state: ShareableState): string {
 
   setOptionalString(params, 'vimg', state.visiumImage)
   setOptionalString(params, 'mimg', state.merscopeImage)
+  setOptionalString(params, 'aimg', state.ateraImage)
   setOptionalString(params, 'vlib', state.visiumLibrary)
 
   if (state.visiumOffTissue !== undefined) {

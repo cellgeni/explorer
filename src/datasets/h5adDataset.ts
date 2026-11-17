@@ -298,6 +298,8 @@ type H5adLabels =
       readonly kind: 'codes'
       readonly codes: NumericArrayLike
       readonly categories: readonly string[]
+      // One `#rrggbb` per category, when the store keeps them.
+      readonly colors?: readonly string[]
     }
   | { readonly kind: 'strings'; readonly strings: readonly string[] }
 
@@ -870,6 +872,15 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
           ? track.values.categories.map((category) => [category, []])
           : [],
       )
+      const colorByLabel = new Map<string, string>()
+
+      if (track.values.kind === 'codes' && track.values.colors !== undefined) {
+        const { categories, colors } = track.values
+        categories.forEach((category, index) => {
+          const color = colors[index]
+          if (color !== undefined) colorByLabel.set(category, color)
+        })
+      }
 
       for (let index = 0; index < cache.cellIds.length; index += 1) {
         const label = labelAt(track.values, index)
@@ -886,10 +897,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
       for (const [label, cellIds] of cellIdsByLabel) {
         if (cellIds.length === 0) continue
+        const color = colorByLabel.get(label)
         annotations.push({
           id: `analysis:${slug(track.label)}:${slug(label)}`,
           label: `${track.label}: ${label}`,
           cellIds,
+          ...(color === undefined ? {} : { color }),
         })
       }
     }
@@ -2904,11 +2917,17 @@ async function readObservationTracks(
           continue
         }
 
+        const colors = await readCategoryColors(entity, `/obs/${key}`, categories.length)
         categoricalTracks.push({
           id: key,
           label: key,
           categoryCount: categories.length,
-          values: { kind: 'codes', codes, categories },
+          values: {
+            kind: 'codes',
+            codes,
+            categories,
+            ...(colors === null ? {} : { colors }),
+          },
         })
         continue
       }
@@ -3176,6 +3195,40 @@ async function readCategoricalGroup(
   )
 
   return { codes, categories }
+}
+
+// Atera stores each category's colour beside a categorical column's codes, in
+// `color`, as 0xRRGGBBAA integers (int32). Alpha is dropped. Null when the
+// column has no colours, or not one per category.
+async function readCategoryColors(
+  group: H5GroupLike,
+  path: string,
+  categoryCount: number,
+): Promise<readonly string[] | null> {
+  const entity = group.get('color')
+
+  if (
+    !isDataset(entity) ||
+    entity.shape === null ||
+    entity.shape.length !== 1 ||
+    readShapeDimension(entity.shape, 0, `${path}/color`) !== categoryCount
+  ) {
+    return null
+  }
+
+  const value = await readDatasetValue(entity)
+
+  if (!isNumericArray(value)) {
+    return null
+  }
+
+  const colors = readNumericArray(value, `${path}/color`)
+
+  return Array.from(
+    { length: categoryCount },
+    (_value, index) =>
+      `#${((numericValue(colors, index) >>> 8) & 0xffffff).toString(16).padStart(6, '0')}`,
+  )
 }
 
 // An AnnData nullable array: a group with `values` and a boolean `mask` that is

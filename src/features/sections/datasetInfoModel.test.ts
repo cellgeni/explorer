@@ -51,6 +51,8 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     visiumHdControlState: { status: 'idle' },
     merscopeImageState: { status: 'idle' },
     handleMerscopeImageChange: vi.fn(),
+    ateraImageState: { status: 'idle' },
+    handleAteraImageChange: vi.fn(),
     ...overrides,
   }
 }

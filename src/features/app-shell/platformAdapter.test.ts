@@ -5,7 +5,9 @@ import type { RoiSelection } from '../../data/roiSelection'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import type {
   BoundaryElementsLoader,
+  CellTranscriptDistributionLoader,
   GeneExpressionLoader,
+  RoiTranscriptsLoader,
   SpatialDatasetLoader,
   TranscriptAggregateLoader,
   TranscriptCapabilitiesLoader,
@@ -22,8 +24,10 @@ import {
   PLATFORM_NAMES,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
+  loadPlatformCellTranscriptDistribution,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
+  loadPlatformRoiTranscripts,
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
@@ -662,16 +666,16 @@ describe('platformAdapter', () => {
       annotations: true,
       nucleusBoundaries: true,
       transcripts: true,
-      cellTranscriptDistribution: false,
+      cellTranscriptDistribution: true,
       transcriptGeneOnlyFilter: false,
     })
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
     expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
     expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(true)
     expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:nucleus')
+    // Magic Lens reads ROI cells and matrix rows through the AnnData table.
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
-      loadEnabled: false,
-      unavailableReason: 'Unavailable for Atera',
+      loadEnabled: true,
     })
     await expect(
       loadPlatformBoundaryElements(
@@ -812,6 +816,84 @@ describe('platformAdapter', () => {
       { signal, geneOnly: true },
     )
     expect(getSpatialDataset).toHaveBeenCalledTimes(3)
+  })
+
+  it('exports and bins Atera transcripts for the selected genes only', async () => {
+    const point = {
+      id: '0,0:0',
+      cellId: asCellId('aaaaaaaa-1'),
+      featureName: 'UMOD',
+      fovName: null,
+      position: { x: micrometers(1), y: micrometers(1) },
+      zLocation: 2,
+      qv: 30,
+      isGene: true,
+    }
+    const dataset = {
+      transcriptCapabilities: vi.fn(),
+      transcriptAggregates: vi.fn(),
+      transcriptViewport: vi.fn(async () => ({
+        points: [point],
+        groups: [],
+        hitPointLimit: false,
+      })),
+    }
+    const getSpatialDataset = vi.fn(
+      async () => dataset,
+    ) as unknown as SpatialDatasetLoader
+    const loadRoiTranscripts = vi.fn(async () => []) as RoiTranscriptsLoader
+    const loadCellTranscriptDistribution = vi.fn() as CellTranscriptDistributionLoader
+    const atera = appPlatformAdapterFor(readyLoadState, 'atera')
+    const outline = [
+      { x: micrometers(0), y: micrometers(0) },
+      { x: micrometers(4), y: micrometers(0) },
+      { x: micrometers(4), y: micrometers(4) },
+    ]
+
+    await expect(
+      loadPlatformRoiTranscripts(
+        atera,
+        { getSpatialDataset, loadRoiTranscripts, selectedGenes: ['UMOD'] },
+        readyLoadState.url,
+        selection,
+      ),
+    ).resolves.toMatchObject([{ featureName: 'UMOD', qv: 30, zLocation: 2 }])
+    await expect(
+      loadPlatformCellTranscriptDistribution(
+        atera,
+        { getSpatialDataset, loadCellTranscriptDistribution, selectedGenes: ['UMOD'] },
+        readyLoadState.url,
+        asCellId('aaaaaaaa-1'),
+        { boundaryPolygon: outline, minQv: 20 },
+      ),
+    ).resolves.toMatchObject({ transcriptCount: 1, featureNames: ['UMOD'] })
+
+    expect(dataset.transcriptViewport).toHaveBeenCalledTimes(2)
+    expect(dataset.transcriptViewport).toHaveBeenLastCalledWith(
+      { minX: 0, maxX: 4, minY: 0, maxY: 4 },
+      expect.objectContaining({ featureNames: ['UMOD'], minQv: 20 }),
+    )
+    expect(loadRoiTranscripts).not.toHaveBeenCalled()
+    expect(loadCellTranscriptDistribution).not.toHaveBeenCalled()
+
+    // Xenium keeps its loaders; H5AD has no transcripts to export.
+    await loadPlatformRoiTranscripts(
+      appPlatformAdapterFor(readyLoadState, 'xenium'),
+      { getSpatialDataset, loadRoiTranscripts, selectedGenes: [] },
+      readyLoadState.url,
+      selection,
+    )
+    expect(loadRoiTranscripts).toHaveBeenCalledWith(readyLoadState.url, selection, {})
+    await expect(
+      loadPlatformRoiTranscripts(
+        appPlatformAdapterFor(readyLoadState, 'h5ad'),
+        { getSpatialDataset, loadRoiTranscripts, selectedGenes: [] },
+        readyLoadState.url,
+        selection,
+      ),
+    ).rejects.toThrow(
+      'H5AD and SpatialData datasets do not support ROI transcript export.',
+    )
   })
 
   it('rejects Atera transcript requests when the dataset has no transcript readers', async () => {

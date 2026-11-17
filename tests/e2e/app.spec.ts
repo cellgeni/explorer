@@ -1383,6 +1383,10 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(
     annotationsPanel.getByRole('region', { name: 'azimuth_broad labels' }),
   ).toContainText('Epithelial cell', { timeout: ATERA_LOAD_TIMEOUT_MS })
+  // Azimuth classes take the colours Atera stores beside the column.
+  await expect(
+    annotationsPanel.getByLabel('azimuth_broad: Epithelial cell color'),
+  ).toHaveValue('#007b96')
 
   // With UMOD selected, Atera transcripts are its density from
   // binned_transcripts.zarr.zip; for all features they are cell-summary squares.
@@ -1390,12 +1394,22 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   const transcriptSummary = transcriptsPanel.getByLabel('Transcript overlay summary')
   await page.getByRole('checkbox', { name: 'Show transcripts', exact: true }).check()
   await expect(transcriptsPanel).toContainText(
-    /Showing native 1 selected-feature density squares from binned_transcripts\.zarr\.zip/,
+    /Showing native 1 selected-feature density squares at QV 20\+ from binned_transcripts\.zarr\.zip/,
     { timeout: ATERA_LOAD_TIMEOUT_MS },
   )
   await expect(transcriptSummary).toContainText('Per-gene LOD + exact')
   await expect(transcriptSummary).toContainText(/Rendered[1-9][0-9,]* squares/)
   await expect(page.getByRole('checkbox', { name: 'Gene-only calls' })).toBeDisabled()
+
+  // Density follows Min QV: QV 30 bins UMOD's rows from transcripts.zarr.zip,
+  // or, over the rows one view reads (whole-slide UMOD is), says so.
+  const minQv = transcriptsPanel.getByRole('spinbutton', { name: 'Min QV' })
+  await minQv.fill('30')
+  await expect(transcriptsPanel).toContainText(
+    /at QV 30\+ from transcripts\.zarr\.zip|Min QV 30 needs [0-9,]+ transcript rows here/,
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
+  await minQv.fill('20')
 
   await transcriptsPanel.getByLabel('Feature filter').selectOption('all')
   await expect(transcriptsPanel).toContainText('Set Feature filter to Selected genes', {
@@ -1418,6 +1432,74 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   ).toBeVisible({ timeout: ATERA_LOAD_TIMEOUT_MS })
   await expect(transcriptSummary).toContainText(/Rendered[1-9][0-9,]*/)
   await expect(transcriptsPanel.getByLabel('Top transcript groups')).toContainText('UMOD')
+
+  // The cell at the centre of the view: its UMOD transcripts by z.
+  const canvas = page.getByRole('img', { name: 'Spatial viewer canvas area' })
+  await canvas.focus()
+  const cellCard = page.getByRole('region', { name: 'Cell', exact: true })
+  for (let step = 0; step < 6 && !(await cellCard.isVisible()); step += 1) {
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(1_000)
+    if (!(await cellCard.isVisible())) await page.keyboard.press('ArrowRight')
+  }
+  const cellZ = cellCard.getByLabel('Cell transcript z-axis distribution')
+  await expect(cellZ).toContainText(/[0-9,]+ z records/, {
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
+  await expect(cellZ).toContainText('UMOD')
+  await cellCard.getByRole('button', { name: 'Clear selected cell' }).click()
+
+  // Magic Lens summarises the view's cells from the matrix.
+  const magicLens = await openControls(page, 'magic-lens')
+  await magicLens.getByRole('button', { name: 'Summarise View' }).click()
+  const magicLensCard = page.getByRole('region', { name: 'Magic Lens', exact: true })
+  await expect(magicLensCard.getByLabel('Magic lens gene distribution')).toContainText(
+    'UMOD',
+    { timeout: ATERA_LOAD_TIMEOUT_MS },
+  )
+  await magicLensCard.getByRole('button', { name: 'Clear Magic Lens' }).click()
+
+  // ROI transcript export: the selected genes' transcripts in the box.
+  const boxTool = page.getByRole('button', { name: 'Box selection' })
+  await boxTool.click()
+  const canvasBox = await canvas.boundingBox()
+  expect(canvasBox).not.toBeNull()
+  if (canvasBox === null) return
+  await page.mouse.move(
+    canvasBox.x + canvasBox.width * 0.4,
+    canvasBox.y + canvasBox.height * 0.4,
+  )
+  await page.mouse.down()
+  await page.mouse.move(
+    canvasBox.x + canvasBox.width * 0.6,
+    canvasBox.y + canvasBox.height * 0.6,
+    { steps: 10 },
+  )
+  await page.mouse.up()
+  const roiCard = page.getByRole('region', { name: 'ROI 1' })
+  await expect(roiCard).toContainText(/[1-9][0-9,]* cells? · /, {
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
+  const downloadPromise = page.waitForEvent('download')
+  await roiCard.getByRole('button', { name: 'Export Transcripts' }).click()
+  const download = await downloadPromise
+  expect(download.suggestedFilename()).toBe('roi-1-transcripts.csv')
+  const downloadPath = await download.path()
+  expect(downloadPath).not.toBeNull()
+  if (downloadPath === null) return
+  const transcriptRows = (await readFile(downloadPath, 'utf8')).trim().split('\n')
+  expect(transcriptRows[0]).toBe(
+    'cell_id,feature_name,x_location,y_location,z_location,qv,overlaps_nucleus,is_gene',
+  )
+  expect(transcriptRows[1]).toContain(',UMOD,')
+
+  // The 3D DAPI stack replaces the 2D image and gets Z plane.
+  const imagePanel = await openControls(page, 'image')
+  await imagePanel.getByLabel('Morphology', { exact: true }).selectOption('3d')
+  await expect(page).toHaveURL(/aimg=3d/, { timeout: ATERA_LOAD_TIMEOUT_MS })
+  await expect(await openControls(page, 'image')).toContainText(/8 \/ 15/, {
+    timeout: ATERA_LOAD_TIMEOUT_MS,
+  })
 })
 
 test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell panels @live', async ({

@@ -179,9 +179,10 @@ Paths listed in `experiment.spatial` (`explorer_files`,
 instrument put them. A dataset manifest can relocate any of them; see
 [Dataset manifest](./dataset-manifest.md#atera).
 
-Not read, so they can be left out of a hosted copy: `morphology_3d/` (the 3D
-stack is the largest file in the bundle), `diffexp_genes/`, the HTML
-summaries, and `overview_scan.png`.
+Not read, so they can be left out of a hosted copy: `diffexp_genes/`, the
+HTML summaries, and `overview_scan.png`. `morphology_3d/` is read only when
+the 3D DAPI stack is chosen under Image › `Morphology`; it is the largest file
+in the bundle, and leaving it out removes that choice.
 
 All the zips and OME-TIFFs need byte-range support. Keep the zips stored as
 written; do not recompress them.

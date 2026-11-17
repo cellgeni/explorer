@@ -133,6 +133,15 @@ export interface TranscriptAggregateResult {
     readonly chunkCount: number
     readonly chunkLimit: number
   }
+  // The QV the bins count from, when they filter by QV (Atera).
+  readonly minQv?: number
+  // Set when the bins count from a lower QV than asked, because the asked
+  // one needs more transcript rows than one view may read (Atera).
+  readonly qvOverBudget?: {
+    readonly minQv: number
+    readonly rowCount: number
+    readonly rowLimit: number
+  }
 }
 
 export interface TranscriptViewportOptions {
@@ -161,6 +170,9 @@ export interface TranscriptAggregateOptions {
   readonly mode?: 'density'
   readonly featureNames?: readonly string[]
   readonly maxBins?: number
+  // Per-gene outputs (Atera) count transcripts at this QV or above; Xenium
+  // density counts every transcript.
+  readonly minQv?: number
 }
 
 export type TranscriptLodPlan =
@@ -599,6 +611,7 @@ export function transcriptAggregateRequestKey(
     readonly mode: 'density'
     readonly featureNames: readonly string[]
     readonly maxBins: number
+    readonly minQv?: number
   },
 ): string {
   return [
@@ -611,6 +624,7 @@ export function transcriptAggregateRequestKey(
     options.mode,
     options.maxBins,
     [...options.featureNames].sort((a, b) => a.localeCompare(b)).join(','),
+    ...(options.minQv === undefined ? [] : [`qv${options.minQv}`]),
   ].join('|')
 }
 

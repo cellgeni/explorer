@@ -89,13 +89,35 @@ Delivered:
       7,645 exact points against an estimate of 7,689, about 5 s cold and
       1.4 s with the range cache warm.
 
-## Known Gaps
+## Closed Open Items
 
-- [ ] Transcripts: no ROI transcript export or cell z histogram; density
-      always counts QV ≥ 20 (the binned store's threshold), whatever `Min QV`
-      says.
-- [ ] Magic Lens is unavailable.
-- [ ] Azimuth category colours (`obs/<column>/color`, packed RGBA) are not
-      used.
-- [ ] The 3D DAPI stack (`morphology_3d/`) is not shown with the dataset; it
-      opens as an image URL with a `Z plane` slider.
+Closed 2026-11-17, checked in headless Chromium (GPU) against the reference
+run on the Sanger bucket. See [Atera](../../modalities/atera.md).
+
+- [x] ROI transcript export and the cell z histogram (2026-11-17).
+      **DECISION:** both cover the selected genes, as the transcript layer
+      does: Xenium's every feature would mean reading every row of each tile
+      an ROI or cell touches (up to 52 million). They read through the
+      exact-point reader, whose new `contains` test keeps only points inside
+      the lasso or cell outline before the limit. Without genes, the export
+      fails and asks for them, and the histogram asks for them. A
+      110 × 70 µm box on UMOD-rich tubules exported 1,013 rows in 0.25 s;
+      an epithelial cell's 45 UMOD transcripts binned in 2.4–2.7 s.
+- [x] Density that follows `Min QV` (2026-11-17). At QV 20 the squares are
+      the binned store's; at another value they bin the selected genes' rows
+      of `transcripts.zarr.zip`, up to 2,000,000 rows a view
+      (`ATERA_QV_DENSITY_ROW_LIMIT`), beyond which the QV ≥ 20 squares show
+      with a message naming the row count. At QV 30, whole-slide NPHS1 binned
+      88 squares from `transcripts.zarr.zip`; whole-slide UMOD needs
+      2,142,840 rows and fell back.
+- [x] Magic Lens (2026-11-17). It reads the lens cells and their CSR rows
+      through the AnnData ROI loaders; before, it called the Xenium loaders.
+      Summarise View over 368 cells at 4 px/µm took 3.4 s.
+- [x] Azimuth category colours (2026-11-17). The AnnData reader reads a
+      categorical column's `color` (int32 `0xRRGGBBAA`) when it has one per
+      category, and new classes take it until the user picks another colour.
+- [x] The 3D DAPI stack shown with the dataset (2026-11-17). **DECISION:**
+      an alternative dataset image, `Morphology` in the Image section, that
+      reloads the dataset with `aimg=3d`, as the MERSCOPE stain choice does;
+      the stack gets the existing `Z plane` control. A manifest's 2D sidecar
+      is not applied to it. The switch showed plane 8 of 15 in 1.7 s.

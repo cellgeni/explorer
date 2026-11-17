@@ -222,9 +222,9 @@ returns to the previous dataset, or to the start screen.
 The layer panel's Image section controls dataset image opacity, image
 channels, and custom image layers. Hover tooltips and the coordinate unit are
 in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
-or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, Atera
-`morphology_3d/`, or a BioImage Archive OME-Zarr), `Z plane` picks the plane
-shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
+or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, the Atera 3D DAPI
+stack chosen under `Morphology`, or a BioImage Archive OME-Zarr), `Z plane`
+picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
 rendering settings name. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
@@ -283,7 +283,8 @@ the exact point budget.
 Use `Show transcripts` to enable the overlay. `Detail` selects `Auto`,
 `Density`, or `Exact`. Under Advanced, the `Exact points` meter shows the
 view's transcripts against the budget; `Edit Max` changes the budget. `Min QV`
-and `Gene-only calls` filter exact transcript records. `Opacity` and
+and `Gene-only calls` filter exact transcript records; on Atera, `Min QV`
+filters density too. `Opacity` and
 `Point size` affect only the transcript overlay.
 
 Density square colors are normalized against the largest square on the whole

@@ -48,6 +48,7 @@ function matrixStore(): Map<string, Uint8Array> {
       'centroid_row',
       'cell_area',
       'transcript_counts',
+      'azimuth_broad',
     ],
     'encoding-type': 'dataframe',
   })
@@ -59,6 +60,9 @@ function matrixStore(): Map<string, Uint8Array> {
   array(entries, 'obs/centroid_row', '<f4', [10, 10, 200])
   array(entries, 'obs/cell_area', '<f4', [50, 60, 70])
   array(entries, 'obs/transcript_counts', '<i8', [3, 5, 7])
+  // Atera stores category colours as 0xRRGGBBAA integers.
+  categorical(entries, 'obs/azimuth_broad', [1, 0, 1], ['Endothelial cell', 'Fibroblast'])
+  array(entries, 'obs/azimuth_broad/color', '<i4', [0x008456ff, 0x8e00f8ff])
   group(entries, 'obsm', { 'encoding-type': 'dict' })
   array(entries, 'obsm/X_umap', '<f4', [1, 2, 3, 4, 5, 6], [3, 2])
   group(entries, 'var', {
@@ -245,7 +249,18 @@ describe('AteraDataset', () => {
     await expect(dataset.genePanel()).resolves.toEqual(['GENEA', 'GENEB', 'GENEC'])
     await expect(dataset.annotationGroups()).resolves.toEqual([
       expect.objectContaining({ label: 'leiden_res_1.0', groupCount: 2 }),
+      expect.objectContaining({ label: 'azimuth_broad', groupCount: 2 }),
     ])
+    // Azimuth classes keep the colours Atera stores; Leiden has none.
+    const annotations = await dataset.annotations()
+    expect(annotations.map((annotation) => [annotation.label, annotation.color])).toEqual(
+      [
+        ['leiden_res_1.0: 0', undefined],
+        ['leiden_res_1.0: 1', undefined],
+        ['azimuth_broad: Endothelial cell', '#008456'],
+        ['azimuth_broad: Fibroblast', '#8e00f8'],
+      ],
+    )
     // Boolean columns are 0/1 tracks, as on the h5wasm backend.
     const tracks = await dataset.metadataTracks()
     expect(tracks.map((track) => [track.label, track.min, track.max])).toEqual([
@@ -409,15 +424,38 @@ describe('AteraDataset', () => {
     await expect(dataset.morphologyUrl()).resolves.toBe(
       `${BASE_URL}/morphology_2d/ch0000_dapi.ome.tif`,
     )
+    // This experiment.spatial names no 3D stack.
+    await expect(dataset.morphology3dUrl()).resolves.toBeNull()
+  })
+
+  it('locates the 3D DAPI stack from experiment.spatial', async () => {
+    const { dataset } = createDataset({
+      experiment: {
+        images: {
+          morphology_2d_filepath: 'morphology_2d/ch0000_dapi.ome.tif',
+          morphology_3d_filepath: 'morphology_3d/ch0000_dapi_3d.ome.tif',
+        },
+      },
+    })
+
+    await expect(dataset.morphology3dUrl()).resolves.toBe(
+      `${BASE_URL}/morphology_3d/ch0000_dapi_3d.ome.tif`,
+    )
   })
 
   it('prefers manifest file locations over experiment.spatial', async () => {
     const { dataset } = createDataset({
-      files: { morphology: 'https://images.example.test/he.ome.tif' },
+      files: {
+        morphology: 'https://images.example.test/he.ome.tif',
+        morphology3d: 'https://images.example.test/dapi-3d.ome.tif',
+      },
     })
 
     await expect(dataset.morphologyUrl()).resolves.toBe(
       'https://images.example.test/he.ome.tif',
+    )
+    await expect(dataset.morphology3dUrl()).resolves.toBe(
+      'https://images.example.test/dapi-3d.ome.tif',
     )
     await expect(dataset.fileUrl('cells')).resolves.toBe(`${BASE_URL}/cells.zarr.zip`)
   })

@@ -220,6 +220,12 @@ import {
   type MerscopeImageControlState,
 } from '../dataset/merscopeImageModel'
 import {
+  ateraImageControlReady,
+  IDLE_ATERA_IMAGE_STATE,
+  parseAteraImageChoice,
+  type AteraImageControlState,
+} from '../dataset/ateraImageModel'
+import {
   createStructuredLoadError,
   readErrorMessage,
   type StructuredLoadError,
@@ -287,6 +293,7 @@ export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
 
 interface AteraMorphologyDataset {
   morphologyUrl(): Promise<string | null>
+  morphology3dUrl(): Promise<string | null>
 }
 
 interface UseDatasetLifecycleCallbacks {
@@ -461,6 +468,7 @@ interface UseDatasetLifecycleSetters {
   readonly setSpatialDataControlState: Setter<SpatialDataControlState>
   readonly setVisiumControlState: Setter<VisiumControlState>
   readonly setMerscopeImageState: Setter<MerscopeImageControlState>
+  readonly setAteraImageState: Setter<AteraImageControlState>
   readonly setViewportCellCount: Setter<number | null>
 }
 
@@ -634,6 +642,7 @@ export function useDatasetLifecycle({
     setSpatialDataControlState,
     setVisiumControlState,
     setMerscopeImageState,
+    setAteraImageState,
     setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
@@ -1046,6 +1055,7 @@ export function useDatasetLifecycle({
           setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
           setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
           setMerscopeImageState(IDLE_MERSCOPE_IMAGE_STATE)
+          setAteraImageState(IDLE_ATERA_IMAGE_STATE)
           setDatasetWarmupState(IDLE_DATASET_WARMUP_STATE)
           setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
           cellFeatureMatrixCapabilityKeyRef.current = null
@@ -1625,26 +1635,57 @@ export function useDatasetLifecycle({
             return
           }
 
-          if (!loadImage || !isAteraMorphologyDataset(dataset)) {
+          if (!isAteraMorphologyDataset(dataset)) {
+            setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+            return
+          }
+
+          // The 2D image unless the link asks for the 3D DAPI stack (or there
+          // is no 2D image). The choice is offered when there are both.
+          const [morphologyUrl, morphology3dUrl] = await Promise.all([
+            dataset.morphologyUrl(),
+            dataset.morphology3dUrl(),
+          ])
+
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
+          const imageChoice =
+            morphology3dUrl !== null &&
+            (morphologyUrl === null ||
+              parseAteraImageChoice(restoreState.ateraImage) === '3d')
+              ? '3d'
+              : '2d'
+          const imageUrl = imageChoice === '3d' ? morphology3dUrl : morphologyUrl
+
+          if (morphologyUrl !== null && morphology3dUrl !== null) {
+            whenCommitted(() => {
+              setAteraImageState(ateraImageControlReady(imageChoice))
+            })
+          }
+
+          if (!loadImage) {
             setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
             return
           }
 
           // morphology_2d is a multi-file OME-TIFF like Xenium's
-          // morphology_focus, so it opens through the same loader.
+          // morphology_focus, so it opens through the same loader; the 3D
+          // stack is one OME-TIFF with an IFD per plane, which gets the
+          // `Z plane` control.
           loadMorphologyInBackground(
-            async () => {
-              const morphologyUrl = await dataset.morphologyUrl()
-
-              return morphologyUrl === null
+            async () =>
+              imageUrl === null
                 ? null
                 : loadMorphologyImage(requestedUrl, {
-                    candidates: [morphologyUrl],
+                    candidates: [imageUrl],
                     signal,
                     onFallback: notifyFallbackWhenCommitted,
                     ...restoredZPlane,
-                  })
-            },
+                    // A manifest's sidecar covers the 2D channel files only.
+                    ...(imageChoice === '3d' ? { zchunkStoreUrl: null } : {}),
+                  }),
             restoreState.morphologyEnabledChannelIds === undefined
               ? {}
               : { channelSelection: restoreState.morphologyEnabledChannelIds },

@@ -3,10 +3,11 @@ import { intToCellId } from './cellid'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
   loadDatasetCellTranscriptDistribution,
+  loadPerGeneCellTranscriptDistribution,
   summarizeCellTranscriptZDistribution,
 } from './cellTranscripts'
 import { loadTranscriptZarrViewport } from './transcriptZarr'
-import { micrometers } from './coords'
+import { micrometers, type DataPoint } from './coords'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
@@ -256,6 +257,79 @@ describe('cell transcript distribution loader', () => {
       limit: CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
       minQv: 20,
     })
+  })
+})
+
+describe('per-gene cell transcript distribution (Atera)', () => {
+  const boundaryPolygon = [
+    { x: micrometers(0), y: micrometers(0) },
+    { x: micrometers(10), y: micrometers(0) },
+    { x: micrometers(10), y: micrometers(10) },
+    { x: micrometers(0), y: micrometers(10) },
+  ]
+
+  it('reads the selected genes in the outline and names them', async () => {
+    const readTranscripts = vi.fn(
+      async (
+        _bbox: unknown,
+        options: { readonly contains?: (point: DataPoint) => boolean },
+      ) => ({
+        points: [transcriptPoint('a', 2, 2, 0), transcriptPoint('b', 8, 8, 1)].filter(
+          (point) => options.contains?.(point.position) ?? true,
+        ),
+        groups: [],
+        hitPointLimit: true,
+      }),
+    )
+
+    const distribution = await loadPerGeneCellTranscriptDistribution(readTranscripts, {
+      featureNames: ['UMOD'],
+      boundaryPolygon,
+      limit: 2,
+      minQv: 25,
+      binCount: 2,
+    })
+
+    expect(distribution).toMatchObject({
+      transcriptCount: 2,
+      zCount: 2,
+      hitTranscriptLimit: true,
+      minQv: 25,
+      featureNames: ['UMOD'],
+    })
+    expect(readTranscripts).toHaveBeenCalledWith(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(0),
+        maxY: micrometers(10),
+      },
+      expect.objectContaining({
+        featureNames: ['UMOD'],
+        pointLimit: 2,
+        groupLimit: 1,
+        minQv: 25,
+      }),
+    )
+    const contains = readTranscripts.mock.calls[0]?.[1].contains
+    expect(contains?.({ x: micrometers(5), y: micrometers(5) })).toBe(true)
+    expect(contains?.({ x: micrometers(12), y: micrometers(5) })).toBe(false)
+  })
+
+  it('reads nothing without selected genes', async () => {
+    const readTranscripts = vi.fn()
+
+    await expect(
+      loadPerGeneCellTranscriptDistribution(readTranscripts, {
+        featureNames: [],
+        boundaryPolygon,
+      }),
+    ).resolves.toMatchObject({
+      bins: [],
+      transcriptCount: 0,
+      featureNames: [],
+    })
+    expect(readTranscripts).not.toHaveBeenCalled()
   })
 })
 

@@ -15,6 +15,7 @@ import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFo
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { DatasetManifestAbout } from '../dataset/datasetManifestModel'
 import { formatMerscopeImageSize } from '../dataset/merscopeImageModel'
+import type { AteraImageChoice } from '../dataset/ateraImageModel'
 import type { SpatialDataControlState } from '../dataset/spatialDataModel'
 import { visiumHdBinSizeLabel, type VisiumHdControlState } from '../dataset/visiumHdModel'
 import {
@@ -573,6 +574,32 @@ export function MerscopeImageSelect({
         Each stain and plane is read whole from the .vzg.
       </p>
     </div>
+  )
+}
+
+type AteraViewModel = DatasetViewOptionsModel['atera']
+
+// The Atera 2D image or 3D DAPI stack, for the Image section.
+export function AteraImageSelect({ atera }: { readonly atera: AteraViewModel }) {
+  const { disabled, onImageChange, state } = atera
+
+  if (state.status === 'idle') {
+    return null
+  }
+
+  return (
+    <Select<AteraImageChoice>
+      className="ui-field--inline"
+      label="Morphology"
+      title="Atera morphology image to show"
+      value={state.choice}
+      disabled={disabled}
+      options={[
+        { value: '2d', label: '2D (all stains)' },
+        { value: '3d', label: '3D DAPI stack' },
+      ]}
+      onChange={onImageChange}
+    />
   )
 }
 

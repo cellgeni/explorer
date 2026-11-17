@@ -407,6 +407,34 @@ describe('morphology image loader', () => {
     }
   })
 
+  it('skips the manifest sidecar for an image it does not cover', async () => {
+    const baseUrl = 'https://example.test/manifest-sidecar-skip/explorer.json'
+    const zchunkStoreUrl = 'https://sidecars.example.test/2d.zchunkstore'
+    const stackUrl = 'https://example.test/manifest-sidecar-skip/dapi_3d.ome.tif'
+    const loader = { channels: [] } as unknown as TiffPyramidLoader
+    const openImage = vi.fn(async () => loader)
+    setDatasetManifest(baseUrl, {
+      platform: 'atera',
+      url: baseUrl,
+      rootUrl: 'https://example.test/manifest-sidecar-skip',
+      files: {
+        morphologyZchunkstore: { path: zchunkStoreUrl, url: zchunkStoreUrl },
+      },
+    })
+
+    try {
+      await loadMorphologyImage(baseUrl, {
+        fetcher: vi.fn(),
+        openImage,
+        candidates: [stackUrl],
+        zchunkStoreUrl: null,
+      })
+      expect(openImage.mock.calls).toEqual([[stackUrl, undefined, undefined, undefined]])
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
   it('opens channel loaders from OME-declared sibling focus files', async () => {
     const channel0 = {
       id: 'Channel:0',

@@ -306,6 +306,18 @@ describe('annotationModel', () => {
       a: '#abcdef',
       b: '#ff7f0e',
     })
+    // Stored colours seed new classes; colours already set, and malformed
+    // stored ones, do not.
+    expect(
+      colorsForAnnotations(
+        [
+          { id: 'a', color: '#008456' },
+          { id: 'b', color: '#8E00F8' },
+          { id: 'c', color: 'red' },
+        ],
+        { a: '#abcdef' },
+      ),
+    ).toEqual({ a: '#abcdef', b: '#8e00f8', c: '#2ca02c' })
   })
 
   it('removes colors and builds custom import prefixes', () => {

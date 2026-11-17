@@ -22,6 +22,7 @@ import {
   VisiumHdBinControls,
   VisiumOffTissueToggle,
   MerscopeImageSelect,
+  AteraImageSelect,
   VisiumTissueImageSelect,
 } from '../sections/DatasetInfoBlocks'
 import type { DatasetViewOptionsModel } from '../sections/datasetInfoModel'
@@ -359,6 +360,7 @@ function ImageSection({
       </div>
       <VisiumTissueImageSelect visium={viewOptions.visium} />
       <MerscopeImageSelect merscope={viewOptions.merscope} />
+      <AteraImageSelect atera={viewOptions.atera} />
       <ImageChannelControls image={image} />
       <CustomImageLayers layers={image.customLayers} />
     </>

@@ -3,7 +3,10 @@ import {
   type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
 import type { Annotation } from '../../datasets/spatialDataset'
-import { annotationPaletteColor } from '../../rendering/annotationPalette'
+import {
+  annotationPaletteColor,
+  normalizeAnnotationColor,
+} from '../../rendering/annotationPalette'
 import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
 
@@ -272,8 +275,10 @@ export function mergeImportedAnnotations(
   ]
 }
 
+// New annotations take the colour their dataset stores, else the next palette
+// colour; colours already set, including the user's, are kept.
 export function colorsForAnnotations(
-  annotations: readonly Pick<Annotation, 'id'>[],
+  annotations: readonly Pick<Annotation, 'id' | 'color'>[],
   currentColors: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const nextColors: Record<string, string> = { ...currentColors }
@@ -284,7 +289,9 @@ export function colorsForAnnotations(
       continue
     }
 
-    nextColors[annotation.id] = annotationPaletteColor(colorIndex)
+    const storedColor =
+      annotation.color === undefined ? null : normalizeAnnotationColor(annotation.color)
+    nextColors[annotation.id] = storedColor ?? annotationPaletteColor(colorIndex)
     colorIndex += 1
   }
 

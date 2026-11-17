@@ -154,6 +154,10 @@ import {
   type MerscopeImageControlState,
 } from '../dataset/merscopeImageModel'
 import {
+  IDLE_ATERA_IMAGE_STATE,
+  type AteraImageControlState,
+} from '../dataset/ateraImageModel'
+import {
   AUTO_GENE_SCALE_RANGE,
   parseGeneScaleRange,
   type GeneScaleRange,
@@ -521,6 +525,8 @@ export function useAppDomainState({
   const [merscopeImageState, setMerscopeImageState] = useState<MerscopeImageControlState>(
     IDLE_MERSCOPE_IMAGE_STATE,
   )
+  const [ateraImageState, setAteraImageState] =
+    useState<AteraImageControlState>(IDLE_ATERA_IMAGE_STATE)
   const [gridCellAssignmentState, setGridCellAssignmentState] = useState<
     GridCellAssignmentState<StructuredLoadError>
   >(IDLE_GRID_CELL_ASSIGNMENT_STATE)
@@ -765,6 +771,10 @@ export function useAppDomainState({
     merscope: {
       merscopeImageState,
       setMerscopeImageState,
+    },
+    atera: {
+      ateraImageState,
+      setAteraImageState,
     },
     visiumHd: {
       gridCellAssignmentState,

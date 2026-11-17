@@ -52,6 +52,7 @@ describe('parseAteraExperiment', () => {
     ).toEqual({
       micrometersPerPixel: 0.21249222,
       morphologyPath: 'morphology_2d/ch0000_dapi.ome.tif',
+      morphology3dPath: 'morphology_3d/ch0000_dapi_3d.ome.tif',
       cellCount: 93864,
       transcriptCount: 666909842,
       panelName: 'Atera Human Whole Transcriptome Gene Expression',

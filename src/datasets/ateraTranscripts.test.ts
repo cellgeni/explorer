@@ -190,7 +190,12 @@ function transcriptStore(): ZarrEntries {
   return entries
 }
 
-function createReader(options: { readonly withTranscripts?: boolean } = {}) {
+function createReader(
+  options: {
+    readonly withTranscripts?: boolean
+    readonly qvDensityRowLimit?: number
+  } = {},
+) {
   const stores = new Map<string, ZarrEntries>([[BINNED_URL, binnedStore()]])
 
   if (options.withTranscripts !== false) {
@@ -210,6 +215,9 @@ function createReader(options: { readonly withTranscripts?: boolean } = {}) {
 
       return { store: mapStore(entries, requestedKeys, url.split('/').pop()) }
     },
+    ...(options.qvDensityRowLimit === undefined
+      ? {}
+      : { qvDensityRowLimit: options.qvDensityRowLimit }),
   })
 
   return { reader, requestedKeys }
@@ -288,6 +296,72 @@ describe('AteraTranscripts', () => {
         ],
       ],
     ])
+  })
+
+  it('counts QV 20 density from the binned store', async () => {
+    const { reader, requestedKeys } = createReader()
+    const result = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA'],
+      minQv: 20,
+    })
+
+    expect(result.minQv).toBe(20)
+    expect(result.sourceFile).toBe('binned_transcripts.zarr.zip')
+    expect(requestedKeys.some((key) => key.startsWith('transcripts.zarr.zip'))).toBe(
+      false,
+    )
+  })
+
+  it('bins the genes rows by QV for another Min QV', async () => {
+    const { reader } = createReader()
+    const strict = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA', 'GENEB'],
+      minQv: 30,
+    })
+
+    // QV 40 at (2, 2) and 32.5 at (17, 17); QV 10, 25.5 and 20 drop out.
+    expect(strict).toMatchObject({
+      minQv: 30,
+      sourceFile: 'transcripts.zarr.zip',
+      visibleTranscriptCount: 2,
+      level: { level: 0, gridSizeMicrometers: 5 },
+    })
+    expect(strict.qvOverBudget).toBeUndefined()
+    expect(
+      strict.bins.map((bin) => [bin.binX, bin.binY, bin.count, bin.topFeatures]),
+    ).toEqual([
+      [0, 0, 1, [{ featureName: 'GENEA', count: 1 }]],
+      [3, 3, 1, [{ featureName: 'GENEA', count: 1 }]],
+    ])
+
+    const loose = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA', 'GENEB'],
+      minQv: 0,
+    })
+
+    expect(loose.visibleTranscriptCount).toBe(5)
+    expect(loose.bins.map((bin) => [bin.binX, bin.binY, bin.count])).toEqual([
+      [0, 0, 1],
+      [2, 0, 1],
+      [0, 1, 1],
+      [1, 1, 1],
+      [3, 3, 1],
+    ])
+  })
+
+  it('falls back to QV 20 squares when Min QV needs too many rows', async () => {
+    const { reader } = createReader({ qvDensityRowLimit: 4 })
+    const result = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA', 'GENEB'],
+      minQv: 30,
+    })
+
+    // Five rows in tile 0,0 and one in tile -1,0, which touches x = 0.
+    expect(result).toMatchObject({
+      minQv: 20,
+      sourceFile: 'binned_transcripts.zarr.zip',
+      qvOverBudget: { minQv: 30, rowCount: 6, rowLimit: 4 },
+    })
   })
 
   it('reads exact points for selected genes in the box above the minimum QV', async () => {
@@ -378,6 +452,19 @@ describe('AteraTranscripts', () => {
     expect(result.points.map((point) => point.id)).toEqual(
       all.points.slice(0, 2).map((point) => point.id),
     )
+  })
+
+  it('filters by a shape inside the box before the limit', async () => {
+    const { reader } = createReader()
+    // Only points with x > 3 (0,0:3 and 0,0:4) are inside.
+    const result = await reader.viewport(bbox(0, 0, 15, 15), {
+      featureNames: ['GENEA', 'GENEB'],
+      pointLimit: 2,
+      contains: (point) => point.x > 3,
+    })
+
+    expect(result.hitPointLimit).toBe(false)
+    expect(result.points.map((point) => point.id)).toEqual(['0,0:3', '0,0:4'])
   })
 
   it('reads only the tiles the box touches and caches gene offsets', async () => {
