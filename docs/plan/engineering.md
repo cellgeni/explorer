@@ -191,8 +191,9 @@ From a run of `npm test` and the repository:
   smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
   Pages. `audit.yml` runs `npm audit` from the lockfile on every PR, push to
   `main` and at 06:00 UTC on weekdays: `--omit=dev` fails on any advisory,
-  and the full audit on high and critical ones. It is outside `ci.yml` so
-  that a new advisory cannot stop `pages.yml` deploying `main`.
+  and the full audit on critical ones (on high ones too before 2026-11-17;
+  see Open). It is outside `ci.yml` so that a new advisory cannot stop
+  `pages.yml` deploying `main`.
 - The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
   by hand against the dev server, not in CI.
 - Recount on 2026-11-16 (`bea26d2`): 292 Vitest files with 2,468 tests,
@@ -253,6 +254,11 @@ From a run of `npm test` and the repository:
 - [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
 - [x] Dependency audit: `audit.yml` runs `npm audit` on every PR and each
       weekday (2026-11-16; see the inventory).
+- [ ] Restore `--audit-level=high` for the dev tools' audit in `audit.yml`.
+      Since 2026-11-17 it fails only on critical advisories, because
+      `picomatch` advisory GHSA-fc5q-39xc-vjpf (high) covers every release up
+      to 4.0.7 and has no fix. It reaches only Vite, Vitest,
+      typescript-eslint and `patch-package`.
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
       `main`. See [Open Items](open-items.md) for what a preview would need.
 - [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their

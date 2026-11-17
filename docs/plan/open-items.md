@@ -210,6 +210,12 @@ Testing:
       previews. Without a URL, CI could upload each PR's build as an
       artifact.
 - [ ] The golden fixture bundle (a committed, Xenium-shaped one).
+- [ ] Restore `--audit-level=high` for the dev tools' audit in `audit.yml`
+      once `picomatch` fixes
+      [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+      (high, ReDoS, every release up to 4.0.7). Since 2026-11-17 it fails
+      only on critical advisories (see
+      [Testing And CI](engineering.md#open)).
 
 ## Known Gaps From The Phase Files
 
