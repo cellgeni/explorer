@@ -150,3 +150,21 @@ Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review
       it ran at about 40 MB/s here (2 million `cell_id,label` rows, 95 MB, in
       2.5 s). Imports from disk are not limited, since the user picks the
       file.
+- [x] DuckDB extension failures were dropped: `createDuckDbClient` called
+      `configureDuckDb(conn)` without `onHttpfsLoadError` or
+      `onSpatialLoadError`, so when `LOAD spatial` failed nothing said so,
+      and the lasso, the one spatial query, failed later with a catalog
+      error. Since 2026-11-16 `spatial` loads on the first lasso query
+      (`loadDuckDbSpatial` in `duckdb.ts`) instead of when a DuckDB client
+      starts. It is 4.4 MB to download and 23.5 MB of WASM to compile, and
+      loading it took about 1.4 s from every client in headless Chromium,
+      though only the lasso uses it. If it does not load, the lasso shows
+      "DuckDB extension did not load" under Issues, with the address that
+      failed, and the next lasso tries again. `parquet` now loads when the
+      client starts: left to load on the first query, a failed load
+      reported only "function signature mismatch", then and on every later
+      query. A failed `httpfs` load logs a console warning: reads still
+      work without it, but counting `cells.parquet` took 3.7 s instead of
+      0.5 s. The extensions still come from extensions.duckdb.org at run
+      time, outside the lockfile and `npm audit`; the URL carries DuckDB's
+      version, and DuckDB refuses unsigned extensions.

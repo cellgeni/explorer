@@ -253,14 +253,14 @@ A read of the code at `bea26d2` against the conventions in
 [PLAN.md](../../PLAN.md#conventions-for-every-task). None of these was
 recorded before.
 
-Dependencies (the `h5wasm` preload and the unused `deck.gl` package are
-closed; see
+Dependencies (the `h5wasm` preload, the unused `deck.gl` package and the
+dev tool advisories are closed; see
 [Optimization Pass](phases/optimization-pass.md#closed-open-items)):
 
 - [ ] hyparquet stays at 1.26.0 for `patches/hyparquet+1.26.0.patch` while
-      1.33.0 is out. `npm audit --omit=dev` reports one moderate advisory,
-      `qs` through duckdb-wasm. Nothing in CI audits dependencies, and there
-      is no Dependabot.
+      1.33.0 is out. There is no Dependabot, so updates are made by hand.
+      Since 2026-11-16 `audit.yml` flags advisories; the dev tools' 21 (8
+      high) had built up unseen before then.
 
 Correctness and robustness:
 
@@ -281,14 +281,6 @@ Correctness and robustness:
       (`ateraDataset.ts`). Catching only zarrita's `NotFoundError`, as
       `ateraDataset.ts` already does for feature types, would keep transient
       failures visible.
-- [ ] DuckDB extension failures are dropped: `createDuckDbClient` calls
-      `configureDuckDb(conn)` without `onHttpfsLoadError` or
-      `onSpatialLoadError` (`duckdb.ts`). If `LOAD spatial` fails, nothing
-      says so, and the polygon ROI, the one spatial query (`gexSelection.ts`),
-      fails later with a catalog error. The extensions are fetched from
-      DuckDB's extension repository at run time, outside the lockfile.
-- [ ] When a Zarr decode worker fails, its chunks decode on the main thread
-      with no notice (`workerZarrCodecs.ts`).
 
 Rendering:
 

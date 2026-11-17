@@ -1,5 +1,6 @@
 import * as zarr from 'zarrita'
-import { sharedZarrDecodePool } from '../workers/zarrDecodePool'
+import { ZarrDecodeWorkerError, sharedZarrDecodePool } from '../workers/zarrDecodePool'
+import { reportZarrCodecWorkerFailure } from './zarrCodecWorkerStatus'
 import type {
   ZarrCodecCall,
   ZarrCodecChunk,
@@ -34,19 +35,33 @@ type ZarrCodec = ReturnType<ZarrCodecEntry['fromConfig']>
 
 const workerLoaders = new WeakSet<ZarrCodecLoader>()
 
+// Whether the workers have failed, shared by the codecs of one installation.
+interface WorkerState {
+  failed: boolean
+  readonly onFailure: (error: ZarrDecodeWorkerError) => void
+}
+
 // Points zarrita's codec registry at the worker codecs. Called once on the
 // main thread before any Zarr read; workers keep zarrita's own codecs. Where
 // there is no `Worker` (Vitest's jsdom) nothing changes. Returns a function
 // that restores the previous codecs.
+//
+// Once a worker fails, rather than a chunk, every codec decodes on the main
+// thread until the page is reloaded, and onWorkerFailure is called once. A
+// worker whose script does not load fails each time it is started, so
+// starting new ones would only repeat the failure.
 export function installWorkerZarrCodecs(
   decoder: ZarrCodecDecoder | null = sharedZarrDecodePool(),
   registry: Map<string, ZarrCodecLoader> = zarr.registry,
+  onWorkerFailure: (error: ZarrDecodeWorkerError) => void = reportZarrCodecWorkerFailure,
 ): () => void {
   const restore: (() => void)[] = []
 
   if (decoder === null) {
     return () => undefined
   }
+
+  const workers: WorkerState = { failed: false, onFailure: onWorkerFailure }
 
   for (const [codecName, kind] of Object.entries(WORKER_CODECS)) {
     for (const name of [codecName, `numcodecs.${codecName}`]) {
@@ -56,7 +71,7 @@ export function installWorkerZarrCodecs(
         continue
       }
 
-      const entry = workerCodecEntry(name, kind, loadOriginal, decoder)
+      const entry = workerCodecEntry(name, kind, loadOriginal, decoder, workers)
       const load: ZarrCodecLoader = () => Promise.resolve(entry)
       workerLoaders.add(load)
       registry.set(name, load)
@@ -76,6 +91,7 @@ function workerCodecEntry(
   kind: NonNullable<ZarrCodecEntry['kind']>,
   loadOriginal: ZarrCodecLoader,
   decoder: ZarrCodecDecoder,
+  workers: WorkerState,
 ): ZarrCodecEntry {
   return {
     kind,
@@ -91,13 +107,21 @@ function workerCodecEntry(
         kind,
         encode: async (data: Uint8Array) => (await onMainThread()).encode(data),
         async decode(bytes: Uint8Array): Promise<Uint8Array | ZarrCodecChunk> {
-          try {
-            return await decoder.decodeCodec({ name, configuration, meta }, bytes)
-          } catch {
-            // A worker that fails leaves the chunk to zarrita's own codec,
-            // which also reports chunks that do not decode.
-            return (await onMainThread()).decode(bytes)
+          if (!workers.failed) {
+            try {
+              return await decoder.decodeCodec({ name, configuration, meta }, bytes)
+            } catch (error) {
+              if (error instanceof ZarrDecodeWorkerError && !workers.failed) {
+                workers.failed = true
+                workers.onFailure(error)
+              }
+            }
           }
+
+          // A chunk the worker could not decode, and every chunk once the
+          // workers have failed, goes to zarrita's own codec, which reports
+          // chunks that do not decode.
+          return (await onMainThread()).decode(bytes)
         },
       }
 

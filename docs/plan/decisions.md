@@ -35,7 +35,16 @@ TypeScript and modules are non-negotiable; React is the recommended default.
   redundant in duckdb-wasm. Phase 5.1 changed this: load `httpfs` during
   bootstrap before remote Parquet reads, and continue if loading fails on older
   bundles. On DuckDB v1.5.1 this read 100 remote transcript rows in about 1.2 s.
-  `LOAD spatial` is still required.
+  Since 2026-11-16 a failed load logs a console warning: reads still work, but
+  counting `cells.parquet` took 3.7 s instead of 0.5 s.
+- Extensions (2026-11-16): DuckDB-WASM downloads them from
+  extensions.duckdb.org on first `LOAD`, outside `package-lock.json` and
+  `npm audit`. The URL carries DuckDB's version, and unsigned extensions are
+  refused. `parquet` loads at bootstrap, because a failed autoload reports only
+  "function signature mismatch". `spatial`, for `ST_Within`, loads on the first
+  lasso query: 4.4 MB to download and 23.5 MB of WASM to compile, which added
+  about 1.4 s to every client when it loaded at bootstrap. A failed load throws
+  `DuckDbExtensionLoadError`, shown as "DuckDB extension did not load".
 - Range-read `cell_boundaries.parquet` and `transcripts.parquet` with the
   bounding-box pattern. Buffer only small files such as `cells.parquet`.
 - Use separate DuckDB clients for transcript scans and interactive cell or ROI
@@ -128,8 +137,9 @@ Later additions:
   reads or their caches into workers. zarrita still fetches chunks and assembles
   selections on the main thread; whole arrays chunked only by row are assembled
   a chunk at a time (`getWholeArray`) instead of with zarrita's row-by-row copy,
-  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. If a
-  worker fails, the chunk is decoded on the main thread.
+  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. A chunk
+  a worker cannot decode is decoded on the main thread. Since 2026-11-17 a
+  worker that fails sends every chunk there until reload, with a notice.
 - **SpatialData shapes worker (2026-11-13).** Each `shapes.parquet` is decoded
   in a worker of its own (`spatialDataShapes.worker.ts`). The worker fetches a
   plain URL itself; a file inside a zipped store, or behind a custom fetcher,

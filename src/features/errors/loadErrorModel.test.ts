@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DuckDbExtensionLoadError } from '../../data/duckdb'
 import { FileNotListedError } from '../../data/folderListing'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import { LikelyMissingFileError } from '../../data/hostResponses'
@@ -159,6 +160,27 @@ describe('loadErrorModel', () => {
       message: readErrorMessage(ignoredRange),
     })
     expect(readErrorMessage(ignoredRange)).toContain('received HTTP 200')
+  })
+
+  it('points a DuckDB extension that did not load at the extension repository', () => {
+    const error = new DuckDbExtensionLoadError(
+      'spatial',
+      'Lasso selections',
+      new Error(
+        "Failed to execute 'send' on 'XMLHttpRequest': Failed to load 'https://extensions.duckdb.org/v1.5.1/wasm_eh/spatial.duckdb_extension.wasm'.",
+      ),
+    )
+
+    expect(createStructuredLoadError('ROI cells', error)).toEqual({
+      source: 'ROI cells',
+      code: 'network',
+      title: 'DuckDB extension did not load',
+      message:
+        "Lasso selections need DuckDB's spatial extension, which did not load: Failed to execute 'send' on 'XMLHttpRequest': Failed to load 'https://extensions.duckdb.org/v1.5.1/wasm_eh/spatial.duckdb_extension.wasm'.",
+      action:
+        'DuckDB downloads its extensions from extensions.duckdb.org. Check that this network can reach it, then try again.',
+      detail: 'DuckDbExtensionLoadError',
+    })
   })
 
   it('reports unlisted and likely missing files as missing, not as Range problems', () => {

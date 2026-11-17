@@ -61,7 +61,11 @@ and need no network. `npm run test:coverage` adds V8 coverage over `src/` with
 minimum thresholds; CI runs it too and uploads the report, in a job that is
 allowed to fail. The full Playwright suite, which adds the `@live` tests on
 hosted datasets and every example in `examples/`, runs on a weekday schedule
-(`.github/workflows/e2e-live.yml`).
+(`.github/workflows/e2e-live.yml`). `npm audit` runs on every pull request,
+on pushes to `main` and each weekday morning (`.github/workflows/audit.yml`):
+any advisory in a package the app ships fails it, and in the dev tools only
+high and critical ones do. It is a workflow of its own so that a newly
+published advisory cannot hold up the Pages deploy, which waits for CI.
 
 ## Load Pipeline
 
@@ -360,6 +364,14 @@ All screen↔data conversions go through `coords.ts`.
   The advice depends on whether the address is on this computer, on the local
   network, or elsewhere. See
   [Serve data from your computer](./host-your-own-data.md#serve-data-from-your-computer).
+- **DuckDB extensions.** DuckDB-WASM downloads its extensions from
+  `extensions.duckdb.org` (`src/data/duckdb.ts`): `httpfs` and `parquet` when
+  a client starts, and `spatial` on the first lasso. They are not in
+  `package-lock.json`; the URL carries DuckDB's version, and unsigned
+  extensions are refused. A `parquet` or `spatial` load that fails throws
+  `DuckDbExtensionLoadError` ("DuckDB extension did not load"), and the next
+  lasso loads `spatial` again. Without `httpfs`, reads go through DuckDB-WASM's
+  own HTTP file system, which is slower, and a console warning says so.
 
 See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 
@@ -513,11 +525,16 @@ worker, which runs zarrita's own codec and sends back the bytes by transfer
 (strings by clone). Byte order, filters and assembling the selection stay on
 the main thread; whole arrays whose chunks span every axis but the first are
 assembled a chunk at a time (`getWholeArray`, `src/zarr/zarrWholeArray.ts`)
-instead of zarrita's row-by-row copy. If a worker fails, the chunk is decoded
-on the main thread with zarrita's codec; with no `Worker` the registry is left
-alone. OME-Zarr image chunk bytes are fetched on the main thread and decoded
-whole in the Zarr decode workers, which fall back to the main thread if they
-fail. Other hyparquet reads (Visium HD positions and barcode mappings, and
+instead of zarrita's row-by-row copy. A chunk a worker cannot decode is
+decoded on the main thread with zarrita's codec, which reports a chunk that
+does not decode. A worker that fails (`ZarrDecodeWorkerError`: its script did
+not load, or it stopped) sends every chunk to the main thread until the page
+is reloaded, rather than starting new workers that fail again, and Data access
+notes says so ("Zarr decoding", `src/zarr/zarrCodecWorkerStatus.ts`), however
+many datasets are opened after. With no `Worker` the registry is left alone.
+OME-Zarr image chunk bytes are fetched on the main thread and decoded whole in
+the Zarr decode workers, which fall back to the main thread if they fail.
+Other hyparquet reads (Visium HD positions and barcode mappings, and
 `Browse File`'s footer and first rows) run on the main thread.
 
 ## Performance Budget

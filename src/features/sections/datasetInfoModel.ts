@@ -1,3 +1,4 @@
+import { useSyncExternalStore } from 'react'
 import type { Dispatch, FormEventHandler, SetStateAction } from 'react'
 import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
 import type { PerformanceBudget } from '../../data/performanceBudget'
@@ -10,6 +11,12 @@ import {
   normalizeBoundaryCellLimit,
 } from '../../rendering/boundaryViewport'
 import { bundledDeckVersion } from '../../rendering/deckLayers'
+import {
+  subscribeZarrCodecWorkerFailure,
+  zarrCodecWorkerFailure,
+  zarrCodecWorkerNotice,
+  type ZarrCodecWorkerFailure,
+} from '../../zarr/zarrCodecWorkerStatus'
 import type {
   AppendDebugEvent,
   DebugLogEntry,
@@ -256,6 +263,11 @@ export function useDatasetInfoModel({
   merscopeImageState,
   handleMerscopeImageChange,
 }: DatasetInfoModelInput): DatasetInfoModel {
+  const zarrWorkerFailure = useSyncExternalStore(
+    subscribeZarrCodecWorkerFailure,
+    zarrCodecWorkerFailure,
+  )
+
   return {
     facts: datasetFactsInput === null ? [] : datasetFacts(datasetFactsInput),
     open: {
@@ -331,7 +343,7 @@ export function useDatasetInfoModel({
       },
       onDownload: handleDownloadDiagnostics,
       matrixState: cellFeatureMatrixCapabilityState,
-      fallbackNotices,
+      fallbackNotices: withZarrCodecWorkerNotice(fallbackNotices, zarrWorkerFailure),
       errors: activeErrors,
       log: debugLog,
       onClearLog: () => {
@@ -346,4 +358,19 @@ export function useDatasetInfoModel({
         : null,
     },
   }
+}
+
+// The Zarr decode workers stay failed until the page is reloaded, so their
+// notice is not kept with the dataset's, which each load clears. It takes ID
+// 0; the dataset's notices are numbered from 1.
+export function withZarrCodecWorkerNotice(
+  notices: readonly FallbackNoticeEntry[],
+  failure: ZarrCodecWorkerFailure | null,
+): readonly FallbackNoticeEntry[] {
+  return failure === null
+    ? notices
+    : [
+        { id: 0, timestamp: failure.timestamp, ...zarrCodecWorkerNotice(failure) },
+        ...notices,
+      ]
 }

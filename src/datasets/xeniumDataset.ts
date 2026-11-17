@@ -2,6 +2,11 @@ import { micrometers } from '../data/coords'
 import { datasetFileLabelFor, datasetFileUrlFor } from '../data/datasetFiles'
 import { assertHttpRangeSupport } from '../data/rangeSupport'
 import {
+  normalizeRoiSelection,
+  roiSelectionToSpatialSelection,
+  type RoiSelectionInput,
+} from '../data/roiSelection'
+import {
   isMissingParquetColumnError,
   readXeniumBoundaryElements,
   readXeniumCellIdsForSelection,
@@ -21,7 +26,6 @@ import {
 import type { CellId } from '../data/cellid'
 import type { DatasetFileRole } from './datasetManifest'
 import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
-import type { RoiSelectionInput } from '../data/roiSelection'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { CellTranscriptZDistribution } from '../data/cellTranscripts'
 import type { TiffPyramidLoader } from '../tiff/loader'
@@ -111,6 +115,7 @@ export interface XeniumDatasetOptions {
 
 export interface DuckDbClientLike {
   readonly conn: XeniumDuckDbConnection
+  loadSpatial(): Promise<void>
   close?(): Promise<void>
 }
 
@@ -460,7 +465,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     selectionInput: RoiSelectionInput,
     options: { readonly limit?: number } = {},
   ): Promise<readonly DatasetCell[]> {
-    return this.conn().then((conn) =>
+    return this.connFor(spatialSelectionFor(selectionInput)).then((conn) =>
       readXeniumCellsForSelection(conn, this.urlFor('cells'), selectionInput, options),
     )
   }
@@ -477,7 +482,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     selectionInput: RoiSelectionInput,
     options: TranscriptQueryOptions = {},
   ): Promise<readonly DatasetTranscript[]> {
-    const conn = await this.conn()
+    const conn = await this.connFor(spatialSelectionFor(selectionInput))
     return readXeniumTranscriptsForSelection(
       conn,
       this.urlFor('transcripts'),
@@ -573,7 +578,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
     scope: TranscriptScope,
     minQv: number,
   ): Promise<GexResult> {
-    const conn = await this.conn()
+    const conn = await this.connFor(selection)
     const cellIds =
       scope === 'cells-only'
         ? await readXeniumCellIdsForSelection(conn, this.urlFor('cells'), selection)
@@ -635,8 +640,24 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   }
 
   private async conn(): Promise<XeniumDuckDbConnection> {
+    return (await this.duckClient()).conn
+  }
+
+  // Polygon queries use ST_Within, from DuckDB's spatial extension, which is
+  // loaded on the first one.
+  private async connFor(selection: Selection | null): Promise<XeniumDuckDbConnection> {
+    const client = await this.duckClient()
+
+    if (selection?.kind === 'polygon') {
+      await client.loadSpatial()
+    }
+
+    return client.conn
+  }
+
+  private duckClient(): Promise<DuckDbClientLike> {
     this.duckClientPromise ??= this.duckFactory()
-    return (await this.duckClientPromise).conn
+    return this.duckClientPromise
   }
 
   private urlFor(role: DatasetFileRole): string {
@@ -657,6 +678,10 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       )
     }
   }
+}
+
+function spatialSelectionFor(selectionInput: RoiSelectionInput): Selection | null {
+  return roiSelectionToSpatialSelection(normalizeRoiSelection(selectionInput))
 }
 
 function normalizeBaseUrl(baseUrl: string): string {

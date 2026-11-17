@@ -135,7 +135,7 @@ describe('XeniumDataset lazy defaults', () => {
         },
       ],
     ])
-    const duckClient: DuckDbClientLike = { conn }
+    const duckClient: DuckDbClientLike = { conn, loadSpatial: async () => {} }
     const overviewPoint: CellOverviewPoint = {
       cellId,
       position: { x: micrometers(2), y: micrometers(3) },

@@ -339,3 +339,31 @@ Found by the 2026-11-16 review:
       one, `qs` through duckdb-wasm. The bundle did not change. `h5wasm` is
       pinned at 0.10.2, the version the lockfile already held, so every
       dependency is now pinned.
+- [x] `npm audit` reported 22 advisories (8 high) once `deck.gl` was gone, all
+      but `qs` in the dev tools (2026-11-16): Vite's dev server
+      (`launch-editor`), Vitest's mock server, and minimatch, brace-expansion,
+      postcss, nanoid, source-map-js, browserslist, undici and zod under ESLint,
+      typescript-eslint, Vite and jsdom. Vite went from 8.0.12 to 8.3.8, Vitest
+      and `@vitest/coverage-v8` from 4.1.7 to 4.1.12, ESLint from 10.3.0 to
+      10.15.0 and typescript-eslint from 8.59.2 to 8.73.0, none a major version,
+      and `npm audit fix` moved the rest within their ranges; `qs` and
+      `side-channel` are the only runtime packages that changed, and neither is
+      in the bundle. `npm audit` now reports none. Vite 8.3 folds 19 small
+      shared chunks the start screen already preloaded into the entry (767 kB to
+      852 kB, 216 kB to 243 kB gzip), so `index.html` preloads 18 files where it
+      preloaded 37, and 745 kB gzip of JavaScript where it preloaded 754 kB. Two
+      chunks that were not preloaded went into the lazy `h5adDataset` chunk and
+      the workers, not the entry.
+- [x] When a Zarr decode worker failed, its chunks decoded on the main thread
+      with no notice (`workerZarrCodecs.ts`), and the pool started new
+      workers for the next chunks, which failed the same way. With the worker
+      script answering 404, as an old tab does after a deploy, the Xenium
+      demo started 19 workers in 20 s of gene colouring, transcript density
+      and zooming. Since 2026-11-17 the pool fails a worker's requests with
+      `ZarrDecodeWorkerError`, unlike a chunk that does not decode, and after
+      one the codecs decode on the main thread until reload: one worker
+      start in the same session. Data access notes shows "Zarr decoding",
+      which outlasts the dataset's notices, and the console has a warning.
+      A chunk a worker cannot decode still goes to the main thread alone.
+      OME-Zarr tiles and SpatialData labels use the same pool and still
+      start new workers after a failure.
