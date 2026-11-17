@@ -240,12 +240,15 @@ rows through the region shapes that share their index (spatialdata-io indexes
 cell ids when the table annotates labels. A cell's first nucleus keeps its
 id and later ones get `<id>#nucleus-N`, as on Xenium; each matched nucleus
 names its cell (segmentation metadata `cellId`), so hovering it shows the
-cell and a click selects it. Nuclei that match no row are left out; when none
-match, every nucleus is drawn and the log says so. `meta().segmentations` lists the cell and nucleus outlines, and the cell
-outlines are read only while `Cell boundaries` is on, so nuclei alone do not
-wait for them. On STHELAR bone marrow, all 225,906 nuclei matched; the first
-view with nuclei took 17-21 s, most of it the 19.4 MB compressed zip entry
-from the BioImage Archive.
+cell, a click selects it, and the Cell card lists the cell's nuclei in view.
+Nuclei that match no row are left out; when none match, every nucleus is
+drawn and the log says so. `meta().segmentations` lists the cell and nucleus
+outlines. Cell and nucleus outlines are separate viewport requests, and cell
+outlines are read only while `Cell boundaries` is on, so neither waits for
+the other. On STHELAR bone marrow all 225,906 nuclei matched; in one run on
+2026-11-17 the cell outlines were drawn 0.1 s after the view opened and the
+nuclei 6.8 s later, most of it the 19.4 MB compressed zip entry from
+the BioImage Archive.
 
 ## Image
 

@@ -127,10 +127,22 @@ matter on real stores.
       with a nucleus element (`summary().nuclei`,
       `nucleusBoundaryControlsVisibleFor`); cell outlines are read only while
       `Cell boundaries` is on, so nuclei alone do not wait for them; a link's
-      `nucleusBounds=1` turns them on. On STHELAR bone marrow all 225,906
-      nuclei matched, and the first view with nuclei (1,912 in view) took
-      17-21 s, most of it the 19.4 MB compressed zip entry from the BioImage
-      Archive. The 460-plex store has no nucleus shapes.
+      `nucleusBounds=1` turns them on. Each matched nucleus names its cell
+      (segmentation metadata `cellId`), so with
+      [Phase 17](17-xenium-nucleus-boundaries.md#closed-open-items)'s nucleus
+      hover (PR #161) hovering a nucleus shows its cell, a click selects the
+      cell, and the Cell card lists the cell's nuclei in view with area and
+      circularity; nuclei drawn because none matched name no cell. Since
+      PR #161 cell and nucleus outlines are also separate viewport requests,
+      so cell outlines no longer wait for the nuclei. On STHELAR bone marrow
+      all 225,906 nuclei matched. The first view with nuclei (1,912 in view)
+      took 17-21 s, most of it the 19.4 MB compressed zip entry from the
+      BioImage Archive, and the cell outlines waited for it. Rechecked after
+      PR #161 (2026-11-17, one run): cell outlines were drawn 0.1 s after the
+      view opened and 1,909 nuclei 6.8 s later; hovering a nucleus showed
+      `1 of 1` and its cell, and a click opened that cell's card with one
+      `Nucleus` row (26.5 µm², against the table's `nucleus_area` of 27.4).
+      The 460-plex store has no nucleus shapes.
 - [x] Flipped and axis-swapped images are shown (2026-11-17). STHELAR's
       `he` (an x/y swap and flip) opens from the `Image` select and lies over
       the DAPI `morpho` image, with cell and nucleus outlines on the

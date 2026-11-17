@@ -162,8 +162,12 @@ Xenium demo and against BioImage Archive S-BIAD1426, an XOA 1.7.1 run whose
       tooltip shows the nucleus ID, its place among its cell's nuclei
       (`2 of 3`), the cell, vertices and area. Readers name each nucleus's
       cell in its segmentation metadata (`cellId`): Xenium and Atera from the
-      cell ID, Visium HD from the GeoJSON `cell_id`, kept in its own
-      segmentation index column so shared metadata stays deduplicated.
+      cell ID, SpatialData from the table row the nucleus matched (see
+      [Phase 10](10-spatialdata.md#closed-open-items)), and Visium HD from
+      the GeoJSON `cell_id`, kept in its own segmentation index column so
+      shared metadata stays deduplicated. On SpatialData, hover, click, and
+      the Cell card's nucleus rows were checked on STHELAR bone marrow
+      (2026-11-17).
 - [x] A file without `label_id`, checked (2026-11-17). S-BIAD1426's
       `nucleus_boundaries.parquet` (3.7 MB, 816,445 rows, one row group,
       string `cell_id`, 13-vertex rings, one nucleus per cell) exposed a
