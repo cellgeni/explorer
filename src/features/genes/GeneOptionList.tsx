@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 
 const GENE_OPTION_ROW_HEIGHT = 28
 const GENE_OPTION_VISIBLE_ROWS = 7
@@ -10,6 +10,8 @@ interface GeneOptionListProps {
   readonly aliases?: ReadonlyMap<string, string> | undefined
   readonly ariaLabel?: string
   readonly emptyMessage?: string
+  // A change, such as a new search, scrolls the list back to the top.
+  readonly scrollResetKey?: string
   readonly onToggleGene: (gene: string) => void
 }
 
@@ -19,12 +21,27 @@ export function GeneOptionList({
   aliases,
   ariaLabel = 'Gene options',
   emptyMessage = 'No matching genes',
+  scrollResetKey = '',
   onToggleGene,
 }: GeneOptionListProps) {
-  const geneListKey = `${genes.length}:${genes[0] ?? ''}:${genes[genes.length - 1] ?? ''}`
-  const [scrollState, setScrollState] = useState({ key: '', scrollTop: 0 })
-  const scrollTop = scrollState.key === geneListKey ? scrollState.scrollTop : 0
+  const listRef = useRef<HTMLDivElement>(null)
+  const scrollResetKeyRef = useRef(scrollResetKey)
+  const [scrollTop, setScrollTop] = useState(0)
   const selectedGeneSet = useMemo(() => new Set(selectedGenes), [selectedGenes])
+
+  // The rows drawn follow the list's own scroll position whenever the genes
+  // change. Picking a gene takes it out of the list but leaves the list
+  // scrolled, so rows drawn for the top would leave the box looking empty.
+  useLayoutEffect(() => {
+    const list = listRef.current
+
+    if (scrollResetKeyRef.current !== scrollResetKey) {
+      scrollResetKeyRef.current = scrollResetKey
+      if (list !== null) list.scrollTop = 0
+    }
+
+    setScrollTop(list?.scrollTop ?? 0)
+  }, [genes, scrollResetKey])
 
   if (genes.length === 0) {
     return (
@@ -56,11 +73,12 @@ export function GeneOptionList({
     // A list, so each option says where it is among all the genes, as
     // only some rows are rendered (15.5-D: a button cannot carry that).
     <div
+      ref={listRef}
       className="gene-option-list is-virtualized"
       role="list"
       aria-label={ariaLabel}
       onScroll={(event) => {
-        setScrollState({ key: geneListKey, scrollTop: event.currentTarget.scrollTop })
+        setScrollTop(event.currentTarget.scrollTop)
       }}
       style={{ height: `${viewportHeight}px` }}
     >

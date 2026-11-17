@@ -231,6 +231,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
         genes={filteredGenes}
         selectedGenes={selectedGenes}
         aliases={aliases}
+        scrollResetKey={geneSearch}
         emptyMessage={geneSearchEmptyMessage(geneSearch, selectedGenes, {
           noun: 'genes',
           aliases,
