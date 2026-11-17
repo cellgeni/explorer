@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../data/coords'
+import type { ImagePyramidLoader } from '../data/imagePyramid'
 import {
   MINIMAP_MAX_SIZE,
   minimapDeckTarget,
   minimapDrawsImage,
+  minimapImageChannels,
+  minimapImageLoader,
   minimapLayout,
   minimapPoints,
   minimapTileCacheTiles,
@@ -121,5 +124,20 @@ describe('viewerMinimapModel', () => {
     expect(minimapTileCacheTiles(loader(4), 3)).toBe(24)
     expect(minimapTileCacheTiles(loader(130), 1)).toBe(130)
     expect(minimapTileCacheTiles(loader(240), 4)).toBe(512)
+  })
+
+  it('draws an image’s overview where it has one', () => {
+    const thumbnail = { url: 'slide.svs#ifd=1' } as ImagePyramidLoader
+    const slide = { url: 'slide.svs', overview: thumbnail } as ImagePyramidLoader
+    const plain = { url: 'plain.ome.tif' } as ImagePyramidLoader
+    const channel = { id: 'Channel:0', enabled: true, loader: slide }
+    const plainChannel = { id: 'Channel:1', enabled: true, loader: plain }
+
+    expect(minimapImageLoader(slide)).toBe(thumbnail)
+    expect(minimapImageLoader(plain)).toBe(plain)
+    expect(minimapImageChannels([channel])).toEqual([{ ...channel, loader: thumbnail }])
+
+    const unchanged = [plainChannel]
+    expect(minimapImageChannels(unchanged)).toBe(unchanged)
   })
 })

@@ -7,6 +7,7 @@ import {
   LayerStackLines,
   OpenDatasetForm,
 } from '../sections/DatasetInfoBlocks'
+import { SlideImages } from '../sections/SlideImages'
 import type { DatasetInfoModel } from '../sections/datasetInfoModel'
 
 interface InfoDrawerProps {
@@ -15,11 +16,12 @@ interface InfoDrawerProps {
   readonly onClose: () => void
 }
 
-// ⓘ's dataset info drawer (plan 15.2-F): what is open, the
-// manifest's About, the view options that have no layer section, opening
-// another dataset, and Diagnostics with the issues, notes and log. Its
-// sections render only while it is open, so the open-dataset form is not in
-// the page twice (the dataset name menu has one too).
+// ⓘ's dataset info drawer (plan 15.2-F): what is open, its slide images
+// (an SVS label and macro), the manifest's About, the view options that have
+// no layer section, opening another dataset, and Diagnostics with the issues,
+// notes and log. Its sections render only while it is open, so the
+// open-dataset form is not in the page twice (the dataset name menu has one
+// too).
 export function InfoDrawer({ info, open, onClose }: InfoDrawerProps) {
   const { visium, spatialData } = info.viewOptions
   const hasViewOptions =
@@ -48,6 +50,11 @@ export function InfoDrawer({ info, open, onClose }: InfoDrawerProps) {
               </dl>
             )}
           </DrawerSection>
+          {info.slideImages === null ? null : (
+            <DrawerSection title="Slide images">
+              <SlideImages source={info.slideImages} />
+            </DrawerSection>
+          )}
           {info.about === null ? null : (
             <DrawerSection title="About">
               <DatasetAbout about={info.about} />

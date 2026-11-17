@@ -138,6 +138,26 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value))
 }
 
+// The minimap draws an image's overview (an SVS thumbnail) where it has one,
+// rather than every tile of its coarsest level.
+export function minimapImageLoader<Loader extends Pick<ImagePyramidLoader, 'overview'>>(
+  loader: Loader,
+): Loader | ImagePyramidLoader {
+  return loader.overview ?? loader
+}
+
+export function minimapImageChannels<
+  Channel extends { readonly loader: ImagePyramidLoader },
+>(channels: readonly Channel[]): readonly Channel[] {
+  return channels.some((channel) => channel.loader.overview !== undefined)
+    ? channels.map((channel) =>
+        channel.loader.overview === undefined
+          ? channel
+          : { ...channel, loader: channel.loader.overview },
+      )
+    : channels
+}
+
 export function minimapTileCacheTiles(
   loader: Pick<ImagePyramidLoader, 'numLevels' | 'tilesForLevel'> | null,
   channelCount: number,

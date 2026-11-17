@@ -1,4 +1,5 @@
 import type { TileIndex } from '../data/coords'
+import type { ImagePyramidTileFetchOptions } from '../data/imagePyramid'
 import type { TileCacheEntry } from './tileCache'
 
 export interface TileRequestCache<Loader> {
@@ -8,6 +9,7 @@ export interface TileRequestCache<Loader> {
     col: number,
     row: number,
     signal?: AbortSignal,
+    fetchOptions?: ImagePyramidTileFetchOptions,
   ): Promise<TileCacheEntry>
 }
 
@@ -21,8 +23,15 @@ interface QueuedTile {
 // Loads the tiles a view wants, a few at a time and nearest first. When the
 // view moves, tiles still wanted keep loading and only those no longer wanted
 // are cancelled, so tiles keep arriving while the view pans.
+//
+// Each tile fetch is told which tiles are still queued, so a loader can read
+// those stored beside it in the same request. A tile whose bytes then come
+// from another tile's request gives up its slot, so the limit counts requests
+// rather than tiles.
 export class TileRequestScheduler<Loader> {
   private readonly inFlight = new Map<string, AbortController>()
+  // In-flight tiles that count against the limit.
+  private readonly holdingSlots = new Set<string>()
   private queue: QueuedTile[] = []
   private loader: Loader | null = null
   private maxConcurrentRequests = 1
@@ -58,6 +67,7 @@ export class TileRequestScheduler<Loader> {
       if (!wantedKeys.has(key)) {
         controller.abort()
         this.inFlight.delete(key)
+        this.holdingSlots.delete(key)
       }
     }
 
@@ -71,6 +81,7 @@ export class TileRequestScheduler<Loader> {
     }
 
     this.inFlight.clear()
+    this.holdingSlots.clear()
     this.queue = []
   }
 
@@ -79,7 +90,7 @@ export class TileRequestScheduler<Loader> {
 
     while (
       loader !== null &&
-      this.inFlight.size < this.maxConcurrentRequests &&
+      this.holdingSlots.size < this.maxConcurrentRequests &&
       this.queue.length > 0
     ) {
       const tile = this.queue.shift()
@@ -90,9 +101,12 @@ export class TileRequestScheduler<Loader> {
 
       const controller = new AbortController()
       this.inFlight.set(tile.key, controller)
+      this.holdingSlots.add(tile.key)
+      const isCurrent = () => this.inFlight.get(tile.key) === controller
       const settle = (entry: TileCacheEntry | null) => {
-        if (this.inFlight.get(tile.key) === controller) {
+        if (isCurrent()) {
           this.inFlight.delete(tile.key)
+          this.holdingSlots.delete(tile.key)
         }
 
         if (
@@ -105,9 +119,19 @@ export class TileRequestScheduler<Loader> {
 
         this.pump()
       }
+      const upcoming = this.queue
+        .filter((queued) => queued.level === tile.level)
+        .map(({ col, row }) => ({ col, row }))
 
       void this.cache
-        .request(loader, tile.level, tile.col, tile.row, controller.signal)
+        .request(loader, tile.level, tile.col, tile.row, controller.signal, {
+          upcoming,
+          onSharedRead: () => {
+            if (isCurrent() && this.holdingSlots.delete(tile.key)) {
+              this.pump()
+            }
+          },
+        })
         .then(settle, () => {
           settle(null)
         })

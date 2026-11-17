@@ -197,106 +197,130 @@ describe('TiffPyramidLoader', () => {
     expect(ranges).toEqual(['bytes=20-21', 'bytes=10-11', 'bytes=10-11', 'bytes=20-21'])
   })
 
-  it('reads tiles stored next to each other in one request when asked to', async () => {
+  it('reads upcoming tiles stored next to a tile in its request', async () => {
     // A 6 x 2 level written row by row, 10 bytes per tile, plus one tile
     // stored elsewhere in the file.
-    const chunks = new Map<string, TiffChunk>()
-
-    for (let row = 0; row < 2; row += 1) {
-      for (let col = 0; col < 6; col += 1) {
-        chunks.set(`0/${row}/${col}`, { offset: 1000 + (row * 6 + col) * 10, length: 10 })
-      }
-    }
-
-    chunks.set('0/1/5', { offset: 50_000, length: 10 })
-    const ranges: string[] = []
-    const loader = new TiffPyramidLoader({
-      url: 'https://example.test/slide.svs',
-      chunkIndex: chunks,
-      levelMeta: new Map([
-        [0, { width: imagePixels(600), height: imagePixels(200), nCols: 6, nRows: 2 }],
-      ]),
-      units,
-      tileWidth: imagePixels(100),
-      tileHeight: imagePixels(100),
-      numLevels: 1,
-      imageWidth: imagePixels(600),
-      imageHeight: imagePixels(200),
-      readAdjacentTiles: true,
-      fetcher: async (_input, init) => {
-        const range = new Headers(init?.headers).get('Range') ?? ''
-        const [start = 0, end = 0] = range.slice(6).split('-').map(Number)
-        ranges.push(range)
-        return new Response(
-          Uint8Array.from(
-            { length: end - start + 1 },
-            (_unused, index) => (start + index) % 256,
-          ),
-          { status: 206 },
-        )
-      },
-      byteRangeCache: null,
-    })
+    const { loader, ranges } = adjacentTilesLoader()
     const firstByte = async (col: number, row: number) =>
       (await loader.fetchTileBytes(0, col, row))[0]
+    const onSharedRead = vi.fn()
 
-    // Tile (2, 0) and its file neighbours within four tiles: the first row
-    // and the second row up to the tile stored elsewhere.
-    await expect(firstByte(2, 0)).resolves.toBe(1020 % 256)
-    expect(ranges).toEqual(['bytes=1000-1109'])
-    await expect(firstByte(0, 0)).resolves.toBe(1000 % 256)
-    await expect(firstByte(4, 1)).resolves.toBe(1100 % 256)
+    // Tile (2, 0) and the upcoming tiles stored next to it: (1, 0) before it,
+    // then (3, 0) to (1, 1) after it, up to (2, 1), which is not upcoming.
+    await expect(
+      loader.fetchTileBytes(0, 2, 0, undefined, {
+        upcoming: [
+          { col: 1, row: 0 },
+          { col: 3, row: 0 },
+          { col: 4, row: 0 },
+          { col: 5, row: 0 },
+          { col: 0, row: 1 },
+          { col: 1, row: 1 },
+          { col: 3, row: 1 },
+          { col: 5, row: 1 },
+        ],
+      }),
+    ).resolves.toEqual(tileBytes(1020))
+    expect(ranges).toEqual(['bytes=1010-1079'])
+
+    await expect(
+      loader.fetchTileBytes(0, 0, 1, undefined, { onSharedRead }),
+    ).resolves.toEqual(tileBytes(1060))
+    await expect(firstByte(1, 0)).resolves.toBe(1010 % 256)
     expect(ranges).toHaveLength(1)
+    expect(onSharedRead).toHaveBeenCalledOnce()
 
-    await expect(firstByte(5, 1)).resolves.toBe(50_000 % 256)
-    expect(ranges).toEqual(['bytes=1000-1109', 'bytes=50000-50009'])
+    // Tiles not upcoming were not read ahead; the one stored elsewhere does
+    // not join a run either.
+    await expect(firstByte(0, 0)).resolves.toBe(1000 % 256)
+    await expect(
+      loader.fetchTileBytes(0, 5, 1, undefined, { upcoming: [{ col: 4, row: 1 }] }),
+    ).resolves.toHaveLength(10)
+    expect(ranges).toEqual(['bytes=1010-1079', 'bytes=1000-1009', 'bytes=50000-50009'])
 
-    // A tile read ahead is used once; fetched again, it starts a new run.
-    await loader.fetchTileBytes(0, 0, 0)
+    // A tile read ahead is used once; fetched again, it is read again.
+    await expect(firstByte(3, 0)).resolves.toBe(1030 % 256)
     expect(ranges).toHaveLength(3)
+    await expect(firstByte(3, 0)).resolves.toBe(1030 % 256)
+    expect(ranges).toHaveLength(4)
   })
 
-  it('lets a caller stop waiting without cancelling a run other tiles share', async () => {
-    const chunks = new Map<string, TiffChunk>([
-      ['0/0/0', { offset: 0, length: 4 }],
-      ['0/0/1', { offset: 4, length: 4 }],
-    ])
-    let respond: (response: Response) => void = () => {}
-    const signals: (AbortSignal | null | undefined)[] = []
-    const loader = new TiffPyramidLoader({
-      url: 'https://example.test/slide.svs',
-      chunkIndex: chunks,
-      levelMeta: new Map([
-        [0, { width: imagePixels(200), height: imagePixels(100), nCols: 2, nRows: 1 }],
-      ]),
-      units,
-      tileWidth: imagePixels(100),
-      tileHeight: imagePixels(100),
-      numLevels: 1,
-      imageWidth: imagePixels(200),
-      imageHeight: imagePixels(100),
-      readAdjacentTiles: true,
-      fetcher: (_input, init) => {
-        signals.push(init?.signal)
-        return new Promise<Response>((resolve) => {
-          respond = resolve
-        })
-      },
-      byteRangeCache: null,
+  it('does not read a tile in two runs at once', async () => {
+    const { loader, ranges, respond } = adjacentTilesLoader({ delayed: true })
+    const all = { upcoming: [0, 1, 2, 3].map((col) => ({ col, row: 0 })) }
+
+    const first = loader.fetchTileBytes(0, 0, 0, undefined, all)
+    const second = loader.fetchTileBytes(0, 3, 0, undefined, all)
+    await vi.waitFor(() => {
+      expect(ranges).toHaveLength(1)
     })
-    const controller = new AbortController()
-    const first = loader.fetchTileBytes(0, 0, 0, controller.signal)
-    const second = loader.fetchTileBytes(0, 1, 0)
+    // The first run took tiles 1 to 3, so tile 3 waits for it.
+    expect(ranges).toEqual(['bytes=1000-1039'])
+    respond()
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      tileBytes(1000),
+      tileBytes(1030),
+    ])
+    expect(ranges).toHaveLength(1)
+  })
+
+  it('cancels a run once every tile waiting for it has stopped', async () => {
+    const { loader, signals, respond } = adjacentTilesLoader({ delayed: true })
+    const firstController = new AbortController()
+    const secondController = new AbortController()
+    const upcoming = [{ col: 1, row: 0 }]
+    const first = loader.fetchTileBytes(0, 0, 0, firstController.signal, { upcoming })
 
     await vi.waitFor(() => {
       expect(signals).toHaveLength(1)
     })
+    const onSharedRead = vi.fn()
+    const second = loader.fetchTileBytes(0, 1, 0, secondController.signal, {
+      onSharedRead,
+    })
+    await vi.waitFor(() => {
+      expect(onSharedRead).toHaveBeenCalled()
+    })
+
+    // The run goes on while tile 1 still waits for it.
+    firstController.abort()
+    await expect(first).rejects.toThrow()
+    expect(signals[0]?.aborted).toBe(false)
+
+    secondController.abort()
+    await expect(second).rejects.toThrow()
+    expect(signals[0]?.aborted).toBe(true)
+
+    // A tile the cancelled run was reading ahead is read again.
+    const third = loader.fetchTileBytes(0, 1, 0)
+    await vi.waitFor(() => {
+      expect(signals).toHaveLength(2)
+    })
+    respond()
+    await expect(third).resolves.toHaveLength(10)
+  })
+
+  it('lets a caller stop waiting without cancelling a run other tiles share', async () => {
+    const { loader, signals, respond } = adjacentTilesLoader({ delayed: true })
+    const controller = new AbortController()
+    const first = loader.fetchTileBytes(0, 0, 0, controller.signal, {
+      upcoming: [{ col: 1, row: 0 }],
+    })
+
+    await vi.waitFor(() => {
+      expect(signals).toHaveLength(1)
+    })
+    const onSharedRead = vi.fn()
+    const second = loader.fetchTileBytes(0, 1, 0, undefined, { onSharedRead })
+    await vi.waitFor(() => {
+      expect(onSharedRead).toHaveBeenCalled()
+    })
     controller.abort()
-    respond(new Response(Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8]), { status: 206 }))
+    respond()
 
     await expect(first).rejects.toThrow()
-    await expect(second).resolves.toEqual(Uint8Array.from([5, 6, 7, 8]))
-    expect(signals[0]).toBeUndefined()
+    await expect(second).resolves.toEqual(tileBytes(1010))
+    expect(signals[0]?.aborted).toBe(false)
   })
 
   it('decodes each level with its own tags when the levels have them', () => {
@@ -1109,3 +1133,70 @@ const zStackOmeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016
     </Pixels>
   </Image>
 </OME>`
+
+function tileBytes(offset: number): Uint8Array {
+  return Uint8Array.from({ length: 10 }, (_unused, index) => (offset + index) % 256)
+}
+
+// A 6 x 2 level written row by row from byte 1000, 10 bytes per tile, except
+// tile (5, 1), stored at byte 50,000. Each response byte is its file offset
+// modulo 256. Delayed responses wait for respond().
+function adjacentTilesLoader(options: { readonly delayed?: boolean } = {}) {
+  const chunks = new Map<string, TiffChunk>()
+
+  for (let row = 0; row < 2; row += 1) {
+    for (let col = 0; col < 6; col += 1) {
+      chunks.set(`0/${row}/${col}`, { offset: 1000 + (row * 6 + col) * 10, length: 10 })
+    }
+  }
+
+  chunks.set('0/1/5', { offset: 50_000, length: 10 })
+  const ranges: string[] = []
+  const signals: (AbortSignal | undefined)[] = []
+  const waiting: (() => void)[] = []
+  const loader = new TiffPyramidLoader({
+    url: 'https://example.test/slide.svs',
+    chunkIndex: chunks,
+    levelMeta: new Map([
+      [0, { width: imagePixels(600), height: imagePixels(200), nCols: 6, nRows: 2 }],
+    ]),
+    units,
+    tileWidth: imagePixels(100),
+    tileHeight: imagePixels(100),
+    numLevels: 1,
+    imageWidth: imagePixels(600),
+    imageHeight: imagePixels(200),
+    fetcher: async (_input, init) => {
+      const range = new Headers(init?.headers).get('Range') ?? ''
+      const [start = 0, end = 0] = range.slice(6).split('-').map(Number)
+      ranges.push(range)
+      signals.push(init?.signal ?? undefined)
+
+      if (options.delayed === true) {
+        await new Promise<void>((resolve) => {
+          waiting.push(resolve)
+        })
+      }
+
+      return new Response(
+        Uint8Array.from(
+          { length: end - start + 1 },
+          (_unused, index) => (start + index) % 256,
+        ),
+        { status: 206 },
+      )
+    },
+    byteRangeCache: null,
+  })
+
+  return {
+    loader,
+    ranges,
+    signals,
+    respond: () => {
+      for (const resolve of waiting.splice(0)) {
+        resolve()
+      }
+    },
+  }
+}

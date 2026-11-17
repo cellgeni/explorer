@@ -16,6 +16,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
     cellFeatureMatrixCapabilityState: { status: 'idle' },
     datasetAbout: null,
     datasetFactsInput: null,
+    datasetImageLoader: null,
     datasetUrl: 'https://example.test/output',
     debugLog: [],
     debugMode: false,

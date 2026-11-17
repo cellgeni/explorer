@@ -909,7 +909,8 @@ centres the view there, keeping the zoom, and dragging moves it along.
 
 - With an image, it draws the image's enabled channels at the coarsest
   pyramid level with its own small tile cache (24 tiles, 2 requests at a
-  time), through `MorphologyCanvas`; Visium uses its tissue image.
+  time), through `MorphologyCanvas`; an RGB SVS slide draws its thumbnail
+  instead (the loader's `overview`); Visium uses its tissue image.
 - Without one, or with every channel off, up to 6,000 cells (or Visium HD
   bins) are dots.
 - It sits beside the deck.gl canvas, so showing it does not redraw the map.
@@ -994,10 +995,22 @@ sections render only while it is open.
 | Section              | Contents                                                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dataset              | Platform, exact counts (cells, spots or bins; genes), image ("4 channels · 15 z planes", "Tissue image", "None"), pixel size in µm/px, address |
+| Slide images         | For an SVS image: the label, the macro (the whole glass slide), and the thumbnail; see [Slide Images](#slide-images)                           |
 | About                | The manifest's name, description, source, licence and citation, when it has them                                                               |
 | View options         | The Visium summary and library, and the SpatialData coordinate system, image and scale, on those platforms                                     |
 | Open another dataset | The open-dataset form, with `Boundary limit` under Advanced                                                                                    |
 | Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode   |
+
+### Slide Images
+
+`SlideImages` (`src/features/sections/SlideImages.tsx`) lists the images a
+slide scanner stores beside an SVS image when the drawer opens ("Reading the
+slide images…"): the label first, then `Macro (whole slide)` and
+`Thumbnail`. Each is drawn whole, at most 320 × 240 px and never larger than
+the image, through `MorphologyCanvas`, with its name, its size in pixels, and
+`Open`, a link that opens it on its own (`#ifd=N` on the slide's URL) in a new
+tab. An image that cannot be read says so in its place; a list that cannot be
+read says "The slide images could not be read: …".
 
 ### Open Another Dataset
 

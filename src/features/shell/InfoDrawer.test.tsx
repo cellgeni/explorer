@@ -18,6 +18,22 @@ describe('InfoDrawer', () => {
     expect(screen.getByRole('button', { name: 'Load Dataset' })).toBeInTheDocument()
   })
 
+  it('shows the slide images of an image that stores them', async () => {
+    const info = testDatasetInfoModel({
+      facts: [{ label: 'Platform', value: 'Image' }],
+      slideImages: { associatedImages: async () => [] },
+    })
+    render(<InfoDrawer info={info} open onClose={vi.fn()} />)
+
+    expect(sectionTitles()).toEqual([
+      'Dataset',
+      'Slide images',
+      'Open another dataset',
+      'Diagnostics',
+    ])
+    expect(await screen.findByText('The image has no slide images.')).toBeInTheDocument()
+  })
+
   it('lists the dataset, its About and view options, and keeps the boundary limit under Advanced', () => {
     const info = testDatasetInfoModel({
       facts: [

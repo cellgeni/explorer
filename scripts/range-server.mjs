@@ -8,7 +8,12 @@
 //     not copied yet are fetched from <url>, written into <file> and recorded
 //     in <file>.ranges.json, so a dataset is downloaded once and later loads
 //     read only local bytes. <file> is created at the remote size; on APFS and
-//     ext4 only the copied ranges take disk space.
+//     ext4 only the copied ranges take disk space. Requests without a Range
+//     header are refused (416), so a browser tab on the mirror does not copy
+//     the whole file.
+//   --delay <ms>
+//     Answers each request this long after it arrives, as a distant host
+//     would. Requests wait in parallel.
 import {
   createReadStream,
   existsSync,
@@ -29,12 +34,17 @@ const CORS = {
   'Accept-Ranges': 'bytes',
 }
 
+// Zenodo refuses Node's default user agent ("node") with 403.
+const ORIGIN_HEADERS = { 'User-Agent': 'explorer-range-server' }
+
 const args = process.argv.slice(2)
 const portIndex = args.indexOf('--port')
 const mirrorIndex = args.indexOf('--mirror')
+const delayIndex = args.indexOf('--delay')
+const delayMs = delayIndex < 0 ? 0 : Number(args[delayIndex + 1])
 const usage =
-  'Usage: node scripts/range-server.mjs <folder> [--port N]\n' +
-  '       node scripts/range-server.mjs --mirror <url> <file> [--port N]'
+  'Usage: node scripts/range-server.mjs <folder> [--port N] [--delay MS]\n' +
+  '       node scripts/range-server.mjs --mirror <url> <file> [--port N] [--delay MS]'
 
 if (args.length === 0 || args.includes('--help')) {
   console.log(usage)
@@ -54,18 +64,24 @@ createServer((request, response) => {
     return
   }
 
-  serve(request, response).catch((error) => {
-    console.error(`${request.method} ${request.url}: ${error.message}`)
+  delay(delayMs)
+    .then(() => serve(request, response))
+    .catch((error) => {
+      console.error(`${request.method} ${request.url}: ${error.message}`)
 
-    if (!response.headersSent) {
-      response.writeHead(502, CORS)
-    }
+      if (!response.headersSent) {
+        response.writeHead(502, CORS)
+      }
 
-    response.end()
-  })
+      response.end()
+    })
 }).listen(port, '127.0.0.1', () => {
   console.log(`${source.description} on http://127.0.0.1:${port}/`)
 })
+
+function delay(ms) {
+  return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve()
+}
 
 async function serve(request, response) {
   const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname)
@@ -80,6 +96,13 @@ async function serve(request, response) {
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? '')
 
   if (range === null) {
+    // A mirror would copy the whole remote file to answer this.
+    if (source.rangesOnly === true && request.method !== 'HEAD') {
+      response.writeHead(416, { ...CORS, 'Content-Range': `bytes */${file.size}` })
+      response.end()
+      return
+    }
+
     response.writeHead(200, { ...CORS, 'Content-Length': file.size })
 
     if (request.method === 'HEAD') {
@@ -151,7 +174,7 @@ async function mirrorSource(url, path) {
     throw new Error(usage)
   }
 
-  const head = await fetch(url, { method: 'HEAD' })
+  const head = await fetch(url, { method: 'HEAD', headers: ORIGIN_HEADERS })
   const size = Number(head.headers.get('content-length'))
 
   if (!head.ok || !Number.isFinite(size) || size <= 0) {
@@ -203,13 +226,14 @@ async function mirrorSource(url, path) {
 
   return {
     description: `Mirroring ${url} (${size.toLocaleString()} bytes, ${covered.length} ranges copied) into ${path}`,
+    rangesOnly: true,
     async file() {
       return {
         size,
         async read(start, end) {
           if (!isCovered(start, end)) {
             const remote = await fetch(url, {
-              headers: { Range: `bytes=${start}-${end}` },
+              headers: { ...ORIGIN_HEADERS, Range: `bytes=${start}-${end}` },
             })
 
             if (remote.status !== 206) {

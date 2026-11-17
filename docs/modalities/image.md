@@ -58,7 +58,12 @@ All images implement `ImagePyramidLoader` (`src/data/imagePyramid.ts`):
 `url`, `units`, tile size, `numLevels`, image size, `channels`, plus
 `bestLevel`, `tilesForBbox`, `tilesForLevel`, `tileBounds`, and
 `tileSourceSize`. TIFF loaders add `fetchTileBytes`/`tileDecodeOptions`;
-Zarr loaders add `loadTile`/`loadTilePixels`/`sampleTilePixels`.
+Zarr loaders add `loadTile`/`loadTilePixels`/`sampleTilePixels`. A caller
+passes `fetchTileBytes` the tiles it will fetch next (`upcoming`), and is told
+(`onSharedRead`) when a tile's bytes come from another tile's request (see
+[Fetching And Decoding](#fetching-and-decoding)). An SVS loader also has an
+`overview`, the thumbnail the minimap draws, and `associatedImages`, which
+lists the label, macro, and thumbnail.
 
 `openImagePyramid` (`src/data/morphologyImage.ts`) sends Zarr-looking URLs to
 `openOmeZarrImage` and everything else to `openTiff`.
@@ -256,25 +261,49 @@ top-level IFD code with QPTIFF (`src/tiff/loader.ts`, layout and metadata in
   spread through the file. The walk reads through a geotiff block cache of
   64 KiB blocks, which fetches each IFD together with its `JPEGTables` and
   tile offsets, and stops at the label (the first stripped IFD with
-  `NewSubfileType` bit 0 set), so the macro IFD is not read. The slide below
-  opens in 5 range requests (320 KB); reading exact ranges took 10.
+  `NewSubfileType` bit 0 set), so the macro IFD is read only when the slide
+  images are listed. The slide below opens in 5 range requests (320 KB);
+  reading exact ranges took 10.
 - **Layout.** Every tiled IFD is a level, as OpenSlide reads SVS. A tiled IFD
   with another tile size or sample count than IFD 0, or no smaller than the
-  level before it, is left out. The thumbnail, label, and macro are not shown.
+  level before it, is left out.
+- **Slide images.** Stripped IFDs are named as OpenSlide names them: IFD 1 is
+  the thumbnail; another is named by the first word of its description's
+  second line (`label 387x463`, `macro 1280x431`), or else by
+  `NewSubfileType` (1 label, 9 macro). Each opens as a one-level loader of a
+  [stripped level](#stripped-tiffs) in its own pixels (1 µm per pixel, since
+  the label and macro have no scale): the info drawer's
+  [Slide images](../ui-reference.md#info-drawer) section draws them whole,
+  label first, and `#ifd=N` on the slide's URL opens one as an image of its
+  own. The list is read when the section opens, once per loader; reading it
+  costs the macro IFD's block.
+- **Minimap.** An RGB slide's thumbnail, stretched over the slide's extent,
+  is the loader's `overview`, which the [minimap](../ui-reference.md#minimap)
+  draws instead of the coarsest level: one strip read and decode (132 KB for
+  the slide below) rather than every tile of that level (130). A thumbnail
+  that cannot be read leaves the minimap to the coarsest level, with a
+  notice.
 - **Metadata.** The pixel size is `MPP` from the description (`|`-separated
   `key = value` fields, any spacing around `=`), else `XResolution` in
   `ResolutionUnit`, else 0.2125 µm. The slide is one channel, `RGB`, drawn as
-  stored; a single-sample slide is one greyscale channel.
+  stored; a single-sample slide is one channel with the window of its bit
+  depth.
+- **Fluorescence.** Aperio FL scanners write one SVS per channel (16-bit,
+  uncompressed 256-pixel tiles, with an RGB thumbnail, label, and macro) and
+  an `.afi` XML file that lists a scan's channel files. A channel file's
+  channel is named by `Dye` and drawn in `DisplayColor` (a packed `0xRRGGBB`
+  integer). `Acquisition Bit Depth` (10) is the camera's: the samples span
+  the full 16 bits, so it does not set the window. Open one channel file as
+  the image and the others as [custom layers](#custom-image-layers); `.afi`
+  files are not read.
 - **Per-level tags.** Each level is decoded with its own IFD's tags: Aperio
   writes different JPEG quantization tables for each level.
 - **Tile offsets** of a level are read when its first tile is fetched, so
   level 0's offsets, the largest arrays, wait until the view zooms in.
 - **Adjacent reads.** SVS tiles are small (240 or 256 px, a few KB) and stored
-  back to back, row by row or in scan stripes. A tile fetch reads, in one
-  request, the run of tiles stored next to it in the file that lie within 4
-  tiles of it in the image (at most 16 tiles and 1 MiB). The others wait in
-  memory, at most 512 of them, for their own fetch. A run is not cancelled
-  when its tile leaves the view, since other tiles may be waiting on it.
+  back to back, row by row or in scan stripes, so tiles in view are read in
+  runs, as for every tiled TIFF (see
+  [Fetching And Decoding](#fetching-and-decoding)).
 - **Missing tiles.** A zero-length tile is drawn transparent without a
   request.
 - `.zchunkstore` sidecars are not used. A sidecar named by the dataset
@@ -286,16 +315,21 @@ components; see [Codecs](#codecs).
 
 Checked against:
 
-| File                                                                                                                | Scanner                       | Tiles                                         | Levels                                     |
-| ------------------------------------------------------------------------------------------------------------------- | ----------------------------- | --------------------------------------------- | ------------------------------------------ |
-| BioImage Archive S-BSST129 `HR10036-BL117659-94605_N2.svs` (24 MB)                                                  | Aperio AT2                    | JPEG 2000 RGB, 240 px                         | 11,952 × 8,842 and 2,988 × 2,210; 0.503 µm |
-| OpenSlide test data `CMU-1.svs` and `CMU-1-Small-Region.svs`                                                        | Aperio ScanScope              | JPEG RGB, `JPEGTables` per level, 256 px      | 46,000 × 32,914, three levels; 0.499 µm    |
-| BioImage Archive S-BIAD2323 `component_C_leica_svs/c003_leica.svs` and `component_A_grundium_svs/c004_grundium.svs` | Leica GT450 DX, Grundium Ocus | JPEG YCbCr, BigTIFF, 256 px and 512 px        | five and four levels; 0.264 and 0.251 µm   |
-| OpenSlide test data `JP2K-33003-1.svs`                                                                              | Aperio                        | JPEG 2000 YCbCr, chroma at half width, 256 px | 15,374 × 17,497, three levels              |
+| File                                                                                                                                           | Scanner                                 | Tiles                                         | Levels                                     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | --------------------------------------------- | ------------------------------------------ |
+| BioImage Archive S-BSST129 `HR10036-BL117659-94605_N2.svs` (24 MB)                                                                             | Aperio AT2                              | JPEG 2000 RGB, 240 px                         | 11,952 × 8,842 and 2,988 × 2,210; 0.503 µm |
+| OpenSlide test data `CMU-1.svs` and `CMU-1-Small-Region.svs`                                                                                   | Aperio ScanScope                        | JPEG RGB, `JPEGTables` per level, 256 px      | 46,000 × 32,914, three levels; 0.499 µm    |
+| BioImage Archive S-BIAD2323 `component_C_leica_svs/c003_leica.svs` and `component_A_grundium_svs/c004_grundium.svs`                            | Leica GT450 DX, Grundium Ocus           | JPEG YCbCr, BigTIFF, 256 px and 512 px        | five and four levels; 0.264 and 0.251 µm   |
+| OpenSlide test data `JP2K-33003-1.svs`                                                                                                         | Aperio                                  | JPEG 2000 YCbCr, chroma at half width, 256 px | 15,374 × 17,497, three levels              |
+| Zenodo [10.5281/zenodo.841835](https://zenodo.org/records/841835) `Papadeno_L34_MS1_Tumor3_DAPI.tif` and `…_Alexa Fluor 568.tif` (858 MB each) | Aperio ScanScope FL (ImageScope export) | Uncompressed 16-bit, one channel, 256 px      | 18,417 × 21,256 and two levels; 0.463 µm   |
 
-All but the last were opened in the app (the BioImage Archive ones directly
-from EBI); for `JP2K-33003-1.svs`, tiles decoded by the app were compared with
-tifffile (`imagecodecs`) decodes.
+All but `JP2K-33003-1.svs` were opened in the app (the BioImage Archive ones
+directly from EBI, the Zenodo ones through a local mirror, since Zenodo's
+CORS-enabled `/api/records/…/content` URLs do not end in a file name the app
+detects); for `JP2K-33003-1.svs`, tiles decoded by the app were compared with
+tifffile (`imagecodecs`) decodes. The slide images of CMU-1-Small-Region, the
+BioImage Archive Aperio slide, and the Zenodo channel files were drawn in the
+app.
 
 ### NDPI
 
@@ -447,6 +481,21 @@ transform.
 - `TileRequestScheduler` (`src/tiff/tileRequestScheduler.ts`) loads the tiles
   in view, nearest first. When the view moves, tiles still in view keep
   loading and only those that left it are cancelled.
+- **Runs of tiles.** Each tile fetch is told which tiles the scheduler still
+  has queued at its level. A tiled TIFF level (OME-TIFF, QPTIFF, SVS, page
+  pyramids) reads, in one request, the queued tiles stored back to back with
+  the requested one (gaps up to 4 KB), growing both ways in file order, up to
+  16 tiles and 1 MiB. Tiles are mostly stored row by row, so a run is a
+  stretch of a row in view, or whole rows when the view spans the image. The
+  others wait in memory, at most 512, for their own fetch, and no other run
+  reads them. Tiles not in view are never read ahead, and a run is cancelled
+  once every tile waiting for it has left the view. Xenium's 1,024-pixel
+  JPEG 2000 tiles (400–670 KB) are too large to pair under 1 MiB, so they
+  are read one per request as before.
+- **Slots.** The concurrency limit counts requests rather than tiles: a tile
+  whose bytes turn out to come from another tile's run gives up its slot
+  (`onSharedRead`), so the scheduler starts another request instead of
+  holding a slot until the run arrives.
 
 ## OME-Zarr
 
@@ -601,13 +650,13 @@ fails, tiles are decoded and sampled on the main thread.
   IFDs are spread through the file, rather than together at the start, costs
   one 1 MiB block per IFD to open. Float (unmixed component) QPTIFFs fail like
   other float images.
-- SVS: the thumbnail, label, and macro images are not shown, and the minimap
-  draws the coarsest level from its own tiles rather than the thumbnail, so
-  it decodes that level a second time. Aperio's 4× level steps mean a view
-  just past a level switch draws about 7 source pixels per screen pixel.
-  Aperio fluorescence SVS files (one pyramid per channel) have not been
-  tried. A JPEG 2000 33003 tile with full-width chroma would be shown as
-  YCbCr; no such file has been seen.
+- SVS: Aperio's 4× level steps mean a view just past a level switch draws
+  about 7 source pixels per screen pixel. An Aperio FL scan's `.afi` file is
+  not read, so its channels open one file at a time (the first as the image,
+  the others as custom layers). The minimap of a single-channel or
+  fluorescence slide draws the coarsest level, not the thumbnail. A JPEG 2000
+  33003 tile with full-width chroma would be shown as YCbCr; no such file has
+  been seen.
 - NDPI: files over 4 GB are not read, and on hosts that hide
   `Content-Range` (Zenodo) they fail with a parse error rather than the
   over-4-GB message. An NDPI URL without a `.ndpi` suffix (Zenodo's
