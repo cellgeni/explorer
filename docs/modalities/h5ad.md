@@ -49,16 +49,16 @@ the Visium platform once it is read; see
 
 ## Files Read
 
-| File                    | Required                                    | Read by                    | Library                                                    | Notes                                                                           |
-| ----------------------- | ------------------------------------------- | -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| `sample.h5ad`           | Yes                                         | `readH5ad`                 | `h5wasm` (by range or whole) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                                           |
-| `sample.h5ad.json`      | Over 300 MiB, this or the repository        | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                        | Kerchunk reference; URL is the H5AD URL plus `.json`                            |
-| `sample.h5ad.icechunk/` | Over 300 MiB with no JSON, this or the JSON | `readH5adIcechunkOrThrow`  | `icechunk-js` and `zarrita`                                | Icechunk repository of virtual references; URL is the H5AD URL plus `.icechunk` |
+| File                    | Required                                 | Read by                    | Library                                                    | Notes                                                                           |
+| ----------------------- | ---------------------------------------- | -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `sample.h5ad`           | Yes                                      | `readH5ad`                 | `h5wasm` (by range or whole) or `zarrita` over a reference | `HEAD` first to read `Content-Length`                                           |
+| `sample.h5ad.json`      | Over 300 MiB without Range, this or repo | `readH5adReferenceOrThrow` | `@zarrita/storage` `ReferenceStore`                        | Kerchunk reference; URL is the H5AD URL plus `.json`                            |
+| `sample.h5ad.icechunk/` | Over 300 MiB without Range, this or JSON | `readH5adIcechunkOrThrow`  | `icechunk-js` and `zarrita`                                | Icechunk repository of virtual references; URL is the H5AD URL plus `.icechunk` |
 
 ## Two Backends
 
-`readH5ad` picks a backend from the file size (`H5AD_MAX_FILE_BYTES` =
-300 MiB = 314,572,800 bytes):
+`readH5ad` picks a backend from the file size and whether the file can be read
+by range (`H5AD_MAX_FILE_BYTES` = 300 MiB = 314,572,800 bytes):
 
 - **HDF5 (`h5wasm`).** An H5 file worker (`src/workers/h5File.worker.ts`)
   opens the file with `h5wasm.File` and sends back its groups, datasets and
@@ -71,18 +71,20 @@ the Visium platform once it is read; see
     opens the URL itself and reads it by range with synchronous requests
     (`h5RangeFile.ts`, `rangeBlockCache.ts`), so only what HDF5 reads is
     fetched: object headers, those groups' arrays, and `/X`, read whole at
-    load. If the host ignores Range requests or hides the file's size, the
-    file is downloaded whole as above; without `Content-Length` the body is
-    streamed with a running byte count, and going past 300 MiB cancels the
-    download and switches to the reference backend.
-  - **Over 300 MiB without a reference:** read by range too. `/X` is read
-    whole if its arrays decode to at most 300 MiB
-    (`H5AD_RANGE_MATRIX_MAX_BYTES`); otherwise each request slices it in the
-    worker, as the reference backend does.
+    load. A file over 300 MiB is read this way too, with or without a
+    reference next to it; its `/X` is read whole if its arrays decode to at
+    most 300 MiB (`H5AD_RANGE_MATRIX_MAX_BYTES`), and otherwise each request
+    slices it in the worker, as the reference backend does.
+  - **When the host ignores Range requests or hides the file's size:** a
+    file up to 300 MiB is downloaded whole as above; without
+    `Content-Length` the body is streamed with a running byte count, and
+    going past 300 MiB cancels the download and switches to the reference
+    backend. A file over 300 MiB goes straight to the reference backend.
 
   A custom `fetcher` (tests) keeps the whole download on the main thread.
 
-- **Kerchunk reference (`zarrita`).** For files over 300 MiB. The app fetches
+- **Kerchunk reference (`zarrita`).** For files over 300 MiB that the worker
+  cannot read by range, or read through a custom `fetcher`. The app fetches
   `<h5ad URL>.json`, rewrites every chunk reference to point at the H5AD URL
   (the URL stored in the JSON is ignored), and opens it as a Zarr v2 store with
   `ReferenceStore.fromSpec`. Chunk reads are byte-range requests with at most 6

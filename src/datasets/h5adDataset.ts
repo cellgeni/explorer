@@ -1645,35 +1645,21 @@ interface ReadH5adOptions {
   readonly onProgress?: H5adLoadProgressReporter
 }
 
-// Small files are downloaded whole. Over the size limit, a companion reference
-// is preferred to reading by range. A host that does not answer range requests
-// gets the file downloaded whole, within the limit.
+// Small files are downloaded whole, and larger ones read by range. A companion
+// reference is used only for a file over the size limit that cannot be read by
+// range: its host does not answer range requests, or this is a custom fetcher.
+// Below the limit, such a file is downloaded whole.
 async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCache> {
   const { fetcher, onProgress } = options
   reportH5adProgress(onProgress, 'H5AD size check started')
   const headResponse = await fetchH5adHead(url, fetcher).catch(() => null)
   const declaredByteLength =
     headResponse?.ok === true ? readContentLength(headResponse.headers) : null
-  const openByRange = options.byRange ? () => readH5adByRange(url, options) : null
-
-  if (declaredByteLength !== null && declaredByteLength > H5AD_MAX_FILE_BYTES) {
-    reportH5adProgress(
-      onProgress,
-      `H5AD file is ${formatByteCount(
-        declaredByteLength,
-      )}, above the ${formatByteCount(H5AD_MAX_FILE_BYTES)} browser limit`,
-    )
-    return readH5adReferenceOrThrow(
-      url,
-      fetcher,
-      declaredByteLength,
-      onProgress,
-      openByRange,
-    )
-  }
+  const overSizeLimit =
+    declaredByteLength !== null && declaredByteLength > H5AD_MAX_FILE_BYTES
 
   if (
-    openByRange !== null &&
+    options.byRange &&
     (declaredByteLength === null || declaredByteLength > H5AD_RANGE_MIN_FILE_BYTES)
   ) {
     reportH5adProgress(
@@ -1682,7 +1668,7 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
         ? 'H5AD size check unavailable; reading by range'
         : `H5AD file is ${formatByteCount(declaredByteLength)}; reading by range`,
     )
-    const cache = await openByRange()
+    const cache = await readH5adByRange(url, options)
 
     if (cache !== null) {
       return cache
@@ -1690,8 +1676,20 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
 
     reportH5adProgress(
       onProgress,
-      'H5AD host does not answer range requests; downloading the whole file',
+      overSizeLimit
+        ? 'H5AD host does not answer range requests'
+        : 'H5AD host does not answer range requests; downloading the whole file',
     )
+  }
+
+  if (overSizeLimit) {
+    reportH5adProgress(
+      onProgress,
+      `H5AD file is ${formatByteCount(
+        declaredByteLength,
+      )}, above the ${formatByteCount(H5AD_MAX_FILE_BYTES)} browser limit`,
+    )
+    return readH5adReferenceOrThrow(url, fetcher, declaredByteLength, onProgress)
   }
 
   if (declaredByteLength === null) {
@@ -1727,7 +1725,7 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
         )}; looking for companion reference`,
       )
       // The host ignored range requests, or this is a custom fetcher.
-      return readH5adReferenceOrThrow(url, fetcher, error.byteLength, onProgress, null)
+      return readH5adReferenceOrThrow(url, fetcher, error.byteLength, onProgress)
     }
 
     throw error
@@ -1858,27 +1856,18 @@ function hydrateH5WorkerGroup(
   )
 }
 
-// `openByRange` opens the file without a companion, when its host allows.
 async function readH5adReferenceOrThrow(
   url: string,
   fetcher: typeof fetch,
   byteLength: number,
   onProgress: H5adLoadProgressReporter | undefined,
-  openByRange: (() => Promise<H5adCache | null>) | null,
 ): Promise<H5adCache> {
   const referenceUrl = h5adReferenceUrl(url)
   reportH5adProgress(onProgress, `Looking for H5AD reference ${referenceUrl}`)
   const response = await fetchH5adReferenceFile(referenceUrl, fetcher).catch(() => null)
 
   if (response?.ok !== true) {
-    return readH5adIcechunkOrThrow(
-      url,
-      fetcher,
-      referenceUrl,
-      byteLength,
-      onProgress,
-      openByRange,
-    )
+    return readH5adIcechunkOrThrow(url, fetcher, referenceUrl, byteLength, onProgress)
   }
 
   reportH5adProgress(onProgress, `Loading H5AD reference ${referenceUrl}`)
@@ -1912,7 +1901,6 @@ async function readH5adIcechunkOrThrow(
   referenceUrl: string,
   byteLength: number,
   onProgress: H5adLoadProgressReporter | undefined,
-  openByRange: (() => Promise<H5adCache | null>) | null,
 ): Promise<H5adCache> {
   const repositoryUrl = h5adIcechunkUrl(url)
   reportH5adProgress(onProgress, `Looking for H5AD Icechunk repository ${repositoryUrl}`)
@@ -1925,18 +1913,6 @@ async function readH5adIcechunkOrThrow(
     })
   } catch (error) {
     if (error instanceof IcechunkRepositoryUnavailableError && !error.found) {
-      if (openByRange !== null) {
-        reportH5adProgress(
-          onProgress,
-          'No H5AD reference or Icechunk repository; reading the file by range',
-        )
-        const cache = await openByRange()
-
-        if (cache !== null) {
-          return cache
-        }
-      }
-
       throw new H5adReferenceFileUnavailableError(
         url,
         referenceUrl,

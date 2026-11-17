@@ -349,10 +349,11 @@ spot outlines.
 For hosted H5AD files, use the same CORS and byte-range rules listed above.
 Files up to 64 MiB are downloaded whole (no byte ranges) and opened
 client-side with `h5wasm`; larger ones are read by range, so only the groups
-the viewer shows are fetched. A host without byte-range support gets files up
-to 300 MiB downloaded whole. Over 300 MiB, the viewer uses a sibling kerchunk
-reference JSON at the H5AD URL plus `.json`, or an Icechunk repository at the
-H5AD URL plus `.icechunk`, when there is one; for example:
+the viewer shows are fetched, whatever their size. A host without byte-range
+support gets files up to 300 MiB downloaded whole. Over 300 MiB, when the file
+cannot be read by range (for example the host hides its size), the viewer uses
+a sibling kerchunk reference JSON at the H5AD URL plus `.json`, or an Icechunk
+repository at the H5AD URL plus `.icechunk`; for example:
 
 ```text
 https://bucket.example/path/to/sample.h5ad
@@ -363,10 +364,10 @@ https://bucket.example/path/to/sample.h5ad.icechunk/   (instead of the .json)
 Generate either with `scripts/make_h5ad_reference.py` (VirtualiZarr; see
 [Large H5AD files](./h5ad-reference.md)), then host them with CORS and
 byte-range support.
-The app probes the H5AD size first; when the file exceeds 300 MiB it opens the
-JSON with Zarrita `ReferenceStore`, or the repository with `icechunk-js`, and
-lazily reads the referenced HDF5 chunks; with neither, it reads the file by
-range. Chunk references are always
+The app probes the H5AD size first and reads the file by range; only when
+that fails and the file exceeds 300 MiB does it open the JSON with Zarrita
+`ReferenceStore`, or the repository with `icechunk-js`, and lazily read the
+referenced HDF5 chunks. Chunk references are always
 redirected to the H5AD URL, so the URL stored inside the reference does not
 matter. AnnData written straight into an Icechunk repository opens from its
 `.icechunk` URL; see [AnnData in Icechunk](./modalities/h5ad.md#anndata-in-icechunk). With the reference backend, or a CSC `/X` over

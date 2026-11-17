@@ -1707,7 +1707,7 @@ describe('AnnDataH5adDataset read by range', () => {
     )
   })
 
-  it('opens a file over the size limit by range when it has no companion', async () => {
+  it('reads a file over the size limit by range without looking for a companion', async () => {
     // HEAD says 350 MiB; the range replies give the fixture's true size.
     const host = stubH5adRangeHost(await createTinyH5ad('csr'), {
       headByteLength: 350 * 1024 * 1024,
@@ -1720,28 +1720,49 @@ describe('AnnDataH5adDataset read by range', () => {
     })
 
     await expect(dataset.cellIds()).resolves.toEqual(allCells)
-    expect(progress).toContain(
-      'No H5AD reference or Icechunk repository; reading the file by range',
-    )
-    // Companion lookups are not listed; the H5AD itself is never fetched whole.
+    expect(progress.slice(0, 2)).toEqual([
+      'H5AD size check started',
+      'H5AD file is 350.0 MB; reading by range',
+    ])
+    // A .h5ad.json or .h5ad.icechunk next to it would not be read.
+    expect(host.companionRequests).toEqual([])
+    // The H5AD itself is never fetched whole.
     expect(host.requests.filter(({ range }) => range === null)).toEqual([
       { method: 'HEAD', range: null, url: 'https://example.test/oversized.h5ad' },
     ])
   })
 
-  it('names the missing companion when an oversized file cannot be read by range', async () => {
+  it('looks for a companion when an oversized file cannot be read by range', async () => {
     const host = stubH5adRangeHost(await createTinyH5ad('csr'), {
       headByteLength: 350 * 1024 * 1024,
       answersRange: false,
     })
+    const progress: string[] = []
     const dataset = new AnnDataH5adDataset({
       url: 'https://example.test/oversized.h5ad',
       h5WorkerFactory: host.h5WorkerFactory,
+      onProgress: (message) => progress.push(message),
     })
 
     await expect(dataset.meta()).rejects.toMatchObject({
       name: 'H5adReferenceFileUnavailableError',
     })
+    expect(progress.slice(0, 5)).toEqual([
+      'H5AD size check started',
+      'H5AD file is 350.0 MB; reading by range',
+      'H5AD host does not answer range requests',
+      'H5AD file is 350.0 MB, above the 300.0 MB browser limit',
+      'Looking for H5AD reference https://example.test/oversized.h5ad.json',
+    ])
+    expect(host.companionRequests[0]).toBe('https://example.test/oversized.h5ad.json')
+    expect(host.companionRequests.slice(1)).toContainEqual(
+      expect.stringMatching(/^https:\/\/example\.test\/oversized\.h5ad\.icechunk\//),
+    )
+    // Only the first range request; the file is never downloaded whole.
+    expect(host.requests.map(({ method, range }) => [method, range])).toEqual([
+      ['HEAD', null],
+      ['GET', 'bytes=0-1048575'],
+    ])
   })
 })
 
@@ -1752,10 +1773,11 @@ interface H5adRangeHostOptions {
 }
 
 // Serves `bytes` at any .h5ad URL through a stubbed global fetch (other paths,
-// such as companion references, are 404), and starts in-process H5 workers that
-// read it by range as the real worker does.
+// such as companion references, are 404 and listed in `companionRequests`), and
+// starts in-process H5 workers that read it by range as the real worker does.
 function stubH5adRangeHost(bytes: Uint8Array, options: H5adRangeHostOptions = {}) {
   const requests: { method: string; range: string | null; url: string }[] = []
+  const companionRequests: string[] = []
   const rangeReads: (readonly [number, number])[] = []
 
   vi.stubGlobal(
@@ -1766,6 +1788,7 @@ function stubH5adRangeHost(bytes: Uint8Array, options: H5adRangeHostOptions = {}
       const range = new Headers(init?.headers).get('range')
 
       if (!new URL(url).pathname.endsWith('.h5ad')) {
+        companionRequests.push(url)
         return new Response(null, { status: 404 })
       }
 
@@ -1797,6 +1820,7 @@ function stubH5adRangeHost(bytes: Uint8Array, options: H5adRangeHostOptions = {}
 
   return {
     requests,
+    companionRequests,
     rangeReads,
     // The first range request and the range reads after it.
     fetchedBytes: () =>

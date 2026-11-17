@@ -128,11 +128,12 @@ Enter a source in the `Dataset or image URL` field:
   filtered feature-barcode matrix, plus root `feature_slice.h5` for gene
   overlays.
 - H5AD: direct `.h5ad` file URL with `obs`, `var`, `/X`, and a supported 2D
-  `obsm` coordinate matrix. Files over 64 MiB are read by range; over
-  300 MiB on a host without Range support they need a `.h5ad.json` reference
-  or `.h5ad.icechunk` repository next to them. An AnnData Zarr store (v2 or
-  v3, as `adata.write_zarr` writes it) needs neither, as it is read chunk
-  by chunk; its root metadata must say `encoding-type: anndata`.
+  `obsm` coordinate matrix. Files over 64 MiB are read by range, without a
+  `.h5ad.json` reference or `.h5ad.icechunk` repository; one next to the file
+  is read only when it is over 300 MiB and cannot be read by range. An
+  AnnData Zarr store (v2 or v3, as `adata.write_zarr` writes it) needs
+  neither, as it is read chunk by chunk; its root metadata must say
+  `encoding-type: anndata`.
 - SpatialData: Zarr store root (v2 or v3) with consolidated metadata, an AnnData
   table annotating a shapes or labels element, and optionally image elements;
   or the same store zipped as one `.zarr.zip` file.
