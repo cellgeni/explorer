@@ -22,10 +22,10 @@ import {
 } from './appRuntimeModel'
 import {
   gridCellLayerBinSize,
-  visiumHdOverviewToGridCellLayerData,
+  visiumHdOverviewToGridCellColumns,
 } from './visiumHdGridLayerData'
 import { isVisiumHdOverviewDataset } from './useVisiumHdBinWorkflow'
-import type { GridCellDatum } from '../../rendering/deckLayers'
+import type { GridCellColumns } from '../../rendering/gridCellColumns'
 
 interface MutableRef<T> {
   current: T
@@ -46,7 +46,7 @@ interface VisiumHdGridLodWorkflowControls {
 interface VisiumHdGridLodWorkflowData {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly loadedDatasetUrl: string | null
-  readonly spatialGridCells: readonly GridCellDatum[]
+  readonly spatialGridCells: GridCellColumns
 }
 
 interface VisiumHdGridLodWorkflowLoaders {
@@ -59,7 +59,7 @@ interface VisiumHdGridLodWorkflowRefs {
 
 interface VisiumHdGridLodWorkflowSetters {
   readonly setLoadState: Setter<DatasetLoadState<StructuredLoadError>>
-  readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
+  readonly setSpatialGridCells: Setter<GridCellColumns>
   readonly setVisiumHdControlState: Setter<VisiumHdControlState>
 }
 
@@ -122,9 +122,7 @@ export function useVisiumHdGridLodWorkflow({
           return
         }
 
-        setSpatialGridCells(
-          visiumHdOverviewToGridCellLayerData(overview, selectedBinSize),
-        )
+        setSpatialGridCells(visiumHdOverviewToGridCellColumns(overview, selectedBinSize))
         setLoadState(datasetLoadReady(datasetUrl, overview.gridCells.ids.length))
         setVisiumHdControlState(
           visiumHdControlReadyFromOptions(

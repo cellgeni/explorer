@@ -121,13 +121,27 @@ export function minimapPoints<Element>(
   positionOf: (element: Element) => readonly [number, number] | null,
   limit = MINIMAP_POINT_LIMIT,
 ): readonly (readonly [number, number])[] {
-  const stride = Math.max(1, elements.length / limit)
+  return minimapIndexPoints(
+    elements.length,
+    (index) => {
+      const element = elements[index]
+      return element === undefined ? null : positionOf(element)
+    },
+    limit,
+  )
+}
+
+// As minimapPoints, for elements known by index, such as columnar grid bins.
+export function minimapIndexPoints(
+  count: number,
+  positionAt: (index: number) => readonly [number, number] | null,
+  limit = MINIMAP_POINT_LIMIT,
+): readonly (readonly [number, number])[] {
+  const stride = Math.max(1, count / limit)
   const points: (readonly [number, number])[] = []
 
-  for (let index = 0; index < elements.length; index += stride) {
-    const element = elements[Math.floor(index)]
-    if (element === undefined) continue
-    const position = positionOf(element)
+  for (let index = 0; index < count; index += stride) {
+    const position = positionAt(Math.floor(index))
     if (position !== null) points.push(position)
   }
 

@@ -25,16 +25,6 @@ Sequencing:
 - [ ] Feature-fix pass: keep recording fixes until correctness is stable.
 - [ ] Optimization pass: interaction, memory, fetch/decode concurrency, and
       rendering cost, without behaviour changes.
-- [ ] Hosted Visium HD optimization: profiling, segmentation streaming, Feature
-      Slice ranges, memory, and bundles. Partly done: Feature Slice and
-      matrix reads go through the range-read H5 worker (#122,
-      `visiumFeatureSlice.ts`), and segmentation GeoJSON is parsed once, in a
-      worker (`visiumHdSegmentationIndex.worker.ts`). Profiled 2026-11-17
-      ([Phase 6](phases/06-visium-hd.md#closed-open-items)): 16 µm first
-      paint is ready in 3.6 s with one 296 ms long task, and the Visium HD
-      chunks are small. Left: the 2 µm tier keeps an object, polygon and
-      index entry per bin, about 1.8 GB of heap and 2–3 s blocks for the
-      reference's 3.4 million bins; a columnar grid would remove most of it.
 
 Other gaps found in the review:
 

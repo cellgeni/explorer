@@ -20,7 +20,12 @@ import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import { ViewerMinimap } from './ViewerMinimap'
 import { ViewerAxes } from './ViewerAxes'
 import { viewerAxesModel } from './viewerAxesModel'
-import { minimapDrawsImage, minimapLayout, minimapPoints } from './viewerMinimapModel'
+import {
+  minimapDrawsImage,
+  minimapIndexPoints,
+  minimapLayout,
+  minimapPoints,
+} from './viewerMinimapModel'
 import {
   selectionOverlayModel,
   type ViewerSelectionHighlight,
@@ -61,13 +66,26 @@ import {
   type MouseCoordinate,
 } from './viewerNavigation'
 import {
-  countGridCellsInSpatialIndex,
   createGridCellRenderLods,
-  createGridCellSpatialIndex,
-  gridCellsInBbox,
   isRenderLodGridCell,
   selectGridCellsForRenderLod,
 } from './viewerGridCellIndex'
+import {
+  countGridCellsInBbox,
+  EMPTY_GRID_CELL_COLUMNS,
+  gridCellCenterXAt,
+  gridCellCenterYAt,
+  gridCellIndicesInBbox,
+  gridCellTileIndex,
+  type GridCellColumns,
+} from '../rendering/gridCellColumns'
+import {
+  createGridCellStyler,
+  gridCellRenderSelection,
+  packGridCellCenters,
+  packGridCellColors,
+  packGridCells,
+} from '../rendering/gridCellRenderer'
 import {
   dataPointsToBbox,
   dataPointsToPathOverlay,
@@ -88,7 +106,6 @@ import {
   expressingElementsByScore,
   spatialOverviewView,
   styleCellsByGeneExpression,
-  styleGridCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
   FIT_FALLBACK_VIEWPORT,
@@ -126,7 +143,6 @@ import {
 import {
   createElementObservationColorizer,
   createObservationColorizer,
-  styleGridCellsByObservation,
 } from '../rendering/cellStyling'
 import { scaleFromZoom } from '../data/coords'
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
@@ -231,7 +247,6 @@ const EMPTY_LEGEND_SECTIONS: readonly ViewerLegendSection[] = []
 // Defaults for omitted props are constants, so a parent re-render that leaves
 // them out does not hand deck.gl new layers.
 const EMPTY_BOUNDARIES: readonly CellBoundaryDatum[] = []
-const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
 const EMPTY_TRANSCRIPT_BINS: NonNullable<ViewerCoreProps['transcriptAggregateBins']> = []
 const EMPTY_TRANSCRIPT_POINTS: NonNullable<ViewerCoreProps['transcriptPoints']> = []
 const EMPTY_IMAGE_CHANNELS: NonNullable<ViewerCoreProps['imageChannels']> = []
@@ -248,7 +263,7 @@ export function ViewerCore({
   cellBoundaryHoverEnabled = false,
   hoverTooltipsEnabled = true,
   overviewCellSourceLabel = 'Xenium',
-  gridCells = EMPTY_GRID_CELLS,
+  gridCells = EMPTY_GRID_CELL_COLUMNS,
   fitGridCells,
   fitImageExtent = null,
   transcriptAggregateBins = EMPTY_TRANSCRIPT_BINS,
@@ -340,10 +355,10 @@ export function ViewerCore({
               cell.position[0] ?? 0,
               cell.position[1] ?? 0,
             ])
-          : minimapPoints(viewFitGridCells, (cell) => {
-              const corner = cell.polygon[0]
-              return corner === undefined ? null : [corner[0] ?? 0, corner[1] ?? 0]
-            }),
+          : minimapIndexPoints(viewFitGridCells.length, (index) => [
+              gridCellCenterXAt(viewFitGridCells, index),
+              -gridCellCenterYAt(viewFitGridCells, index),
+            ]),
     [minimap, minimapImageless, viewFitCells, viewFitGridCells],
   )
   const resetKey =
@@ -462,8 +477,8 @@ interface ViewerSurfaceProps {
   readonly cellBoundaryHoverEnabled: boolean
   readonly hoverTooltipsEnabled: boolean
   readonly overviewCellSourceLabel: string
-  readonly gridCells: readonly GridCellDatum[]
-  readonly viewportCountGridCells: readonly GridCellDatum[]
+  readonly gridCells: GridCellColumns
+  readonly viewportCountGridCells: GridCellColumns
   readonly transcriptAggregateBins: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints: readonly TranscriptPointDatum[]
   readonly geometricAnnotations: readonly GeometricAnnotationDatum[]
@@ -815,29 +830,28 @@ function ViewerSurface({
     [renderGridCellLods, viewState.zoom],
   )
   const viewportCountGridCellIndex = useMemo(
-    () => createGridCellSpatialIndex(viewportCountGridCells),
+    () => gridCellTileIndex(viewportCountGridCells),
     [viewportCountGridCells],
   )
   // Grids up to GRID_CELL_FULL_RENDER_LIMIT bins are drawn whole and the GPU
   // culls bins off screen. Larger ones (exact 2 µm bins) are clipped to a
   // snapped box around the view, which only changes every half view of panning.
-  const renderGridCellIndex = useMemo(
-    () =>
-      renderLodGridCells.length > GRID_CELL_FULL_RENDER_LIMIT
-        ? createGridCellSpatialIndex(renderLodGridCells)
-        : null,
-    [renderLodGridCells],
-  )
   const gridCellClipKey =
-    renderGridCellIndex === null || viewportBbox === null
+    renderLodGridCells.length <= GRID_CELL_FULL_RENDER_LIMIT || viewportBbox === null
       ? null
       : snappedViewportClipKey(viewportBbox)
   const renderGridCells = useMemo(
     () =>
-      renderGridCellIndex === null || gridCellClipKey === null
-        ? renderLodGridCells
-        : gridCellsInBbox(renderGridCellIndex, viewportClipBboxFromKey(gridCellClipKey)),
-    [gridCellClipKey, renderGridCellIndex, renderLodGridCells],
+      gridCellRenderSelection(
+        renderLodGridCells,
+        gridCellClipKey === null
+          ? null
+          : gridCellIndicesInBbox(
+              gridCellTileIndex(renderLodGridCells),
+              viewportClipBboxFromKey(gridCellClipKey),
+            ),
+      ),
+    [gridCellClipKey, renderLodGridCells],
   )
   // Every overview cell stays on the GPU. Panning only changes how many of them
   // the GPU draws: cells are sampled by a fixed rank down to the render limit,
@@ -892,28 +906,37 @@ function ViewerSurface({
   const cellPointRankValues = useMemo(() => cellPointRanks(cells.length), [cells.length])
   const cellPointGeometry = useMemo(() => packCellPointGeometry(cells), [cells])
   // Bins take an annotation or metadata colour by their barcode, as cells do
-  // by their ID; gene expression colours over it.
-  const gridCellObservationColorizer = useMemo(
+  // by their ID; gene expression colours over it. Only the drawn bins are
+  // packed for the GPU, and a bin becomes an object only when it is picked.
+  const gridCellStyler = useMemo(
     () =>
-      createElementObservationColorizer(observationColorMode, {
-        annotations: annotationStyleColors,
-        metadataTrack: cellMetadataTrack,
+      createGridCellStyler({
+        observationColor: createElementObservationColorizer(observationColorMode, {
+          annotations: annotationStyleColors,
+          metadataTrack: cellMetadataTrack,
+        }),
+        expressionIndex: geneExpressionPointStyleIndex,
+        styleUnmatchedCells: geneExpressionActive,
       }),
-    [annotationStyleColors, cellMetadataTrack, observationColorMode],
-  )
-  const expressionStyledGridCells = useMemo(
-    () =>
-      styleGridCellsByGeneExpression(
-        styleGridCellsByObservation(renderGridCells, gridCellObservationColorizer),
-        geneExpressionPointStyleIndex,
-        { styleUnmatchedCells: geneExpressionActive },
-      ),
     [
+      annotationStyleColors,
+      cellMetadataTrack,
       geneExpressionActive,
       geneExpressionPointStyleIndex,
-      gridCellObservationColorizer,
-      renderGridCells,
+      observationColorMode,
     ],
+  )
+  const gridCellCenters = useMemo(
+    () => packGridCellCenters(renderGridCells),
+    [renderGridCells],
+  )
+  const gridCellColors = useMemo(
+    () => packGridCellColors(renderGridCells, gridCellStyler),
+    [gridCellStyler, renderGridCells],
+  )
+  const gridCellPacking = useMemo(
+    () => packGridCells(renderGridCells, gridCellCenters, gridCellColors, gridCellStyler),
+    [gridCellCenters, gridCellColors, gridCellStyler, renderGridCells],
   )
   // The overlay draws every expressing cell at every zoom, highest scores last
   // so they stay on top where cells overlap zoomed out. Cells scoring zero are
@@ -1057,7 +1080,7 @@ function ViewerSurface({
         cellBoundaryFillEnabled,
         cellBoundaryPickable: cellBoundaryHoverEnabled,
         nucleusBoundaries,
-        gridCells: expressionStyledGridCells,
+        gridCells: gridCellPacking,
         cellBoundaryGeometry: boundaryLayerGeometry,
         cellBoundaryStyle: boundaryLayerStyle,
         geneExpressionActive,
@@ -1086,7 +1109,7 @@ function ViewerSurface({
       nucleusBoundaries,
       cells,
       cellPointPacking,
-      expressionStyledGridCells,
+      gridCellPacking,
       geneExpressionActive,
       geneExpressionOverlayElements,
       geometricAnnotations,
@@ -1120,7 +1143,7 @@ function ViewerSurface({
     () =>
       viewportBbox === null
         ? viewportCountGridCells.length
-        : countGridCellsInSpatialIndex(viewportCountGridCellIndex, viewportBbox),
+        : countGridCellsInBbox(viewportCountGridCellIndex, viewportBbox),
     [viewportBbox, viewportCountGridCells.length, viewportCountGridCellIndex],
   )
   const estimatedViewportCellCount = useMemo(() => {
@@ -1445,7 +1468,7 @@ function ViewerSurface({
 
         const [x = 0, deckY = 0] = viewState.target
         const reach = KEYBOARD_PICK_RADIUS_PIXELS / scaleFromZoom(viewState.zoom)
-        const bin = gridCellAtPoint(renderGridCells, x, -deckY)
+        const bin = gridCellAtPoint(renderLodGridCells, x, -deckY)
 
         if (bin !== null && onGridCellClick !== undefined) {
           event.preventDefault()
@@ -1485,7 +1508,7 @@ function ViewerSurface({
       onGridCellClick,
       onRoiComplete,
       overviewCellIndex,
-      renderGridCells,
+      renderLodGridCells,
       roiMode,
       selectionHighlight,
       viewState,

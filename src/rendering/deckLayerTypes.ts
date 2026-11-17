@@ -1,4 +1,5 @@
 import type { CellPointGeometry } from './cellPointStyle'
+import type { GridCellPacking } from './gridCellRenderer'
 import type { BinaryAttribute, Color, Position } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { CellMetadata } from '../data/cellMetadata'
@@ -60,17 +61,6 @@ export interface GridCellDatum {
   readonly lineColor: Color
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
-}
-
-export interface GridCellLayerDataOptions {
-  readonly metadata?: readonly GridCellLayerBatchMetadata[]
-}
-
-export interface GridCellLayerBatchMetadata {
-  readonly binSizeMicrometers?: number
-  readonly inTissue?: ArrayLike<number>
-  readonly fullresRows?: ArrayLike<number>
-  readonly fullresCols?: ArrayLike<number>
 }
 
 export interface CellBoundaryLayerGeometryOptions {
@@ -191,7 +181,8 @@ export interface OverviewLayerOptions {
   readonly cellPointScale?: number
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly nucleusBoundaryOpacity?: number
-  readonly gridCells?: readonly GridCellDatum[]
+  // The bins drawn, packed (gridCellRenderer.ts).
+  readonly gridCells?: GridCellPacking | null
   readonly gridCellOpacity?: number
   readonly cellBoundaryGeometry?: CellBoundaryLayerGeometry
   readonly cellBoundaryStyle?: CellBoundaryLayerStyle

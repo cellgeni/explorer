@@ -68,11 +68,19 @@ vi.mock('@deck.gl/react', () => ({
             readonly data?: readonly unknown[]
             // Packed layers keep their objects here for picking.
             readonly cells?: readonly unknown[]
+            // Or build the picked one (grid bins).
+            readonly pickObject?: ((index: number) => unknown) | null
           }
         }
         const id = candidate.id ?? candidate.props?.id ?? 'unknown-layer'
         const data = candidate.props?.cells ?? candidate.props?.data ?? []
-        const clickObject = Array.isArray(data) ? data[0] : undefined
+        const pickObject = candidate.props?.pickObject
+        const clickObject =
+          typeof pickObject === 'function'
+            ? pickObject(0)
+            : Array.isArray(data)
+              ? data[0]
+              : undefined
 
         return (
           <div

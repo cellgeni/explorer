@@ -1667,17 +1667,14 @@ describe('useDatasetLifecycle', () => {
       url: datasetUrl,
       cellCount: 1,
     })
-    const gridCellCall = setSpatialGridCells.mock.calls.find(
-      ([value]) => Array.isArray(value) && value.length === 1,
-    )
-    expect(gridCellCall?.[0]).toEqual([
+    expect(setSpatialGridCells).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 'BC-1',
+        ids: ['BC-1'],
         gridId: grid.id,
-        row: 0,
-        col: 0,
+        rows: Int32Array.from([0]),
+        cols: Int32Array.from([0]),
       }),
-    ])
+    )
     await waitFor(() => {
       expect(setFlatMorphologyImage).toHaveBeenCalledWith({
         url: `${datasetUrl}/binned_outputs/square_016um/spatial/tissue_hires_image.png`,

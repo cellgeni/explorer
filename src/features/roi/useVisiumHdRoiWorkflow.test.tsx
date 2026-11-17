@@ -5,6 +5,11 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import { gridCellAt } from '../../rendering/gridCellColumns'
+import {
+  gridCellColumnsFixture,
+  squareGridBasis,
+} from '../../test/gridCellColumnsFixture'
 import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -29,19 +34,17 @@ const readyLoadState: DatasetLoadState<StructuredLoadError> = {
   cellCount: 1,
 }
 
+// One bin in the selection and one outside it, as 10 µm squares.
+const selectedGridCellColumns = gridCellColumnsFixture(
+  [
+    { id: 's_008um_1_1', row: 0, col: 0 },
+    { id: 's_008um_9_9', row: 4, col: 4 },
+  ],
+  { gridId: 'visium-hd-8um', binSizeMicrometers: 8, basis: squareGridBasis(10) },
+)
 const selectedGridCells: readonly GridCellDatum[] = [
-  gridCellDatum('s_008um_1_1', [
-    [0, 0, 0],
-    [10, 0, 0],
-    [10, -10, 0],
-    [0, -10, 0],
-  ]),
-  gridCellDatum('s_008um_9_9', [
-    [40, -40, 0],
-    [50, -40, 0],
-    [50, -50, 0],
-    [40, -50, 0],
-  ]),
+  gridCellAt(selectedGridCellColumns, 0),
+  gridCellAt(selectedGridCellColumns, 1),
 ]
 
 const readyVisiumHdRoiState: VisiumHdRoiState = {
@@ -129,7 +132,7 @@ function Probe({
     },
     data: {
       activeRoiState: visiumHdRoiState,
-      gridCells: selectedGridCells,
+      gridCells: selectedGridCellColumns,
       loadState,
       ...(referenceBins === undefined ? {} : { referenceBins }),
     },
@@ -476,16 +479,3 @@ describe('useVisiumHdRoiWorkflow', () => {
     expect(snapshot.visiumHdRoiState).toBe(readyVisiumHdRoiState)
   })
 })
-
-function gridCellDatum(id: string, polygon: GridCellDatum['polygon']): GridCellDatum {
-  return {
-    id,
-    gridId: 'visium-hd-8um',
-    row: 1,
-    col: 1,
-    binSizeMicrometers: 8,
-    polygon,
-    fillColor: [0, 0, 0, 255],
-    lineColor: [255, 255, 255, 255],
-  }
-}

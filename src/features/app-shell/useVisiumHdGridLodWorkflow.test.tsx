@@ -11,7 +11,8 @@ import type {
   VisiumHdBinnedOverview,
   VisiumHdBinSizeMicrometers,
 } from '../../datasets/visiumHdDataset'
-import type { GridCellDatum } from '../../rendering/deckLayers'
+import type { GridCellColumns } from '../../rendering/gridCellColumns'
+import { gridCellColumnsFixture } from '../../test/gridCellColumnsFixture'
 import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import { useVisiumHdGridLodWorkflow } from './useVisiumHdGridLodWorkflow'
 
@@ -29,7 +30,7 @@ function Probe({
 }: {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly getSpatialDataset: WorkflowOptions['loaders']['getSpatialDataset']
-  readonly spatialGridCells: readonly GridCellDatum[]
+  readonly spatialGridCells: GridCellColumns
   readonly setLoadState: WorkflowOptions['setters']['setLoadState']
   readonly setSpatialGridCells: WorkflowOptions['setters']['setSpatialGridCells']
   readonly setVisiumHdControlState: WorkflowOptions['setters']['setVisiumHdControlState']
@@ -68,7 +69,7 @@ describe('useVisiumHdGridLodWorkflow', () => {
       <Probe
         currentViewportDetail={viewportDetail(3)}
         getSpatialDataset={vi.fn(async () => dataset)}
-        spatialGridCells={[gridCellDatum(16)]}
+        spatialGridCells={gridCellColumns(16)}
         setLoadState={setLoadState}
         setSpatialGridCells={setSpatialGridCells}
         setVisiumHdControlState={setVisiumHdControlState}
@@ -79,16 +80,11 @@ describe('useVisiumHdGridLodWorkflow', () => {
       expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
     })
 
-    expect(setSpatialGridCells).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-      }),
-    ])
-    expect(
-      (setSpatialGridCells.mock.calls[0]?.[0] as readonly GridCellDatum[])[0]
-        ?.renderLodSourceBinSizeMicrometers,
-    ).toBeUndefined()
+    const loadedCells = setSpatialGridCells.mock.calls[0]?.[0] as GridCellColumns
+
+    expect(loadedCells.ids).toEqual(['s_002um_000001_000002-1'])
+    expect(loadedCells.binSizeMicrometers).toBe(2)
+    expect(loadedCells.renderLodSourceBinSizeMicrometers).toBeUndefined()
     expect(setLoadState).toHaveBeenCalledWith({
       status: 'ready',
       url: 'https://example.test/visium',
@@ -123,7 +119,7 @@ describe('useVisiumHdGridLodWorkflow', () => {
       <Probe
         currentViewportDetail={viewportDetail(3)}
         getSpatialDataset={vi.fn(async () => dataset)}
-        spatialGridCells={[gridCellDatum(16)]}
+        spatialGridCells={gridCellColumns(16)}
         setLoadState={vi.fn()}
         setSpatialGridCells={vi.fn()}
         setVisiumHdControlState={setVisiumHdControlState}
@@ -156,7 +152,7 @@ describe('useVisiumHdGridLodWorkflow', () => {
       <Probe
         currentViewportDetail={viewportDetail(2.9)}
         getSpatialDataset={vi.fn(async () => dataset)}
-        spatialGridCells={[gridCellDatum(2)]}
+        spatialGridCells={gridCellColumns(2)}
         setLoadState={setLoadState}
         setSpatialGridCells={setSpatialGridCells}
         setVisiumHdControlState={setVisiumHdControlState}
@@ -167,13 +163,13 @@ describe('useVisiumHdGridLodWorkflow', () => {
       expect(dataset.readBinnedOverview).toHaveBeenCalledWith(16)
     })
 
-    expect(setSpatialGridCells).toHaveBeenCalledWith([
+    expect(setSpatialGridCells).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 's_016um_000001_000002-1',
+        ids: ['s_016um_000001_000002-1'],
         binSizeMicrometers: 16,
         renderLodSourceBinSizeMicrometers: 2,
       }),
-    ])
+    )
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'ready',
@@ -261,22 +257,16 @@ function gridCells(grid: SpatialGrid, ids: readonly string[]): GridCellBatch<str
   }
 }
 
-function gridCellDatum(binSizeMicrometers: VisiumHdBinSizeMicrometers): GridCellDatum {
-  return {
-    id: `grid-cell-${binSizeMicrometers}`,
-    gridId: `grid-${binSizeMicrometers}um`,
-    row: 0,
-    col: 0,
-    binSizeMicrometers,
-    polygon: [
-      [0, 0, 0],
-      [binSizeMicrometers, 0, 0],
-      [binSizeMicrometers, -binSizeMicrometers, 0],
-      [0, -binSizeMicrometers, 0],
-    ],
-    fillColor: [34, 120, 108, 28],
-    lineColor: [22, 90, 82, 150],
-  }
+function gridCellColumns(
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): GridCellColumns {
+  return gridCellColumnsFixture(
+    [{ id: `grid-cell-${binSizeMicrometers}`, row: 0, col: 0 }],
+    {
+      gridId: `grid-${binSizeMicrometers}um`,
+      binSizeMicrometers,
+    },
+  )
 }
 
 function visiumMeta(grid: SpatialGrid): DatasetMeta {

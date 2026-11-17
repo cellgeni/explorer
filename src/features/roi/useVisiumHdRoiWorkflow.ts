@@ -4,6 +4,7 @@ import { summarizeRoiGeneExpression } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import type { GridCellColumns } from '../../rendering/gridCellColumns'
 import { slug } from '../../utils/slug'
 import {
   downloadTextFile,
@@ -69,7 +70,7 @@ interface UseVisiumHdRoiWorkflowControls {
 
 interface UseVisiumHdRoiWorkflowData {
   readonly activeRoiState: VisiumHdRoiState
-  readonly gridCells: readonly GridCellDatum[]
+  readonly gridCells: GridCellColumns
   // A selected bin with its expression score, for the barcode export.
   readonly styleGridCell?: (cell: GridCellDatum) => GridCellDatum
   readonly loadState: DatasetLoadState<StructuredLoadError>

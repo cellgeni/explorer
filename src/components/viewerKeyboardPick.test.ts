@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { GridCellDatum, OverviewCellDatum } from '../rendering/deckLayerTypes'
+import type { OverviewCellDatum } from '../rendering/deckLayerTypes'
+import { gridCellColumnsFixture } from '../test/gridCellColumnsFixture'
 import { createOverviewCellIndex } from '../rendering/overviewCellIndex'
 import { gridCellAtPoint, nearestOverviewCell } from './viewerKeyboardPick'
 
@@ -10,23 +11,6 @@ function cell(id: string, x: number, y: number, radius = 2): OverviewCellDatum {
     position: [x, -y, 0],
     radiusMicrometers: radius,
   } as unknown as OverviewCellDatum
-}
-
-function bin(id: string, x: number, y: number, size = 16): GridCellDatum {
-  return {
-    id,
-    gridId: 'grid',
-    row: 0,
-    col: 0,
-    polygon: [
-      [x, -y, 0],
-      [x + size, -y, 0],
-      [x + size, -(y + size), 0],
-      [x, -(y + size), 0],
-    ],
-    fillColor: [0, 0, 0, 255],
-    lineColor: [0, 0, 0, 255],
-  }
 }
 
 describe('keyboard picking (15.5-D)', () => {
@@ -44,13 +28,19 @@ describe('keyboard picking (15.5-D)', () => {
   })
 
   it('opens the bin that holds the centre', () => {
-    const bins = [bin('x', 0, 0), bin('y', 16, 0)]
+    const bins = gridCellColumnsFixture([
+      { id: 'x', row: 0, col: 0 },
+      { id: 'y', row: 0, col: 1 },
+    ])
 
     expect(gridCellAtPoint(bins, 20, 8)?.id).toBe('y')
     expect(gridCellAtPoint(bins, 40, 8)).toBeNull()
+    // Coarse bins drawn for finer ones are not opened.
     expect(
       gridCellAtPoint(
-        [{ ...bin('lod', 0, 0), renderLodSourceBinSizeMicrometers: 2 }],
+        gridCellColumnsFixture([{ id: 'lod', row: 0, col: 0 }], {
+          renderLodSourceBinSizeMicrometers: 2,
+        }),
         4,
         4,
       ),

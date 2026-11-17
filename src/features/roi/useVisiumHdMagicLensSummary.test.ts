@@ -3,7 +3,10 @@ import { micrometers } from '../../data/coords'
 import type { GexResult } from '../../data/gexTypes'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { GridCellDatum } from '../../rendering/deckLayers'
+import {
+  gridCellColumnsFixture,
+  squareGridBasis,
+} from '../../test/gridCellColumnsFixture'
 import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import { summarizeVisiumHdMagicLensSelection } from './useVisiumHdMagicLensSummary'
 
@@ -17,26 +20,15 @@ const selection: RoiSelection = {
   },
 }
 
-const gridCells: readonly GridCellDatum[] = [
-  gridCellDatum('s_008um_1_1', [
-    [0, 0, 0],
-    [10, 0, 0],
-    [10, -10, 0],
-    [0, -10, 0],
-  ]),
-  gridCellDatum('s_008um_1_2', [
-    [20, 0, 0],
-    [30, 0, 0],
-    [30, -10, 0],
-    [20, -10, 0],
-  ]),
-  gridCellDatum('outside', [
-    [80, -80, 0],
-    [90, -80, 0],
-    [90, -90, 0],
-    [80, -90, 0],
-  ]),
-]
+// Two bins in the lens and one far outside it, as 10 µm squares.
+const gridCells = gridCellColumnsFixture(
+  [
+    { id: 's_008um_1_1', row: 0, col: 0 },
+    { id: 's_008um_1_2', row: 0, col: 2 },
+    { id: 'outside', row: 8, col: 8 },
+  ],
+  { binSizeMicrometers: 8, basis: squareGridBasis(10) },
+)
 
 describe('summarizeVisiumHdMagicLensSelection', () => {
   it('loads Visium HD expression profiles when no genes are selected', async () => {
@@ -223,19 +215,6 @@ function geneExpressionBatch(
     genes,
     geneCounts: genes.length === 1 ? [{ gene: genes[0] ?? '', count: sum(counts) }] : [],
     maxCount: Math.max(0, ...counts),
-  }
-}
-
-function gridCellDatum(id: string, polygon: GridCellDatum['polygon']): GridCellDatum {
-  return {
-    id,
-    gridId: 'visium-hd-8um',
-    row: 1,
-    col: 1,
-    binSizeMicrometers: 8,
-    polygon,
-    fillColor: [0, 0, 0, 255],
-    lineColor: [255, 255, 255, 255],
   }
 }
 

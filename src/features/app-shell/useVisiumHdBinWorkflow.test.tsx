@@ -187,9 +187,14 @@ describe('useVisiumHdBinWorkflow', () => {
         genes: ['Actb'],
       })
     })
-    expect(setSpatialGridCells).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'BC-8', gridId: grid.id, row: 0, col: 0 }),
-    ])
+    expect(setSpatialGridCells).toHaveBeenCalledWith(
+      expect.objectContaining({
+        ids: ['BC-8'],
+        gridId: grid.id,
+        rows: Int32Array.from([0]),
+        cols: Int32Array.from([0]),
+      }),
+    )
     expect(setFlatMorphologyImage).toHaveBeenCalledWith({
       url: `${datasetUrl}/binned_outputs/square_008um/spatial/tissue_hires_image.png`,
       size: [200, 120],
@@ -681,13 +686,13 @@ describe('useVisiumHdBinWorkflow', () => {
     expect(dataset.genePanel).toHaveBeenCalledWith(2)
     expect(dataset.readBinnedOverview).toHaveBeenCalledWith(16)
     expect(dataset.meta).toHaveBeenCalledWith(16)
-    expect(setSpatialGridCells).toHaveBeenCalledWith([
+    expect(setSpatialGridCells).toHaveBeenCalledWith(
       expect.objectContaining({
-        id: 's_016um_000001_000002-1',
+        ids: ['s_016um_000001_000002-1'],
         binSizeMicrometers: 16,
         renderLodSourceBinSizeMicrometers: 2,
       }),
-    ])
+    )
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'ready',
@@ -779,9 +784,9 @@ describe('useVisiumHdBinWorkflow', () => {
     })
 
     expect(readBinnedOverview).toHaveBeenCalledTimes(2)
-    expect(setSpatialGridCells).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'BC-2', binSizeMicrometers: 2 }),
-    ])
+    expect(setSpatialGridCells).toHaveBeenCalledWith(
+      expect.objectContaining({ ids: ['BC-2'], binSizeMicrometers: 2 }),
+    )
     expect(setLoadState).toHaveBeenCalledWith({
       status: 'ready',
       url: 'https://example.test/visium',

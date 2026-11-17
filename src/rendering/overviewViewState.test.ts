@@ -8,6 +8,7 @@ import {
   overviewFitExtent,
   viewStateForBbox,
 } from './overviewViewState'
+import { gridCellColumnsFixture, squareGridBasis } from '../test/gridCellColumnsFixture'
 
 function cell(x: number, y: number): OverviewCellDatum {
   return { position: [x, y] } as unknown as OverviewCellDatum
@@ -37,7 +38,7 @@ describe('fit to view (F18)', () => {
   })
 
   it('includes the image extent, flipped into deck.gl y', () => {
-    const extent = overviewFitExtent([], [], {
+    const extent = overviewFitExtent([], undefined, {
       minX: micrometers(0),
       maxX: micrometers(100),
       minY: micrometers(10),
@@ -47,6 +48,23 @@ describe('fit to view (F18)', () => {
     expect(extent).toEqual({ minX: 0, maxX: 100, minY: -50, maxY: -10 })
     expect(extentKey(extent)).toBe('0:100:-50:-10')
     expect(extentKey(null)).toBe('empty')
+  })
+
+  it('includes every grid bin, flipped into deck.gl y', () => {
+    const bins = gridCellColumnsFixture(
+      [
+        { id: 'a', row: 0, col: 0 },
+        { id: 'b', row: 3, col: 1 },
+      ],
+      { basis: squareGridBasis(16, { x: 10, y: 20 }) },
+    )
+
+    expect(overviewFitExtent([], bins)).toEqual({
+      minX: 10,
+      maxX: 42,
+      minY: -84,
+      maxY: -20,
+    })
   })
 })
 

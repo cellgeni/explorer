@@ -1,21 +1,204 @@
-import type { Position } from '@deck.gl/core'
-import { micrometers, type BBox } from '../data/coords'
-import { gridCellCorners } from '../datasets/spatialGrid'
-import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
+import type { Color } from '@deck.gl/core'
 import {
-  colorWithOpacity,
+  boundaryLineColor,
   GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY,
 } from './deckLayerColors'
-import type { GridCellDatum, GridCellLayerDataOptions } from './deckLayerTypes'
+import type { GeneExpressionElementStyleIndex, GridCellDatum } from './deckLayerTypes'
+import {
+  gridCellExpressionStyle,
+  hasGeneExpressionElementStyles,
+  type GridCellExpressionStyle,
+} from './geneExpressionRenderer'
 import { GridBinLayer } from './gridBinLayer'
+import {
+  DEFAULT_GRID_CELL_FILL_COLOR,
+  DEFAULT_GRID_CELL_LINE_COLOR,
+  gridCellAt,
+  gridCellCenterXAt,
+  gridCellCenterYAt,
+  type GridCellColumns,
+} from './gridCellColumns'
 import {
   DEFAULT_CELL_FILL_OPACITY,
   DEFAULT_LAYER_OPACITY,
   normalizeLayerOpacity,
 } from './layerOpacity'
+import { attributeDescriptor, samePackedLayerData } from './packedLayerData'
+
+// The bins drawn: every bin of `columns`, or those at `indices`.
+export interface GridCellRenderSelection {
+  readonly columns: GridCellColumns
+  readonly indices: Uint32Array | null
+  readonly length: number
+}
+
+export function gridCellRenderSelection(
+  columns: GridCellColumns,
+  indices: Uint32Array | null = null,
+): GridCellRenderSelection {
+  return { columns, indices, length: indices?.length ?? columns.length }
+}
+
+// A drawn bin's colour and score, from its ID and centre (data µm, y down);
+// null leaves it in the default colours.
+export type GridCellStyler = (
+  id: string,
+  x: number,
+  y: number,
+) => GridCellExpressionStyle | null
+
+// Bins take an annotation or metadata colour by their barcode, as cells do by
+// their ID; gene expression colours over it. Null when neither applies.
+export function createGridCellStyler(options: {
+  readonly observationColor: ((element: { readonly id: string }) => Color) | null
+  readonly expressionIndex: GeneExpressionElementStyleIndex
+  readonly styleUnmatchedCells: boolean
+}): GridCellStyler | null {
+  const { observationColor, expressionIndex, styleUnmatchedCells } = options
+  const styleExpression =
+    styleUnmatchedCells || hasGeneExpressionElementStyles(expressionIndex)
+
+  if (observationColor === null && !styleExpression) {
+    return null
+  }
+
+  return (id, x, y) => {
+    const expressionStyle = styleExpression
+      ? gridCellExpressionStyle(expressionIndex, id, x, y, styleUnmatchedCells)
+      : null
+
+    if (expressionStyle !== null || observationColor === null) {
+      return expressionStyle
+    }
+
+    const fillColor = observationColor({ id })
+    return { fillColor, lineColor: boundaryLineColor(fillColor) }
+  }
+}
+
+// The drawn bins' centres in deck.gl coordinates (y negated), x and y per bin.
+export function packGridCellCenters(selection: GridCellRenderSelection): Float64Array {
+  const { columns, indices } = selection
+  const { rows, cols } = columns
+  const { origin, rowStep, colStep } = columns.basis
+  const centers = new Float64Array(selection.length * 2)
+
+  for (let position = 0; position < selection.length; position += 1) {
+    const index = indices === null ? position : (indices[position] ?? 0)
+    const row = rows[index] ?? 0
+    const col = cols[index] ?? 0
+    centers[position * 2] = origin.x + row * rowStep.x + col * colStep.x
+    centers[position * 2 + 1] = -(origin.y + row * rowStep.y + col * colStep.y)
+  }
+
+  return centers
+}
+
+export interface GridCellColors {
+  readonly fill: Uint8Array
+  readonly line: Uint8Array
+}
+
+// RGBA fill and line colours of the drawn bins, before layer opacity.
+export function packGridCellColors(
+  selection: GridCellRenderSelection,
+  styler: GridCellStyler | null,
+): GridCellColors {
+  const { columns, indices } = selection
+  const { ids, rows, cols } = columns
+  const { origin, rowStep, colStep } = columns.basis
+  const fill = new Uint8Array(selection.length * 4)
+  const line = new Uint8Array(selection.length * 4)
+
+  for (let position = 0; position < selection.length; position += 1) {
+    let fillColor = DEFAULT_GRID_CELL_FILL_COLOR
+    let lineColor = DEFAULT_GRID_CELL_LINE_COLOR
+
+    if (styler !== null) {
+      const index = indices === null ? position : (indices[position] ?? 0)
+      const row = rows[index] ?? 0
+      const col = cols[index] ?? 0
+      const style = styler(
+        ids[index] ?? '',
+        origin.x + row * rowStep.x + col * colStep.x,
+        origin.y + row * rowStep.y + col * colStep.y,
+      )
+
+      if (style !== null) {
+        fillColor = style.fillColor
+        lineColor = style.lineColor
+      }
+    }
+
+    writeColor(fill, position, fillColor)
+    writeColor(line, position, lineColor)
+  }
+
+  return { fill, line }
+}
+
+function writeColor(target: Uint8Array, position: number, color: Color): void {
+  target[position * 4] = color[0]
+  target[position * 4 + 1] = color[1]
+  target[position * 4 + 2] = color[2]
+  target[position * 4 + 3] = color[3] ?? 255
+}
+
+// The drawn bins packed for the GPU, and each one as an object for picking.
+export interface GridCellPacking {
+  readonly selection: GridCellRenderSelection
+  readonly centers: Float64Array
+  readonly colors: GridCellColors
+  // From a bin's corner to its column and row neighbours, in deck.gl
+  // coordinates: the same for every bin of a grid.
+  readonly columnVector: readonly [number, number]
+  readonly rowVector: readonly [number, number]
+  // The drawn bin at `position`, styled as drawn.
+  readonly cellAt: (position: number) => GridCellDatum
+}
+
+export function packGridCells(
+  selection: GridCellRenderSelection,
+  centers: Float64Array,
+  colors: GridCellColors,
+  styler: GridCellStyler | null,
+): GridCellPacking {
+  const { columns, indices } = selection
+  const { rowStep, colStep } = columns.basis
+
+  return {
+    selection,
+    centers,
+    colors,
+    columnVector: deckVector(colStep),
+    rowVector: deckVector(rowStep),
+    cellAt: (position) => {
+      const index = indices === null ? position : (indices[position] ?? 0)
+      const cell = gridCellAt(columns, index)
+      const style =
+        styler === null
+          ? null
+          : styler(
+              cell.id,
+              gridCellCenterXAt(columns, index),
+              gridCellCenterYAt(columns, index),
+            )
+
+      return style === null ? cell : { ...cell, ...style }
+    },
+  }
+}
+
+// A data vector in deck.gl coordinates, y negated (without a -0).
+function deckVector(vector: {
+  readonly x: number
+  readonly y: number
+}): readonly [number, number] {
+  return [vector.x, vector.y === 0 ? 0 : -vector.y]
+}
 
 export function createGridCellLayer(
-  gridCells: readonly GridCellDatum[],
+  packing: GridCellPacking | null,
   options: {
     readonly opacity?: number
     readonly fillOpacity?: number
@@ -23,7 +206,7 @@ export function createGridCellLayer(
     readonly geneExpressionActive: boolean
   },
 ): GridBinLayer<GridCellDatum> | null {
-  if (gridCells.length === 0) {
+  if (packing === null || packing.selection.length === 0) {
     return null
   }
 
@@ -36,130 +219,69 @@ export function createGridCellLayer(
   const effectiveGridCellFillOpacity = options.geneExpressionActive
     ? Math.max(gridCellFillOpacity, GENE_EXPRESSION_OVERLAY_MIN_FILL_OPACITY)
     : gridCellFillOpacity
+  const colors = gridCellLayerColorsWithCache(
+    packing.colors,
+    effectiveGridCellFillOpacity,
+    gridCellLineOpacity,
+  )
 
   return new GridBinLayer<GridCellDatum>({
     id: 'spatial-grid-cells',
-    data: gridCells,
+    data: {
+      length: packing.selection.length,
+      attributes: {
+        getCenter: attributeDescriptor(packing.centers, 2),
+        getFillColor: attributeDescriptor(colors.fill, 4, true),
+        getLineColor: attributeDescriptor(colors.line, 4, true),
+      },
+    } as unknown as GridCellDatum[],
+    dataComparator: samePackedLayerData,
+    pickObject: packing.cellAt,
     pickable: true,
     stroked: true,
     filled: true,
     opacity: 1,
     lineWidthPixels: GRID_CELL_LINE_WIDTH_PIXELS,
-    getCenter: gridCellCenter,
-    getColumnVector: (cell) => gridCellEdge(cell, 1),
-    getRowVector: (cell) => gridCellEdge(cell, 3),
-    getFillColor: (cell) =>
-      colorWithOpacity(cell.fillColor, effectiveGridCellFillOpacity),
-    getLineColor: (cell) => colorWithOpacity(cell.lineColor, gridCellLineOpacity),
-    updateTriggers: {
-      getFillColor: [effectiveGridCellFillOpacity],
-      getLineColor: [gridCellLineOpacity],
-    },
+    getColumnVector: packing.columnVector,
+    getRowVector: packing.rowVector,
   })
 }
 
 const GRID_CELL_LINE_WIDTH_PIXELS = 0.25
 
-// Grid cell polygons list their corners as (row, col), (row, col + 1),
-// (row + 1, col + 1), (row + 1, col), so opposite corners give the centre and
-// corners 1 and 3 the column and row edges.
-function gridCellCenter(cell: GridCellDatum): Position {
-  const [x0 = 0, y0 = 0] = cell.polygon[0] ?? []
-  const [x2 = x0, y2 = y0] = cell.polygon[2] ?? []
-  return [(x0 + x2) / 2, (y0 + y2) / 2, 0]
+// Colours with the layer's opacity in their alpha, kept per packed colours so
+// a render that changes neither builds no new arrays.
+const gridCellLayerColorsCache = new WeakMap<
+  GridCellColors,
+  { readonly fillOpacity: number; readonly lineOpacity: number; colors: GridCellColors }
+>()
+
+function gridCellLayerColorsWithCache(
+  colors: GridCellColors,
+  fillOpacity: number,
+  lineOpacity: number,
+): GridCellColors {
+  const cached = gridCellLayerColorsCache.get(colors)
+
+  if (cached?.fillOpacity === fillOpacity && cached.lineOpacity === lineOpacity) {
+    return cached.colors
+  }
+
+  const layerColors = {
+    fill: colorsWithOpacity(colors.fill, fillOpacity),
+    line: colorsWithOpacity(colors.line, lineOpacity),
+  }
+  gridCellLayerColorsCache.set(colors, { fillOpacity, lineOpacity, colors: layerColors })
+  return layerColors
 }
 
-function gridCellEdge(cell: GridCellDatum, corner: 1 | 3): [number, number] {
-  const [x0 = 0, y0 = 0] = cell.polygon[0] ?? []
-  const [x = x0, y = y0] = cell.polygon[corner] ?? []
-  return [x - x0, y - y0]
-}
+// As colorWithOpacity, for each packed colour.
+function colorsWithOpacity(colors: Uint8Array, opacity: number): Uint8Array {
+  const result = new Uint8Array(colors)
 
-export function gridCellBatchesToLayerData(
-  grids: readonly SpatialGrid[],
-  batches: readonly GridCellBatch[],
-  options: GridCellLayerDataOptions = {},
-): readonly GridCellDatum[] {
-  if (grids.length === 0 || batches.length === 0) {
-    return []
+  for (let offset = 3; offset < result.length; offset += 4) {
+    result[offset] = Math.round((colors[offset] ?? 255) * opacity)
   }
 
-  const gridById = new Map(grids.map((grid) => [grid.id, grid]))
-  const cells: GridCellDatum[] = []
-
-  for (let batchIndex = 0; batchIndex < batches.length; batchIndex += 1) {
-    const batch = batches[batchIndex]
-
-    if (batch === undefined) {
-      continue
-    }
-
-    const grid = gridById.get(batch.gridId)
-    const metadata = options.metadata?.[batchIndex]
-
-    if (grid === undefined) {
-      continue
-    }
-
-    for (let index = 0; index < batch.rows.length; index += 1) {
-      const id = batch.ids[index]
-
-      if (id === undefined) {
-        continue
-      }
-
-      const row = batch.rows[index] ?? 0
-      const col = batch.cols[index] ?? 0
-      const polygon = gridCellCorners(grid, row, col).map(
-        (point): [number, number, number] => [point.x, -point.y, 0],
-      )
-
-      cells.push({
-        id,
-        gridId: grid.id,
-        row,
-        col,
-        ...(metadata?.binSizeMicrometers === undefined
-          ? {}
-          : { binSizeMicrometers: metadata.binSizeMicrometers }),
-        ...(metadata?.inTissue?.[index] === undefined
-          ? {}
-          : { inTissue: metadata.inTissue[index] === 1 }),
-        ...(metadata?.fullresRows?.[index] === undefined
-          ? {}
-          : { fullresRow: metadata.fullresRows[index] }),
-        ...(metadata?.fullresCols?.[index] === undefined
-          ? {}
-          : { fullresCol: metadata.fullresCols[index] }),
-        bbox: gridCellPolygonBbox(polygon),
-        polygon,
-        fillColor: [34, 120, 108, 28],
-        lineColor: [22, 90, 82, 150],
-      })
-    }
-  }
-
-  return cells
-}
-
-function gridCellPolygonBbox(polygon: GridCellDatum['polygon']): BBox {
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const [x = 0, deckY = 0] of polygon) {
-    const rawY = -deckY
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minY = Math.min(minY, rawY)
-    maxY = Math.max(maxY, rawY)
-  }
-
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
+  return result
 }

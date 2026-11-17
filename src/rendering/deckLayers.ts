@@ -49,8 +49,6 @@ export type {
   GeneExpressionScoreModeOption,
   GeometricAnnotationDatum,
   GridCellDatum,
-  GridCellLayerBatchMetadata,
-  GridCellLayerDataOptions,
   OverviewCellDatum,
   OverviewLayerOptions,
   OverviewViewState,
@@ -95,10 +93,8 @@ export {
   styleCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
   styleGridCellByGeneExpression,
-  styleGridCellsByGeneExpression,
   unscoredGridCell,
 } from './geneExpressionRenderer'
-export { gridCellBatchesToLayerData } from './gridCellRenderer'
 export {
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
@@ -192,7 +188,7 @@ export function createOverviewLayers(
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptDensityBins = options.transcriptAggregateBins ?? []
   const geometricAnnotations = options.geometricAnnotations ?? []
-  const gridCells = options.gridCells ?? []
+  const gridCells = options.gridCells ?? null
   const gridCellOpacity =
     options.gridCellOpacity === undefined
       ? undefined
@@ -305,7 +301,7 @@ export function createOverviewLayers(
     layers.push(transcriptDensityLayer)
   }
 
-  const gridCellLayer = createGridCellLayer(cellsVisible ? gridCells : [], {
+  const gridCellLayer = createGridCellLayer(cellsVisible ? gridCells : null, {
     fillOpacity: gridCellOpacity ?? cellFillOpacity,
     lineOpacity: gridCellOpacity ?? cellBoundaryOpacity,
     geneExpressionActive,

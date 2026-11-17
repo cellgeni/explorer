@@ -13,6 +13,7 @@ import {
 } from './deckLayerColors'
 import type { CellPointGeometry, CellPointLayerColors } from './cellPointStyle'
 import type { OverviewCellDatum } from './deckLayerTypes'
+import { attributeDescriptor, samePackedLayerData } from './packedLayerData'
 
 export interface CellPointLayerOptions {
   readonly cellFillOpacity: number
@@ -61,47 +62,6 @@ class PackedCellPointLayer extends ScatterplotLayer<
 
     return info
   }
-}
-
-function samePackedCellPointData(next: unknown, previous: unknown): boolean {
-  const nextData = next as PackedCellPointData | null
-  const previousData = previous as PackedCellPointData | null
-
-  if (nextData === null || previousData === null) {
-    return nextData === previousData
-  }
-
-  return (
-    nextData.length === previousData.length &&
-    Object.keys(nextData.attributes).every(
-      (name) => nextData.attributes[name] === previousData.attributes[name],
-    )
-  )
-}
-
-interface PackedCellPointData {
-  readonly length: number
-  readonly attributes: Readonly<Record<string, object>>
-}
-
-// deck.gl re-uploads a packed attribute whenever its descriptor object changes,
-// so each typed array keeps one descriptor.
-const attributeDescriptors = new WeakMap<ArrayBufferView, object>()
-
-function attributeDescriptor(
-  value: Float64Array | Float32Array | Uint8Array,
-  size: number,
-  normalized = false,
-): object {
-  const cached = attributeDescriptors.get(value)
-
-  if (cached !== undefined) {
-    return cached
-  }
-
-  const descriptor = { value, size, ...(normalized ? { normalized: true } : {}) }
-  attributeDescriptors.set(value, descriptor)
-  return descriptor
 }
 
 // Smallest radii at 1x. A cell point is at least about a pixel across, so a
@@ -170,7 +130,7 @@ export function createCellPointLayer(
       } as unknown as PackedCellPointLayerProps['data'],
       // The data wrapper is rebuilt every render; only changed arrays count as
       // new data, or deck.gl would regenerate picking colours on every frame.
-      dataComparator: samePackedCellPointData,
+      dataComparator: samePackedLayerData,
       // Sampled cells by rank, and no point where an outline is drawn.
       filterRange: [
         [0, packed.sampleFraction],
