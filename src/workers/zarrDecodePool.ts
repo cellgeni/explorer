@@ -32,7 +32,20 @@ export interface ZarrWorkerTile {
   readonly hi: number
 }
 
-type PendingResponse = (response: ZarrDecodeResponse) => void
+interface PendingResponse {
+  readonly resolve: (response: ZarrDecodeResponse) => void
+  readonly reject: (error: ZarrDecodeWorkerError) => void
+}
+
+// A worker failed, rather than the request: it did not start, or it stopped.
+// Requests waiting on it get this; a chunk that does not decode gets an
+// ordinary error.
+export class ZarrDecodeWorkerError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'ZarrDecodeWorkerError'
+  }
+}
 
 // Remembered chunk placements; stale ones cost one extra round trip.
 const MAX_TRACKED_CHUNKS = 2_048
@@ -161,7 +174,7 @@ export class ZarrDecodePool {
   }
 
   terminate(): void {
-    this.reset(new Error('Zarr decode worker pool terminated.'))
+    this.reset(new ZarrDecodeWorkerError('Zarr decode worker pool terminated.'))
   }
 
   // Requests not tied to a cached chunk go to the workers in turn.
@@ -251,7 +264,7 @@ export class ZarrDecodePool {
     this.nextRequestId += 1
 
     return new Promise((resolve, reject) => {
-      this.pending.set(id, resolve)
+      this.pending.set(id, { resolve, reject })
 
       try {
         this.worker(workerIndex).postMessage(message(id), transfer)
@@ -264,17 +277,20 @@ export class ZarrDecodePool {
 
   private worker(index: number): ZarrDecodeWorkerLike {
     while (this.workers.length <= index) {
-      const worker = this.workerFactory()
+      const worker = this.startWorker()
       worker.onmessage = (event) => {
-        const resolve = this.pending.get(event.data.id)
+        const pending = this.pending.get(event.data.id)
 
-        if (resolve !== undefined) {
+        if (pending !== undefined) {
           this.pending.delete(event.data.id)
-          resolve(event.data)
+          pending.resolve(event.data)
         }
       }
       worker.onerror = (event) => {
-        this.reset(new Error(event.message || 'Zarr decode worker failed.'))
+        // A worker whose script does not load reports an empty message.
+        this.reset(
+          new ZarrDecodeWorkerError(event.message || 'Zarr decode worker failed.'),
+        )
       }
       this.workers.push(worker)
     }
@@ -288,11 +304,21 @@ export class ZarrDecodePool {
     return worker
   }
 
+  private startWorker(): ZarrDecodeWorkerLike {
+    try {
+      return this.workerFactory()
+    } catch (cause) {
+      throw new ZarrDecodeWorkerError(
+        `Zarr decode worker did not start: ${cause instanceof Error ? cause.message : String(cause)}`,
+      )
+    }
+  }
+
   // Fails every request and drops all workers and chunk placements; the next
   // request starts fresh workers.
-  private reset(error: Error): void {
-    for (const [id, resolve] of this.pending) {
-      resolve({ type: 'error', id, error: error.message })
+  private reset(error: ZarrDecodeWorkerError): void {
+    for (const { reject } of this.pending.values()) {
+      reject(error)
     }
 
     this.pending.clear()

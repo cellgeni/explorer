@@ -4,6 +4,7 @@ import * as zarr from 'zarrita'
 import { ownBytes, vlenUtf8Bytes } from '../test/zarrCodecFixtures'
 import { decodeZarrCodec } from '../workers/zarrCodecCore'
 import type { ZarrCodecCall } from '../workers/zarrDecodeMessages'
+import { ZarrDecodeWorkerError } from '../workers/zarrDecodePool'
 import { installWorkerZarrCodecs, type ZarrCodecDecoder } from './workerZarrCodecs'
 
 // zarrita's own codecs, as a worker's registry holds them.
@@ -120,12 +121,34 @@ describe('installWorkerZarrCodecs', () => {
     expect(decoder.calls).toHaveLength(5)
   })
 
-  it('decodes on the main thread when the worker fails', async () => {
-    const decodeCodec = vi.fn(() => Promise.reject(new Error('worker failed')))
-    uninstall = installWorkerZarrCodecs({ decodeCodec })
+  it('decodes a chunk the worker could not decode on the main thread', async () => {
+    const decodeCodec = vi.fn(() => Promise.reject(new Error('unexpected codec input')))
+    const onWorkerFailure = vi.fn()
+    uninstall = installWorkerZarrCodecs({ decodeCodec }, zarr.registry, onWorkerFailure)
 
     expect(await readStore()).toEqual(EXPECTED)
-    expect(decodeCodec).toHaveBeenCalled()
+    const calls = decodeCodec.mock.calls.length
+    expect(calls).toBeGreaterThan(0)
+
+    // The workers still get the next chunks.
+    expect(await readStore()).toEqual(EXPECTED)
+    expect(decodeCodec.mock.calls.length).toBe(calls * 2)
+    expect(onWorkerFailure).not.toHaveBeenCalled()
+  })
+
+  it('decodes on the main thread once a worker fails, and says so once', async () => {
+    const failure = new ZarrDecodeWorkerError('Zarr decode worker failed.')
+    const decodeCodec = vi.fn(() => Promise.reject(failure))
+    const onWorkerFailure = vi.fn()
+    uninstall = installWorkerZarrCodecs({ decodeCodec }, zarr.registry, onWorkerFailure)
+
+    expect(await readStore()).toEqual(EXPECTED)
+    const calls = decodeCodec.mock.calls.length
+
+    expect(await readStore()).toEqual(EXPECTED)
+    expect(decodeCodec).toHaveBeenCalledTimes(calls)
+    expect(onWorkerFailure).toHaveBeenCalledOnce()
+    expect(onWorkerFailure).toHaveBeenCalledWith(failure)
   })
 
   it('reports a chunk that does not decode', async () => {
