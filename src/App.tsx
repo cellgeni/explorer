@@ -4291,6 +4291,8 @@ export function App({ dependencies }: AppProps = {}) {
         : EMPTY_ANNOTATIONS,
     visibleClasses: annotationStyleColors,
     selection: plotsSelection,
+    savedSelections: selectionList.selections,
+    loadSelectionCells: loadActiveRoiCells,
     selectedGenes,
     colorScale: geneExpressionColorScale,
     elementNoun: platformAdapter.labels.embeddingElementPlural,

@@ -16,6 +16,9 @@ import {
   plotReadDecision,
   plotSetOptions,
   plotsPanelGroups,
+  resolvePlotSetId,
+  SELECTIONS_SET_ID,
+  type PlotSavedSelection,
 } from './plotsPanelModel'
 
 const annotations: readonly Annotation<string>[] = [
@@ -97,6 +100,107 @@ describe('Plots panel groups (plan 22-D1 to 22-D3)', () => {
     })
 
     expect(panel.setId).toBe('analysis:cluster')
+  })
+})
+
+describe('Group by › Selections', () => {
+  const ready = (cellIds: readonly string[], hitCellLimit = false) =>
+    ({ status: 'ready', cellIds, hitCellLimit }) as const
+  const saved: readonly PlotSavedSelection[] = [
+    {
+      id: 's1',
+      name: 'ROI 1',
+      color: '#f0c84b',
+      visible: true,
+      cells: ready(['a', 'b']),
+    },
+    {
+      id: 's2',
+      name: 'ROI 2',
+      color: '#4bc8f0',
+      visible: true,
+      cells: ready(['b', 'c'], true),
+    },
+    { id: 's3', name: 'ROI 3', color: '#f04bc8', visible: false, cells: ready(['d']) },
+    {
+      id: 's4',
+      name: 'ROI 4',
+      color: '#4bf06e',
+      visible: true,
+      cells: { status: 'error', message: 'Range requests are not supported.' },
+    },
+  ]
+
+  it('lists the saved selections as a set, the default without a loaded one', () => {
+    expect(plotSetOptions(annotations, 4).at(-1)).toEqual({
+      id: SELECTIONS_SET_ID,
+      label: 'Selections',
+      classCount: 4,
+    })
+    expect(plotSetOptions([], 0)).toEqual([])
+    expect(resolvePlotSetId([], 4, null)).toBe(SELECTIONS_SET_ID)
+    expect(resolvePlotSetId(annotations, 4, null)).toBe('analysis:cluster')
+    expect(resolvePlotSetId(annotations, 4, SELECTIONS_SET_ID)).toBe(SELECTIONS_SET_ID)
+    // Deleting the last selection falls back to the dataset's set.
+    expect(resolvePlotSetId(annotations, 0, SELECTIONS_SET_ID)).toBe('analysis:cluster')
+  })
+
+  it('makes each shown selection a group, overlaps and all', () => {
+    const panel = plotsPanelGroups({
+      annotations: [],
+      visibleClasses: [],
+      setId: null,
+      // The active selection is already a row; it is not added again.
+      selection: {
+        name: 'ROI 1',
+        color: '#f0c84b',
+        cellIds: ['a', 'b'],
+        hitCellLimit: false,
+      },
+      savedSelections: saved,
+      selectedGenes: ['Gad1'],
+    })
+
+    expect(panel.setId).toBe(SELECTIONS_SET_ID)
+    expect(panel.setLabel).toBe('Selections')
+    expect(panel.groups.map((group) => [group.label, group.color, group.kind])).toEqual([
+      ['ROI 1', '#f0c84b', 'class'],
+      ['ROI 2', '#4bc8f0', 'class'],
+    ])
+    expect(plotGroupsInput(panel.groups)).toEqual({
+      selection: null,
+      classes: [
+        ['a', 'b'],
+        ['b', 'c'],
+      ],
+    })
+    expect(panel.groupNoun).toBe('selection')
+    expect(panel.hiddenClassCount).toBe(1)
+    expect(panel.limitedSelections).toEqual(['ROI 2'])
+    expect(panel.selectionErrors).toEqual(['ROI 4: Range requests are not supported.'])
+  })
+
+  it('waits for every shown selection’s cells before grouping', () => {
+    const panel = plotsPanelGroups({
+      annotations: [],
+      visibleClasses: [],
+      setId: SELECTIONS_SET_ID,
+      selection: null,
+      savedSelections: [
+        ...saved,
+        {
+          id: 's5',
+          name: 'ROI 5',
+          color: '#000000',
+          visible: true,
+          cells: { status: 'loading' },
+        },
+      ],
+      selectedGenes: ['Gad1'],
+    })
+
+    expect(panel.pendingSelectionCount).toBe(1)
+    expect(panel.groups).toEqual([])
   })
 })
 
