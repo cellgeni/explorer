@@ -377,18 +377,23 @@ or embedding cell also opens the Cell card with metadata, expression, shape
 metrics when boundary geometry is available, and, for Xenium, a compact z-axis
 distribution of molecules/transcripts assigned to that cell.
 
-The Plots panel, opened from Cells › `Show Plots`, draws a dot plot of the
-selected genes by the classes of a loaded set:
+The Plots panel, opened from Cells › `Show Plots`, plots the selected genes
+by the classes of a loaded set:
 
 1. Select genes in Cells › Genes (up to 32 are plotted).
 2. Load an annotation set in Cells › Clusters.
-3. Choose `Show Plots`. Each dot's size is the share of the class's cells
-   expressing the gene, and its colour the class's mean, with zeros counted.
-4. Pick another loaded set under `Group by`, or draw a selection to add it as
+3. Choose `Show Plots`. The dot plot comes first: each dot's size is the
+   share of the class's cells expressing the gene, and its colour the class's
+   mean, with zeros counted.
+4. Under `Plot`, choose `Violin` for the spread of each gene's values in each
+   class, with a box for the quartiles and a line at the median, or `Heatmap`
+   for the class means as coloured tiles, which suits sets with hundreds of
+   classes. `Include zeros` off shows the violins of expressing cells only.
+5. Pick another loaded set under `Group by`, or draw a selection to add it as
    the first group. `Scale` switches between log1p and the stored values,
    and `Colour` between one range for every gene and one per gene.
-5. `Show numbers` lists the numbers; `Export SVG` saves the figure and
-   `Export CSV` the numbers behind it.
+6. `Show numbers` lists the numbers; `Export SVG` and `Export PNG` save the
+   figure and `Export CSV` the numbers behind it.
 
 The plot uses every cell of the dataset, not just the view, and compares
 nothing statistically. It works on every platform except Visium HD, whose bins

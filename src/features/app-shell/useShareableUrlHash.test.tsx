@@ -84,6 +84,7 @@ function ShareableUrlHashProbe({
       panels: undefined,
       card: 'cell:cell-7',
       tool: 'magic-lens',
+      plot: 'violin',
       hiddenLayers: [],
     },
   })
@@ -136,6 +137,7 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('channels=Channel%3A1')
     expect(window.location.hash).toMatch(/[#&]z=6(&|$)/)
     expect(window.location.hash).toContain('tool=magic-lens')
+    expect(window.location.hash).toContain('plot=violin')
     expect(window.location.hash).not.toMatch(/[#&]lens=/)
     expect(window.location.hash).toContain('card=cell%3Acell-7')
     expect(window.location.hash).not.toContain('panel=')

@@ -39,6 +39,9 @@ export interface ShareableState {
   readonly card?: string
   // The active tool when it is not Pan: `tool=`.
   readonly tool?: string
+  // The Plots panel's plot when it is not the dot plot: `plot=` (plan
+  // 22-D8).
+  readonly plot?: string
   // Hidden layers (image, cells, annotations): `hidden=`.
   readonly hiddenLayers?: readonly string[]
   // Hidden annotation classes, such as `analysis:leiden:3`: `hiddenClasses=`,
@@ -127,6 +130,7 @@ export function parseShareableState(hash: string): ShareableState {
   const panels = readCsvAllowEmpty(params, 'panel')
   const card = readString(params, 'card')
   const tool = readString(params, 'tool')
+  const plot = readString(params, 'plot')
   const hiddenLayers = readCsv(params, 'hidden')
   const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
   const hiddenAnnotationSetIds = readEscapedCsv(params, 'hiddenSets')
@@ -233,6 +237,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (tool !== undefined) {
     state.tool = tool
+  }
+
+  if (plot !== undefined) {
+    state.plot = plot
   }
 
   if (hiddenLayers !== undefined) {
@@ -473,6 +481,7 @@ export function formatShareableState(state: ShareableState): string {
 
   setOptionalString(params, 'card', state.card)
   setOptionalString(params, 'tool', state.tool)
+  setOptionalString(params, 'plot', state.plot)
 
   if (state.hiddenLayers !== undefined && state.hiddenLayers.length > 0) {
     params.set('hidden', state.hiddenLayers.join(','))

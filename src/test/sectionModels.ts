@@ -442,6 +442,8 @@ export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel 
   return {
     status: 'Nothing to plot',
     loading: false,
+    plotKind: 'dot',
+    onPlotKindChange: vi.fn(),
     setOptions: [],
     setId: null,
     onSetChange: vi.fn(),
@@ -450,6 +452,8 @@ export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel 
     onScaleChange: vi.fn(),
     colour: 'shared',
     onColourChange: vi.fn(),
+    includeZeros: true,
+    onIncludeZerosChange: vi.fn(),
     showNumbers: false,
     onShowNumbersChange: vi.fn(),
     message: 'Select genes in Cells › Genes to plot them.',
@@ -463,6 +467,7 @@ export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel 
     canRetry: false,
     onRetry: vi.fn(),
     onExportSvg: vi.fn(),
+    onExportPng: vi.fn(),
     onExportCsv: vi.fn(),
     ...overrides,
   }

@@ -320,4 +320,14 @@ describe('shareableState', () => {
       parseShareableState('#hiddenClasses=a%252Cb,100%').hiddenAnnotationIds,
     ).toEqual(['a,b', '100%'])
   })
+
+  it('writes and reads the Plots panel’s plot', () => {
+    const hash = formatShareableState({ panels: ['cells', 'plots'], plot: 'heatmap' })
+
+    expect(hash).toBe('#xv=2&panel=cells%2Cplots&plot=heatmap')
+    expect(parseShareableState(hash)).toMatchObject({
+      panels: ['cells', 'plots'],
+      plot: 'heatmap',
+    })
+  })
 })

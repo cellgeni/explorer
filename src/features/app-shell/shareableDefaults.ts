@@ -17,6 +17,7 @@ import { AUTO_GENE_SCALE_RANGE, formatGeneScaleRange } from '../genes/geneScaleR
 // budget. A measure unit that is not set follows the mouse coordinate unit.
 export const DEFAULT_SHAREABLE_STATE = {
   tool: 'pan',
+  plot: 'dot',
   hiddenLayers: [],
   selectedGenes: [],
   geneExpressionColorScale: DEFAULT_GENE_EXPRESSION_COLOR_SCALE,

@@ -50,6 +50,8 @@ interface ShareableViewHashOptions {
   readonly card: string | undefined
   readonly tool: string
   readonly hiddenLayers: readonly string[]
+  // The Plots panel's plot (plot=).
+  readonly plot: string
 }
 
 interface ShareableLayerHashOptions {
@@ -180,8 +182,15 @@ export function useShareableUrlHash({
   const visiumLibrary = dataset.visiumSelection?.visiumLibrary
   const visiumOffTissue = dataset.visiumSelection?.visiumOffTissue
   const merscopeImage = dataset.merscopeSelection?.merscopeImage
-  const { activeRoiSelection, card, hiddenLayers, panels, shareableViewState, tool } =
-    view
+  const {
+    activeRoiSelection,
+    card,
+    hiddenLayers,
+    panels,
+    plot,
+    shareableViewState,
+    tool,
+  } = view
   const {
     boundaryCellLimit,
     cellMetadataTrackId,
@@ -265,6 +274,7 @@ export function useShareableUrlHash({
           ...(panels === undefined ? {} : { panels }),
           ...(card === undefined ? {} : { card }),
           tool,
+          plot,
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
           ...(hiddenAnnotationSetIds === undefined ? {} : { hiddenAnnotationSetIds }),
@@ -345,6 +355,7 @@ export function useShareableUrlHash({
     hiddenAnnotationSetIds,
     hiddenLayers,
     panels,
+    plot,
     tool,
     annotationUrl,
     collectionUrl,
