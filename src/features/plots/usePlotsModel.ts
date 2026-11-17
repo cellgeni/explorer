@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
+import type { SavedSelection } from '../roi/selectionListModel'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
-import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
+import type { RoiCellsLoader, SpatialDatasetLoader } from '../app-shell/appDependencies'
 import {
   downloadBlob,
   downloadTextFile,
@@ -21,11 +22,14 @@ import {
   plotGroupsInput,
   plotKindInfo,
   plotsPanelGroups,
+  resolvePlotSetId,
+  SELECTIONS_SET_ID,
   type PlotSetOption,
   type PlotsSelectionInput,
 } from './plotsPanelModel'
 import { plotViewSvg, svgSize, type PlotView } from './plotViews'
 import { svgDocument } from './svgMarkup'
+import { useSelectionCells } from './useSelectionCells'
 import { openPlotsSource, usePlotsWorkflow, type PlotsData } from './usePlotsWorkflow'
 import { violinPlotModel } from './violinPlot'
 
@@ -84,6 +88,10 @@ export interface PlotsModelInput {
   readonly annotations: readonly Annotation<string>[]
   readonly visibleClasses: readonly Pick<AnnotationColorStyle, 'id' | 'color'>[]
   readonly selection: PlotsSelectionInput | null
+  // Saved selections, each a group under Group by › Selections, and how
+  // their cells are looked up.
+  readonly savedSelections: readonly SavedSelection[]
+  readonly loadSelectionCells: RoiCellsLoader
   readonly selectedGenes: readonly string[]
   readonly colorScale: GeneExpressionColorScale
   readonly elementNoun: string
@@ -117,6 +125,8 @@ export function usePlotsModel({
   annotations,
   visibleClasses,
   selection,
+  savedSelections: savedSelectionList,
+  loadSelectionCells,
   selectedGenes,
   colorScale,
   elementNoun,
@@ -128,6 +138,18 @@ export function usePlotsModel({
   const [includeZeros, setIncludeZeros] = useState(true)
   const [showNumbers, setShowNumbers] = useState(false)
   const kindInfo = plotKindInfo(plotKind)
+  const savedSelections = useSelectionCells({
+    enabled:
+      open &&
+      available &&
+      datasetReady &&
+      resolvePlotSetId(annotations, savedSelectionList.length, chosenSetId) ===
+        SELECTIONS_SET_ID,
+    datasetUrl,
+    selections: savedSelectionList,
+    loadCells: loadSelectionCells,
+    appendDebugEvent,
+  })
 
   const panel = useMemo(
     () =>
@@ -136,6 +158,7 @@ export function usePlotsModel({
         visibleClasses,
         setId: chosenSetId,
         selection,
+        savedSelections,
         selectedGenes,
         maxClasses: kindInfo.maxClasses,
       }),
@@ -143,6 +166,7 @@ export function usePlotsModel({
       annotations,
       chosenSetId,
       kindInfo.maxClasses,
+      savedSelections,
       selectedGenes,
       selection,
       visibleClasses,
@@ -234,6 +258,7 @@ export function usePlotsModel({
     data,
     hasGenes: panel.genes.length > 0,
     hasGroups: panel.groups.length > 0,
+    pendingSelectionCount: panel.pendingSelectionCount,
     hasPlot: plot !== null,
     platformLabel,
     elementNoun,
@@ -251,8 +276,8 @@ export function usePlotsModel({
   const reading = data.status === 'reading' || data.status === 'preparing'
 
   return {
-    status: plotsStatus(panel.genes.length, panel.groups.length, panel.setLabel, data),
-    loading: reading,
+    status: plotsStatus(panel, data),
+    loading: reading || panel.pendingSelectionCount > 0,
     plotKind,
     onPlotKindChange: (kind) => {
       onPlotKindChange(kind)
@@ -336,11 +361,17 @@ export function usePlotsModel({
 }
 
 function plotsStatus(
-  geneCount: number,
-  groupCount: number,
-  setLabel: string | null,
+  panel: ReturnType<typeof plotsPanelGroups>,
   data: PlotsData,
 ): string {
+  const geneCount = panel.genes.length
+  const groupCount = panel.groups.length
+  const setLabel = panel.setLabel
+
+  if (panel.pendingSelectionCount > 0) {
+    const count = panel.pendingSelectionCount
+    return `Finding the cells in ${count.toLocaleString()} ${count === 1 ? 'selection' : 'selections'}`
+  }
   if (data.status === 'reading') {
     const count = data.readingGenes.length
     return `Reading ${count.toLocaleString()} ${count === 1 ? 'gene' : 'genes'}`
@@ -360,6 +391,7 @@ function plotsMessage({
   data,
   hasGenes,
   hasGroups,
+  pendingSelectionCount,
   hasPlot,
   platformLabel,
   elementNoun,
@@ -370,6 +402,7 @@ function plotsMessage({
   readonly data: PlotsData
   readonly hasGenes: boolean
   readonly hasGroups: boolean
+  readonly pendingSelectionCount: number
   readonly hasPlot: boolean
   readonly platformLabel: string
   readonly elementNoun: string
@@ -381,6 +414,7 @@ function plotsMessage({
   if (!datasetReady) return 'Plots show once the dataset has loaded.'
   if (data.status === 'unavailable') return data.message
   if (!hasGenes) return 'Select genes in Cells › Genes to plot them.'
+  if (pendingSelectionCount > 0) return `Finding the ${elementNoun} in each selection…`
   if (!hasGroups) {
     return `Load an annotation set in Cells › Clusters, or draw a selection, to group the ${elementNoun}.`
   }
@@ -425,16 +459,33 @@ function plotsNotes(
       `Plotting the first ${PLOT_MAX_GENES} of ${(PLOT_MAX_GENES + panel.omittedGeneCount).toLocaleString()} selected genes.`,
     )
   }
+  const groupNouns = (count: number) =>
+    panel.groupNoun === 'selection'
+      ? count === 1
+        ? 'selection'
+        : 'selections'
+      : count === 1
+        ? 'class'
+        : 'classes'
+
   if (panel.hiddenClassCount > 0) {
     notes.push(
-      `${panel.hiddenClassCount.toLocaleString()} hidden ${panel.hiddenClassCount === 1 ? 'class' : 'classes'} left out.`,
+      `${panel.hiddenClassCount.toLocaleString()} hidden ${groupNouns(panel.hiddenClassCount)} left out.`,
     )
   }
   if (panel.omittedClassCount > 0) {
     const shown = panel.groups.filter((group) => group.kind === 'class').length
     notes.push(
-      `Showing the first ${shown.toLocaleString()} of ${(shown + panel.omittedClassCount).toLocaleString()} classes; hide classes to choose others.`,
+      `Showing the first ${shown.toLocaleString()} of ${(shown + panel.omittedClassCount).toLocaleString()} ${groupNouns(2)}; hide ${groupNouns(2)} to choose others.`,
     )
+  }
+  for (const name of panel.limitedSelections) {
+    notes.push(
+      `${name} holds its first ${elementNoun} only: the query stopped at its limit.`,
+    )
+  }
+  for (const error of panel.selectionErrors) {
+    notes.push(`Left out, as its ${elementNoun} could not be found: ${error}`)
   }
   if (panel.selectionHitCellLimit) {
     const name = panel.groups.find((group) => group.kind === 'selection')?.label
@@ -449,7 +500,7 @@ function plotsNotes(
   }
   if (summary !== null && summary.repeatedCells > 0) {
     notes.push(
-      `${summary.repeatedCells.toLocaleString()} ${elementNoun} are in more than one class and count in each.`,
+      `${summary.repeatedCells.toLocaleString()} ${elementNoun} are in more than one ${groupNouns(1)} and count in each.`,
     )
   }
   if (!log1pAvailable) {

@@ -674,27 +674,27 @@ Opening the panel moves focus into it, and closing it returns focus to
 ## Plots Panel
 
 The Plots panel plots the selected genes by the classes of one annotation
-set, with the active selection as one more group: a dot plot, a violin plot
-or a group-mean heatmap ([plan 22](plan/phases/22-plots-panel.md);
+set, with the active selection as one more group, or by the saved
+selections: a dot plot, a violin plot or a group-mean heatmap ([plan 22](plan/phases/22-plots-panel.md);
 `src/features/plots/`, `src/features/shell/PlotsWindow.tsx`). It opens from
 Cells › `Show Plots` and closes with `Close plots` or Esc. It sits at the top
 right of the canvas, 480 × 420 px at first, or to the left of the Embedding
 panel when that is open. Its grip resizes it from 320 × 280 px up to the
 canvas, as the Embedding panel's does.
 
-| Control               | Notes                                                                                                                                                                                                                               |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Plot`                | `Dot plot`, `Violin` or `Heatmap`, kept in the link as `plot=`. Switching reads nothing again                                                                                                                                       |
-| `Group by`            | The sets loaded in Cells › Clusters, as the lists there group them: the dataset's set, each imported file's sets, and selections kept with `Save ROI` ("Loaded annotations"). The dataset's set is the default                      |
-| `Scale`               | `log1p` or `As stored`. `log1p` is the default when every value read is a whole number, as counts are; it is off when the matrix holds negative values, which look scaled                                                           |
-| `Colour`              | Dot plot and heatmap. `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                              |
-| `Include zeros`       | Violin, on by default: every cell, with the cells at 0. Off: only the cells expressing the gene, which the axis caption says                                                                                                        |
-| `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and the mean (dot plot, heatmap) or the median and quartiles shown (violin). It is also the plot's text alternative                                          |
-| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                                         |
-| `Read`                | Shown when a read is over 32 MiB: reads the genes. Its title gives the size                                                                                                                                                         |
-| `Export SVG`          | The plot as `{dataset}-{plot}-{set}.svg` (`dot-plot`, `violin` or `heatmap`), drawn from the same model with its colours and font written out, so it looks the same outside the app. The heatmap's file is drawn from its model too |
-| `Export PNG`          | The same drawing as a PNG at twice its size, `{dataset}-{plot}-{set}.png`                                                                                                                                                           |
-| `Export CSV`          | One row per group and gene, on the plot's scale (`values` says which): cells, cells expressing, % expressing, mean, median, quartiles, minimum and maximum over every cell, and the median and quartiles of the expressing cells    |
+| Control               | Notes                                                                                                                                                                                                                                                                                  |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Plot`                | `Dot plot`, `Violin` or `Heatmap`, kept in the link as `plot=`. Switching reads nothing again                                                                                                                                                                                          |
+| `Group by`            | The sets loaded in Cells › Clusters, as the lists there group them: the dataset's set, each imported file's sets, and selections kept with `Save ROI` ("Loaded annotations"); then `Selections`, every saved selection as a group. The dataset's set is the default, else `Selections` |
+| `Scale`               | `log1p` or `As stored`. `log1p` is the default when every value read is a whole number, as counts are; it is off when the matrix holds negative values, which look scaled                                                                                                              |
+| `Colour`              | Dot plot and heatmap. `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`                                                                                                                 |
+| `Include zeros`       | Violin, on by default: every cell, with the cells at 0. Off: only the cells expressing the gene, which the axis caption says                                                                                                                                                           |
+| `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and the mean (dot plot, heatmap) or the median and quartiles shown (violin). It is also the plot's text alternative                                                                                             |
+| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                                                                                            |
+| `Read`                | Shown when a read is over 32 MiB: reads the genes. Its title gives the size                                                                                                                                                                                                            |
+| `Export SVG`          | The plot as `{dataset}-{plot}-{set}.svg` (`dot-plot`, `violin` or `heatmap`), drawn from the same model with its colours and font written out, so it looks the same outside the app. The heatmap's file is drawn from its model too                                                    |
+| `Export PNG`          | The same drawing as a PNG at twice its size, `{dataset}-{plot}-{set}.png`                                                                                                                                                                                                              |
+| `Export CSV`          | One row per group and gene, on the plot's scale (`values` says which): cells, cells expressing, % expressing, mean, median, quartiles, minimum and maximum over every cell, and the median and quartiles of the expressing cells                                                       |
 
 The dot plot has groups down and genes across, as in Scanpy. A dot's area is
 the share of the group's cells expressing the gene (the key shows 20 to
@@ -728,6 +728,12 @@ What it plots:
 - The active selection as an extra group, named and coloured as in the
   Selection card. Its cells stay in their classes too, so it overlaps them.
   A Xenium selection that stopped at 50,000 cells is those cells, with a note.
+- Under `Group by` › `Selections`, every saved selection in Annotations ›
+  Selections instead, in the list's order and colours. Unchecked selections
+  are left out, with a note. Each selection's cells are looked up once, as
+  the Selection card does for the active one, and again only when its outline
+  changes; the plot waits for all of them. A cell in two selections counts in
+  both. A selection whose cells cannot be found is left out, with a note.
 
 Method:
 

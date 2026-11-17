@@ -6,7 +6,8 @@ import { PLOT_DENSITY_MAX_GROUPS, type PlotGroupsInput } from './plotStats'
 
 // What the Plots panel plots (plan 22-D1 to 22-D3): the selected genes,
 // grouped by the classes of one annotation set, with the active selection
-// as an extra group first.
+// as an extra group first. Group by › Selections makes each saved
+// selection a group instead.
 
 // The Xenium reader's limit, kept for every platform (22-D1).
 export const PLOT_MAX_GENES = 32
@@ -78,6 +79,29 @@ export interface PlotsSelectionInput {
   readonly hitCellLimit: boolean
 }
 
+// Group by › Selections: every saved selection, as Annotations › Selections
+// lists them.
+export const SELECTIONS_SET_ID = 'saved-selections'
+const SELECTIONS_SET_LABEL = 'Selections'
+
+export type PlotSelectionCells =
+  | { readonly status: 'loading' }
+  | {
+      readonly status: 'ready'
+      readonly cellIds: readonly string[]
+      // The query stopped at its cell limit (Xenium, 50,000 cells).
+      readonly hitCellLimit: boolean
+    }
+  | { readonly status: 'error'; readonly message: string }
+
+export interface PlotSavedSelection {
+  readonly id: string
+  readonly name: string
+  readonly color: string
+  readonly visible: boolean
+  readonly cells: PlotSelectionCells
+}
+
 export interface PlotsPanelInput {
   // Every loaded class, shown or hidden, in the legend's order.
   readonly annotations: readonly Annotation<string>[]
@@ -86,6 +110,7 @@ export interface PlotsPanelInput {
   // The set chosen in Group by, or null for the default.
   readonly setId: string | null
   readonly selection: PlotsSelectionInput | null
+  readonly savedSelections?: readonly PlotSavedSelection[]
   readonly selectedGenes: readonly string[]
   readonly maxClasses?: number
 }
@@ -102,6 +127,13 @@ export interface PlotsPanelGroups {
   readonly genes: readonly string[]
   readonly omittedGeneCount: number
   readonly selectionHitCellLimit: boolean
+  // What the set's groups are: classes, or saved selections.
+  readonly groupNoun: 'class' | 'selection'
+  // Selections whose cells are still being looked up; the groups wait.
+  readonly pendingSelectionCount: number
+  // Selections that stopped at the cell limit, and those that failed.
+  readonly limitedSelections: readonly string[]
+  readonly selectionErrors: readonly string[]
 }
 
 export function plotsPanelGroups({
@@ -109,21 +141,25 @@ export function plotsPanelGroups({
   visibleClasses,
   setId: chosenSetId,
   selection,
+  savedSelections = [],
   selectedGenes,
   maxClasses = DOT_PLOT_MAX_CLASSES,
 }: PlotsPanelInput): PlotsPanelGroups {
-  const setOptions = plotSetOptions(annotations)
-  const setId =
-    setOptions.find((option) => option.id === chosenSetId)?.id ??
-    defaultPlotSetId(annotations)
+  const setOptions = plotSetOptions(annotations, savedSelections.length)
+  const setId = resolvePlotSetId(annotations, savedSelections.length, chosenSetId)
   const setLabel = setOptions.find((option) => option.id === setId)?.label ?? null
+  const genes = uniqueGenes(selectedGenes)
+
+  if (setId === SELECTIONS_SET_ID) {
+    return selectionsPanelGroups(savedSelections, setOptions, setLabel, genes, maxClasses)
+  }
+
   const setClasses = annotations.filter(
     (annotation) => annotationSetGrouping(annotation).id === setId,
   )
   const styleById = new Map(visibleClasses.map((style) => [style.id, style]))
   const shown = setClasses.filter((annotation) => styleById.has(annotation.id))
   const kept = shown.slice(0, maxClasses)
-  const genes = uniqueGenes(selectedGenes)
 
   return {
     setOptions,
@@ -154,13 +190,81 @@ export function plotsPanelGroups({
     genes: genes.slice(0, PLOT_MAX_GENES),
     omittedGeneCount: Math.max(0, genes.length - PLOT_MAX_GENES),
     selectionHitCellLimit: selection?.hitCellLimit === true,
+    groupNoun: 'class',
+    pendingSelectionCount: 0,
+    limitedSelections: [],
+    selectionErrors: [],
   }
 }
 
+// Each shown saved selection is a group, in the list's order. A cell in two
+// selections counts in both. Nothing is grouped until every shown selection's
+// cells are known, so the plot is drawn once.
+function selectionsPanelGroups(
+  savedSelections: readonly PlotSavedSelection[],
+  setOptions: readonly PlotSetOption[],
+  setLabel: string | null,
+  genes: readonly string[],
+  maxClasses: number,
+): PlotsPanelGroups {
+  const shown = savedSelections.filter((saved) => saved.visible)
+  const pendingSelectionCount = shown.filter(
+    (saved) => saved.cells.status === 'loading',
+  ).length
+  const ready = shown.flatMap((saved) =>
+    saved.cells.status === 'ready' ? [{ saved, cells: saved.cells }] : [],
+  )
+  const kept = pendingSelectionCount > 0 ? [] : ready.slice(0, maxClasses)
+
+  return {
+    setOptions,
+    setId: SELECTIONS_SET_ID,
+    setLabel,
+    groups: kept.map(({ saved, cells }) => ({
+      id: `selection:${saved.id}`,
+      label: saved.name,
+      color: saved.color,
+      kind: 'class' as const,
+      cellIds: cells.cellIds,
+    })),
+    hiddenClassCount: savedSelections.length - shown.length,
+    omittedClassCount: pendingSelectionCount > 0 ? 0 : ready.length - kept.length,
+    genes: genes.slice(0, PLOT_MAX_GENES),
+    omittedGeneCount: Math.max(0, genes.length - PLOT_MAX_GENES),
+    selectionHitCellLimit: false,
+    groupNoun: 'selection',
+    pendingSelectionCount,
+    limitedSelections: kept.flatMap(({ saved, cells }) =>
+      cells.hitCellLimit ? [saved.name] : [],
+    ),
+    selectionErrors: shown.flatMap((saved) =>
+      saved.cells.status === 'error' ? [`${saved.name}: ${saved.cells.message}`] : [],
+    ),
+  }
+}
+
+// The set Group by shows: the chosen one while it exists, else the dataset's
+// set, else the saved selections.
+export function resolvePlotSetId(
+  annotations: readonly Annotation<string>[],
+  savedSelectionCount: number,
+  chosenSetId: string | null,
+): string | null {
+  const options = plotSetOptions(annotations, savedSelectionCount)
+
+  return (
+    options.find((option) => option.id === chosenSetId)?.id ??
+    defaultPlotSetId(annotations) ??
+    (savedSelectionCount > 0 ? SELECTIONS_SET_ID : null)
+  )
+}
+
 // The sets as the Clusters lists group them: the dataset's set, each
-// imported file's sets, and saved selections together.
+// imported file's sets, and selections kept with Save ROI together; then
+// the saved selections, when there are any.
 export function plotSetOptions(
   annotations: readonly Annotation<string>[],
+  savedSelectionCount = 0,
 ): readonly PlotSetOption[] {
   const options = new Map<string, { label: string; classCount: number }>()
 
@@ -171,7 +275,18 @@ export function plotSetOptions(
     options.set(id, option)
   }
 
-  return [...options].map(([id, option]) => ({ id, ...option }))
+  return [
+    ...[...options].map(([id, option]) => ({ id, ...option })),
+    ...(savedSelectionCount === 0
+      ? []
+      : [
+          {
+            id: SELECTIONS_SET_ID,
+            label: SELECTIONS_SET_LABEL,
+            classCount: savedSelectionCount,
+          },
+        ]),
+  ]
 }
 
 // The dataset's own set: the first with a class that is not a saved

@@ -3908,6 +3908,22 @@ describe('App', () => {
         expect(window.location.hash).toContain('plot=heatmap')
       })
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+
+      // Group by › Selections: each saved selection is a group of its own.
+      fireEvent.change(within(reopened).getByRole('combobox', { name: 'Group by' }), {
+        target: { value: 'saved-selections' },
+      })
+      expect(
+        await within(reopened).findByText('2 genes by Selections'),
+      ).toBeInTheDocument()
+      fireEvent.click(within(reopened).getByRole('switch', { name: 'Show numbers' }))
+      expect(
+        within(reopened)
+          .getAllByRole('row')
+          .slice(1)
+          .map((row) => row.textContent),
+      ).toEqual(['ROI 1Actb2100%1.04', 'ROI 1Gad120%0'])
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
     } finally {
       viewport.restore()
     }
