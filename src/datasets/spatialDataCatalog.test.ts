@@ -84,6 +84,65 @@ describe('SpatialData catalog', () => {
     ])
   })
 
+  it('draws nucleus shapes that are not a region as the nucleus layer', () => {
+    const catalog = catalogFixture([
+      element('shapes', 'spots', [['global', {}]]),
+      element('shapes', 'cell_boundaries', [['global', {}]]),
+      element('shapes', 'nucleus_boundaries', [['global', {}]]),
+      element('shapes', 'he_patches', [['global', {}]]),
+    ])
+    const view = selectSpatialDataView(catalog)
+
+    expect(view.nucleusCandidates.map((entry) => entry.element.name)).toEqual([
+      'nucleus_boundaries',
+    ])
+    expect(view.skippedElements.map((entry) => entry.name)).toEqual(['he_patches'])
+
+    // A table that annotates the nuclei draws them as its cells instead.
+    const nucleiTable = selectSpatialDataView({
+      ...catalog,
+      tables: [
+        {
+          name: 'table_nuclei',
+          path: 'tables/table_nuclei',
+          regions: ['nucleus_boundaries'],
+        },
+      ],
+    })
+    expect(nucleiTable.regionShapes.map((entry) => entry.element.name)).toEqual([
+      'nucleus_boundaries',
+    ])
+    expect(nucleiTable.nucleusCandidates).toEqual([])
+  })
+
+  it('keeps flipped and axis-swapped images, finest first, and skips rotated ones', () => {
+    const placedImage = (
+      name: string,
+      affine: { a: number; b: number; d: number; e: number },
+    ): SpatialDataElement => ({
+      kind: 'images',
+      name,
+      path: `images/${name}`,
+      attrs: {},
+      transforms: [{ coordinateSystem: 'global', affine: { ...affine, c: 0, f: 0 } }],
+    })
+    const catalog = catalogFixture([
+      placedImage('he', { a: 0, b: 1.3, d: -1.3, e: 1e-6 }),
+      placedImage('rotated', { a: 0.8, b: -0.6, d: 0.6, e: 0.8 }),
+      placedImage('morpho', { a: 1, b: 0, d: 0, e: 1 }),
+      element('shapes', 'spots', [['global', {}]]),
+    ])
+    const view = selectSpatialDataView(catalog)
+
+    expect(view.images.map((entry) => entry.element.name)).toEqual(['morpho', 'he'])
+    // The negligible term is dropped.
+    expect(view.images[1]?.affine).toEqual({ a: 0, b: 1.3, c: 0, d: -1.3, e: 0, f: 0 })
+    expect(view.image?.element.name).toBe('morpho')
+    // Images other than the one shown are listed as skipped too.
+    expect(view.skippedElements.map((entry) => entry.name)).toEqual(['he', 'rotated'])
+    expect(selectSpatialDataView(catalog, { image: 'he' }).image?.element.name).toBe('he')
+  })
+
   it('honours an explicit coordinate system', () => {
     const catalog = catalogFixture([
       element('images', 'hires', [['hires', {}]]),

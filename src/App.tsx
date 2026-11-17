@@ -122,6 +122,7 @@ import {
   loadPlatformTranscriptAggregates,
   loadPlatformTranscriptCapabilities,
   loadPlatformTranscriptViewport,
+  nucleusBoundaryControlsVisibleFor,
   PLATFORM_NAMES,
   platformAnalysisEmbeddingOptions,
   platformActiveBoundaryCell,
@@ -4010,7 +4011,12 @@ export function App({ dependencies }: AppProps = {}) {
     genePanelState,
     hasAnnotationColors:
       annotationState.status === 'ready' && annotationState.annotations.length > 0,
-    nucleusBoundaryControlsVisible: platformAdapter.capabilities.nucleusBoundaries,
+    nucleusBoundaryControlsVisible: nucleusBoundaryControlsVisibleFor(
+      platformAdapter,
+      spatialDataControlState.status === 'idle'
+        ? undefined
+        : spatialDataControlState.nuclei,
+    ),
     observationColorMode,
     rememberGeneExpressionScaleMax,
     resetGeneExpressionSelectionState,

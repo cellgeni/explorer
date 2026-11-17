@@ -112,6 +112,37 @@ describe('SpatialDataDataset', () => {
     )
   })
 
+  it('opens an image with swapped and flipped axes through a frame placement', async () => {
+    const openImage = imageOpenerFixture()
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture({ flippedImage: true })),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage,
+    })
+
+    await expect(dataset.summary()).resolves.toMatchObject({
+      image: 'he',
+      images: ['he'],
+      skippedElements: [],
+    })
+    const meta = await dataset.meta()
+
+    expect(openImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        transform: {
+          scaleX: 0.5,
+          scaleY: 0.5,
+          translateX: 0,
+          translateY: 0,
+          placement: { a: 0, b: 1, c: 10, d: -1, e: 0, f: 60 },
+        },
+      }),
+    )
+    // The 50 × 50 µm frame lands at x 10-60, y 10-60.
+    expect(meta.extent).toEqual({ minX: 1, minY: 1, maxX: 60, maxY: 60 })
+  })
+
   it('loads boundaries when the image cannot be opened', async () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
@@ -209,6 +240,170 @@ describe('SpatialDataDataset', () => {
     await expect(dataset.summary()).resolves.toMatchObject({
       boundaries: 'cell_boundaries',
     })
+  })
+})
+
+describe('SpatialDataDataset nucleus boundaries', () => {
+  const everywhere = {
+    minX: micrometers(0),
+    maxX: micrometers(100),
+    minY: micrometers(0),
+    maxY: micrometers(100),
+  }
+  const nucleus = (x: number, id: unknown) => ({
+    geometry: {
+      type: 'Polygon',
+      coordinates: [
+        [
+          [x, 0],
+          [x + 0.5, 0],
+          [x + 0.5, 0.5],
+        ],
+      ],
+    },
+    id,
+  })
+
+  it('matches nuclei to table rows through the region shapes', async () => {
+    const progress: string[] = []
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture({ nucleusBoundaries: true })),
+      readShapes: shapesReaderFixture({
+        cells: polygonRows(),
+        // Cell 10 has two nuclei; 77 matches no shape.
+        nucleus_boundaries: [
+          nucleus(0, 10n),
+          nucleus(0.25, 10n),
+          nucleus(2, 11n),
+          nucleus(4, 77n),
+        ],
+      }),
+      openImage: imageOpenerFixture(),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    await expect(dataset.summary()).resolves.toMatchObject({
+      boundaries: 'cells',
+      nuclei: 'nucleus_boundaries',
+      skippedElements: [],
+    })
+    await expect(dataset.meta()).resolves.toMatchObject({
+      segmentations: [
+        {
+          id: 'cell',
+          kind: 'cell',
+          sourceKind: 'parquet',
+          path: 'shapes/cells/shapes.parquet',
+        },
+        {
+          id: 'nucleus',
+          kind: 'nucleus',
+          sourceKind: 'parquet',
+          path: 'shapes/nucleus_boundaries/shapes.parquet',
+        },
+      ],
+    })
+
+    const nuclei = await dataset.segmentationElements('nucleus', everywhere)
+    expect(nuclei.map((element) => element.id)).toEqual([
+      'cell-a',
+      'cell-a#nucleus-2',
+      'cell-b',
+    ])
+    expect(nuclei[0]).toMatchObject({
+      metadata: { segmentation: { kind: 'nucleus' } },
+      // The element transform scales shapes by 2.
+      geometry: {
+        rings: [
+          [
+            { x: 0, y: 0 },
+            { x: 1, y: 0 },
+            { x: 1, y: 1 },
+          ],
+        ],
+      },
+    })
+    expect(progress).toContain(
+      'SpatialData shapes nucleus_boundaries: 3 of 4 nuclei match table rows',
+    )
+
+    const inView = await dataset.segmentationElements('nucleus', {
+      minX: micrometers(3),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    })
+    expect(inView.map((element) => element.id)).toEqual(['cell-b'])
+    // Nuclei still in view keep their element objects.
+    expect(inView[0]).toBe(nuclei[2])
+    await expect(dataset.segmentationElements('cell', everywhere)).resolves.toHaveLength(
+      2,
+    )
+  })
+
+  it('draws every nucleus when none matches a table row', async () => {
+    const progress: string[] = []
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture({ nucleusBoundaries: true })),
+      readShapes: shapesReaderFixture({
+        cells: polygonRows(),
+        nucleus_boundaries: [nucleus(0, 'n-1'), nucleus(2, 'n-2')],
+      }),
+      openImage: imageOpenerFixture(),
+      onProgress: (message) => {
+        progress.push(message)
+      },
+    })
+
+    const nuclei = await dataset.segmentationElements('nucleus', everywhere)
+
+    expect(nuclei.map((element) => element.id)).toEqual([
+      'nucleus_boundaries#n-1',
+      'nucleus_boundaries#n-2',
+    ])
+    expect(progress).toContain(
+      'SpatialData shapes nucleus_boundaries: no nucleus matches a row of table table; drawing every nucleus',
+    )
+  })
+
+  it('matches nuclei by table cell id when the table annotates labels', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(labelsStoreFixture({ nucleusBoundaries: true })),
+      readShapes: shapesReaderFixture({
+        nucleus_boundaries: [nucleus(1, 'cell-b'), nucleus(3, 'cell-z')],
+      }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.meta()).resolves.toMatchObject({
+      segmentations: [
+        { kind: 'cell', sourceKind: 'zarr', path: 'labels/seg' },
+        { kind: 'nucleus', sourceKind: 'parquet' },
+      ],
+    })
+    const nuclei = await dataset.segmentationElements('nucleus', everywhere)
+    expect(nuclei.map((element) => element.id)).toEqual(['cell-b'])
+  })
+
+  it('has no nucleus layer without a nucleus shapes element', async () => {
+    const readShapes = shapesReaderFixture({ cells: polygonRows() })
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(storeFixture()),
+      readShapes,
+      openImage: imageOpenerFixture(),
+    })
+
+    expect((await dataset.summary()).nuclei).toBeUndefined()
+    expect((await dataset.meta()).segmentations?.map((entry) => entry.kind)).toEqual([
+      'cell',
+    ])
+    await expect(dataset.segmentationElements('nucleus', everywhere)).resolves.toEqual([])
   })
 })
 
@@ -547,6 +742,9 @@ function zippedStoreFetcher(url: string, extra: readonly ZipFixtureFile[]): type
 function storeFixture(
   options: {
     readonly companionBoundaries?: boolean
+    // he is placed with its x and y swapped and flipped, as STHELAR's H&E.
+    readonly flippedImage?: boolean
+    readonly nucleusBoundaries?: boolean
     readonly secondImage?: boolean
   } = {},
 ): ReadonlyMap<string, Uint8Array> {
@@ -573,20 +771,35 @@ function storeFixture(
           axes: CYX.axes,
           datasets: [{ path: '0' }],
           coordinateTransformations: [
-            {
-              type: 'sequence',
-              input: CYX,
-              output: { name: 'global', axes: CYX.axes },
-              transformations: [
-                { type: 'scale', scale: [1, 0.5, 0.5], input: CYX, output: CYX },
-                {
-                  type: 'translation',
-                  translation: [0, 10, 20],
+            options.flippedImage === true
+              ? {
+                  // x = 0.5 * y_px + 10, y = -0.5 * x_px + 60.
+                  type: 'affine',
                   input: CYX,
-                  output: CYX,
+                  output: {
+                    name: 'global',
+                    axes: [{ name: 'c' }, { name: 'x' }, { name: 'y' }],
+                  },
+                  affine: [
+                    [1, 0, 0, 0],
+                    [0, 0.5, 0, 10],
+                    [0, 0, -0.5, 60],
+                  ],
+                }
+              : {
+                  type: 'sequence',
+                  input: CYX,
+                  output: { name: 'global', axes: CYX.axes },
+                  transformations: [
+                    { type: 'scale', scale: [1, 0.5, 0.5], input: CYX, output: CYX },
+                    {
+                      type: 'translation',
+                      translation: [0, 10, 20],
+                      input: CYX,
+                      output: CYX,
+                    },
+                  ],
                 },
-              ],
-            },
           ],
         },
       ],
@@ -619,6 +832,12 @@ function storeFixture(
       ? {
           'shapes/cell_boundaries/.zgroup': { zarr_format: 2 },
           'shapes/cell_boundaries/.zattrs': shapesTransform('cell_boundaries'),
+        }
+      : {}),
+    ...(options.nucleusBoundaries === true
+      ? {
+          'shapes/nucleus_boundaries/.zgroup': { zarr_format: 2 },
+          'shapes/nucleus_boundaries/.zattrs': shapesTransform('nucleus_boundaries'),
         }
       : {}),
     'tables/.zgroup': { zarr_format: 2 },
@@ -754,11 +973,25 @@ function longTableFixture(rows: number): ReadonlyMap<string, Uint8Array> {
 // Labels raster (6 x 4 pixels in two 3-column chunks) annotated by a table
 // whose instance key holds strings and whose `cell_labels` column holds the
 // label ids. Label pixels are 2 global units.
-function labelsStoreFixture(): ReadonlyMap<string, Uint8Array> {
+function labelsStoreFixture(
+  options: { readonly nucleusBoundaries?: boolean } = {},
+): ReadonlyMap<string, Uint8Array> {
   const YX = { name: 'yx', axes: [{ name: 'y' }, { name: 'x' }] }
   const metadata: Record<string, unknown> = {
     '.zgroup': { zarr_format: 2 },
     '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    ...(options.nucleusBoundaries === true
+      ? {
+          'shapes/.zgroup': { zarr_format: 2 },
+          'shapes/nucleus_boundaries/.zgroup': { zarr_format: 2 },
+          'shapes/nucleus_boundaries/.zattrs': {
+            'encoding-type': 'ngff:shapes',
+            coordinateTransformations: [
+              { type: 'identity', input: XY, output: { name: 'global', axes: XY.axes } },
+            ],
+          },
+        }
+      : {}),
     'labels/.zgroup': { zarr_format: 2 },
     'labels/seg/.zgroup': { zarr_format: 2 },
     'labels/seg/.zattrs': {
@@ -880,10 +1113,11 @@ function shapesReaderFixture(
 
 function imageOpenerFixture() {
   return vi.fn(async (request: SpatialDataImageRequest) => {
-    const { scaleX, translateX, translateY } = request.transform
+    const { scaleX, translateX, translateY, placement } = request.transform
 
     return {
       url: request.url,
+      ...(placement === undefined ? {} : { placement }),
       units: {
         dataUnit: 'micrometer',
         imageUnit: 'pixel',

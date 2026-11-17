@@ -5,14 +5,17 @@ import {
   imagePixelsToMicrometers,
   micrometers,
   micrometersToImagePixels,
+  placeFrameBbox,
   screenPixels,
   screenToData,
   tileBounds,
   tilesForBbox,
+  unplaceFrameBbox,
   viewportBbox,
 } from './coords'
 import type {
   BBox,
+  ImageFramePlacement,
   OrthographicViewState,
   TileGrid,
   UnitsDescriptor,
@@ -213,5 +216,49 @@ describe('tile math', () => {
         oneToOneUnits,
       ),
     ).toEqual([{ col: 2, row: 2 }])
+  })
+})
+
+describe('image frame placement', () => {
+  const frame: BBox = {
+    minX: micrometers(0),
+    maxX: micrometers(40),
+    minY: micrometers(0),
+    maxY: micrometers(20),
+  }
+
+  it('places a frame bbox flipped or with swapped axes', () => {
+    // x' = y + 100, y' = -x + 220: axes swapped, then y flipped.
+    const swapped: ImageFramePlacement = {
+      a: 0,
+      b: 1,
+      c: micrometers(100),
+      d: -1,
+      e: 0,
+      f: micrometers(220),
+    }
+    const flipped: ImageFramePlacement = {
+      a: -1,
+      b: 0,
+      c: micrometers(50),
+      d: 0,
+      e: 1,
+      f: micrometers(0),
+    }
+
+    expect(placeFrameBbox(swapped, frame)).toEqual({
+      minX: 100,
+      maxX: 120,
+      minY: 180,
+      maxY: 220,
+    })
+    expect(placeFrameBbox(flipped, frame)).toEqual({
+      minX: 10,
+      maxX: 50,
+      minY: 0,
+      maxY: 20,
+    })
+    expect(unplaceFrameBbox(swapped, placeFrameBbox(swapped, frame))).toEqual(frame)
+    expect(unplaceFrameBbox(flipped, placeFrameBbox(flipped, frame))).toEqual(frame)
   })
 })

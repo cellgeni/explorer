@@ -4,6 +4,7 @@ import {
   micrometers,
   tilesForBboxOnAxes,
   type BBox,
+  type ImageFramePlacement,
   type ImagePixels,
   type TileIndex,
   type UnitsDescriptor,
@@ -74,6 +75,9 @@ export interface OmeZarrPlanarTransform {
   readonly scaleY: number
   readonly translateX: number
   readonly translateY: number
+  // Flips or swaps the scaled frame's axes in the coordinate system (see
+  // ImageFramePlacement); the translation is then the placement's.
+  readonly placement?: ImageFramePlacement
 }
 
 interface OmeZarrImageSelection {
@@ -138,6 +142,7 @@ interface OmeZarrLoaderOptions {
   readonly zStack?: ImagePyramidZStack
   readonly units: UnitsDescriptor
   readonly origin?: { readonly x: number; readonly y: number }
+  readonly placement?: ImageFramePlacement
   readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
   readonly decodePool?: ZarrDecodePool | null
 }
@@ -280,7 +285,9 @@ export async function openOmeZarrImageWithOptions(
     units,
     ...(planarTransform === undefined
       ? {}
-      : { origin: { x: planarTransform.translateX, y: planarTransform.translateY } }),
+      : planarTransform.placement === undefined
+        ? { origin: { x: planarTransform.translateX, y: planarTransform.translateY } }
+        : { placement: planarTransform.placement }),
     createBitmap: options.createBitmap ?? createBitmapFromImageData,
     decodePool:
       options.decodePool === undefined ? sharedZarrDecodePool() : options.decodePool,
@@ -381,6 +388,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   readonly imageHeight: ImagePixels
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly zStack?: ImagePyramidZStack
+  readonly placement?: ImageFramePlacement
   private readonly levels: readonly OmeZarrLevelMeta[]
   private readonly axes: readonly OmeZarrAxis[]
   private readonly xAxis: number
@@ -413,6 +421,10 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
 
     if (options.zStack !== undefined) {
       this.zStack = options.zStack
+    }
+
+    if (options.placement !== undefined) {
+      this.placement = options.placement
     }
 
     this.units = options.units

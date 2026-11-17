@@ -285,6 +285,34 @@ describe('OME-Zarr image loader', () => {
     ).toEqual([{ col: 0, row: 1 }])
   })
 
+  it('keeps tile bounds in its frame when the image is flipped or axis-swapped', async () => {
+    const placement = {
+      a: 0,
+      b: 1,
+      c: micrometers(100),
+      d: -1,
+      e: 0,
+      f: micrometers(50),
+    }
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/sample.ome.zarr',
+      {
+        fetcher: fetcherForFiles(legacyV2OmeZarrFiles('/images/sample.ome.zarr')),
+        planarTransform: {
+          scaleX: 2,
+          scaleY: 3,
+          translateX: 0,
+          translateY: 0,
+          placement,
+        },
+      },
+    )
+
+    expect(loader.placement).toEqual(placement)
+    // The frame starts at 0; the placement holds the translation.
+    expect(loader.tileBounds(0, 1, 1)).toEqual({ minX: 2, maxX: 4, minY: 3, maxY: 6 })
+  })
+
   it('selects no tiles for a bbox that misses the image', async () => {
     const rootPath = '/images/partial.zarr'
     const files = new Map([

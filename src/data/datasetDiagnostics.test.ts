@@ -621,6 +621,126 @@ describe('runDatasetDiagnostics', () => {
     expect(requests.filter((request) => request.method === 'HEAD')).toHaveLength(1)
   })
 
+  it('checks every chunk of a zipped store, and its nucleus shapes', async () => {
+    const zipUrl = 'https://example.test/every.zarr.zip'
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const array = (shape: number[], chunks: number[]) => ({
+      zarr_format: 2,
+      shape,
+      chunks,
+      dtype: '<u2',
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+    })
+    const yx = [{ name: 'y' }, { name: 'x' }]
+    const raster = {
+      multiscales: [
+        {
+          axes: yx,
+          datasets: [{ path: '0' }, { path: '1' }],
+          coordinateTransformations: [
+            {
+              type: 'identity',
+              input: { axes: yx },
+              output: { name: 'global', axes: yx },
+            },
+          ],
+        },
+      ],
+    }
+    const identity = {
+      coordinateTransformations: [
+        { type: 'identity', input: { axes: ['x', 'y'] }, output: { name: 'global' } },
+      ],
+    }
+    // More table chunks than an HTTP store has checked.
+    const tableChunks = 2_002
+    const metadata = {
+      '.zgroup': { zarr_format: 2 },
+      'images/he/.zgroup': { zarr_format: 2 },
+      'images/he/.zattrs': raster,
+      'images/he/0/.zarray': array([4, 4], [2, 2]),
+      'images/he/1/.zarray': array([2, 2], [2, 2]),
+      'labels/cells/.zgroup': { zarr_format: 2 },
+      'labels/cells/.zattrs': raster,
+      'labels/cells/0/.zarray': array([4, 4], [2, 2]),
+      'labels/cells/1/.zarray': array([2, 2], [2, 2]),
+      'shapes/nucleus_boundaries/.zgroup': { zarr_format: 2 },
+      'shapes/nucleus_boundaries/.zattrs': identity,
+      'tables/table/.zgroup': { zarr_format: 2 },
+      'tables/table/.zattrs': { region: 'cells', instance_key: 'cell_id' },
+      'tables/table/obs/.zgroup': { zarr_format: 2 },
+      'tables/table/obs/area/.zarray': { ...array([tableChunks], [1]), dtype: '<f8' },
+    }
+    const chunk = (name: string) => ({
+      name: `every.zarr/${name}`,
+      data: new Uint8Array(8),
+    })
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          zipUrl,
+          zipArchive([
+            {
+              name: 'every.zarr/zmetadata',
+              data: json({ zarr_consolidated_format: 1, metadata }),
+            },
+            ...Array.from({ length: tableChunks }, (_value, index) =>
+              chunk(`tables/table/obs/area/${index.toString()}`),
+            ),
+            // A chunk of the image's finer level is absent, as a writer
+            // that skips empty chunks leaves it; the labels' coarser level is
+            // absent.
+            ...['0/0/0', '0/0/1', '0/1/0', '1/0/0'].map((key) =>
+              chunk(`images/he/${key}`),
+            ),
+            ...['0/0/0', '0/0/1', '0/1/0', '0/1/1'].map((key) =>
+              chunk(`labels/cells/${key}`),
+            ),
+            {
+              name: 'every.zarr/shapes/nucleus_boundaries/shapes.parquet',
+              data: new TextEncoder().encode('PAR1....PAR1'),
+            },
+          ]),
+        ],
+      ]),
+    )
+
+    const report = await runDatasetDiagnostics(zipUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'spatialdata' as const,
+        baseUrl: zipUrl,
+        spatialDataUrl: zipUrl,
+        checked: [],
+      })),
+      fetcher,
+    })
+
+    expect(
+      report.checks.slice(2).map((check) => [check.id, check.status, check.message]),
+    ).toEqual([
+      ['spatialdata-table-chunks', 'pass', 'All 2,002 table chunks readable'],
+      [
+        'spatialdata-image-chunk',
+        'pass',
+        '4 of 5 chunks in 2 levels in the zip. The other 1, all in finer levels, read as empty, as when the writer skips empty chunks: images/he/0/1/1 (HTTP 404)',
+      ],
+      [
+        'spatialdata-labels-cells',
+        'warning',
+        '1 of 5 chunks in 2 levels missing from the zip: labels/cells/1/0/0 (HTTP 404)',
+      ],
+      [
+        'spatialdata-shapes-nucleus_boundaries',
+        'pass',
+        'In the zip, stored: byte-range readable',
+      ],
+    ])
+  })
+
   it('checks MERSCOPE tables and boundaries, and lists files not read yet', async () => {
     const detection: SpatialDatasetDetection = {
       platform: 'merscope',

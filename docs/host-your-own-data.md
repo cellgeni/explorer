@@ -420,9 +420,13 @@ What the app reads:
   visible area when you zoom in below `Boundary limit`. Label ids come from the
   `instance_key` column when it holds integers, otherwise from an integer `obs`
   column named like `cell_labels`.
+- Shapes named like `nucleus_boundaries` that no table annotates, drawn
+  behind the `Nucleus boundaries` checkbox and matched to cells through the
+  instance ids they share with the cell shapes (or the table's cell ids).
+  The file is read whole the first time nuclei are shown.
 - One image element, as an OME-Zarr pyramid. The finest image is shown by
-  default; pick another one in View options. Scale and translation
-  transforms are applied. Rotated, sheared, or flipped images are skipped.
+  default; pick another one in View options. Scale, translation, flips, and
+  x/y swaps are applied; rotated or sheared images are skipped.
   Native RGB (H&E) images, including three-channel 8-bit images with
   SpatialData's default channel labels `0`, `1`, `2`, keep their full 0-255
   display window instead of per-channel auto contrast. Chunks larger than 512
@@ -450,9 +454,11 @@ Incomplete uploads: Zarr reads a missing chunk as the array fill value, so a
 partly uploaded store can load with empty columns. The app logs table chunks
 read that way, fails with `Store objects missing or unreadable` when a string
 array or a required array cannot be read, and skips optional `obs` columns
-whose chunks return `403`. `Diagnose Dataset` checks every table chunk, one
-chunk of the image and of each labels region in the view the app loads, and
-the `shapes.parquet` files drawn as cells.
+whose chunks return `403`. `Diagnose Dataset` checks the first 2,000 table
+chunks, one chunk of the image and of each labels region in the view the app
+loads, and the `shapes.parquet` files drawn as cells or nuclei. In a zipped
+store it checks every table, image, and labels chunk against the zip's
+directory.
 
 ## Host Your Own Image-Only Data
 
