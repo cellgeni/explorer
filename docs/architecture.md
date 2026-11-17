@@ -515,11 +515,16 @@ worker, which runs zarrita's own codec and sends back the bytes by transfer
 (strings by clone). Byte order, filters and assembling the selection stay on
 the main thread; whole arrays whose chunks span every axis but the first are
 assembled a chunk at a time (`getWholeArray`, `src/zarr/zarrWholeArray.ts`)
-instead of zarrita's row-by-row copy. If a worker fails, the chunk is decoded
-on the main thread with zarrita's codec; with no `Worker` the registry is left
-alone. OME-Zarr image chunk bytes are fetched on the main thread and decoded
-whole in the Zarr decode workers, which fall back to the main thread if they
-fail. Other hyparquet reads (Visium HD positions and barcode mappings, and
+instead of zarrita's row-by-row copy. A chunk a worker cannot decode is
+decoded on the main thread with zarrita's codec, which reports a chunk that
+does not decode. A worker that fails (`ZarrDecodeWorkerError`: its script did
+not load, or it stopped) sends every chunk to the main thread until the page
+is reloaded, rather than starting new workers that fail again, and Data access
+notes says so ("Zarr decoding", `src/zarr/zarrCodecWorkerStatus.ts`), however
+many datasets are opened after. With no `Worker` the registry is left alone.
+OME-Zarr image chunk bytes are fetched on the main thread and decoded whole in
+the Zarr decode workers, which fall back to the main thread if they fail.
+Other hyparquet reads (Visium HD positions and barcode mappings, and
 `Browse File`'s footer and first rows) run on the main thread.
 
 ## Performance Budget

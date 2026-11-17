@@ -137,8 +137,9 @@ Later additions:
   reads or their caches into workers. zarrita still fetches chunks and assembles
   selections on the main thread; whole arrays chunked only by row are assembled
   a chunk at a time (`getWholeArray`) instead of with zarrita's row-by-row copy,
-  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. If a
-  worker fails, the chunk is decoded on the main thread.
+  which took 124–127 ms for the Xenium matrix's 1,414,155 × 2 cell IDs. A chunk
+  a worker cannot decode is decoded on the main thread. Since 2026-11-17 a
+  worker that fails sends every chunk there until reload, with a notice.
 - **SpatialData shapes worker (2026-11-13).** Each `shapes.parquet` is decoded
   in a worker of its own (`spatialDataShapes.worker.ts`). The worker fetches a
   plain URL itself; a file inside a zipped store, or behind a custom fetcher,

@@ -1,5 +1,6 @@
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { reportZarrCodecWorkerFailure } from '../../zarr/zarrCodecWorkerStatus'
 import {
   datasetFacts,
   useDatasetInfoModel,
@@ -137,6 +138,40 @@ describe('useDatasetInfoModel', () => {
 
     writeText.mockRejectedValueOnce(new Error('denied'))
     await expect(result.current.share.onCopyLink()).resolves.toBe(false)
+  })
+
+  // Last here, since the failure lasts for the rest of the test file.
+  it('lists a Zarr decode worker failure before the dataset notices, across loads', () => {
+    const datasetNotice = {
+      id: 1,
+      timestamp: 2,
+      source: 'Expression',
+      message: 'Read by range',
+    }
+    const { result, rerender } = renderHook(
+      (props: DatasetInfoModelInput) => useDatasetInfoModel(props),
+      { initialProps: input({ fallbackNotices: [datasetNotice] }) },
+    )
+
+    expect(result.current.diagnostics.fallbackNotices).toEqual([datasetNotice])
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    act(() => {
+      reportZarrCodecWorkerFailure(new Error('Zarr decode worker failed.'))
+    })
+    warn.mockRestore()
+
+    expect(result.current.diagnostics.fallbackNotices).toMatchObject([
+      { id: 0, source: 'Zarr decoding', detail: 'Zarr decode worker failed.' },
+      datasetNotice,
+    ])
+
+    // A new load clears the dataset's notices but not this one.
+    rerender(input({ fallbackNotices: [] }))
+
+    expect(result.current.diagnostics.fallbackNotices).toMatchObject([
+      { id: 0, source: 'Zarr decoding' },
+    ])
   })
 })
 

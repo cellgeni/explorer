@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from 'vitest'
 import type {
+  ZarrCodecCall,
   ZarrCodecChunkMeta,
   ZarrDecodeRequest,
   ZarrDecodeResponse,
 } from './zarrDecodeMessages'
-import { ZarrDecodePool, type ZarrDecodeWorkerLike } from './zarrDecodePool'
+import {
+  ZarrDecodePool,
+  ZarrDecodeWorkerError,
+  type ZarrDecodeWorkerLike,
+} from './zarrDecodePool'
 
 // Answers like the real worker: tiles of chunks it holds, misses otherwise.
 class FakeWorker implements ZarrDecodeWorkerLike {
@@ -91,6 +96,11 @@ const SOURCE = {
   coords: [0, 0],
 } as const
 const WINDOW = { xAxis: 1, yAxis: 0, x0: 0, y0: 0, width: 2, height: 2, fixedAxes: [] }
+const GZIP: ZarrCodecCall = {
+  name: 'gzip',
+  configuration: {},
+  meta: { dataType: 'uint8', shape: [1], codecs: [], fillValue: 0 },
+}
 
 describe('ZarrDecodePool', () => {
   it('sends a chunk once and renders all of its tiles on the same worker', async () => {
@@ -213,16 +223,32 @@ describe('ZarrDecodePool', () => {
       })
     }
 
-    await expect(
-      pool.decodeCodec(
-        {
-          name: 'gzip',
-          configuration: {},
-          meta: { dataType: 'uint8', shape: [1], codecs: [], fillValue: 0 },
-        },
-        Uint8Array.from([0]),
-      ),
-    ).rejects.toThrow('corrupt')
+    const error: unknown = await pool
+      .decodeCodec(GZIP, Uint8Array.from([0]))
+      .catch((caught: unknown) => caught)
+
+    // The chunk failed, not the worker.
+    expect(error).toBeInstanceOf(Error)
+    expect(error).not.toBeInstanceOf(ZarrDecodeWorkerError)
+    expect(error).toMatchObject({ message: 'corrupt' })
+  })
+
+  it('reports a worker that does not start as a worker failure', async () => {
+    const pool = new ZarrDecodePool({
+      size: 1,
+      workerFactory: () => {
+        throw new Error('Content Security Policy blocks workers')
+      },
+    })
+
+    const error: unknown = await pool
+      .decodeCodec(GZIP, Uint8Array.from([0]))
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(ZarrDecodeWorkerError)
+    expect(error).toMatchObject({
+      message: 'Zarr decode worker did not start: Content Security Policy blocks workers',
+    })
   })
 
   it('returns label traces and fails pending work when a worker crashes', async () => {
@@ -254,6 +280,20 @@ describe('ZarrDecodePool', () => {
         window: WINDOW,
         render: {},
       }),
-    ).rejects.toThrow('boom')
+    ).rejects.toThrow(new ZarrDecodeWorkerError('boom'))
+  })
+
+  it('fails pending codec steps as worker failures when a worker script does not load', async () => {
+    const worker = new FakeWorker()
+    const pool = new ZarrDecodePool({ size: 1, workerFactory: () => worker })
+    worker.postMessage = () => {
+      queueMicrotask(() => {
+        worker.onerror?.({ message: '' } as ErrorEvent)
+      })
+    }
+
+    await expect(pool.decodeCodec(GZIP, Uint8Array.from([0]))).rejects.toThrow(
+      new ZarrDecodeWorkerError('Zarr decode worker failed.'),
+    )
   })
 })
