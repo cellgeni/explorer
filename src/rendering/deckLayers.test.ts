@@ -16,14 +16,12 @@ import {
   createOverviewLayers,
   geneExpressionElementsToLayerData,
   geneExpressionScoreSpread,
-  gridCellBatchesToLayerData,
   overviewCellsToLayerData,
   spatialOverviewView,
   styleCellBoundariesByCells,
   styleCellBoundariesByGeneExpression,
   styleCellsByGeneExpression,
   styleGridCellByGeneExpression,
-  styleGridCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
   unscoredGridCell,
   transcriptAggregateBinsToLayerData,
@@ -32,6 +30,16 @@ import {
 import { geneExpressionColor } from './deckLayerColors'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 import { GridBinLayer } from './gridBinLayer'
+import { gridCellAt, gridCellColumnsFromBatch } from './gridCellColumns'
+import {
+  createGridCellStyler,
+  gridCellRenderSelection,
+  packGridCellCenters,
+  packGridCellColors,
+  packGridCells,
+  type GridCellPacking,
+  type GridCellStyler,
+} from './gridCellRenderer'
 import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
 
 const fixtureCells: readonly OverviewCellDatum[] = [
@@ -1318,106 +1326,109 @@ describe('deck layer factory', () => {
     ])
   })
 
-  it('renders affine grid cells as pickable polygons using cell opacities', () => {
-    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
-    const layers = createOverviewLayers([], [], {
-      gridCells,
-      cellFillOpacity: 0.25,
-      cellBoundaryOpacity: 0.4,
-    })
-    const gridLayer = layers.find(
-      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
+  it('renders affine grid cells as packed, pickable bins using cell opacities', () => {
+    const packing = fixtureGridPacking()
+    const gridLayer = fixtureGridLayer(
+      createOverviewLayers([], [], {
+        gridCells: packing,
+        cellFillOpacity: 0.25,
+        cellBoundaryOpacity: 0.4,
+      }),
     )
 
-    expect(gridLayer).toBeInstanceOf(GridBinLayer)
-
-    if (!(gridLayer instanceof GridBinLayer)) {
-      throw new Error('Expected grid cells to render as GridBinLayer.')
-    }
-
     expect(gridLayer.props.pickable).toBe(true)
-    expect(gridLayer.props.data).toEqual(gridCells)
-
-    const getCenter = gridLayer.props.getCenter as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
-    const getColumnVector = gridLayer.props.getColumnVector as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
-    const getRowVector = gridLayer.props.getRowVector as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
-    const getFillColor = gridLayer.props.getFillColor as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
-    const getLineColor = gridLayer.props.getLineColor as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
-
-    // The cell polygon is (4, -15), (16, -15), (16, -25), (4, -25).
-    expect(getCenter(gridCells[0]!)).toEqual([10, -20, 0])
-    expect(getColumnVector(gridCells[0]!)).toEqual([12, 0])
-    expect(getRowVector(gridCells[0]!)).toEqual([0, -10])
-    expect(getFillColor(gridCells[0]!)).toEqual([34, 120, 108, 7])
-    expect(getLineColor(gridCells[0]!)).toEqual([22, 90, 82, 60])
+    expect(gridLayer.props.data).toMatchObject({ length: 2 })
+    // BC-1 is centred at (10, 20) and BC-2 at (22, 10), y negated for deck.gl.
+    expect(Array.from(packedAttribute(gridLayer, 'getCenter'))).toEqual([
+      10, -20, 22, -10,
+    ])
+    expect(gridLayer.props.getColumnVector).toEqual([12, 0])
+    expect(gridLayer.props.getRowVector).toEqual([0, -10])
+    expect(Array.from(packedAttribute(gridLayer, 'getFillColor').slice(0, 4))).toEqual([
+      34, 120, 108, 7,
+    ])
+    expect(Array.from(packedAttribute(gridLayer, 'getLineColor').slice(0, 4))).toEqual([
+      22, 90, 82, 60,
+    ])
+    // Picking gives the bin as an object.
+    expect(gridLayer.props.pickObject?.(1)).toMatchObject({ id: 'BC-2', row: 0, col: 1 })
   })
 
   it('merges gene expression color into affine grid cells', () => {
-    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
-    const expressionStyledGridCells = styleGridCellsByGeneExpression(
-      gridCells,
-      [
-        {
-          id: 'BC-1',
-          position: [10, -20, 0],
-          radiusPixels: 6,
-          fillColor: [240, 128, 120, 220],
-          expressionCount: 7,
-          expressionGenes: ['Actb'],
-        },
-      ],
-      { styleUnmatchedCells: true },
+    const packing = fixtureGridPacking(
+      createGridCellStyler({
+        observationColor: null,
+        expressionIndex: createGeneExpressionElementStyleIndex([
+          {
+            id: 'BC-1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 7,
+            expressionGenes: ['Actb'],
+          },
+        ]),
+        styleUnmatchedCells: true,
+      }),
     )
 
-    expect(expressionStyledGridCells[0]).toMatchObject({
+    expect(Array.from(packing.colors.fill)).toEqual([240, 128, 120, 220, 72, 68, 58, 84])
+    expect(Array.from(packing.colors.line.slice(0, 4))).toEqual([240, 128, 120, 220])
+    expect(packing.cellAt(0)).toMatchObject({
       id: 'BC-1',
       fillColor: [240, 128, 120, 220],
       lineColor: [240, 128, 120, 220],
       expressionCount: 7,
       expressionGenes: ['Actb'],
     })
-    expect(expressionStyledGridCells[1]).toMatchObject({
+    expect(packing.cellAt(1)).toMatchObject({
       id: 'BC-2',
       fillColor: [72, 68, 58, 84],
       expressionCount: 0,
     })
 
-    const layers = createOverviewLayers([], [], {
-      gridCells: expressionStyledGridCells,
-      cellFillOpacity: 0.5,
-    })
-    const gridLayer = layers.find(
-      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
+    const gridLayer = fixtureGridLayer(
+      createOverviewLayers([], [], { gridCells: packing, cellFillOpacity: 0.5 }),
     )
 
-    if (!(gridLayer instanceof GridBinLayer)) {
-      throw new Error('Expected grid cells to render as GridBinLayer.')
-    }
+    expect(Array.from(packedAttribute(gridLayer, 'getFillColor').slice(0, 4))).toEqual([
+      240, 128, 120, 110,
+    ])
+  })
 
-    const getFillColor = gridLayer.props.getFillColor as unknown as (
-      cell: (typeof expressionStyledGridCells)[number],
-    ) => readonly number[]
+  it('colours bins by annotation, with gene expression over it', () => {
+    const packing = fixtureGridPacking(
+      createGridCellStyler({
+        observationColor: (bin) =>
+          bin.id === 'BC-2' ? [255, 0, 0, 230] : [10, 10, 10, 100],
+        expressionIndex: createGeneExpressionElementStyleIndex([
+          {
+            id: 'BC-1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+          },
+        ]),
+        styleUnmatchedCells: false,
+      }),
+    )
 
-    expect(getFillColor(expressionStyledGridCells[0]!)).toEqual([240, 128, 120, 110])
+    expect(Array.from(packing.colors.fill)).toEqual([240, 128, 120, 220, 255, 0, 0, 230])
+    expect(Array.from(packing.colors.line.slice(4))).not.toEqual([22, 90, 82, 150])
+    expect(
+      createGridCellStyler({
+        observationColor: null,
+        expressionIndex: createGeneExpressionElementStyleIndex([]),
+        styleUnmatchedCells: false,
+      }),
+    ).toBeNull()
   })
 
   it('styles one grid cell as the whole grid is styled, and drops a stale score', () => {
-    const [cell] = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
-
-    if (cell === undefined) {
-      throw new Error('Expected a grid cell.')
-    }
-
+    const cell = gridCellAt(
+      gridCellColumnsFromBatch(fixtureGrid, fixtureGridCellBatch),
+      0,
+    )
     const index = createGeneExpressionElementStyleIndex([
       {
         id: cell.id,
@@ -1430,7 +1441,15 @@ describe('deck layer factory', () => {
     ])
     const styled = styleGridCellByGeneExpression(cell, index, false)
 
-    expect(styled).toEqual(styleGridCellsByGeneExpression([cell], index)[0])
+    expect(styled).toEqual(
+      fixtureGridPacking(
+        createGridCellStyler({
+          observationColor: null,
+          expressionIndex: index,
+          styleUnmatchedCells: false,
+        }),
+      ).cellAt(0),
+    )
     expect(styled).toMatchObject({ expressionCount: 7, expressionGenes: ['Actb'] })
     expect(
       styleGridCellByGeneExpression(
@@ -1455,70 +1474,94 @@ describe('deck layer factory', () => {
   })
 
   it('maps coarser binned gene expression colors onto affine grid cells by position', () => {
-    const gridCells = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
-    const expressionStyledGridCells = styleGridCellsByGeneExpression(
-      gridCells,
-      [
-        {
-          id: 's_016um_0_1',
-          position: [10, -20, 0],
-          radiusPixels: 6,
-          fillColor: [240, 128, 120, 220],
-          expressionCount: 7,
-          expressionGenes: ['Actb'],
-          binSizeMicrometers: 16,
-        },
-      ],
-      { styleUnmatchedCells: true },
+    const packing = fixtureGridPacking(
+      createGridCellStyler({
+        observationColor: null,
+        expressionIndex: createGeneExpressionElementStyleIndex([
+          {
+            id: 's_016um_0_1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 7,
+            expressionGenes: ['Actb'],
+            binSizeMicrometers: 16,
+          },
+        ]),
+        styleUnmatchedCells: true,
+      }),
     )
 
-    expect(expressionStyledGridCells[0]).toMatchObject({
+    expect(packing.cellAt(0)).toMatchObject({
       id: 'BC-1',
       fillColor: [240, 128, 120, 222],
       lineColor: [240, 128, 120, 222],
       expressionCount: 7,
       expressionGenes: ['Actb'],
     })
-    expect(expressionStyledGridCells[1]).toMatchObject({
+    expect(packing.cellAt(1)).toMatchObject({
       id: 'BC-2',
       fillColor: [72, 68, 58, 84],
       expressionCount: 0,
     })
+    expect(Array.from(packing.colors.fill.slice(0, 4))).toEqual([240, 128, 120, 222])
   })
 
   it('keeps active affine-grid gene expression visible at low cell fill opacity', () => {
-    const gridCells = styleGridCellsByGeneExpression(
-      gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch]),
-      [
-        {
-          id: 'BC-1',
-          position: [10, -20, 0],
-          radiusPixels: 6,
-          fillColor: [240, 128, 120, 220],
-          expressionCount: 7,
-          expressionGenes: ['Actb'],
-        },
-      ],
-      { styleUnmatchedCells: true },
+    const packing = fixtureGridPacking(
+      createGridCellStyler({
+        observationColor: null,
+        expressionIndex: createGeneExpressionElementStyleIndex([
+          {
+            id: 'BC-1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+            expressionCount: 7,
+            expressionGenes: ['Actb'],
+          },
+        ]),
+        styleUnmatchedCells: true,
+      }),
     )
-    const layers = createOverviewLayers([], [], {
-      geneExpressionActive: true,
-      gridCells,
-      cellFillOpacity: 0.1,
-    })
-    const gridLayer = layers.find(
-      (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
+    const gridLayer = fixtureGridLayer(
+      createOverviewLayers([], [], {
+        geneExpressionActive: true,
+        gridCells: packing,
+        cellFillOpacity: 0.1,
+      }),
     )
 
-    if (!(gridLayer instanceof GridBinLayer)) {
-      throw new Error('Expected grid cells to render as GridBinLayer.')
-    }
+    expect(Array.from(packedAttribute(gridLayer, 'getFillColor').slice(0, 4))).toEqual([
+      240, 128, 120, 110,
+    ])
+  })
 
-    const getFillColor = gridLayer.props.getFillColor as unknown as (
-      cell: (typeof gridCells)[number],
-    ) => readonly number[]
+  it('draws only the selected bins', () => {
+    const columns = gridCellColumnsFromBatch(fixtureGrid, fixtureGridCellBatch)
+    const selection = gridCellRenderSelection(columns, Uint32Array.from([1]))
+    const packing = packGridCells(
+      selection,
+      packGridCellCenters(selection),
+      packGridCellColors(selection, null),
+      null,
+    )
 
-    expect(getFillColor(gridCells[0]!)).toEqual([240, 128, 120, 110])
+    expect(Array.from(packing.centers)).toEqual([22, -10])
+    expect(packing.cellAt(0).id).toBe('BC-2')
+    expect(createOverviewLayers([], [], { gridCells: packing })).toContainEqual(
+      expect.any(GridBinLayer),
+    )
+    expect(
+      createOverviewLayers([], [], {
+        gridCells: packGridCells(
+          gridCellRenderSelection(columns, new Uint32Array(0)),
+          new Float64Array(0),
+          { fill: new Uint8Array(0), line: new Uint8Array(0) },
+          null,
+        ),
+      }).some((layer) => layer instanceof GridBinLayer),
+    ).toBe(false)
   })
 
   it('colors transcript aggregate bins with the selected density scale', () => {
@@ -1962,8 +2005,10 @@ describe('deck layer factory', () => {
     ])
   })
 
-  it('converts columnar affine grid batches into deck.gl polygons', () => {
-    expect(gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])).toEqual([
+  it('builds a bin of a columnar affine grid as a deck.gl polygon', () => {
+    const columns = gridCellColumnsFromBatch(fixtureGrid, fixtureGridCellBatch)
+
+    expect([gridCellAt(columns, 0), gridCellAt(columns, 1)]).toEqual([
       {
         id: 'BC-1',
         gridId: 'grid-16um',
@@ -2007,19 +2052,15 @@ describe('deck layer factory', () => {
     ])
   })
 
-  it('copies Visium HD grid-cell metadata into deck.gl polygon data', () => {
-    expect(
-      gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch], {
-        metadata: [
-          {
-            binSizeMicrometers: 16,
-            inTissue: new Uint8Array([1, 0]),
-            fullresRows: new Float64Array([128, 144]),
-            fullresCols: new Float64Array([256, 272]),
-          },
-        ],
-      }),
-    ).toEqual([
+  it('reads Visium HD grid-cell metadata into a bin', () => {
+    const columns = gridCellColumnsFromBatch(fixtureGrid, fixtureGridCellBatch, {
+      binSizeMicrometers: 16,
+      inTissue: new Uint8Array([1, 0]),
+      fullresRows: new Float64Array([128, 144]),
+      fullresCols: new Float64Array([256, 272]),
+    })
+
+    expect([gridCellAt(columns, 0), gridCellAt(columns, 1)]).toEqual([
       expect.objectContaining({
         id: 'BC-1',
         binSizeMicrometers: 16,
@@ -2037,6 +2078,44 @@ describe('deck layer factory', () => {
     ])
   })
 })
+
+function fixtureGridPacking(styler: GridCellStyler | null = null): GridCellPacking {
+  const selection = gridCellRenderSelection(
+    gridCellColumnsFromBatch(fixtureGrid, fixtureGridCellBatch),
+  )
+
+  return packGridCells(
+    selection,
+    packGridCellCenters(selection),
+    packGridCellColors(selection, styler),
+    styler,
+  )
+}
+
+function fixtureGridLayer(layers: ReturnType<typeof createOverviewLayers>) {
+  const gridLayer = layers.find(
+    (layer) => layer instanceof GridBinLayer && layer.id === 'spatial-grid-cells',
+  )
+
+  if (!(gridLayer instanceof GridBinLayer)) {
+    throw new Error('Expected grid cells to render as GridBinLayer.')
+  }
+
+  return gridLayer
+}
+
+function packedAttribute(layer: GridBinLayer, name: string): Uint8Array | Float64Array {
+  const data = layer.props.data as unknown as {
+    readonly attributes: Readonly<Record<string, { readonly value: Uint8Array }>>
+  }
+  const attribute = data.attributes[name]
+
+  if (attribute === undefined) {
+    throw new Error(`Expected a packed ${name} attribute.`)
+  }
+
+  return attribute.value
+}
 
 const fixtureGrid: SpatialGrid = {
   id: 'grid-16um',

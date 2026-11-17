@@ -19,6 +19,7 @@ import type {
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
+import type { GridCellColumns } from '../rendering/gridCellColumns'
 import type { LoadingTaskSummary } from './AppStatusPanels'
 import type {
   FlatMorphologyCanvasImage,
@@ -40,8 +41,9 @@ export interface ViewerCoreProps {
   readonly cellBoundaryHoverEnabled?: boolean
   readonly hoverTooltipsEnabled?: boolean
   readonly overviewCellSourceLabel?: string
-  readonly gridCells?: readonly GridCellDatum[]
-  readonly fitGridCells?: readonly GridCellDatum[]
+  // Grid bins (Visium HD), as columns.
+  readonly gridCells?: GridCellColumns
+  readonly fitGridCells?: GridCellColumns
   readonly fitImageExtent?: BBox | null
   readonly transcriptAggregateBins?: readonly TranscriptAggregateDatum[]
   readonly transcriptPoints?: readonly TranscriptPointDatum[]

@@ -20,11 +20,15 @@ import {
   transcriptPointsToLayerData,
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
-  type GridCellDatum,
   type OverviewCellDatum,
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
+import {
+  EMPTY_GRID_CELL_COLUMNS,
+  gridCellColumnsBbox,
+  type GridCellColumns,
+} from '../../rendering/gridCellColumns'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { overviewCellsToBbox } from '../cells/cellDetailModel'
 import {
@@ -58,7 +62,6 @@ import {
 
 const EMPTY_ANNOTATION_STYLE_COLORS: readonly AnnotationColorStyle[] = []
 const EMPTY_MORPHOLOGY_CHANNEL_OPACITIES: ReadonlyMap<string, number> = new Map()
-const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 
 interface ViewerLayerAnnotationOptions {
@@ -74,7 +77,7 @@ interface ViewerLayerCellOptions {
   readonly cellMetadataTrack: CellMetadataColorStyle | null
   readonly observationColorMode: ObservationColorMode
   readonly overviewCells: readonly OverviewCellDatum[]
-  readonly gridCells?: readonly GridCellDatum[]
+  readonly gridCells?: GridCellColumns
   readonly currentViewportBbox: BBox | null
 }
 
@@ -135,7 +138,7 @@ export function useViewerLayerData({
   const {
     cellMetadataTrack,
     currentViewportBbox,
-    gridCells = EMPTY_GRID_CELLS,
+    gridCells = EMPTY_GRID_CELL_COLUMNS,
     observationColorMode,
     overviewCells,
   } = cells
@@ -401,42 +404,19 @@ export function useViewerLayerData({
 
 function spatialLayerDataToBbox(
   cells: readonly OverviewCellDatum[],
-  gridCells: readonly GridCellDatum[],
+  gridCells: GridCellColumns,
 ): BBox | null {
   const cellBbox = overviewCellsToBbox(cells)
+  const gridCellBbox = gridCellColumnsBbox(gridCells)
 
-  if (gridCells.length === 0) {
-    return cellBbox
-  }
-
-  let minX = cellBbox?.minX ?? Number.POSITIVE_INFINITY
-  let maxX = cellBbox?.maxX ?? Number.NEGATIVE_INFINITY
-  let minY = cellBbox?.minY ?? Number.POSITIVE_INFINITY
-  let maxY = cellBbox?.maxY ?? Number.NEGATIVE_INFINITY
-
-  for (const cell of gridCells) {
-    for (const [x = 0, deckY = 0] of cell.polygon) {
-      const rawY = -deckY
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, rawY)
-      maxY = Math.max(maxY, rawY)
-    }
-  }
-
-  if (
-    !Number.isFinite(minX) ||
-    !Number.isFinite(maxX) ||
-    !Number.isFinite(minY) ||
-    !Number.isFinite(maxY)
-  ) {
-    return null
+  if (gridCellBbox === null || cellBbox === null) {
+    return gridCellBbox ?? cellBbox
   }
 
   return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
+    minX: micrometers(Math.min(cellBbox.minX, gridCellBbox.minX)),
+    maxX: micrometers(Math.max(cellBbox.maxX, gridCellBbox.maxX)),
+    minY: micrometers(Math.min(cellBbox.minY, gridCellBbox.minY)),
+    maxY: micrometers(Math.max(cellBbox.maxY, gridCellBbox.maxY)),
   }
 }

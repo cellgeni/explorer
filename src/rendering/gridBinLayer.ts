@@ -3,8 +3,10 @@ import type {
   Accessor,
   Color,
   DefaultProps,
+  GetPickingInfoParams,
   LayerDataSource,
   LayerProps,
+  PickingInfo,
   Position,
   UpdateParameters,
 } from '@deck.gl/core'
@@ -132,6 +134,8 @@ interface GridBinLayerOwnProps<DataT> {
   readonly lineWidthPixels?: number
   readonly stroked?: boolean
   readonly filled?: boolean
+  // The picked bin's object, when the data is packed arrays.
+  readonly pickObject?: ((index: number) => DataT) | null
 }
 
 export type GridBinLayerProps<DataT> = GridBinLayerOwnProps<DataT> & LayerProps
@@ -145,6 +149,7 @@ const defaultProps: DefaultProps<GridBinLayerOwnProps<unknown>> = {
   lineWidthPixels: { type: 'number', min: 0, value: 1 },
   stroked: true,
   filled: true,
+  pickObject: { type: 'function', value: null, compare: false },
 }
 
 // Corners of the unit quad, as a triangle strip.
@@ -199,6 +204,17 @@ export class GridBinLayer<DataT = unknown> extends Layer<
         defaultValue: [0, 0, 0, 255],
       },
     })
+  }
+
+  override getPickingInfo(params: GetPickingInfoParams): PickingInfo {
+    const info = super.getPickingInfo(params)
+    const pickObject = this.props.pickObject
+
+    if (pickObject !== null && info.index >= 0) {
+      info.object = pickObject(info.index)
+    }
+
+    return info
   }
 
   override updateState(params: UpdateParameters<this>) {

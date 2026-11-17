@@ -1,99 +1,38 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
-import type { GridCellDatum } from '../rendering/deckLayers'
+import { gridCellAt, gridCellColumnsBbox } from '../rendering/gridCellColumns'
+import { gridCellColumnsFixture, squareGridBasis } from '../test/gridCellColumnsFixture'
 import {
   GRID_CELL_2UM_EXACT_RENDER_ZOOM_MIN,
-  countGridCellsInSpatialIndex,
+  coarsenGridCellColumns,
   createGridCellRenderLods,
-  createGridCellSpatialIndex,
-  gridCellIntersectsBbox,
-  gridCellsInBbox,
   isRenderLodGridCell,
   selectGridCellsForRenderLod,
 } from './viewerGridCellIndex'
 
 describe('viewerGridCellIndex', () => {
-  it('returns only grid cells intersecting the viewport bbox', () => {
-    const cells = [
-      gridCell('visible', bbox(0, 10, 0, 10)),
-      gridCell('outside', bbox(100, 110, 100, 110)),
-      gridCell('edge', bbox(10, 20, 10, 20)),
-    ]
-    const index = createGridCellSpatialIndex(cells, { bucketSizeMicrometers: 16 })
-    const query = bbox(5, 10, 5, 10)
-
-    expect(gridCellsInBbox(index, query).map((cell) => cell.id)).toEqual([
-      'visible',
-      'edge',
-    ])
-    expect(countGridCellsInSpatialIndex(index, query)).toBe(2)
-  })
-
-  it('uses optional render padding without changing exact counts', () => {
-    const cells = [
-      gridCell('inside', bbox(0, 10, 0, 10)),
-      gridCell('padded', bbox(12, 20, 0, 10)),
-    ]
-    const index = createGridCellSpatialIndex(cells, { bucketSizeMicrometers: 16 })
-    const query = bbox(0, 10, 0, 10)
-
-    expect(countGridCellsInSpatialIndex(index, query)).toBe(1)
-    expect(
-      gridCellsInBbox(index, query, { paddingMicrometers: 2 }).map((cell) => cell.id),
-    ).toEqual(['inside', 'padded'])
-  })
-
-  it('can fall back to polygon bounds when cached bounds are absent', () => {
-    const cellWithBounds = gridCell('polygon-only', bbox(0, 10, 0, 10))
-    const cell: GridCellDatum = {
-      id: cellWithBounds.id,
-      gridId: cellWithBounds.gridId,
-      row: cellWithBounds.row,
-      col: cellWithBounds.col,
-      binSizeMicrometers: 2,
-      polygon: cellWithBounds.polygon,
-      fillColor: cellWithBounds.fillColor,
-      lineColor: cellWithBounds.lineColor,
-    }
-
-    expect(gridCellIntersectsBbox(cell, bbox(9, 20, 9, 20))).toBe(true)
-    expect(gridCellIntersectsBbox(cell, bbox(11, 20, 11, 20))).toBe(false)
-  })
-
   it('renders selected 2um cells as 16um LOD until close zoom', () => {
-    const cells: GridCellDatum[] = []
-    const xOffset = 100
-    const yOffset = 200
+    const bins = []
 
     for (let row = 0; row < 8; row += 1) {
       for (let col = 0; col < 8; col += 1) {
-        cells.push(
-          gridCell(
-            `2um-${row}-${col}`,
-            bbox(
-              xOffset + col * 2,
-              xOffset + (col + 1) * 2,
-              yOffset + row * 2,
-              yOffset + (row + 1) * 2,
-            ),
-            {
-              row,
-              col,
-              binSizeMicrometers: 2,
-            },
-          ),
-        )
+        bins.push({ id: `2um-${row}-${col}`, row, col })
       }
     }
 
+    const cells = gridCellColumnsFixture(bins, {
+      binSizeMicrometers: 2,
+      basis: squareGridBasis(2, { x: 100, y: 200 }),
+    })
     const lods = createGridCellRenderLods(cells)
     const zoomedOutCells = selectGridCellsForRenderLod(
       lods,
       GRID_CELL_2UM_EXACT_RENDER_ZOOM_MIN - 0.1,
     )
+    const coarse = gridCellAt(zoomedOutCells, 0)
 
     expect(zoomedOutCells).toHaveLength(1)
-    expect(zoomedOutCells[0]).toMatchObject({
+    expect(coarse).toMatchObject({
       id: 'render-lod-16um:0:0',
       row: 0,
       col: 0,
@@ -101,46 +40,63 @@ describe('viewerGridCellIndex', () => {
       renderLodSourceBinSizeMicrometers: 2,
       bbox: bbox(100, 116, 200, 216),
     })
-    expect(isRenderLodGridCell(zoomedOutCells[0] as GridCellDatum)).toBe(true)
+    expect(isRenderLodGridCell(coarse)).toBe(true)
     expect(selectGridCellsForRenderLod(lods, GRID_CELL_2UM_EXACT_RENDER_ZOOM_MIN)).toBe(
       cells,
     )
   })
 
   it('does not coarsen 8um or 16um grid cells for rendering', () => {
-    const cells = [
-      gridCell('8um', bbox(0, 8, 0, 8), { binSizeMicrometers: 8 }),
-      gridCell('8um-next', bbox(8, 16, 0, 8), { binSizeMicrometers: 8 }),
-    ]
+    const cells = gridCellColumnsFixture(
+      [
+        { id: '8um', row: 0, col: 0 },
+        { id: '8um-next', row: 0, col: 1 },
+      ],
+      { binSizeMicrometers: 8 },
+    )
     const lods = createGridCellRenderLods(cells)
 
+    expect(lods.coarse16um).toBeNull()
     expect(selectGridCellsForRenderLod(lods, -4)).toBe(cells)
   })
-})
 
-function gridCell(
-  id: string,
-  bounds: BBox,
-  values: Partial<GridCellDatum> = {},
-): GridCellDatum {
-  return {
-    id,
-    gridId: 'grid-2um',
-    row: 0,
-    col: 0,
-    binSizeMicrometers: 2,
-    bbox: bounds,
-    polygon: [
-      [bounds.minX, -bounds.minY, 0],
-      [bounds.maxX, -bounds.minY, 0],
-      [bounds.maxX, -bounds.maxY, 0],
-      [bounds.minX, -bounds.maxY, 0],
-    ],
-    fillColor: [34, 120, 108, 28],
-    lineColor: [22, 90, 82, 150],
-    ...values,
-  }
-}
+  it('keeps one coarse square per occupied slot, in tissue when any bin is', () => {
+    const cells = gridCellColumnsFixture(
+      [
+        { id: 'a', row: 9, col: 17, inTissue: false },
+        { id: 'b', row: 0, col: 0, inTissue: false },
+        { id: 'c', row: 15, col: 23, inTissue: true },
+        { id: 'd', row: -1, col: 0, inTissue: false },
+      ],
+      { binSizeMicrometers: 2 },
+    )
+    const coarse = coarsenGridCellColumns(cells, 16)
+
+    expect(coarse.ids).toEqual([
+      'render-lod-16um:-1:0',
+      'render-lod-16um:0:0',
+      'render-lod-16um:1:2',
+    ])
+    expect(Array.from(coarse.inTissue ?? [])).toEqual([0, 0, 1])
+    // Each coarse square covers its 8 × 8 bins.
+    expect(gridCellColumnsBbox(coarse)).toEqual(bbox(0, 48, -16, 32))
+  })
+
+  it('coarsens bins scattered over a huge grid', () => {
+    const cells = gridCellColumnsFixture(
+      [
+        { id: 'far', row: 8_000_000, col: 8_000_000 },
+        { id: 'near', row: 1, col: 1 },
+      ],
+      { binSizeMicrometers: 2 },
+    )
+
+    expect(coarsenGridCellColumns(cells, 16).ids).toEqual([
+      'render-lod-16um:0:0',
+      'render-lod-16um:1000000:1000000',
+    ])
+  })
+})
 
 function bbox(minX: number, maxX: number, minY: number, maxY: number): BBox {
   return {

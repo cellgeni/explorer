@@ -1,4 +1,4 @@
-import type { Position } from '@deck.gl/core'
+import type { Color, Position } from '@deck.gl/core'
 import type { GeneExpressionElement } from '../datasets/xeniumDataset'
 import { geneScoreSpread, type GeneScoreSpread } from '../features/genes/geneScaleRange'
 import {
@@ -200,35 +200,6 @@ export function hasGeneExpressionElementStyles(
   )
 }
 
-export function styleGridCellsByGeneExpression(
-  cells: readonly GridCellDatum[],
-  expressionSource: readonly OverviewCellDatum[] | GeneExpressionElementStyleIndex,
-  options: GeneExpressionElementStyleOptions = {},
-): readonly GridCellDatum[] {
-  if (cells.length === 0) {
-    return cells
-  }
-
-  const styleIndex = isOverviewCellDatumArray(expressionSource)
-    ? createGeneExpressionElementStyleIndex(expressionSource, options)
-    : expressionSource
-  const styleUnmatchedCells = options.styleUnmatchedCells ?? false
-
-  if (!hasGeneExpressionElementStyles(styleIndex) && !styleUnmatchedCells) {
-    return cells
-  }
-
-  let hasExpressionStyle = false
-  const styledCells = cells.map((cell) => {
-    const styled = styleGridCellByGeneExpression(cell, styleIndex, styleUnmatchedCells)
-
-    hasExpressionStyle ||= styled !== cell
-    return styled
-  })
-
-  return hasExpressionStyle ? styledCells : cells
-}
-
 // One bin coloured and scored as the map shows it: by its own expression, or
 // that of the coarser bin it falls in. Unmatched bins are left as they are,
 // or scored 0 with `styleUnmatchedCells`.
@@ -237,28 +208,47 @@ export function styleGridCellByGeneExpression(
   styleIndex: GeneExpressionElementStyleIndex,
   styleUnmatchedCells: boolean,
 ): GridCellDatum {
+  const [x = 0, deckY = 0] = gridCellCenterPosition(cell)
+  const style = gridCellExpressionStyle(
+    styleIndex,
+    cell.id,
+    x,
+    -deckY,
+    styleUnmatchedCells,
+  )
+
+  return style === null ? cell : { ...cell, ...style }
+}
+
+export interface GridCellExpressionStyle {
+  readonly fillColor: Color
+  readonly lineColor: Color
+  readonly expressionCount?: number
+  readonly expressionGenes?: readonly string[]
+}
+
+// The colour and score of the bin `id` centred at (x, y) (data µm, y down):
+// its own expression, or that of the coarser bin it falls in; zero for an
+// unmatched bin with `styleUnmatchedCells`, otherwise null.
+export function gridCellExpressionStyle(
+  styleIndex: GeneExpressionElementStyleIndex,
+  id: string,
+  x: number,
+  y: number,
+  styleUnmatchedCells: boolean,
+): GridCellExpressionStyle | null {
   const expressionElement =
-    styleIndex.expressionByElementId.get(cell.id) ??
+    styleIndex.expressionByElementId.get(id) ??
     (styleIndex.expressionByBinKey === undefined ||
     styleIndex.binMicrometers === undefined
       ? undefined
-      : styleIndex.expressionByBinKey.get(
-          gridCellBinKey(cell, styleIndex.binMicrometers),
-        ))
+      : styleIndex.expressionByBinKey.get(pointBinKey(x, y, styleIndex.binMicrometers)))
 
   if (expressionElement === undefined) {
-    return styleUnmatchedCells
-      ? {
-          ...cell,
-          fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
-          lineColor: boundaryLineColor(GENE_EXPRESSION_ZERO_FILL_COLOR),
-          expressionCount: 0,
-        }
-      : cell
+    return styleUnmatchedCells ? ZERO_GRID_CELL_EXPRESSION_STYLE : null
   }
 
   return {
-    ...cell,
     fillColor: expressionElement.fillColor,
     lineColor: boundaryLineColor(expressionElement.fillColor),
     ...(expressionElement.expressionCount === undefined
@@ -268,6 +258,12 @@ export function styleGridCellByGeneExpression(
       ? {}
       : { expressionGenes: expressionElement.expressionGenes }),
   }
+}
+
+const ZERO_GRID_CELL_EXPRESSION_STYLE: GridCellExpressionStyle = {
+  fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
+  lineColor: boundaryLineColor(GENE_EXPRESSION_ZERO_FILL_COLOR),
+  expressionCount: 0,
 }
 
 // A bin without the expression score it was styled with.
@@ -438,13 +434,12 @@ function expressionBinStylesByKey(
 
 function positionBinKey(position: Position, binMicrometers: number): string {
   const [x = 0, deckY = 0] = position
-  const rawY = -deckY
 
-  return `${Math.floor(x / binMicrometers)}:${Math.floor(rawY / binMicrometers)}`
+  return pointBinKey(x, -deckY, binMicrometers)
 }
 
-function gridCellBinKey(cell: GridCellDatum, binMicrometers: number): string {
-  return positionBinKey(gridCellCenterPosition(cell), binMicrometers)
+function pointBinKey(x: number, y: number, binMicrometers: number): string {
+  return `${Math.floor(x / binMicrometers)}:${Math.floor(y / binMicrometers)}`
 }
 
 function gridCellCenterPosition(cell: GridCellDatum): Position {

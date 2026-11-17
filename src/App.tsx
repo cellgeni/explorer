@@ -312,6 +312,11 @@ import type {
   GridCellDatum,
   OverviewCellDatum,
 } from './rendering/deckLayers'
+import {
+  EMPTY_GRID_CELL_COLUMNS,
+  gridCellAt,
+  gridCellById,
+} from './rendering/gridCellColumns'
 import type {
   ViewerMagicLensDetail,
   ViewerMagicLensStatus,
@@ -319,7 +324,6 @@ import type {
 } from './components/ViewerCore'
 
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
-const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
 const EMPTY_ANNOTATIONS: readonly Annotation[] = []
@@ -1125,7 +1129,7 @@ export function App({ dependencies }: AppProps = {}) {
     [geneExpressionColorsReady, gridCellExpressionStyleIndex],
   )
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
-    ? EMPTY_GRID_CELL_DATA
+    ? EMPTY_GRID_CELL_COLUMNS
     : spatialGridCells
   const geneExpressionOverlayEnabled = platformAdapter.geneExpressionOverlayEnabled(
     spatialGridCells.length,
@@ -2453,8 +2457,8 @@ export function App({ dependencies }: AppProps = {}) {
   }, [overviewCells, platformAdapter.kind])
   const roiReferenceBins = useMemo(
     () =>
-      referenceSampleIndices(spatialGridCells.length).flatMap(
-        (index) => spatialGridCells[index] ?? [],
+      referenceSampleIndices(spatialGridCells.length).map((index) =>
+        gridCellAt(spatialGridCells, index),
       ),
     [spatialGridCells],
   )
@@ -2904,7 +2908,7 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
-      const gridCell = spatialGridCells.find((cell) => cell.id === elementId)
+      const gridCell = gridCellById(spatialGridCells, elementId)
 
       if (gridCell === undefined) {
         return
@@ -3596,7 +3600,7 @@ export function App({ dependencies }: AppProps = {}) {
 
     // Bins and boundaries load with the view, which the link also restores.
     if (card.kind === 'bin') {
-      const bin = spatialGridCells.find((cell) => cell.id === card.id)
+      const bin = gridCellById(spatialGridCells, card.id)
       if (bin === undefined) return
       linkedCardRef.current = null
       handleViewerGridCellClick(bin)

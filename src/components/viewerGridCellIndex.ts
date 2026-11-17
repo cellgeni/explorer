@@ -1,133 +1,38 @@
-import { micrometers, type BBox } from '../data/coords'
 import { VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN } from '../data/visiumHdGridLod'
+import { deriveNestedGridBasis } from '../datasets/spatialGrid'
 import type { GridCellDatum } from '../rendering/deckLayers'
+import { GridCellColumns } from '../rendering/gridCellColumns'
 
-const DEFAULT_GRID_CELL_BUCKET_MICROMETERS = 128
 const VISIUM_HD_2UM_BIN_MICROMETERS = 2
 const VISIUM_HD_RENDER_LOD_BIN_MICROMETERS = 16
-const EMPTY_GRID_CELLS: readonly GridCellDatum[] = []
+// Coarse slots are counted in a dense array up to this many per source bin,
+// and in a map beyond (bins scattered over a huge grid).
+const DENSE_COARSE_SLOTS_PER_BIN = 4
 
 export const GRID_CELL_2UM_EXACT_RENDER_ZOOM_MIN = VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN
 
-interface GridCellIndexEntry {
-  readonly cell: GridCellDatum
-  readonly sourceIndex: number
-  readonly bbox: BBox
-}
-
-export interface GridCellSpatialIndex {
-  readonly bucketSizeMicrometers: number
-  readonly buckets: ReadonlyMap<string, readonly GridCellIndexEntry[]>
-  readonly cellCount: number
-  readonly cells: readonly GridCellDatum[]
-  readonly maxCellSpanMicrometers: number
-}
-
 export interface GridCellRenderLods {
-  readonly exact: readonly GridCellDatum[]
-  readonly coarse16um: readonly GridCellDatum[]
+  readonly exact: GridCellColumns
+  readonly coarse16um: GridCellColumns | null
   readonly exactBinSizeMicrometers: number | null
 }
 
-export function createGridCellSpatialIndex(
-  cells: readonly GridCellDatum[],
-  options: { readonly bucketSizeMicrometers?: number } = {},
-): GridCellSpatialIndex {
-  const bucketSizeMicrometers = normalizeBucketSize(options.bucketSizeMicrometers)
-  const mutableBuckets = new Map<string, GridCellIndexEntry[]>()
-  let maxCellSpanMicrometers = 0
-
-  for (let sourceIndex = 0; sourceIndex < cells.length; sourceIndex += 1) {
-    const cell = cells[sourceIndex]
-
-    if (cell === undefined) {
-      continue
-    }
-
-    const bbox = gridCellBbox(cell)
-
-    if (bbox === null) {
-      continue
-    }
-
-    const centerX = (bbox.minX + bbox.maxX) / 2
-    const centerY = (bbox.minY + bbox.maxY) / 2
-    const bucketKey = gridCellBucketKey(centerX, centerY, bucketSizeMicrometers)
-    const bucket = mutableBuckets.get(bucketKey)
-    const entry = { cell, sourceIndex, bbox }
-
-    maxCellSpanMicrometers = Math.max(
-      maxCellSpanMicrometers,
-      bbox.maxX - bbox.minX,
-      bbox.maxY - bbox.minY,
-    )
-
-    if (bucket === undefined) {
-      mutableBuckets.set(bucketKey, [entry])
-      continue
-    }
-
-    bucket.push(entry)
-  }
+export function createGridCellRenderLods(columns: GridCellColumns): GridCellRenderLods {
+  const binSizeMicrometers = columns.binSizeMicrometers
+  const exactBinSizeMicrometers =
+    binSizeMicrometers !== undefined &&
+    Number.isFinite(binSizeMicrometers) &&
+    binSizeMicrometers > 0 &&
+    columns.length > 0
+      ? binSizeMicrometers
+      : null
 
   return {
-    bucketSizeMicrometers,
-    buckets: mutableBuckets,
-    cellCount: cells.length,
-    cells,
-    maxCellSpanMicrometers,
-  }
-}
-
-export function gridCellsInBbox(
-  index: GridCellSpatialIndex,
-  bbox: BBox,
-  options: { readonly paddingMicrometers?: number } = {},
-): readonly GridCellDatum[] {
-  if (index.cellCount === 0) {
-    return index.cells
-  }
-
-  const queryBbox = padBbox(bbox, options.paddingMicrometers ?? 0)
-  const entries = gridCellEntriesInBbox(index, queryBbox)
-
-  if (entries.length === index.cellCount) {
-    return index.cells
-  }
-
-  entries.sort((left, right) => left.sourceIndex - right.sourceIndex)
-
-  return entries.map((entry) => entry.cell)
-}
-
-export function countGridCellsInSpatialIndex(
-  index: GridCellSpatialIndex,
-  bbox: BBox,
-): number {
-  if (index.cellCount === 0) {
-    return 0
-  }
-
-  return gridCellEntriesInBbox(index, bbox).length
-}
-
-export function gridCellIntersectsBbox(cell: GridCellDatum, bbox: BBox): boolean {
-  const cellBbox = gridCellBbox(cell)
-
-  return cellBbox === null ? false : bboxIntersectsBbox(cellBbox, bbox)
-}
-
-export function createGridCellRenderLods(
-  cells: readonly GridCellDatum[],
-): GridCellRenderLods {
-  const exactBinSizeMicrometers = commonGridCellBinSize(cells)
-
-  return {
-    exact: cells,
+    exact: columns,
     coarse16um:
       exactBinSizeMicrometers === VISIUM_HD_2UM_BIN_MICROMETERS
-        ? aggregateGridCellsForRenderLod(cells, VISIUM_HD_RENDER_LOD_BIN_MICROMETERS)
-        : EMPTY_GRID_CELLS,
+        ? coarsenGridCellColumns(columns, VISIUM_HD_RENDER_LOD_BIN_MICROMETERS)
+        : null,
     exactBinSizeMicrometers,
   }
 }
@@ -135,10 +40,11 @@ export function createGridCellRenderLods(
 export function selectGridCellsForRenderLod(
   lods: GridCellRenderLods,
   zoom: number,
-): readonly GridCellDatum[] {
+): GridCellColumns {
   if (
     lods.exactBinSizeMicrometers === VISIUM_HD_2UM_BIN_MICROMETERS &&
     zoom < GRID_CELL_2UM_EXACT_RENDER_ZOOM_MIN &&
+    lods.coarse16um !== null &&
     lods.coarse16um.length > 0
   ) {
     return lods.coarse16um
@@ -151,292 +57,126 @@ export function isRenderLodGridCell(cell: GridCellDatum): boolean {
   return cell.renderLodSourceBinSizeMicrometers !== undefined
 }
 
-function gridCellEntriesInBbox(
-  index: GridCellSpatialIndex,
-  bbox: BBox,
-): GridCellIndexEntry[] {
-  const bucketQueryBbox = padBbox(bbox, index.maxCellSpanMicrometers)
-  const minBucketX = bucketCoordinate(bucketQueryBbox.minX, index.bucketSizeMicrometers)
-  const maxBucketX = bucketCoordinate(bucketQueryBbox.maxX, index.bucketSizeMicrometers)
-  const minBucketY = bucketCoordinate(bucketQueryBbox.minY, index.bucketSizeMicrometers)
-  const maxBucketY = bucketCoordinate(bucketQueryBbox.maxY, index.bucketSizeMicrometers)
-  const entries: GridCellIndexEntry[] = []
-
-  for (let bucketX = minBucketX; bucketX <= maxBucketX; bucketX += 1) {
-    for (let bucketY = minBucketY; bucketY <= maxBucketY; bucketY += 1) {
-      const bucket = index.buckets.get(`${bucketX}:${bucketY}`)
-
-      if (bucket === undefined) {
-        continue
-      }
-
-      for (const entry of bucket) {
-        if (bboxIntersectsBbox(entry.bbox, bbox)) {
-          entries.push(entry)
-        }
-      }
-    }
-  }
-
-  return entries
-}
-
-function aggregateGridCellsForRenderLod(
-  cells: readonly GridCellDatum[],
+// The squares of a coarser nested grid that hold at least one bin, in row then
+// column order: what zoomed-out 2 µm bins are drawn as. They have no
+// expression or annotation of their own (their IDs match no element), so they
+// take a gene's colour by where their centre falls.
+export function coarsenGridCellColumns(
+  columns: GridCellColumns,
   binSizeMicrometers: number,
-): readonly GridCellDatum[] {
-  const aggregates = new Map<string, GridCellRenderLodAggregate>()
+): GridCellColumns {
+  const sourceBinSizeMicrometers =
+    columns.binSizeMicrometers ?? VISIUM_HD_2UM_BIN_MICROMETERS
+  const factor = Math.round(binSizeMicrometers / sourceBinSizeMicrometers)
+  const { length, rows, cols } = columns
+  let minRow = Number.POSITIVE_INFINITY
+  let maxRow = Number.NEGATIVE_INFINITY
+  let minCol = Number.POSITIVE_INFINITY
+  let maxCol = Number.NEGATIVE_INFINITY
 
-  for (const cell of cells) {
-    const cellBbox = gridCellBbox(cell)
-
-    if (cellBbox === null) {
-      continue
-    }
-
-    const sourceBinSizeMicrometers =
-      cell.binSizeMicrometers ?? VISIUM_HD_2UM_BIN_MICROMETERS
-    const col = Math.floor((cell.col * sourceBinSizeMicrometers) / binSizeMicrometers)
-    const row = Math.floor((cell.row * sourceBinSizeMicrometers) / binSizeMicrometers)
-    const key = `${row}:${col}`
-    let aggregate = aggregates.get(key)
-
-    if (aggregate === undefined) {
-      aggregate = createGridCellRenderLodAggregate(
-        cell,
-        row,
-        col,
-        binSizeMicrometers,
-        sourceBinSizeMicrometers,
-        cellBbox,
-      )
-      aggregates.set(key, aggregate)
-    }
-
-    aggregateGridCell(aggregate, cell, cellBbox)
+  for (let index = 0; index < length; index += 1) {
+    const row = Math.floor((rows[index] ?? 0) / factor)
+    const col = Math.floor((cols[index] ?? 0) / factor)
+    if (row < minRow) minRow = row
+    if (row > maxRow) maxRow = row
+    if (col < minCol) minCol = col
+    if (col > maxCol) maxCol = col
   }
 
-  return Array.from(aggregates.values())
-    .sort((left, right) => left.row - right.row || left.col - right.col)
-    .map(gridCellRenderLodAggregateToDatum)
-}
+  const rowSpan = length === 0 ? 0 : maxRow - minRow + 1
+  const colSpan = length === 0 ? 0 : maxCol - minCol + 1
+  const slotOf = (index: number) =>
+    (Math.floor((rows[index] ?? 0) / factor) - minRow) * colSpan +
+    (Math.floor((cols[index] ?? 0) / factor) - minCol)
+  // In-tissue state of each occupied slot: 1 when any of its bins is in
+  // tissue, otherwise 0.
+  const occupied =
+    rowSpan * colSpan <= DENSE_COARSE_SLOTS_PER_BIN * length + 65_536
+      ? denseOccupiedSlots(columns, rowSpan * colSpan, slotOf)
+      : sparseOccupiedSlots(columns, slotOf)
+  const count = occupied.slots.length
+  const coarseRows = new Int32Array(count)
+  const coarseCols = new Int32Array(count)
+  const inTissue = new Uint8Array(count)
+  const ids: string[] = new Array<string>(count)
+  const label = `render-lod-${binSizeMicrometers}um`
 
-function commonGridCellBinSize(cells: readonly GridCellDatum[]): number | null {
-  let binSizeMicrometers: number | null = null
-
-  for (const cell of cells) {
-    if (
-      cell.binSizeMicrometers === undefined ||
-      !Number.isFinite(cell.binSizeMicrometers) ||
-      cell.binSizeMicrometers <= 0
-    ) {
-      return null
-    }
-
-    if (binSizeMicrometers === null) {
-      binSizeMicrometers = cell.binSizeMicrometers
-      continue
-    }
-
-    if (cell.binSizeMicrometers !== binSizeMicrometers) {
-      return null
-    }
+  for (let index = 0; index < count; index += 1) {
+    const slot = occupied.slots[index] ?? 0
+    const row = Math.floor(slot / colSpan) + minRow
+    const col = (slot % colSpan) + minCol
+    coarseRows[index] = row
+    coarseCols[index] = col
+    inTissue[index] = occupied.inTissue[index] ?? 0
+    ids[index] = `${label}:${row}:${col}`
   }
 
-  return binSizeMicrometers
-}
-
-function createGridCellRenderLodAggregate(
-  cell: GridCellDatum,
-  row: number,
-  col: number,
-  binSizeMicrometers: number,
-  sourceBinSizeMicrometers: number,
-  bbox: BBox,
-): GridCellRenderLodAggregate {
-  return {
-    id: `render-lod-${binSizeMicrometers}um:${row}:${col}`,
-    gridId: `${cell.gridId}:render-lod-${binSizeMicrometers}um`,
-    row,
-    col,
+  return new GridCellColumns({
+    gridId: `${columns.gridId}:${label}`,
+    basis: deriveNestedGridBasis(columns.basis, factor),
+    length: count,
+    ids,
+    rows: coarseRows,
+    cols: coarseCols,
     binSizeMicrometers,
-    sourceBinSizeMicrometers,
-    bbox,
-    count: 0,
-    inTissue: false,
-    sumFillRed: 0,
-    sumFillGreen: 0,
-    sumFillBlue: 0,
-    sumFillAlpha: 0,
-    sumLineRed: 0,
-    sumLineGreen: 0,
-    sumLineBlue: 0,
-    sumLineAlpha: 0,
+    inTissue,
+    renderLodSourceBinSizeMicrometers: sourceBinSizeMicrometers,
+  })
+}
+
+interface OccupiedSlots {
+  readonly slots: ArrayLike<number>
+  readonly inTissue: ArrayLike<number>
+}
+
+function denseOccupiedSlots(
+  columns: GridCellColumns,
+  slotCount: number,
+  slotOf: (index: number) => number,
+): OccupiedSlots {
+  // 0: empty; 1: bins, none in tissue; 2: a bin in tissue.
+  const state = new Uint8Array(slotCount)
+  let count = 0
+
+  for (let index = 0; index < columns.length; index += 1) {
+    const slot = slotOf(index)
+    const next = columns.inTissue?.[index] === 1 ? 2 : 1
+
+    if (state[slot] === 0) count += 1
+    if (next > (state[slot] ?? 0)) state[slot] = next
   }
+
+  const slots = new Uint32Array(count)
+  const inTissue = new Uint8Array(count)
+  let cursor = 0
+
+  for (let slot = 0; slot < slotCount; slot += 1) {
+    const value = state[slot] ?? 0
+    if (value === 0) continue
+    slots[cursor] = slot
+    inTissue[cursor] = value === 2 ? 1 : 0
+    cursor += 1
+  }
+
+  return { slots, inTissue }
 }
 
-function aggregateGridCell(
-  aggregate: GridCellRenderLodAggregate,
-  cell: GridCellDatum,
-  bbox: BBox,
-): void {
-  aggregate.count += 1
-  aggregate.bbox = bboxUnion(aggregate.bbox, bbox)
-  aggregate.inTissue = aggregate.inTissue || cell.inTissue === true
-  aggregate.sumFillRed += cell.fillColor[0] ?? 0
-  aggregate.sumFillGreen += cell.fillColor[1] ?? 0
-  aggregate.sumFillBlue += cell.fillColor[2] ?? 0
-  aggregate.sumFillAlpha += cell.fillColor[3] ?? 255
-  aggregate.sumLineRed += cell.lineColor[0] ?? 0
-  aggregate.sumLineGreen += cell.lineColor[1] ?? 0
-  aggregate.sumLineBlue += cell.lineColor[2] ?? 0
-  aggregate.sumLineAlpha += cell.lineColor[3] ?? 255
-}
+function sparseOccupiedSlots(
+  columns: GridCellColumns,
+  slotOf: (index: number) => number,
+): OccupiedSlots {
+  const state = new Map<number, number>()
 
-function gridCellRenderLodAggregateToDatum(
-  aggregate: GridCellRenderLodAggregate,
-): GridCellDatum {
-  const count = Math.max(aggregate.count, 1)
+  for (let index = 0; index < columns.length; index += 1) {
+    const slot = slotOf(index)
+    const next = columns.inTissue?.[index] === 1 ? 2 : 1
+    if (next > (state.get(slot) ?? 0)) state.set(slot, next)
+  }
+
+  const slots = Float64Array.from(state.keys()).sort()
 
   return {
-    id: aggregate.id,
-    gridId: aggregate.gridId,
-    row: aggregate.row,
-    col: aggregate.col,
-    binSizeMicrometers: aggregate.binSizeMicrometers,
-    renderLodSourceBinSizeMicrometers: aggregate.sourceBinSizeMicrometers,
-    ...(aggregate.inTissue ? { inTissue: true } : {}),
-    bbox: aggregate.bbox,
-    polygon: gridCellBboxPolygon(aggregate.bbox),
-    fillColor: [
-      Math.round(aggregate.sumFillRed / count),
-      Math.round(aggregate.sumFillGreen / count),
-      Math.round(aggregate.sumFillBlue / count),
-      Math.round(aggregate.sumFillAlpha / count),
-    ],
-    lineColor: [
-      Math.round(aggregate.sumLineRed / count),
-      Math.round(aggregate.sumLineGreen / count),
-      Math.round(aggregate.sumLineBlue / count),
-      Math.round(aggregate.sumLineAlpha / count),
-    ],
+    slots,
+    inTissue: Uint8Array.from(slots, (slot) => (state.get(slot) === 2 ? 1 : 0)),
   }
-}
-
-function gridCellBboxPolygon(bbox: BBox): GridCellDatum['polygon'] {
-  return [
-    [bbox.minX, -bbox.minY, 0],
-    [bbox.maxX, -bbox.minY, 0],
-    [bbox.maxX, -bbox.maxY, 0],
-    [bbox.minX, -bbox.maxY, 0],
-  ]
-}
-
-function gridCellBbox(cell: GridCellDatum): BBox | null {
-  if (cell.bbox !== undefined) {
-    return cell.bbox
-  }
-
-  if (cell.polygon.length === 0) {
-    return null
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const [x = 0, deckY = 0] of cell.polygon) {
-    const rawY = -deckY
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minY = Math.min(minY, rawY)
-    maxY = Math.max(maxY, rawY)
-  }
-
-  if (
-    !Number.isFinite(minX) ||
-    !Number.isFinite(maxX) ||
-    !Number.isFinite(minY) ||
-    !Number.isFinite(maxY)
-  ) {
-    return null
-  }
-
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
-}
-
-function bboxIntersectsBbox(left: BBox, right: BBox): boolean {
-  return (
-    left.maxX >= right.minX &&
-    left.minX <= right.maxX &&
-    left.maxY >= right.minY &&
-    left.minY <= right.maxY
-  )
-}
-
-function bboxUnion(left: BBox, right: BBox): BBox {
-  return {
-    minX: micrometers(Math.min(left.minX, right.minX)),
-    maxX: micrometers(Math.max(left.maxX, right.maxX)),
-    minY: micrometers(Math.min(left.minY, right.minY)),
-    maxY: micrometers(Math.max(left.maxY, right.maxY)),
-  }
-}
-
-function gridCellBucketKey(x: number, y: number, bucketSizeMicrometers: number): string {
-  return `${bucketCoordinate(x, bucketSizeMicrometers)}:${bucketCoordinate(
-    y,
-    bucketSizeMicrometers,
-  )}`
-}
-
-function bucketCoordinate(value: number, bucketSizeMicrometers: number): number {
-  return Math.floor(value / bucketSizeMicrometers)
-}
-
-function padBbox(bbox: BBox, paddingMicrometers: number): BBox {
-  if (paddingMicrometers <= 0) {
-    return bbox
-  }
-
-  return {
-    minX: micrometers(bbox.minX - paddingMicrometers),
-    maxX: micrometers(bbox.maxX + paddingMicrometers),
-    minY: micrometers(bbox.minY - paddingMicrometers),
-    maxY: micrometers(bbox.maxY + paddingMicrometers),
-  }
-}
-
-function normalizeBucketSize(bucketSizeMicrometers: number | undefined): number {
-  return bucketSizeMicrometers === undefined ||
-    !Number.isFinite(bucketSizeMicrometers) ||
-    bucketSizeMicrometers <= 0
-    ? DEFAULT_GRID_CELL_BUCKET_MICROMETERS
-    : bucketSizeMicrometers
-}
-
-interface GridCellRenderLodAggregate {
-  readonly id: string
-  readonly gridId: string
-  readonly row: number
-  readonly col: number
-  readonly binSizeMicrometers: number
-  readonly sourceBinSizeMicrometers: number
-  bbox: BBox
-  count: number
-  inTissue: boolean
-  sumFillRed: number
-  sumFillGreen: number
-  sumFillBlue: number
-  sumFillAlpha: number
-  sumLineRed: number
-  sumLineGreen: number
-  sumLineBlue: number
-  sumLineAlpha: number
 }

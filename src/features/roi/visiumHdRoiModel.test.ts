@@ -3,6 +3,10 @@ import { micrometers } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import {
+  gridCellColumnsFixture,
+  squareGridBasis,
+} from '../../test/gridCellColumnsFixture'
+import {
   IDLE_VISIUM_HD_ROI_STATE,
   gridCellDatumCenter,
   gridCellDatumDeckCenter,
@@ -77,51 +81,36 @@ describe('visiumHdRoiModel', () => {
     }
 
     const result = selectVisiumHdGridCellsInRoi(
-      [
-        gridCellDatum('BC-1', [
-          [0, 0, 0],
-          [10, 0, 0],
-          [10, -10, 0],
-          [0, -10, 0],
-        ]),
-        gridCellDatum('BC-2', [
-          [24, -24, 0],
-          [34, -24, 0],
-          [34, -34, 0],
-          [24, -34, 0],
-        ]),
-      ],
+      roiBins([
+        { id: 'BC-1', row: 0, col: 0 },
+        { id: 'BC-2', row: 2, col: 2 },
+      ]),
       selection,
     )
 
     expect(result.hitBinLimit).toBe(false)
     expect(result.bins).toEqual([
-      expect.objectContaining({
+      {
         barcode: 'BC-1',
-        row: 1,
-        col: 2,
+        gridId: 'grid-16um',
+        row: 0,
+        col: 0,
         center: { x: micrometers(5), y: micrometers(5) },
-      }),
+        binSizeMicrometers: 16,
+        inTissue: true,
+        fullresRow: 128,
+        fullresCol: 256,
+      },
     ])
   })
 
   it('styles only the bins it selects, for their expression scores', () => {
     const styled: string[] = []
     const result = selectVisiumHdGridCellsInRoi(
-      [
-        gridCellDatum('inside', [
-          [0, 0, 0],
-          [10, 0, 0],
-          [10, -10, 0],
-          [0, -10, 0],
-        ]),
-        gridCellDatum('outside', [
-          [40, -40, 0],
-          [50, -40, 0],
-          [50, -50, 0],
-          [40, -50, 0],
-        ]),
-      ],
+      roiBins([
+        { id: 'inside', row: 0, col: 0 },
+        { id: 'outside', row: 4, col: 4 },
+      ]),
       {
         kind: 'box',
         bbox: {
@@ -165,20 +154,13 @@ describe('visiumHdRoiModel', () => {
     }
 
     const result = selectVisiumHdGridCellsInRoi(
-      [
-        gridCellDatum('inside', [
-          [4, -4, 0],
-          [8, -4, 0],
-          [8, -8, 0],
-          [4, -8, 0],
-        ]),
-        gridCellDatum('outside-lasso', [
-          [16, -16, 0],
-          [20, -16, 0],
-          [20, -20, 0],
-          [16, -20, 0],
-        ]),
-      ],
+      roiBins(
+        [
+          { id: 'inside', row: 1, col: 1 },
+          { id: 'outside-lasso', row: 4, col: 4 },
+        ],
+        4,
+      ),
       selection,
     )
 
@@ -197,7 +179,11 @@ describe('visiumHdRoiModel', () => {
     }
 
     const result = selectVisiumHdGridCellsInRoi(
-      [gridCellDatum('BC-1'), gridCellDatum('BC-2'), gridCellDatum('BC-3')],
+      roiBins([
+        { id: 'BC-1', row: 0, col: 0 },
+        { id: 'BC-2', row: 0, col: 1 },
+        { id: 'BC-3', row: 0, col: 2 },
+      ]),
       selection,
       2,
     )
@@ -208,7 +194,10 @@ describe('visiumHdRoiModel', () => {
 
   it('summarizes selected bins and formats status copy', () => {
     const { bins } = selectVisiumHdGridCellsInRoi(
-      [gridCellDatum('BC-1'), gridCellDatum('BC-2', undefined, { inTissue: false })],
+      roiBins([
+        { id: 'BC-1', row: 0, col: 0 },
+        { id: 'BC-2', row: 0, col: 1, inTissue: false },
+      ]),
       {
         kind: 'box',
         bbox: {
@@ -294,6 +283,27 @@ describe('visiumHdRoiModel', () => {
     expect(gridCellDatumDeckCenter(cell)).toEqual([10, -20, 0])
   })
 })
+
+// 16 µm bins drawn as `size` µm squares from the origin.
+function roiBins(
+  bins: readonly {
+    readonly id: string
+    readonly row: number
+    readonly col: number
+    readonly inTissue?: boolean
+  }[],
+  size = 10,
+) {
+  return gridCellColumnsFixture(
+    bins.map((bin) => ({
+      inTissue: true,
+      fullresRow: 128,
+      fullresCol: 256,
+      ...bin,
+    })),
+    { gridId: 'grid-16um', binSizeMicrometers: 16, basis: squareGridBasis(size) },
+  )
+}
 
 function gridCellDatum(
   id: string,

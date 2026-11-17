@@ -5,7 +5,11 @@ import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { GridCellDatum, OverviewCellDatum } from '../../rendering/deckLayers'
+import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import {
+  gridCellColumnsFixture,
+  squareGridBasis,
+} from '../../test/gridCellColumnsFixture'
 import { geneExpressionScaleKeyFor } from '../genes/geneControlsModel'
 import { useViewerLayerData } from './useViewerLayerData'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
@@ -265,22 +269,10 @@ describe('useViewerLayerData', () => {
   })
 
   it('derives extent from Visium HD grid cells when overview cells are absent', () => {
-    const gridCells: readonly GridCellDatum[] = [
-      {
-        id: 'BC-1',
-        gridId: 'grid-16um',
-        row: 0,
-        col: 0,
-        polygon: [
-          [10, -20, 0],
-          [26, -20, 0],
-          [26, -36, 0],
-          [10, -36, 0],
-        ],
-        fillColor: [34, 120, 108, 28],
-        lineColor: [22, 90, 82, 150],
-      },
-    ]
+    // One 16 µm bin from (10, 20) to (26, 36).
+    const gridCells = gridCellColumnsFixture([{ id: 'BC-1', row: 0, col: 0 }], {
+      basis: squareGridBasis(16, { x: 10, y: 20 }),
+    })
 
     function GridProbe({ onReady }: { readonly onReady: (nextResult: Result) => void }) {
       const nextResult = useViewerLayerData(

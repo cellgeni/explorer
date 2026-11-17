@@ -5,7 +5,7 @@ import type { RoiSelectionInput } from '../../data/roiSelection'
 import { normalizeRoiSelection } from '../../data/roiSelection'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
-import type { GridCellDatum } from '../../rendering/deckLayers'
+import type { GridCellColumns } from '../../rendering/gridCellColumns'
 import { cellExpressionSummaryFromGexCells } from '../cells/cellExpressionProfileModel'
 import type {
   GeneExpressionLoader,
@@ -34,7 +34,7 @@ interface UseVisiumHdMagicLensSummaryControls {
 interface UseVisiumHdMagicLensSummaryData {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly gridCells: readonly GridCellDatum[]
+  readonly gridCells: GridCellColumns
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly selectedGenes: readonly string[]
 }
@@ -62,7 +62,7 @@ interface SummarizeVisiumHdMagicLensSelectionOptions {
 interface SummarizeVisiumHdMagicLensSelectionData {
   readonly currentViewportDetail: ViewerViewportDetail | null
   readonly geneExpressionBatch: GeneExpressionBatch | null
-  readonly gridCells: readonly GridCellDatum[]
+  readonly gridCells: GridCellColumns
   readonly readyDatasetUrl: string | null
   readonly selectedGenes: readonly string[]
 }

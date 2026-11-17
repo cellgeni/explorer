@@ -441,8 +441,8 @@ the bin-size segmented control to switch between detected 16 µm, 8 µm, and
 2 µm tiers. The 2 µm tier uses filtered matrix barcodes and a grid basis derived
 from a coarser tier, or from `feature_slice.h5` when there is no coarser tier;
 it does not read the 2 µm `tissue_positions.parquet`. With 2 µm selected, the
-view shows 16 µm bins until you zoom in past zoom level 3. 2 µm bins are
-memory-hungry: the 3.4 million of the reference dataset take about 1.8 GB.
+view shows 16 µm bins until you zoom in past zoom level 3. The 3.4 million
+2 µm bins of the reference dataset take about 300 MB of browser memory.
 
 Bins › Clusters lists Space Ranger's graph-based and k-means clusterings of
 the 8 µm and 16 µm bins; `graphclust` is chosen. A clustering belongs to its

@@ -239,10 +239,10 @@ Known gaps (2026-11-08 review):
 - [x] First pass at broader browser coverage: 16/8 µm switching, 2 µm
       enablement, Feature Slice overlay, ROI barcode export, segmentation
       controls, and Bin Info.
-- [ ] Optimize hosted Visium HD datasets: interaction profiling, segmentation
+- [x] Optimize hosted Visium HD datasets: interaction profiling, segmentation
       streaming cost, Feature Slice worker ranges, memory, and bundle splitting.
-      Profiled 2026-11-17 (see [Closed Open Items](#closed-open-items)); the
-      2 µm tier's per-bin objects are what is left.
+      Profiled 2026-11-17, and the 2 µm tier's per-bin objects replaced by a
+      columnar grid the same day (see [Closed Open Items](#closed-open-items)).
 - [x] Vendor chunk groups (see [Optimization Pass](optimization-pass.md)).
 - [x] Transition helpers, the platform adapter, and the viewer split (see
       [the refactor record](../engineering.md#application-structure-and-refactor-record)).
@@ -322,10 +322,28 @@ Profiling (2026-11-17), production build with GPU, against Sanger storage:
   are built, and 1.8 GB of heap. Each bin is an object with its own polygon,
   and the viewer's spatial index, zoomed-out aggregates and visible count
   are objects per bin too (`createGridCellRenderLods` alone took 3.7 s in a
-  dev build). This is what remains of the optimization item: a columnar grid,
-  as cells have.
+  dev build). This was what remained of the optimization item.
 - Bundles: the Visium HD code is in lazy chunks of about 60 KB (20 KB
   gzipped); none is worth splitting further.
+
+Columnar grid (2026-11-17), closing the item:
+
+- Bins stay columns from the overview to the viewer (`GridCellColumns`,
+  `src/rendering/gridCellColumns.ts`). The viewer indexes them by tiles of
+  32 × 32 rows and columns, draws zoomed-out 2 µm bins as the squares of the
+  nested 16 µm grid that hold them, packs only the bins it draws for
+  `GridBinLayer`, and makes a bin an object only when it is picked, opened or
+  exported. ROI and Magic Lens select from the tiles the selection meets.
+- Opening the 2 µm-only reference on production builds with GPU, `main`
+  against the branch, two to three runs each: ready in 5.7–7.5 s against
+  3.6–5.6 s; 1,793–1,819 MB of heap against 272–335 MB; main-thread blocks of
+  1.1 and 1.7 s against none over 200 ms. Colouring A2M zoomed out took
+  1.8–3.9 s on both: it waits on the network.
+- Found on the way: React's development build lists what changed in a
+  component's props, entry by entry for arrays and typed arrays it can
+  enumerate. Passing the 2 µm columns as a prop ran the dev tab out of memory
+  after a tier switch, so the per-bin arrays sit in a private field behind
+  getters. Production builds never did this.
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
 

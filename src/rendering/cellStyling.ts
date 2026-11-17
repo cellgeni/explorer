@@ -1,12 +1,11 @@
 import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
 import {
-  boundaryLineColor,
   colorsGradient,
   DEFAULT_OVERVIEW_CELL_FILL_RGB,
   FADED_CELL_ALPHA,
 } from './deckLayerColors'
-import type { GridCellDatum, OverviewCellDatum } from './deckLayers'
+import type { OverviewCellDatum } from './deckLayers'
 
 export type ObservationColorMode =
   | 'transcript-count'
@@ -91,21 +90,6 @@ export function createObservationColorizer(
   }
 
   return (cell) => observationColor(readObservationValue(cell, mode), maxValue, mode)
-}
-
-// Bins coloured by `colorize`; unchanged when it is null.
-export function styleGridCellsByObservation(
-  cells: readonly GridCellDatum[],
-  colorize: ((element: { readonly id: string }) => Color) | null,
-): readonly GridCellDatum[] {
-  if (colorize === null || cells.length === 0) {
-    return cells
-  }
-
-  return cells.map((cell) => {
-    const fillColor = colorize(cell)
-    return { ...cell, fillColor, lineColor: boundaryLineColor(fillColor) }
-  })
 }
 
 // The colour of an element known only by its id, such as a Visium HD bin,

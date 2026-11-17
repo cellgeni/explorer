@@ -1,10 +1,15 @@
-import { micrometers, type BBox } from '../data/coords'
 import type { GridCellDatum, OverviewCellDatum } from '../rendering/deckLayerTypes'
+import {
+  gridCellAt,
+  gridCellIndexAtPoint,
+  gridCellTileIndex,
+  isRenderLodGridCellColumns,
+  type GridCellColumns,
+} from '../rendering/gridCellColumns'
 import {
   overviewCellIndicesNear,
   type OverviewCellIndex,
 } from '../rendering/overviewCellIndex'
-import { gridCellIntersectsBbox, isRenderLodGridCell } from './viewerGridCellIndex'
 
 // Enter on the canvas (plan 15.5-D) opens what is at the centre
 // of the view, which a crosshair marks while the canvas has keyboard focus,
@@ -48,27 +53,15 @@ export function nearestOverviewCell(
 // The drawn bin that holds the point (data µm, y down). Coarse bins drawn
 // while zoomed out are not bins a card can show.
 export function gridCellAtPoint(
-  gridCells: readonly GridCellDatum[],
+  gridCells: GridCellColumns,
   x: number,
   y: number,
 ): GridCellDatum | null {
-  const point: BBox = {
-    minX: micrometers(x),
-    maxX: micrometers(x),
-    minY: micrometers(y),
-    maxY: micrometers(y),
+  if (isRenderLodGridCellColumns(gridCells)) {
+    return null
   }
 
-  for (let index = gridCells.length - 1; index >= 0; index -= 1) {
-    const cell = gridCells[index]
-    if (
-      cell !== undefined &&
-      !isRenderLodGridCell(cell) &&
-      gridCellIntersectsBbox(cell, point)
-    ) {
-      return cell
-    }
-  }
+  const index = gridCellIndexAtPoint(gridCellTileIndex(gridCells), x, y)
 
-  return null
+  return index < 0 ? null : gridCellAt(gridCells, index)
 }

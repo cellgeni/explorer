@@ -1,9 +1,10 @@
 import type { BBox } from '../data/coords'
-import type {
-  GridCellDatum,
-  OverviewCellDatum,
-  OverviewViewState,
-} from './deckLayerTypes'
+import type { OverviewCellDatum, OverviewViewState } from './deckLayerTypes'
+import {
+  EMPTY_GRID_CELL_COLUMNS,
+  gridCellColumnsBbox,
+  type GridCellColumns,
+} from './gridCellColumns'
 import type { CssViewportSize } from './morphologyCanvas'
 
 const DEFAULT_OVERVIEW_VIEW_STATE: OverviewViewState = {
@@ -32,7 +33,7 @@ export interface DeckExtent {
 
 export function overviewFitExtent(
   cells: readonly OverviewCellDatum[],
-  gridCells: readonly GridCellDatum[] = [],
+  gridCells: GridCellColumns = EMPTY_GRID_CELL_COLUMNS,
   imageExtent: BBox | null = null,
 ): DeckExtent | null {
   if (cells.length === 0 && gridCells.length === 0 && imageExtent === null) {
@@ -52,13 +53,13 @@ export function overviewFitExtent(
     maxY = Math.max(maxY, y)
   }
 
-  for (const cell of gridCells) {
-    for (const [x = 0, y = 0] of cell.polygon) {
-      minX = Math.min(minX, x)
-      maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y)
-      maxY = Math.max(maxY, y)
-    }
+  const gridCellBbox = gridCellColumnsBbox(gridCells)
+
+  if (gridCellBbox !== null) {
+    minX = Math.min(minX, gridCellBbox.minX)
+    maxX = Math.max(maxX, gridCellBbox.maxX)
+    minY = Math.min(minY, -gridCellBbox.maxY)
+    maxY = Math.max(maxY, -gridCellBbox.minY)
   }
 
   if (imageExtent !== null) {

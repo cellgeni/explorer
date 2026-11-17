@@ -36,6 +36,10 @@ import {
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
 import {
+  EMPTY_GRID_CELL_COLUMNS,
+  type GridCellColumns,
+} from '../../rendering/gridCellColumns'
+import {
   type AnnotationGroupState,
   type AnnotationState,
   IDLE_ANNOTATION_GROUP_STATE,
@@ -378,7 +382,9 @@ export function useAppDomainState({
     GeneExpressionState<StructuredLoadError>
   >(IDLE_GENE_EXPRESSION_STATE)
   const [overviewCells, setOverviewCells] = useState<readonly OverviewCellDatum[]>([])
-  const [spatialGridCells, setSpatialGridCells] = useState<readonly GridCellDatum[]>([])
+  const [spatialGridCells, setSpatialGridCells] = useState<GridCellColumns>(
+    EMPTY_GRID_CELL_COLUMNS,
+  )
   const [geneExpressionBatch, setGeneExpressionBatch] =
     useState<GeneExpressionBatch | null>(null)
   const [geneExpressionScaleDomain, setGeneExpressionScaleDomain] =

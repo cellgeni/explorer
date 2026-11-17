@@ -14,6 +14,16 @@ import { asCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import {
+  EMPTY_GRID_CELL_COLUMNS,
+  gridCellAt,
+  type GridCellColumns,
+} from '../rendering/gridCellColumns'
+import {
+  gridCellColumnsFixture,
+  squareGridBasis,
+  type GridCellFixtureBin,
+} from '../test/gridCellColumnsFixture'
 
 type MockDeckHover = (info: {
   readonly layer?: { readonly id: string }
@@ -174,22 +184,7 @@ describe('ViewerCore', () => {
   })
 
   it('renders grid-cell polygons without overview cells', () => {
-    const gridCell: GridCellDatum = {
-      id: 'BC-1',
-      gridId: 'grid-16um',
-      row: 1,
-      col: 2,
-      polygon: [
-        [0, 0, 0],
-        [16, 0, 0],
-        [16, -16, 0],
-        [0, -16, 0],
-      ],
-      fillColor: [34, 120, 108, 28],
-      lineColor: [22, 90, 82, 150],
-    }
-
-    render(<ViewerCore gridCells={[gridCell]} />)
+    render(<ViewerCore gridCells={gridCellColumns()} />)
 
     expect(screen.getByTestId('deckgl')).toBeInTheDocument()
     expect(screen.getByTestId('deck-layer-spatial-grid-cells')).toHaveAttribute(
@@ -253,22 +248,13 @@ describe('ViewerCore', () => {
   it('draws whole grids and leaves off-screen bins to the GPU', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const nearGridCell = gridCellDatum()
-    const farGridCell = gridCellDatum({
-      id: 'BC-far',
-      col: 600,
-      polygon: [
-        [1000, 0, 0],
-        [1016, 0, 0],
-        [1016, -16, 0],
-        [1000, -16, 0],
-      ],
-    })
+    const nearGridCells = gridCellColumns()
+    const gridCells = gridCellColumns([{}, { id: 'BC-far', col: 70 }])
 
     render(
       <ViewerCore
-        fitGridCells={[nearGridCell]}
-        gridCells={[nearGridCell, farGridCell]}
+        fitGridCells={nearGridCells}
+        gridCells={gridCells}
         initialViewStateOverride={{ target: [8, -8, 0], zoom: 4 }}
       />,
     )
@@ -280,19 +266,7 @@ describe('ViewerCore', () => {
       )
     })
 
-    const gridLayer = deckGlMock.layers.find((layer) => {
-      const candidate = layer as { readonly id?: string }
-
-      return candidate.id === 'spatial-grid-cells'
-    }) as
-      | {
-          readonly props?: {
-            readonly data?: readonly GridCellDatum[]
-          }
-        }
-      | undefined
-
-    expect(gridLayer?.props?.data?.map((cell) => cell.id)).toEqual(['BC-1', 'BC-far'])
+    expect(gridLayerCells().map((cell) => cell.id)).toEqual(['BC-1', 'BC-far'])
   })
 
   it('shares its view with the panels of registered sections beside it', async () => {
@@ -415,18 +389,12 @@ describe('ViewerCore', () => {
   it('renders selected 2um grid cells as coarse 16um bins until close zoom', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const gridCells: GridCellDatum[] = []
-
-    for (let row = 0; row < 8; row += 1) {
-      for (let col = 0; col < 8; col += 1) {
-        gridCells.push(twoMicrometerGridCell(row, col))
-      }
-    }
+    const gridCells = twoMicrometerGridCells(8)
 
     const onGridCellClick = vi.fn()
     render(
       <ViewerCore
-        fitGridCells={[gridCells[0] as GridCellDatum]}
+        fitGridCells={twoMicrometerGridCells(1)}
         gridCells={gridCells}
         initialViewStateOverride={{ target: [8, -8, 0], zoom: 0 }}
         onGridCellClick={onGridCellClick}
@@ -440,18 +408,7 @@ describe('ViewerCore', () => {
       )
     })
 
-    const gridLayer = deckGlMock.layers.find((layer) => {
-      const candidate = layer as { readonly id?: string }
-
-      return candidate.id === 'spatial-grid-cells'
-    }) as
-      | {
-          readonly props?: {
-            readonly data?: readonly GridCellDatum[]
-          }
-        }
-      | undefined
-    const renderCell = gridLayer?.props?.data?.[0]
+    const renderCell = gridLayerCells()[0]
 
     expect(renderCell).toMatchObject({
       id: 'render-lod-16um:0:0',
@@ -481,7 +438,7 @@ describe('ViewerCore', () => {
       <ViewerCore
         geneExpressionActive
         geneExpressionOverlayEnabled={false}
-        gridCells={[gridCellDatum()]}
+        gridCells={gridCellColumns()}
         expressionElements={[
           {
             id: 'BC-1',
@@ -500,20 +457,8 @@ describe('ViewerCore', () => {
 
       return candidate.id === 'gene-expression-scatter'
     })
-    const gridLayer = deckGlMock.layers.find((layer) => {
-      const candidate = layer as { readonly id?: string }
-
-      return candidate.id === 'spatial-grid-cells'
-    }) as
-      | {
-          readonly props?: {
-            readonly data?: readonly GridCellDatum[]
-          }
-        }
-      | undefined
-
     expect(expressionLayer).toBeUndefined()
-    expect(gridLayer?.props?.data?.[0]).toMatchObject({
+    expect(gridLayerCells()[0]).toMatchObject({
       id: 'BC-1',
       fillColor: [240, 128, 120, 220],
       expressionCount: 7,
@@ -545,7 +490,7 @@ describe('ViewerCore', () => {
   })
 
   it('keeps the current zoom when rendered grid cells are toggled with a stable fit', () => {
-    const gridCell = gridCellDatum()
+    const gridCells = gridCellColumns()
     const boundary: CellBoundaryDatum = {
       id: 'cellid_000000001-1',
       polygon: [
@@ -559,8 +504,8 @@ describe('ViewerCore', () => {
     }
     const { rerender } = render(
       <ViewerCore
-        gridCells={[gridCell]}
-        fitGridCells={[gridCell]}
+        gridCells={gridCells}
+        fitGridCells={gridCells}
         boundaries={[boundary]}
         viewResetKey="dataset:visium"
       />,
@@ -581,8 +526,8 @@ describe('ViewerCore', () => {
 
     rerender(
       <ViewerCore
-        gridCells={[]}
-        fitGridCells={[gridCell]}
+        gridCells={EMPTY_GRID_CELL_COLUMNS}
+        fitGridCells={gridCells}
         boundaries={[boundary]}
         viewResetKey="dataset:visium"
       />,
@@ -595,18 +540,11 @@ describe('ViewerCore', () => {
 
   it('resets the view for a new dataset key without remounting the image canvas', async () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const firstGridCell = gridCellDatum()
-    const secondGridCell = gridCellDatum({
-      id: 'BC-2',
-      polygon: [
-        [100, -100, 0],
-        [132, -100, 0],
-        [132, -132, 0],
-        [100, -132, 0],
-      ],
-    })
+    const firstGridCells = gridCellColumns()
+    // From (96, 96) to (112, 112).
+    const secondGridCells = gridCellColumns([{ id: 'BC-2', row: 10, col: 13 }])
     const { rerender } = render(
-      <ViewerCore gridCells={[firstGridCell]} viewResetKey="dataset:a" />,
+      <ViewerCore gridCells={firstGridCells} viewResetKey="dataset:a" />,
     )
     const canvas = document.querySelector('canvas.morphology-canvas')
 
@@ -623,10 +561,10 @@ describe('ViewerCore', () => {
 
     expect(deckGlMock.viewState?.zoom).toBe(6)
 
-    rerender(<ViewerCore gridCells={[secondGridCell]} viewResetKey="dataset:b" />)
+    rerender(<ViewerCore gridCells={secondGridCells} viewResetKey="dataset:b" />)
 
     await waitFor(() => {
-      expect(deckGlMock.viewState?.target).toEqual([116, -116, 0])
+      expect(deckGlMock.viewState?.target).toEqual([104, -104, 0])
     })
     expect(document.querySelector('canvas.morphology-canvas')).toBe(canvas)
   })
@@ -1052,9 +990,10 @@ describe('ViewerCore', () => {
   })
 
   it('shows grid-cell hover metadata', () => {
-    const gridCell = gridCellDatum()
+    const gridCells = gridCellColumns()
+    const gridCell = gridCellAt(gridCells, 0)
 
-    render(<ViewerCore gridCells={[gridCell]} />)
+    render(<ViewerCore gridCells={gridCells} />)
 
     act(() => {
       deckGlMock.onHover?.({ object: gridCell, x: 18, y: 24 })
@@ -1070,11 +1009,12 @@ describe('ViewerCore', () => {
   it('suppresses grid-cell hover metadata while cursor magic lens is active', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const gridCell = gridCellDatum()
+    const gridCells = gridCellColumns()
+    const gridCell = gridCellAt(gridCells, 0)
 
     render(
       <ViewerCore
-        gridCells={[gridCell]}
+        gridCells={gridCells}
         magicLensActive
         magicLensRadiusMicrometers={40}
         magicLensStatus="ready"
@@ -1218,7 +1158,8 @@ describe('ViewerCore', () => {
       ...overviewCellDatum(),
       id: 'hover-disabled-cell',
     }
-    const gridCell = gridCellDatum({ id: 'hover-disabled-bin' })
+    const gridCells = gridCellColumns([{ id: 'hover-disabled-bin' }])
+    const gridCell = gridCellAt(gridCells, 0)
     const boundary: CellBoundaryDatum = {
       id: 'hover-disabled-boundary',
       polygon: [
@@ -1235,7 +1176,7 @@ describe('ViewerCore', () => {
     render(
       <ViewerCore
         cells={[cell]}
-        gridCells={[gridCell]}
+        gridCells={gridCells}
         boundaries={[boundary]}
         cellBoundaryHoverEnabled
         hoverTooltipsEnabled={false}
@@ -1340,10 +1281,11 @@ describe('ViewerCore', () => {
   })
 
   it('notifies when a grid cell is clicked', () => {
-    const gridCell = gridCellDatum()
+    const gridCells = gridCellColumns()
+    const gridCell = gridCellAt(gridCells, 0)
     const onGridCellClick = vi.fn()
 
-    render(<ViewerCore gridCells={[gridCell]} onGridCellClick={onGridCellClick} />)
+    render(<ViewerCore gridCells={gridCells} onGridCellClick={onGridCellClick} />)
 
     act(() => {
       deckGlMock.onClick?.({ object: gridCell, x: 14, y: 22 })
@@ -1356,7 +1298,7 @@ describe('ViewerCore', () => {
   // software WebGL that pick can outlast the 250 ms mjolnir.js allows for a
   // click, which then never reaches onClick.
   it('takes a click however long deck.gl picks on pointerdown', () => {
-    render(<ViewerCore gridCells={[gridCellDatum()]} />)
+    render(<ViewerCore gridCells={gridCellColumns()} />)
 
     expect(deckGlMock.eventRecognizerOptions).toEqual({ click: { time: Infinity } })
   })
@@ -1534,7 +1476,7 @@ describe('ViewerCore', () => {
     const onViewportChange = vi.fn()
 
     render(
-      <ViewerCore gridCells={[gridCellDatum()]} onViewportChange={onViewportChange} />,
+      <ViewerCore gridCells={gridCellColumns()} onViewportChange={onViewportChange} />,
     )
 
     await waitFor(() => {
@@ -1549,17 +1491,7 @@ describe('ViewerCore', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const onViewportChange = vi.fn()
-    const firstGridCell = gridCellDatum()
-    const secondGridCell = gridCellDatum({
-      id: 'BC-2',
-      col: 8,
-      polygon: [
-        [20, 0, 0],
-        [36, 0, 0],
-        [36, -16, 0],
-        [20, -16, 0],
-      ],
-    })
+    const fitGridCells = gridCellColumns([{}, { id: 'BC-2', col: 8 }])
     const boundary: CellBoundaryDatum = {
       id: 'cellid_000000001-1',
       polygon: [
@@ -1575,8 +1507,8 @@ describe('ViewerCore', () => {
     render(
       <ViewerCore
         boundaries={[boundary]}
-        fitGridCells={[firstGridCell, secondGridCell]}
-        gridCells={[]}
+        fitGridCells={fitGridCells}
+        gridCells={EMPTY_GRID_CELL_COLUMNS}
         onViewportChange={onViewportChange}
       />,
     )
@@ -2621,49 +2553,62 @@ function transcriptDatum({
   }
 }
 
-function gridCellDatum(values: Partial<GridCellDatum> = {}): GridCellDatum {
-  return {
-    id: 'BC-1',
-    gridId: 'grid-16um',
-    row: 4,
-    col: 7,
-    binSizeMicrometers: 16,
-    inTissue: true,
-    fullresRow: 128,
-    fullresCol: 256,
-    polygon: [
-      [0, 0, 0],
-      [16, 0, 0],
-      [16, -16, 0],
-      [0, -16, 0],
-    ],
-    fillColor: [34, 120, 108, 28],
-    lineColor: [22, 90, 82, 150],
-    ...values,
-  }
+// 16 µm bins, placed so that row 4, column 7 covers (0, 0) to (16, 16).
+function gridCellColumns(
+  bins: readonly Partial<GridCellFixtureBin>[] = [{}],
+): GridCellColumns {
+  return gridCellColumnsFixture(
+    bins.map((bin) => ({
+      id: 'BC-1',
+      row: 4,
+      col: 7,
+      inTissue: true,
+      fullresRow: 128,
+      fullresCol: 256,
+      ...bin,
+    })),
+    {
+      gridId: 'grid-16um',
+      binSizeMicrometers: 16,
+      basis: squareGridBasis(16, { x: -7 * 16, y: -4 * 16 }),
+    },
+  )
 }
 
-function twoMicrometerGridCell(row: number, col: number): GridCellDatum {
-  const minX = col * 2
-  const maxX = minX + 2
-  const minY = row * 2
-  const maxY = minY + 2
+// A square of 2 µm bins from the origin, `size` bins across.
+function twoMicrometerGridCells(size: number): GridCellColumns {
+  const bins: GridCellFixtureBin[] = []
 
-  return gridCellDatum({
-    id: `2um-${row}-${col}`,
-    gridId: 'grid-2um',
-    row,
-    col,
-    binSizeMicrometers: 2,
-    fullresRow: row,
-    fullresCol: col,
-    polygon: [
-      [minX, -minY, 0],
-      [maxX, -minY, 0],
-      [maxX, -maxY, 0],
-      [minX, -maxY, 0],
-    ],
-  })
+  for (let row = 0; row < size; row += 1) {
+    for (let col = 0; col < size; col += 1) {
+      bins.push({ id: `2um-${row}-${col}`, row, col, fullresRow: row, fullresCol: col })
+    }
+  }
+
+  return gridCellColumnsFixture(bins, { gridId: 'grid-2um', binSizeMicrometers: 2 })
+}
+
+// The bins the grid layer draws, as picking gives them.
+function gridLayerCells(): readonly GridCellDatum[] {
+  const gridLayer = deckGlMock.layers.find((layer) => {
+    const candidate = layer as { readonly id?: string }
+
+    return candidate.id === 'spatial-grid-cells'
+  }) as
+    | {
+        readonly props?: {
+          readonly data?: { readonly length: number }
+          readonly pickObject?: (index: number) => GridCellDatum
+        }
+      }
+    | undefined
+  const pickObject = gridLayer?.props?.pickObject
+
+  return pickObject === undefined
+    ? []
+    : Array.from({ length: gridLayer?.props?.data?.length ?? 0 }, (_, index) =>
+        pickObject(index),
+      )
 }
 
 function imageLoaderFixture(): TiffPyramidLoader {

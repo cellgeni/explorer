@@ -234,7 +234,11 @@ import {
   flatMorphologyImageFromSource,
   isVisiumHdOverviewDataset,
 } from './useVisiumHdBinWorkflow'
-import { visiumHdOverviewToGridCellLayerData } from './visiumHdGridLayerData'
+import { visiumHdOverviewToGridCellColumns } from './visiumHdGridLayerData'
+import {
+  EMPTY_GRID_CELL_COLUMNS,
+  type GridCellColumns,
+} from '../../rendering/gridCellColumns'
 import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
@@ -460,7 +464,7 @@ interface UseDatasetLifecycleSetters {
   readonly setSelectedGenes: Setter<readonly string[]>
   readonly setShowCellBoundaries: Setter<boolean>
   readonly setShowNucleusBoundaries: Setter<boolean>
-  readonly setSpatialGridCells: Setter<readonly GridCellDatum[]>
+  readonly setSpatialGridCells: Setter<GridCellColumns>
   readonly setTranscriptCapabilityState: Setter<
     TranscriptCapabilityState<StructuredLoadError>
   >
@@ -1081,7 +1085,7 @@ export function useDatasetLifecycle({
           setCellFeatureMatrixCapabilityState(IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE)
           cellFeatureMatrixCapabilityKeyRef.current = null
           setOverviewCells([])
-          setSpatialGridCells([])
+          setSpatialGridCells(EMPTY_GRID_CELL_COLUMNS)
           setGeneExpressionBatch(null)
           setGeneExpressionScaleDomain(EMPTY_GENE_EXPRESSION_SCALE_DOMAIN)
           setMorphologyImage(null)
@@ -2029,7 +2033,7 @@ export function useDatasetLifecycle({
           }
 
           commit()
-          setSpatialGridCells(visiumHdOverviewToGridCellLayerData(overview))
+          setSpatialGridCells(visiumHdOverviewToGridCellColumns(overview))
           setVisiumHdControlState(
             visiumHdControlStateFromOverview(
               requestedUrl,
@@ -2265,7 +2269,7 @@ export function useDatasetLifecycle({
     setSpatialDataControlState(IDLE_SPATIALDATA_CONTROL_STATE)
     setVisiumControlState(IDLE_VISIUM_CONTROL_STATE)
     setMerscopeImageState(IDLE_MERSCOPE_IMAGE_STATE)
-    setSpatialGridCells([])
+    setSpatialGridCells(EMPTY_GRID_CELL_COLUMNS)
     setFlatMorphologyImage(null)
     initialShareableStateRef.current = null
     invalidateLatestRequest({

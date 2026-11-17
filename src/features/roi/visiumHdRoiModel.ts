@@ -3,6 +3,13 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
+import {
+  gridCellAt,
+  gridCellCenterAt,
+  gridCellIndicesInBbox,
+  gridCellTileIndex,
+  type GridCellColumns,
+} from '../../rendering/gridCellColumns'
 import { formatCsv } from '../../utils/csv'
 
 export const VISIUM_HD_ROI_BIN_EXPORT_LIMIT = 50_000
@@ -124,19 +131,23 @@ export function summarizeVisiumHdRoiBins(
 }
 
 // `styleCell` gives a selected bin its expression score, so only the bins
-// kept are styled.
+// kept become objects and are styled. Bins are selected by their centre.
 export function selectVisiumHdGridCellsInRoi(
-  cells: readonly GridCellDatum[],
+  cells: GridCellColumns,
   selection: RoiSelection,
   limit = VISIUM_HD_ROI_BIN_EXPORT_LIMIT,
   styleCell: (cell: GridCellDatum) => GridCellDatum = (cell) => cell,
 ): VisiumHdRoiSelectionResult {
   const normalizedLimit = normalizeSelectionLimit(limit)
   const bins: VisiumHdRoiBin[] = []
+  // Bins whose box meets the selection's include every bin centred in it.
+  const candidates = gridCellIndicesInBbox(gridCellTileIndex(cells), selection.bbox)
+  const candidateCount = candidates?.length ?? cells.length
   let selectedCount = 0
 
-  for (const cell of cells) {
-    const center = gridCellDatumCenter(cell)
+  for (let position = 0; position < candidateCount; position += 1) {
+    const index = candidates === null ? position : (candidates[position] ?? 0)
+    const center = gridCellCenterAt(cells, index)
 
     if (!pointInBbox(center, selection.bbox)) {
       continue
@@ -149,7 +160,7 @@ export function selectVisiumHdGridCellsInRoi(
     selectedCount += 1
 
     if (bins.length < normalizedLimit) {
-      bins.push(gridCellDatumToRoiBin(styleCell(cell), center))
+      bins.push(gridCellDatumToRoiBin(styleCell(gridCellAt(cells, index)), center))
     }
   }
 

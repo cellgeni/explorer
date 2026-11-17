@@ -128,9 +128,11 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 
 - **Grid.** With 2 µm selected and zoom below 3
   (`VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN`), `useVisiumHdGridLodWorkflow` shows the
-  16 µm grid instead, when 16 µm exists. `viewerGridCellIndex.ts` also builds
-  colour-averaged 16 µm aggregates for rendering 2 µm grids zoomed out. Those
-  stand-in and aggregate cells cannot be clicked or hovered.
+  16 µm grid instead, when 16 µm exists. Without a 16 µm tier, the viewer
+  draws a 2 µm grid zoomed out as the squares of the nested 16 µm grid that
+  hold its bins (`coarsenGridCellColumns` in `viewerGridCellIndex.ts`); they
+  take a gene's colour from where their centre falls. Those stand-in and
+  coarse bins cannot be clicked or hovered.
 - **Gene expression.** `planGeneExpressionLod`
   (`src/data/geneExpressionLod.ts`) requests 16 µm data for a 2 µm selection
   below zoom 3, and for an 8 µm selection at zoom −1.25 or lower. At zoom
@@ -222,10 +224,21 @@ overlays, ROI, Magic Lens and the Bin card read the drawn tier
 - Bin assignments read only the row groups of `barcode_mappings.parquet` that
   can hold the bins, after one HEAD and footer read per dataset (see
   [2 µm strategy](../visium-hd-2um-strategy.md#barcode-mapping-bridge)).
+- Bins stay columns from the overview to the viewer (`GridCellColumns`,
+  `src/rendering/gridCellColumns.ts`, since 2026-11-17): the overview's ids,
+  rows, columns, tissue and full-resolution arrays, shared rather than copied,
+  with the grid basis giving each bin's square. The viewer groups bins into
+  tiles of 32 × 32 rows and columns (`gridCellTileIndex`) for the visible
+  count, clipping, Enter picking and ROI selection; a tile inside the query
+  counts whole. A grid of more than 1,000,000 bins is clipped to a snapped box
+  around the view. Only the drawn bins are packed for `GridBinLayer`, as
+  centres and colours, and a bin becomes an object (`gridCellAt`) only when it
+  is picked, opened in a card or exported.
 - Bins are styled where they are drawn or read: the viewer colours the ones
-  it draws, and the Bin card and an ROI style their own. Until 2026-11-17 App
-  copied every bin for each expression batch, which at 2 µm (3.4 million)
-  blocked for about 10 s and ran the tab out of memory.
+  it draws, from their barcode and centre, and the Bin card and an ROI style
+  their own. Until 2026-11-17 App copied every bin for each expression batch,
+  which at 2 µm (3.4 million) blocked for about 10 s and ran the tab out of
+  memory.
 - Segmentation GeoJSON is fetched on the main thread, so custom fetchers and
   the full-file budget apply, and its body is piped chunk by chunk to a
   short-lived worker that parses each feature and transfers the columns back
@@ -268,20 +281,19 @@ overlays, ROI, Magic Lens and the Bin card read the drawn tier
 | `src/features/genes/useVisiumHdExpressionProjectionWorkflow.ts`, `visiumHdExpressionProjection.ts`                                                                                     | Bin→cell expression projection                                                  |
 | `src/features/roi/useVisiumHdRoiWorkflow.ts`, `visiumHdRoiModel.ts`, `useVisiumHdMagicLensSummary.ts`                                                                                  | ROI and Magic Lens                                                              |
 | `src/features/cells/GridCellInfoPanel.tsx`, `gridCellAssignmentModel.ts`                                                                                                               | Bin card details                                                                |
-| `src/components/viewerGridCellIndex.ts`, `src/rendering/gridCellRenderer.ts`                                                                                                           | Grid picking index and rendering                                                |
+| `src/rendering/gridCellColumns.ts`, `src/components/viewerGridCellIndex.ts`, `src/rendering/gridCellRenderer.ts`                                                                       | Columnar bins, tile index, zoomed-out squares and rendering                     |
 | `src/data/datasetDiagnostics.ts`                                                                                                                                                       | `runVisiumHdDiagnostics`                                                        |
 
 ## Known Limitations
 
 - `feature_slice.h5` is required for selected-gene overlays, and for a
   dataset with only a 2 µm tier; there is no fallback to the filtered matrix.
-- 2 µm bins are heavy in the browser. Each is an object with its own corner
-  polygon, and the viewer indexes and aggregates them as objects, so the
-  reference's 3,443,936 bins take about 1.8 GB of heap. Measured 2026-11-17
-  on a production build with GPU, opening the 2 µm-only reference: ready in
-  10.9 s, with main-thread blocks of 2.1 and 2.9 s while the bins are built;
-  colouring a gene took 6 s. A columnar grid, as cells have, would remove
-  most of it.
+- The 2 µm bins' barcodes stay as 3.4 million strings, about 140 MB of the
+  2 µm tier's 270–340 MB of heap (see
+  [Phase 6](../plan/phases/06-visium-hd.md#closed-open-items)): each is a
+  slice of the decoded `barcodes.tsv.gz` text, which keeps that text alive.
+  Space Ranger's barcodes encode the row and column, so they could be made
+  when needed instead.
 - Diagnostics do not check the clustering files.
 - With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
   stand-in bins but query the 2 µm matrix (found by reading the code; not
