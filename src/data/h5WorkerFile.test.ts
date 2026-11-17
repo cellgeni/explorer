@@ -173,6 +173,20 @@ describe('openH5WorkerFile', () => {
     file.close()
   })
 
+  it('reads a Visium HD feature slice metadata', async () => {
+    const file = await openH5WorkerFile(await createH5Bytes(writeTinyFeatureSlice), {
+      workerFactory: () => new CloningH5Worker(),
+    })
+
+    await expect(file.featureSliceMetadata()).resolves.toEqual({
+      nrows: 32,
+      ncols: 32,
+      spotPitchMicrometers: 2,
+      spotToFullresTransform: [8, 0, 100, 0, 8, 200, 0, 0, 1],
+    })
+    file.close()
+  })
+
   it('sends one request at a time, and never sends one cancelled while waiting', async () => {
     const { worker, file } = await openManualFile()
     const controller = new AbortController()

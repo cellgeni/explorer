@@ -244,7 +244,7 @@ describe('platformAdapter', () => {
 
     expect(adapter.labels.embeddingElementPlural).toBe('bins')
     expect(adapter.capabilities).toMatchObject({
-      annotations: false,
+      annotations: true,
       nucleusBoundaries: true,
       transcripts: false,
     })

@@ -167,7 +167,8 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   capabilities: {
     cells: true,
     magicLens: true,
-    annotations: false,
+    // Space Ranger's clusterings of the 8 and 16 µm tiers.
+    annotations: true,
     geometricAnnotations: true,
     nucleusBoundaries: true,
     transcripts: false,

@@ -1,3 +1,5 @@
+import type { VisiumFeatureSliceMetadata } from '../data/visiumFeatureSliceH5'
+
 // An H5 file worker holds one HDF5 file, opened with h5wasm from bytes the main
 // thread downloaded or from a URL it reads itself. The main thread reads
 // datasets by path; values come back as transferred typed arrays or cloned
@@ -26,6 +28,7 @@ export type H5FileWorkerRequest =
   | H5FileReadRequest
   | H5FileMatrixCellsRequest
   | H5FileFeatureSliceRequest
+  | H5FileFeatureSliceMetadataRequest
   | H5FileStatsRequest
 
 export interface H5FileOpenRequest {
@@ -98,6 +101,13 @@ export interface H5FileFeatureSliceRequest {
   readonly binSizeMicrometers: number
 }
 
+// A Visium HD feature_slice.h5's `metadata_json`: its grid size, spot pitch
+// and spot-to-pixel transform.
+export interface H5FileFeatureSliceMetadataRequest {
+  readonly id: number
+  readonly op: 'feature-slice-metadata'
+}
+
 export interface H5FileFeatureSliceTarget {
   readonly id: string
   readonly row: number
@@ -109,6 +119,7 @@ export type H5FileWorkerResponse =
   | H5FileReadResponse
   | H5FileMatrixCellsResponse
   | H5FileFeatureSliceResponse
+  | H5FileFeatureSliceMetadataResponse
   | H5FileStatsResponse
   | H5FileWorkerFailure
 
@@ -147,6 +158,13 @@ export interface H5FileFeatureSliceResponse {
   readonly ok: true
   readonly op: 'feature-slice'
   readonly cells: H5MatrixCellsPayload
+}
+
+export interface H5FileFeatureSliceMetadataResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'feature-slice-metadata'
+  readonly metadata: VisiumFeatureSliceMetadata
 }
 
 export interface H5FileWorkerFailure {

@@ -94,7 +94,9 @@ export {
   geneExpressionScoreSpread,
   styleCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
+  styleGridCellByGeneExpression,
   styleGridCellsByGeneExpression,
+  unscoredGridCell,
 } from './geneExpressionRenderer'
 export { gridCellBatchesToLayerData } from './gridCellRenderer'
 export {

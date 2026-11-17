@@ -1,11 +1,12 @@
 import type { Color } from '@deck.gl/core'
 import type { CellId } from '../data/cellid'
 import {
+  boundaryLineColor,
   colorsGradient,
   DEFAULT_OVERVIEW_CELL_FILL_RGB,
   FADED_CELL_ALPHA,
 } from './deckLayerColors'
-import type { OverviewCellDatum } from './deckLayers'
+import type { GridCellDatum, OverviewCellDatum } from './deckLayers'
 
 export type ObservationColorMode =
   | 'transcript-count'
@@ -92,9 +93,40 @@ export function createObservationColorizer(
   return (cell) => observationColor(readObservationValue(cell, mode), maxValue, mode)
 }
 
+// Bins coloured by `colorize`; unchanged when it is null.
+export function styleGridCellsByObservation(
+  cells: readonly GridCellDatum[],
+  colorize: ((element: { readonly id: string }) => Color) | null,
+): readonly GridCellDatum[] {
+  if (colorize === null || cells.length === 0) {
+    return cells
+  }
+
+  return cells.map((cell) => {
+    const fillColor = colorize(cell)
+    return { ...cell, fillColor, lineColor: boundaryLineColor(fillColor) }
+  })
+}
+
+// The colour of an element known only by its id, such as a Visium HD bin,
+// under the annotation or metadata mode; null under any other mode, whose
+// values only cells have.
+export function createElementObservationColorizer(
+  mode: ObservationColorMode,
+  options: ObservationStyleOptions = {},
+): ((element: { readonly id: string }) => Color) | null {
+  if (mode === 'annotations') {
+    return (options.annotations ?? []).length === 0
+      ? null
+      : annotationColorizer(options.annotations ?? [])
+  }
+
+  return mode === 'metadata' ? metadataColorizer(options.metadataTrack ?? null) : null
+}
+
 function annotationColorizer(
   annotations: readonly AnnotationColorStyle[],
-): (cell: OverviewCellDatum) => Color {
+): (cell: { readonly id: string }) => Color {
   const colorByCellId = new Map<string, Color>()
 
   for (const annotation of annotations) {
@@ -112,7 +144,7 @@ function annotationColorizer(
 
 function metadataColorizer(
   metadataTrack: CellMetadataColorStyle | null,
-): ((cell: OverviewCellDatum) => Color) | null {
+): ((cell: { readonly id: string }) => Color) | null {
   if (metadataTrack === null || metadataTrack.values.length === 0) {
     return null
   }

@@ -214,55 +214,72 @@ export function styleGridCellsByGeneExpression(
     : expressionSource
   const styleUnmatchedCells = options.styleUnmatchedCells ?? false
 
-  if (
-    styleIndex.expressionByElementId.size === 0 &&
-    (styleIndex.expressionByBinKey?.size ?? 0) === 0 &&
-    !styleUnmatchedCells
-  ) {
+  if (!hasGeneExpressionElementStyles(styleIndex) && !styleUnmatchedCells) {
     return cells
   }
 
   let hasExpressionStyle = false
   const styledCells = cells.map((cell) => {
-    const expressionElement =
-      styleIndex.expressionByElementId.get(cell.id) ??
-      (styleIndex.expressionByBinKey === undefined ||
-      styleIndex.binMicrometers === undefined
-        ? undefined
-        : styleIndex.expressionByBinKey.get(
-            gridCellBinKey(cell, styleIndex.binMicrometers),
-          ))
+    const styled = styleGridCellByGeneExpression(cell, styleIndex, styleUnmatchedCells)
 
-    if (expressionElement === undefined) {
-      if (!styleUnmatchedCells) {
-        return cell
-      }
-
-      hasExpressionStyle = true
-
-      return {
-        ...cell,
-        fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
-        lineColor: boundaryLineColor(GENE_EXPRESSION_ZERO_FILL_COLOR),
-        expressionCount: 0,
-      }
-    }
-
-    hasExpressionStyle = true
-    return {
-      ...cell,
-      fillColor: expressionElement.fillColor,
-      lineColor: boundaryLineColor(expressionElement.fillColor),
-      ...(expressionElement.expressionCount === undefined
-        ? {}
-        : { expressionCount: expressionElement.expressionCount }),
-      ...(expressionElement.expressionGenes === undefined
-        ? {}
-        : { expressionGenes: expressionElement.expressionGenes }),
-    }
+    hasExpressionStyle ||= styled !== cell
+    return styled
   })
 
   return hasExpressionStyle ? styledCells : cells
+}
+
+// One bin coloured and scored as the map shows it: by its own expression, or
+// that of the coarser bin it falls in. Unmatched bins are left as they are,
+// or scored 0 with `styleUnmatchedCells`.
+export function styleGridCellByGeneExpression(
+  cell: GridCellDatum,
+  styleIndex: GeneExpressionElementStyleIndex,
+  styleUnmatchedCells: boolean,
+): GridCellDatum {
+  const expressionElement =
+    styleIndex.expressionByElementId.get(cell.id) ??
+    (styleIndex.expressionByBinKey === undefined ||
+    styleIndex.binMicrometers === undefined
+      ? undefined
+      : styleIndex.expressionByBinKey.get(
+          gridCellBinKey(cell, styleIndex.binMicrometers),
+        ))
+
+  if (expressionElement === undefined) {
+    return styleUnmatchedCells
+      ? {
+          ...cell,
+          fillColor: GENE_EXPRESSION_ZERO_FILL_COLOR,
+          lineColor: boundaryLineColor(GENE_EXPRESSION_ZERO_FILL_COLOR),
+          expressionCount: 0,
+        }
+      : cell
+  }
+
+  return {
+    ...cell,
+    fillColor: expressionElement.fillColor,
+    lineColor: boundaryLineColor(expressionElement.fillColor),
+    ...(expressionElement.expressionCount === undefined
+      ? {}
+      : { expressionCount: expressionElement.expressionCount }),
+    ...(expressionElement.expressionGenes === undefined
+      ? {}
+      : { expressionGenes: expressionElement.expressionGenes }),
+  }
+}
+
+// A bin without the expression score it was styled with.
+export function unscoredGridCell(cell: GridCellDatum): GridCellDatum {
+  if (cell.expressionCount === undefined && cell.expressionGenes === undefined) {
+    return cell
+  }
+
+  const { expressionCount: _count, expressionGenes: _genes, ...unscored } = cell
+  void _count
+  void _genes
+  return unscored
 }
 
 export function createGeneExpressionElementStyleIndex(

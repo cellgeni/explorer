@@ -942,6 +942,43 @@ describe('runDatasetDiagnostics', () => {
     expect(summarizeDatasetDiagnostics(report)).toBe('2 failed, 0 warnings')
   })
 
+  it('skips the unread 2 µm positions and requires feature_slice.h5 with no coarser tier', async () => {
+    const rangeValidator = vi.fn(async (url: string) => {
+      if (url.endsWith('/feature_slice.h5')) {
+        throw new Error('Feature Slice H5 returned HTTP 404.')
+      }
+    })
+    const diagnose = (bins: ReturnType<typeof visiumBin>[]) =>
+      runDatasetDiagnostics('https://example.test/visium', {
+        detectDataset: vi.fn(async () => visiumHdDetection(bins)),
+        fetcher: statusFetcher({}),
+        rangeValidator,
+      })
+    const featureSlice = (report: Awaited<ReturnType<typeof diagnose>>) =>
+      report.checks.find((check) => check.id === 'visium-hd-feature-slice')
+
+    const twoOnly = await diagnose([visiumBin(2, 'square_002um')])
+
+    expect(twoOnly.checks.map((check) => check.id)).not.toContain(
+      'visium-hd-2um-positions',
+    )
+    expect(rangeValidator).not.toHaveBeenCalledWith(
+      expect.stringContaining('square_002um/spatial/tissue_positions.parquet'),
+      expect.anything(),
+    )
+    expect(featureSlice(twoOnly)).toMatchObject({ required: true, status: 'fail' })
+
+    const withSixteen = await diagnose([
+      visiumBin(2, 'square_002um'),
+      visiumBin(16, 'square_016um'),
+    ])
+
+    expect(featureSlice(withSixteen)).toMatchObject({
+      required: false,
+      status: 'warning',
+    })
+  })
+
   it.each([
     [
       'a later path in the tier',
