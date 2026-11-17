@@ -2,6 +2,7 @@ import { transferablesOf } from '../workers/h5FileTransfer'
 import { unpackGexResult } from '../workers/h5MatrixCellsPayload'
 import type { SharedLoad } from '../utils/sharedLoad'
 import type { GexResult } from './gexTypes'
+import type { VisiumFeatureSliceMetadata } from './visiumFeatureSliceH5'
 import type {
   H5FileFeatureSliceTarget,
   H5FileRangeStats,
@@ -70,6 +71,8 @@ export interface H5WorkerFile {
     binSizeMicrometers: number,
     signal?: AbortSignal,
   ): Promise<GexResult<ElementId>>
+  // A Visium HD feature_slice.h5's metadata, without its feature names.
+  featureSliceMetadata(signal?: AbortSignal): Promise<VisiumFeatureSliceMetadata>
   close(): void
 }
 
@@ -244,6 +247,21 @@ function createH5WorkerFile(
       }
 
       return unpackGexResult(response.cells)
+    },
+    async featureSliceMetadata(signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'feature-slice-metadata' }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'feature-slice-metadata') {
+        throw new Error(
+          'The H5 file worker answered a Feature Slice metadata read with another reply.',
+        )
+      }
+
+      return response.metadata
     },
     close() {
       workerRegistry?.unregister(file)

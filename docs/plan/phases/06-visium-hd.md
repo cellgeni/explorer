@@ -2,16 +2,16 @@
 
 The original brief's Phase 6 covered both standard Visium and Visium HD.
 
-| Original Phase 6 task                                              | Outcome                                                     |
-| ------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `VisiumHDDataset` implementing `SpatialDataset`                    | Done (`VisiumHdDataset`)                                    |
-| `VisiumDataset` (spots, `tissue_positions.csv`, `circle` geometry) | Done in [Phase 14](14-standard-visium.md)                   |
-| `scalefactors_json.json` + tissue PNGs → `image()` as `flat`       | Done for Visium HD                                          |
-| `filtered_feature_bc_matrix.h5` → `matrix()` via h5wasm            | Done, read by range in an H5 file worker                    |
-| `analysis/` → `annotations()`                                      | Embeddings only; Visium HD cluster annotations not recorded |
-| `capabilities.transcripts = false`, `pyramidImage = false`         | Done                                                        |
-| Spot/square render layer                                           | Done as an affine grid layer                                |
-| `binned_outputs/` resolution switcher (2/8/16 µm)                  | Done                                                        |
+| Original Phase 6 task                                              | Outcome                                                 |
+| ------------------------------------------------------------------ | ------------------------------------------------------- |
+| `VisiumHDDataset` implementing `SpatialDataset`                    | Done (`VisiumHdDataset`)                                |
+| `VisiumDataset` (spots, `tissue_positions.csv`, `circle` geometry) | Done in [Phase 14](14-standard-visium.md)               |
+| `scalefactors_json.json` + tissue PNGs → `image()` as `flat`       | Done for Visium HD                                      |
+| `filtered_feature_bc_matrix.h5` → `matrix()` via h5wasm            | Done, read by range in an H5 file worker                |
+| `analysis/` → `annotations()`                                      | Done (2026-11-17): embeddings, and clusterings per tier |
+| `capabilities.transcripts = false`, `pyramidImage = false`         | Done                                                    |
+| Spot/square render layer                                           | Done as an affine grid layer                            |
+| `binned_outputs/` resolution switcher (2/8/16 µm)                  | Done                                                    |
 
 Original definition of done: a Visium dataset renders spots over its tissue
 image with gene colouring, gene sets, annotations, and ROI export, reusing the
@@ -203,7 +203,9 @@ Known gaps (2026-11-08 review):
   [Closed Open Items](#closed-open-items)).
 - 16 µm first paint also reads the whole 8 µm positions file to derive the
   basis. The 2 µm positions file must exist for detection, though it is never
-  read. With only a 2 µm tier, the default load fails.
+  read. With only a 2 µm tier, the default load fails. The 2 µm part was fixed
+  2026-11-17 (see [Closed Open Items](#closed-open-items)); the 8 µm read
+  stays (about 0.6 s of decoding, in short tasks).
 
 ## Definition Of Done (MVP)
 
@@ -239,11 +241,91 @@ Known gaps (2026-11-08 review):
       controls, and Bin Info.
 - [ ] Optimize hosted Visium HD datasets: interaction profiling, segmentation
       streaming cost, Feature Slice worker ranges, memory, and bundle splitting.
+      Profiled 2026-11-17 (see [Closed Open Items](#closed-open-items)); the
+      2 µm tier's per-bin objects are what is left.
 - [x] Vendor chunk groups (see [Optimization Pass](optimization-pass.md)).
 - [x] Transition helpers, the platform adapter, and the viewer split (see
       [the refactor record](../engineering.md#application-structure-and-refactor-record)).
 
 ## Closed Open Items
+
+Closed 2026-11-17, from [Open Items](../open-items.md):
+
+- [x] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
+      detection needs a positions file that is never read.
+  - Detection and diagnostics check the 2 µm tier's
+    `filtered_feature_bc_matrix/barcodes.tsv.gz`, which it reads, instead of
+    its `tissue_positions.parquet` (171 MB on the reference), which it does
+    not (`visiumHdRequiredBinPaths`).
+  - With no 8 or 16 µm tier, the 2 µm basis comes from `feature_slice.h5`:
+    its `metadata_json` `transform_matrices.spot_colrow_to_microscope_colrow`
+    is the projective transform Space Ranger places each bin with (on the
+    reference it reproduces all 11.2 million positions to 1e-11 px). Its
+    affine part alone is off by up to 0.43 px, so the basis is fitted to it at
+    17 × 17 points: within 0.08 px of every position, as the 8 µm-derived
+    basis is (0.075). The metadata is read in the H5 worker that then serves
+    the file's gene reads (a `feature-slice-metadata` request). Diagnostics
+    require `feature_slice.h5` for such a dataset.
+  - The 2 → 16 µm gene LOD needed a 16 µm tier, and failed without one.
+    Rather than read 2 µm expression zoomed out (3.4 million targets in one
+    Feature Slice read), a size with no tier reads expression for bins made
+    from the finest tier that nests in it (`coarsenVisiumHdBinnedOverview`),
+    named as Space Ranger names that size's barcodes.
+  - Checked live with a manifest listing only the reference's 2 µm bins:
+    ready in 10.9 s (production build, GPU), A2M coloured zoomed out in about
+    6 s, no positions request. A live test does the same.
+- [x] Visium HD dataset annotations from `analysis/` (original Phase 6).
+  - Each 8 and 16 µm tier's `analysis/clustering/<clustering>/clusters.csv`
+    (graph-based, and k-means for k = 2 to 10) is an annotation set of that
+    tier, listed by `HEAD` when the tier is shown
+    (`useVisiumHdAnnotationSetsWorkflow`); graphclust is chosen. Set ids carry
+    the tier (`visium-hd-clusters:16:gene_expression_graphclust`); annotation
+    ids do not (`analysis:gene_expression_graphclust:3`), so a class keeps
+    its colour and visibility across tiers.
+  - Decision: a loaded set follows the tier. After a switch it is read again
+    for the new tier when that tier has the clustering, and cleared when it
+    does not (2 µm has none). Projecting one tier's clusters onto another's
+    bins was not pursued: each tier is clustered on its own.
+  - Bins had no annotation or metadata colour at all; the viewer now colours
+    the bins it draws by barcode (`createElementObservationColorizer`), and a
+    bin's hover tooltip names its cluster.
+  - The Plots panel appears with the annotations and says Visium HD has no
+    matrix it can read by gene.
+  - Reference: 54,504 bins in 16 clusters at 16 µm (1.3 MB), 215,196 in 16
+    at 8 µm (5.2 MB). A live test loads, switches and clears it.
+- [x] Streaming or viewport-scoped 2 µm barcode reads.
+  - `barcodes.tsv.gz` is parsed a line at a time as it downloads
+    (`forEachMaybeGzipLine`), into ids and `Int32Array` rows and columns:
+    the reference's 20 MB gzipped, 75 MB of text, is never held whole, and the
+    3.4 million objects the parser made are gone. Parsing takes about 0.6 s,
+    spread between network reads. A budget overrun cancels the download.
+  - Viewport-scoped reads were not pursued: the file is gzipped text, and the
+    filtered matrix's barcodes are not in spatial order.
+
+Found while closing them (2026-11-17):
+
+- [x] Colouring a gene with 2 µm bins loaded ran the tab out of memory
+      ("Target crashed" in Playwright) after a 9.7 s block. For each
+      expression batch App copied every bin with its new colour (3.4 million
+      objects) and built a map of them, and the viewer then rebuilt its
+      zoomed-out aggregates from the copies. The 2 µm tier of a full dataset
+      did the same once zoomed in past 3. The viewer already styled the bins
+      it draws, so App now passes the bins unstyled; the Bin card and an ROI
+      style only their own (`styleGridCellByGeneExpression`).
+
+Profiling (2026-11-17), production build with GPU, against Sanger storage:
+
+- 16 µm first paint: ready in 3.6 s, with one long task (296 ms).
+  Hyparquet decodes the 16 and 8 µm positions for about 0.6 s in all, in
+  short async tasks, so moving it to a worker was not done.
+- 2 µm-only: ready in 10.9 s, with blocks of 2.1 and 2.9 s while the bins
+  are built, and 1.8 GB of heap. Each bin is an object with its own polygon,
+  and the viewer's spatial index, zoomed-out aggregates and visible count
+  are objects per bin too (`createGridCellRenderLods` alone took 3.7 s in a
+  dev build). This is what remains of the optimization item: a columnar grid,
+  as cells have.
+- Bundles: the Visium HD code is in lazy chunks of about 60 KB (20 KB
+  gzipped); none is worth splitting further.
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
 

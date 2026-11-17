@@ -1,6 +1,6 @@
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { readMaybeGzipText } from './readMaybeGzipText'
+import { forEachMaybeGzipLine, readMaybeGzipText } from './readMaybeGzipText'
 
 const CSV = 'barcode,in_tissue,array_row,array_col\nAAAC-1,1,0,0\nAAAG-1,0,0,2\n'
 
@@ -70,5 +70,41 @@ describe('readMaybeGzipText', () => {
     )
     // Plain text needs no decompression, so it still reads.
     await expect(readMaybeGzipText(new Response(CSV))).resolves.toBe(CSV)
+  })
+})
+
+describe('forEachMaybeGzipLine', () => {
+  const linesOf = async (response: Response) => {
+    const lines: string[] = []
+    await forEachMaybeGzipLine(response, (line, index) => {
+      lines.push(`${index}:${line}`)
+    })
+    return lines
+  }
+
+  it('reads plain and gzipped lines, with or without a final newline', async () => {
+    await expect(linesOf(new Response('a\r\nb\nc'))).resolves.toEqual([
+      '0:a',
+      '1:b',
+      '2:c',
+    ])
+    await expect(
+      linesOf(bytesResponse(gzipSync(new TextEncoder().encode('µm\nx\n')))),
+    ).resolves.toEqual(['0:µm', '1:x'])
+    await expect(linesOf(new Response(''))).resolves.toEqual([])
+    await expect(linesOf(new Response(null))).resolves.toEqual([])
+  })
+
+  it('decodes a character split between chunks', async () => {
+    const bytes = new TextEncoder().encode('µm\n')
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes.subarray(0, 1))
+        controller.enqueue(bytes.subarray(1))
+        controller.close()
+      },
+    })
+
+    await expect(linesOf(new Response(body))).resolves.toEqual(['0:µm'])
   })
 })

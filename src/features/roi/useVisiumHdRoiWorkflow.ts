@@ -70,6 +70,8 @@ interface UseVisiumHdRoiWorkflowControls {
 interface UseVisiumHdRoiWorkflowData {
   readonly activeRoiState: VisiumHdRoiState
   readonly gridCells: readonly GridCellDatum[]
+  // A selected bin with its expression score, for the barcode export.
+  readonly styleGridCell?: (cell: GridCellDatum) => GridCellDatum
   readonly loadState: DatasetLoadState<StructuredLoadError>
   // The reference sample for enriched genes (15.4-B): bins spread over the
   // loaded bins. Those outside a selection are its comparison.
@@ -118,7 +120,13 @@ interface UseVisiumHdRoiWorkflowResult {
 export function useVisiumHdRoiWorkflow({
   callbacks: { appendDebugEvent, clearRoi },
   controls: { activeBinSize, isVisiumHdDataset, roiName },
-  data: { activeRoiState, gridCells, loadState, referenceBins = NO_REFERENCE_BINS },
+  data: {
+    activeRoiState,
+    gridCells,
+    styleGridCell,
+    loadState,
+    referenceBins = NO_REFERENCE_BINS,
+  },
   loaders: { getSpatialDataset },
   refs: { roiGeneAbortRef, roiGeneRequestIdRef, roiIdRef },
   setters: {
@@ -153,7 +161,12 @@ export function useVisiumHdRoiWorkflow({
         return
       }
 
-      const result = selectVisiumHdGridCellsInRoi(gridCells, selection)
+      const result = selectVisiumHdGridCellsInRoi(
+        gridCells,
+        selection,
+        undefined,
+        styleGridCell,
+      )
       const barcodes = result.bins.map((bin) => bin.barcode)
       const binSize = activeBinSize
 
@@ -313,6 +326,7 @@ export function useVisiumHdRoiWorkflow({
       isVisiumHdDataset,
       readyDatasetUrl,
       referenceBins,
+      styleGridCell,
       roiGeneAbortRef,
       roiGeneRequestIdRef,
       roiIdRef,

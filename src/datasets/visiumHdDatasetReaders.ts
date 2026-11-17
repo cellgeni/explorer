@@ -4,6 +4,7 @@ import { isListedAsMissing } from '../data/folderListing'
 import { noteReadableResponse } from '../data/hostResponses'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from '../data/gex'
 import type {
+  VisiumFeatureSliceMetadata,
   VisiumFeatureSliceReadOptions,
   VisiumFeatureSliceTarget,
 } from '../data/visiumFeatureSlice'
@@ -30,7 +31,7 @@ import type {
 } from './visiumHdBarcodeMappings'
 import type {
   ReadVisiumHdFilteredMatrixBarcodesOptions,
-  VisiumHdSquareBarcode,
+  VisiumHdSquareBarcodeColumns,
 } from './visiumHdBarcodes'
 import {
   VisiumHdTwoMicrometerOverviewDisabledError,
@@ -51,7 +52,9 @@ import {
 } from './spatialGrid'
 import type { Compressors } from 'hyparquet'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
+import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
 import type {
+  Annotation,
   DatasetMeta,
   ElementBatch,
   GridCellBatch,
@@ -71,6 +74,7 @@ import type {
 } from './visiumHdOverview'
 import type { GeneExpressionBatch, GeneExpressionGeneCount } from './xeniumDataset'
 import type {
+  VisiumHdAnnotationQueryOptions,
   VisiumHdBarcodeMappingCellQueryOptions,
   VisiumHdBarcodeMappingQueryOptions,
   VisiumHdBarcodeMappingsForCellReader,
@@ -101,7 +105,7 @@ export type VisiumHdFilteredMatrixBarcodeReader = (
   baseUrl: string,
   bin: VisiumHdBinDescriptor,
   options: ReadVisiumHdFilteredMatrixBarcodesOptions,
-) => Promise<readonly VisiumHdSquareBarcode[]>
+) => Promise<VisiumHdSquareBarcodeColumns>
 
 export type VisiumHdBarcodeMappingsReader = (
   baseUrl: string,
@@ -118,6 +122,11 @@ export type VisiumHdFeatureMatrixReader = (
   ids: readonly SpatialElementId[],
   options?: CellFeatureMatrixReadOptions,
 ) => Promise<GexResult<SpatialElementId>>
+
+export type VisiumHdFeatureSliceMetadataReader = (
+  url: string,
+  options: { readonly signal?: AbortSignal },
+) => Promise<VisiumFeatureSliceMetadata>
 
 export type VisiumHdFeatureSliceReader = (
   url: string,
@@ -143,6 +152,7 @@ export interface VisiumHdDatasetReaderControllerOptions {
   readonly featureMatrixReader?: VisiumHdFeatureMatrixReader
   readonly featureSliceH5Path?: string
   readonly featureSliceReader?: VisiumHdFeatureSliceReader
+  readonly featureSliceMetadataReader?: VisiumHdFeatureSliceMetadataReader
   readonly maxTwoMicrometerFilteredBarcodes?: number
   readonly maxInteractiveFeatureSliceBytes?: number
   readonly maxInteractiveSegmentationGeojsonBytes?: number
@@ -188,7 +198,7 @@ const readVisiumHdFilteredMatrixBarcodesLazy = async (
   baseUrl: string,
   bin: VisiumHdBinDescriptor,
   options: ReadVisiumHdFilteredMatrixBarcodesOptions,
-): Promise<readonly VisiumHdSquareBarcode[]> => {
+): Promise<VisiumHdSquareBarcodeColumns> => {
   const { readVisiumHdFilteredMatrixBarcodes } = await import('./visiumHdBarcodes')
   return readVisiumHdFilteredMatrixBarcodes(baseUrl, bin, options)
 }
@@ -245,6 +255,14 @@ const gexFromVisiumFeatureSliceH5Lazy = async (
   return gexFromVisiumFeatureSliceH5(url, targets, genes, options)
 }
 
+const readVisiumFeatureSliceH5MetadataLazy: VisiumHdFeatureSliceMetadataReader = async (
+  url,
+  options,
+) => {
+  const { readVisiumFeatureSliceH5Metadata } = await import('../data/visiumFeatureSlice')
+  return readVisiumFeatureSliceH5Metadata(url, options)
+}
+
 export class VisiumHdDatasetReaderController {
   readonly baseUrl: string
   readonly bins: readonly VisiumHdBinDescriptor[]
@@ -263,6 +281,7 @@ export class VisiumHdDatasetReaderController {
   private readonly featureMatrixReader: VisiumHdFeatureMatrixReader
   private readonly featureSliceH5Path: string
   private readonly featureSliceReader: VisiumHdFeatureSliceReader
+  private readonly featureSliceMetadataReader: VisiumHdFeatureSliceMetadataReader
   private readonly maxInteractiveFeatureSliceBytes: number
   private readonly maxInteractiveSegmentationGeojsonBytes: number | undefined
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
@@ -272,13 +291,22 @@ export class VisiumHdDatasetReaderController {
     VisiumHdBinSizeMicrometers,
     Promise<VisiumHdBinnedOverview>
   >()
+  // Expression bins for sizes with no tier, made from a finer one.
+  private readonly coarsenedOverviewPromises = new Map<
+    VisiumHdBinSizeMicrometers,
+    Promise<VisiumHdBinnedOverview>
+  >()
+  private readonly annotationGroupLoads = new Map<
+    VisiumHdBinSizeMicrometers,
+    SharedLoad<readonly AnalysisAnnotationGroupOption[]>
+  >()
   private readonly genePanelPromises = new Map<
     VisiumHdBinSizeMicrometers,
     Promise<readonly string[]>
   >()
   private readonly filteredMatrixBarcodePromises = new Map<
     VisiumHdBinSizeMicrometers,
-    Promise<readonly VisiumHdSquareBarcode[]>
+    Promise<VisiumHdSquareBarcodeColumns>
   >()
   // Barcode-mapping reads are shared by callers with their own signals (see
   // waitForSharedLoad), so a bin selection's cancel does not drop the cache.
@@ -336,6 +364,8 @@ export class VisiumHdDatasetReaderController {
     this.featureSliceH5Path = options.featureSliceH5Path ?? 'feature_slice.h5'
     this.featureSliceReader =
       options.featureSliceReader ?? gexFromVisiumFeatureSliceH5Lazy
+    this.featureSliceMetadataReader =
+      options.featureSliceMetadataReader ?? readVisiumFeatureSliceH5MetadataLazy
     this.maxTwoMicrometerFilteredBarcodes =
       normalizeVisiumHdTwoMicrometerFilteredBarcodeBudget(
         options.maxTwoMicrometerFilteredBarcodes,
@@ -427,10 +457,78 @@ export class VisiumHdDatasetReaderController {
     return promise
   }
 
+  // The tier's Space Ranger clusterings, read once per tier. A tier without
+  // an analysis folder, such as 2 µm, has none.
+  annotationGroups(
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: VisiumHdAnnotationQueryOptions = {},
+  ): Promise<readonly AnalysisAnnotationGroupOption[]> {
+    const bin = this.bins.find(
+      (candidate) => candidate.binSizeMicrometers === binSizeMicrometers,
+    )
+
+    if (bin === undefined) {
+      return Promise.resolve([])
+    }
+
+    return waitForSharedLoad(
+      this.annotationGroupLoads,
+      binSizeMicrometers,
+      async (signal) => {
+        const { readVisiumHdClusteringGroups } = await import('./visiumHdClusters')
+        return readVisiumHdClusteringGroups(this.baseUrl, bin, {
+          fetcher: this.fetcher,
+          signal,
+        })
+      },
+      options.signal,
+    )
+  }
+
+  // One clustering's clusters, named by its set id, which carries its tier;
+  // without one, every clustering of the tier.
+  async annotations(
+    options: VisiumHdAnnotationQueryOptions = {},
+  ): Promise<readonly Annotation<SpatialElementId>[]> {
+    const group =
+      options.groupId === undefined
+        ? null
+        : (await import('./visiumHdClusters')).parseVisiumHdClusteringGroupId(
+            options.groupId,
+          )
+
+    if (options.groupId !== undefined && group === null) {
+      throw new Error(`Visium HD has no annotation set ${options.groupId}.`)
+    }
+
+    const binSizeMicrometers =
+      group?.binSizeMicrometers ??
+      options.binSizeMicrometers ??
+      this.defaultBinSizeMicrometers
+    const bin = findBin(this.bins, binSizeMicrometers)
+    const clusterings =
+      group === null
+        ? (await this.annotationGroups(binSizeMicrometers, options)).map(
+            (option) => option.groupingName,
+          )
+        : [group.clustering]
+    const { readVisiumHdClusterAnnotations } = await import('./visiumHdClusters')
+    const sets = await Promise.all(
+      clusterings.map((clustering) =>
+        readVisiumHdClusterAnnotations(this.baseUrl, bin, clustering, {
+          fetcher: this.fetcher,
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+        }),
+      ),
+    )
+
+    return sets.flat()
+  }
+
   filteredMatrixBarcodes(
     binSizeMicrometers = this.defaultBinSizeMicrometers,
     options: ReadVisiumHdFilteredMatrixBarcodesOptions = {},
-  ): Promise<readonly VisiumHdSquareBarcode[]> {
+  ): Promise<VisiumHdSquareBarcodeColumns> {
     const existing = this.filteredMatrixBarcodePromises.get(binSizeMicrometers)
 
     if (existing !== undefined && options.signal === undefined) {
@@ -604,9 +702,50 @@ export class VisiumHdDatasetReaderController {
       genes,
       maxInteractiveFeatureSliceBytes: this.maxInteractiveFeatureSliceBytes,
       readBinnedOverview: (binSizeMicrometers) =>
-        this.readBinnedOverview(binSizeMicrometers),
+        this.expressionOverview(binSizeMicrometers),
       queryOptions: options,
     })
+  }
+
+  // The bins expression is read for. A size with no tier of its own, such as
+  // the 16 µm stand-in for zoomed-out 2 µm bins in a dataset with only a 2 µm
+  // tier, is made from the finest tier that nests in it.
+  private expressionOverview(
+    binSizeMicrometers = this.defaultBinSizeMicrometers,
+  ): Promise<VisiumHdBinnedOverview> {
+    const sourceBinSize = coarsenedOverviewSourceBinSize(
+      this.bins,
+      binSizeMicrometers,
+      (size) => this.overviewPromises.has(size),
+    )
+
+    if (sourceBinSize === undefined) {
+      return this.readBinnedOverview(binSizeMicrometers)
+    }
+
+    const existing = this.coarsenedOverviewPromises.get(binSizeMicrometers)
+
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const promise = Promise.all([
+      this.readBinnedOverview(sourceBinSize),
+      import('./visiumHdOverview'),
+    ])
+      .then(([source, overviewModule]) =>
+        overviewModule.coarsenVisiumHdBinnedOverview(source, binSizeMicrometers),
+      )
+      .catch((error: unknown) => {
+        if (this.coarsenedOverviewPromises.get(binSizeMicrometers) === promise) {
+          this.coarsenedOverviewPromises.delete(binSizeMicrometers)
+        }
+
+        throw error
+      })
+
+    this.coarsenedOverviewPromises.set(binSizeMicrometers, promise)
+    return promise
   }
 
   readBinnedOverview(
@@ -667,18 +806,11 @@ export class VisiumHdDatasetReaderController {
 
     const bin = findBin(this.bins, 2)
     const sourceBinSize = preferredTwoMicrometerBasisSourceBinSize(this.bins)
-
-    if (sourceBinSize === undefined) {
-      return Promise.reject(
-        new VisiumHdTwoMicrometerOverviewDisabledError(
-          '2 µm overview loading requires a detected 8 µm or 16 µm tier to derive the affine grid basis.',
-        ),
-      )
-    }
-
     const promise = (async () => {
-      const [sourceOverview, scalefactors, barcodes, overviewModule] = await Promise.all([
-        this.readBinnedOverview(sourceBinSize),
+      const [basisSource, scalefactors, barcodes, overviewModule] = await Promise.all([
+        sourceBinSize === undefined
+          ? this.featureSliceMetadataForBasis()
+          : this.readBinnedOverview(sourceBinSize),
         this.scalefactorsReader(datasetFileUrl(this.baseUrl, bin.scalefactorsPath), {
           fetcher: this.fetcher,
         }),
@@ -690,10 +822,21 @@ export class VisiumHdDatasetReaderController {
         }),
         import('./visiumHdOverview'),
       ])
-      const basis = deriveSubdividedGridBasis(
-        sourceOverview.grid.basis,
-        sourceOverview.binSizeMicrometers / 2,
-      )
+      // A coarser tier's fitted basis, halved down to 2 µm; else the
+      // Feature Slice spot transform.
+      const basis =
+        'grid' in basisSource
+          ? deriveSubdividedGridBasis(
+              basisSource.grid.basis,
+              basisSource.binSizeMicrometers / 2,
+            )
+          : overviewModule.visiumHdGridBasisFromFeatureSlice(basisSource, scalefactors, 2)
+
+      if (basis === null) {
+        throw new VisiumHdTwoMicrometerOverviewDisabledError(
+          `${this.featureSliceH5Path} has no spot transform (transform_matrices.spot_colrow_to_microscope_colrow), and there is no 8 µm or 16 µm tier to place the 2 µm bins from.`,
+        )
+      }
 
       return overviewModule.createVisiumHdBinnedOverviewFromSquareBarcodes(
         bin,
@@ -711,6 +854,22 @@ export class VisiumHdDatasetReaderController {
 
     this.overviewPromises.set(2, promise)
     return promise
+  }
+
+  // feature_slice.h5's metadata, for a dataset with only a 2 µm tier. Its
+  // spot transform places the bins.
+  private async featureSliceMetadataForBasis(): Promise<VisiumFeatureSliceMetadata> {
+    try {
+      return await this.featureSliceMetadataReader(
+        datasetFileUrl(this.baseUrl, this.featureSliceH5Path),
+        {},
+      )
+    } catch (error) {
+      throw new VisiumHdTwoMicrometerOverviewDisabledError(
+        `With no 8 µm or 16 µm tier, the 2 µm bins are placed by ${this.featureSliceH5Path}, which could not be read: ${error instanceof Error ? error.message : String(error)}`,
+        { cause: error },
+      )
+    }
   }
 
   private async segmentationElementsWithScalefactors(
@@ -894,6 +1053,26 @@ function preferredTwoMicrometerBasisSourceBinSize(
   }
 
   return undefined
+}
+
+// A finer tier that nests in `binSizeMicrometers` bins, when the dataset has
+// no tier of that size; else undefined. One already read is preferred, else
+// the coarsest, which has the fewest bins to read.
+function coarsenedOverviewSourceBinSize(
+  bins: readonly VisiumHdBinDescriptor[],
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+  isRead: (binSizeMicrometers: VisiumHdBinSizeMicrometers) => boolean,
+): VisiumHdBinSizeMicrometers | undefined {
+  if (bins.some((bin) => bin.binSizeMicrometers === binSizeMicrometers)) {
+    return undefined
+  }
+
+  const candidates = bins
+    .map((bin) => bin.binSizeMicrometers)
+    .filter((size) => size < binSizeMicrometers && binSizeMicrometers % size === 0)
+    .sort((left, right) => right - left)
+
+  return candidates.find(isRead) ?? candidates[0]
 }
 
 function nestedBasisSourceBinSize(

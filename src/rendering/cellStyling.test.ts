@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { intToCellId } from '../data/cellid'
-import { styleOverviewCellsByObservation } from './cellStyling'
-import type { OverviewCellDatum } from './deckLayers'
+import {
+  createElementObservationColorizer,
+  styleGridCellsByObservation,
+  styleOverviewCellsByObservation,
+} from './cellStyling'
+import type { GridCellDatum, OverviewCellDatum } from './deckLayers'
 
 const cellA = intToCellId(1, 1)
 const cellB = intToCellId(1, 2)
@@ -108,5 +112,61 @@ describe('cell observation styling', () => {
 
     expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
     expect(styled[1]?.fillColor).not.toEqual(cells[1]?.fillColor)
+  })
+})
+
+describe('element observation styling', () => {
+  const bin = (id: string): GridCellDatum => ({
+    id,
+    gridId: 'visium-hd-square-016um',
+    row: 0,
+    col: 0,
+    polygon: [],
+    fillColor: [34, 120, 108, 28],
+    lineColor: [22, 90, 82, 150],
+  })
+
+  it('colours bins by the annotation listing their barcode', () => {
+    const colorize = createElementObservationColorizer('annotations', {
+      annotations: [{ id: 'cluster-1', cellIds: [cellA], color: '#ff0000' }],
+    })
+    const [annotated, unclassed] = styleGridCellsByObservation(
+      [bin(cellA), bin(cellB)],
+      colorize,
+    )
+
+    expect(annotated?.fillColor).toEqual([255, 0, 0, 230])
+    expect(annotated?.lineColor).not.toEqual(bin(cellA).lineColor)
+    // A bin in no shown class fades, as a cell does.
+    expect(unclassed?.fillColor[3]).toBeLessThan(230)
+  })
+
+  it('leaves bins unchanged in modes only cells have values for', () => {
+    const bins = [bin(cellA)]
+
+    for (const mode of ['transcript-count', 'cell-area', 'gene-expression'] as const) {
+      expect(createElementObservationColorizer(mode)).toBeNull()
+    }
+
+    expect(
+      createElementObservationColorizer('annotations', { annotations: [] }),
+    ).toBeNull()
+    expect(styleGridCellsByObservation(bins, null)).toBe(bins)
+  })
+
+  it('colours bins by a metadata track', () => {
+    const colorize = createElementObservationColorizer('metadata', {
+      metadataTrack: {
+        id: 'score',
+        values: [
+          { cellId: cellA, value: 0 },
+          { cellId: cellB, value: 10 },
+        ],
+        min: 0,
+        max: 10,
+      },
+    })
+
+    expect(colorize?.({ id: cellA })).not.toEqual(colorize?.({ id: cellB }))
   })
 })

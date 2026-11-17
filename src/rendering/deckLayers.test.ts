@@ -22,8 +22,10 @@ import {
   styleCellBoundariesByCells,
   styleCellBoundariesByGeneExpression,
   styleCellsByGeneExpression,
+  styleGridCellByGeneExpression,
   styleGridCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
+  unscoredGridCell,
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
 } from './deckLayers'
@@ -1407,6 +1409,49 @@ describe('deck layer factory', () => {
     ) => readonly number[]
 
     expect(getFillColor(expressionStyledGridCells[0]!)).toEqual([240, 128, 120, 110])
+  })
+
+  it('styles one grid cell as the whole grid is styled, and drops a stale score', () => {
+    const [cell] = gridCellBatchesToLayerData([fixtureGrid], [fixtureGridCellBatch])
+
+    if (cell === undefined) {
+      throw new Error('Expected a grid cell.')
+    }
+
+    const index = createGeneExpressionElementStyleIndex([
+      {
+        id: cell.id,
+        position: [10, -20, 0],
+        radiusPixels: 6,
+        fillColor: [240, 128, 120, 220],
+        expressionCount: 7,
+        expressionGenes: ['Actb'],
+      },
+    ])
+    const styled = styleGridCellByGeneExpression(cell, index, false)
+
+    expect(styled).toEqual(styleGridCellsByGeneExpression([cell], index)[0])
+    expect(styled).toMatchObject({ expressionCount: 7, expressionGenes: ['Actb'] })
+    expect(
+      styleGridCellByGeneExpression(
+        cell,
+        createGeneExpressionElementStyleIndex([]),
+        false,
+      ),
+    ).toBe(cell)
+    expect(
+      styleGridCellByGeneExpression(
+        cell,
+        createGeneExpressionElementStyleIndex([]),
+        true,
+      ),
+    ).toMatchObject({ expressionCount: 0 })
+
+    const unscored = unscoredGridCell(styled)
+
+    expect(unscored).not.toHaveProperty('expressionCount')
+    expect(unscored).not.toHaveProperty('expressionGenes')
+    expect(unscoredGridCell(cell)).toBe(cell)
   })
 
   it('maps coarser binned gene expression colors onto affine grid cells by position', () => {

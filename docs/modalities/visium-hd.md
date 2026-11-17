@@ -14,13 +14,12 @@ URL checks, the `experiment.xenium` probe, and the root Zarr metadata probes.
 
 - **Bin tiers.** For each tier in `VISIUM_HD_BINS`, in the order 2, 8, 16 µm,
   three `HEAD` requests run in parallel. A tier counts as present only when all
-  three succeed:
-  - `binned_outputs/square_XXXum/spatial/tissue_positions.parquet`
+  three succeed (`visiumHdRequiredBinPaths`):
+  - `binned_outputs/square_XXXum/spatial/tissue_positions.parquet` for 8 and
+    16 µm; for 2 µm, whose positions file is not read,
+    `binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz`
   - `binned_outputs/square_XXXum/spatial/scalefactors_json.json`
   - `binned_outputs/square_XXXum/filtered_feature_bc_matrix.h5`
-
-  This means the 2 µm `tissue_positions.parquet` must exist for 2 µm to be
-  offered, even though it is never read.
 
 - **Segmented outputs.** Eight `HEAD` probes under `segmented_outputs/`
   (`VISIUM_HD_SEGMENTED_OUTPUT_PROBES`) record which segmentation files exist.
@@ -28,8 +27,8 @@ URL checks, the `experiment.xenium` probe, and the root Zarr metadata probes.
 
 A [dataset manifest](../dataset-manifest.md) with `"platform": "visium-hd"`
 skips the earlier probes. Its `files.bins` list replaces the tier probe (each
-listed bin's three files are checked with `HEAD`, and a missing one is an
-error), `files.segmentedOutputs` replaces the segmented-output probes, and
+listed bin's three files, as above, are checked with `HEAD`, and a missing one
+is an error), `files.segmentedOutputs` replaces the segmented-output probes, and
 `options.binSize` sets the first tier shown. `featureSlice` and
 `barcodeMappings` can also be relocated.
 
@@ -41,24 +40,27 @@ error), `files.segmentedOutputs` replaces the segmented-output probes, and
 
 `T` is `binned_outputs/square_{002,008,016}um`.
 
-| Path                                                                                                                                            | Required                  | Read by                                                                                                                 | Library                                    | What is read                                                                                                                     | Used for                                                                          |
-| ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `T/spatial/tissue_positions.parquet` (8, 16 µm)                                                                                                 | Yes (probed for 2 µm too) | `readVisiumHdTissuePositions` (`visiumHdOverview.ts`)                                                                   | `hyparquet`, footer in IndexedDB           | `barcode`, `in_tissue`, `array_row`, `array_col`, `pxl_row_in_fullres`, `pxl_col_in_fullres`                                     | 8/16 µm bin grid                                                                  |
-| `T/spatial/scalefactors_json.json`                                                                                                              | Yes                       | `readVisiumHdScalefactors`                                                                                              | fetch + JSON                               | `microns_per_pixel`, `tissue_hires_scalef`, `tissue_lowres_scalef`; optional image sizes, `bin_size_um`, `spot_diameter_fullres` | Units, image scaling, segmentation scaling                                        |
-| `T/filtered_feature_bc_matrix.h5`                                                                                                               | Yes                       | `gexFromFeatureBarcodeMatrixH5` (`src/data/gex.ts`) in `h5File.worker.ts`                                               | `h5wasm`, range-read file in a worker      | `/matrix/barcodes`, `/matrix/features/{name,feature_type}`, `/matrix/indptr`; `indices`/`data` sliced                            | All-gene bin and cell profiles, ROI gene stats, Magic Lens without selected genes |
-| `T/filtered_feature_bc_matrix/barcodes.tsv.gz` (2 µm)                                                                                           | For 2 µm                  | `readVisiumHdFilteredMatrixBarcodes` (`visiumHdBarcodes.ts`)                                                            | fetch + `DecompressionStream` (whole file) | Barcodes parsed with `/^(?:s\|square)_(\d{3})um_(\d+)_(\d+)(?:-\d+)?$/`                                                          | 2 µm bin grid                                                                     |
-| `T/filtered_feature_bc_matrix/features.tsv.gz`                                                                                                  | Optional                  | `readVisiumHdFeatureGenePanel`                                                                                          | fetch + gunzip                             | Columns 1 (name) and 2 (type), gene features only                                                                                | Gene search list                                                                  |
-| `feature_slice.h5` (root)                                                                                                                       | For gene overlays         | `gexFromVisiumFeatureSliceH5` (`src/data/visiumFeatureSlice.ts`) in `h5File.worker.ts`                                  | `h5wasm`, range-read file in a worker      | Root `metadata_json` (`nrows`, `ncols`, `spot_pitch`), `/features/{name,feature_type}`, `/feature_slices/<i>/{row,col,data}`     | Selected-gene bin colouring                                                       |
-| `barcode_mappings.parquet` (root)                                                                                                               | Optional                  | `readVisiumHdBarcodeMappings` (hyparquet); `readVisiumHdBarcodeMappingsForCellWithDuckDb`                               | `hyparquet` / DuckDB-WASM                  | `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`, `in_cell`                                               | Bin→cell assignment, segmented-cell profiles, expression projection               |
-| `T/spatial/tissue_hires_image.png`                                                                                                              | Optional                  | `VisiumHdDatasetReaderController.image()`                                                                               | `HTMLImageElement`                         | Whole PNG                                                                                                                        | Tissue underlay                                                                   |
-| `T/analysis/{umap,tsne}/…/projection.csv`, then root `analysis/…`                                                                               | Optional                  | `loadDatasetAnalysisEmbeddings` (`src/data/analysisEmbeddings.ts`)                                                      | fetch + CSV                                | Barcode column plus two axis columns                                                                                             | Embedding view for the active tier                                                |
-| `segmented_outputs/cell_segmentations.geojson`, else `graphclust_annotated_cell_segmentations.geojson`                                          | Optional                  | `readVisiumHdSegmentationIndexInWorker` (`visiumHdSegmentationIndexWorker.ts`) in `visiumHdSegmentationIndex.worker.ts` | fetch; streaming JSON scanner in a worker  | Polygon/MultiPolygon in full-res pixels, `cell_id`, label and colour properties                                                  | Cell boundaries                                                                   |
-| `segmented_outputs/nucleus_segmentations.geojson`, else `graphclust_annotated_nucleus_segmentations.geojson`, else `nucleus_instance_mask.tiff` | Optional                  | Same, or `readVisiumHdNucleusInstanceMaskRasterFromTiff` (`visiumHdSegmentations.ts`)                                   | JSON scanner / `geotiff` windowed read     | Polygons, or mask labels traced into polygons                                                                                    | Nucleus boundaries                                                                |
+| Path                                                                                                                                            | Required              | Read by                                                                                                                 | Library                                   | What is read                                                                                                                     | Used for                                                                          |
+| ----------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `T/spatial/tissue_positions.parquet` (8, 16 µm)                                                                                                 | Yes (not for 2 µm)    | `readVisiumHdTissuePositions` (`visiumHdOverview.ts`)                                                                   | `hyparquet`, footer in IndexedDB          | `barcode`, `in_tissue`, `array_row`, `array_col`, `pxl_row_in_fullres`, `pxl_col_in_fullres`                                     | 8/16 µm bin grid                                                                  |
+| `T/spatial/scalefactors_json.json`                                                                                                              | Yes                   | `readVisiumHdScalefactors`                                                                                              | fetch + JSON                              | `microns_per_pixel`, `tissue_hires_scalef`, `tissue_lowres_scalef`; optional image sizes, `bin_size_um`, `spot_diameter_fullres` | Units, image scaling, segmentation scaling                                        |
+| `T/filtered_feature_bc_matrix.h5`                                                                                                               | Yes                   | `gexFromFeatureBarcodeMatrixH5` (`src/data/gex.ts`) in `h5File.worker.ts`                                               | `h5wasm`, range-read file in a worker     | `/matrix/barcodes`, `/matrix/features/{name,feature_type}`, `/matrix/indptr`; `indices`/`data` sliced                            | All-gene bin and cell profiles, ROI gene stats, Magic Lens without selected genes |
+| `T/filtered_feature_bc_matrix/barcodes.tsv.gz` (2 µm)                                                                                           | For 2 µm              | `readVisiumHdFilteredMatrixBarcodes` (`visiumHdBarcodes.ts`)                                                            | fetch + `DecompressionStream`, streamed   | Barcodes parsed with `/^(?:s\|square)_(\d{3})um_(\d+)_(\d+)(?:-\d+)?$/`, a line at a time                                        | 2 µm bin grid                                                                     |
+| `T/filtered_feature_bc_matrix/features.tsv.gz`                                                                                                  | Optional              | `readVisiumHdFeatureGenePanel`                                                                                          | fetch + gunzip                            | Columns 1 (name) and 2 (type), gene features only                                                                                | Gene search list                                                                  |
+| `feature_slice.h5` (root)                                                                                                                       | For gene overlays     | `gexFromVisiumFeatureSliceH5` (`src/data/visiumFeatureSlice.ts`) in `h5File.worker.ts`                                  | `h5wasm`, range-read file in a worker     | Root `metadata_json` (`nrows`, `ncols`, `spot_pitch`), `/features/{name,feature_type}`, `/feature_slices/<i>/{row,col,data}`     | Selected-gene bin colouring                                                       |
+| `feature_slice.h5` `metadata_json` `transform_matrices.spot_colrow_to_microscope_colrow`                                                        | With only a 2 µm tier | `readVisiumFeatureSliceH5Metadata`, in the worker that serves its gene reads                                            | `h5wasm`, range-read file in a worker     | The 3×3 spot (col, row) → full-resolution pixel transform                                                                        | 2 µm grid basis when there is no 8 or 16 µm tier                                  |
+| `T/analysis/clustering/<clustering>/clusters.csv` (8, 16 µm)                                                                                    | Optional              | `readVisiumHdClusteringGroups`, `readVisiumHdClusterAnnotations` (`visiumHdClusters.ts`)                                | `HEAD`; fetch + CSV                       | `Barcode,Cluster` for `gene_expression_graphclust` and `gene_expression_kmeans_{2..10}_clusters`                                 | Annotation sets for the tier's bins                                               |
+| `barcode_mappings.parquet` (root)                                                                                                               | Optional              | `readVisiumHdBarcodeMappings` (hyparquet); `readVisiumHdBarcodeMappingsForCellWithDuckDb`                               | `hyparquet` / DuckDB-WASM                 | `square_002um`, `square_008um`, `square_016um`, `cell_id`, `in_nucleus`, `in_cell`                                               | Bin→cell assignment, segmented-cell profiles, expression projection               |
+| `T/spatial/tissue_hires_image.png`                                                                                                              | Optional              | `VisiumHdDatasetReaderController.image()`                                                                               | `HTMLImageElement`                        | Whole PNG                                                                                                                        | Tissue underlay                                                                   |
+| `T/analysis/{umap,tsne}/…/projection.csv`, then root `analysis/…`                                                                               | Optional              | `loadDatasetAnalysisEmbeddings` (`src/data/analysisEmbeddings.ts`)                                                      | fetch + CSV                               | Barcode column plus two axis columns                                                                                             | Embedding view for the active tier                                                |
+| `segmented_outputs/cell_segmentations.geojson`, else `graphclust_annotated_cell_segmentations.geojson`                                          | Optional              | `readVisiumHdSegmentationIndexInWorker` (`visiumHdSegmentationIndexWorker.ts`) in `visiumHdSegmentationIndex.worker.ts` | fetch; streaming JSON scanner in a worker | Polygon/MultiPolygon in full-res pixels, `cell_id`, label and colour properties                                                  | Cell boundaries                                                                   |
+| `segmented_outputs/nucleus_segmentations.geojson`, else `graphclust_annotated_nucleus_segmentations.geojson`, else `nucleus_instance_mask.tiff` | Optional              | Same, or `readVisiumHdNucleusInstanceMaskRasterFromTiff` (`visiumHdSegmentations.ts`)                                   | JSON scanner / `geotiff` windowed read    | Polygons, or mask labels traced into polygons                                                                                    | Nucleus boundaries                                                                |
 
 `T/spatial/tissue_lowres_image.png` is drawn instead of the high-res PNG when
 that cannot be read (a `HEAD` decides), with a notice naming the skipped path.
 
-Probed or diagnosed but **never read**:
+Probed or diagnosed but **never read**: the 2 µm `tissue_positions.parquet`
+(171 MB and 11.2 million rows on the reference dataset, read by no check),
 `segmented_outputs/spatial/scalefactors_json.json`,
 `segmented_outputs/filtered_feature_cell_matrix.h5`, and
 `segmented_outputs/raw_feature_cell_matrix.h5`. Clustering CSVs, CytAssist
@@ -103,13 +105,24 @@ tier.
 the 2 µm positions file:
 
 1. Loads the 8 µm overview (or 16 µm if 8 µm is missing), the 2 µm
-   scalefactors, and the 2 µm `barcodes.tsv.gz` in parallel.
+   scalefactors, and the 2 µm `barcodes.tsv.gz` in parallel. The barcodes
+   stream into columns (ids, `Int32Array` rows and columns) as they download:
+   the reference file is 20 MB gzipped, 3,443,936 lines and 75 MB of text,
+   and neither is held whole.
 2. Halves the source basis down to 2 µm (`deriveSubdividedGridBasis`).
 3. Places each barcode by its encoded row/column. All bins are treated as in
    tissue.
 
-Without an 8 or 16 µm tier, 2 µm loading fails with
-`VisiumHdTwoMicrometerOverviewDisabledError`.
+**With only a 2 µm tier** (2026-11-17), step 1 reads `feature_slice.h5`'s
+metadata instead of a coarser tier. Its
+`transform_matrices.spot_colrow_to_microscope_colrow` is the 3×3 projective
+transform Space Ranger places every bin with; on the reference it reproduces
+`tissue_positions.parquet` to 1e-11 pixels. The grid is affine, so
+`visiumHdGridBasisFromFeatureSlice` fits a basis to the transform at 17 × 17
+points over the slide; that places each 2 µm bin within 0.08 full-resolution
+pixels of Space Ranger's position, as the 8 µm-derived basis does (0.075).
+Without a readable `feature_slice.h5`, or one with no transform, the load
+fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 
 ### Zoom Level Of Detail
 
@@ -121,7 +134,12 @@ Without an 8 or 16 µm tier, 2 µm loading fails with
 - **Gene expression.** `planGeneExpressionLod`
   (`src/data/geneExpressionLod.ts`) requests 16 µm data for a 2 µm selection
   below zoom 3, and for an 8 µm selection at zoom −1.25 or lower. At zoom
-  −1.25 or lower the request covers the whole slide.
+  −1.25 or lower the request covers the whole slide. A dataset with no 16 µm
+  tier reads 16 µm expression for bins made from its finest tier
+  (`coarsenVisiumHdBinnedOverview`): Feature Slice counts bin to any multiple
+  of the spot pitch, and the bins are named as Space Ranger names 16 µm
+  barcodes. On the 2 µm-only reference that is 54,000 bins rather than 3.4
+  million.
 
 ## Feature Read Paths
 
@@ -137,10 +155,39 @@ Without an 8 or 16 µm tier, 2 µm loading fails with
 | Embeddings                 | Per-tier `projection.csv`, then root `analysis/`                                                                                                                                                                                                                                |
 | ROI                        | `useVisiumHdRoiWorkflow` selects bins whose centre is inside the box/lasso (up to 50,000), then `matrix(barcodes, binSize)`; exports barcodes CSV and GeoJSON                                                                                                                   |
 | Magic Lens                 | `useVisiumHdMagicLensSummary`: up to 25,000 bins; `matrix()` when no genes are selected, otherwise selected-gene expression filtered to the lens                                                                                                                                |
+| Annotations                | `annotationGroups(binSize)` lists the tier's clusterings by `HEAD`; `annotations({ groupId })` reads one `clusters.csv` into one annotation per cluster. Bins are coloured by their barcode, and hovering one names its cluster                                                 |
 
-Annotations from the dataset are not supported (`annotations()` rejects and
-`VISIUM_HD_PLATFORM_ADAPTER.capabilities.annotations` is `false`), and
 Visium HD has no transcript records.
+
+### Annotations
+
+Space Ranger clusters each 8 and 16 µm tier's bins, graph-based and by k-means
+for k = 2 to 10, and writes each clustering to
+`analysis/clustering/<clustering>/clusters.csv`. The 2 µm tier has none. A
+clustering's barcodes are one tier's bins, so:
+
+- **Sets are per tier.** A set's id names its tier and clustering, as in
+  `visium-hd-clusters:16:gene_expression_graphclust`, and its label is
+  Xenium's (`graphclust`, `kmeans 10`); graph-based is chosen first.
+  `useVisiumHdAnnotationSetsWorkflow` lists the active tier's sets whenever
+  the tier changes.
+- **A loaded set follows the tier.** After a bin-size switch, a set loaded for
+  the old tier is read again for the new one when it has the same clustering,
+  keeping the colour mode, and cleared when it does not (2 µm). Imported
+  labels loaded with it are dropped.
+- **Classes keep their colours.** Annotation ids are
+  `analysis:<clustering>:<cluster>`, without the tier, so a class's colour and
+  visibility carry across tiers. The panel lists them under the set name, as
+  for Xenium and H5AD.
+- **"All"** reads every clustering of the active tier: ten files, about 13 MB
+  at 16 µm and 50 MB at 8 µm on the reference.
+
+On the reference, listing a tier's sets is ten `HEAD` requests, and
+`graphclust` loads 54,504 bins in 16 clusters at 16 µm (1.3 MB) and 215,196 in
+16 at 8 µm (5.2 MB).
+
+The Plots panel is shown, as for other datasets with annotations, and says
+it is not available: Visium HD has no matrix it can read by gene.
 
 ## Load Sequence
 
@@ -151,6 +198,7 @@ Visium HD has no transcript records.
 3. Awaits `readBinnedOverview()` and `meta()`, renders the grid, and fills the
    bin-size control in Bins › Appearance.
 4. If `Tissue image` is enabled, loads the hires PNG in the background.
+5. Once the dataset is ready, lists the tier's annotation sets.
 
 Changing the bin size runs `useVisiumHdBinWorkflow`. The drawn tier stays on
 screen until the new one is ready, and the `Active bins` row names it, as in
@@ -174,6 +222,10 @@ overlays, ROI, Magic Lens and the Bin card read the drawn tier
 - Bin assignments read only the row groups of `barcode_mappings.parquet` that
   can hold the bins, after one HEAD and footer read per dataset (see
   [2 µm strategy](../visium-hd-2um-strategy.md#barcode-mapping-bridge)).
+- Bins are styled where they are drawn or read: the viewer colours the ones
+  it draws, and the Bin card and an ROI style their own. Until 2026-11-17 App
+  copied every bin for each expression batch, which at 2 µm (3.4 million)
+  blocked for about 10 s and ran the tab out of memory.
 - Segmentation GeoJSON is fetched on the main thread, so custom fetchers and
   the full-file budget apply, and its body is piped chunk by chunk to a
   short-lived worker that parses each feature and transfers the columns back
@@ -203,7 +255,8 @@ overlays, ROI, Magic Lens and the Bin card read the drawn tier
 | `src/datasets/visiumHdDataset.ts`                                                                                                                                                      | `SpatialDataset` facade                                                         |
 | `src/datasets/visiumHdDatasetReaders.ts`                                                                                                                                               | Reader controller: tiers, caches, image, gene expression, matrix, segmentations |
 | `src/datasets/visiumHdOverview.ts`                                                                                                                                                     | Positions and scalefactors parsing, overview batches, gene panel                |
-| `src/datasets/visiumHdBarcodes.ts`                                                                                                                                                     | 2 µm barcode parsing                                                            |
+| `src/datasets/visiumHdBarcodes.ts`                                                                                                                                                     | 2 µm barcode streaming and parsing                                              |
+| `src/datasets/visiumHdClusters.ts`, `src/features/app-shell/useVisiumHdAnnotationSetsWorkflow.ts`                                                                                      | Cluster annotation sets per tier                                                |
 | `src/datasets/visiumHdBarcodeMappings.ts`, `visiumHdBarcodeMappingDuckDb.ts`                                                                                                           | `barcode_mappings.parquet` readers                                              |
 | `src/datasets/visiumHdSegmentations.ts`, `visiumHdSegmentationModel.ts`                                                                                                                | GeoJSON and nucleus-mask segmentation readers                                   |
 | `src/datasets/visiumHdSegmentationIndex.ts`, `visiumHdSegmentationIndexWorker.ts`, `src/workers/visiumHdSegmentationIndex.worker.ts`                                                   | Segmentation index columns, viewport selection, and the GeoJSON parse worker    |
@@ -220,10 +273,16 @@ overlays, ROI, Magic Lens and the Bin card read the drawn tier
 
 ## Known Limitations
 
-- `feature_slice.h5` is required for selected-gene overlays; there is no
-  fallback to the filtered matrix.
-- With only a 2 µm tier detected, the default load fails.
-- The 2 → 16 µm gene LOD does not check that 16 µm exists.
+- `feature_slice.h5` is required for selected-gene overlays, and for a
+  dataset with only a 2 µm tier; there is no fallback to the filtered matrix.
+- 2 µm bins are heavy in the browser. Each is an object with its own corner
+  polygon, and the viewer indexes and aggregates them as objects, so the
+  reference's 3,443,936 bins take about 1.8 GB of heap. Measured 2026-11-17
+  on a production build with GPU, opening the 2 µm-only reference: ready in
+  10.9 s, with main-thread blocks of 2.1 and 2.9 s while the bins are built;
+  colouring a gene took 6 s. A columnar grid, as cells have, would remove
+  most of it.
+- Diagnostics do not check the clustering files.
 - With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
   stand-in bins but query the 2 µm matrix (found by reading the code; not
   reproduced).

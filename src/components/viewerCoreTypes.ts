@@ -185,6 +185,7 @@ export interface ViewerTranscriptHoverDetail {
 
 export interface ViewerGridCellHoverDetail {
   readonly cell: GridCellDatum
+  readonly annotationLabels?: readonly string[]
   readonly screen: ScreenPoint
 }
 

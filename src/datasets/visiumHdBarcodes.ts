@@ -1,6 +1,9 @@
 import { datasetFileUrl } from '../data/datasetFiles'
-import { readMaybeGzipText } from '../data/readMaybeGzipText'
-import { VisiumHdFilteredBarcodeBudgetExceededError } from './visiumHdStrategy'
+import { forEachMaybeGzipLine } from '../data/readMaybeGzipText'
+import {
+  VisiumHdFilteredBarcodeBudgetExceededError,
+  visiumHdFilteredBarcodesPath,
+} from './visiumHdStrategy'
 import type { SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
@@ -9,6 +12,15 @@ export interface VisiumHdSquareBarcode {
   readonly binSizeMicrometers: VisiumHdBinSizeMicrometers
   readonly row: number
   readonly col: number
+}
+
+// A tier's square barcodes as columns: 3.4 million on the reference
+// dataset's 2 µm tier.
+export interface VisiumHdSquareBarcodeColumns {
+  readonly binSizeMicrometers: VisiumHdBinSizeMicrometers
+  readonly ids: readonly SpatialElementId[]
+  readonly rows: Int32Array
+  readonly cols: Int32Array
 }
 
 export interface ReadVisiumHdFilteredMatrixBarcodesOptions {
@@ -20,16 +32,16 @@ export interface ReadVisiumHdFilteredMatrixBarcodesOptions {
 const VISIUM_HD_SQUARE_BARCODE_PATTERN =
   /^(?:s|square)_(?<size>\d{3})um_(?<row>\d+)_(?<col>\d+)(?:-\d+)?$/u
 
+// Read as it downloads, one line at a time, into columns: the reference 2 µm
+// file is 20 MB gzipped and 75 MB of text. A budget overrun stops the
+// download.
 export async function readVisiumHdFilteredMatrixBarcodes(
   baseUrl: string,
   bin: VisiumHdBinDescriptor,
   options: ReadVisiumHdFilteredMatrixBarcodesOptions = {},
-): Promise<readonly VisiumHdSquareBarcode[]> {
+): Promise<VisiumHdSquareBarcodeColumns> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-  const url = datasetFileUrl(
-    baseUrl,
-    `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
-  )
+  const url = datasetFileUrl(baseUrl, visiumHdFilteredBarcodesPath(bin.outputPath))
   const response =
     options.signal === undefined
       ? await fetcher(url)
@@ -39,12 +51,14 @@ export async function readVisiumHdFilteredMatrixBarcodes(
     throw new Error(`Unable to load Visium HD barcodes.tsv.gz: HTTP ${response.status}.`)
   }
 
-  return parseVisiumHdFilteredMatrixBarcodes(await readMaybeGzipText(response), {
-    binSizeMicrometers: bin.binSizeMicrometers,
-    ...(options.maxBarcodeCount === undefined
-      ? {}
-      : { maxBarcodeCount: options.maxBarcodeCount }),
+  const columns = new SquareBarcodeColumnsBuilder(
+    bin.binSizeMicrometers,
+    options.maxBarcodeCount,
+  )
+  await forEachMaybeGzipLine(response, (line, lineIndex) => {
+    columns.add(line, lineIndex)
   })
+  return columns.finish()
 }
 
 export function parseVisiumHdFilteredMatrixBarcodes(
@@ -53,15 +67,42 @@ export function parseVisiumHdFilteredMatrixBarcodes(
     readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
     readonly maxBarcodeCount?: number
   } = {},
-): readonly VisiumHdSquareBarcode[] {
-  const normalizedMaxBarcodeCount = normalizeMaxBarcodeCount(options.maxBarcodeCount)
-  const barcodes: VisiumHdSquareBarcode[] = []
+): VisiumHdSquareBarcodeColumns {
+  const columns = new SquareBarcodeColumnsBuilder(
+    options.binSizeMicrometers,
+    options.maxBarcodeCount,
+  )
 
   for (const [lineIndex, line] of text.split(/\r?\n/).entries()) {
-    const barcode = (line.split('\t')[0] ?? '').trim()
+    columns.add(line, lineIndex)
+  }
+
+  return columns.finish()
+}
+
+// Barcodes of one bin size, the first line's unless one is given, added a
+// line at a time into growing typed arrays.
+class SquareBarcodeColumnsBuilder {
+  private readonly ids: SpatialElementId[] = []
+  private rows: Int32Array<ArrayBuffer> = new Int32Array(1024)
+  private cols: Int32Array<ArrayBuffer> = new Int32Array(1024)
+  private binSizeMicrometers: VisiumHdBinSizeMicrometers | undefined
+  private readonly maxBarcodeCount: number | undefined
+
+  constructor(
+    binSizeMicrometers: VisiumHdBinSizeMicrometers | undefined,
+    maxBarcodeCount: number | undefined,
+  ) {
+    this.binSizeMicrometers = binSizeMicrometers
+    this.maxBarcodeCount = normalizeMaxBarcodeCount(maxBarcodeCount)
+  }
+
+  add(line: string, lineIndex: number): void {
+    const tab = line.indexOf('\t')
+    const barcode = (tab === -1 ? line : line.slice(0, tab)).trim()
 
     if (barcode.length === 0) {
-      continue
+      return
     }
 
     const parsed = parseVisiumHdSquareBarcode(barcode)
@@ -72,32 +113,52 @@ export function parseVisiumHdFilteredMatrixBarcodes(
       )
     }
 
-    if (
-      options.binSizeMicrometers !== undefined &&
-      parsed.binSizeMicrometers !== options.binSizeMicrometers
-    ) {
+    this.binSizeMicrometers ??= parsed.binSizeMicrometers
+
+    if (parsed.binSizeMicrometers !== this.binSizeMicrometers) {
       throw new Error(
-        `Expected ${options.binSizeMicrometers} µm barcode on line ${
+        `Expected ${this.binSizeMicrometers} µm barcode on line ${
           lineIndex + 1
         }, received ${parsed.binSizeMicrometers} µm: ${barcode}`,
       )
     }
 
-    barcodes.push(parsed)
+    const index = this.ids.length
 
-    if (
-      normalizedMaxBarcodeCount !== undefined &&
-      barcodes.length > normalizedMaxBarcodeCount
-    ) {
+    if (this.maxBarcodeCount !== undefined && index + 1 > this.maxBarcodeCount) {
       throw new VisiumHdFilteredBarcodeBudgetExceededError(
         parsed.binSizeMicrometers,
-        barcodes.length,
-        normalizedMaxBarcodeCount,
+        index + 1,
+        this.maxBarcodeCount,
       )
     }
+
+    if (index === this.rows.length) {
+      this.rows = grow(this.rows)
+      this.cols = grow(this.cols)
+    }
+
+    this.ids.push(barcode)
+    this.rows[index] = parsed.row
+    this.cols[index] = parsed.col
   }
 
-  return barcodes
+  finish(): VisiumHdSquareBarcodeColumns {
+    const count = this.ids.length
+
+    return {
+      binSizeMicrometers: this.binSizeMicrometers ?? 2,
+      ids: this.ids,
+      rows: this.rows.slice(0, count),
+      cols: this.cols.slice(0, count),
+    }
+  }
+}
+
+function grow(array: Int32Array): Int32Array<ArrayBuffer> {
+  const grown = new Int32Array(array.length * 2)
+  grown.set(array)
+  return grown
 }
 
 export function parseVisiumHdSquareBarcode(

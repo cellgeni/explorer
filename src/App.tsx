@@ -22,6 +22,10 @@ import { visiumSelectionToShareable } from './features/dataset/visiumModel'
 import { visiumHdActiveBinSize } from './features/dataset/visiumHdModel'
 import { merscopeImageSelectionToShareable } from './features/dataset/merscopeImageModel'
 import { useMerscopeImageWorkflow } from './features/app-shell/useMerscopeImageWorkflow'
+import {
+  isVisiumHdAnnotationDataset,
+  useVisiumHdAnnotationSetsWorkflow,
+} from './features/app-shell/useVisiumHdAnnotationSetsWorkflow'
 import { ateraImageSelectionToShareable } from './features/dataset/ateraImageModel'
 import { useAteraImageWorkflow } from './features/app-shell/useAteraImageWorkflow'
 import { useTranscriptWorkflow } from './features/transcripts/useTranscriptWorkflow'
@@ -272,10 +276,12 @@ import {
 import type { FallbackNotice } from './data/fallbackNotice'
 import { normalizeLayerOpacity } from './rendering/layerOpacity'
 import {
+  createGeneExpressionElementStyleIndex,
   geometricAnnotationsToLayerData,
   geneExpressionScoreSpread,
   styleCellBoundariesByGeneExpression,
-  styleGridCellsByGeneExpression,
+  styleGridCellByGeneExpression,
+  unscoredGridCell,
 } from './rendering/deckLayers'
 import { annotationPaletteColor } from './rendering/annotationPalette'
 import { useViewerStore } from './store/viewerStore'
@@ -1095,16 +1101,25 @@ export function App({ dependencies }: AppProps = {}) {
       showCellBoundaries,
     },
   )
-  const expressionStyledSpatialGridCells = useMemo(
-    () =>
-      styleGridCellsByGeneExpression(spatialGridCells, viewerGeneExpressionElements, {
-        styleUnmatchedCells: geneExpressionColorsReady,
-      }),
-    [geneExpressionColorsReady, spatialGridCells, viewerGeneExpressionElements],
+  // Bins are styled where they are used: the viewer the ones it draws, and the
+  // Bin card and an ROI their own. Restyling every bin for each expression
+  // batch copied 3.4 million objects at 2 µm and ran the tab out of memory.
+  const gridCellExpressionStyleIndex = useMemo(
+    () => createGeneExpressionElementStyleIndex(viewerGeneExpressionElements),
+    [viewerGeneExpressionElements],
+  )
+  const styleGridCell = useCallback(
+    (cell: GridCellDatum) =>
+      styleGridCellByGeneExpression(
+        cell,
+        gridCellExpressionStyleIndex,
+        geneExpressionColorsReady,
+      ),
+    [geneExpressionColorsReady, gridCellExpressionStyleIndex],
   )
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
     ? EMPTY_GRID_CELL_DATA
-    : expressionStyledSpatialGridCells
+    : spatialGridCells
   const boundaryLoadingEnabled = platformAdapter.boundaryLoadingEnabled(
     showCellBoundaries,
     showNucleusBoundaries,
@@ -1228,21 +1243,13 @@ export function App({ dependencies }: AppProps = {}) {
     }
     return max
   }, [observationColorMode, overviewCells])
-  const gridCellById = useMemo(() => {
-    const cellById = new Map<string, GridCellDatum>()
-
-    for (const cell of expressionStyledSpatialGridCells) {
-      cellById.set(cell.id, cell)
-    }
-
-    return cellById
-  }, [expressionStyledSpatialGridCells])
   const activeSelectedGridCell = useMemo(() => {
     if (selectedGridCell === null) {
       return null
     }
 
-    const cell = gridCellById.get(selectedGridCell.id) ?? selectedGridCell
+    // Scored by the latest batch, not the one the bin was clicked in.
+    const cell = styleGridCell(unscoredGridCell(selectedGridCell))
 
     if (
       isVisiumHdDataset &&
@@ -1268,10 +1275,10 @@ export function App({ dependencies }: AppProps = {}) {
     return cell
   }, [
     geneExpressionState.status,
-    gridCellById,
     isVisiumHdDataset,
     selectedGenes,
     selectedGridCell,
+    styleGridCell,
     styledGeneExpressionElements,
   ])
   const activeVisiumHdExpressionProfileSelection = useMemo(
@@ -1916,9 +1923,27 @@ export function App({ dependencies }: AppProps = {}) {
         })
       }
 
+      if (platformAdapter.kind === 'visium-hd') {
+        const dataset = await getSpatialDataset(baseUrl)
+
+        if (!isVisiumHdAnnotationDataset(dataset)) {
+          throw new Error('Loaded Visium HD dataset does not expose annotations.')
+        }
+
+        // A set's id names its tier; "All" reads the active tier's sets.
+        // Bin barcodes stand in for cell IDs.
+        return (await dataset.annotations({
+          ...(options.signal === undefined ? {} : { signal: options.signal }),
+          ...(options.groupId === undefined ? {} : { groupId: options.groupId }),
+          ...(activeVisiumHdBinSize === undefined
+            ? {}
+            : { binSizeMicrometers: activeVisiumHdBinSize }),
+        })) as readonly Annotation[]
+      }
+
       return loadAnnotations(baseUrl, options)
     },
-    [getSpatialDataset, loadAnnotations, platformAdapter],
+    [activeVisiumHdBinSize, getSpatialDataset, loadAnnotations, platformAdapter],
   )
   // Only AnnData tracks arrive without values; imported CSV/JSON tracks carry them.
   const loadActiveCellMetadataTrackValues = useCallback<CellMetadataTrackValuesLoader>(
@@ -2106,7 +2131,7 @@ export function App({ dependencies }: AppProps = {}) {
     data: {
       currentViewportDetail,
       geneExpressionBatch,
-      gridCells: expressionStyledSpatialGridCells,
+      gridCells: spatialGridCells,
       loadState,
       selectedGenes,
     },
@@ -2437,10 +2462,10 @@ export function App({ dependencies }: AppProps = {}) {
   }, [overviewCells, platformAdapter.kind])
   const roiReferenceBins = useMemo(
     () =>
-      referenceSampleIndices(expressionStyledSpatialGridCells.length).flatMap(
-        (index) => expressionStyledSpatialGridCells[index] ?? [],
+      referenceSampleIndices(spatialGridCells.length).flatMap(
+        (index) => spatialGridCells[index] ?? [],
       ),
-    [expressionStyledSpatialGridCells],
+    [spatialGridCells],
   )
   const {
     handleCancelRoiCells,
@@ -2516,7 +2541,8 @@ export function App({ dependencies }: AppProps = {}) {
     },
     data: {
       activeRoiState: activeVisiumHdRoiState,
-      gridCells: expressionStyledSpatialGridCells,
+      gridCells: spatialGridCells,
+      styleGridCell,
       loadState,
       referenceBins: roiReferenceBins,
     },
@@ -2595,6 +2621,18 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedAnnotationGroupId,
       setSelectedCellMetadataTrackId,
     },
+  })
+  useVisiumHdAnnotationSetsWorkflow({
+    appendDebugEvent,
+    activeBinSize: activeVisiumHdBinSize,
+    annotationState,
+    getSpatialDataset,
+    isVisiumHdDataset,
+    loadAnnotationGroup,
+    loadState,
+    setAnnotationGroupState,
+    setAnnotationState,
+    setSelectedAnnotationGroupId,
   })
   useCellMetadataTrackValues({
     callbacks: { appendDebugEvent },
@@ -2875,7 +2913,7 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
-      const gridCell = gridCellById.get(elementId)
+      const gridCell = spatialGridCells.find((cell) => cell.id === elementId)
 
       if (gridCell === undefined) {
         return
@@ -2890,12 +2928,12 @@ export function App({ dependencies }: AppProps = {}) {
     [
       clearVisiumHdExpressionProfileState,
       focusSpatialViewOnGridCell,
-      gridCellById,
       handleEmbeddingCellSelect,
       isVisiumHdDataset,
       setSelectedBoundaryCell,
       setSelectedCell,
       setSelectedGridCell,
+      spatialGridCells,
     ],
   )
   // Stable viewer click handlers keep the deck props unchanged across App
@@ -3555,7 +3593,7 @@ export function App({ dependencies }: AppProps = {}) {
 
     // Bins and boundaries load with the view, which the link also restores.
     if (card.kind === 'bin') {
-      const bin = gridCellById.get(card.id)
+      const bin = spatialGridCells.find((cell) => cell.id === card.id)
       if (bin === undefined) return
       linkedCardRef.current = null
       handleViewerGridCellClick(bin)
@@ -3568,7 +3606,6 @@ export function App({ dependencies }: AppProps = {}) {
     handleViewerCellBoundaryClick(boundary)
   }, [
     drawnBoundaryById,
-    gridCellById,
     handleViewerCellBoundaryClick,
     handleViewerCellClick,
     handleViewerGridCellClick,
@@ -3578,6 +3615,7 @@ export function App({ dependencies }: AppProps = {}) {
     selectedBoundaryCell,
     selectedCell,
     selectedGridCell,
+    spatialGridCells,
   ])
   const currentShareUrl = useShareableUrlHash({
     dataset: {
@@ -4115,7 +4153,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleRemoveGeometricAnnotation: undoable.handleRemoveShape,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
-    loadEnabled: platformAdapter.capabilities.annotations && platformFeatureLoadEnabled,
+    loadEnabled: platformAdapter.capabilities.annotations && loadState.status === 'ready',
     selectedAnnotationGroupId,
     selectionList,
     selectionsAvailable: platformAdapter.kind !== 'image',
