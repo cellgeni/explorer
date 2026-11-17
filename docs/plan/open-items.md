@@ -104,15 +104,14 @@ Features:
 
 - [ ] `t` selection for OME-Zarr, and a `Z plane` control for custom image
       layers (OME-TIFF and OME-Zarr dataset images have one).
-- [ ] H5AD: worker-backed lazy Range reads, `/layers/*` and `/raw/X`, and richer
-      schema diagnostics. Partly done: lazy Range reads work through
-      kerchunk and Icechunk companions (`6971ceb`, `b71ffc8`), on the main
-      thread. A plain `.h5ad` is decoded in the H5 worker (`82fb292`), but is
-      still downloaded whole, up to the 300 MB limit; the worker's range-read
-      path (`openH5WorkerFileFromUrl`) serves only Xenium and Visium HD. Only `/X` is read.
+- [ ] H5AD: `/layers/*` and `/raw/X`, and richer schema diagnostics. Only
+      `/X` is read. Worker-backed lazy Range reads are done (2026-11-17): a
+      plain `.h5ad` over 64 MiB is read by range in the H5 worker, walking
+      only the groups the viewer reads, and one over 300 MiB opens without a
+      companion ([Phase 7](phases/07-h5ad.md#range-reads-2026-11-17)).
       Diagnostics check that the file answers Range requests, or, for an
       Icechunk repository or an AnnData Zarr store, read the first `/X`
-      chunk. Rechecked 2026-11-16.
+      chunk.
 - [ ] AnnData Zarr: stores without a root `encoding-type`, zipped stores,
       node names with `#` or `?`, and an abort signal for `matrix()` (see
       [Phase 7](phases/07-h5ad.md#anndata-zarr-stores-2026-11-14)).

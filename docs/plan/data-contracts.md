@@ -112,13 +112,19 @@ matrices.
   A manifest or collection can declare the coordinates `image-pixels` of an
   attached image instead of micrometres (Phases 11 and 20).
 - Duplicate or missing obs/var names are normalized deterministically.
-- **Size gate.** Files up to 300 MiB (314,572,800 bytes) are downloaded whole
-  and opened with h5wasm. Larger files need a sibling `DATASET.h5ad.json`
-  reference, read with the Zarrita `ReferenceStore`, or a sibling
-  `DATASET.h5ad.icechunk` repository, read with `icechunk-js`, so `/X` data
-  and indices stay lazy. `scripts/make_h5ad_reference.py` writes either. The
-  H5AD URL's query string is carried to the reference URL, so presigned URLs
-  need a matching presigned reference.
+- **Size gate.** Files up to 64 MiB are downloaded whole and opened with
+  h5wasm in an H5 file worker. Larger files, and files of unknown size, are
+  opened by that worker from their URL and read by range (since 2026-11-17):
+  only `X`, `obs`, `var`, `obsm`, `uns/spatial` and `uns/spatialdata_attrs`
+  are walked, and `/X` is read whole. A host that ignores Range gets the file
+  downloaded whole, up to 300 MiB (314,572,800 bytes). Over 300 MiB, a sibling
+  `DATASET.h5ad.json` reference, read with the Zarrita `ReferenceStore`, or a
+  sibling `DATASET.h5ad.icechunk` repository, read with `icechunk-js`, is
+  used first; without one the file is read by range, and `/X` stays lazy
+  (sliced per request) when it decodes to more than 300 MiB.
+  `scripts/make_h5ad_reference.py` writes either reference. The H5AD URL's
+  query string is carried to the reference URL, so presigned URLs need a
+  matching presigned reference.
 - **AnnData Zarr stores** (2026-11-14): a Zarr v2 or v3 store whose root has
   `encoding-type: anndata` is read through zarrita, from consolidated
   metadata when present, else by walking `X`, `obs`, `var`, `obsm` and

@@ -95,8 +95,9 @@ and has `Diagnose Dataset`.
   tolerated for metadata keys only. Since 2026-11-14 AnnData Zarr stores and
   Browse Store walk a store without it, using the bucket's listing where it
   answers ([4.10](decisions.md#410-zarr-store-access-phases-910)).
-- **H5AD over 300 MiB:** host the kerchunk `.h5ad.json` reference next to the
-  file.
+- **H5AD over 300 MiB:** since 2026-11-17 read by range when the host
+  answers Range requests; a kerchunk `.h5ad.json` reference next to the file
+  is used first when present.
 - **Replacing files in place:** since 2026-11-16 the IndexedDB byte-range
   cache keys each range by the file's size and ETag (or Last-Modified), so a
   file replaced at the same URL misses it. Files already opened keep their
