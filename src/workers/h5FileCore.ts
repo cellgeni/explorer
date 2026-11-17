@@ -5,6 +5,7 @@ import {
 import {
   createVisiumFeatureSliceCache,
   gexFromVisiumFeatureSliceLoadedH5,
+  readVisiumFeatureSliceMetadata,
   type H5FileLike as FeatureSliceH5FileLike,
   type VisiumFeatureSliceCache,
 } from '../data/visiumFeatureSliceH5'
@@ -195,6 +196,20 @@ export function createH5FileHandler(
           respond(
             { id: request.id, ok: true, op: 'feature-slice', cells },
             gexPayloadTransferables(cells),
+          )
+          return
+        }
+        case 'feature-slice-metadata': {
+          const current = expectOpen()
+          const metadata =
+            featureSlice?.metadata ??
+            readVisiumFeatureSliceMetadata(
+              current.file as unknown as FeatureSliceH5FileLike,
+            )
+          throwRangeError(current)
+          respond(
+            { id: request.id, ok: true, op: 'feature-slice-metadata', metadata },
+            [],
           )
           return
         }

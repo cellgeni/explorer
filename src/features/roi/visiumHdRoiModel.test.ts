@@ -105,6 +105,49 @@ describe('visiumHdRoiModel', () => {
     ])
   })
 
+  it('styles only the bins it selects, for their expression scores', () => {
+    const styled: string[] = []
+    const result = selectVisiumHdGridCellsInRoi(
+      [
+        gridCellDatum('inside', [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+          [0, -10, 0],
+        ]),
+        gridCellDatum('outside', [
+          [40, -40, 0],
+          [50, -40, 0],
+          [50, -50, 0],
+          [40, -50, 0],
+        ]),
+      ],
+      {
+        kind: 'box',
+        bbox: {
+          minX: micrometers(0),
+          maxX: micrometers(20),
+          minY: micrometers(0),
+          maxY: micrometers(20),
+        },
+      },
+      undefined,
+      (cell) => {
+        styled.push(cell.id)
+        return { ...cell, expressionCount: 4, expressionGenes: ['Actb'] }
+      },
+    )
+
+    expect(styled).toEqual(['inside'])
+    expect(result.bins).toEqual([
+      expect.objectContaining({
+        barcode: 'inside',
+        expressionCount: 4,
+        expressionGenes: ['Actb'],
+      }),
+    ])
+  })
+
   it('uses exact lasso geometry after the bounding-box prefilter', () => {
     const selection: RoiSelection = {
       kind: 'lasso',

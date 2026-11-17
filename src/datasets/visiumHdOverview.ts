@@ -8,9 +8,16 @@ import {
   defaultPersistentByteRangeCache,
   fetchKeepingValidator,
 } from '../data/persistentByteRangeCache'
-import { fitGridBasis, gridCellCenter } from './spatialGrid'
+import {
+  deriveNestedGridBasis,
+  fitGridBasis,
+  gridCellCenter,
+  type GridBasisFitSample,
+} from './spatialGrid'
+import { visiumHdFilteredBarcodesPath } from './visiumHdStrategy'
 import type { AsyncBuffer, Compressors } from 'hyparquet'
 import type { DataPoint } from '../data/coords'
+import type { VisiumFeatureSliceMetadata } from '../data/visiumFeatureSliceH5'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type {
   GridCellBatch,
@@ -18,7 +25,7 @@ import type {
   SpatialGridBasis,
   SpatialElementId,
 } from './spatialDataset'
-import type { VisiumHdSquareBarcode } from './visiumHdBarcodes'
+import type { VisiumHdSquareBarcodeColumns } from './visiumHdBarcodes'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
 
 export interface VisiumHdScalefactors {
@@ -431,59 +438,50 @@ export function createVisiumHdBinnedOverview(
       tissueHiresImage: `${bin.outputPath}/spatial/tissue_hires_image.png`,
       tissueLowresImage: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
       filteredMatrixH5: bin.filteredMatrixH5Path,
-      filteredMatrixBarcodes: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
+      filteredMatrixBarcodes: visiumHdFilteredBarcodesPath(bin.outputPath),
     },
   }
 }
 
 export function createVisiumHdBinnedOverviewFromSquareBarcodes(
   bin: VisiumHdBinDescriptor,
-  barcodes: readonly VisiumHdSquareBarcode[],
+  barcodes: VisiumHdSquareBarcodeColumns,
   scalefactors: VisiumHdScalefactors,
   basis: SpatialGridBasis,
 ): VisiumHdBinnedOverview {
-  if (barcodes.length === 0) {
+  const count = barcodes.ids.length
+
+  if (count === 0) {
     throw new Error(
       'No Visium HD filtered matrix barcodes were available for the binned overview.',
     )
   }
 
-  const ids = new Array<SpatialElementId>(barcodes.length)
-  const rows = new Int32Array(barcodes.length)
-  const cols = new Int32Array(barcodes.length)
-  const fullresRows = new Float64Array(barcodes.length)
-  const fullresCols = new Float64Array(barcodes.length)
-  const inTissue = new Uint8Array(barcodes.length)
+  if (barcodes.binSizeMicrometers !== bin.binSizeMicrometers) {
+    throw new Error(
+      `Expected ${bin.binSizeMicrometers} µm barcodes, received ${barcodes.binSizeMicrometers} µm.`,
+    )
+  }
+
+  const { rows, cols } = barcodes
+  const fullresRows = new Float64Array(count)
+  const fullresCols = new Float64Array(count)
   let minRow = Number.POSITIVE_INFINITY
   let maxRow = Number.NEGATIVE_INFINITY
   let minCol = Number.POSITIVE_INFINITY
   let maxCol = Number.NEGATIVE_INFINITY
 
-  for (let index = 0; index < barcodes.length; index += 1) {
-    const barcode = barcodes[index]
+  for (let index = 0; index < count; index += 1) {
+    const row = rows[index] ?? 0
+    const col = cols[index] ?? 0
+    const center = gridCellCenter(basis, row, col)
 
-    if (barcode === undefined) {
-      throw new Error(`Missing Visium HD barcode row ${index}.`)
-    }
-
-    if (barcode.binSizeMicrometers !== bin.binSizeMicrometers) {
-      throw new Error(
-        `Expected ${bin.binSizeMicrometers} µm barcode, received ${barcode.binSizeMicrometers} µm: ${barcode.barcode}`,
-      )
-    }
-
-    const center = gridCellCenter(basis, barcode.row, barcode.col)
-
-    ids[index] = barcode.barcode
-    rows[index] = barcode.row
-    cols[index] = barcode.col
     fullresRows[index] = dataPointToFullresRow(center, scalefactors)
     fullresCols[index] = dataPointToFullresCol(center, scalefactors)
-    inTissue[index] = 1
-    minRow = Math.min(minRow, barcode.row)
-    maxRow = Math.max(maxRow, barcode.row)
-    minCol = Math.min(minCol, barcode.col)
-    maxCol = Math.max(maxCol, barcode.col)
+    minRow = Math.min(minRow, row)
+    maxRow = Math.max(maxRow, row)
+    minCol = Math.min(minCol, col)
+    maxCol = Math.max(maxCol, col)
   }
 
   const grid: SpatialGrid = {
@@ -505,21 +503,157 @@ export function createVisiumHdBinnedOverviewFromSquareBarcodes(
     gridCells: {
       kind: 'grid-cells',
       gridId: grid.id,
-      ids,
+      ids: barcodes.ids,
       rows,
       cols,
     },
     fullresRows,
     fullresCols,
-    inTissue,
+    // Filtered matrix barcodes are the bins under tissue.
+    inTissue: new Uint8Array(count).fill(1),
     sourcePaths: {
       tissuePositions: bin.tissuePositionsPath,
       scalefactors: bin.scalefactorsPath,
       tissueHiresImage: `${bin.outputPath}/spatial/tissue_hires_image.png`,
       tissueLowresImage: `${bin.outputPath}/spatial/tissue_lowres_image.png`,
       filteredMatrixH5: bin.filteredMatrixH5Path,
-      filteredMatrixBarcodes: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
+      filteredMatrixBarcodes: visiumHdFilteredBarcodesPath(bin.outputPath),
     },
+  }
+}
+
+// Samples per axis when fitting a grid basis to feature_slice.h5's spot
+// transform. The transform is projective, but only just: on the reference
+// dataset an affine fit over the slide places every 2 µm bin within 0.08
+// full-resolution pixels of its tissue_positions.parquet position.
+const FEATURE_SLICE_BASIS_FIT_STEPS = 16
+
+// The grid basis of `binSizeMicrometers` bins from feature_slice.h5's
+// spot-to-pixel transform, for a dataset with no coarser tier's positions to
+// fit it from. Feature Slice spots are the finest bins, so a coarser size is
+// derived by nesting.
+export function visiumHdGridBasisFromFeatureSlice(
+  metadata: Pick<
+    VisiumFeatureSliceMetadata,
+    'nrows' | 'ncols' | 'spotPitchMicrometers' | 'spotToFullresTransform'
+  >,
+  scalefactors: Pick<VisiumHdScalefactors, 'micronsPerPixel'>,
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): SpatialGridBasis | null {
+  const transform = metadata.spotToFullresTransform
+
+  if (transform === undefined) {
+    return null
+  }
+
+  const [m00, m01, m02, m10, m11, m12, m20, m21, m22] = transform
+  const samples: GridBasisFitSample[] = []
+
+  for (let rowStep = 0; rowStep <= FEATURE_SLICE_BASIS_FIT_STEPS; rowStep += 1) {
+    for (let colStep = 0; colStep <= FEATURE_SLICE_BASIS_FIT_STEPS; colStep += 1) {
+      const row = ((metadata.nrows - 1) * rowStep) / FEATURE_SLICE_BASIS_FIT_STEPS
+      const col = ((metadata.ncols - 1) * colStep) / FEATURE_SLICE_BASIS_FIT_STEPS
+      const w = m20 * col + m21 * row + m22
+      const fullresCol = (m00 * col + m01 * row + m02) / w
+      const fullresRow = (m10 * col + m11 * row + m12) / w
+
+      samples.push({
+        row,
+        col,
+        point: fullresPixelCenterToDataPoint(fullresRow, fullresCol, scalefactors),
+      })
+    }
+  }
+
+  const spotBasis = fitGridBasis(samples)
+  const scale = binSizeMicrometers / metadata.spotPitchMicrometers
+
+  return scale === 1 ? spotBasis : deriveNestedGridBasis(spotBasis, scale)
+}
+
+// `binSizeMicrometers` bins made from finer ones, for gene expression at a
+// size the dataset has no tier for: feature_slice.h5 counts can be binned to
+// any multiple of the spot pitch. Each bin holds the finer bins that nest in
+// it and is named as Space Ranger names that size's barcodes.
+export function coarsenVisiumHdBinnedOverview(
+  overview: VisiumHdBinnedOverview,
+  binSizeMicrometers: VisiumHdBinSizeMicrometers,
+): VisiumHdBinnedOverview {
+  const scale = binSizeMicrometers / overview.binSizeMicrometers
+  const basis = deriveNestedGridBasis(overview.grid.basis, scale)
+  const sourceRows = overview.gridCells.rows
+  const sourceCols = overview.gridCells.cols
+  let maxRow = 0
+  let maxCol = 0
+
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    maxRow = Math.max(maxRow, Math.floor((sourceRows[index] ?? 0) / scale))
+    maxCol = Math.max(maxCol, Math.floor((sourceCols[index] ?? 0) / scale))
+  }
+
+  // One slot per coarse bin of the grid's bounding box: 420 × 420 for 16 µm
+  // bins on a 3,350 × 3,350 2 µm slide.
+  const columnCount = maxCol + 1
+  const occupied = new Uint8Array((maxRow + 1) * columnCount)
+  let count = 0
+
+  for (let index = 0; index < sourceRows.length; index += 1) {
+    const slot =
+      Math.floor((sourceRows[index] ?? 0) / scale) * columnCount +
+      Math.floor((sourceCols[index] ?? 0) / scale)
+
+    if (occupied[slot] === 0) {
+      occupied[slot] = 1
+      count += 1
+    }
+  }
+
+  const ids = new Array<SpatialElementId>(count)
+  const rows = new Int32Array(count)
+  const cols = new Int32Array(count)
+  const fullresRows = new Float64Array(count)
+  const fullresCols = new Float64Array(count)
+  const sizeLabel = String(binSizeMicrometers).padStart(3, '0')
+  let minRow = Number.POSITIVE_INFINITY
+  let minCol = Number.POSITIVE_INFINITY
+  let target = 0
+
+  for (let slot = 0; slot < occupied.length; slot += 1) {
+    if (occupied[slot] === 0) {
+      continue
+    }
+
+    const row = Math.floor(slot / columnCount)
+    const col = slot % columnCount
+    const center = gridCellCenter(basis, row, col)
+
+    ids[target] =
+      `s_${sizeLabel}um_${String(row).padStart(5, '0')}_${String(col).padStart(5, '0')}-1`
+    rows[target] = row
+    cols[target] = col
+    fullresRows[target] = dataPointToFullresRow(center, overview.scalefactors)
+    fullresCols[target] = dataPointToFullresCol(center, overview.scalefactors)
+    minRow = Math.min(minRow, row)
+    minCol = Math.min(minCol, col)
+    target += 1
+  }
+
+  const grid: SpatialGrid = {
+    id: visiumHdGridId(binSizeMicrometers),
+    binSizeMicrometers: micrometers(binSizeMicrometers),
+    basis,
+    bounds: { minRow, maxRow, minCol, maxCol },
+  }
+
+  return {
+    binSizeMicrometers,
+    scalefactors: overview.scalefactors,
+    grid,
+    gridCells: { kind: 'grid-cells', gridId: grid.id, ids, rows, cols },
+    fullresRows,
+    fullresCols,
+    inTissue: new Uint8Array(count).fill(1),
+    sourcePaths: overview.sourcePaths,
   }
 }
 
@@ -534,7 +668,7 @@ function visiumHdGridId(binSizeMicrometers: VisiumHdBinSizeMicrometers): string 
 function fullresPixelCenterToDataPoint(
   fullresRow: number,
   fullresCol: number,
-  scalefactors: VisiumHdScalefactors,
+  scalefactors: Pick<VisiumHdScalefactors, 'micronsPerPixel'>,
 ): DataPoint {
   return {
     x: micrometers(fullresCol * scalefactors.micronsPerPixel),

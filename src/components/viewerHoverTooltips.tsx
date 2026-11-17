@@ -57,6 +57,7 @@ export function GridCellHoverTooltip({
             <dd>{formatCoordinateValue(cell.expressionCount)}</dd>
           </div>
         )}
+        <AnnotationLabelsRow labels={detail.annotationLabels} />
       </dl>
     </div>
   )

@@ -15,6 +15,7 @@ import {
   throwIfAborted,
   type H5FileLike,
   type VisiumFeatureSliceCache,
+  type VisiumFeatureSliceMetadata,
   type VisiumFeatureSliceTarget,
 } from './visiumFeatureSliceH5'
 
@@ -23,6 +24,7 @@ export {
   parseVisiumFeatureSliceMetadata,
   type VisiumFeatureSliceMetadata,
   type VisiumFeatureSliceTarget,
+  type VisiumFeatureSliceTransform,
 } from './visiumFeatureSliceH5'
 
 export type VisiumFeatureSliceBackend = 'full-file' | 'lazy-range-worker'
@@ -85,6 +87,31 @@ export async function gexFromVisiumFeatureSliceH5<ElementId extends string>(
   return gexFromVisiumFeatureSliceLoadedH5(matrix, targets, selectedGenes, options)
 }
 
+export interface VisiumFeatureSliceMetadataReadOptions {
+  readonly signal?: AbortSignal
+  readonly workerFactory?: H5WorkerFactory
+}
+
+// The file's metadata, read by range in the worker that later serves its gene
+// reads, so the file is opened once.
+export async function readVisiumFeatureSliceH5Metadata(
+  url: string,
+  options: VisiumFeatureSliceMetadataReadOptions = {},
+): Promise<VisiumFeatureSliceMetadata> {
+  const file = await openFeatureSliceFile(url, options)
+  throwIfAborted(options.signal)
+
+  try {
+    return await file.featureSliceMetadata(options.signal)
+  } catch (error) {
+    if (!isAbortError(error)) {
+      dropSharedH5WorkerFile(featureSliceFileCache, url, file)
+    }
+
+    throw error
+  }
+}
+
 // The file stays open in its H5 file worker for the session, read by range,
 // so a gene or bin read once is not fetched again.
 async function gexFromVisiumFeatureSliceRangeWorker<ElementId extends string>(
@@ -94,18 +121,7 @@ async function gexFromVisiumFeatureSliceRangeWorker<ElementId extends string>(
   options: VisiumFeatureSliceReadOptions,
 ): Promise<GexResult<ElementId>> {
   const startedAt = Date.now()
-  const file = await waitForSharedLoad(
-    featureSliceFileCache,
-    url,
-    (signal) =>
-      openH5WorkerFileFromUrl(url, 'feature_slice.h5', {
-        signal,
-        ...(options.workerFactory === undefined
-          ? {}
-          : { workerFactory: options.workerFactory }),
-      }),
-    options.signal,
-  )
+  const file = await openFeatureSliceFile(url, options)
   throwIfAborted(options.signal)
   let result: GexResult<ElementId>
 
@@ -131,6 +147,24 @@ async function gexFromVisiumFeatureSliceRangeWorker<ElementId extends string>(
     detail: `${selectedGenes.length.toLocaleString()} genes, ${targets.length.toLocaleString()} bins`,
   })
   return result
+}
+
+function openFeatureSliceFile(
+  url: string,
+  options: VisiumFeatureSliceMetadataReadOptions,
+): Promise<H5WorkerFile> {
+  return waitForSharedLoad(
+    featureSliceFileCache,
+    url,
+    (signal) =>
+      openH5WorkerFileFromUrl(url, 'feature_slice.h5', {
+        signal,
+        ...(options.workerFactory === undefined
+          ? {}
+          : { workerFactory: options.workerFactory }),
+      }),
+    options.signal,
+  )
 }
 
 function isAbortError(error: unknown): boolean {

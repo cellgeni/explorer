@@ -123,10 +123,13 @@ export function summarizeVisiumHdRoiBins(
   }
 }
 
+// `styleCell` gives a selected bin its expression score, so only the bins
+// kept are styled.
 export function selectVisiumHdGridCellsInRoi(
   cells: readonly GridCellDatum[],
   selection: RoiSelection,
   limit = VISIUM_HD_ROI_BIN_EXPORT_LIMIT,
+  styleCell: (cell: GridCellDatum) => GridCellDatum = (cell) => cell,
 ): VisiumHdRoiSelectionResult {
   const normalizedLimit = normalizeSelectionLimit(limit)
   const bins: VisiumHdRoiBin[] = []
@@ -146,7 +149,7 @@ export function selectVisiumHdGridCellsInRoi(
     selectedCount += 1
 
     if (bins.length < normalizedLimit) {
-      bins.push(gridCellDatumToRoiBin(cell, center))
+      bins.push(gridCellDatumToRoiBin(styleCell(cell), center))
     }
   }
 

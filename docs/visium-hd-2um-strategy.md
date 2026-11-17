@@ -8,9 +8,9 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
 ## Current Contract
 
 - Dataset detection reports the 2 µm tier when its
-  `tissue_positions.parquet`, `scalefactors_json.json`, and
-  `filtered_feature_bc_matrix.h5` all answer `HEAD`. The positions file must
-  exist even though it is not read.
+  `filtered_feature_bc_matrix/barcodes.tsv.gz`, `scalefactors_json.json`, and
+  `filtered_feature_bc_matrix.h5` all answer `HEAD`. Its
+  `tissue_positions.parquet` is neither read nor needed.
 - The `Visium HD dataset` panel (Bins › Appearance) enables 2 µm when the
   tier is detected.
 - `VisiumHdDataset.readBinnedOverview(2)` does not read the full
@@ -19,11 +19,17 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
   `filtered_feature_bc_matrix/barcodes.tsv.gz`, the 2 µm
   `scalefactors_json.json`, and an affine grid basis derived from the 8 µm
   tier (or 16 µm when 8 µm is missing). The source tier's positions file is
-  read in full to fit that basis. Without an 8 µm or 16 µm tier, 2 µm loading
-  fails with `VisiumHdTwoMicrometerOverviewDisabledError`.
+  read in full to fit that basis. Without an 8 µm or 16 µm tier, the basis is
+  fitted to `feature_slice.h5`'s spot-to-pixel transform
+  (`transform_matrices.spot_colrow_to_microscope_colrow`), which places each
+  bin within 0.08 full-resolution pixels of its Space Ranger position on the
+  reference dataset. Without that either, 2 µm loading fails with
+  `VisiumHdTwoMicrometerOverviewDisabledError`.
 - Below zoom level 3 (`VISIUM_HD_2UM_EXACT_GRID_ZOOM_MIN`), a 2 µm selection
-  renders and queries 16 µm bins instead when 16 µm exists
-  (`src/data/visiumHdGridLod.ts`, `src/data/geneExpressionLod.ts`).
+  renders 16 µm bins instead when 16 µm exists (`src/data/visiumHdGridLod.ts`),
+  and queries 16 µm expression (`src/data/geneExpressionLod.ts`). With no
+  16 µm tier the 2 µm bins are drawn, and the 16 µm expression is read for
+  bins made from them.
 - Lower-level callers and tests may still pass
   `maxTwoMicrometerFilteredBarcodes` to impose an explicit barcode-count cap.
 
@@ -45,10 +51,13 @@ The app enables the 2 µm segmented control when the 2 µm binned output is
 detected. The older `2 µm budget` dataset control was removed; normal app
 loading uses the barcode-sidecar path without a UI budget field.
 
-The current gzip barcode reader still buffers `barcodes.tsv.gz`. This is much
-smaller than full 2 µm positions for typical filtered in-tissue bins, but very
-large hosted deployments should still consider a streaming or viewport-scoped
-barcode reader before treating 2 µm first paint as unbounded.
+The barcode reader streams `barcodes.tsv.gz` (since 2026-11-17): each line is
+parsed into columns as it arrives, so neither the file nor its 75 MB of text
+on the reference is held whole, and a barcode budget stops the download once
+it is passed. The parse, about 0.6 s for 3.4 million lines, runs between
+network reads rather than in one task. A viewport-scoped read is not
+possible: the file is gzipped text, and the filtered matrix's barcodes are
+not in spatial order.
 
 ## Barcode Mapping Bridge
 

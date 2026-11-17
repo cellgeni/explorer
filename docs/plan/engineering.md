@@ -309,6 +309,12 @@ Testing:
   - Since 2026-11-16, the Bin card opened with a mouse click held for
     400 ms, which mjolnir.js dropped before (see
     [Phase 6](phases/06-visium-hd.md#closed-open-items)).
+  - Since 2026-11-17, a dataset with only a 2 µm tier (a manifest listing the
+    reference's 2 µm bins, answered by the test): 3,443,936 bins and no
+    positions request, then a gene coloured zoomed out; about 17 s locally.
+  - Since 2026-11-17, the clusterings: `graphclust` loaded at 16 µm (54,504
+    bins), read again at 8 µm (215,196), and cleared at 2 µm; about 15 s
+    locally.
 - [x] Direct tests for small helpers. About 14 pure helpers have no test, for
       example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
       `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the

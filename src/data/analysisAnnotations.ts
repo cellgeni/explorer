@@ -214,7 +214,9 @@ async function readCellIdsByMatrixRow(matrixUrl: string): Promise<readonly CellI
   return cellIds
 }
 
-function formatGroupingName(name: string): string {
+// Space Ranger's clustering names as the sets list them: `graphclust`,
+// `kmeans 10`.
+export function formatGroupingName(name: string): string {
   return name
     .replace(/^gene_expression_/, '')
     .replace(/_clusters$/, '')

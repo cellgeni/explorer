@@ -50,6 +50,7 @@ import {
 import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
+import { visiumHdRequiredBinPaths } from './visiumHdStrategy'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -1301,11 +1302,7 @@ async function detectVisiumHdFromManifest(
             : { filteredMatrixH5Path: bin.filteredMatrix }),
         })
         const probes = await Promise.all(
-          [
-            descriptor.tissuePositionsPath,
-            descriptor.scalefactorsPath,
-            descriptor.filteredMatrixH5Path,
-          ].map((path) =>
+          visiumHdRequiredBinPaths(descriptor).map((path) =>
             probeDirectDatasetUrl(resolveManifestPath(rootUrl, path), path, options),
           ),
         )
@@ -1353,8 +1350,8 @@ function visiumHdDetection(
   }
 }
 
-// Standard Space Ranger tiers under `rootUrl` that have positions,
-// scalefactors, and a filtered matrix.
+// Standard Space Ranger tiers under `rootUrl` that have positions (for 2 µm,
+// filtered barcodes), scalefactors, and a filtered matrix.
 async function probeVisiumHdBins(
   rootUrl: string,
   options: DetectSpatialDatasetOptions,
@@ -1364,14 +1361,14 @@ async function probeVisiumHdBins(
 
   for (const bin of VISIUM_HD_BINS) {
     const descriptor = visiumHdBinDescriptor(bin.size, bin.outputPath)
-    const [positions, scalefactors, matrix] = await Promise.all([
-      probeDatasetPath(rootUrl, descriptor.tissuePositionsPath, options),
-      probeDatasetPath(rootUrl, descriptor.scalefactorsPath, options),
-      probeDatasetPath(rootUrl, descriptor.filteredMatrixH5Path, options),
-    ])
-    checked.push(positions, scalefactors, matrix)
+    const probes = await Promise.all(
+      visiumHdRequiredBinPaths(descriptor).map((path) =>
+        probeDatasetPath(rootUrl, path, options),
+      ),
+    )
+    checked.push(...probes)
 
-    if (positions.ok && scalefactors.ok && matrix.ok) {
+    if (probes.every((probe) => probe.ok)) {
       bins.push(descriptor)
     }
   }

@@ -120,7 +120,11 @@ import {
   snappedViewportClipKey,
   viewportClipBboxFromKey,
 } from '../rendering/viewportClip'
-import { createObservationColorizer } from '../rendering/cellStyling'
+import {
+  createElementObservationColorizer,
+  createObservationColorizer,
+  styleGridCellsByObservation,
+} from '../rendering/cellStyling'
 import { scaleFromZoom } from '../data/coords'
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
@@ -884,12 +888,29 @@ function ViewerSurface({
   )
   const cellPointRankValues = useMemo(() => cellPointRanks(cells.length), [cells.length])
   const cellPointGeometry = useMemo(() => packCellPointGeometry(cells), [cells])
+  // Bins take an annotation or metadata colour by their barcode, as cells do
+  // by their ID; gene expression colours over it.
+  const gridCellObservationColorizer = useMemo(
+    () =>
+      createElementObservationColorizer(observationColorMode, {
+        annotations: annotationStyleColors,
+        metadataTrack: cellMetadataTrack,
+      }),
+    [annotationStyleColors, cellMetadataTrack, observationColorMode],
+  )
   const expressionStyledGridCells = useMemo(
     () =>
-      styleGridCellsByGeneExpression(renderGridCells, geneExpressionPointStyleIndex, {
-        styleUnmatchedCells: geneExpressionActive,
-      }),
-    [geneExpressionActive, geneExpressionPointStyleIndex, renderGridCells],
+      styleGridCellsByGeneExpression(
+        styleGridCellsByObservation(renderGridCells, gridCellObservationColorizer),
+        geneExpressionPointStyleIndex,
+        { styleUnmatchedCells: geneExpressionActive },
+      ),
+    [
+      geneExpressionActive,
+      geneExpressionPointStyleIndex,
+      gridCellObservationColorizer,
+      renderGridCells,
+    ],
   )
   // The overlay draws every expressing cell at every zoom, highest scores last
   // so they stay on top where cells overlap zoomed out. Cells scoring zero are
@@ -1606,8 +1627,10 @@ function ViewerSurface({
           return
         }
 
+        const annotationLabels = annotationLabelsByCellId.get(info.object.id)
         setGridCellHover({
           cell: info.object,
+          ...(annotationLabels === undefined ? {} : { annotationLabels }),
           screen: {
             x: info.x,
             y: info.y,

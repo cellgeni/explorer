@@ -139,6 +139,13 @@ export function writeTinyFeatureSlice(file: H5wasmFile): void {
       nrows: 32,
       ncols: 32,
       spot_pitch: 2,
+      transform_matrices: {
+        spot_colrow_to_microscope_colrow: [
+          [8, 0, 100],
+          [0, 8, 200],
+          [0, 0, 1],
+        ],
+      },
     }),
   )
   const features = file.create_group('features')
