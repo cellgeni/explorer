@@ -236,11 +236,10 @@ to it.
       full-resolution microscope image is not shown, and k-means clusterings
       and `spatial_enrichment.csv` are not read
       ([Phase 14](phases/14-standard-visium.md#known-gaps)).
-- [ ] Xenium nucleus boundaries: cell and nucleus outlines are drawn together
-      once both queries finish (cold, the cells wait about 4 s for the
-      nuclei); a failed nucleus read clears the cell outlines too; ticking
-      either checkbox requests both again; nuclei cannot be picked or
-      hovered; and files without `label_id` are covered by a unit test only
+- [ ] Xenium nucleus boundaries: with both outline types on and cold, the
+      nuclei are drawn about 6 s after the cells, since both queries share
+      one DuckDB instance; on Visium HD, bins take the pointer from cell and
+      nucleus outlines
       ([Phase 17](phases/17-xenium-nucleus-boundaries.md#known-gaps)).
 - [ ] MERSCOPE: transcripts are not read; boundaries are not read by viewport;
       deposits without a `.vzg` show no image; inflated `.vzg` pyramids are

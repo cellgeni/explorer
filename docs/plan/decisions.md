@@ -306,6 +306,10 @@ Amendments made in later phases:
 - **Xenium nuclei (Phase 17).** `nucleus_boundaries.parquet` is read the same
   way and under the same rule, split by `cell_id` and `label_id`. The cell
   query is skipped while `Cell boundaries` is off.
+- **Separate outline requests (Phase 17 known gaps, 2026-11-17).** On every
+  platform, cell and nucleus outlines are separate viewport requests with
+  their own state and error. Each is drawn when it arrives, and a hidden
+  layer keeps the outlines it read. A nucleus click selects its cell.
 - **SpatialData outlines (Phase 10).** Label outlines are traced only for cells
   overlapping the requested area, cached per label while their chunks stay
   loaded, and simplified with Douglas–Peucker at 0.25 label pixels. Requests

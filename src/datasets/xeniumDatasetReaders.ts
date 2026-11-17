@@ -132,7 +132,10 @@ export async function readXeniumNucleusBoundaryElements(
     bbox,
     options,
   )
-  const nuclei = new Map<string, { readonly id: string; readonly points: DataPoint[] }>()
+  const nuclei = new Map<
+    string,
+    { readonly id: string; readonly cellId: CellId; readonly points: DataPoint[] }
+  >()
   const nucleusCountByCell = new Map<CellId, number>()
 
   for (const row of rows) {
@@ -147,6 +150,7 @@ export async function readXeniumNucleusBoundaryElements(
       nucleusCountByCell.set(parsed.cellId, occurrence)
       nucleus = {
         id: occurrence === 1 ? parsed.cellId : `${parsed.cellId}#nucleus-${occurrence}`,
+        cellId: parsed.cellId,
         points: [],
       }
       nuclei.set(key, nucleus)
@@ -157,13 +161,13 @@ export async function readXeniumNucleusBoundaryElements(
 
   return [...nuclei.values()]
     .filter(({ points }) => points.length >= 3)
-    .map(({ id, points }) => ({
+    .map(({ id, cellId, points }) => ({
       id,
       geometry: {
         kind: 'polygon',
         rings: [points],
       },
-      metadata: { segmentation: { kind: 'nucleus' } },
+      metadata: { segmentation: { kind: 'nucleus', cellId } },
     }))
 }
 

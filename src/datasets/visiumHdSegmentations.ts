@@ -1338,6 +1338,13 @@ function readSegmentationFeatureMetadata(
   const color = readColorProperty(properties, ANNOTATION_COLOR_PROPERTY_KEYS)
   const fillColor = readColorProperty(properties, ANNOTATION_FILL_COLOR_PROPERTY_KEYS)
   const lineColor = readColorProperty(properties, ANNOTATION_LINE_COLOR_PROPERTY_KEYS)
+  // Space Ranger's nucleus features name their cell by `cell_id`.
+  const cellId =
+    kind === 'nucleus'
+      ? normalizeVisiumHdGeojsonCellId(
+          readFirstProperty(properties, ['cell_id', 'Cell_id', 'cellId', 'CellID']),
+        )
+      : null
 
   if (
     label === undefined &&
@@ -1345,12 +1352,13 @@ function readSegmentationFeatureMetadata(
     fillColor === undefined &&
     lineColor === undefined
   ) {
-    return undefined
+    return cellId === null ? undefined : { segmentation: { kind, cellId } }
   }
 
   return {
     segmentation: {
       kind,
+      ...(cellId === null ? {} : { cellId }),
       annotation: {
         ...(label === undefined ? {} : { label }),
         ...(color === undefined ? {} : { color }),

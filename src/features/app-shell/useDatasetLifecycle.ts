@@ -336,6 +336,9 @@ interface UseDatasetLifecycleRefs {
   readonly boundaryAbortRef: MutableRef<AbortController | null>
   readonly boundaryRequestIdRef: MutableRef<number>
   readonly boundaryViewportKeyRef: MutableRef<string | null>
+  readonly nucleusBoundaryAbortRef?: MutableRef<AbortController | null>
+  readonly nucleusBoundaryRequestIdRef?: MutableRef<number>
+  readonly nucleusBoundaryViewportKeyRef?: MutableRef<string | null>
   readonly cellDetailAbortRef: MutableRef<AbortController | null>
   readonly cellDetailRequestIdRef: MutableRef<number>
   readonly cellFeatureMatrixCapabilityKeyRef: MutableRef<string | null>
@@ -403,6 +406,7 @@ interface UseDatasetLifecycleSetters {
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
+  readonly setNucleusBoundaryState?: Setter<BoundaryLoadState<StructuredLoadError>>
   readonly setCellDetailState: Setter<CellDetailState<StructuredLoadError>>
   readonly setCellFeatureMatrixCapabilityState: Setter<CellFeatureMatrixCapabilityState>
   readonly setCellTranscriptDistributionState: Setter<
@@ -550,6 +554,9 @@ export function useDatasetLifecycle({
     magicLensLastDetailRef,
     magicLensLastQueryKeyRef,
     magicLensRequestIdRef,
+    nucleusBoundaryAbortRef,
+    nucleusBoundaryRequestIdRef,
+    nucleusBoundaryViewportKeyRef,
     roiAbortRef,
     roiGeneViewportWarmupAbortRef,
     roiGeneViewportWarmupKeyRef,
@@ -584,6 +591,7 @@ export function useDatasetLifecycle({
     setAutoContrastChannelIds,
     setBoundaryElements,
     setNucleusBoundaryElements,
+    setNucleusBoundaryState,
     setBoundaryState,
     setCellDetailState,
     setCellFeatureMatrixCapabilityState,
@@ -675,6 +683,9 @@ export function useDatasetLifecycle({
       abortActiveRequest(diagnosticsAbortRef)
       abortActiveRequest(analysisEmbeddingAbortRef)
       abortActiveRequest(boundaryAbortRef)
+      if (nucleusBoundaryAbortRef !== undefined) {
+        abortActiveRequest(nucleusBoundaryAbortRef)
+      }
       abortActiveRequest(geneExpressionAbortRef)
       abortActiveRequest(roiAbortRef)
       abortActiveRequest(roiTranscriptExportAbortRef)
@@ -699,6 +710,7 @@ export function useDatasetLifecycle({
     geneExpressionAbortRef,
     magicLensAbortRef,
     magicLensDebounceRef,
+    nucleusBoundaryAbortRef,
     roiAbortRef,
     roiGeneViewportWarmupAbortRef,
     roiGeneViewportWarmupTimeoutRef,
@@ -1005,6 +1017,15 @@ export function useDatasetLifecycle({
             abortRef: boundaryAbortRef,
             requestIdRef: boundaryRequestIdRef,
           })
+          if (
+            nucleusBoundaryAbortRef !== undefined &&
+            nucleusBoundaryRequestIdRef !== undefined
+          ) {
+            invalidateLatestRequest({
+              abortRef: nucleusBoundaryAbortRef,
+              requestIdRef: nucleusBoundaryRequestIdRef,
+            })
+          }
           invalidateLatestRequest({
             abortRef: geneExpressionAbortRef,
             requestIdRef: geneExpressionRequestIdRef,
@@ -1181,12 +1202,16 @@ export function useDatasetLifecycle({
           )
           setDiagnosticsState(IDLE_DATASET_DIAGNOSTICS_STATE)
           setBoundaryState(IDLE_BOUNDARY_LOAD_STATE)
+          setNucleusBoundaryState?.(IDLE_BOUNDARY_LOAD_STATE)
           setGenePanelState(IDLE_GENE_PANEL_STATE)
           setAnnotationState(IDLE_ANNOTATION_STATE)
           setGeneExpressionState(IDLE_GENE_EXPRESSION_STATE)
           magicLensLastDetailRef.current = null
           magicLensLastQueryKeyRef.current = null
           boundaryViewportKeyRef.current = null
+          if (nucleusBoundaryViewportKeyRef !== undefined) {
+            nucleusBoundaryViewportKeyRef.current = null
+          }
           geneExpressionViewportKeyRef.current = null
           transcriptViewportKeyRef.current = null
           lastViewportDetailRef.current = null

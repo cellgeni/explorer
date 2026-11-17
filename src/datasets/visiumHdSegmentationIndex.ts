@@ -22,6 +22,9 @@ export interface VisiumHdSegmentationIndex {
   // stored once.
   readonly metadataIndexes: Uint32Array
   readonly metadata: readonly (SpatialElementMetadata | undefined)[]
+  // The cell each nucleus belongs to, kept out of the shared metadata; absent
+  // when no polygon names one.
+  readonly cellIds?: readonly (string | undefined)[]
 }
 
 // Collects polygons into index columns as a file is parsed.
@@ -38,6 +41,8 @@ export class VisiumHdSegmentationIndexBuilder {
   )
   private readonly metadata: (SpatialElementMetadata | undefined)[] = [undefined]
   private readonly metadataIndexesByKey = new Map<string, number>()
+  private readonly cellIds: (string | undefined)[] = []
+  private hasCellIds = false
 
   constructor() {
     this.polygonRingOffsets.push(0)
@@ -73,7 +78,10 @@ export class VisiumHdSegmentationIndexBuilder {
     this.bounds.push(maxX)
     this.bounds.push(maxY)
     this.polygonRingOffsets.push(this.ringOffsets.length - 1)
-    this.metadataIndexes.push(this.metadataIndex(element.metadata))
+    const { metadata, cellId } = splitSegmentationCellId(element.metadata)
+    this.cellIds.push(cellId)
+    this.hasCellIds ||= cellId !== undefined
+    this.metadataIndexes.push(this.metadataIndex(metadata))
   }
 
   finish(): VisiumHdSegmentationIndex {
@@ -85,6 +93,7 @@ export class VisiumHdSegmentationIndexBuilder {
       coords: this.coords.toArray(),
       metadataIndexes: this.metadataIndexes.toArray(),
       metadata: this.metadata,
+      ...(this.hasCellIds ? { cellIds: this.cellIds } : {}),
     }
   }
 
@@ -186,12 +195,47 @@ function segmentationIndexElement(
     rings.push(points)
   }
 
-  const metadata = index.metadata[index.metadataIndexes[polygon] ?? 0]
+  const metadata = withSegmentationCellId(
+    index.metadata[index.metadataIndexes[polygon] ?? 0],
+    index.cellIds?.[polygon],
+  )
 
   return {
     id: index.ids[polygon] ?? String(polygon),
     geometry: { kind: 'polygon', rings },
     ...(metadata === undefined ? {} : { metadata }),
+  }
+}
+
+// Each nucleus names its own cell, so the cell ID would make every metadata
+// entry unique; it is stored in its own column instead.
+function splitSegmentationCellId(metadata: SpatialElementMetadata | undefined): {
+  readonly metadata: SpatialElementMetadata | undefined
+  readonly cellId: string | undefined
+} {
+  const segmentation = metadata?.segmentation
+
+  if (segmentation?.cellId === undefined) {
+    return { metadata, cellId: undefined }
+  }
+
+  const { cellId, ...rest } = segmentation
+  const shared = rest.annotation === undefined ? undefined : { segmentation: rest }
+
+  return { metadata: shared, cellId }
+}
+
+function withSegmentationCellId(
+  metadata: SpatialElementMetadata | undefined,
+  cellId: string | undefined,
+): SpatialElementMetadata | undefined {
+  if (cellId === undefined) {
+    return metadata
+  }
+
+  return {
+    ...metadata,
+    segmentation: { ...(metadata?.segmentation ?? { kind: 'nucleus' }), cellId },
   }
 }
 

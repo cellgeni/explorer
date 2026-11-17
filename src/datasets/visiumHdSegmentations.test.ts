@@ -208,6 +208,36 @@ describe('Visium HD segmentation GeoJSON reader', () => {
     })
   })
 
+  it('links Space Ranger nuclei to their cells by cell_id', () => {
+    const elements = parseVisiumHdSegmentationGeojson(
+      {
+        type: 'FeatureCollection',
+        features: [
+          {
+            type: 'Feature',
+            properties: { cell_id: 2 },
+            geometry: {
+              type: 'Polygon',
+              coordinates: [
+                [
+                  [10, 20],
+                  [14, 20],
+                  [14, 24],
+                  [10, 20],
+                ],
+              ],
+            },
+          },
+        ],
+      },
+      { scalefactors, kind: 'nucleus' },
+    )
+
+    expect(elements[0]?.metadata).toEqual({
+      segmentation: { kind: 'nucleus', cellId: normalizeVisiumHdGeojsonCellId(2) },
+    })
+  })
+
   it('flattens multipolygons and filters by viewport bbox', () => {
     const elements = parseVisiumHdSegmentationGeojson(
       {

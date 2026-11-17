@@ -371,6 +371,7 @@ export function CellCard({ card }: { readonly card: CellCardModel }) {
       {card.kind === 'boundary' ? (
         <BoundaryCellInfoPanel
           cell={card.cell}
+          nuclei={card.nuclei}
           expressionStatus={card.expressionStatus}
           expressionProfileState={card.profileState}
           onLoadExpressionProfile={card.onLoadProfile}
@@ -386,6 +387,7 @@ export function CellCard({ card }: { readonly card: CellCardModel }) {
       ) : (
         <CellInfoPanel
           cell={card.cell}
+          nuclei={card.nuclei}
           annotationLabels={card.annotationLabels}
           state={card.state}
           transcriptDistributionState={card.distributionState}

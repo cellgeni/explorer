@@ -9,6 +9,7 @@ import type {
 import type {
   ViewerCellBoundaryHoverDetail,
   ViewerGridCellHoverDetail,
+  ViewerNucleusOrdinal,
   ViewerOverviewCellHoverDetail,
   ViewerTranscriptHoverDetail,
 } from './viewerCoreTypes'
@@ -139,6 +140,10 @@ export function CellBoundaryHoverTooltip({
   const boundary = detail.boundary
   const cell = detail.cell
 
+  if (detail.nucleus !== undefined) {
+    return <NucleusBoundaryHoverTooltip detail={detail} nucleus={detail.nucleus} />
+  }
+
   return (
     <div
       className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
@@ -200,6 +205,54 @@ export function CellBoundaryHoverTooltip({
             <dd>{formatExpressionGeneList(detail.expressionGenes)}</dd>
           </div>
         )}
+      </dl>
+    </div>
+  )
+}
+
+// A nucleus: its cell, its place among the cell's nuclei, and its outline.
+function NucleusBoundaryHoverTooltip({
+  detail,
+  nucleus,
+}: {
+  readonly detail: ViewerCellBoundaryHoverDetail
+  readonly nucleus: ViewerNucleusOrdinal
+}) {
+  const boundary = detail.boundary
+
+  return (
+    <div
+      className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
+      style={{
+        left: detail.screen.x,
+        top: detail.screen.y,
+      }}
+      aria-hidden="true"
+    >
+      <p>{boundary.id}</p>
+      <dl>
+        <div>
+          <dt>Nucleus</dt>
+          <dd>
+            {nucleus.ordinal === undefined || nucleus.count === undefined
+              ? 'Segmented'
+              : `${nucleus.ordinal.toLocaleString()} of ${nucleus.count.toLocaleString()}`}
+          </dd>
+        </div>
+        {boundary.cellId === undefined ? null : (
+          <div>
+            <dt>Cell</dt>
+            <dd>{boundary.cellId}</dd>
+          </div>
+        )}
+        <div>
+          <dt>Vertices</dt>
+          <dd>{boundary.polygon.length.toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt>Area</dt>
+          <dd>{formatBoundaryPolygonArea(boundary.polygon)}</dd>
+        </div>
       </dl>
     </div>
   )

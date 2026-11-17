@@ -186,6 +186,9 @@ function Probe({
       magicLensLastDetailRef: { current: null },
       magicLensLastQueryKeyRef: stringRef(),
       magicLensRequestIdRef: numberRef(),
+      nucleusBoundaryAbortRef: refs.nucleusBoundaryAbortRef,
+      nucleusBoundaryRequestIdRef: numberRef(),
+      nucleusBoundaryViewportKeyRef: stringRef(),
       roiAbortRef: refs.roiAbortRef,
       roiGeneViewportWarmupAbortRef: refs.roiGeneViewportWarmupAbortRef,
       roiGeneViewportWarmupKeyRef: stringRef(),
@@ -215,6 +218,7 @@ function Probe({
       setAutoContrastChannelIds: noopSetter,
       setBoundaryElements: noopSetter,
       setBoundaryState: noopSetter,
+      setNucleusBoundaryState: noopSetter,
       setCellDetailState: noopSetter,
       setCellFeatureMatrixCapabilityState: noopSetter,
       setCellTranscriptDistributionState: noopSetter,
@@ -296,6 +300,7 @@ function createLifecycleRefs() {
     geneExpressionAbortRef: abortRef(),
     magicLensAbortRef: abortRef(),
     magicLensDebounceRef: timeoutRef(),
+    nucleusBoundaryAbortRef: abortRef(),
     roiAbortRef: abortRef(),
     roiGeneViewportWarmupAbortRef: abortRef(),
     roiGeneViewportWarmupTimeoutRef: timeoutRef(),
@@ -380,6 +385,7 @@ describe('useDatasetLifecycle', () => {
     expect(refs.diagnosticsAbortRef.current).toBeNull()
     expect(refs.analysisEmbeddingAbortRef.current).toBeNull()
     expect(refs.boundaryAbortRef.current).toBeNull()
+    expect(refs.nucleusBoundaryAbortRef.current).toBeNull()
     expect(refs.geneExpressionAbortRef.current).toBeNull()
     expect(refs.roiAbortRef.current).toBeNull()
     expect(refs.roiTranscriptExportAbortRef.current).toBeNull()

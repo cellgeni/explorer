@@ -190,11 +190,19 @@ export interface ViewerGridCellHoverDetail {
 
 export interface ViewerCellBoundaryHoverDetail {
   readonly boundary: CellBoundaryDatum
+  // Set when the outline is a nucleus.
+  readonly nucleus?: ViewerNucleusOrdinal
   readonly cell?: OverviewCellDatum
   readonly annotationLabels?: readonly string[]
   readonly expressionCount?: number
   readonly expressionGenes?: readonly string[]
   readonly screen: ScreenPoint
+}
+
+// A nucleus's place among the nuclei drawn for its cell, when it has one.
+export interface ViewerNucleusOrdinal {
+  readonly ordinal?: number
+  readonly count?: number
 }
 
 export interface ViewerOverviewCellHoverDetail {

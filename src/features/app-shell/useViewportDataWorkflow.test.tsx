@@ -6,12 +6,13 @@ import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
-import type { SpatialElement } from '../../datasets/spatialDataset'
+import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { GeneExpressionState } from '../genes/geneControlsModel'
+import { deferredPromise } from '../../test/appTestHarness'
 import { useViewportDataWorkflow } from './useViewportDataWorkflow'
 
 const bbox = {
@@ -80,6 +81,8 @@ interface Snapshot {
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionRequestId: number
   readonly geneExpressionState: GeneExpressionState<StructuredLoadError>
+  readonly nucleusBoundaryElements: readonly SpatialElement[]
+  readonly nucleusBoundaryState: BoundaryLoadState<StructuredLoadError>
   readonly shareableViewState: ShareableViewState | undefined
   readonly telemetryEvents: readonly TelemetryEvent[]
 }
@@ -88,11 +91,12 @@ let api: ReturnType<typeof useViewportDataWorkflow>
 let snapshot: Snapshot
 
 function Probe({
-  boundaryLoadingEnabled = true,
+  cellBoundaryLoadingEnabled = true,
   geneExpressionDisabledMessage,
   geneExpressionLoadingEnabled = true,
   loadBoundaryElements,
   loadGeneExpression,
+  loadNucleusBoundaryElements,
   onReady,
   selectedGenes = ['Actb'],
   visiumHdBinSizeMicrometers,
@@ -100,12 +104,15 @@ function Probe({
   readonly loadBoundaryElements: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loaders']['boundaryElements']
-  readonly boundaryLoadingEnabled?: boolean
+  readonly cellBoundaryLoadingEnabled?: boolean
   readonly geneExpressionDisabledMessage?: string
   readonly geneExpressionLoadingEnabled?: boolean
   readonly loadGeneExpression: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loaders']['geneExpression']
+  readonly loadNucleusBoundaryElements?: Parameters<
+    typeof useViewportDataWorkflow
+  >[0]['loaders']['boundaryElements']
   readonly onReady: (
     nextApi: ReturnType<typeof useViewportDataWorkflow>,
     nextSnapshot: Snapshot,
@@ -117,6 +124,12 @@ function Probe({
     readonly SpatialElement[]
   >([])
   const [boundaryState, setBoundaryState] = React.useState<
+    BoundaryLoadState<StructuredLoadError>
+  >({ status: 'idle' })
+  const [nucleusBoundaryElements, setNucleusBoundaryElements] = React.useState<
+    readonly SpatialElement[]
+  >([])
+  const [nucleusBoundaryState, setNucleusBoundaryState] = React.useState<
     BoundaryLoadState<StructuredLoadError>
   >({ status: 'idle' })
   const [currentViewportDetail, setCurrentViewportDetail] =
@@ -132,6 +145,9 @@ function Probe({
   const boundaryAbortRef = React.useRef<AbortController | null>(null)
   const boundaryRequestIdRef = React.useRef(0)
   const boundaryViewportKeyRef = React.useRef<string | null>(null)
+  const nucleusBoundaryAbortRef = React.useRef<AbortController | null>(null)
+  const nucleusBoundaryRequestIdRef = React.useRef(0)
+  const nucleusBoundaryViewportKeyRef = React.useRef<string | null>(null)
   const debugMessagesRef = React.useRef<string[]>([])
   const geneExpressionAbortRef = React.useRef<AbortController | null>(null)
   const geneExpressionRequestIdRef = React.useRef(0)
@@ -154,7 +170,7 @@ function Probe({
     },
     controls: {
       boundaryCellLimit: 10,
-      boundaryLoadingEnabled,
+      cellBoundaryLoadingEnabled,
       geneExpressionDetailMode: 'auto',
       geneExpressionDisabledMessage,
       geneExpressionLoadingEnabled,
@@ -170,6 +186,9 @@ function Probe({
     loaders: {
       boundaryElements: loadBoundaryElements,
       geneExpression: loadGeneExpression,
+      ...(loadNucleusBoundaryElements === undefined
+        ? {}
+        : { nucleusBoundaryElements: loadNucleusBoundaryElements }),
     },
     requests: {
       boundary: {
@@ -183,10 +202,17 @@ function Probe({
         geneExpressionViewportKeyRef,
       },
       lastViewportDetailRef,
+      nucleusBoundary: {
+        abortRef: nucleusBoundaryAbortRef,
+        requestIdRef: nucleusBoundaryRequestIdRef,
+        boundaryViewportKeyRef: nucleusBoundaryViewportKeyRef,
+      },
     },
     setters: {
       setBoundaryElements,
       setBoundaryState,
+      setNucleusBoundaryElements,
+      setNucleusBoundaryState,
       setCurrentViewportDetail,
       setGeneExpressionBatch,
       setGeneExpressionState,
@@ -204,6 +230,8 @@ function Probe({
       geneExpressionBatch,
       geneExpressionRequestId: geneExpressionRequestIdRef.current,
       geneExpressionState,
+      nucleusBoundaryElements,
+      nucleusBoundaryState,
       shareableViewState,
       telemetryEvents: telemetryEventsRef.current,
     })
@@ -219,7 +247,7 @@ describe('useViewportDataWorkflow', () => {
 
     render(
       <Probe
-        boundaryLoadingEnabled={false}
+        cellBoundaryLoadingEnabled={false}
         geneExpressionLoadingEnabled={false}
         loadBoundaryElements={loadBoundaryElements}
         loadGeneExpression={loadGeneExpression}
@@ -322,7 +350,9 @@ describe('useViewportDataWorkflow', () => {
       ]),
     )
     expect(
-      snapshot.debugMessages.some((message) => message.startsWith('Boundaries ready:')),
+      snapshot.debugMessages.some((message) =>
+        message.startsWith('Cell boundaries ready: 1 cells in '),
+      ),
     ).toBe(true)
     expect(snapshot.telemetryEvents).toEqual(
       expect.arrayContaining([
@@ -579,5 +609,275 @@ describe('useViewportDataWorkflow', () => {
     expect(snapshot.geneExpressionBatch).toBeNull()
     expect(snapshot.geneExpressionRequestId).toBeGreaterThan(0)
     expect(loadGeneExpression).not.toHaveBeenCalled()
+  })
+
+  describe('nucleus boundaries', () => {
+    const square = (min: number, max: number): SpatialElement['geometry'] => ({
+      kind: 'polygon',
+      rings: [
+        [
+          { x: micrometers(min), y: micrometers(min) },
+          { x: micrometers(max), y: micrometers(min) },
+          { x: micrometers(max), y: micrometers(max) },
+        ],
+      ],
+    })
+    const cellElement: SpatialElement = { id: 'cell-1', geometry: square(0, 10) }
+    const nucleusElement: SpatialElement = {
+      id: 'cell-1',
+      geometry: square(2, 6),
+      metadata: { segmentation: { kind: 'nucleus', cellId: 'cell-1' } },
+    }
+    const captureSnapshot = (
+      nextApi: ReturnType<typeof useViewportDataWorkflow>,
+      nextSnapshot: Snapshot,
+    ) => {
+      api = nextApi
+      snapshot = nextSnapshot
+    }
+    const flushRequests = async () => {
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+    }
+
+    it('draws cell outlines without waiting for the nucleus request', async () => {
+      const nuclei = deferredPromise<ElementBatch>()
+      const loadNucleusBoundaryElements = vi.fn(() => nuclei.promise)
+
+      render(
+        <Probe
+          loadBoundaryElements={vi.fn(async () => ({ elements: [cellElement] }))}
+          loadGeneExpression={vi.fn(async () => batch)}
+          loadNucleusBoundaryElements={loadNucleusBoundaryElements}
+          onReady={captureSnapshot}
+          selectedGenes={[]}
+        />,
+      )
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+
+      expect(snapshot.boundaryElements).toEqual([cellElement])
+      expect(snapshot.boundaryState.status).toBe('ready')
+      expect(snapshot.nucleusBoundaryState.status).toBe('loading')
+      expect(snapshot.nucleusBoundaryElements).toEqual([])
+
+      await act(async () => {
+        nuclei.resolve({ elements: [nucleusElement] })
+        await nuclei.promise
+      })
+
+      expect(snapshot.nucleusBoundaryElements).toEqual([nucleusElement])
+      expect(snapshot.nucleusBoundaryState).toEqual({
+        status: 'ready',
+        url: 'https://example.test/output',
+        cellCount: 1,
+      })
+      expect(snapshot.debugMessages).toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^Cell boundaries ready: 1 cells in [0-9,]+ ms/),
+          expect.stringMatching(/^Nucleus boundaries ready: 1 nuclei in [0-9,]+ ms/),
+        ]),
+      )
+      expect(snapshot.telemetryEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            name: 'viewport.nucleus-boundaries.load',
+            outcome: 'success',
+          }),
+        ]),
+      )
+    })
+
+    it('keeps cell outlines when the nucleus read fails', async () => {
+      render(
+        <Probe
+          loadBoundaryElements={vi.fn(async () => ({ elements: [cellElement] }))}
+          loadGeneExpression={vi.fn(async () => batch)}
+          loadNucleusBoundaryElements={vi.fn(async () => {
+            throw new Error('nucleus_boundaries.parquet: HTTP 404')
+          })}
+          onReady={captureSnapshot}
+          selectedGenes={[]}
+        />,
+      )
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+
+      expect(snapshot.boundaryElements).toEqual([cellElement])
+      expect(snapshot.boundaryState.status).toBe('ready')
+      expect(snapshot.nucleusBoundaryElements).toEqual([])
+      expect(snapshot.nucleusBoundaryState).toMatchObject({
+        status: 'error',
+        error: { source: 'Nucleus boundaries' },
+      })
+      expect(snapshot.debugMessages).toContain('Nucleus boundary load failed')
+      expect(snapshot.debugMessages).not.toContain('Cell boundary load failed')
+    })
+
+    it('reads only the outline type whose checkbox changes', async () => {
+      const loadBoundaryElements = vi.fn(async () => ({ elements: [cellElement] }))
+      const loadNucleusBoundaryElements = vi.fn(async () => ({
+        elements: [nucleusElement],
+      }))
+      const props = {
+        loadBoundaryElements,
+        loadGeneExpression: vi.fn(async () => batch),
+        onReady: captureSnapshot,
+        selectedGenes: [],
+      }
+      const { rerender } = render(<Probe {...props} />)
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+
+      expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+
+      // Nuclei ticked: only nuclei are read.
+      rerender(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      await flushRequests()
+
+      expect(loadNucleusBoundaryElements).toHaveBeenCalledTimes(1)
+      expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+      expect(snapshot.nucleusBoundaryElements).toEqual([nucleusElement])
+
+      // Cells unticked, then ticked again in the same view: nothing is read,
+      // and the outlines already read come back.
+      rerender(
+        <Probe
+          {...props}
+          cellBoundaryLoadingEnabled={false}
+          loadNucleusBoundaryElements={loadNucleusBoundaryElements}
+        />,
+      )
+      await flushRequests()
+      rerender(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      await flushRequests()
+
+      expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+      expect(loadNucleusBoundaryElements).toHaveBeenCalledTimes(1)
+      expect(snapshot.boundaryElements).toEqual([cellElement])
+      expect(snapshot.boundaryState.status).toBe('ready')
+    })
+
+    it('stops a hidden layer request and reads it again when shown', async () => {
+      const firstNuclei = deferredPromise<ElementBatch>()
+      const loadNucleusBoundaryElements = vi
+        .fn<() => Promise<ElementBatch>>()
+        .mockReturnValueOnce(firstNuclei.promise)
+        .mockResolvedValue({ elements: [nucleusElement] })
+      const props = {
+        loadBoundaryElements: vi.fn(async () => ({ elements: [cellElement] })),
+        loadGeneExpression: vi.fn(async () => batch),
+        onReady: captureSnapshot,
+        selectedGenes: [],
+      }
+      const { rerender } = render(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+
+      expect(snapshot.nucleusBoundaryState.status).toBe('loading')
+
+      rerender(<Probe {...props} />)
+      await flushRequests()
+      await act(async () => {
+        firstNuclei.resolve({ elements: [nucleusElement] })
+        await firstNuclei.promise
+      })
+
+      expect(snapshot.nucleusBoundaryState).toEqual({ status: 'idle' })
+      expect(snapshot.nucleusBoundaryElements).toEqual([])
+
+      rerender(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      await flushRequests()
+
+      expect(loadNucleusBoundaryElements).toHaveBeenCalledTimes(2)
+      expect(snapshot.nucleusBoundaryElements).toEqual([nucleusElement])
+    })
+
+    it('drops a hidden layer error and reads the layer again when shown', async () => {
+      const loadNucleusBoundaryElements = vi
+        .fn<() => Promise<ElementBatch>>()
+        .mockRejectedValueOnce(new Error('nucleus_boundaries.parquet: HTTP 503'))
+        .mockResolvedValue({ elements: [nucleusElement] })
+      const props = {
+        loadBoundaryElements: vi.fn(async () => ({ elements: [cellElement] })),
+        loadGeneExpression: vi.fn(async () => batch),
+        onReady: captureSnapshot,
+        selectedGenes: [],
+      }
+      const { rerender } = render(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+
+      expect(snapshot.nucleusBoundaryState.status).toBe('error')
+
+      // Panning inside the failed area does not retry.
+      act(() => {
+        api.handleViewportChange({
+          ...detail,
+          bbox: { ...bbox, minX: micrometers(1), maxX: micrometers(99) },
+        })
+      })
+      await flushRequests()
+      expect(loadNucleusBoundaryElements).toHaveBeenCalledTimes(1)
+
+      rerender(<Probe {...props} />)
+      await flushRequests()
+      expect(snapshot.nucleusBoundaryState).toEqual({ status: 'idle' })
+
+      rerender(
+        <Probe {...props} loadNucleusBoundaryElements={loadNucleusBoundaryElements} />,
+      )
+      await flushRequests()
+
+      expect(loadNucleusBoundaryElements).toHaveBeenCalledTimes(2)
+      expect(snapshot.nucleusBoundaryElements).toEqual([nucleusElement])
+      expect(snapshot.nucleusBoundaryState.status).toBe('ready')
+    })
+
+    it('clears both layers beyond the boundary limit', async () => {
+      const props = {
+        loadBoundaryElements: vi.fn(async () => ({ elements: [cellElement] })),
+        loadGeneExpression: vi.fn(async () => batch),
+        loadNucleusBoundaryElements: vi.fn(async () => ({ elements: [nucleusElement] })),
+        onReady: captureSnapshot,
+        selectedGenes: [],
+      }
+      render(<Probe {...props} />)
+      act(() => {
+        api.handleViewportChange(detail)
+      })
+      await flushRequests()
+      act(() => {
+        api.handleViewportChange(denseOverviewDetail)
+      })
+      await flushRequests()
+
+      expect(snapshot.boundaryElements).toEqual([])
+      expect(snapshot.nucleusBoundaryElements).toEqual([])
+      expect(snapshot.boundaryState).toEqual({ status: 'idle' })
+      expect(snapshot.nucleusBoundaryState).toEqual({ status: 'idle' })
+    })
   })
 })

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CellInfoPanel } from './CellInfoPanel'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 
 describe('CellInfoPanel', () => {
   it('shows the selected cell nuclei count when available', () => {
@@ -21,6 +21,47 @@ describe('CellInfoPanel', () => {
 
     expect(nucleiTerm.nextElementSibling).toHaveTextContent('2')
     expect(segmentationTerm.nextElementSibling).toHaveTextContent('nucleus_expansion')
+  })
+
+  it('lists the nuclei drawn for the cell with their area and circularity', () => {
+    const nucleus = (id: string, size: number): CellBoundaryDatum => ({
+      id,
+      cellId: 'cell-1',
+      polygon: [
+        [0, 0, 0],
+        [size, 0, 0],
+        [size, -size, 0],
+        [0, -size, 0],
+      ],
+      fillColor: [0, 0, 0, 0],
+      lineColor: [0, 0, 0, 0],
+    })
+    const { rerender } = render(
+      <CellInfoPanel
+        cell={cellDatum({ nucleusCount: 2 })}
+        nuclei={[nucleus('cell-1', 4), nucleus('cell-1#nucleus-2', 2)]}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+      />,
+    )
+
+    expect(screen.getByText('Nucleus 1').nextElementSibling).toHaveTextContent(
+      '16 µm², circularity 0.785',
+    )
+    expect(screen.getByText('Nucleus 2')).toHaveAttribute('title', 'cell-1#nucleus-2')
+    expect(screen.getByText('Nucleus 2').nextElementSibling).toHaveTextContent('4 µm²')
+
+    rerender(
+      <CellInfoPanel
+        cell={cellDatum()}
+        nuclei={[nucleus('cell-1', 4)]}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        variant="observations"
+      />,
+    )
+
+    expect(screen.getByText('Nucleus').nextElementSibling).toHaveTextContent('16 µm²')
   })
 
   it('shows unavailable values when optional cell metadata is absent', () => {

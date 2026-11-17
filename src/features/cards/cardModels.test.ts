@@ -260,6 +260,7 @@ describe('cell card', () => {
     readonly cell?: OverviewCellDatum
     readonly boundary?: CellBoundaryDatum
     readonly bin?: GridCellDatum
+    readonly nuclei?: readonly CellBoundaryDatum[]
   }) {
     return {
       cell: {
@@ -283,6 +284,7 @@ describe('cell card', () => {
         expressionStatus: undefined,
       },
       profile: { state: undefined, onLoad: undefined },
+      nuclei: selected.nuclei ?? [],
       onClose: vi.fn(),
       zoomToBbox: vi.fn(),
     }
@@ -299,6 +301,16 @@ describe('cell card', () => {
     expect(cellCard(input({ bin, boundary }))).toMatchObject({
       kind: 'boundary',
       title: 'Cell',
+    })
+  })
+
+  it('carries the selected cell nuclei to the cell and boundary cards', () => {
+    const nuclei = [{ id: 'nucleus-1', cellId: 'cell-1' } as CellBoundaryDatum]
+
+    expect(cellCard(input({ cell, nuclei }))).toMatchObject({ kind: 'cell', nuclei })
+    expect(cellCard(input({ boundary, nuclei }))).toMatchObject({
+      kind: 'boundary',
+      nuclei,
     })
   })
 })
@@ -343,6 +355,7 @@ describe('Go To regions', () => {
         expressionStatus: undefined,
       },
       profile: { state: undefined, onLoad: undefined },
+      nuclei: [],
       onClose: vi.fn(),
       zoomToBbox,
     })
@@ -460,6 +473,7 @@ describe('useCardStackModel', () => {
             expressionStatus: undefined,
           },
           profile: { state: undefined, onLoad: undefined },
+          nuclei: [],
           onClose: vi.fn(),
         },
         transcript: null,

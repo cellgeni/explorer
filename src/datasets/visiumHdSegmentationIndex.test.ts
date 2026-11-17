@@ -36,6 +36,43 @@ describe('Visium HD segmentation index', () => {
     expect(index.metadata).toEqual([undefined, annotated.metadata])
   })
 
+  it('keeps nucleus cell IDs in their own column', () => {
+    const annotation = { label: 'B cell', color: '#00ff00' }
+    const elements = [
+      square('nucleus-a', 0, 0, 10, {
+        segmentation: { kind: 'nucleus', cellId: 'cellid_000000001-1', annotation },
+      }),
+      square('nucleus-b', 20, 0, 10, {
+        segmentation: { kind: 'nucleus', cellId: 'cellid_000000002-1', annotation },
+      }),
+      square('nucleus-c', 40, 0, 10, {
+        segmentation: { kind: 'nucleus', cellId: 'cellid_000000003-1' },
+      }),
+      square('nucleus-d', 60, 0, 10),
+    ]
+    const index = visiumHdSegmentationIndexFromElements(elements)
+
+    expect(index.cellIds).toEqual([
+      'cellid_000000001-1',
+      'cellid_000000002-1',
+      'cellid_000000003-1',
+      undefined,
+    ])
+    expect(index.metadata).toEqual([
+      undefined,
+      { segmentation: { kind: 'nucleus', annotation } },
+    ])
+    expect(Array.from(index.metadataIndexes)).toEqual([1, 1, 0, 0])
+    expect(
+      Array.from(
+        selectVisiumHdSegmentationIndexElements(index, bbox(0, 0, 70, 10)).values(),
+      ),
+    ).toEqual(elements)
+    expect(
+      visiumHdSegmentationIndexFromElements([square('cell', 0, 0, 1)]),
+    ).not.toHaveProperty('cellIds')
+  })
+
   it('selects polygons whose bounds meet the bbox, edges included, in file order', () => {
     const elements = [
       square('right', 20, 0, 10),

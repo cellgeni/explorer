@@ -21,6 +21,7 @@ export type LoadErrorSource =
   | 'Morphology image'
   | 'Image tiles'
   | 'Cell boundaries'
+  | 'Nucleus boundaries'
   | 'Gene panel'
   | 'Annotations'
   | 'Embeddings'

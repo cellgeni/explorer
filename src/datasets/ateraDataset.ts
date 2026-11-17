@@ -990,7 +990,9 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
         element: {
           id,
           geometry: { kind: 'polygon', rings: [polygon.ring] },
-          metadata: { segmentation: { kind } },
+          metadata: {
+            segmentation: kind === 'nucleus' ? { kind, cellId } : { kind },
+          },
         },
       })
     }

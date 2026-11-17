@@ -3,7 +3,7 @@ import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 
 export const CELL_GENE_EXPRESSION_LIMIT = 100_000
 const CELL_DETAIL_BOUNDARY_RADIUS_MICROMETERS = 25
@@ -282,6 +282,34 @@ export function summarizeCellShape(
     ),
     ...(boundaryMetrics ?? {}),
   }
+}
+
+export interface NucleusShapeSummary {
+  readonly id: string
+  readonly areaMicrometersSquared?: number
+  readonly circularity?: number
+}
+
+// Area and circularity of each nucleus drawn for the selected cell.
+export function summarizeNucleusShapes(
+  nuclei: readonly CellBoundaryDatum[],
+): readonly NucleusShapeSummary[] {
+  return nuclei.map((nucleus) => {
+    const metrics = polygonRingShapeMetrics(
+      nucleus.polygon.map(([x = 0, deckY = 0]) => ({
+        x: micrometers(x),
+        y: micrometers(-deckY),
+      })),
+    )
+
+    return {
+      id: nucleus.id,
+      ...(metrics?.boundaryAreaMicrometersSquared === undefined
+        ? {}
+        : { areaMicrometersSquared: metrics.boundaryAreaMicrometersSquared }),
+      ...(metrics?.circularity === undefined ? {} : { circularity: metrics.circularity }),
+    }
+  })
 }
 
 function polygonShapeMetrics(

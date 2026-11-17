@@ -5,7 +5,7 @@ import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 const TASKS: readonly LoadingTaskSummary[] = [
   { id: 'dataset', label: 'Loading dataset', detail: 'output', cancellable: true },
   { id: 'gene-panel', label: 'Loading gene panel' },
-  { id: 'boundaries', label: 'Loading boundaries' },
+  { id: 'boundaries', label: 'Loading cell boundaries' },
   { id: 'annotation-sets', label: 'Loading annotation sets' },
   { id: 'morphology', label: 'Loading image' },
   {

@@ -215,7 +215,7 @@ describe('XeniumDataset', () => {
           ],
         ],
       },
-      metadata: { segmentation: { kind: 'nucleus' } },
+      metadata: { segmentation: { kind: 'nucleus', cellId: 'aaaaaaaa-1' } },
     })
     expect(validateRangeSupport).toHaveBeenCalledWith(
       'https://example.test/xenium/nucleus_boundaries.parquet',
@@ -283,6 +283,48 @@ describe('XeniumDataset', () => {
       true,
       false,
       false,
+    ])
+  })
+
+  it('retries every request that asked for label_id before the first one failed', async () => {
+    const conn: XeniumDuckDbConnection = {
+      async prepare(sql) {
+        return {
+          async query() {
+            if (sql.includes('label_id')) {
+              throw new Error(
+                'Binder Error: Table "b" does not have a column named "label_id"',
+              )
+            }
+
+            return new FakeTable([
+              { cell_id: 'aaaaaaaa-1', x: 0, y: 0 },
+              { cell_id: 'aaaaaaaa-1', x: 2, y: 0 },
+              { cell_id: 'aaaaaaaa-1', x: 2, y: 2 },
+            ])
+          },
+        }
+      },
+    }
+    const dataset = makeDataset(conn, { validateRangeSupport: async () => undefined })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    // Zooming starts several viewport requests before any of them returns.
+    await expect(
+      Promise.all([
+        dataset.segmentationElements('nucleus', bbox),
+        dataset.segmentationElements('nucleus', bbox),
+        dataset.segmentationElements('nucleus', bbox),
+      ]),
+    ).resolves.toEqual([
+      [expect.objectContaining({ id: 'aaaaaaaa-1' })],
+      [expect.objectContaining({ id: 'aaaaaaaa-1' })],
+      [expect.objectContaining({ id: 'aaaaaaaa-1' })],
     ])
   })
 

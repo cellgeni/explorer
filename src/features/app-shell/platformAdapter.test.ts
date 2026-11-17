@@ -136,8 +136,7 @@ describe('platformAdapter', () => {
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(false)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
-    expect(adapter.boundaryLoadingEnabled(true, true)).toBe(false)
-    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('disabled:no-nucleus')
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(false)
     expect(adapter.geneExpressionOverlayEnabled(0)).toBe(false)
     expect(adapter.cellBoundaryHoverEnabled(true)).toBe(false)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
@@ -212,16 +211,8 @@ describe('platformAdapter', () => {
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(true)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
-    // Cell outlines are read only while shown, so toggling them changes the key.
     expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
     expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
-    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:cell:nucleus')
-    expect(adapter.boundaryOverlayRequestKey(false, true)).toBe('enabled:no-cell:nucleus')
-    expect(adapter.boundaryOverlayRequestKey(false, false)).toBe(
-      'disabled:no-cell:no-nucleus',
-    )
     expect(adapter.geneExpressionOverlayEnabled(25)).toBe(true)
     expect(adapter.cellBoundaryHoverEnabled(false)).toBe(false)
     expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
@@ -259,8 +250,8 @@ describe('platformAdapter', () => {
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(false)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
-    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
-    expect(adapter.boundaryOverlayRequestKey(false, true)).toBe('enabled:nucleus')
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
     expect(adapter.geneExpressionOverlayEnabled(25)).toBe(false)
     expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
@@ -494,8 +485,8 @@ describe('platformAdapter', () => {
     const plain = datasetFor(false)
     const labelled = datasetFor(true)
 
-    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
-    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
     expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
     await expect(load(plain)).resolves.toEqual({ elements: [] })
     expect(plain.elements).not.toHaveBeenCalled()
@@ -525,8 +516,8 @@ describe('platformAdapter', () => {
     expect(isAnnDataPlatform(appPlatformAdapterFor(readyLoadState, 'h5ad'))).toBe(true)
     expect(isAnnDataPlatform(appPlatformAdapterFor(readyLoadState, 'xenium'))).toBe(false)
     expect(adapter.capabilities).toMatchObject({ annotations: true, transcripts: false })
-    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: false,
       unavailableReason: 'Unavailable for SpatialData',
@@ -564,8 +555,8 @@ describe('platformAdapter', () => {
       nucleusBoundaries: false,
       transcripts: false,
     })
-    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
-    expect(adapter.boundaryOverlayRequestKey(true, false)).toBe('enabled:no-nucleus')
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: false,
@@ -611,8 +602,8 @@ describe('platformAdapter', () => {
       transcripts: false,
       nucleusBoundaries: false,
     })
-    expect(adapter.boundaryLoadingEnabled(true, false)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
     expect(adapter.geneExpressionOverlayEnabled(0)).toBe(true)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: false,
@@ -670,9 +661,8 @@ describe('platformAdapter', () => {
       transcriptGeneOnlyFilter: false,
     })
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(true)
-    expect(adapter.boundaryLoadingEnabled(false, true)).toBe(true)
-    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(true)
-    expect(adapter.boundaryOverlayRequestKey(true, true)).toBe('enabled:nucleus')
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
     // Magic Lens reads ROI cells and matrix rows through the AnnData table.
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: true,

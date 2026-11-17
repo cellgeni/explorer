@@ -202,6 +202,9 @@ export function useAppDomainState({
   const [boundaryState, setBoundaryState] = useState<
     BoundaryLoadState<StructuredLoadError>
   >(IDLE_BOUNDARY_LOAD_STATE)
+  const [nucleusBoundaryState, setNucleusBoundaryState] = useState<
+    BoundaryLoadState<StructuredLoadError>
+  >(IDLE_BOUNDARY_LOAD_STATE)
   const [genePanelState, setGenePanelState] =
     useState<GenePanelState<StructuredLoadError>>(IDLE_GENE_PANEL_STATE)
   const [annotationState, setAnnotationState] =
@@ -581,6 +584,7 @@ export function useAppDomainState({
       diagnosticsState,
       loadState,
       morphologyState,
+      nucleusBoundaryState,
       pendingDatasetLoadState,
       setBoundaryState,
       setCellFeatureMatrixCapabilityState,
@@ -591,6 +595,7 @@ export function useAppDomainState({
       setDiagnosticsState,
       setLoadState,
       setMorphologyState,
+      setNucleusBoundaryState,
       setPendingDatasetLoadState,
     },
     genes: {

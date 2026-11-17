@@ -388,7 +388,7 @@ describe('deck layer factory', () => {
     ).toEqual([])
   })
 
-  it('adds a non-pickable nucleus segmentation polygon layer', () => {
+  it('adds a pickable nucleus segmentation polygon layer', () => {
     const nucleusBoundaries: readonly CellBoundaryDatum[] = [
       {
         id: 'nucleus-1',
@@ -417,7 +417,7 @@ describe('deck layer factory', () => {
     }
 
     expect(nucleusLayer.id).toBe('nucleus-segmentation-polygons')
-    expect(nucleusLayer.props.pickable).toBe(false)
+    expect(nucleusLayer.props.pickable).toBe(true)
     expect(nucleusLayer.props.stroked).toBe(true)
     expect(nucleusLayer.props.filled).toBe(true)
     expect(nucleusLayer.props.data).toEqual(nucleusBoundaries)

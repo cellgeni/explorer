@@ -34,6 +34,28 @@ describe('BoundaryCellInfoPanel', () => {
     expect(screen.queryByText('Annotation')).not.toBeInTheDocument()
   })
 
+  it('lists the nuclei drawn for the cell', () => {
+    render(
+      <BoundaryCellInfoPanel
+        cell={boundaryCell()}
+        nuclei={[
+          boundaryCell({
+            id: 'nucleus_000000007',
+            cellId: 'cellid_000000042-1',
+            polygon: [
+              [2, 2],
+              [6, 2],
+              [6, 6],
+              [2, 6],
+            ],
+          }),
+        ]}
+      />,
+    )
+
+    expect(valueOf('Nucleus')).toBe('16 µm², circularity 0.785')
+  })
+
   it('shows the annotation label when the cell has one', () => {
     render(
       <BoundaryCellInfoPanel cell={boundaryCell({ annotationLabel: 'Astrocyte' })} />,
