@@ -281,8 +281,6 @@ Correctness and robustness:
       (`ateraDataset.ts`). Catching only zarrita's `NotFoundError`, as
       `ateraDataset.ts` already does for feature types, would keep transient
       failures visible.
-- [ ] When a Zarr decode worker fails, its chunks decode on the main thread
-      with no notice (`workerZarrCodecs.ts`).
 
 Rendering:
 

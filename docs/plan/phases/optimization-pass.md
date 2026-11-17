@@ -354,3 +354,16 @@ Found by the 2026-11-16 review:
       preloaded 37, and 745 kB gzip of JavaScript where it preloaded 754 kB. Two
       chunks that were not preloaded went into the lazy `h5adDataset` chunk and
       the workers, not the entry.
+- [x] When a Zarr decode worker failed, its chunks decoded on the main thread
+      with no notice (`workerZarrCodecs.ts`), and the pool started new
+      workers for the next chunks, which failed the same way. With the worker
+      script answering 404, as an old tab does after a deploy, the Xenium
+      demo started 19 workers in 20 s of gene colouring, transcript density
+      and zooming. Since 2026-11-17 the pool fails a worker's requests with
+      `ZarrDecodeWorkerError`, unlike a chunk that does not decode, and after
+      one the codecs decode on the main thread until reload: one worker
+      start in the same session. Data access notes shows "Zarr decoding",
+      which outlasts the dataset's notices, and the console has a warning.
+      A chunk a worker cannot decode still goes to the main thread alone.
+      OME-Zarr tiles and SpatialData labels use the same pool and still
+      start new workers after a failure.
