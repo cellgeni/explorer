@@ -8,7 +8,7 @@ import {
   type PlotTable,
 } from './plotModel'
 import type { PlotScale } from './plotStats'
-import { PLOT_KINDS } from './plotsPanelModel'
+import { PLOT_KINDS, type PlotSetKind } from './plotsPanelModel'
 import { plotViewSvg, plotViewTable, type PlotView } from './plotViews'
 import { SvgTree } from './SvgTree'
 import type { PlotsModel } from './usePlotsModel'
@@ -58,6 +58,14 @@ const COLOUR_OPTIONS: readonly {
 
 const PLOT_KIND_OPTIONS = PLOT_KINDS.map(({ value, label }) => ({ value, label }))
 
+// Group by's headings: sets Clusters has loaded, and the dataset's others,
+// which Plots reads for the plot alone.
+const SET_GROUPS: Readonly<Record<PlotSetKind, string | undefined>> = {
+  loaded: 'Loaded',
+  dataset: 'In the dataset',
+  selections: undefined,
+}
+
 function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
   return (
     <div className="plots-controls">
@@ -78,6 +86,7 @@ function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
             : plots.setOptions.map((option) => ({
                 value: option.id,
                 label: `${option.label} (${option.classCount.toLocaleString()})`,
+                group: SET_GROUPS[option.kind],
               }))
         }
         disabled={plots.setOptions.length === 0}
