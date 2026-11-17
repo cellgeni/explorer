@@ -807,11 +807,12 @@ async function runSpatialDataDiagnostics(
     }),
   ]
   // A zip lists every file, so chunks are checked against its directory
-  // instead of with a request each.
+  // instead of with a request each, and every chunk is checked.
   const probe: ChunkProber =
     zip === undefined
       ? (targets) => probeChunks(url, targets, options)
       : (targets) => Promise.resolve(zipChunkProbes(zip, targets))
+  const everyChunk = zip !== undefined
 
   if (view.table === undefined) {
     checks.push(
@@ -828,16 +829,28 @@ async function runSpatialDataDiagnostics(
   }
 
   if (view.table !== undefined) {
-    checks.push(await checkSpatialDataTableChunks(url, store, catalog, view, probe))
+    checks.push(
+      await checkSpatialDataTableChunks(url, store, catalog, view, probe, {
+        everyChunk,
+      }),
+    )
   }
 
   if (view.image !== undefined) {
-    checks.push(await checkSpatialDataRasterChunk(url, store, view.image.element, probe))
+    checks.push(
+      await checkSpatialDataRasterChunks(url, store, view.image.element, probe, {
+        everyChunk,
+      }),
+    )
   }
 
   // Outlines of a labels region are traced from its chunks.
   for (const entry of view.regionLabels) {
-    checks.push(await checkSpatialDataRasterChunk(url, store, entry.element, probe))
+    checks.push(
+      await checkSpatialDataRasterChunks(url, store, entry.element, probe, {
+        everyChunk,
+      }),
+    )
   }
 
   const checkShapes = async (element: SpatialDataElement, required: boolean) => {
@@ -866,6 +879,13 @@ async function runSpatialDataDiagnostics(
     checks.push(await checkShapes(companion, false))
   }
 
+  // The nucleus layer is optional.
+  const nuclei = view.nucleusCandidates[0]?.element
+
+  if (nuclei !== undefined) {
+    checks.push(await checkShapes(nuclei, false))
+  }
+
   return checks
 }
 
@@ -886,14 +906,18 @@ interface ChunkTarget {
 type ChunkProber = (targets: readonly ChunkTarget[]) => Promise<readonly ChunkProbe[]>
 
 // Zarr reads absent chunks as fill values, so an interrupted upload loads
-// without errors but with empty columns. HEAD every table chunk to find them.
+// without errors but with empty columns. HEAD each table chunk to find them:
+// the first SPATIALDATA_MAX_CHECKED_CHUNKS over HTTP, or every chunk with
+// `everyChunk` (a zip, checked against its directory).
 async function checkSpatialDataTableChunks(
   url: string,
   store: SpatialDataStore,
   catalog: SpatialDataCatalog,
   view: SpatialDataView,
   probe: ChunkProber,
+  options: { readonly everyChunk: boolean },
 ): Promise<DatasetDiagnosticCheck> {
+  const maxChunks = options.everyChunk ? Infinity : SPATIALDATA_MAX_CHECKED_CHUNKS
   const startedAt = Date.now()
   const tablePath = view.table?.path ?? ''
   const targets: ChunkTarget[] = []
@@ -911,14 +935,15 @@ async function checkSpatialDataTableChunks(
 
     const stringArray = isStringArrayMetadata(metadata)
 
-    for (const chunkKey of zarrChunkKeys(metadata, {
-      limit: SPATIALDATA_MAX_CHECKED_CHUNKS,
-    })) {
+    for (const chunkKey of zarrChunkKeys(
+      metadata,
+      options.everyChunk ? {} : { limit: maxChunks },
+    )) {
       targets.push({ key: `${node.path}/${chunkKey}`, stringArray })
     }
   }
 
-  const checked = targets.slice(0, SPATIALDATA_MAX_CHECKED_CHUNKS)
+  const checked = targets.slice(0, maxChunks)
   const probes = await probe(checked)
   const failed = probes.filter((probe) => probe.status !== 200 && probe.status !== 206)
   const blocking = failed.filter((probe) => probe.status !== 404 || probe.stringArray)
@@ -945,12 +970,15 @@ async function checkSpatialDataTableChunks(
   })
 }
 
-// The first chunk of an image's or labels element's coarsest level.
-async function checkSpatialDataRasterChunk(
+// The first chunk of an image's or labels element's coarsest level, or with
+// `everyChunk` (a zip, checked against its directory) every chunk of every
+// level.
+async function checkSpatialDataRasterChunks(
   url: string,
   store: SpatialDataStore,
   element: SpatialDataElement,
   probe: ChunkProber,
+  options: { readonly everyChunk: boolean },
 ): Promise<DatasetDiagnosticCheck> {
   const startedAt = Date.now()
   const isImage = element.kind === 'images'
@@ -959,19 +987,30 @@ async function checkSpatialDataRasterChunk(
   const datasets = Array.isArray(multiscales)
     ? recordValue(multiscales[0])?.datasets
     : undefined
-  const coarsest = Array.isArray(datasets)
-    ? recordValue(datasets.at(-1))?.path
-    : undefined
-  const levelPath =
-    typeof coarsest === 'string' ? `${element.path}/${coarsest}` : undefined
-  const metadata =
-    levelPath === undefined ? null : await readZarrArrayMetadata(store, levelPath)
-  const chunkKey =
-    metadata === null ? undefined : zarrChunkKeys(metadata, { limit: 1 })[0]
+  const levelPaths = (Array.isArray(datasets) ? datasets : [])
+    .map((dataset) => recordValue(dataset)?.path)
+    .filter((path): path is string => typeof path === 'string')
+    .map((path) => `${element.path}/${path}`)
+  const checkedLevels = options.everyChunk ? levelPaths : levelPaths.slice(-1)
+  const targets: ChunkTarget[] = []
+
+  for (const levelPath of checkedLevels) {
+    const metadata = await readZarrArrayMetadata(store, levelPath)
+    const chunkKeys =
+      metadata === null
+        ? []
+        : zarrChunkKeys(metadata, options.everyChunk ? {} : { limit: 1 })
+
+    for (const chunkKey of chunkKeys) {
+      targets.push({ key: `${levelPath}/${chunkKey}`, stringArray: false })
+    }
+  }
+
   const id = isImage ? 'spatialdata-image-chunk' : `spatialdata-labels-${element.name}`
   const label = `SpatialData ${isImage ? 'image' : 'labels'} ${element.name}`
+  const firstTarget = targets[0]
 
-  if (levelPath === undefined || chunkKey === undefined) {
+  if (firstTarget === undefined) {
     return diagnosticCheck({
       id,
       label,
@@ -983,20 +1022,50 @@ async function checkSpatialDataRasterChunk(
     })
   }
 
-  const [chunk] = await probe([{ key: `${levelPath}/${chunkKey}`, stringArray: false }])
-  const ok = chunk?.status === 200 || chunk?.status === 206
+  const probes = await probe(targets)
+  const failed = probes.filter((chunk) => chunk.status !== 200 && chunk.status !== 206)
+  const status =
+    failed.length === 0
+      ? 'pass'
+      : failed.every((chunk) => chunk.status === 404)
+        ? 'warning'
+        : 'fail'
+
+  if (!options.everyChunk) {
+    return diagnosticCheck({
+      id,
+      label,
+      url: datasetFileUrl(url, firstTarget.key),
+      required: false,
+      status,
+      message:
+        failed.length === 0
+          ? 'Coarsest level chunk readable'
+          : `Coarsest level chunk ${describeChunkProbes(failed)}`,
+      startedAt,
+    })
+  }
+
+  // Writers such as zarr-python 3 skip chunks that hold only the fill value,
+  // so finer levels of an image often lack the chunks over empty background.
+  // That is only expected when the coarsest level, which covers the same
+  // area, is complete.
+  const coarsestPrefix = `${checkedLevels.at(-1) ?? ''}/`
+  const coarsestComplete = failed.every((chunk) => !chunk.key.startsWith(coarsestPrefix))
+  const scope = `${targets.length.toLocaleString()} chunks in ${checkedLevels.length.toLocaleString()} level${checkedLevels.length === 1 ? '' : 's'}`
 
   return diagnosticCheck({
     id,
     label,
-    url: datasetFileUrl(url, `${levelPath}/${chunkKey}`),
+    url: datasetFileUrl(url, element.path),
     required: false,
-    status: ok ? 'pass' : chunk?.status === 404 ? 'warning' : 'fail',
-    message: ok
-      ? 'Coarsest level chunk readable'
-      : chunk === undefined
-        ? 'Not checked'
-        : `Coarsest level chunk ${describeChunkProbes([chunk])}`,
+    status: status === 'warning' && coarsestComplete ? 'pass' : status,
+    message:
+      failed.length === 0
+        ? `All ${scope} in the zip`
+        : status === 'warning' && coarsestComplete
+          ? `${(targets.length - failed.length).toLocaleString()} of ${scope} in the zip. The other ${failed.length.toLocaleString()}, all in finer levels, read as empty, as when the writer skips empty chunks: ${describeChunkProbes(failed)}`
+          : `${failed.length.toLocaleString()} of ${scope} missing from the zip: ${describeChunkProbes(failed)}`,
     startedAt,
   })
 }

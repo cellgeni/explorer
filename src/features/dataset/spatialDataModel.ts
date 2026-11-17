@@ -14,6 +14,8 @@ export type SpatialDataControlState =
       readonly coordinateSystems: readonly string[]
       readonly image?: string
       readonly images: readonly string[]
+      // The nucleus shapes element, when the store has one.
+      readonly nuclei?: string
       readonly units: SpatialDataUnits
       readonly selection: SpatialDataSelection
     }
@@ -32,6 +34,7 @@ export function spatialDataControlReady(
     coordinateSystems: summary.coordinateSystems,
     ...(summary.image === undefined ? {} : { image: summary.image }),
     images: summary.images,
+    ...(summary.nuclei === undefined ? {} : { nuclei: summary.nuclei }),
     units: summary.units,
     selection,
   }

@@ -1,6 +1,7 @@
 import * as zarr from 'zarrita'
 import {
   micrometers,
+  placeFrameBbox,
   type BBox,
   type DataPoint,
   type UnitsDescriptor,
@@ -74,9 +75,11 @@ import type {
   DatasetMeta,
   ElementBatch,
   ImageSource,
+  SegmentationInfo,
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
+  SpatialElementMetadata,
 } from './spatialDataset'
 import type { DatasetCell, GeneExpressionBatch } from './xeniumDataset'
 
@@ -131,6 +134,8 @@ export interface SpatialDataSummary {
   readonly tables: readonly string[]
   readonly regions: readonly string[]
   readonly boundaries?: string
+  // The shapes element drawn as the nucleus layer.
+  readonly nuclei?: string
   readonly skippedElements: readonly string[]
   readonly units: SpatialDataUnits
 }
@@ -173,6 +178,17 @@ interface RegionRows {
   readonly scale: number
 }
 
+// The elements a boundary index built for the last viewport request, by
+// outline; the next request reuses those still in view, so they keep the
+// same objects. Only outlines in view are kept: building every outline at
+// once costs gigabytes for large segmentations.
+interface ViewportElements {
+  readonly index: BoundaryIndex
+  readonly byCell: ReadonlyMap<number, SpatialElement>
+}
+
+const NUCLEUS_METADATA: SpatialElementMetadata = { segmentation: { kind: 'nucleus' } }
+
 // Shapes drawn as cell boundaries, with the factor that takes their
 // coordinates to µm.
 interface ScaledShapes {
@@ -180,8 +196,8 @@ interface ScaledShapes {
   readonly scale: number
 }
 
-// Cell outlines for the boundary layer; elements are built only for the
-// cells a viewport request returns.
+// Cell or nucleus outlines for a boundary layer; elements are built only for
+// the outlines a viewport request returns.
 interface BoundaryIndex {
   readonly ids: readonly string[]
   // Cell i's outline is shape shapeIndexes[i] of sources[sourceIndexes[i]].
@@ -218,18 +234,14 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private statePromise: Promise<SpatialDataState> | null = null
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
   private boundaryIndexPromise: Promise<BoundaryIndex> | null = null
+  private nucleusIndexPromise: Promise<BoundaryIndex> | null = null
   private readonly labelReaders = new Map<string, Promise<SpatialDataLabelsReader>>()
   // Cell elements for cached label rings, so unchanged cells keep the same
   // objects across viewport requests.
   private readonly labelElementsByRing = new WeakMap<Float64Array, SpatialElement>()
-  // Shape elements of the last viewport request by boundary index cell,
-  // reused by the next so cells still in view keep the same objects. Only the
-  // cells in view are kept: building every outline at once costs gigabytes
-  // for large segmentations.
-  private shapeElements: {
-    readonly index: BoundaryIndex
-    readonly byCell: ReadonlyMap<number, SpatialElement>
-  } | null = null
+  // Cell and nucleus elements of the last viewport request.
+  private shapeElements: ViewportElements | null = null
+  private nucleusElements: ViewportElements | null = null
   // Filled while the table resolves row coordinates.
   private regionShapes: ReadonlyMap<string, RegionShapes> = new Map()
   private regionRows: RegionRows | null = null
@@ -288,6 +300,9 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         (entry) => entry.element.name,
       ),
       ...(boundaries === null ? {} : { boundaries: boundaries.entry.element.name }),
+      ...(view.nucleusCandidates[0] === undefined
+        ? {}
+        : { nuclei: view.nucleusCandidates[0].element.name }),
       skippedElements: view.skippedElements.map(
         (element) => `${element.kind}/${element.name}`,
       ),
@@ -312,7 +327,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   }
 
   async meta(): Promise<DatasetMeta> {
-    const { table } = await this.state()
+    const { table, view } = await this.state()
     const [loader, tableMeta, boundaries] = await Promise.all([
       // Boundary loading reads meta() first, so an image that cannot be
       // opened counts as none here instead of blocking outlines. Its error
@@ -321,6 +336,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       table === null ? null : table.meta(),
       this.boundarySource(),
     ])
+    const nuclei = view.nucleusCandidates[0]
     const extents: BBox[] = []
 
     if (tableMeta !== null) {
@@ -329,7 +345,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
     if (loader !== null) {
       const origin = loader.tileBounds(0, 0, 0)
-      extents.push({
+      const frame: BBox = {
         minX: origin.minX,
         minY: origin.minY,
         maxX: micrometers(
@@ -338,7 +354,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         maxY: micrometers(
           origin.minY + loader.imageHeight * loader.units.micrometersPerPixel,
         ),
-      })
+      }
+      extents.push(
+        loader.placement === undefined ? frame : placeFrameBbox(loader.placement, frame),
+      )
     }
 
     return {
@@ -351,6 +370,18 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         pyramidImage: loader !== null,
         multiChannel: (loader?.channels.length ?? 0) > 1,
       },
+      ...(boundaries === null && nuclei === undefined
+        ? {}
+        : {
+            segmentations: [
+              ...(boundaries === null
+                ? []
+                : [segmentationInfo('cell', boundaries.kind, boundaries.entry)]),
+              ...(nuclei === undefined
+                ? []
+                : [segmentationInfo('nucleus', 'shapes', nuclei)]),
+            ],
+          }),
       ...(loader === null
         ? {}
         : {
@@ -372,29 +403,31 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return { elements: await this.labelElements(source.entry, bbox) }
     }
 
-    const index = await this.boundaryIndex()
-    const { bounds } = index
-    const previous =
-      this.shapeElements?.index === index ? this.shapeElements.byCell : new Map()
-    const byCell = new Map<number, SpatialElement>()
+    this.shapeElements = viewportElements(
+      await this.boundaryIndex(),
+      bbox,
+      this.shapeElements,
+    )
+    return { elements: Array.from(this.shapeElements.byCell.values()) }
+  }
 
-    for (let cell = 0; cell < index.ids.length; cell += 1) {
-      const offset = cell * 4
-
-      if (
-        (bounds[offset] ?? 0) > bbox.maxX ||
-        (bounds[offset + 1] ?? 0) > bbox.maxY ||
-        (bounds[offset + 2] ?? 0) < bbox.minX ||
-        (bounds[offset + 3] ?? 0) < bbox.minY
-      ) {
-        continue
-      }
-
-      byCell.set(cell, previous.get(cell) ?? boundaryElement(index, cell))
+  // Cell outlines, or nucleus outlines from a nucleus shapes element such as
+  // spatialdata-io's Xenium `nucleus_boundaries` (plan 10, known gaps).
+  async segmentationElements(
+    kind: 'cell' | 'nucleus',
+    bbox: BBox,
+  ): Promise<readonly SpatialElement[]> {
+    if (kind === 'cell') {
+      return (await this.elements(bbox)).elements
     }
 
-    this.shapeElements = { index, byCell }
-    return { elements: Array.from(byCell.values()) }
+    this.nucleusElements = viewportElements(
+      await this.nucleusIndex(),
+      bbox,
+      this.nucleusElements,
+      NUCLEUS_METADATA,
+    )
+    return Array.from(this.nucleusElements.byCell.values())
   }
 
   async overview(): Promise<readonly CellOverviewPoint[]> {
@@ -1128,6 +1161,98 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     return this.companionBoundaryIndex(companion) ?? this.regionBoundaryIndex()
   }
 
+  private nucleusIndex(): Promise<BoundaryIndex> {
+    if (this.nucleusIndexPromise === null) {
+      this.nucleusIndexPromise = this.readNucleusIndex().catch((error: unknown) => {
+        this.nucleusIndexPromise = null
+        throw error
+      })
+    }
+
+    return this.nucleusIndexPromise
+  }
+
+  // Nuclei are matched to table rows through the region shapes that share
+  // their index or, without region shapes, by the table's cell ids. A cell's first nucleus keeps
+  // its id and later ones get `<id>#nucleus-N`, as on Xenium. Nuclei that
+  // match no row are left out, unless none match.
+  private async readNucleusIndex(): Promise<BoundaryIndex> {
+    const { view, table } = await this.state()
+    const entry = view.nucleusCandidates[0]
+
+    if (entry === undefined) {
+      return boundaryIndexOf([], [], [], [])
+    }
+
+    const tableCellIds = table === null ? [] : await table.cellIds()
+    const { micrometersPerUnit } = await this.units()
+    const shapes = await this.readElementShapes(
+      entry,
+      scaleAffine(entry.affine, micrometersPerUnit),
+    )
+    const regions = Array.from(this.regionShapes.values())
+    const tableLookup = new ShapeLookup(tableCellIds)
+    const nucleusCounts = new Map<string, number>()
+    const ids: string[] = []
+    const shapeIndexes: number[] = []
+
+    regions.forEach((region) => {
+      region.lookup.rewind()
+    })
+    // Without region shapes (a labels region, or none) a nucleus id is
+    // looked up among the table's cell ids.
+    const cellIdOf = (instanceId: string): string | undefined => {
+      if (regions.length === 0) {
+        return tableLookup.indexOf(instanceId) >= 0 ? instanceId : undefined
+      }
+
+      for (const region of regions) {
+        const cellId = region.cellIds[region.lookup.indexOf(instanceId)]
+
+        if (cellId !== undefined) {
+          return cellId
+        }
+      }
+
+      return undefined
+    }
+
+    shapes.ids.forEach((instanceId, index) => {
+      const cellId = cellIdOf(instanceId)
+
+      if (cellId === undefined) {
+        return
+      }
+
+      const count = (nucleusCounts.get(cellId) ?? 0) + 1
+      nucleusCounts.set(cellId, count)
+      ids.push(count === 1 ? cellId : `${cellId}#nucleus-${count.toString()}`)
+      shapeIndexes.push(index)
+    })
+
+    if (ids.length === 0 && shapes.ids.length > 0) {
+      this.onProgress?.(
+        `SpatialData shapes ${entry.element.name}: no nucleus matches a row of table ${view.table?.name ?? ''}; drawing every nucleus`,
+      )
+      return boundaryIndexOf(
+        shapes.ids.map((id) => `${entry.element.name}#${id}`),
+        [{ shapes, scale: 1 }],
+        shapes.ids.map(() => 0),
+        shapes.ids.map((_id, index) => index),
+      )
+    }
+
+    this.onProgress?.(
+      `SpatialData shapes ${entry.element.name}: ${ids.length.toLocaleString()} of ${shapes.ids.length.toLocaleString()} nuclei match table rows`,
+    )
+    return boundaryIndexOf(
+      ids,
+      [{ shapes, scale: 1 }],
+      shapeIndexes.map(() => 0),
+      shapeIndexes,
+    )
+  }
+
   private regionBoundaryIndex(): BoundaryIndex {
     const rows = this.regionRows
     const ids: string[] = []
@@ -1287,12 +1412,32 @@ function numericOrNaN(value: string | number | null | undefined): number {
   return typeof value === 'number' ? value : Number.NaN
 }
 
+// The image loader's scale and translation. A flip or axis swap (the catalog
+// keeps only images placed by axis permutations) becomes the loader's frame
+// placement, with the scale left in the loader.
 function planarTransformFromAffine(affine: Affine2D): OmeZarrPlanarTransform {
+  const { a, b, c, d, e, f } = affine
+
+  if (b === 0 && d === 0 && a > 0 && e > 0) {
+    return { scaleX: a, scaleY: e, translateX: c, translateY: f }
+  }
+
+  const swapped = a === 0
+  const sign = (value: number) => Math.sign(value) || 0
+
   return {
-    scaleX: affine.a,
-    scaleY: affine.e,
-    translateX: affine.c,
-    translateY: affine.f,
+    scaleX: Math.abs(swapped ? d : a),
+    scaleY: Math.abs(swapped ? b : e),
+    translateX: 0,
+    translateY: 0,
+    placement: {
+      a: sign(a),
+      b: sign(b),
+      c: micrometers(c),
+      d: sign(d),
+      e: sign(e),
+      f: micrometers(f),
+    },
   }
 }
 
@@ -1322,7 +1467,41 @@ function boundaryIndexOf(
   }
 }
 
-function boundaryElement(index: BoundaryIndex, cell: number): SpatialElement {
+// The outlines of `index` whose bounds meet `bbox`, keeping the element
+// objects of outlines still in view from the previous request.
+function viewportElements(
+  index: BoundaryIndex,
+  bbox: BBox,
+  previous: ViewportElements | null,
+  metadata?: SpatialElementMetadata,
+): ViewportElements {
+  const { bounds } = index
+  const previousByCell = previous?.index === index ? previous.byCell : new Map()
+  const byCell = new Map<number, SpatialElement>()
+
+  for (let cell = 0; cell < index.ids.length; cell += 1) {
+    const offset = cell * 4
+
+    if (
+      (bounds[offset] ?? 0) > bbox.maxX ||
+      (bounds[offset + 1] ?? 0) > bbox.maxY ||
+      (bounds[offset + 2] ?? 0) < bbox.minX ||
+      (bounds[offset + 3] ?? 0) < bbox.minY
+    ) {
+      continue
+    }
+
+    byCell.set(cell, previousByCell.get(cell) ?? boundaryElement(index, cell, metadata))
+  }
+
+  return { index, byCell }
+}
+
+function boundaryElement(
+  index: BoundaryIndex,
+  cell: number,
+  metadata?: SpatialElementMetadata,
+): SpatialElement {
   const source = index.sources[index.sourceIndexes[cell] ?? 0]
 
   return {
@@ -1333,6 +1512,24 @@ function boundaryElement(index: BoundaryIndex, cell: number): SpatialElement {
         source === undefined ? [] : outlinePoints(source, index.shapeIndexes[cell] ?? 0),
       ],
     },
+    ...(metadata === undefined ? {} : { metadata }),
+  }
+}
+
+function segmentationInfo(
+  kind: 'cell' | 'nucleus',
+  sourceKind: 'shapes' | 'labels',
+  entry: SpatialDataPlacedElement,
+): SegmentationInfo {
+  return {
+    id: kind,
+    kind,
+    label: `${kind === 'cell' ? 'Cell' : 'Nucleus'} boundaries (${entry.element.name})`,
+    sourceKind: sourceKind === 'shapes' ? 'parquet' : 'zarr',
+    path:
+      sourceKind === 'shapes'
+        ? `${entry.element.path}/shapes.parquet`
+        : entry.element.path,
   }
 }
 

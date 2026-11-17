@@ -1,6 +1,12 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
-import type { BBox, ImagePixels, TileIndex, UnitsDescriptor } from './coords'
+import type {
+  BBox,
+  ImageFramePlacement,
+  ImagePixels,
+  TileIndex,
+  UnitsDescriptor,
+} from './coords'
 import type { FallbackNotifier } from './fallbackNotice'
 import type { TileSamples, TileSampling } from './tileSamples'
 
@@ -115,6 +121,10 @@ export interface ImagePyramidLoader {
   // decoded once for many tiles (NDPI), so a large uncompressed tile is no
   // heavier to load than its neighbours.
   readonly tilesFromSharedReads?: boolean
+  // Set when the image is flipped or its axes swapped in the dataset; tile
+  // bounds stay in the loader's frame. Absent means the frame is the
+  // dataset's.
+  readonly placement?: ImageFramePlacement
 
   bestLevel(deckScale: number): number
   tilesForBbox(level: number, bbox: BBox): readonly TileIndex[]

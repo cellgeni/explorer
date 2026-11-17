@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { micrometers, scaleFromZoom, type BBox, type TileIndex } from '../data/coords'
+import {
+  micrometers,
+  scaleFromZoom,
+  unplaceFrameBbox,
+  type BBox,
+  type TileIndex,
+} from '../data/coords'
 import { normalizeLayerOpacity } from '../rendering/layerOpacity'
 import {
   drawFlatImage,
@@ -251,8 +257,8 @@ export function MorphologyCanvas({
 
       const currentRequestIsReady = requestedTilesAreReadyToDraw(channelRequests)
       const batches = currentRequestIsReady
-        ? channelTileBatches(channelRequests, bbox, { requestedLevelOnly: true })
-        : channelTileBatches(channelRequests, bbox, { requestedLevelOnly: false })
+        ? channelTileBatches(channelRequests, { requestedLevelOnly: true })
+        : channelTileBatches(channelRequests, { requestedLevelOnly: false })
 
       if (!currentRequestIsReady && !tileBatchesHaveTiles(batches)) {
         return
@@ -314,6 +320,8 @@ interface ChannelRequest {
   readonly scheduler: TileRequestScheduler<ImagePyramidLoader>
   readonly cacheKey: string
   readonly channel: MorphologyCanvasChannel
+  // The viewport in the loader's frame.
+  readonly bbox: BBox
   readonly level: number
   readonly maxConcurrentRequests: number
   readonly tiles: readonly TileIndex[]
@@ -323,14 +331,18 @@ type ChannelTileBatch = Parameters<typeof drawMorphologyTileChannels>[1][number]
 
 function channelTileBatches(
   requests: readonly ChannelRequest[],
-  bbox: BBox,
   options: { readonly requestedLevelOnly: boolean },
 ): readonly ChannelTileBatch[] {
-  return requests.map((request) => ({
-    color: request.channel.color,
-    opacity: normalizeLayerOpacity(request.channel.opacity ?? 1),
-    tiles: readyTilesForChannelRequest(request, bbox, options),
-  }))
+  return requests.map((request) => {
+    const { placement } = request.channel.loader
+
+    return {
+      color: request.channel.color,
+      opacity: normalizeLayerOpacity(request.channel.opacity ?? 1),
+      tiles: readyTilesForChannelRequest(request, request.bbox, options),
+      ...(placement === undefined ? {} : { placement }),
+    }
+  })
 }
 
 function tileBatchesHaveTiles(batches: readonly ChannelTileBatch[]): boolean {
@@ -426,16 +438,22 @@ function prepareChannelRequest(options: {
   readonly onTileError?: (error: Error) => void
   readonly viewState: OverviewViewState
 }): ChannelRequest {
-  const level = options.channel.loader.bestLevel(2 ** options.viewState.zoom)
-  const scheduling = tileSchedulingForLoader(options.channel.loader, {
+  const { loader } = options.channel
+  const level = loader.bestLevel(2 ** options.viewState.zoom)
+  const scheduling = tileSchedulingForLoader(loader, {
     baseMaxCacheTiles: options.maxCacheTiles,
     baseMaxConcurrentRequests: options.baseMaxConcurrentRequests,
   })
+  // Tiles are selected and cached in the loader's frame.
+  const bbox =
+    loader.placement === undefined
+      ? options.bbox
+      : unplaceFrameBbox(loader.placement, options.bbox)
   const requestBbox =
     scheduling.prefetchScreenMarginPixels <= 0
-      ? options.bbox
+      ? bbox
       : expandBboxByScreenPixels(
-          options.bbox,
+          bbox,
           options.viewState.zoom,
           scheduling.prefetchScreenMarginPixels,
         )
@@ -473,13 +491,14 @@ function prepareChannelRequest(options: {
     scheduler: record.scheduler,
     cacheKey,
     channel: options.channel,
+    bbox,
     level,
     maxConcurrentRequests: scheduling.maxConcurrentRequests,
     tiles: selectCenteredTiles(
-      options.channel.loader.tilesForBbox(level, requestBbox),
+      loader.tilesForBbox(level, requestBbox),
       Math.min(scheduling.maxInitialTileRequests, record.maxTiles),
-      options.bbox,
-      (tile) => options.channel.loader.tileBounds(level, tile.col, tile.row),
+      bbox,
+      (tile) => loader.tileBounds(level, tile.col, tile.row),
     ),
   }
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyAffine,
+  axisPermutingAffine,
   readElementCoordinateTransforms,
   transformationToAffine,
 } from './spatialDataTransforms'
@@ -106,5 +107,52 @@ describe('SpatialData coordinate transformations', () => {
         ],
       }).map((transform) => transform.coordinateSystem),
     ).toEqual(['global'])
+  })
+
+  it('keeps flips and axis swaps, and drops negligible turns', () => {
+    // STHELAR bone marrow `he`: input (c, y, x), output (c, x, y), an x/y swap
+    // and flip with a 1.9e-5 rad registration turn.
+    const he = transformationToAffine(
+      {
+        type: 'affine',
+        input: CYX,
+        output: { name: 'global', axes: [{ name: 'c' }, { name: 'x' }, { name: 'y' }] },
+        affine: [
+          [1, 0, 0, 0],
+          [0, 1.288078013016111, -2.44257565353962e-5, -71.74741989665199],
+          [0, -2.44257565353962e-5, -1.288078013016111, 15558.932913935298],
+        ],
+      },
+      [],
+    )
+
+    expect(axisPermutingAffine(he)).toEqual({
+      a: 0,
+      b: 1.288078013016111,
+      c: -71.74741989665199,
+      d: -1.288078013016111,
+      e: 0,
+      f: 15558.932913935298,
+    })
+    expect(axisPermutingAffine({ a: -2, b: 0, c: 5, d: 0, e: 3, f: 0 })).toEqual({
+      a: -2,
+      b: 0,
+      c: 5,
+      d: 0,
+      e: 3,
+      f: 0,
+    })
+    // 45° and a shear stay skipped.
+    expect(
+      axisPermutingAffine({
+        a: Math.SQRT1_2,
+        b: -Math.SQRT1_2,
+        c: 0,
+        d: Math.SQRT1_2,
+        e: Math.SQRT1_2,
+        f: 0,
+      }),
+    ).toBeNull()
+    expect(axisPermutingAffine({ a: 1, b: 0.01, c: 0, d: 0, e: 1, f: 0 })).toBeNull()
   })
 })

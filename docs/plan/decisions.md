@@ -330,15 +330,18 @@ Amendments made in later phases:
 - Non-range chunk reads go through a 256 MiB LRU per SpatialData store. Decoded
   OME-Zarr chunks share a separate 256 MiB cache.
 - Absent chunks read as fill values, so an interrupted upload loads silently with
-  empty data. Diagnostics therefore send a `HEAD` for every table chunk, and
-  missing string chunks fail fast.
+  empty data. Diagnostics therefore send a `HEAD` for each table chunk (the
+  first 2,000 over HTTP), and missing string chunks fail fast.
 - **Zipped SpatialData (2026-11-13).** A `.zip` URL is read through zarrita's
   `ZipFileStore` over the cached range reader (`src/zarr/zarrZipStore.ts`).
   The central directory is read once and shared by detection, the dataset,
   and diagnostics; keys are relative to the store folder inside the zip.
   Stored entries are read by range, deflated entries whole. Only SpatialData
   is read from zips. Diagnostics check chunks against the zip directory
-  instead of sending `HEAD`s.
+  instead of sending `HEAD`s, so they check every table, image, and labels
+  chunk (2026-11-17). Image and labels chunks absent only from finer levels
+  pass with a note: zarr-python 3 does not write chunks that hold only the
+  fill value, and 304 of the 460-plex image's 1,148 are absent.
 
 ## 4.11 Units For Stores Without Declared Scale (Phase 10)
 

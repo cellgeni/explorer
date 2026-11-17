@@ -118,17 +118,20 @@ Features:
 - [ ] AnnData Zarr: stores without a root `encoding-type`, zipped stores,
       node names with `#` or `?`, and an abort signal for `matrix()` (see
       [Phase 7](phases/07-h5ad.md#anndata-zarr-stores-2026-11-14)).
-- [ ] SpatialData: images that are not axis-aligned, `points` (transcripts),
-      nucleus boundaries, and viewport-scoped shape reads; also labels drawn
-      as a raster rather than traced outlines, labels' other z planes,
+- [ ] SpatialData: rotated or sheared images, `points` (transcripts), Magic
+      Lens, and viewport-scoped shape reads; also labels drawn as a raster
+      rather than traced outlines, nucleus labels, labels' other z planes,
       polygons with holes or several parts (only the outer ring of the
-      largest part is kept), and diagnostics beyond the first chunk of the
-      coarsest level (see
+      largest part is kept), and HTTP diagnostics beyond the first 2,000
+      table chunks and the first chunk of the coarsest level (see
       [Phase 10](phases/10-spatialdata.md#known-gaps)). Partly done: the info
       drawer picks one table and one image at a time (a Visium HD store opens
-      on its coarsest bins). Images with a flipped or swapped axis (STHELAR's
-      H&E) are skipped. Points are not read. Shapes are read whole, in a worker since
-      2026-11-13, then filtered to the viewport. spatialdata-io's
+      on its coarsest bins). Since 2026-11-17 nucleus shapes are drawn,
+      flipped and axis-swapped images (STHELAR's H&E) are shown, and zipped
+      stores have every chunk diagnosed. Points are not read; the 460-plex
+      store's carry x/y row-group statistics but no page index, so a 100 µm
+      view would read 4.7 million rows. Shapes are read whole, in a worker
+      since 2026-11-13, then filtered to the viewport. spatialdata-io's
       `shapes.parquet` cannot be read by viewport: the 460-plex
       `cell_boundaries` is one row group of 598,222 rows with no per-shape
       bounding-box column.

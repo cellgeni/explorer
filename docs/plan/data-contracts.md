@@ -183,13 +183,18 @@ matrices.
   from `spatialdata_attrs`.
 - One coordinate system is shown: ranked by table regions placed in it, then
   whether it holds an image, then element count, then the name `global`.
-- One image is shown: axis-aligned, positive-scale, highest resolution.
+- One image is shown: the highest resolution of those whose affine only
+  scales, flips, or swaps x and y (off-axis terms under 1e-4 of the scale
+  are dropped). Rotated and sheared images are skipped.
+- Nuclei: a non-region shapes element named like `nucleus_boundaries`,
+  matched to table rows through the region shapes' instance ids.
 - Shapes: `shapes.parquet` (GeoParquet or WKB; Point, Polygon, MultiPolygon).
   Points become circles from the `radius` column. Polygons keep the outer ring
   of their largest polygon, read from WKB into a `Float32Array`.
 - Labels: rows are placed from `obsm` through the labels transform, and cell
   outlines are traced from the label raster on demand.
-- Not read: `points` (transcripts), extra images, and extra tables.
+- Not read: `points` (transcripts), extra images, extra tables, and nucleus
+  labels.
 
 ## 5.7 Dataset Manifest (Phase 11)
 
