@@ -1,7 +1,8 @@
 import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import { annotationSetGrouping } from '../annotations/annotationModel'
-import type { PlotGroupsInput } from './plotStats'
+import type { PlotKind } from './plotModel'
+import { PLOT_DENSITY_MAX_GROUPS, type PlotGroupsInput } from './plotStats'
 
 // What the Plots panel plots (plan 22-D1 to 22-D3): the selected genes,
 // grouped by the classes of one annotation set, with the active selection
@@ -9,8 +10,51 @@ import type { PlotGroupsInput } from './plotStats'
 
 // The Xenium reader's limit, kept for every platform (22-D1).
 export const PLOT_MAX_GENES = 32
-// Classes a dot plot shows (22-D2).
+// Classes each plot shows (22-D2). The violin's, with the selection, stay
+// within the groups the worker makes densities for.
 export const DOT_PLOT_MAX_CLASSES = 60
+export const VIOLIN_MAX_CLASSES = Math.min(60, PLOT_DENSITY_MAX_GROUPS - 1)
+export const HEATMAP_MAX_CLASSES = 500
+
+export interface PlotKindInfo {
+  readonly value: PlotKind
+  readonly label: string
+  readonly maxClasses: number
+  // The plot's name in file names.
+  readonly fileName: string
+}
+
+const DOT_PLOT_KIND: PlotKindInfo = {
+  value: 'dot',
+  label: 'Dot plot',
+  maxClasses: DOT_PLOT_MAX_CLASSES,
+  fileName: 'dot-plot',
+}
+
+export const PLOT_KINDS: readonly PlotKindInfo[] = [
+  DOT_PLOT_KIND,
+  {
+    value: 'violin',
+    label: 'Violin',
+    maxClasses: VIOLIN_MAX_CLASSES,
+    fileName: 'violin',
+  },
+  {
+    value: 'heatmap',
+    label: 'Heatmap',
+    maxClasses: HEATMAP_MAX_CLASSES,
+    fileName: 'heatmap',
+  },
+]
+
+// `plot=` (22-D8); the dot plot when the link names none or another.
+export function parsePlotKind(value: string | undefined): PlotKind {
+  return PLOT_KINDS.find((kind) => kind.value === value)?.value ?? DOT_PLOT_KIND.value
+}
+
+export function plotKindInfo(kind: PlotKind): PlotKindInfo {
+  return PLOT_KINDS.find((info) => info.value === kind) ?? DOT_PLOT_KIND
+}
 
 export interface PlotSetOption {
   readonly id: string

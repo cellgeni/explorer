@@ -13,7 +13,10 @@ import {
   testTranscriptsSectionModel,
   testViewSettingsModel,
 } from '../../test/sectionModels'
+import { plotTestInput } from '../../test/plotFixtures'
 import type { CardStackModel } from '../cards/cardModels'
+import { heatmapModel } from '../plots/heatmap'
+import type { PlotsModel } from '../plots/usePlotsModel'
 import { DEFAULT_SHELL_PANELS, type ShellPanelState } from './shellLinkModel'
 import { ShellLayout } from './ShellLayout'
 import { NARROW_SCREEN_QUERY } from './useNarrowScreen'
@@ -380,7 +383,15 @@ describe('ShellLayout', () => {
   })
 
   describe('the Plots window (plan 22-D8)', () => {
-    function PanelsHarness({ initial }: { readonly initial: ShellPanelState }) {
+    function PanelsHarness({
+      initial,
+      plots = testPlotsModel(),
+      children = <div>canvas</div>,
+    }: {
+      readonly initial: ShellPanelState
+      readonly plots?: PlotsModel
+      readonly children?: ReactNode
+    }) {
       const [panels, setPanels] = useState(initial)
       return (
         <ShellLayout
@@ -407,11 +418,11 @@ describe('ShellLayout', () => {
           annotations={testAnnotationsSectionModel()}
           cards={NO_CARDS}
           embedding={testEmbeddingModel()}
-          plots={testPlotsModel()}
+          plots={plots}
           panels={panels}
           onPanelsChange={setPanels}
         >
-          <div>canvas</div>
+          {children}
         </ShellLayout>
       )
     }
@@ -458,6 +469,41 @@ describe('ShellLayout', () => {
       expect(screen.queryByRole('region', { name: 'Embedding' })).toBeNull()
       fireEvent.click(screen.getByRole('button', { name: 'Close plots' }))
       expect(screen.queryByRole('region', { name: 'Plots' })).toBeNull()
+    })
+
+    it('shows the heatmap’s numbers on hover without drawing the viewer again (22-G)', () => {
+      stubScreenWidth(false)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getBoundingClientRect').mockReturnValue({
+        left: 0,
+        top: 0,
+      } as DOMRect)
+      let viewerRenders = 0
+      function Viewer() {
+        viewerRenders += 1
+        return <div>canvas</div>
+      }
+      render(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], plotsOpen: true }}
+          plots={testPlotsModel({
+            message: null,
+            plotKind: 'heatmap',
+            plot: { kind: 'heatmap', model: heatmapModel(plotTestInput) },
+          })}
+        >
+          <Viewer />
+        </PanelsHarness>,
+      )
+      const rendersBefore = viewerRenders
+
+      const canvas = within(plotsWindow())
+        .getByRole('img', { name: /^Heatmap of Actb/ })
+        .querySelector('canvas') as HTMLCanvasElement
+      fireEvent.pointerMove(canvas, { clientX: 5, clientY: 5 })
+
+      expect(within(plotsWindow()).getByText(/^ROI 1, Actb: 4 cells/)).toBeInTheDocument()
+      expect(viewerRenders).toBe(rendersBefore)
     })
 
     it('leaves Show Plots out where cells have no annotation sets', () => {

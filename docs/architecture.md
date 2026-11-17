@@ -36,7 +36,7 @@ files. Parsing happens in the browser:
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
 | `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
 | `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, the Embedding and Plots windows, link panel state, narrow layout                                         |
-| `src/features/plots/`                   | The Plots panel (plan 22): what it groups, the stats store and its worker session, the dot plot model and SVG, exports                                                                   |
+| `src/features/plots/`                   | The Plots panel (plan 22): what it groups, the stats store and its worker session, the dot plot, violin and heatmap models, their SVGs and the heatmap canvas, exports                   |
 | `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
 | `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
@@ -502,7 +502,11 @@ dataset and gives the dataset's row cell IDs; Xenium's are the
 `cell_features/cell_id` integer pairs, made text in the worker. The worker
 maps each class's cell IDs, and the selection's, to rows once per set, then
 sums each gene's stored values into the groups of their rows; every other
-cell of a group counts as 0. It keeps gene values up
+cell of a group counts as 0. It also sorts each group's stored values once
+per gene, for the quartiles with the zeros placed among them, and for up to
+64 groups makes a smoothed histogram of each on the gene's range, the
+violin's shape; both scales and both Include zeros settings are worked out
+then, so switching reads and computes nothing. It keeps gene values up
 to 128 MiB, least recently used first out, and answers for genes it no longer
 holds with their names, which the panel reads again. If the worker fails, or
 there is no `Worker`, the same store runs on the main thread. See

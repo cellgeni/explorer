@@ -1,12 +1,17 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { detectPerformanceBudget } from '../../data/performanceBudget'
-import { formatShareableState, parseShareableState } from '../../data/shareableState'
+import {
+  formatShareableState,
+  parseShareableState,
+  type ShareableState,
+} from '../../data/shareableState'
 import { formatGeneScaleRange } from '../genes/geneScaleRange'
+import { parsePlotKind } from '../plots/plotsPanelModel'
 import { DEFAULT_SHAREABLE_STATE, withoutShareableDefaults } from './shareableDefaults'
 import { useAppDomainState } from './useAppDomainState'
 
-function initialSettings(initialShareableState = {}) {
+function initialSettings(initialShareableState: ShareableState = {}) {
   const { result } = renderHook(() =>
     useAppDomainState({
       initialShareableState,
@@ -17,6 +22,8 @@ function initialSettings(initialShareableState = {}) {
 
   return {
     tool: tools.activeTool,
+    // App keeps the plot, as it reads it here.
+    plot: parsePlotKind(initialShareableState.plot),
     hiddenLayers: (['image', 'cells', 'annotations'] as const).filter(
       (layer) => !layers.layerVisibility[layer],
     ),

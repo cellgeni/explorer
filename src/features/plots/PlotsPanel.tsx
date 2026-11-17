@@ -1,19 +1,21 @@
 import { useId } from 'react'
 import { Button, Select, Switch } from '../../components/ui'
+import { HeatmapFigure } from './HeatmapFigure'
 import {
-  dotPlotSvg,
-  formatPercent,
-  formatPlotNumber,
   PANEL_PLOT_PAINT,
-  type DotPlotModel,
   type PlotColourMode,
-} from './dotPlot'
+  type PlotKind,
+  type PlotTable,
+} from './plotModel'
 import type { PlotScale } from './plotStats'
+import { PLOT_KINDS } from './plotsPanelModel'
+import { plotViewSvg, plotViewTable, type PlotView } from './plotViews'
 import { SvgTree } from './SvgTree'
 import type { PlotsModel } from './usePlotsModel'
 
-// The Plots panel's body (plan 22-D, 22-E): Group by, Scale and Colour, the
-// dot plot or a table of its numbers, notes, and the exports.
+// The Plots panel's body (plan 22-D, 22-E to 22-G): Plot, Group by, Scale
+// and the plot's own controls, the plot or a table of its numbers, notes,
+// and the exports.
 export function PlotsPanel({ plots }: { readonly plots: PlotsModel }) {
   return (
     <>
@@ -31,9 +33,9 @@ export function PlotsPanel({ plots }: { readonly plots: PlotsModel }) {
             {plots.message ?? 'Reading the selected genes…'}
           </p>
         ) : plots.showNumbers ? (
-          <DotPlotTable plot={plots.plot} />
+          <PlotTableView table={plotViewTable(plots.plot)} />
         ) : (
-          <DotPlotFigure plot={plots.plot} />
+          <PlotFigure plot={plots.plot} />
         )}
       </div>
       <PlotsFooter plots={plots} />
@@ -54,9 +56,18 @@ const COLOUR_OPTIONS: readonly {
   { value: 'per-gene', label: 'Per gene' },
 ]
 
+const PLOT_KIND_OPTIONS = PLOT_KINDS.map(({ value, label }) => ({ value, label }))
+
 function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
   return (
     <div className="plots-controls">
+      <Select<PlotKind>
+        title="The plot: dot plot, violin or group-mean heatmap"
+        label="Plot"
+        value={plots.plotKind}
+        options={PLOT_KIND_OPTIONS}
+        onChange={plots.onPlotKindChange}
+      />
       <Select
         title="The annotation set whose classes group the cells"
         label="Group by"
@@ -86,13 +97,22 @@ function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
         ]}
         onChange={plots.onScaleChange}
       />
-      <Select<PlotColourMode>
-        title="Colour means on one range for every gene, or from each gene's lowest to highest mean"
-        label="Colour"
-        value={plots.colour}
-        options={COLOUR_OPTIONS}
-        onChange={plots.onColourChange}
-      />
+      {plots.plotKind === 'violin' ? (
+        <Switch
+          title="Show every cell, with the cells at 0, or only the cells expressing the gene"
+          label="Include zeros"
+          checked={plots.includeZeros}
+          onChange={plots.onIncludeZerosChange}
+        />
+      ) : (
+        <Select<PlotColourMode>
+          title="Colour means on one range for every gene, or from each gene's lowest to highest mean"
+          label="Colour"
+          value={plots.colour}
+          options={COLOUR_OPTIONS}
+          onChange={plots.onColourChange}
+        />
+      )}
       <Switch
         title="Show the plot's numbers as a table"
         label="Show numbers"
@@ -103,48 +123,45 @@ function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
   )
 }
 
-function DotPlotFigure({ plot }: { readonly plot: DotPlotModel }) {
+function PlotFigure({ plot }: { readonly plot: PlotView }) {
   const idPrefix = useId().replaceAll(':', '')
+
+  if (plot.kind === 'heatmap') return <HeatmapFigure plot={plot.model} />
 
   return (
     <div className="plots-figure">
-      <SvgTree node={dotPlotSvg(plot, PANEL_PLOT_PAINT, `dot-plot-${idPrefix}`)} />
+      <SvgTree
+        node={plotViewSvg(plot, PANEL_PLOT_PAINT, `${plot.kind}-plot-${idPrefix}`)}
+      />
     </div>
   )
 }
 
 // The plot's numbers, which is also its text alternative (22-D9).
-function DotPlotTable({ plot }: { readonly plot: DotPlotModel }) {
+function PlotTableView({ table }: { readonly table: PlotTable }) {
   return (
     <div className="plots-table-scroll">
       <table className="plots-table">
-        <caption>{plot.summary}</caption>
+        <caption>{table.caption}</caption>
         <thead>
           <tr>
             <th scope="col">Group</th>
-            <th scope="col">Gene</th>
-            <th scope="col">Cells</th>
-            <th scope="col">% expressing</th>
-            <th scope="col">Mean {plot.valueLabel}</th>
+            {table.columns.map((column) => (
+              <th key={column} scope="col">
+                {column}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {plot.cells.map((cell) => {
-            const group = plot.groups[cell.groupIndex]
-            const gene = plot.genes[cell.geneIndex]?.gene ?? ''
-            return (
-              <tr key={`${cell.groupIndex}:${cell.geneIndex}`}>
-                <th scope="row">
-                  {group?.label ?? ''}
-                  {group?.kind === 'selection' ? ' (selection)' : ''}
-                </th>
-                <td>{gene}</td>
-                <td>{cell.cells.toLocaleString()}</td>
-                <td>{cell.percent === null ? '–' : formatPercent(cell.percent)}</td>
-                <td>{cell.mean === null ? '–' : formatPlotNumber(cell.mean)}</td>
-              </tr>
-            )
-          })}
+          {table.rows.map((row) => (
+            <tr key={row.key}>
+              <th scope="row">{row.group}</th>
+              {row.values.map((value, index) => (
+                <td key={table.columns[index] ?? index}>{value}</td>
+              ))}
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
@@ -187,11 +204,18 @@ function PlotsFooter({ plots }: { readonly plots: PlotsModel }) {
           </Button>
         ) : null}
         <Button
-          title="Download the dot plot as an SVG file"
+          title="Download the plot as an SVG file"
           disabled={plots.plot === null}
           onClick={plots.onExportSvg}
         >
           Export SVG
+        </Button>
+        <Button
+          title="Download the plot as a PNG image, at twice its size"
+          disabled={plots.plot === null}
+          onClick={plots.onExportPng}
+        >
+          Export PNG
         </Button>
         <Button
           title="Download each group's numbers for each gene as CSV"

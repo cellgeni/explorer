@@ -3,15 +3,15 @@ import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
-import { downloadTextFile, type AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import {
-  dotPlotModel,
-  dotPlotSvg,
-  type DotPlotGene,
-  type DotPlotModel,
-  type PlotColourMode,
-} from './dotPlot'
-import { documentPlotPaint, plotFileName, plotStatsCsv } from './plotExport'
+  downloadBlob,
+  downloadTextFile,
+  type AppendDebugEvent,
+} from '../app-shell/appRuntimeModel'
+import { dotPlotModel } from './dotPlot'
+import { heatmapModel } from './heatmap'
+import { documentPlotPaint, plotFileName, plotStatsCsv, svgPngBlob } from './plotExport'
+import type { PlotColourMode, PlotGene, PlotKind } from './plotModel'
 import type { PlotScale } from './plotStats'
 import {
   formatReadSize,
@@ -19,12 +19,15 @@ import {
   PLOT_READ_MAX_BYTES,
   plotGenesPhrase,
   plotGroupsInput,
+  plotKindInfo,
   plotsPanelGroups,
   type PlotSetOption,
   type PlotsSelectionInput,
 } from './plotsPanelModel'
+import { plotViewSvg, svgSize, type PlotView } from './plotViews'
 import { svgDocument } from './svgMarkup'
 import { openPlotsSource, usePlotsWorkflow, type PlotsData } from './usePlotsWorkflow'
+import { violinPlotModel } from './violinPlot'
 
 // The Plots panel (plan 22-D): what it shows and what its controls do.
 
@@ -32,6 +35,8 @@ export interface PlotsModel {
   // The line under the heading.
   readonly status: string
   readonly loading: boolean
+  readonly plotKind: PlotKind
+  readonly onPlotKindChange: (kind: PlotKind) => void
   readonly setOptions: readonly PlotSetOption[]
   readonly setId: string | null
   readonly onSetChange: (setId: string) => void
@@ -41,11 +46,14 @@ export interface PlotsModel {
   readonly onScaleChange: (scale: PlotScale) => void
   readonly colour: PlotColourMode
   readonly onColourChange: (colour: PlotColourMode) => void
+  // The violin shows every cell, or the expressing cells only (22-F).
+  readonly includeZeros: boolean
+  readonly onIncludeZerosChange: (include: boolean) => void
   readonly showNumbers: boolean
   readonly onShowNumbersChange: (show: boolean) => void
   // A message in place of the plot, or the plot.
   readonly message: string | null
-  readonly plot: DotPlotModel | null
+  readonly plot: PlotView | null
   // What the plot leaves out, and genes that failed.
   readonly notes: readonly string[]
   readonly geneErrors: readonly string[]
@@ -58,11 +66,15 @@ export interface PlotsModel {
   readonly canRetry: boolean
   readonly onRetry: () => void
   readonly onExportSvg: () => void
+  readonly onExportPng: () => void
   readonly onExportCsv: () => void
 }
 
 export interface PlotsModelInput {
   readonly open: boolean
+  // The plot shown, kept in the link as `plot=` (22-D8).
+  readonly plotKind: PlotKind
+  readonly onPlotKindChange: (kind: PlotKind) => void
   // The platform's cells have annotation sets (Visium HD bins do not).
   readonly available: boolean
   readonly datasetUrl: string | null
@@ -95,6 +107,8 @@ function objectId(value: object): number {
 
 export function usePlotsModel({
   open,
+  plotKind,
+  onPlotKindChange,
   available,
   datasetUrl,
   datasetReady,
@@ -111,7 +125,9 @@ export function usePlotsModel({
   const [chosenSetId, setChosenSetId] = useState<string | null>(null)
   const [chosenScale, setChosenScale] = useState<PlotScale | null>(null)
   const [colour, setColour] = useState<PlotColourMode>('shared')
+  const [includeZeros, setIncludeZeros] = useState(true)
   const [showNumbers, setShowNumbers] = useState(false)
+  const kindInfo = plotKindInfo(plotKind)
 
   const panel = useMemo(
     () =>
@@ -121,8 +137,16 @@ export function usePlotsModel({
         setId: chosenSetId,
         selection,
         selectedGenes,
+        maxClasses: kindInfo.maxClasses,
       }),
-    [annotations, chosenSetId, selectedGenes, selection, visibleClasses],
+    [
+      annotations,
+      chosenSetId,
+      kindInfo.maxClasses,
+      selectedGenes,
+      selection,
+      visibleClasses,
+    ],
   )
   const groupsRequest = useMemo(
     () =>
@@ -151,7 +175,7 @@ export function usePlotsModel({
 
   // Stats for these groups, in the genes' order.
   const current = data.groupsKey !== null && data.groupsKey === groupsRequest?.key
-  const genes = useMemo<readonly DotPlotGene[]>(
+  const genes = useMemo<readonly PlotGene[]>(
     () =>
       panel.genes.map((gene) => ({
         gene,
@@ -168,21 +192,40 @@ export function usePlotsModel({
   const storedLabel = wholeNumbers && loadedStats.length > 0 ? 'counts' : 'X'
   const valueLabel = scale === 'log1p' ? `log1p(${storedLabel})` : storedLabel
 
-  const plot = useMemo(
-    () =>
-      genes.every(({ stats }) => stats === null)
-        ? null
-        : dotPlotModel({
-            groups: panel.groups,
-            genes,
-            scale,
-            colour,
-            colorScale,
-            valueLabel,
-            setLabel: panel.setLabel,
-          }),
-    [colorScale, colour, genes, panel.groups, panel.setLabel, scale, valueLabel],
-  )
+  const plot = useMemo((): PlotView | null => {
+    if (genes.every(({ stats }) => stats === null)) return null
+
+    const input = {
+      groups: panel.groups,
+      genes,
+      scale,
+      valueLabel,
+      setLabel: panel.setLabel,
+    }
+    switch (plotKind) {
+      case 'dot':
+        return { kind: 'dot', model: dotPlotModel({ ...input, colour, colorScale }) }
+      case 'violin':
+        return { kind: 'violin', model: violinPlotModel({ ...input, includeZeros }) }
+      case 'heatmap':
+        return { kind: 'heatmap', model: heatmapModel({ ...input, colour, colorScale }) }
+    }
+  }, [
+    colorScale,
+    colour,
+    genes,
+    includeZeros,
+    panel.groups,
+    panel.setLabel,
+    plotKind,
+    scale,
+    valueLabel,
+  ])
+  const fileName = (extension: string) =>
+    datasetUrl === null
+      ? null
+      : plotFileName(datasetUrl, kindInfo.fileName, panel.setLabel, extension)
+  const plotName = kindInfo.label.toLowerCase()
 
   const largeRead = largeReadNotice(data)
   const message = plotsMessage({
@@ -210,6 +253,11 @@ export function usePlotsModel({
   return {
     status: plotsStatus(panel.genes.length, panel.groups.length, panel.setLabel, data),
     loading: reading,
+    plotKind,
+    onPlotKindChange: (kind) => {
+      onPlotKindChange(kind)
+      appendDebugEvent(`Plots: showing the ${plotKindInfo(kind).label.toLowerCase()}`)
+    },
     setOptions: panel.setOptions,
     setId: panel.setId,
     onSetChange: (setId) => {
@@ -221,6 +269,8 @@ export function usePlotsModel({
     onScaleChange: setChosenScale,
     colour,
     onColourChange: setColour,
+    includeZeros,
+    onIncludeZerosChange: setIncludeZeros,
     showNumbers,
     onShowNumbersChange: setShowNumbers,
     message,
@@ -241,21 +291,46 @@ export function usePlotsModel({
       data.status === 'cancelled' || data.status === 'error' || geneErrors.length > 0,
     onRetry: data.retry,
     onExportSvg: () => {
-      if (plot === null || datasetUrl === null) return
+      const name = fileName('svg')
+      if (plot === null || name === null) return
       downloadTextFile(
-        plotFileName(datasetUrl, 'dot-plot', panel.setLabel, 'svg'),
-        svgDocument(dotPlotSvg(plot, documentPlotPaint(), 'dot-plot')),
+        name,
+        svgDocument(plotViewSvg(plot, documentPlotPaint(), plot.kind)),
         'image/svg+xml;charset=utf-8',
       )
-      appendDebugEvent('Plots: exported the dot plot as SVG')
+      appendDebugEvent(`Plots: exported the ${plotName} as SVG`)
+    },
+    onExportPng: () => {
+      const name = fileName('png')
+      if (plot === null || name === null) return
+      const svg = plotViewSvg(plot, documentPlotPaint(), plot.kind)
+      const { width, height } = svgSize(svg)
+      svgPngBlob(svgDocument(svg), width, height).then(
+        (blob) => {
+          downloadBlob(name, blob)
+          appendDebugEvent(`Plots: exported the ${plotName} as PNG`)
+        },
+        (error: unknown) => {
+          appendDebugEvent(
+            `Plots: PNG export failed: ${error instanceof Error ? error.message : String(error)}`,
+          )
+        },
+      )
     },
     onExportCsv: () => {
-      if (plot === null || datasetUrl === null) return
+      const name = fileName('csv')
+      if (plot === null || name === null) return
       downloadTextFile(
-        plotFileName(datasetUrl, 'dot-plot', panel.setLabel, 'csv'),
-        plotStatsCsv({ setLabel: panel.setLabel, groups: panel.groups, genes }),
+        name,
+        plotStatsCsv({
+          setLabel: panel.setLabel,
+          groups: panel.groups,
+          genes,
+          scale,
+          valueLabel,
+        }),
       )
-      appendDebugEvent('Plots: exported the dot plot numbers as CSV')
+      appendDebugEvent(`Plots: exported the ${plotName} numbers as CSV`)
     },
   }
 }

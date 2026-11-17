@@ -3843,6 +3843,35 @@ describe('App', () => {
         ).toContain('ROI 1 (selection)Actb2100%1.04')
       })
       expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
+
+      // The violin and the heatmap use the same numbers, and the link keeps
+      // the plot.
+      fireEvent.change(within(reopened).getByRole('combobox', { name: 'Plot' }), {
+        target: { value: 'violin' },
+      })
+      expect(
+        within(reopened).getByRole('columnheader', { name: 'Median log1p(counts)' }),
+      ).toBeInTheDocument()
+      fireEvent.click(within(reopened).getByRole('switch', { name: 'Show numbers' }))
+      expect(
+        within(reopened).getByRole('img', {
+          name: /^Violin plot of Actb and Gad1 across 3 groups of cell_type/,
+        }),
+      ).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.location.hash).toContain('plot=violin')
+      })
+
+      fireEvent.change(within(reopened).getByRole('combobox', { name: 'Plot' }), {
+        target: { value: 'heatmap' },
+      })
+      expect(
+        within(reopened).getByRole('img', { name: /^Heatmap of Actb and Gad1/ }),
+      ).toBeInTheDocument()
+      await waitFor(() => {
+        expect(window.location.hash).toContain('plot=heatmap')
+      })
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
     } finally {
       viewport.restore()
     }

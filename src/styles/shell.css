@@ -173,6 +173,143 @@
   stroke-dasharray: 3 3;
 }
 
+.plot-axis {
+  stroke: var(--text-3);
+}
+
+.plot-mark {
+  fill: var(--text-1);
+  stroke: var(--text-1);
+}
+
+/* The plot's own background: .plots-view's. */
+.plot-surface {
+  fill: var(--surface-0);
+  stroke: var(--surface-0);
+}
+
+/* The heatmap (22-G): gene labels over the canvas, group labels beside it,
+   the colour bar under it. */
+.plots-heatmap {
+  display: grid;
+  grid-template-columns: max-content max-content;
+  grid-template-areas:
+    '. genes'
+    'groups grid'
+    '. legend';
+  gap: 6px;
+  width: max-content;
+  padding: var(--space-1);
+  color: var(--text-1);
+  font-size: 11px;
+}
+
+.plots-heatmap--compact {
+  font-size: 10px;
+}
+
+.plots-heatmap-genes,
+.plots-heatmap-groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plots-heatmap-genes {
+  grid-area: genes;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* Read from the bottom up, as the dot plot's gene labels are. */
+.plots-heatmap-genes li {
+  width: 22px;
+  max-height: 16ch;
+  overflow: hidden;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transform: rotate(180deg);
+  writing-mode: vertical-rl;
+}
+
+.plots-heatmap-groups {
+  grid-area: groups;
+}
+
+.plots-heatmap-groups li {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  height: var(--heatmap-row);
+}
+
+.plots-heatmap-label {
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plots-heatmap-swatch {
+  flex: none;
+  width: 10px;
+  height: min(10px, calc(var(--heatmap-row) - 2px));
+  border-radius: 2px;
+}
+
+.plots-heatmap-swatch--selection {
+  border-radius: 0;
+}
+
+.plots-heatmap-grid {
+  grid-area: grid;
+  position: relative;
+}
+
+.plots-heatmap-grid canvas {
+  display: block;
+}
+
+.plots-heatmap-tip {
+  position: absolute;
+  z-index: 1;
+  width: max-content;
+  max-width: 280px;
+  margin: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-1);
+  font-size: var(--font-caption);
+  pointer-events: none;
+}
+
+.plots-heatmap-legend {
+  grid-area: legend;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  color: var(--text-3);
+  font-size: 10px;
+}
+
+.plots-heatmap-bar,
+.plots-heatmap-ends {
+  width: 120px;
+}
+
+.plots-heatmap-bar {
+  height: 10px;
+}
+
+.plots-heatmap-ends {
+  display: flex;
+  justify-content: space-between;
+}
+
 .plots-table {
   width: 100%;
   border-collapse: collapse;

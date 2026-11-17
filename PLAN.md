@@ -54,7 +54,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 19](docs/plan/phases/19-ndpi.md)                                                   | NDPI (Hamamatsu) images                                  | Done (2026-11-15)                                                |
 | [Phase 20](docs/plan/phases/20-dataset-collections.md)                                    | Dataset collections: previews, sections side by side     | Done (2026-11-14 to 2026-11-16)                                  |
 | [Phase 21](docs/plan/phases/21-structure-browser.md)                                      | Browse Store and Browse File (Zarr and Parquet)          | Done (2026-11-15 to 2026-11-16)                                  |
-| [Phase 22](docs/plan/phases/22-plots-panel.md)                                            | Plots panel: dot plot, violin, group-mean heatmap        | M1 and M2 (every platform but Visium HD) done (2026-11-16)       |
+| [Phase 22](docs/plan/phases/22-plots-panel.md)                                            | Plots panel: dot plot, violin, group-mean heatmap        | M1–M3 done (2026-11-17)                                          |
 
 **Done** means a phase's tasks shipped. Most phase files also keep a Known
 Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)

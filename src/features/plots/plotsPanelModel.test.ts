@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import type { Annotation } from '../../datasets/spatialDataset'
+import { PLOT_DENSITY_MAX_GROUPS } from './plotStats'
 import {
   defaultPlotSetId,
   formatReadSize,
+  HEATMAP_MAX_CLASSES,
+  parsePlotKind,
+  plotKindInfo,
+  VIOLIN_MAX_CLASSES,
   PLOT_MAX_GENES,
   PLOT_READ_MAX_BYTES,
   PLOT_READ_PROMPT_BYTES,
@@ -92,6 +97,22 @@ describe('Plots panel groups (plan 22-D1 to 22-D3)', () => {
     })
 
     expect(panel.setId).toBe('analysis:cluster')
+  })
+})
+
+describe('Plot kinds (plan 22-D2, 22-D8)', () => {
+  it('reads plot= and falls back to the dot plot', () => {
+    expect(parsePlotKind('violin')).toBe('violin')
+    expect(parsePlotKind('heatmap')).toBe('heatmap')
+    expect(parsePlotKind('scatter')).toBe('dot')
+    expect(parsePlotKind(undefined)).toBe('dot')
+  })
+
+  it('shows hundreds of classes in the heatmap, and violins with densities', () => {
+    expect(plotKindInfo('heatmap').maxClasses).toBe(HEATMAP_MAX_CLASSES)
+    // The violin's classes and the selection all get densities.
+    expect(VIOLIN_MAX_CLASSES + 1).toBeLessThanOrEqual(PLOT_DENSITY_MAX_GROUPS)
+    expect(plotKindInfo('violin').fileName).toBe('violin')
   })
 })
 
