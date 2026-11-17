@@ -1063,9 +1063,9 @@ deposit, followed by the licence and citation.
 ### Diagnostics
 
 `Diagnose Dataset` runs `runDatasetDiagnostics` for the URL; the download icon
-saves `<platform>-diagnostics.json`, named after the loaded dataset's platform
-(`xenium`, `visium-hd`, `h5ad`, …), or after the platform diagnostics found
-when nothing is loaded (`dataset` if neither is known). Then
+saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
+`generatedAt` in UTC to the second with `-` for `:` (for example
+`diagnostics-2026-11-17T14-05-09Z.json`). Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |

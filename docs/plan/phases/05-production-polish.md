@@ -22,8 +22,9 @@
       `cell_feature_matrix.h5`, and check `gene_panel.json` and the UMAP and
       t-SNE projections (a manifest's `umap`/`tsne` entries replace the
       standard paths). All of these are optional and warn when absent. The
-      dump was always named `xenium-diagnostics.json`; since 2026-11-12 it is
-      `<platform>-diagnostics.json`.
+      dump was always named `xenium-diagnostics.json`; from 2026-11-12 it was
+      `<platform>-diagnostics.json`, and since 2026-11-17 it is
+      `diagnostics-<timestamp>.json`.
 - [x] Privacy-respecting local telemetry (loads, diagnostics, tile-cache
       evictions), kept in memory and exported only through the dump.
 - [x] Docs: `docs/user-guide.md`, `docs/host-your-own-data.md`, and the root
@@ -52,5 +53,7 @@ Reopened by the 2026-11-08 review (marked done before, found incomplete):
 Other gaps found in the review:
 
 - [x] The diagnostics dump is named `xenium-diagnostics.json` on every platform.
-      Now `<platform>-diagnostics.json`, after the loaded dataset, else the
-      platform diagnostics found, else `dataset` (2026-11-12).
+      Then `<platform>-diagnostics.json`, after the loaded dataset, else the
+      platform diagnostics found, else `dataset` (2026-11-12). Now
+      `diagnostics-<timestamp>.json`, the dump's `generatedAt` in UTC to the
+      second with `-` for `:` (2026-11-17).
