@@ -163,7 +163,10 @@ import type {
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
 import type { OverviewViewState } from '../rendering/deckLayers'
-import { DEFAULT_CELL_FILL_OPACITY } from '../rendering/layerOpacity'
+import {
+  DEFAULT_CELL_BOUNDARY_OPACITY,
+  DEFAULT_CELL_FILL_OPACITY,
+} from '../rendering/layerOpacity'
 import type {
   AnnotationColorStyle,
   CellMetadataColorStyle,
@@ -275,7 +278,7 @@ export function ViewerCore({
   imageOpacity = 1,
   cellLayersVisible = true,
   cellFillOpacity = DEFAULT_CELL_FILL_OPACITY,
-  cellBoundaryOpacity = 1,
+  cellBoundaryOpacity = DEFAULT_CELL_BOUNDARY_OPACITY,
   cellPointScale = 1,
   pointSizeFullViewScale = 1,
   trueSizePoints = false,

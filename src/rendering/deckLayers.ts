@@ -29,8 +29,8 @@ import {
 } from './transcriptRenderer'
 import { createGeometricAnnotationLayers } from './geometricAnnotationRenderer'
 import {
+  DEFAULT_CELL_BOUNDARY_OPACITY,
   DEFAULT_CELL_FILL_OPACITY,
-  DEFAULT_LAYER_OPACITY,
   normalizeLayerOpacity,
 } from './layerOpacity'
 
@@ -170,7 +170,7 @@ export function createOverviewLayers(
     options.cellFillOpacity ?? DEFAULT_CELL_FILL_OPACITY,
   )
   const cellBoundaryOpacity = normalizeLayerOpacity(
-    options.cellBoundaryOpacity ?? DEFAULT_LAYER_OPACITY,
+    options.cellBoundaryOpacity ?? DEFAULT_CELL_BOUNDARY_OPACITY,
   )
   const cellBoundaryFillEnabled = options.cellBoundaryFillEnabled ?? false
   const geneExpressionOverlayElements = options.geneExpressionOverlayElements ?? []
