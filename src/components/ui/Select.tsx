@@ -6,6 +6,8 @@ export interface SelectOption<T extends string> {
   readonly value: T
   readonly label: string
   readonly disabled?: boolean | undefined
+  // Consecutive options with the same group sit under it as an optgroup.
+  readonly group?: string | undefined
 }
 
 export interface SelectProps<T extends string> {
@@ -51,14 +53,47 @@ export function Select<T extends string>({
             if (next !== undefined) onChange(next.value)
           }}
         >
-          {options.map((option) => (
-            <option key={option.value} value={option.value} disabled={option.disabled}>
-              {option.label}
-            </option>
-          ))}
+          {optionRuns(options).map((run) =>
+            run.group === undefined ? (
+              run.options.map(renderOption)
+            ) : (
+              <optgroup key={`group:${run.group}`} label={run.group}>
+                {run.options.map(renderOption)}
+              </optgroup>
+            ),
+          )}
         </select>
         <ChevronDownIcon />
       </span>
     </div>
   )
+}
+
+function renderOption<T extends string>(option: SelectOption<T>) {
+  return (
+    <option key={option.value} value={option.value} disabled={option.disabled}>
+      {option.label}
+    </option>
+  )
+}
+
+// Options split where their group changes.
+function optionRuns<T extends string>(
+  options: readonly SelectOption<T>[],
+): readonly {
+  readonly group: string | undefined
+  readonly options: SelectOption<T>[]
+}[] {
+  const runs: { group: string | undefined; options: SelectOption<T>[] }[] = []
+
+  for (const option of options) {
+    const last = runs.at(-1)
+    if (last !== undefined && last.group === option.group) {
+      last.options.push(option)
+    } else {
+      runs.push({ group: option.group, options: [option] })
+    }
+  }
+
+  return runs
 }

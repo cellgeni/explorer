@@ -384,21 +384,25 @@ metrics when boundary geometry is available, and, for Xenium, a compact z-axis
 distribution of molecules/transcripts assigned to that cell.
 
 The Plots panel, opened from Cells › `Show Plots`, plots the selected genes
-by the classes of a loaded set:
+by the classes of one of the dataset's sets, or by your selections:
 
 1. Select genes in Cells › Genes (up to 32 are plotted).
-2. Load an annotation set in Cells › Clusters, or draw selections.
-3. Choose `Show Plots`. The dot plot comes first: each dot's size is the
+2. Choose `Show Plots`. The dot plot comes first: each dot's size is the
    share of the class's cells expressing the gene, and its colour the class's
    mean, with zeros counted.
+3. Under `Group by`, choose the set. `Loaded` lists the sets loaded in Cells ›
+   Clusters, which follow the legend: hide a class there to leave it out.
+   `In the dataset` lists the dataset's other sets, which the panel reads for
+   the plot alone, so the map keeps its colours. `Selections` plots each
+   saved selection in Annotations › Selections as a group of its own. With
+   nothing loaded, the panel starts with your selections, else the dataset's
+   graphclust or first set.
 4. Under `Plot`, choose `Violin` for the spread of each gene's values in each
    class, with a box for the quartiles and a line at the median, or `Heatmap`
    for the class means as coloured tiles, which suits sets with hundreds of
    classes. `Include zeros` off shows the violins of expressing cells only.
-5. Pick another loaded set under `Group by`, or draw a selection to add it as
-   the first group. `Group by` › `Selections` plots each saved selection in
-   Annotations › Selections as a group of its own, and is the default when
-   no set is loaded. `Scale` switches between log1p and the stored values,
+5. Draw a selection to add it as the first group. `Scale` switches between
+   log1p and the stored values,
    and `Colour` between one range for every gene and one per gene.
 6. `Show numbers` lists the numbers; `Export SVG` and `Export PNG` save the
    figure and `Export CSV` the numbers behind it.

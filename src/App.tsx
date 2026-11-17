@@ -47,7 +47,7 @@ import { useToolShortcuts } from './features/shell/useToolShortcuts'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import type { PlotKind } from './features/plots/plotModel'
-import { parsePlotKind } from './features/plots/plotsPanelModel'
+import { parsePlotKind, plotDatasetSets } from './features/plots/plotsPanelModel'
 import { usePlotsModel } from './features/plots/usePlotsModel'
 import {
   cardForLink,
@@ -4276,6 +4276,14 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const plotsAvailable =
     platformAdapter.capabilities.cells && platformAdapter.capabilities.annotations
+  const plotsDatasetSets = useMemo(
+    () =>
+      plotDatasetSets(
+        annotationGroupState.status === 'ready' ? annotationGroupState.groups : [],
+        loadedAnnotationGroupId,
+      ),
+    [annotationGroupState, loadedAnnotationGroupId],
+  )
   const plots = usePlotsModel({
     open: shellPanels.plotsOpen,
     plotKind,
@@ -4293,6 +4301,8 @@ export function App({ dependencies }: AppProps = {}) {
     selection: plotsSelection,
     savedSelections: selectionList.selections,
     loadSelectionCells: loadActiveRoiCells,
+    datasetSets: plotsDatasetSets,
+    loadSetAnnotations: loadActiveAnnotations,
     selectedGenes,
     colorScale: geneExpressionColorScale,
     elementNoun: platformAdapter.labels.embeddingElementPlural,

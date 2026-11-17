@@ -14,11 +14,15 @@ import {
   plotGenesPhrase,
   plotGroupsInput,
   plotReadDecision,
+  datasetSetOptionId,
+  plotDatasetSets,
   plotSetOptions,
   plotsPanelGroups,
   resolvePlotSetId,
   SELECTIONS_SET_ID,
+  type PlotDatasetSet,
   type PlotSavedSelection,
+  type PlotSetSources,
 } from './plotsPanelModel'
 
 const annotations: readonly Annotation<string>[] = [
@@ -28,6 +32,16 @@ const annotations: readonly Annotation<string>[] = [
   { id: 'analysis:cluster:c', label: 'cluster: C', cellIds: ['d'] },
   { id: 'custom:labels-csv:type:t', label: 'type: T', cellIds: ['a'] },
 ]
+function sources(overrides: Partial<PlotSetSources> = {}): PlotSetSources {
+  return {
+    annotations,
+    savedSelectionCount: 0,
+    datasetSets: [],
+    datasetSet: null,
+    ...overrides,
+  }
+}
+
 const styles = annotations.map((annotation, index) => ({
   ...annotation,
   color: `#00000${index}`,
@@ -35,10 +49,15 @@ const styles = annotations.map((annotation, index) => ({
 
 describe('Plots panel groups (plan 22-D1 to 22-D3)', () => {
   it('lists sets as the Clusters lists group them, defaulting to the dataset’s', () => {
-    expect(plotSetOptions(annotations)).toEqual([
-      { id: 'loaded-annotations', label: 'Loaded annotations', classCount: 1 },
-      { id: 'analysis:cluster', label: 'cluster', classCount: 3 },
-      { id: 'custom:labels-csv:type', label: 'type', classCount: 1 },
+    expect(plotSetOptions(sources())).toEqual([
+      {
+        id: 'loaded-annotations',
+        label: 'Loaded annotations',
+        classCount: 1,
+        kind: 'loaded',
+      },
+      { id: 'analysis:cluster', label: 'cluster', classCount: 3, kind: 'loaded' },
+      { id: 'custom:labels-csv:type', label: 'type', classCount: 1, kind: 'loaded' },
     ])
     // Save ROI puts its class first; the dataset's set is still the default.
     expect(defaultPlotSetId(annotations)).toBe('analysis:cluster')
@@ -132,17 +151,19 @@ describe('Group by › Selections', () => {
   ]
 
   it('lists the saved selections as a set, the default without a loaded one', () => {
-    expect(plotSetOptions(annotations, 4).at(-1)).toEqual({
+    const four = sources({ savedSelectionCount: 4 })
+    expect(plotSetOptions(four).at(-1)).toEqual({
       id: SELECTIONS_SET_ID,
       label: 'Selections',
       classCount: 4,
+      kind: 'selections',
     })
-    expect(plotSetOptions([], 0)).toEqual([])
-    expect(resolvePlotSetId([], 4, null)).toBe(SELECTIONS_SET_ID)
-    expect(resolvePlotSetId(annotations, 4, null)).toBe('analysis:cluster')
-    expect(resolvePlotSetId(annotations, 4, SELECTIONS_SET_ID)).toBe(SELECTIONS_SET_ID)
+    expect(plotSetOptions(sources({ annotations: [] }))).toEqual([])
+    expect(resolvePlotSetId({ ...four, annotations: [] }, null)).toBe(SELECTIONS_SET_ID)
+    expect(resolvePlotSetId(four, null)).toBe('analysis:cluster')
+    expect(resolvePlotSetId(four, SELECTIONS_SET_ID)).toBe(SELECTIONS_SET_ID)
     // Deleting the last selection falls back to the dataset's set.
-    expect(resolvePlotSetId(annotations, 0, SELECTIONS_SET_ID)).toBe('analysis:cluster')
+    expect(resolvePlotSetId(sources(), SELECTIONS_SET_ID)).toBe('analysis:cluster')
   })
 
   it('makes each shown selection a group, overlaps and all', () => {
@@ -201,6 +222,137 @@ describe('Group by › Selections', () => {
 
     expect(panel.pendingSelectionCount).toBe(1)
     expect(panel.groups).toEqual([])
+  })
+})
+
+describe('Group by › a set Clusters has not loaded', () => {
+  const groups = [
+    { id: 'obs:leiden', label: 'leiden', groupingName: 'leiden', groupCount: 3 },
+    { id: 'obs:sample', label: 'sample', groupingName: 'sample', groupCount: 2 },
+  ]
+  const datasetSets: readonly PlotDatasetSet[] = plotDatasetSets(groups, undefined)
+  const leiden: readonly Annotation<string>[] = [
+    {
+      id: 'analysis:leiden:0',
+      label: 'leiden: 0',
+      cellIds: ['a', 'b'],
+      color: '#1f77b4',
+    },
+    { id: 'analysis:leiden:1', label: 'leiden: 1', cellIds: ['c'] },
+    { id: 'analysis:leiden:2', label: 'leiden: 2', cellIds: ['d'] },
+  ]
+
+  it('lists the dataset’s sets Clusters has not loaded', () => {
+    expect(datasetSets).toEqual([
+      { groupId: 'obs:leiden', label: 'leiden', classCount: 3 },
+      { groupId: 'obs:sample', label: 'sample', classCount: 2 },
+    ])
+    expect(plotDatasetSets(groups, 'obs:leiden').map((set) => set.groupId)).toEqual([
+      'obs:sample',
+    ])
+    expect(plotDatasetSets(groups, 'all')).toEqual([])
+    expect(
+      plotSetOptions(sources({ datasetSets, savedSelectionCount: 1 })).map(
+        (option) => option.kind,
+      ),
+    ).toEqual(['loaded', 'loaded', 'loaded', 'dataset', 'dataset', 'selections'])
+  })
+
+  it('defaults to graphclust, else the first set that groups the cells', () => {
+    expect(resolvePlotSetId(sources({ annotations: [], datasetSets }), null)).toBe(
+      datasetSetOptionId('obs:leiden'),
+    )
+    // One class compares nothing; thousands are cell IDs.
+    expect(
+      resolvePlotSetId(
+        sources({
+          annotations: [],
+          datasetSets: [
+            { groupId: 'obs:donor', label: 'donor', classCount: 1 },
+            { groupId: 'obs:barcode', label: 'barcode', classCount: 4992 },
+            ...datasetSets,
+          ],
+        }),
+        null,
+      ),
+    ).toBe(datasetSetOptionId('obs:leiden'))
+    expect(
+      resolvePlotSetId(
+        sources({
+          annotations: [],
+          datasetSets: [
+            ...datasetSets,
+            { groupId: 'graphclust', label: 'graphclust', classCount: 9 },
+          ],
+        }),
+        null,
+      ),
+    ).toBe(datasetSetOptionId('graphclust'))
+  })
+
+  it('waits for the classes, then plots every one in its stored or palette colour', () => {
+    const input = {
+      annotations: [],
+      visibleClasses: [],
+      setId: datasetSetOptionId('obs:leiden'),
+      selection: { name: 'ROI 1', color: '#f0c84b', cellIds: ['a'], hitCellLimit: false },
+      datasetSets,
+      selectedGenes: ['Gad1'],
+      maxClasses: 2,
+    }
+    const pending = plotsPanelGroups({
+      ...input,
+      datasetSet: { groupId: 'obs:leiden', status: 'loading' },
+    })
+
+    expect(pending.pendingDatasetSet).toBe(true)
+    expect(pending.groups.filter((group) => group.kind === 'class')).toEqual([])
+
+    const ready = plotsPanelGroups({
+      ...input,
+      datasetSet: {
+        groupId: 'obs:leiden',
+        status: 'ready',
+        annotations: leiden,
+        colors: { 'analysis:leiden:0': '#1f77b4', 'analysis:leiden:1': '#ff7f0e' },
+      },
+    })
+
+    expect(ready.setLabel).toBe('leiden')
+    expect(ready.setKind).toBe('dataset')
+    expect(ready.groups.map((group) => [group.label, group.color, group.kind])).toEqual([
+      ['ROI 1', '#f0c84b', 'selection'],
+      ['0', '#1f77b4', 'class'],
+      ['1', '#ff7f0e', 'class'],
+    ])
+    expect(ready.omittedClassCount).toBe(1)
+    expect(ready.hiddenClassCount).toBe(0)
+
+    const failed = plotsPanelGroups({
+      ...input,
+      datasetSet: { groupId: 'obs:leiden', status: 'error', message: 'Not found.' },
+    })
+    expect(failed.datasetSetError).toBe('Not found.')
+  })
+
+  it('follows the set once Clusters loads it', () => {
+    const datasetSet = {
+      groupId: 'obs:leiden',
+      status: 'ready' as const,
+      annotations: leiden,
+      colors: {},
+    }
+
+    expect(
+      resolvePlotSetId(
+        sources({
+          annotations: [...annotations, ...leiden],
+          datasetSets: plotDatasetSets(groups, 'obs:leiden'),
+          datasetSet,
+        }),
+        datasetSetOptionId('obs:leiden'),
+      ),
+    ).toBe('analysis:leiden')
   })
 })
 

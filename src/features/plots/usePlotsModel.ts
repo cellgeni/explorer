@@ -3,7 +3,11 @@ import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
-import type { RoiCellsLoader, SpatialDatasetLoader } from '../app-shell/appDependencies'
+import type {
+  AnnotationLoader,
+  RoiCellsLoader,
+  SpatialDatasetLoader,
+} from '../app-shell/appDependencies'
 import {
   downloadBlob,
   downloadTextFile,
@@ -21,14 +25,17 @@ import {
   plotGenesPhrase,
   plotGroupsInput,
   plotKindInfo,
+  datasetSetGroupId,
   plotsPanelGroups,
   resolvePlotSetId,
   SELECTIONS_SET_ID,
+  type PlotDatasetSet,
   type PlotSetOption,
   type PlotsSelectionInput,
 } from './plotsPanelModel'
 import { plotViewSvg, svgSize, type PlotView } from './plotViews'
 import { svgDocument } from './svgMarkup'
+import { useDatasetSetAnnotations } from './useDatasetSetAnnotations'
 import { useSelectionCells } from './useSelectionCells'
 import { openPlotsSource, usePlotsWorkflow, type PlotsData } from './usePlotsWorkflow'
 import { violinPlotModel } from './violinPlot'
@@ -92,6 +99,9 @@ export interface PlotsModelInput {
   // their cells are looked up.
   readonly savedSelections: readonly SavedSelection[]
   readonly loadSelectionCells: RoiCellsLoader
+  // The dataset's sets Clusters has not loaded, which Plots reads itself.
+  readonly datasetSets: readonly PlotDatasetSet[]
+  readonly loadSetAnnotations: AnnotationLoader
   readonly selectedGenes: readonly string[]
   readonly colorScale: GeneExpressionColorScale
   readonly elementNoun: string
@@ -127,6 +137,8 @@ export function usePlotsModel({
   selection,
   savedSelections: savedSelectionList,
   loadSelectionCells,
+  datasetSets,
+  loadSetAnnotations,
   selectedGenes,
   colorScale,
   elementNoun,
@@ -138,13 +150,27 @@ export function usePlotsModel({
   const [includeZeros, setIncludeZeros] = useState(true)
   const [showNumbers, setShowNumbers] = useState(false)
   const kindInfo = plotKindInfo(plotKind)
+  const active = open && available && datasetReady
+  // The set Group by shows before a dataset set's classes are known; a set
+  // Plots reads alone is the one chosen, or the default.
+  const baseSources = {
+    annotations,
+    savedSelectionCount: savedSelectionList.length,
+    datasetSets,
+    datasetSet: null,
+  }
+  const baseSetId = resolvePlotSetId(baseSources, chosenSetId)
+  const datasetSet = useDatasetSetAnnotations({
+    enabled: active && datasetSetGroupId(baseSetId) !== null,
+    datasetUrl,
+    groupId: datasetSetGroupId(chosenSetId) ?? datasetSetGroupId(baseSetId),
+    loadAnnotations: loadSetAnnotations,
+    appendDebugEvent,
+  })
   const savedSelections = useSelectionCells({
     enabled:
-      open &&
-      available &&
-      datasetReady &&
-      resolvePlotSetId(annotations, savedSelectionList.length, chosenSetId) ===
-        SELECTIONS_SET_ID,
+      active &&
+      resolvePlotSetId({ ...baseSources, datasetSet }, chosenSetId) === SELECTIONS_SET_ID,
     datasetUrl,
     selections: savedSelectionList,
     loadCells: loadSelectionCells,
@@ -159,12 +185,16 @@ export function usePlotsModel({
         setId: chosenSetId,
         selection,
         savedSelections,
+        datasetSets,
+        datasetSet,
         selectedGenes,
         maxClasses: kindInfo.maxClasses,
       }),
     [
       annotations,
       chosenSetId,
+      datasetSet,
+      datasetSets,
       kindInfo.maxClasses,
       savedSelections,
       selectedGenes,
@@ -259,6 +289,11 @@ export function usePlotsModel({
     hasGenes: panel.genes.length > 0,
     hasGroups: panel.groups.length > 0,
     pendingSelectionCount: panel.pendingSelectionCount,
+    pendingSetLabel: panel.pendingDatasetSet ? panel.setLabel : null,
+    datasetSetError:
+      panel.datasetSetError === null
+        ? null
+        : `${panel.setLabel ?? 'The set'} could not be read: ${panel.datasetSetError}`,
     hasPlot: plot !== null,
     platformLabel,
     elementNoun,
@@ -267,7 +302,7 @@ export function usePlotsModel({
   // With genes already plotted, the large read is a note under the plot.
   const notes = [
     ...(plot !== null && largeRead !== null ? [largeRead] : []),
-    ...plotsNotes(panel, data, elementNoun, log1pAvailable),
+    ...plotsNotes(panel, data, elementNoun, log1pAvailable, plotKind),
   ]
   const geneErrors = panel.genes.flatMap((gene) => {
     const error = data.geneErrors.get(gene)
@@ -277,7 +312,7 @@ export function usePlotsModel({
 
   return {
     status: plotsStatus(panel, data),
-    loading: reading || panel.pendingSelectionCount > 0,
+    loading: reading || panel.pendingSelectionCount > 0 || panel.pendingDatasetSet,
     plotKind,
     onPlotKindChange: (kind) => {
       onPlotKindChange(kind)
@@ -368,6 +403,7 @@ function plotsStatus(
   const groupCount = panel.groups.length
   const setLabel = panel.setLabel
 
+  if (panel.pendingDatasetSet) return `Reading ${panel.setLabel ?? 'the set'}`
   if (panel.pendingSelectionCount > 0) {
     const count = panel.pendingSelectionCount
     return `Finding the cells in ${count.toLocaleString()} ${count === 1 ? 'selection' : 'selections'}`
@@ -392,6 +428,8 @@ function plotsMessage({
   hasGenes,
   hasGroups,
   pendingSelectionCount,
+  pendingSetLabel,
+  datasetSetError,
   hasPlot,
   platformLabel,
   elementNoun,
@@ -403,6 +441,9 @@ function plotsMessage({
   readonly hasGenes: boolean
   readonly hasGroups: boolean
   readonly pendingSelectionCount: number
+  // A dataset set Plots is reading, and why one could not be read.
+  readonly pendingSetLabel: string | null
+  readonly datasetSetError: string | null
   readonly hasPlot: boolean
   readonly platformLabel: string
   readonly elementNoun: string
@@ -414,6 +455,8 @@ function plotsMessage({
   if (!datasetReady) return 'Plots show once the dataset has loaded.'
   if (data.status === 'unavailable') return data.message
   if (!hasGenes) return 'Select genes in Cells › Genes to plot them.'
+  if (pendingSetLabel !== null) return `Reading the classes of ${pendingSetLabel}…`
+  if (datasetSetError !== null) return datasetSetError
   if (pendingSelectionCount > 0) return `Finding the ${elementNoun} in each selection…`
   if (!hasGroups) {
     return `Load an annotation set in Cells › Clusters, or draw a selection, to group the ${elementNoun}.`
@@ -450,6 +493,7 @@ function plotsNotes(
   data: PlotsData,
   elementNoun: string,
   log1pAvailable: boolean,
+  plotKind: PlotKind,
 ): readonly string[] {
   const notes: string[] = []
   const summary = data.summary
@@ -475,8 +519,12 @@ function plotsNotes(
   }
   if (panel.omittedClassCount > 0) {
     const shown = panel.groups.filter((group) => group.kind === 'class').length
+    const showing = `Showing the first ${shown.toLocaleString()} of ${(shown + panel.omittedClassCount).toLocaleString()} ${groupNouns(2)}`
+    // A set read for the plot alone has no legend to hide classes in.
     notes.push(
-      `Showing the first ${shown.toLocaleString()} of ${(shown + panel.omittedClassCount).toLocaleString()} ${groupNouns(2)}; hide ${groupNouns(2)} to choose others.`,
+      panel.setKind === 'dataset'
+        ? `${showing}; load ${panel.setLabel ?? 'the set'} in Cells › Clusters to choose classes${plotKind === 'heatmap' ? '' : ', or use the heatmap'}.`
+        : `${showing}; hide ${groupNouns(2)} to choose others.`,
     )
   }
   for (const name of panel.limitedSelections) {

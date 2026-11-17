@@ -23,6 +23,7 @@ import {
 } from './App'
 import { intToCellId } from './data/cellid'
 import { imagePixels, micrometers } from './data/coords'
+import type { Annotation } from './datasets/spatialDataset'
 import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
@@ -3730,6 +3731,126 @@ describe('App', () => {
       expect(h5adDataset.embeddings).toHaveBeenLastCalledWith(
         expect.objectContaining({ kind: 'X_pca' }),
       )
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  it('plots a set Clusters has not loaded without recolouring the map', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const h5adUrl = 'https://example.test/plot-sets.h5ad'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(h5adUrl)}&genes=Actb&panel=cells%2Cplots`,
+    )
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const cellIds = ['cell-a', 'cell-b', 'cell-c', 'cell-d']
+    const sets: Record<string, readonly Annotation<string>[]> = {
+      'analysis:cell-type': [
+        {
+          id: 'analysis:cell-type:t',
+          label: 'cell_type: T cell',
+          cellIds: ['cell-a', 'cell-b'],
+        },
+        {
+          id: 'analysis:cell-type:b',
+          label: 'cell_type: B cell',
+          cellIds: ['cell-c', 'cell-d'],
+        },
+      ],
+      'analysis:batch': [
+        { id: 'analysis:batch:1', label: 'batch: one', cellIds: ['cell-a', 'cell-c'] },
+        { id: 'analysis:batch:2', label: 'batch: two', cellIds: ['cell-b'] },
+        { id: 'analysis:batch:3', label: 'batch: three', cellIds: ['cell-d'] },
+      ],
+    }
+    const h5adDataset = {
+      overview: vi.fn(async () =>
+        cellIds.map((cellId, index) => ({
+          cellId,
+          position: { x: micrometers(index * 10), y: micrometers(index * 10) },
+          transcriptCount: 0,
+        })),
+      ),
+      genePanel: vi.fn(async () => ['Actb']),
+      geneExpression: vi.fn(async (_bbox: unknown, genes: readonly string[]) => ({
+        elements: [],
+        genes,
+        maxCount: 0,
+      })),
+      annotationGroups: vi.fn(async () => [
+        {
+          id: 'analysis:cell-type',
+          label: 'cell_type',
+          groupingName: 'cell_type',
+          groupCount: 2,
+        },
+        { id: 'analysis:batch', label: 'batch', groupingName: 'batch', groupCount: 3 },
+      ]),
+      annotations: vi.fn(async (options: { readonly groupId?: string } = {}) =>
+        options.groupId === undefined
+          ? Object.values(sets).flat()
+          : (sets[options.groupId] ?? []),
+      ),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => []),
+      cells: vi.fn(async () => []),
+      matrix: vi.fn(async () => ({ geneNames: [], cells: new Map() })),
+      geneValuesRowIds: vi.fn(async () => cellIds),
+      estimateGeneValuesRead: vi.fn(async () => ({ kind: 'read' as const, bytes: 0 })),
+      geneValues: vi.fn(async (genes: readonly string[]) =>
+        genes.map((gene) => ({
+          gene,
+          rows: new Uint32Array([0, 2, 3]),
+          values: new Float32Array([1, 3, 7]),
+        })),
+      ),
+    }
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset)}
+        />,
+      )
+
+      const plots = await screen.findByRole('region', { name: 'Plots' })
+      // Nothing is loaded in Clusters, so Plots reads the dataset's first set.
+      expect(
+        await within(plots).findByRole('img', {
+          name: /^Dot plot of Actb across 2 groups of cell_type/,
+        }),
+      ).toBeInTheDocument()
+      expect(h5adDataset.annotations).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'analysis:cell-type' }),
+      )
+      const groupBy = within(plots).getByRole('combobox', { name: 'Group by' })
+      expect(
+        within(groupBy)
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['cell_type (2)', 'batch (3)'])
+
+      fireEvent.change(groupBy, { target: { value: 'dataset-set:analysis:batch' } })
+      expect(
+        await within(plots).findByRole('img', {
+          name: /^Dot plot of Actb across 3 groups of batch/,
+        }),
+      ).toBeInTheDocument()
+
+      // The map and Clusters are as they were: no set loaded, no set colours.
+      expect(window.location.hash).not.toContain('groups=')
+      expect(window.location.hash).not.toContain('cellColor=annotations')
+      expect(h5adDataset.geneValues).toHaveBeenCalledTimes(1)
     } finally {
       viewport.restore()
     }

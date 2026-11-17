@@ -10,7 +10,9 @@ import { violinPlotModel } from './violinPlot'
 
 const input = { ...plotTestInput, scale: 'log1p' as const, valueLabel: 'log1p(counts)' }
 const plot: PlotView = { kind: 'dot', model: dotPlotModel(input) }
-const setOptions = [{ id: 'analysis:cluster', label: 'cluster', classCount: 2 }]
+const setOptions = [
+  { id: 'analysis:cluster', label: 'cluster', classCount: 2, kind: 'loaded' as const },
+]
 
 describe('PlotsPanel (plan 22-D to 22-G)', () => {
   afterEach(() => {
@@ -66,8 +68,13 @@ describe('PlotsPanel (plan 22-D to 22-G)', () => {
   it('changes the set, scale and colour, and turns log1p off for scaled values', () => {
     const plots = testPlotsModel({
       setOptions: [
-        { id: 'analysis:cluster', label: 'cluster', classCount: 3 },
-        { id: 'loaded-annotations', label: 'Loaded annotations', classCount: 1 },
+        { id: 'analysis:cluster', label: 'cluster', classCount: 3, kind: 'loaded' },
+        {
+          id: 'loaded-annotations',
+          label: 'Loaded annotations',
+          classCount: 1,
+          kind: 'loaded',
+        },
       ],
       setId: 'analysis:cluster',
       scale: 'stored',
