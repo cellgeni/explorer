@@ -109,6 +109,25 @@ export function boundaryLoadFailed<ErrorType>(
   return { status: 'error', url, error }
 }
 
+// The viewer shows one boundary status: a cell outline failure, else a
+// nucleus outline failure, else whichever is loading.
+export function viewerBoundaryLoadState<ErrorType>(
+  cellState: BoundaryLoadState<ErrorType>,
+  nucleusState: BoundaryLoadState<ErrorType>,
+): BoundaryLoadState<ErrorType> {
+  if (cellState.status === 'error') {
+    return cellState
+  }
+
+  if (nucleusState.status === 'error') {
+    return nucleusState
+  }
+
+  return cellState.status !== 'loading' && nucleusState.status === 'loading'
+    ? nucleusState
+    : cellState
+}
+
 export function cellFeatureMatrixCapabilityReady(
   url: string,
   hasCellMajorCsc: boolean,

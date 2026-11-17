@@ -313,6 +313,12 @@ describe('SpatialDataDataset nucleus boundaries', () => {
       'cell-a#nucleus-2',
       'cell-b',
     ])
+    // Each nucleus names its cell, for hover and the Cell card.
+    expect(nuclei.map((element) => element.metadata?.segmentation?.cellId)).toEqual([
+      'cell-a',
+      'cell-a',
+      'cell-b',
+    ])
     expect(nuclei[0]).toMatchObject({
       metadata: { segmentation: { kind: 'nucleus' } },
       // The element transform scales shapes by 2.
@@ -365,6 +371,7 @@ describe('SpatialDataDataset nucleus boundaries', () => {
       'nucleus_boundaries#n-1',
       'nucleus_boundaries#n-2',
     ])
+    expect(nuclei[0]?.metadata).toEqual({ segmentation: { kind: 'nucleus' } })
     expect(progress).toContain(
       'SpatialData shapes nucleus_boundaries: no nucleus matches a row of table table; drawing every nucleus',
     )

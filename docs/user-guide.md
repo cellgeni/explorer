@@ -230,7 +230,10 @@ and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
 `nucleus_boundaries.parquet`, Atera nuclei, and a SpatialData store's
 `nucleus_boundaries` shapes, and Visium HD exposes cell and nucleus
-segmentation toggles when segmented outputs are detected.
+segmentation toggles when segmented outputs are detected. Each checkbox loads
+its own outlines, so cell outlines appear without waiting for nuclei.
+Hovering a nucleus shows its cell; clicking it selects the cell, and the Cell
+card lists the cell's nuclei with their area and circularity.
 
 Custom image layers accept remote OME-TIFF or OME-Zarr URLs and render through
 the same channel controls as dataset morphology.

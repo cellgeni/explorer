@@ -6,7 +6,7 @@ import {
   type CellTranscriptZDistribution,
 } from '../../data/cellTranscripts'
 import { overviewCellMetadata } from '../../data/cellMetadata'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   type CellDetailState,
   type CellLoadErrorSummary,
@@ -14,10 +14,13 @@ import {
   type CellTranscriptDistributionState,
 } from './cellDetailModel'
 import { CellGeneExpressionList } from './CellGeneExpressionList'
+import { CellNucleusRows } from './CellNucleusRows'
 
 interface CellInfoPanelProps {
   readonly cell: OverviewCellDatum | null
   readonly annotationLabels?: readonly string[]
+  // The cell's nuclei drawn in the view.
+  readonly nuclei?: readonly CellBoundaryDatum[]
   readonly state: CellDetailState
   readonly transcriptDistributionState: CellTranscriptDistributionState
   readonly transcriptDistributionVisible?: boolean
@@ -27,10 +30,12 @@ interface CellInfoPanelProps {
 export type CellInfoPanelVariant = 'default' | 'observations'
 
 const EMPTY_ANNOTATION_LABELS: readonly string[] = []
+const EMPTY_NUCLEI: readonly CellBoundaryDatum[] = []
 
 export function CellInfoPanel({
   cell,
   annotationLabels = EMPTY_ANNOTATION_LABELS,
+  nuclei = EMPTY_NUCLEI,
   state,
   transcriptDistributionState,
   transcriptDistributionVisible = true,
@@ -64,14 +69,17 @@ export function CellInfoPanel({
         }
       >
         {variant === 'observations' ? (
-          metadataEntries.length === 0 ? (
-            <div>
-              <dt>Observations</dt>
-              <dd>None</dd>
-            </div>
-          ) : (
-            <MetadataRows entries={metadataEntries} />
-          )
+          <>
+            {metadataEntries.length === 0 ? (
+              <div>
+                <dt>Observations</dt>
+                <dd>None</dd>
+              </div>
+            ) : (
+              <MetadataRows entries={metadataEntries} />
+            )}
+            <CellNucleusRows nuclei={nuclei} />
+          </>
         ) : (
           <>
             <div>
@@ -92,6 +100,7 @@ export function CellInfoPanel({
               <dt>Nuclei</dt>
               <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
             </div>
+            <CellNucleusRows nuclei={nuclei} />
             <div>
               <dt>Segmentation</dt>
               <dd title={formatOptionalText(cell.segmentationMethod)}>

@@ -380,6 +380,12 @@ describe('AteraDataset', () => {
       'aaaaaaab-1',
       'aaaaaaab-1#nucleus-2',
     ])
+    expect(nuclei.map((element) => element.metadata?.segmentation?.cellId)).toEqual([
+      'aaaaaaaa-1',
+      'aaaaaaab-1',
+      'aaaaaaab-1',
+    ])
+    expect(cells.elements[0]?.metadata?.segmentation).toEqual({ kind: 'cell' })
   })
 
   it('adds counts and areas to ROI cells', async () => {

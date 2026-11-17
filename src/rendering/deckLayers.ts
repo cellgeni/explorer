@@ -63,6 +63,7 @@ export type {
   TranscriptPointDatum,
 } from './deckLayerTypes'
 export {
+  NUCLEUS_BOUNDARY_LAYER_ID,
   boundaryElementsToLayerData,
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,

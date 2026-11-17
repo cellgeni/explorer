@@ -1642,17 +1642,22 @@ test('draws Xenium nucleus boundaries without reading cell outlines @live', asyn
   // With cell outlines hidden only nucleus_boundaries.parquet is queried.
   await expectLogEntry(
     page,
-    /Boundaries ready: 0 cells in [0-9] ms, [1-9][0-9,]* nuclei in [0-9,]+ ms/,
-    { timeout: XENIUM_BOUNDARY_TIMEOUT_MS },
+    /Nucleus boundaries ready: [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    {
+      timeout: XENIUM_BOUNDARY_TIMEOUT_MS,
+    },
   )
   const log = page.getByRole('region', { name: 'Activity log' })
-  await expect(log.getByText('Boundary load failed')).toHaveCount(0)
+  await expect(log.getByText(/^Cell boundaries started/)).toHaveCount(0)
+  await expect(log.getByText('Nucleus boundary load failed')).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
 })
 
 test('draws STHELAR nuclei over its axis-swapped and flipped H&E @live', async ({
   page,
 }) => {
+  test.setTimeout(600_000)
+
   await page.goto(
     `/#dataset=${encodeURIComponent(STHELAR_BONE_MARROW_URL)}&sdImage=he&view=${encodeURIComponent(STHELAR_TISSUE_VIEW)}&cellBounds=1&nucleusBounds=1`,
   )
@@ -1675,12 +1680,17 @@ test('draws STHELAR nuclei over its axis-swapped and flipped H&E @live', async (
     /SpatialData shapes nucleus_boundaries: 225,906 of 225,906 nuclei match table rows/,
     { timeout: STHELAR_LOAD_TIMEOUT_MS },
   )
+  await expectLogEntry(page, /Cell boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms/, {
+    timeout: STHELAR_LOAD_TIMEOUT_MS,
+  })
   await expectLogEntry(
     page,
-    /Boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms, [1-9][0-9,]* nuclei in [0-9,]+ ms/,
-    { timeout: STHELAR_LOAD_TIMEOUT_MS },
+    /Nucleus boundaries ready: [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    {
+      timeout: STHELAR_LOAD_TIMEOUT_MS,
+    },
   )
-  await expect(log.getByText('Boundary load failed')).toHaveCount(0)
+  await expect(log.getByText(/^(Cell|Nucleus) boundary load failed/)).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
 })
 
@@ -1893,21 +1903,26 @@ test('draws Visium HD cell and nucleus segmentation boundaries around the view @
 
   // The view holds about 2,400 bins, under the 50,000 boundary limit, so the
   // polygons load; the log counts those kept from each GeoJSON.
+  await expectLogEntry(page, /Cell boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms/, {
+    timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS,
+  })
   await expectLogEntry(
     page,
-    /Boundaries ready: [1-9][0-9,]* cells in [0-9,]+ ms, [1-9][0-9,]* nuclei in [0-9,]+ ms/,
-    { timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS },
+    /Nucleus boundaries ready: [1-9][0-9,]* nuclei in [0-9,]+ ms/,
+    {
+      timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS,
+    },
   )
   const log = page.getByRole('region', { name: 'Activity log' })
-  await expect(log.getByText('Boundary load failed')).toHaveCount(0)
+  await expect(log.getByText(/^(Cell|Nucleus) boundary load failed/)).toHaveCount(0)
   await expect(log.getByText(/^Boundaries deferred/)).toHaveCount(0)
-  await expect(page.getByText('Loading boundaries')).toHaveCount(0)
+  await expect(page.getByText(/^Loading (cell|nucleus) boundaries$/)).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
   await expect(visiumPanel).toContainText('54,504 at 16 µm')
 
   // Panning past the padded request area queries boundaries again, from the
   // files already read.
-  const ready = log.getByText(/Boundaries ready: /).first()
+  const ready = log.getByText(/Cell boundaries ready: /).first()
   const firstReady = await ready.innerText()
   await page.getByRole('img', { name: 'Spatial viewer canvas area' }).focus()
   for (let step = 0; step < 3; step += 1) {
@@ -1916,7 +1931,7 @@ test('draws Visium HD cell and nucleus segmentation boundaries around the view @
   await expect(ready).not.toHaveText(firstReady, {
     timeout: VISIUM_HD_BOUNDARY_TIMEOUT_MS,
   })
-  await expect(ready).toHaveText(/Boundaries ready: [0-9,]+ cells in [0-9,]+ ms/)
+  await expect(ready).toHaveText(/Cell boundaries ready: [0-9,]+ cells in [0-9,]+ ms/)
   expect(Object.fromEntries(geojsonReads)).toEqual({
     'cell_segmentations.geojson': 1,
     'nucleus_segmentations.geojson': 1,

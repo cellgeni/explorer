@@ -615,17 +615,20 @@ section; no cell or gene queries run.
 
 ### Cell, Spot or Bin
 
-A click on a cell, spot or bin selects it and opens this card. The selection is
-marked over the canvas in the highlight colour: its outline when its boundary
-or bin is drawn, otherwise a ring around the point. Esc on the canvas, or
-closing the card, clears it.
+A click on a cell, spot or bin selects it and opens this card. A click on a
+nucleus selects its cell. The selection is marked over the canvas in the
+highlight colour: its outline when its boundary or bin is drawn, otherwise a
+ring around the point. Esc on the canvas, or closing the card, clears it.
 
 - Cell (`src/features/cells/CellInfoPanel.tsx`). Xenium: ID, position,
   transcripts, nuclei, segmentation, annotations, shape metrics (area,
   diameter, eccentricity, axes, perimeter, circularity), and a "Z-axis
   transcripts" histogram. Visium, H5AD, SpatialData: ID, annotations and `obs`
-  values ("Observations"); a Visium spot's barcode is its ID. Then a "Gene
-  expression" list for the cell with a search filter
+  values ("Observations"); a Visium spot's barcode is its ID. While
+  `Nucleus boundaries` is on, each of the cell's nuclei in view adds a
+  `Nucleus` row (`Nucleus 1`, `Nucleus 2`, … for several) with its area and
+  circularity (`CellNucleusRows.tsx`); Atera rows follow the observations.
+  Then a "Gene expression" list for the cell with a search filter
   (`CellGeneExpressionList.tsx`).
 - Bin, Visium HD (`src/features/cells/GridCellInfoPanel.tsx`): barcode, bin
   size, tissue, array row/column, image pixel position; cell assignment from
@@ -633,7 +636,8 @@ closing the card, clears it.
   with `Load Bin GEX` / `Refresh Bin GEX` and a gene filter.
 - Cell, Visium HD segmentation boundary
   (`src/features/cells/BoundaryCellInfoPanel.tsx`): cell ID, annotation,
-  segmentation, vertices, area, selected-gene score and `Load Cell GEX`.
+  segmentation, vertices, area, the cell's nuclei in view, selected-gene score
+  and `Load Cell GEX`.
 
 ### Transcript
 
@@ -878,6 +882,7 @@ on or when `Hover tooltips` is off (except transcripts).
 | Visium HD bin    | Barcode, bin, array row/col, image px, tissue, expression                            |
 | Cell point       | ID, source, count, X/Y µm, transcripts, area, expression, genes, annotations         |
 | Cell boundary    | ID, segmentation, annotation(s), X/Y, transcripts, area, vertices, expression, genes |
+| Nucleus          | ID, place among its cell's nuclei in view (`1 of 2`), cell, vertices, area           |
 | Transcript point | Feature, ID, FOV (when present), cell, QV, X/Y µm, Z, nucleus overlap, distance      |
 | Density bin      | Feature or "Transcript density bin", count, total, level, X/Y, hidden                |
 

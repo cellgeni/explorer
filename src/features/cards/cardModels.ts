@@ -467,6 +467,7 @@ export type CellCardModel =
   | (CellCardBase & {
       readonly kind: 'cell'
       readonly cell: OverviewCellDatum
+      readonly nuclei: readonly CellBoundaryDatum[]
       readonly annotationLabels: readonly string[]
       readonly state: CellDetailState
       readonly distributionState: CellTranscriptDistributionState
@@ -476,6 +477,7 @@ export type CellCardModel =
   | (CellCardBase & {
       readonly kind: 'boundary'
       readonly cell: CellBoundaryDatum
+      readonly nuclei: readonly CellBoundaryDatum[]
       readonly expressionStatus: CellGeneExpressionStatus | undefined
       readonly profileState: CellExpressionProfileState | undefined
       readonly onLoadProfile: (() => void) | undefined
@@ -493,6 +495,7 @@ export function cellCard({
   boundary,
   cell,
   gridCell,
+  nuclei,
   onClose,
   profile,
   zoomToBbox,
@@ -522,6 +525,8 @@ export function cellCard({
     readonly state: CellExpressionProfileState | undefined
     readonly onLoad: (() => void) | undefined
   }
+  // The selected cell's nuclei drawn in the view.
+  readonly nuclei: readonly CellBoundaryDatum[]
   readonly onClose: () => void
   readonly zoomToBbox: ZoomToBbox
 }): CellCardModel | null {
@@ -536,6 +541,7 @@ export function cellCard({
       },
       onClose,
       cell: boundary.selected,
+      nuclei,
       expressionStatus: boundary.expressionStatus,
       profileState: profile.state,
       onLoadProfile: profile.onLoad,
@@ -573,6 +579,7 @@ export function cellCard({
     loading: cell.state.status === 'loading' && cell.state.cellId === selected.id,
     onClose,
     cell: selected,
+    nuclei,
     annotationLabels: cell.annotationLabels,
     state: cell.state,
     distributionState: cell.distributionState,

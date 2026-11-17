@@ -3,7 +3,7 @@ import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { SpatialElement } from '../../datasets/spatialDataset'
-import type { OverviewCellDatum } from '../../rendering/deckLayers'
+import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_CELL_DETAIL_STATE,
   IDLE_CELL_TRANSCRIPT_DISTRIBUTION_STATE,
@@ -20,6 +20,7 @@ import {
   overviewCellsToBbox,
   selectedCellBoundaryBbox,
   summarizeCellShape,
+  summarizeNucleusShapes,
 } from './cellDetailModel'
 
 const cell: OverviewCellDatum = {
@@ -241,5 +242,38 @@ describe('cellDetailModel', () => {
       boundaryEquivalentDiameterMicrometers: expect.any(Number),
       circularity: expect.closeTo(Math.PI / 4),
     })
+  })
+
+  it('summarizes each nucleus outline, in deck coordinates', () => {
+    const nucleus = (id: string, size: number): CellBoundaryDatum => ({
+      id,
+      cellId: 'cell-1',
+      polygon: [
+        [0, 0, 0],
+        [size, 0, 0],
+        [size, -size, 0],
+        [0, -size, 0],
+      ],
+      fillColor: [0, 0, 0, 0],
+      lineColor: [0, 0, 0, 0],
+    })
+
+    expect(
+      summarizeNucleusShapes([nucleus('cell-1', 4), nucleus('cell-1#nucleus-2', 2)]),
+    ).toEqual([
+      {
+        id: 'cell-1',
+        areaMicrometersSquared: 16,
+        circularity: expect.closeTo(Math.PI / 4),
+      },
+      {
+        id: 'cell-1#nucleus-2',
+        areaMicrometersSquared: 4,
+        circularity: expect.closeTo(Math.PI / 4),
+      },
+    ])
+    expect(
+      summarizeNucleusShapes([{ ...nucleus('flat', 1), polygon: [[0, 0, 0]] }]),
+    ).toEqual([{ id: 'flat' }])
   })
 })

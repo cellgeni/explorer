@@ -238,9 +238,10 @@ filters it by bounds like the cell outlines. Nuclei are matched to table
 rows through the region shapes that share their index (spatialdata-io indexes
 `cell_boundaries` and `nucleus_boundaries` by cell id), or by the table's
 cell ids when the table annotates labels. A cell's first nucleus keeps its
-id and later ones get `<id>#nucleus-N`, as on Xenium. Nuclei that match no
-row are left out; when none match, every nucleus is drawn and the log says
-so. `meta().segmentations` lists the cell and nucleus outlines, and the cell
+id and later ones get `<id>#nucleus-N`, as on Xenium; each matched nucleus
+names its cell (segmentation metadata `cellId`), so hovering it shows the
+cell and a click selects it. Nuclei that match no row are left out; when none
+match, every nucleus is drawn and the log says so. `meta().segmentations` lists the cell and nucleus outlines, and the cell
 outlines are read only while `Cell boundaries` is on, so nuclei alone do not
 wait for them. On STHELAR bone marrow, all 225,906 nuclei matched; the first
 view with nuclei took 17-21 s, most of it the 19.4 MB compressed zip entry

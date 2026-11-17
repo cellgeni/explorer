@@ -166,6 +166,9 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
   return layers
 }
 
+export const NUCLEUS_BOUNDARY_LAYER_ID = 'nucleus-segmentation-polygons'
+
+// Nuclei can be hovered and picked; a click selects the nucleus's cell.
 export function createNucleusBoundaryLayers(
   boundaries: readonly CellBoundaryDatum[],
   opacity: number | undefined,
@@ -178,9 +181,9 @@ export function createNucleusBoundaryLayers(
 
   return [
     new PolygonLayer<CellBoundaryDatum>({
-      id: 'nucleus-segmentation-polygons',
+      id: NUCLEUS_BOUNDARY_LAYER_ID,
       data: boundaries,
-      pickable: false,
+      pickable: true,
       stroked: true,
       filled: true,
       opacity: 1,
@@ -305,8 +308,11 @@ export function boundaryElementsToLayerData(
       annotationPaletteByLabel,
     )
 
+    const cellId = element.metadata?.segmentation?.cellId
+
     cells.push({
       id: element.id,
+      ...(cellId === undefined ? {} : { cellId }),
       polygon: ring.map((point) => [point.x, -point.y, 0]),
       fillColor: style.fillColor,
       lineColor: style.lineColor,

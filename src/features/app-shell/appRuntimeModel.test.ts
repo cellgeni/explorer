@@ -79,6 +79,25 @@ describe('appRuntimeModel', () => {
     expect(tasks[6]).toMatchObject({ detail: '2 channels' })
   })
 
+  it('lists cell and nucleus outline loads as separate tasks', () => {
+    const tasks = createLoadingTasks(
+      loadingInputs({
+        boundaryState: { status: 'loading' },
+        nucleusBoundaryState: { status: 'loading' },
+      }),
+    )
+
+    expect(tasks.map((task) => [task.id, task.label])).toEqual([
+      ['boundaries', 'Loading cell boundaries'],
+      ['nucleus-boundaries', 'Loading nucleus boundaries'],
+    ])
+    expect(
+      createLoadingTasks(
+        loadingInputs({ nucleusBoundaryState: { status: 'loading' } }),
+      ).map((task) => task.id),
+    ).toEqual(['nucleus-boundaries'])
+  })
+
   it('marks the tasks the loading list can cancel, with progress where known', () => {
     const tasks = createLoadingTasks(
       loadingInputs({

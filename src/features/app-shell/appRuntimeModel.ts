@@ -100,6 +100,7 @@ interface LoadingTaskStateInputs {
   readonly customMorphologyLayerState: LoadingStatusState
   readonly annotationGroupState: LoadingStatusState
   readonly boundaryState: LoadingStatusState
+  readonly nucleusBoundaryState?: LoadingStatusState
   readonly geneExpressionState: LoadingGeneExpressionState
   readonly visiumHdExpressionProjectionState?: LoadingStatusState
   readonly transcriptCapabilityState: LoadingStatusState
@@ -158,6 +159,7 @@ export function createLoadingTasks({
   customMorphologyLayerState,
   annotationGroupState,
   boundaryState,
+  nucleusBoundaryState,
   geneExpressionState,
   visiumHdExpressionProjectionState,
   transcriptCapabilityState,
@@ -242,7 +244,15 @@ export function createLoadingTasks({
     tasks.push({
       id: 'boundaries',
       area: 'cells',
-      label: 'Loading boundaries',
+      label: 'Loading cell boundaries',
+    })
+  }
+
+  if (nucleusBoundaryState?.status === 'loading') {
+    tasks.push({
+      id: 'nucleus-boundaries',
+      area: 'cells',
+      label: 'Loading nucleus boundaries',
     })
   }
 

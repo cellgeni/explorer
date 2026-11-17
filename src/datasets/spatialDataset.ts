@@ -66,6 +66,8 @@ export interface SpatialElementMetadata {
 
 export interface SpatialElementSegmentationMetadata {
   readonly kind: 'cell' | 'nucleus'
+  // The cell a nucleus belongs to, when the source links them.
+  readonly cellId?: string
   readonly annotation?: SpatialElementSegmentationAnnotation
 }
 

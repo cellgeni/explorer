@@ -18,7 +18,7 @@ import {
 } from '../../data/runtimeMemory'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { BBox } from '../../data/coords'
-import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
+import type { SpatialElement } from '../../datasets/spatialDataset'
 import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
@@ -79,12 +79,14 @@ interface GeneExpressionRequestRefs extends LatestRequestRefs {
 
 interface ViewportDataWorkflowRequests {
   readonly boundary: BoundaryRequestRefs
+  readonly nucleusBoundary?: BoundaryRequestRefs
   readonly geneExpression: GeneExpressionRequestRefs
   readonly lastViewportDetailRef: MutableRef<ViewerViewportDetail | null>
 }
 
 interface ViewportDataWorkflowLoaders {
   readonly boundaryElements: BoundaryElementsLoader
+  // Nuclei load only while this is set (their checkbox is on).
   readonly nucleusBoundaryElements?: BoundaryElementsLoader
   readonly geneExpression: GeneExpressionLoader
 }
@@ -93,6 +95,7 @@ interface ViewportDataWorkflowSetters {
   readonly setBoundaryElements: Setter<readonly SpatialElement[]>
   readonly setNucleusBoundaryElements?: Setter<readonly SpatialElement[]>
   readonly setBoundaryState: Setter<BoundaryLoadState<StructuredLoadError>>
+  readonly setNucleusBoundaryState?: Setter<BoundaryLoadState<StructuredLoadError>>
   readonly setCurrentViewportDetail: Setter<ViewerViewportDetail | null>
   readonly setGeneExpressionBatch: Setter<GeneExpressionBatch | null>
   readonly setGeneExpressionState: Setter<GeneExpressionState<StructuredLoadError>>
@@ -111,7 +114,8 @@ interface ViewportDataWorkflowCallbacks {
 
 interface ViewportDataWorkflowControls {
   readonly boundaryCellLimit: number
-  readonly boundaryLoadingEnabled?: boolean
+  // Whether cell outlines load; nuclei load while their loader is set.
+  readonly cellBoundaryLoadingEnabled?: boolean
   readonly geneExpressionDetailMode: GeneExpressionDetailMode
   readonly geneExpressionDisabledMessage?: string | undefined
   readonly geneExpressionLoadingEnabled?: boolean
@@ -143,7 +147,7 @@ export function useViewportDataWorkflow({
   callbacks: { appendDebugEvent, recordTelemetry, rememberGeneExpressionScaleMax },
   controls: {
     boundaryCellLimit,
-    boundaryLoadingEnabled = true,
+    cellBoundaryLoadingEnabled = true,
     geneExpressionDetailMode,
     geneExpressionDisabledMessage,
     geneExpressionLoadingEnabled = true,
@@ -169,6 +173,9 @@ export function useViewportDataWorkflow({
     },
     lastViewportDetailRef,
   } = requests
+  const nucleusBoundaryAbortRef = requests.nucleusBoundary?.abortRef
+  const nucleusBoundaryRequestIdRef = requests.nucleusBoundary?.requestIdRef
+  const nucleusBoundaryViewportKeyRef = requests.nucleusBoundary?.boundaryViewportKeyRef
   const {
     boundaryElements: loadBoundaryElements,
     geneExpression: loadGeneExpression,
@@ -181,13 +188,13 @@ export function useViewportDataWorkflow({
     setGeneExpressionBatch,
     setGeneExpressionState,
     setNucleusBoundaryElements,
+    setNucleusBoundaryState,
     setShareableViewState,
   } = setters
-  // Area of the boundary request identified by boundaryViewportKeyRef; it is
-  // only trusted while that key is still current.
-  const boundaryRequestAreaRef = useRef<
-    (BoundaryRequestArea & { readonly key: string }) | null
-  >(null)
+  // Area of each layer's boundary request identified by its viewport key ref;
+  // it is only trusted while that key is still current.
+  const cellBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
+  const nucleusBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -203,11 +210,50 @@ export function useViewportDataWorkflow({
           : nextShareableViewState,
       )
 
-      const shouldLoadBoundaries =
-        boundaryLoadingEnabled &&
-        shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })
+      // Cell and nucleus outlines are separate requests, so each draws when
+      // it arrives, a failure clears only its own outlines, and a checkbox
+      // requests only its own outline type.
+      const boundaryLayers: BoundaryLayer[] = [
+        {
+          kind: 'cell',
+          enabled: cellBoundaryLoadingEnabled,
+          load: loadBoundaryElements,
+          requests: {
+            abortRef: boundaryAbortRef,
+            requestIdRef: boundaryRequestIdRef,
+            boundaryViewportKeyRef,
+          },
+          areaRef: cellBoundaryAreaRef,
+          setElements: setBoundaryElements,
+          setState: setBoundaryState,
+        },
+      ]
 
-      if (!shouldLoadBoundaries) {
+      if (
+        nucleusBoundaryAbortRef !== undefined &&
+        nucleusBoundaryRequestIdRef !== undefined &&
+        nucleusBoundaryViewportKeyRef !== undefined &&
+        setNucleusBoundaryElements !== undefined &&
+        setNucleusBoundaryState !== undefined
+      ) {
+        boundaryLayers.push({
+          kind: 'nucleus',
+          enabled: loadNucleusBoundaryElements !== undefined,
+          load: loadNucleusBoundaryElements ?? loadNoBoundaryElements,
+          requests: {
+            abortRef: nucleusBoundaryAbortRef,
+            requestIdRef: nucleusBoundaryRequestIdRef,
+            boundaryViewportKeyRef: nucleusBoundaryViewportKeyRef,
+          },
+          areaRef: nucleusBoundaryAreaRef,
+          setElements: setNucleusBoundaryElements,
+          setState: setNucleusBoundaryState,
+        })
+      }
+
+      const boundaryLoadingEnabled = boundaryLayers.some((layer) => layer.enabled)
+
+      if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
         if (boundaryLoadingEnabled && detail.visibleCellCount > 0) {
           appendDebugEvent(
             `Boundaries deferred: ${detail.visibleCellCount.toLocaleString()} visible cells exceed the ${boundaryCellLimit.toLocaleString()} boundary limit. Zoom in or raise Boundary limit to load true polygons.`,
@@ -215,121 +261,21 @@ export function useViewportDataWorkflow({
           )
         }
 
-        invalidateLatestRequest({
-          abortRef: boundaryAbortRef,
-          requestIdRef: boundaryRequestIdRef,
-        })
-        boundaryViewportKeyRef.current = null
-        setBoundaryElements((current) => (current.length === 0 ? current : []))
-        setNucleusBoundaryElements?.((current) => (current.length === 0 ? current : []))
-        setBoundaryState((current) =>
-          current.status === 'idle' ? current : IDLE_BOUNDARY_LOAD_STATE,
-        )
+        for (const layer of boundaryLayers) {
+          clearBoundaryLayer(layer)
+        }
       } else {
-        const lastArea = boundaryRequestAreaRef.current
-        const currentArea =
-          lastArea !== null &&
-          lastArea.key === boundaryViewportKeyRef.current &&
-          lastArea.key === boundaryViewportKey(loadState.url, lastArea.bbox)
-            ? lastArea
-            : null
-        const requestBbox = paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
-        const requestKey = boundaryViewportKey(loadState.url, requestBbox)
-
-        if (!boundaryRequestCovers(currentArea, detail)) {
-          boundaryRequestAreaRef.current = {
-            key: requestKey,
-            bbox: requestBbox,
-            zoom: detail.viewState.zoom,
+        for (const layer of boundaryLayers) {
+          if (layer.enabled) {
+            requestBoundaryLayer(layer, detail, {
+              appendDebugEvent,
+              baseUrl: loadState.url,
+              boundaryCellLimit,
+              recordTelemetry,
+            })
+          } else {
+            pauseBoundaryLayer(layer)
           }
-          const request = startLatestRequest({
-            abortRef: boundaryAbortRef,
-            requestIdRef: boundaryRequestIdRef,
-          })
-          boundaryViewportKeyRef.current = requestKey
-          setBoundaryState(boundaryLoadStarted(loadState.url))
-          const boundaryStartedAt = readTimestamp()
-          appendDebugEvent(
-            `Boundaries started: ${detail.visibleCellCount.toLocaleString()} visible cells`,
-            { coalesceKey: 'boundary-query' },
-          )
-
-          const loadCellElements = loadProfiledBoundaryElements(
-            loadBoundaryElements,
-            loadState.url,
-            requestBbox,
-            { signal: request.signal },
-          )
-          const loadNucleusElements =
-            loadNucleusBoundaryElements === undefined
-              ? Promise.resolve(profiledBoundaryElements({ elements: [] }, 0))
-              : loadProfiledBoundaryElements(
-                  loadNucleusBoundaryElements,
-                  loadState.url,
-                  requestBbox,
-                  { signal: request.signal },
-                )
-
-          void Promise.all([loadCellElements, loadNucleusElements])
-            .then((batch) => {
-              if (!request.isCurrent()) {
-                return
-              }
-
-              const [cellResult, nucleusResult] = batch
-              const cellBatch = cellResult.batch
-              const nucleusBatch = nucleusResult.batch
-              const profileDetail = formatBoundaryProfileDetail(
-                cellResult,
-                nucleusResult,
-                loadNucleusBoundaryElements !== undefined,
-              )
-
-              setBoundaryElements(cellBatch.elements)
-              setNucleusBoundaryElements?.(nucleusBatch.elements)
-              setBoundaryState(
-                boundaryLoadReady(loadState.url, cellBatch.elements.length),
-              )
-              recordTelemetry(
-                telemetryEvent('viewport.boundaries.load', 'success', {
-                  startedAt: boundaryStartedAt,
-                  detail: profileDetail,
-                }),
-              )
-              appendDebugEvent(`Boundaries ready: ${profileDetail}`, {
-                coalesceKey: 'boundary-query',
-              })
-            })
-            .catch((error) => {
-              if (isAbortError(error)) {
-                return
-              }
-
-              if (!request.isCurrent()) {
-                return
-              }
-
-              setBoundaryElements([])
-              setNucleusBoundaryElements?.([])
-              setBoundaryState(
-                boundaryLoadFailed(
-                  loadState.url,
-                  createStructuredLoadError('Cell boundaries', error),
-                ),
-              )
-              recordTelemetry(
-                telemetryEvent('viewport.boundaries.load', 'failure', {
-                  startedAt: boundaryStartedAt,
-                  detail: readErrorMessage(error),
-                }),
-              )
-              appendDebugEvent('Boundary load failed', {
-                coalesceKey: 'boundary-query',
-              })
-            })
-            .finally(() => {
-              request.complete()
-            })
         }
       }
 
@@ -541,9 +487,9 @@ export function useViewportDataWorkflow({
       appendDebugEvent,
       boundaryAbortRef,
       boundaryCellLimit,
-      boundaryLoadingEnabled,
       boundaryRequestIdRef,
       boundaryViewportKeyRef,
+      cellBoundaryLoadingEnabled,
       geneExpressionAbortRef,
       geneExpressionDetailMode,
       geneExpressionDisabledMessage,
@@ -558,12 +504,16 @@ export function useViewportDataWorkflow({
       loadNucleusBoundaryElements,
       loadGeneExpression,
       loadState,
+      nucleusBoundaryAbortRef,
+      nucleusBoundaryRequestIdRef,
+      nucleusBoundaryViewportKeyRef,
       overviewExtent,
       recordTelemetry,
       rememberGeneExpressionScaleMax,
       selectedGenes,
       setBoundaryElements,
       setNucleusBoundaryElements,
+      setNucleusBoundaryState,
       setBoundaryState,
       setCurrentViewportDetail,
       setGeneExpressionBatch,
@@ -608,48 +558,182 @@ function isTypeErrorLike(error: unknown): boolean {
   )
 }
 
-interface ProfiledBoundaryElements {
-  readonly batch: ElementBatch
-  readonly durationMs: number
+type BoundaryLayerKind = 'cell' | 'nucleus'
+
+type BoundaryRequestAreaWithKey = BoundaryRequestArea & {
+  readonly key: string
+  readonly failed?: boolean
 }
 
-async function loadProfiledBoundaryElements(
-  loader: BoundaryElementsLoader,
-  baseUrl: string,
-  bbox: BBox,
-  options: Parameters<BoundaryElementsLoader>[2],
-): Promise<ProfiledBoundaryElements> {
+interface BoundaryLayer {
+  readonly kind: BoundaryLayerKind
+  readonly enabled: boolean
+  readonly load: BoundaryElementsLoader
+  readonly requests: BoundaryRequestRefs
+  readonly areaRef: MutableRef<BoundaryRequestAreaWithKey | null>
+  readonly setElements: Setter<readonly SpatialElement[]>
+  readonly setState: Setter<BoundaryLoadState<StructuredLoadError>>
+}
+
+interface BoundaryLayerContext {
+  readonly appendDebugEvent: ViewportDataWorkflowCallbacks['appendDebugEvent']
+  readonly baseUrl: string
+  readonly boundaryCellLimit: number
+  readonly recordTelemetry: ViewportDataWorkflowCallbacks['recordTelemetry']
+}
+
+const BOUNDARY_LAYER_COPY: Record<
+  BoundaryLayerKind,
+  {
+    readonly label: 'Cell boundaries' | 'Nucleus boundaries'
+    readonly failed: string
+    readonly plural: string
+    readonly telemetryName: string
+    readonly coalesceKey: string
+  }
+> = {
+  cell: {
+    label: 'Cell boundaries',
+    failed: 'Cell boundary load failed',
+    plural: 'cells',
+    telemetryName: 'viewport.boundaries.load',
+    coalesceKey: 'boundary-query',
+  },
+  nucleus: {
+    label: 'Nucleus boundaries',
+    failed: 'Nucleus boundary load failed',
+    plural: 'nuclei',
+    telemetryName: 'viewport.nucleus-boundaries.load',
+    coalesceKey: 'nucleus-boundary-query',
+  },
+}
+
+const loadNoBoundaryElements: BoundaryElementsLoader = async () => ({ elements: [] })
+
+// Outside the boundary limit no layer keeps outlines.
+function clearBoundaryLayer(layer: BoundaryLayer): void {
+  invalidateLatestRequest(layer.requests)
+  layer.requests.boundaryViewportKeyRef.current = null
+  layer.setElements((current) => (current.length === 0 ? current : []))
+  layer.setState((current) =>
+    current.status === 'idle' ? current : IDLE_BOUNDARY_LOAD_STATE,
+  )
+}
+
+// A hidden layer stops its request and drops its error, but keeps outlines it
+// already read, so showing it again in the same area reads nothing.
+function pauseBoundaryLayer(layer: BoundaryLayer): void {
+  const inFlight = layer.requests.abortRef.current !== null
+
+  if (!inFlight && layer.areaRef.current?.failed !== true) {
+    return
+  }
+
+  if (inFlight) {
+    invalidateLatestRequest(layer.requests)
+  }
+
+  layer.requests.boundaryViewportKeyRef.current = null
+  layer.areaRef.current = null
+  layer.setState(IDLE_BOUNDARY_LOAD_STATE)
+}
+
+function requestBoundaryLayer(
+  layer: BoundaryLayer,
+  detail: ViewerViewportDetail,
+  { appendDebugEvent, baseUrl, boundaryCellLimit, recordTelemetry }: BoundaryLayerContext,
+): void {
+  const { boundaryViewportKeyRef } = layer.requests
+  const copy = BOUNDARY_LAYER_COPY[layer.kind]
+  const lastArea = layer.areaRef.current
+  const currentArea =
+    lastArea !== null &&
+    lastArea.key === boundaryViewportKeyRef.current &&
+    lastArea.key === boundaryViewportKey(baseUrl, lastArea.bbox)
+      ? lastArea
+      : null
+
+  if (boundaryRequestCovers(currentArea, detail)) {
+    return
+  }
+
+  const requestBbox = paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
+  const requestKey = boundaryViewportKey(baseUrl, requestBbox)
+  const requestArea: BoundaryRequestAreaWithKey = {
+    key: requestKey,
+    bbox: requestBbox,
+    zoom: detail.viewState.zoom,
+  }
+  layer.areaRef.current = requestArea
+  const request = startLatestRequest(layer.requests)
+  boundaryViewportKeyRef.current = requestKey
+  layer.setState(boundaryLoadStarted(baseUrl))
   const startedAt = readTimestamp()
-  const batch = await loader(baseUrl, bbox, options)
-  return profiledBoundaryElements(batch, Math.max(0, readTimestamp() - startedAt))
-}
+  appendDebugEvent(
+    `${copy.label} started: ${detail.visibleCellCount.toLocaleString()} visible cells`,
+    { coalesceKey: copy.coalesceKey },
+  )
 
-function profiledBoundaryElements(
-  batch: ElementBatch,
-  durationMs: number,
-): ProfiledBoundaryElements {
-  return { batch, durationMs }
+  void layer
+    .load(baseUrl, requestBbox, { signal: request.signal })
+    .then((batch) => {
+      if (!request.isCurrent()) {
+        return
+      }
+
+      const durationMs = Math.max(0, readTimestamp() - startedAt)
+      const profileDetail = formatBoundaryProfileDetail(
+        batch.elements.length,
+        copy.plural,
+        durationMs,
+      )
+
+      layer.setElements(batch.elements)
+      layer.setState(boundaryLoadReady(baseUrl, batch.elements.length))
+      recordTelemetry(
+        telemetryEvent(copy.telemetryName, 'success', {
+          startedAt,
+          detail: profileDetail,
+        }),
+      )
+      appendDebugEvent(`${copy.label} ready: ${profileDetail}`, {
+        coalesceKey: copy.coalesceKey,
+      })
+    })
+    .catch((error: unknown) => {
+      if (isAbortError(error) || !request.isCurrent()) {
+        return
+      }
+
+      // The failed area is not read again until the view leaves it or the
+      // layer is hidden and shown again.
+      layer.areaRef.current = { ...requestArea, failed: true }
+      layer.setElements([])
+      layer.setState(
+        boundaryLoadFailed(baseUrl, createStructuredLoadError(copy.label, error)),
+      )
+      recordTelemetry(
+        telemetryEvent(copy.telemetryName, 'failure', {
+          startedAt,
+          detail: readErrorMessage(error),
+        }),
+      )
+      appendDebugEvent(copy.failed, { coalesceKey: copy.coalesceKey })
+    })
+    .finally(() => {
+      request.complete()
+    })
 }
 
 function formatBoundaryProfileDetail(
-  cellResult: ProfiledBoundaryElements,
-  nucleusResult: ProfiledBoundaryElements,
-  includeNucleus: boolean,
+  count: number,
+  plural: string,
+  durationMs: number,
 ): string {
   const memoryDetail = currentMemoryDetail()
-  const parts = [
-    `${cellResult.batch.elements.length.toLocaleString()} cells in ${formatDurationMs(
-      cellResult.durationMs,
-    )}`,
-    includeNucleus
-      ? `${nucleusResult.batch.elements.length.toLocaleString()} nuclei in ${formatDurationMs(
-          nucleusResult.durationMs,
-        )}`
-      : undefined,
-    memoryDetail === undefined ? undefined : `memory ${memoryDetail}`,
-  ].filter((part): part is string => part !== undefined)
+  const timing = `${count.toLocaleString()} ${plural} in ${formatDurationMs(durationMs)}`
 
-  return parts.join(', ')
+  return memoryDetail === undefined ? timing : `${timing}, memory ${memoryDetail}`
 }
 
 function currentMemoryDetail(): string | undefined {

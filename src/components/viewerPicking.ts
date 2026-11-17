@@ -1,11 +1,13 @@
 import type { Position } from '@deck.gl/core'
-import type {
-  CellBoundaryDatum,
-  GridCellDatum,
-  OverviewCellDatum,
-  TranscriptAggregateDatum,
-  TranscriptPointDatum,
+import {
+  NUCLEUS_BOUNDARY_LAYER_ID,
+  type CellBoundaryDatum,
+  type GridCellDatum,
+  type OverviewCellDatum,
+  type TranscriptAggregateDatum,
+  type TranscriptPointDatum,
 } from '../rendering/deckLayers'
+import type { ViewerNucleusOrdinal } from './viewerCoreTypes'
 
 export function isOverviewCellDatum(value: unknown): value is OverviewCellDatum {
   if (typeof value !== 'object' || value === null) {
@@ -29,6 +31,50 @@ export function isCellBoundaryDatum(value: unknown): value is CellBoundaryDatum 
   const candidate = value as Partial<CellBoundaryDatum>
 
   return typeof candidate.id === 'string' && Array.isArray(candidate.polygon)
+}
+
+// Nucleus and cell outlines share a datum shape, so a nucleus is told apart by
+// its layer.
+export function pickedNucleusBoundary(info: {
+  readonly layer?: { readonly id: string } | null
+  readonly object?: unknown
+}): CellBoundaryDatum | null {
+  return info.layer?.id === NUCLEUS_BOUNDARY_LAYER_ID && isCellBoundaryDatum(info.object)
+    ? info.object
+    : null
+}
+
+// The nuclei drawn for each cell, in layer order.
+export function nucleusIdsByCellId(
+  nuclei: readonly CellBoundaryDatum[],
+): ReadonlyMap<string, readonly string[]> {
+  const idsByCell = new Map<string, string[]>()
+
+  for (const nucleus of nuclei) {
+    if (nucleus.cellId === undefined) {
+      continue
+    }
+
+    const ids = idsByCell.get(nucleus.cellId)
+
+    if (ids === undefined) {
+      idsByCell.set(nucleus.cellId, [nucleus.id])
+    } else {
+      ids.push(nucleus.id)
+    }
+  }
+
+  return idsByCell
+}
+
+export function nucleusOrdinal(
+  nucleus: CellBoundaryDatum,
+  idsByCell: ReadonlyMap<string, readonly string[]>,
+): ViewerNucleusOrdinal {
+  const ids = nucleus.cellId === undefined ? undefined : idsByCell.get(nucleus.cellId)
+  const index = ids?.indexOf(nucleus.id) ?? -1
+
+  return ids === undefined || index < 0 ? {} : { ordinal: index + 1, count: ids.length }
 }
 
 export function isGridCellDatum(value: unknown): value is GridCellDatum {

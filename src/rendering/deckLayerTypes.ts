@@ -34,6 +34,8 @@ export interface OverviewViewState {
 
 export interface CellBoundaryDatum {
   readonly id: string
+  // The cell a nucleus outline belongs to (segmentation metadata cellId).
+  readonly cellId?: string
   readonly annotationLabel?: string
   readonly polygon: readonly Position[]
   readonly fillColor: Color

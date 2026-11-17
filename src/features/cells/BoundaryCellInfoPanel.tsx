@@ -1,20 +1,26 @@
 import { withSquareMicrometers } from '../../data/units'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import { CellExpressionProfilePanel } from './CellExpressionProfilePanel'
+import { CellNucleusRows } from './CellNucleusRows'
 import type { CellExpressionProfileState } from './cellExpressionProfileModel'
 import {
   expressionStatusLabel,
   type CellGeneExpressionStatus,
 } from './cellGeneExpressionStatus'
 
+const EMPTY_NUCLEI: readonly CellBoundaryDatum[] = []
+
 // A Visium HD cell boundary: its shape, selected-gene expression and profile.
 export function BoundaryCellInfoPanel({
   cell,
+  nuclei = EMPTY_NUCLEI,
   expressionStatus,
   expressionProfileState = IDLE_CELL_EXPRESSION_PROFILE_STATE,
   onLoadExpressionProfile,
 }: {
   readonly cell: CellBoundaryDatum
+  // The cell's nuclei drawn in the view.
+  readonly nuclei?: readonly CellBoundaryDatum[]
   readonly expressionStatus?: CellGeneExpressionStatus | undefined
   readonly expressionProfileState?: CellExpressionProfileState | undefined
   readonly onLoadExpressionProfile?: (() => void) | undefined
@@ -47,6 +53,7 @@ export function BoundaryCellInfoPanel({
           <dt>Area</dt>
           <dd>{withSquareMicrometers(formatBoundaryArea(cell))}</dd>
         </div>
+        <CellNucleusRows nuclei={nuclei} />
       </dl>
 
       <div className="cell-expression-panel">

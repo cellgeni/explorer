@@ -2,7 +2,7 @@ import type { ViewerLoadStatus } from './viewerCoreTypes'
 
 const DATASET_LOADING_TASK_ID = 'dataset'
 const MORPHOLOGY_LOADING_TASK_ID = 'morphology'
-const BOUNDARY_LOADING_TASK_ID = 'boundaries'
+const BOUNDARY_LOADING_TASK_IDS = ['boundaries', 'nucleus-boundaries']
 
 export function readViewportMessage(
   status: ViewerLoadStatus,
@@ -37,7 +37,10 @@ export function readViewportMessage(
     }
   }
 
-  if (boundaryStatus === 'loading' && !loadingTaskIds.has(BOUNDARY_LOADING_TASK_ID)) {
+  if (
+    boundaryStatus === 'loading' &&
+    !BOUNDARY_LOADING_TASK_IDS.some((id) => loadingTaskIds.has(id))
+  ) {
     return { kind: 'info', text: 'Loading cell boundaries…' }
   }
 

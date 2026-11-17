@@ -206,6 +206,9 @@ interface BoundaryIndex {
   readonly shapeIndexes: Uint32Array
   // minX, minY, maxX, maxY per cell, in µm.
   readonly bounds: Float64Array
+  // The table cell each nucleus belongs to; absent for cell outlines and for
+  // nuclei that match no table row.
+  readonly cellIds?: readonly string[]
 }
 
 const DEFAULT_SPATIALDATA_UNITS: UnitsDescriptor = {
@@ -1194,6 +1197,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     const tableLookup = new ShapeLookup(tableCellIds)
     const nucleusCounts = new Map<string, number>()
     const ids: string[] = []
+    const cellIds: string[] = []
     const shapeIndexes: number[] = []
 
     regions.forEach((region) => {
@@ -1227,6 +1231,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       const count = (nucleusCounts.get(cellId) ?? 0) + 1
       nucleusCounts.set(cellId, count)
       ids.push(count === 1 ? cellId : `${cellId}#nucleus-${count.toString()}`)
+      cellIds.push(cellId)
       shapeIndexes.push(index)
     })
 
@@ -1245,12 +1250,15 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     this.onProgress?.(
       `SpatialData shapes ${entry.element.name}: ${ids.length.toLocaleString()} of ${shapes.ids.length.toLocaleString()} nuclei match table rows`,
     )
-    return boundaryIndexOf(
-      ids,
-      [{ shapes, scale: 1 }],
-      shapeIndexes.map(() => 0),
-      shapeIndexes,
-    )
+    return {
+      ...boundaryIndexOf(
+        ids,
+        [{ shapes, scale: 1 }],
+        shapeIndexes.map(() => 0),
+        shapeIndexes,
+      ),
+      cellIds,
+    }
   }
 
   private regionBoundaryIndex(): BoundaryIndex {
@@ -1503,6 +1511,14 @@ function boundaryElement(
   metadata?: SpatialElementMetadata,
 ): SpatialElement {
   const source = index.sources[index.sourceIndexes[cell] ?? 0]
+  const cellId = index.cellIds?.[cell]
+  const elementMetadata =
+    cellId === undefined
+      ? metadata
+      : {
+          ...metadata,
+          segmentation: { ...(metadata?.segmentation ?? { kind: 'nucleus' }), cellId },
+        }
 
   return {
     id: index.ids[cell] ?? String(cell),
@@ -1512,7 +1528,7 @@ function boundaryElement(
         source === undefined ? [] : outlinePoints(source, index.shapeIndexes[cell] ?? 0),
       ],
     },
-    ...(metadata === undefined ? {} : { metadata }),
+    ...(elementMetadata === undefined ? {} : { metadata: elementMetadata }),
   }
 }
 

@@ -384,12 +384,14 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       nucleusBoundaries: this.urlFor('nucleusBoundaries'),
     }
 
+    // Queries run while an earlier one finds the column missing still ask
+    // for it, so each retries on the setting it was read with.
+    const labelIds = this.nucleusLabelIds
+
     try {
-      return await readXeniumNucleusBoundaryElements(conn, urls, bbox, {
-        labelIds: this.nucleusLabelIds,
-      })
+      return await readXeniumNucleusBoundaryElements(conn, urls, bbox, { labelIds })
     } catch (error) {
-      if (!this.nucleusLabelIds || !isMissingParquetColumnError(error, 'label_id')) {
+      if (!labelIds || !isMissingParquetColumnError(error, 'label_id')) {
         throw error
       }
 

@@ -53,6 +53,7 @@ vi.mock('@deck.gl/react', () => ({
   }: {
     readonly layers?: readonly unknown[]
     readonly onClick?: (info: {
+      readonly layer?: { readonly id: string }
       readonly object?: unknown
       readonly x: number
       readonly y: number
@@ -79,7 +80,7 @@ vi.mock('@deck.gl/react', () => ({
             data-testid={`deck-layer-${id}`}
             data-count={String(data.length)}
             onClick={() => {
-              onClick?.({ object: clickObject, x: 0, y: 0 })
+              onClick?.({ layer: { id }, object: clickObject, x: 0, y: 0 })
             }}
           />
         )
@@ -3299,7 +3300,7 @@ describe('App', () => {
     ).not.toBeNull()
   })
 
-  it('draws Xenium nuclei and reads no cell outlines while they are hidden', async () => {
+  it('draws Xenium nuclei, reads each outline type on its own, and selects a nucleus cell', async () => {
     const viewport = installAppViewportFixture()
     const cellId = intToCellId(1, 1)
     const square = (min: number, max: number) => ({
@@ -3324,8 +3325,16 @@ describe('App', () => {
       async () => ({ elements: [{ id: cellId, geometry: square(-4, 4) }] }),
     )
     const nucleusElements: readonly SpatialElement[] = [
-      { id: cellId, geometry: square(-2, 0) },
-      { id: `${cellId}#nucleus-2`, geometry: square(0, 2) },
+      {
+        id: cellId,
+        geometry: square(-2, 0),
+        metadata: { segmentation: { kind: 'nucleus', cellId } },
+      },
+      {
+        id: `${cellId}#nucleus-2`,
+        geometry: square(0, 2),
+        metadata: { segmentation: { kind: 'nucleus', cellId } },
+      },
     ]
     const xeniumDataset = {
       meta: vi.fn(async () => ({
@@ -3391,19 +3400,38 @@ describe('App', () => {
         )
       })
 
+      // Each checkbox reads only its own outline type, and showing cells again
+      // in the same view reuses the outlines read before.
       const cellLoadCount = loadBoundaryElements.mock.calls.length
       const nucleusLoadCount = xeniumDataset.segmentationElements.mock.calls.length
       fireEvent.click(screen.getByLabelText('Cell boundaries'))
       await waitFor(() => {
-        expect(xeniumDataset.segmentationElements.mock.calls.length).toBeGreaterThan(
-          nucleusLoadCount,
-        )
         expect(screen.queryByTestId('deck-layer-cell-boundary-hit-areas')).toBeNull()
         expect(
           screen.getByTestId('deck-layer-nucleus-segmentation-polygons'),
         ).toHaveAttribute('data-count', '2')
       })
+      fireEvent.click(screen.getByLabelText('Cell boundaries'))
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
       expect(loadBoundaryElements).toHaveBeenCalledTimes(cellLoadCount)
+      expect(xeniumDataset.segmentationElements).toHaveBeenCalledTimes(nucleusLoadCount)
+
+      // A nucleus selects its cell, whose card lists the cell's nuclei.
+      fireEvent.click(screen.getByTestId('deck-layer-nucleus-segmentation-polygons'))
+      openControls('cell-card')
+      const cellCard = await screen.findByRole('region', { name: 'Cell' })
+      expect(
+        within(cellCard).getByText('Nucleus 1').nextElementSibling,
+      ).toHaveTextContent('2 µm²')
+      expect(within(cellCard).getByText('Nucleus 2')).toHaveAttribute(
+        'title',
+        `${cellId}#nucleus-2`,
+      )
     } finally {
       viewport.restore()
     }

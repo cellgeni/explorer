@@ -38,6 +38,9 @@ describe('readViewportMessage', () => {
     expect(message('loading', 'ready', 'ready', new Set(['dataset']))).toBeNull()
     expect(message('ready', 'loading', 'ready', new Set(['morphology']))).toBeNull()
     expect(message('ready', 'ready', 'loading', new Set(['boundaries']))).toBeNull()
+    expect(
+      message('ready', 'ready', 'loading', new Set(['nucleus-boundaries'])),
+    ).toBeNull()
     // A task for one load does not hide another.
     expect(message('ready', 'loading', 'ready', new Set(['dataset']))).toEqual({
       kind: 'info',

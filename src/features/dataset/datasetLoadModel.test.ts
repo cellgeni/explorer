@@ -29,6 +29,7 @@ import {
   type DatasetLoadState,
   type DatasetWarmupState,
   type MorphologyLoadState,
+  viewerBoundaryLoadState,
 } from './datasetLoadModel'
 
 const report: DatasetDiagnosticsReport = {
@@ -200,5 +201,21 @@ describe('datasetLoadModel state contracts', () => {
       ['idle', 'loading', 'ready', 'error'],
       ['idle', 'loading', 'ready', 'error'],
     ])
+  })
+
+  it('shows one boundary status: cell failure, nucleus failure, then a load', () => {
+    const url = 'https://example.test/xenium'
+    const cellError = boundaryLoadFailed(url, 'cells failed')
+    const nucleusError = boundaryLoadFailed(url, 'nuclei failed')
+    const loading = boundaryLoadStarted(url)
+    const ready = boundaryLoadReady(url, 4)
+    const idle: BoundaryLoadState<string> = { status: 'idle' }
+
+    expect(viewerBoundaryLoadState(cellError, nucleusError)).toBe(cellError)
+    expect(viewerBoundaryLoadState(loading, nucleusError)).toBe(nucleusError)
+    expect(viewerBoundaryLoadState(ready, loading)).toBe(loading)
+    expect(viewerBoundaryLoadState(loading, ready)).toBe(loading)
+    expect(viewerBoundaryLoadState(ready, idle)).toBe(ready)
+    expect(viewerBoundaryLoadState(idle, idle)).toBe(idle)
   })
 })

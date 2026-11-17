@@ -128,20 +128,43 @@ rule, bbox, and margins as cell outlines, through
 `cell_boundaries.parquet`, plus `label_id`, which tells apart the nuclei of
 one cell (about 3.5% of the demo's cells have more than one). Rows are
 grouped by `cell_id` and `label_id`. A cell's first nucleus keeps the cell
-ID, and later ones are `<cell_id>#nucleus-N`. A file without `label_id` is
-read again without it, and each cell's vertices form one nucleus. The file is
-Range-probed before the first query, so a missing file shows a boundary error
-that names it.
+ID, and later ones are `<cell_id>#nucleus-N`; each nucleus also names its
+cell (segmentation metadata `cellId`). A file without `label_id` (XOA 1.x;
+the column came with XOA 2.0) is read again without it, and each cell's
+vertices form one nucleus. Queries started before the first one finds the
+column missing retry the same way. The file is Range-probed before the first
+query, so a missing file shows a boundary error that names it.
 
-Nuclei are drawn as a blue, non-pickable layer. Both outline types use the
-viewport boundary `XeniumDataset`, whose DuckDB instance runs one query at a
-time. So `Cell boundaries` off skips the cell query
-(`cellBoundaryLoadingEnabled` in `platformAdapter.ts`), and switching either
-checkbox requests both outline types again. The repeat reads come from
-DuckDB's file cache.
+Cell and nucleus outlines are separate requests (`useViewportDataWorkflow.ts`),
+each with its own loading task, error, and log line (`Cell boundaries ready:`
+and `Nucleus boundaries ready:`). Each layer is drawn when its query returns,
+and a failed nucleus read leaves the cell outlines in place. Each checkbox
+reads only its own outline type: with `Cell boundaries` off no cell query
+runs (`cellBoundaryLoadingEnabled` in `platformAdapter.ts`). Unticking a
+checkbox stops that layer's request but keeps the outlines it already read,
+so ticking it again in the same area reads nothing. Both queries share the
+viewport `XeniumDataset`, whose DuckDB instance runs one query at a time, so
+with both on and cold the nuclei arrive after the cells.
 
-Measured on the demo on 2026-11-13 in headless Chromium with Metal WebGL, at
-a 1280 × 800 view of about 4,300 cells and nuclei:
+Nuclei are drawn as a blue layer that can be hovered and clicked. The tooltip
+shows the nucleus ID, its place among its cell's nuclei in view (`2 of 3`),
+the cell ID, vertices, and area. A click selects the nucleus's cell, as a
+click elsewhere in the cell does, and the Cell card then lists the cell's
+nuclei in view with their area and circularity.
+
+Measured on the demo on 2026-11-17 in headless Chromium with Metal WebGL, at
+a 1280 × 800 view of about 4,560 cells and nuclei. Times run from the request
+to the outlines being drawn:
+
+| Case                           | Cells                       | Nuclei                      |
+| ------------------------------ | --------------------------- | --------------------------- |
+| Both, cold                     | 15.8 s (20 requests, 16 MB) | 21.9 s (19 requests, 15 MB) |
+| Each checkbox off and on again | Not queried                 | Not queried                 |
+| Nuclei only, cold              | Not queried                 | 13.7 s                      |
+
+Before the split, measured on 2026-11-13 with the same setup at about 4,300
+cells and nuclei, both outline types were drawn together once both queries
+finished, and each checkbox read both again from DuckDB's file cache:
 
 | Case              | Cells                      | Nuclei                       |
 | ----------------- | -------------------------- | ---------------------------- |
@@ -317,6 +340,7 @@ not passed to the readers, so it does not change the result.
 | `src/data/datasetOverview.ts`, `hyparquetCells.ts`, `duckdbCells.ts`                | First-paint overview                                           |
 | `src/data/cellsOverviewWorker.ts`, `src/workers/cellsOverview*.ts`                  | Overview read in a worker                                      |
 | `src/data/datasetBoundaries.ts`, `src/rendering/boundaryViewport.ts`                | Viewport boundary loading                                      |
+| `src/features/app-shell/useViewportDataWorkflow.ts`                                 | Separate cell and nucleus boundary requests                    |
 | `src/features/app-shell/platformAdapter.ts`                                         | Nucleus loader routing; cell query skipped while hidden        |
 | `src/data/geneExpression.ts`, `geneExpressionLod.ts`, `gex.ts`                      | Expression LOD and matrix readers                              |
 | `src/data/transcriptOverlay.ts`, `transcriptZarr.ts`                                | Transcript capabilities, density, exact points                 |
@@ -333,8 +357,10 @@ not passed to the readers, so it does not change the result.
 
 ## Known Limitations
 
-- Cell and nucleus outlines are drawn together, once both queries finish.
-  With both on, cold, the cells wait about 4 s for the nuclei on the demo.
+- With both outline types on and cold, the nuclei are drawn about 6 s after
+  the cells on the demo, because both queries run one at a time on one
+  DuckDB instance. A second instance for nuclei would run them side by side,
+  at the cost of another DuckDB worker and file cache.
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
 - The morphology image is the first `experiment.xenium` path the folder's

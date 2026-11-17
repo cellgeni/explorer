@@ -264,6 +264,7 @@ import {
 import {
   IDLE_DATASET_LOAD_STATE,
   morphologyLoadFailed,
+  viewerBoundaryLoadState,
 } from './features/dataset/datasetLoadModel'
 import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
@@ -322,7 +323,6 @@ const EMPTY_GRID_CELL_DATA: readonly GridCellDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
 const EMPTY_ANNOTATIONS: readonly Annotation[] = []
-const loadNoBoundaryElements: BoundaryElementsLoader = async () => ({ elements: [] })
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -461,6 +461,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     dataset: {
       boundaryState,
+      nucleusBoundaryState,
       cellFeatureMatrixCapabilityState,
       datasetAbout,
       datasetManifestDefaults,
@@ -471,6 +472,7 @@ export function App({ dependencies }: AppProps = {}) {
       morphologyState,
       pendingDatasetLoadState,
       setBoundaryState,
+      setNucleusBoundaryState,
       setCellFeatureMatrixCapabilityState,
       setDatasetAbout,
       setDatasetManifestDefaults,
@@ -668,6 +670,7 @@ export function App({ dependencies }: AppProps = {}) {
   const visiumHdBinRequestId = useRef(0)
   const analysisEmbeddingRequestId = useRef(0)
   const boundaryRequestId = useRef(0)
+  const nucleusBoundaryRequestId = useRef(0)
   const geneExpressionRequestId = useRef(0)
   const roiRequestId = useRef(0)
   const roiTranscriptExportRequestId = useRef(0)
@@ -688,6 +691,7 @@ export function App({ dependencies }: AppProps = {}) {
   const diagnosticsAbortRef = useRef<AbortController | null>(null)
   const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
+  const nucleusBoundaryAbortRef = useRef<AbortController | null>(null)
   const geneExpressionAbortRef = useRef<AbortController | null>(null)
   const roiAbortRef = useRef<AbortController | null>(null)
   const roiTranscriptExportAbortRef = useRef<AbortController | null>(null)
@@ -710,6 +714,7 @@ export function App({ dependencies }: AppProps = {}) {
   const roiIdRef = useRef(0)
   const geometricAnnotationIdRef = useRef(0)
   const boundaryViewportKeyRef = useRef<string | null>(null)
+  const nucleusBoundaryViewportKeyRef = useRef<string | null>(null)
   const geneExpressionViewportKeyRef = useRef<string | null>(null)
   const geneExpressionLayerTimingKeyRef = useRef<string | null>(null)
   const transcriptViewportKeyRef = useRef<string | null>(null)
@@ -1091,6 +1096,7 @@ export function App({ dependencies }: AppProps = {}) {
       ),
     [viewerGeneExpressionElements, visibleBoundaryLayerData],
   )
+  const viewerBoundaryState = viewerBoundaryLoadState(boundaryState, nucleusBoundaryState)
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
@@ -1121,15 +1127,6 @@ export function App({ dependencies }: AppProps = {}) {
   const viewerGridCells = isVisiumHdBoundarySurfaceReserved
     ? EMPTY_GRID_CELL_DATA
     : spatialGridCells
-  const boundaryLoadingEnabled = platformAdapter.boundaryLoadingEnabled(
-    showCellBoundaries,
-    showNucleusBoundaries,
-  )
-  const boundaryOverlayRequestKey = platformAdapter.boundaryOverlayRequestKey(
-    showCellBoundaries,
-    showNucleusBoundaries,
-  )
-  const boundaryOverlayRequestKeyRef = useRef(boundaryOverlayRequestKey)
   const geneExpressionOverlayEnabled = platformAdapter.geneExpressionOverlayEnabled(
     spatialGridCells.length,
   )
@@ -1745,6 +1742,7 @@ export function App({ dependencies }: AppProps = {}) {
         morphologyState,
         customMorphologyLayerState,
         boundaryState,
+        nucleusBoundaryState,
         genePanelState,
         annotationState,
         annotationGroupState,
@@ -1772,6 +1770,7 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionState,
       genePanelState,
       loadState,
+      nucleusBoundaryState,
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
@@ -2213,7 +2212,8 @@ export function App({ dependencies }: AppProps = {}) {
     },
     controls: {
       boundaryCellLimit,
-      boundaryLoadingEnabled,
+      cellBoundaryLoadingEnabled:
+        platformAdapter.cellBoundaryLoadingEnabled(showCellBoundaries),
       geneExpressionDetailMode,
       geneExpressionScaleKey,
       geneExpressionScoreMode,
@@ -2227,9 +2227,7 @@ export function App({ dependencies }: AppProps = {}) {
       selectedGenes,
     },
     loaders: {
-      boundaryElements: platformAdapter.cellBoundaryLoadingEnabled(showCellBoundaries)
-        ? loadActiveBoundaryElements
-        : loadNoBoundaryElements,
+      boundaryElements: loadActiveBoundaryElements,
       ...(platformAdapter.capabilities.nucleusBoundaries && showNucleusBoundaries
         ? { nucleusBoundaryElements: loadActiveNucleusBoundaryElements }
         : {}),
@@ -2241,6 +2239,11 @@ export function App({ dependencies }: AppProps = {}) {
         requestIdRef: boundaryRequestId,
         boundaryViewportKeyRef,
       },
+      nucleusBoundary: {
+        abortRef: nucleusBoundaryAbortRef,
+        requestIdRef: nucleusBoundaryRequestId,
+        boundaryViewportKeyRef: nucleusBoundaryViewportKeyRef,
+      },
       geneExpression: {
         abortRef: geneExpressionAbortRef,
         requestIdRef: geneExpressionRequestId,
@@ -2251,6 +2254,7 @@ export function App({ dependencies }: AppProps = {}) {
     setters: {
       setBoundaryElements,
       setNucleusBoundaryElements,
+      setNucleusBoundaryState,
       setBoundaryState,
       setCurrentViewportDetail,
       setGeneExpressionBatch,
@@ -2258,22 +2262,6 @@ export function App({ dependencies }: AppProps = {}) {
       setShareableViewState,
     },
   })
-
-  useEffect(() => {
-    if (boundaryOverlayRequestKeyRef.current === boundaryOverlayRequestKey) {
-      return
-    }
-
-    boundaryOverlayRequestKeyRef.current = boundaryOverlayRequestKey
-    const detail = lastViewportDetailRef.current
-
-    if (detail === null || loadState.status !== 'ready') {
-      return
-    }
-
-    boundaryViewportKeyRef.current = null
-    handleViewportChange(detail)
-  }, [boundaryOverlayRequestKey, handleViewportChange, loadState.status])
 
   const { cancelTranscriptLoad, transcriptLoadProgress } = useTranscriptWorkflow({
     callbacks: {
@@ -2326,6 +2314,7 @@ export function App({ dependencies }: AppProps = {}) {
         annotationState,
         autoContrastChannelCount: autoContrastChannelIds.length,
         boundaryState,
+        nucleusBoundaryState,
         cellDetailState,
         cellTranscriptDistributionState,
         visiumHdExpressionProfileState: activeVisiumHdExpressionProfileState,
@@ -2378,6 +2367,7 @@ export function App({ dependencies }: AppProps = {}) {
       magicLensState,
       morphologyState,
       customMorphologyLayerState,
+      nucleusBoundaryState,
       pendingDatasetLoadState,
       roiGeneStatsState,
       roiState,
@@ -2993,6 +2983,14 @@ export function App({ dependencies }: AppProps = {}) {
     setSelectedCell,
     setSelectedGridCell,
   ])
+  // The selected cell's nuclei drawn in the view, for the Cell card.
+  const selectedCellNuclei = useMemo(() => {
+    const cellId = activeSelectedBoundaryCell?.id ?? selectedCell?.id
+
+    return cellId === undefined || visibleNucleusBoundaryLayerData.length === 0
+      ? EMPTY_CELL_BOUNDARY_DATA
+      : visibleNucleusBoundaryLayerData.filter((nucleus) => nucleus.cellId === cellId)
+  }, [activeSelectedBoundaryCell, selectedCell, visibleNucleusBoundaryLayerData])
   const drawnBoundaryById = useMemo(
     () =>
       new Map(
@@ -3257,6 +3255,9 @@ export function App({ dependencies }: AppProps = {}) {
       boundaryAbortRef,
       boundaryRequestIdRef: boundaryRequestId,
       boundaryViewportKeyRef,
+      nucleusBoundaryAbortRef,
+      nucleusBoundaryRequestIdRef: nucleusBoundaryRequestId,
+      nucleusBoundaryViewportKeyRef,
       cellDetailAbortRef,
       cellDetailRequestIdRef: cellDetailRequestId,
       cellFeatureMatrixCapabilityKeyRef,
@@ -3364,6 +3365,7 @@ export function App({ dependencies }: AppProps = {}) {
       setShowNucleusBoundaries,
       setSpatialGridCells,
       setNucleusBoundaryElements,
+      setNucleusBoundaryState,
       setTranscriptCapabilityState,
       setTranscriptDensityColorScale,
       setTranscriptExactPointLimit,
@@ -4389,6 +4391,7 @@ export function App({ dependencies }: AppProps = {}) {
         state: activeVisiumHdExpressionProfileState,
         onLoad: handleLoadVisiumHdExpressionProfile,
       },
+      nuclei: selectedCellNuclei,
       onClose: handleClearSelection,
     },
     transcript: platformAdapter.capabilities.transcripts
@@ -4504,7 +4507,7 @@ export function App({ dependencies }: AppProps = {}) {
             measurementResetKey={measurementResetKey}
             status={loadState.status}
             imageStatus={viewerImageStatus}
-            boundaryStatus={boundaryState.status}
+            boundaryStatus={viewerBoundaryState.status}
             overviewRenderCellLimit={viewerOverviewRenderCellLimit}
             clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
             maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
@@ -4557,8 +4560,8 @@ export function App({ dependencies }: AppProps = {}) {
             spatialDataControlState.units.source === 'unknown'
               ? { physicalUnitLabel: 'units' }
               : {})}
-            {...(boundaryState.status === 'error'
-              ? { boundaryErrorMessage: formatStructuredError(boundaryState.error) }
+            {...(viewerBoundaryState.status === 'error'
+              ? { boundaryErrorMessage: formatStructuredError(viewerBoundaryState.error) }
               : {})}
           />
           {linkedSections.length === 0 ? null : (

@@ -40,14 +40,18 @@ hyparquet:
 - **DECISION:** Nuclei use the existing blue, non-pickable nucleus layer and
   the `Nucleus boundaries` checkbox. It stays off by default on Xenium.
   `nucleusBounds=1` in a link or the manifest default `nucleusBoundaries`
-  turns it on.
+  turns it on. The layer is pickable since 2026-11-17 (**Superseded** in
+  part; see [Closed Open Items](#closed-open-items)).
 - **DECISION:** On Xenium, the cell boundary query runs only while
   `Cell boundaries` is on. Both queries share the boundary DuckDB instance,
   which runs one query at a time. Without this, nuclei shown alone would wait
   for a cold cell query first (about 7 s on the demo). Atera and Visium HD
-  keep loading cells with nuclei.
-- Out of scope: nucleus picking, hover, or a nucleus card; nucleus shape
-  metrics; and the polygons in Xenium's `cells.zarr.zip`.
+  keep loading cells with nuclei. **Superseded** in part on 2026-11-17: every
+  platform reads cell outlines only while they are shown (see
+  [Closed Open Items](#closed-open-items)).
+- Out of scope: nucleus picking, hover, or a nucleus card (**Superseded**
+  2026-11-17); nucleus shape metrics beyond each nucleus's area and
+  circularity; and the polygons in Xenium's `cells.zarr.zip`.
 
 ## Tasks
 
@@ -115,20 +119,59 @@ hyparquet:
 
 ## Known Gaps
 
-- [ ] Cell and nucleus outlines are drawn together, once both queries finish.
-      With both on and cold, the cells wait about 4 s for the nuclei. Drawing
-      each as it arrives, or a second DuckDB instance for nuclei, would remove
-      that wait.
-- [ ] A failed nucleus read clears the cell outlines too, since one boundary
-      request carries both (as on Atera and Visium HD).
-- [ ] Ticking either checkbox requests both outline types again. Repeats come
-      from DuckDB's file cache (about 0.5 s each on the demo), but they are
-      not free.
-- [ ] Nuclei cannot be picked or hovered, and there is no nucleus card.
-- [ ] Files without `label_id` were not available to test against. The
-      fallback is covered by a unit test only.
+- [ ] With both outline types on and cold, the nuclei are drawn about 6 s
+      after the cells on the demo, because one DuckDB instance runs both
+      queries in turn. A second instance for nuclei would run them side by
+      side, at the cost of another DuckDB worker and file cache.
+- [ ] On Visium HD, bins are drawn above cell and nucleus outlines and take
+      the pointer, so outlines cannot be hovered or clicked where bins are
+      drawn. The nucleus-to-cell link is in place for when they can.
 
 ## Closed Open Items
+
+Closed 2026-11-17, checked in headless Chromium (Metal WebGL) against the
+Xenium demo and against BioImage Archive S-BIAD1426, an XOA 1.7.1 run whose
+`nucleus_boundaries.parquet` has no `label_id`. See
+[Xenium](../../modalities/xenium.md#nucleus-boundaries).
+
+- [x] Cell outlines no longer wait for the nuclei (2026-11-17).
+      **DECISION:** cell and nucleus outlines are separate viewport
+      requests on every platform (`useViewportDataWorkflow.ts`), each with
+      its own request refs, covered area, `BoundaryLoadState`, loading task
+      (`Loading cell boundaries`, `Loading nucleus boundaries`) and log line,
+      rather than a second DuckDB instance for nuclei. Each layer is drawn
+      when its query returns. Both on, cold, at a 1280 × 800 view of about
+      4,560 cells: cells in 15.8 s, nuclei in 21.9 s; before, both were drawn
+      once the nuclei arrived.
+- [x] A failed nucleus read leaves the cell outlines (2026-11-17). Its error
+      has the source `Nucleus boundaries`; the viewport shows a cell outline
+      error first, then a nucleus one (`viewerBoundaryLoadState`). With the
+      demo's nucleus file answered 404, the cells were drawn and the
+      viewport named `nucleus_boundaries.parquet`.
+- [x] Each checkbox reads only its own outline type (2026-11-17). A hidden
+      layer stops its request and drops its error but keeps the outlines it
+      read, so showing it again in the same area reads nothing; the
+      adapter's `boundaryLoadingEnabled` and `boundaryOverlayRequestKey`
+      were removed. On the demo, unticking and ticking either checkbox made
+      no request.
+- [x] Nucleus hover and the nucleus card (2026-11-17). **DECISION:** a
+      nucleus belongs to a cell, so a click on one selects its cell (the
+      overview cell, else its drawn outline), and the Cell card, or the
+      Visium HD cell outline card, lists the cell's nuclei in view with area
+      and circularity. There is no nucleus selection of its own. The hover
+      tooltip shows the nucleus ID, its place among its cell's nuclei
+      (`2 of 3`), the cell, vertices and area. Readers name each nucleus's
+      cell in its segmentation metadata (`cellId`): Xenium and Atera from the
+      cell ID, Visium HD from the GeoJSON `cell_id`, kept in its own
+      segmentation index column so shared metadata stays deduplicated.
+- [x] A file without `label_id`, checked (2026-11-17). S-BIAD1426's
+      `nucleus_boundaries.parquet` (3.7 MB, 816,445 rows, one row group,
+      string `cell_id`, 13-vertex rings, one nucleus per cell) exposed a
+      race: zooming started several nucleus queries before the first found
+      the column missing, and the later ones failed with DuckDB's
+      `Binder Error` instead of retrying. Each query now retries on the
+      setting it was made with. After the fix, 6,208 nuclei in view were
+      drawn with no error.
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
 

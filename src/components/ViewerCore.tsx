@@ -39,6 +39,9 @@ import {
   isOverviewCellDatum,
   isTranscriptAggregateDatum,
   isTranscriptPointDatum,
+  nucleusIdsByCellId,
+  nucleusOrdinal,
+  pickedNucleusBoundary,
 } from './viewerPicking'
 import { MagicLensOverlay } from './viewerMagicLensOverlay'
 import { magicLensOverlayModel } from './viewerMagicLensModel'
@@ -945,6 +948,10 @@ function ViewerSurface({
     () => annotationLabelsByCellIdForStyles(annotationStyleColors),
     [annotationStyleColors],
   )
+  const nucleusIdsByCell = useMemo(
+    () => nucleusIdsByCellId(nucleusBoundaries),
+    [nucleusBoundaries],
+  )
   const cellBoundaryFillEnabled =
     (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
     (observationColorMode === 'metadata' && cellMetadataTrack !== null) ||
@@ -1528,7 +1535,29 @@ function ViewerSurface({
         return
       }
 
-      if (isCellBoundaryDatum(info.object)) {
+      const nucleus = pickedNucleusBoundary(info)
+
+      if (nucleus !== null) {
+        // A nucleus selects its cell: the cell itself, else its outline. One
+        // whose cell is neither drawn falls through to the coordinate lookup.
+        const cellId = nucleus.cellId
+        const cell = cellId === undefined ? undefined : cellById.get(cellId)
+
+        if (cell !== undefined && onCellClick !== undefined) {
+          onCellClick(cell)
+          return
+        }
+
+        const boundary =
+          cellId === undefined
+            ? undefined
+            : boundaries.find((candidate) => candidate.id === cellId)
+
+        if (boundary !== undefined && onCellBoundaryClick !== undefined) {
+          onCellBoundaryClick(boundary)
+          return
+        }
+      } else if (isCellBoundaryDatum(info.object)) {
         const cell = cellById.get(info.object.id)
 
         if (cell !== undefined && onCellClick !== undefined) {
@@ -1640,6 +1669,41 @@ function ViewerSurface({
         return
       }
 
+      const hoveredNucleus = pickedNucleusBoundary(info)
+
+      if (hoveredNucleus !== null) {
+        const cell =
+          hoveredNucleus.cellId === undefined
+            ? undefined
+            : cellById.get(hoveredNucleus.cellId)
+
+        setTranscriptHover((current) => {
+          if (current !== null) {
+            onTranscriptHover?.(null)
+          }
+
+          return null
+        })
+        setGridCellHover(null)
+        setCellHover(null)
+
+        if (magicLensActive || !hoverTooltipsEnabled) {
+          setCellBoundaryHover(null)
+          return
+        }
+
+        setCellBoundaryHover({
+          boundary: hoveredNucleus,
+          nucleus: nucleusOrdinal(hoveredNucleus, nucleusIdsByCell),
+          ...(cell === undefined ? {} : { cell }),
+          screen: {
+            x: info.x,
+            y: info.y,
+          },
+        })
+        return
+      }
+
       if (cellBoundaryHoverEnabled && isCellBoundaryDatum(info.object)) {
         const boundary = info.object
         const expressionElement = geneExpressionPointStyleIndex.expressionByElementId.get(
@@ -1733,6 +1797,7 @@ function ViewerSurface({
       geneExpressionPointStyleIndex,
       hoverTooltipsEnabled,
       magicLensActive,
+      nucleusIdsByCell,
       onTranscriptHover,
     ],
   )

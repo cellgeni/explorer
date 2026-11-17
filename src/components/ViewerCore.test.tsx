@@ -16,11 +16,13 @@ import type { RoiSelection } from '../data/roiSelection'
 import type { TiffPyramidLoader } from '../tiff/loader'
 
 type MockDeckHover = (info: {
+  readonly layer?: { readonly id: string }
   readonly object?: unknown
   readonly x: number
   readonly y: number
 }) => void
 type MockDeckClick = (info: {
+  readonly layer?: { readonly id: string }
   readonly object?: unknown
   readonly x: number
   readonly y: number
@@ -678,12 +680,12 @@ describe('ViewerCore', () => {
   it('does not duplicate boundary loading between queued tasks and viewport status', () => {
     render(
       <ViewerCore
-        loadingTasks={[{ id: 'boundaries', label: 'Loading boundaries' }]}
+        loadingTasks={[{ id: 'boundaries', label: 'Loading cell boundaries' }]}
         boundaryStatus="loading"
       />,
     )
 
-    expect(screen.getByText('Loading boundaries')).toBeInTheDocument()
+    expect(screen.getByText('Loading cell boundaries')).toBeInTheDocument()
     expect(screen.queryByText('Loading cell boundaries…')).not.toBeInTheDocument()
   })
 
@@ -1386,6 +1388,117 @@ describe('ViewerCore', () => {
     })
 
     expect(onCellBoundaryClick).toHaveBeenCalledWith(boundary)
+  })
+
+  describe('nuclei', () => {
+    const square = (min: number, size: number): CellBoundaryDatum['polygon'] => [
+      [min, -min, 0],
+      [min + size, -min, 0],
+      [min + size, -min - size, 0],
+      [min, -min - size, 0],
+    ]
+    const nucleusLayer = { id: 'nucleus-segmentation-polygons' }
+    const cellId = asCellId('aaaaaaab-1')
+    const cell: OverviewCellDatum = {
+      id: cellId,
+      position: [5, -5, 0],
+      radiusPixels: 4,
+      fillColor: [215, 63, 124, 220],
+    }
+    const firstNucleus: CellBoundaryDatum = {
+      id: cellId,
+      cellId,
+      polygon: square(1, 2),
+      fillColor: [76, 145, 230, 34],
+      lineColor: [76, 145, 230, 190],
+    }
+    const secondNucleus: CellBoundaryDatum = {
+      ...firstNucleus,
+      id: `${cellId}#nucleus-2`,
+      polygon: square(5, 4),
+    }
+
+    it('shows a hovered nucleus with its cell and its place among the cell nuclei', () => {
+      render(
+        <ViewerCore cells={[cell]} nucleusBoundaries={[firstNucleus, secondNucleus]} />,
+      )
+
+      act(() => {
+        deckGlMock.onHover?.({ layer: nucleusLayer, object: secondNucleus, x: 18, y: 24 })
+      })
+
+      expect(screen.getByText(`${cellId}#nucleus-2`)).toBeInTheDocument()
+      expect(screen.getByText('2 of 2')).toBeInTheDocument()
+      expect(screen.getByText(cellId)).toBeInTheDocument()
+      expect(screen.getByText('16 µm²')).toBeInTheDocument()
+    })
+
+    it('shows a nucleus without a cell as segmented', () => {
+      const nucleus: CellBoundaryDatum = {
+        id: 'nucleus_000000004',
+        polygon: square(0, 3),
+        fillColor: [76, 145, 230, 34],
+        lineColor: [76, 145, 230, 190],
+      }
+
+      render(<ViewerCore nucleusBoundaries={[nucleus]} />)
+      act(() => {
+        deckGlMock.onHover?.({ layer: nucleusLayer, object: nucleus, x: 18, y: 24 })
+      })
+
+      expect(screen.getByText('nucleus_000000004')).toBeInTheDocument()
+      expect(screen.getByText('Segmented')).toBeInTheDocument()
+      expect(screen.getByText('9 µm²')).toBeInTheDocument()
+    })
+
+    it('selects the cell of a clicked nucleus', () => {
+      const onCellClick = vi.fn()
+      const onCellBoundaryClick = vi.fn()
+
+      render(
+        <ViewerCore
+          cells={[cell]}
+          nucleusBoundaries={[firstNucleus]}
+          onCellBoundaryClick={onCellBoundaryClick}
+          onCellClick={onCellClick}
+        />,
+      )
+      act(() => {
+        deckGlMock.onClick?.({ layer: nucleusLayer, object: firstNucleus, x: 14, y: 22 })
+      })
+
+      expect(onCellClick).toHaveBeenCalledWith(cell)
+      expect(onCellBoundaryClick).not.toHaveBeenCalled()
+    })
+
+    it('selects the outline of a clicked nucleus whose cell is not a point', () => {
+      const cellBoundary: CellBoundaryDatum = {
+        id: 'cellid_000000002-1',
+        polygon: square(0, 10),
+        fillColor: [32, 102, 83, 34],
+        lineColor: [32, 102, 83, 190],
+      }
+      const nucleus: CellBoundaryDatum = {
+        ...firstNucleus,
+        id: 'nucleus_000000001',
+        cellId: cellBoundary.id,
+      }
+      const onCellBoundaryClick = vi.fn()
+
+      render(
+        <ViewerCore
+          boundaries={[cellBoundary]}
+          cellBoundaryHoverEnabled
+          nucleusBoundaries={[nucleus]}
+          onCellBoundaryClick={onCellBoundaryClick}
+        />,
+      )
+      act(() => {
+        deckGlMock.onClick?.({ layer: nucleusLayer, object: nucleus, x: 14, y: 22 })
+      })
+
+      expect(onCellBoundaryClick).toHaveBeenCalledWith(cellBoundary)
+    })
   })
 
   it('reports debounced viewport details for boundary loading', async () => {
