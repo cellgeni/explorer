@@ -264,14 +264,15 @@ For each binned tier you want selectable, include all three of:
 - `binned_outputs/square_016um/spatial/scalefactors_json.json`
 - `binned_outputs/square_016um/filtered_feature_bc_matrix.h5`
 
-Use the matching `square_008um` or `square_002um` paths for 8 µm and 2 µm
-tiers. A tier is offered only when all three files answer a `HEAD` request.
-The app reads 16 µm and 8 µm positions directly; when 8 µm is present, loading
-16 µm also reads the 8 µm positions to derive the grid. For 2 µm first paint it
-uses `binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz`
-and derives the grid from the 8 µm (or 16 µm) tier instead of reading the full
-2 µm `tissue_positions.parquet`, which still has to exist for detection. Host
-an 8 µm or 16 µm tier alongside 2 µm.
+Use the matching `square_008um` path for 8 µm. For 2 µm, host
+`binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz` in
+place of its `tissue_positions.parquet`, which is not read: at 171 MB on the
+reference dataset it can be left out. A tier is offered only when its three
+files answer a `HEAD` request. The app reads 16 µm and 8 µm positions directly;
+when 8 µm is present, loading 16 µm also reads the 8 µm positions to derive
+the grid. The 2 µm grid comes from the 8 µm (or 16 µm) tier, or, with only a
+2 µm tier, from the spot transform in `feature_slice.h5`, which that dataset
+then needs.
 
 Strongly recommended:
 
@@ -288,6 +289,9 @@ Optional but supported Visium HD files include:
   `tissue_lowres_image.png` is drawn instead when the high-res PNG is missing.
 - Binned `analysis/umap/gene_expression_2_components/projection.csv` (or root
   `analysis/…`) for embedding views.
+- Binned `analysis/clustering/<clustering>/clusters.csv` in the 8 µm and
+  16 µm tiers, as Space Ranger writes them, for annotation sets
+  (`gene_expression_graphclust` and `gene_expression_kmeans_{2..10}_clusters`).
 - Segmented outputs under `segmented_outputs/`:
   `cell_segmentations.geojson`, `nucleus_segmentations.geojson`,
   `nucleus_instance_mask.tiff`,

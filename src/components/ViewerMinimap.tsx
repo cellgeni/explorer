@@ -9,6 +9,8 @@ import {
 import {
   minimapDeckTarget,
   minimapDrawsImage,
+  minimapImageChannels,
+  minimapImageLoader,
   minimapTileCacheTiles,
   minimapViewRect,
   type MinimapLayout,
@@ -29,9 +31,10 @@ interface ViewerMinimapProps {
 }
 
 // The minimap (plan 15.4-D). It sits beside the deck.gl canvas,
-// never inside it. The image is the coarsest pyramid level, drawn by its own
-// MorphologyCanvas with a small tile cache; Visium's tissue image is the flat
-// image; otherwise the dots show where the cells are.
+// never inside it. The image is its overview (an SVS thumbnail) or else the
+// coarsest pyramid level, drawn by its own MorphologyCanvas with a small tile
+// cache; Visium's tissue image is the flat image; otherwise the dots show
+// where the cells are.
 export const ViewerMinimap = memo(function ViewerMinimap({
   layout,
   imageLoader,
@@ -43,9 +46,14 @@ export const ViewerMinimap = memo(function ViewerMinimap({
 }: ViewerMinimapProps) {
   const draggingRef = useRef(false)
   const hasImage = minimapDrawsImage(imageLoader, imageChannels, flatImage)
+  const minimapLoader = imageLoader === null ? null : minimapImageLoader(imageLoader)
+  const minimapChannels = useMemo(
+    () => minimapImageChannels(imageChannels),
+    [imageChannels],
+  )
   const tileCacheMaxTiles = useMemo(
-    () => minimapTileCacheTiles(imageLoader, imageChannels.length),
-    [imageLoader, imageChannels.length],
+    () => minimapTileCacheTiles(minimapLoader, imageChannels.length),
+    [minimapLoader, imageChannels.length],
   )
   const viewRect = viewBbox === null ? null : minimapViewRect(viewBbox, layout)
 
@@ -85,8 +93,8 @@ export const ViewerMinimap = memo(function ViewerMinimap({
     >
       {hasImage ? (
         <MorphologyCanvas
-          loader={imageLoader}
-          channels={imageChannels}
+          loader={minimapLoader}
+          channels={minimapChannels}
           flatImage={flatImage}
           viewState={layout.viewState}
           maxConcurrentTileRequests={MINIMAP_TILE_REQUESTS}

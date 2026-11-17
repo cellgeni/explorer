@@ -1,3 +1,4 @@
+import { gzipSync } from 'node:zlib'
 import { describe, expect, it, vi } from 'vitest'
 import {
   parseVisiumHdFilteredMatrixBarcodes,
@@ -35,23 +36,15 @@ describe('Visium HD filtered matrix barcodes', () => {
   it('parses filtered matrix barcode TSV rows for a selected bin size', () => {
     expect(
       parseVisiumHdFilteredMatrixBarcodes(
-        ['s_002um_000001_000002-1', 's_002um_000003_000004-1', ''].join('\n'),
+        ['s_002um_000001_000002-1', 's_002um_000003_000004-1\tother', ''].join('\n'),
         { binSizeMicrometers: 2 },
       ),
-    ).toEqual([
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-        row: 1,
-        col: 2,
-      },
-      {
-        barcode: 's_002um_000003_000004-1',
-        binSizeMicrometers: 2,
-        row: 3,
-        col: 4,
-      },
-    ])
+    ).toEqual({
+      binSizeMicrometers: 2,
+      ids: ['s_002um_000001_000002-1', 's_002um_000003_000004-1'],
+      rows: new Int32Array([1, 3]),
+      cols: new Int32Array([2, 4]),
+    })
   })
 
   it('rejects malformed or mismatched square barcode rows', () => {
@@ -82,16 +75,66 @@ describe('Visium HD filtered matrix barcodes', () => {
         fetcher,
         maxBarcodeCount: 10,
       }),
-    ).resolves.toEqual([
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-        row: 1,
-        col: 2,
-      },
-    ])
+    ).resolves.toEqual({
+      binSizeMicrometers: 2,
+      ids: ['s_002um_000001_000002-1'],
+      rows: new Int32Array([1]),
+      cols: new Int32Array([2]),
+    })
     expect(fetcher).toHaveBeenCalledWith(
       'https://example.test/visium/binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz',
     )
+  })
+
+  it('reads a gzipped file as it streams, lines split across chunks', async () => {
+    const barcodes = Array.from(
+      { length: 5_000 },
+      (_, index) =>
+        `s_002um_${String(index % 3350).padStart(5, '0')}_${String(index).padStart(5, '0')}-1`,
+    )
+    const gzipped = gzipSync(new TextEncoder().encode(`${barcodes.join('\r\n')}\r\n`))
+    // Three-byte chunks split the gzip header, and every line.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let offset = 0; offset < gzipped.length; offset += 3) {
+          controller.enqueue(gzipped.subarray(offset, offset + 3))
+        }
+
+        controller.close()
+      },
+    })
+
+    const columns = await readVisiumHdFilteredMatrixBarcodes(
+      'https://example.test/visium/',
+      bin2,
+      { fetcher: async () => new Response(body) },
+    )
+
+    expect(columns.ids).toEqual(barcodes)
+    expect(columns.rows[4_999]).toBe(4_999 % 3350)
+    expect(columns.cols[4_999]).toBe(4_999)
+  })
+
+  it('stops the download once the barcodes pass the budget', async () => {
+    let cancelled = false
+    let chunksSent = 0
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        chunksSent += 1
+        controller.enqueue(new TextEncoder().encode('s_002um_00001_00002-1\n'))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+
+    await expect(
+      readVisiumHdFilteredMatrixBarcodes('https://example.test/visium/', bin2, {
+        fetcher: async () => new Response(body),
+        maxBarcodeCount: 3,
+      }),
+    ).rejects.toThrow(VisiumHdFilteredBarcodeBudgetExceededError)
+    expect(cancelled).toBe(true)
+    expect(chunksSent).toBeLessThan(10)
   })
 })

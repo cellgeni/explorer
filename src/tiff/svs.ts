@@ -6,13 +6,24 @@ import type { TiffChannelInfo } from './omeMetadata'
 // are the pyramid levels; stripped IFDs are associated images: a thumbnail
 // after IFD 0, and the label and macro (slide overview) at the end. IFD 0's
 // ImageDescription starts with "Aperio" and carries `key = value` properties
-// separated by `|`, such as `MPP = 0.2520|AppMag = 20`.
+// separated by `|`, such as `MPP = 0.2520|AppMag = 20`. Aperio FL scanners
+// write one SVS per fluorescence channel, 16-bit, whose properties name the
+// channel (`Dye`, `DisplayColor`); an `.afi` file lists a scan's channel
+// files. Their `Acquisition Bit Depth` (10) is the camera's: samples are
+// scaled to the full 16 bits, so it does not bound the window.
 
 const SVS_DESCRIPTION_PREFIX = 'Aperio'
 
-export interface SvsDescription {
+export interface SvsDescription extends SvsChannelDescription {
   readonly micrometersPerPixel?: number
   readonly objectivePower?: number
+}
+
+// What an Aperio FL channel file says about its channel.
+export interface SvsChannelDescription {
+  readonly dye?: string
+  // `DisplayColor`, a packed 0xRRGGBB integer.
+  readonly displayColor?: readonly [number, number, number]
 }
 
 // The IFD fields that place an image in the SVS layout.
@@ -42,10 +53,14 @@ export function parseSvsDescription(description: string | undefined): SvsDescrip
   const properties = svsProperties(description ?? '')
   const micrometersPerPixel = positiveNumber(properties.get('MPP'))
   const objectivePower = positiveNumber(properties.get('AppMag'))
+  const dye = properties.get('Dye')
+  const displayColor = packedRgb(properties.get('DisplayColor'))
 
   return {
     ...(micrometersPerPixel === undefined ? {} : { micrometersPerPixel }),
     ...(objectivePower === undefined ? {} : { objectivePower }),
+    ...(dye === undefined || dye.length === 0 ? {} : { dye }),
+    ...(displayColor === undefined ? {} : { displayColor }),
   }
 }
 
@@ -57,6 +72,43 @@ export function isSvsAssociatedImageAfterPyramid(ifd: {
   readonly subfileType: number
 }): boolean {
   return !ifd.tiled && (ifd.subfileType & 1) === 1
+}
+
+export type SvsAssociatedImageName = 'thumbnail' | 'label' | 'macro'
+
+const SVS_ASSOCIATED_IMAGE_NAMES: readonly SvsAssociatedImageName[] = [
+  'thumbnail',
+  'label',
+  'macro',
+]
+
+// Names a stripped IFD as OpenSlide does: IFD 1 is the thumbnail; another
+// is named by the first word of its description's second line ("label
+// 387x463", "macro 1280x431"). Without that word, NewSubfileType decides:
+// 1 for the label, 9 for the macro.
+export function svsAssociatedImageName(ifd: {
+  readonly index: number
+  readonly tiled: boolean
+  readonly subfileType: number
+  readonly description?: string | undefined
+}): SvsAssociatedImageName | undefined {
+  if (ifd.tiled) {
+    return undefined
+  }
+
+  if (ifd.index === 1) {
+    return 'thumbnail'
+  }
+
+  const secondLine = ifd.description?.split(/\r?\n/)[1]?.trim() ?? ''
+  const word = secondLine.split(/[\s|]/, 1)[0]?.toLowerCase()
+  const named = SVS_ASSOCIATED_IMAGE_NAMES.find((name) => name === word)
+
+  if (named !== undefined) {
+    return named
+  }
+
+  return ifd.subfileType === 1 ? 'label' : ifd.subfileType === 9 ? 'macro' : undefined
 }
 
 // Every tiled IFD is a pyramid level, as OpenSlide reads SVS. The TIFF
@@ -90,11 +142,13 @@ export function svsLayout(ifds: readonly SvsIfdSummary[]): readonly number[] {
 }
 
 // Brightfield slides are RGB, drawn as stored. A single-sample slide gets
-// one greyscale channel with the full window of its bit depth.
+// one channel with the full window of its bit depth; a fluorescence channel
+// file names its dye and colour.
 export function svsChannelInfo(
   samplesPerPixel: number,
   bitsPerSample: number | undefined,
-  channelName = 'Channel 1',
+  channelName?: string,
+  channel: SvsChannelDescription = {},
 ): TiffChannelInfo {
   if (samplesPerPixel >= 3) {
     return {
@@ -109,14 +163,14 @@ export function svsChannelInfo(
     }
   }
 
-  const name = channelName
+  const name = channelName ?? channel.dye ?? 'Channel 1'
   const bits = Math.min(16, Math.max(8, bitsPerSample ?? 8))
 
   return {
     id: 'Channel:0',
     index: 0,
     name,
-    color: defaultChannelColor({ index: 0, name }),
+    color: channel.displayColor ?? defaultChannelColor({ index: 0, name }),
     // 12-bit samples (MERSCOPE) end at 4095.
     contrast: { min: 0, max: 2 ** bits - 1 },
     ifdIndex: 0,
@@ -143,6 +197,14 @@ function svsProperties(description: string): ReadonlyMap<string, string> {
   }
 
   return properties
+}
+
+function packedRgb(value: string | undefined): [number, number, number] | undefined {
+  const packed = value === undefined || value.length === 0 ? NaN : Number(value)
+
+  return Number.isInteger(packed) && packed >= 0 && packed <= 0xff_ffff
+    ? [(packed >> 16) & 0xff, (packed >> 8) & 0xff, packed & 0xff]
+    : undefined
 }
 
 function positiveNumber(value: string | undefined): number | undefined {

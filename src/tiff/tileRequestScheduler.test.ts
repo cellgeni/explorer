@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import { TileRequestScheduler } from './tileRequestScheduler'
+import type { ImagePyramidTileFetchOptions } from '../data/imagePyramid'
 import type { TileCacheEntry } from './tileCache'
 
 interface PendingRequest {
   readonly key: string
   readonly signal: AbortSignal | undefined
+  readonly fetchOptions: ImagePyramidTileFetchOptions | undefined
   readonly resolve: () => void
 }
 
@@ -26,11 +28,13 @@ function fakeCache() {
       col: number,
       row: number,
       signal?: AbortSignal,
+      fetchOptions?: ImagePyramidTileFetchOptions,
     ): Promise<TileCacheEntry> {
       return new Promise((resolve) => {
         pending.push({
           key: `${level}:${col}:${row}`,
           signal,
+          fetchOptions,
           resolve: () => {
             resolve(
               signal?.aborted === true
@@ -132,5 +136,72 @@ describe('tile request scheduler', () => {
     update('second')
 
     expect(cache.pending.map((request) => request.signal?.aborted)).toEqual([true, false])
+  })
+
+  it('tells each tile fetch which tiles are still queued', () => {
+    const cache = fakeCache()
+    const scheduler = new TileRequestScheduler(cache)
+
+    scheduler.update({
+      loader: 'image',
+      level: 3,
+      tiles: tiles(0, 1, 2),
+      maxConcurrentRequests: 2,
+      onSettled: () => {},
+    })
+
+    expect(cache.pending.map((request) => request.fetchOptions?.upcoming)).toEqual([
+      tiles(1, 2),
+      tiles(2),
+    ])
+  })
+
+  it('frees the slot of a tile whose bytes come from another request', async () => {
+    const cache = fakeCache()
+    const onSettled = vi.fn()
+    const scheduler = new TileRequestScheduler(cache)
+
+    scheduler.update({
+      loader: 'image',
+      level: 0,
+      tiles: tiles(0, 1, 2, 3),
+      maxConcurrentRequests: 1,
+      onSettled,
+    })
+    expect(cache.pending.map((request) => request.key)).toEqual(['0:0:0'])
+
+    // Tile 0 waits on its own request; tile 1 then rides on it.
+    cache.pending[0]?.fetchOptions?.onSharedRead?.()
+    expect(cache.pending.map((request) => request.key)).toEqual(['0:0:0', '0:1:0'])
+    cache.pending[1]?.fetchOptions?.onSharedRead?.()
+    expect(cache.pending.map((request) => request.key)).toEqual([
+      '0:0:0',
+      '0:1:0',
+      '0:2:0',
+    ])
+
+    // Settling a tile that gave up its slot starts nothing more.
+    cache.pending[0]?.resolve()
+    await vi.waitFor(() => {
+      expect(onSettled).toHaveBeenCalledOnce()
+    })
+    expect(cache.pending).toHaveLength(3)
+
+    // A shared-read notice after the view moved on frees nothing.
+    scheduler.update({
+      loader: 'image',
+      level: 0,
+      tiles: tiles(3),
+      maxConcurrentRequests: 1,
+      onSettled,
+    })
+    expect(cache.pending.map((request) => request.key)).toEqual([
+      '0:0:0',
+      '0:1:0',
+      '0:2:0',
+      '0:3:0',
+    ])
+    cache.pending[2]?.fetchOptions?.onSharedRead?.()
+    expect(cache.pending).toHaveLength(4)
   })
 })

@@ -4,6 +4,7 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { BBox, ImagePixels } from '../data/coords'
 import type {
   ImagePyramidDecodedTile,
+  ImagePyramidTileFetchOptions,
   ImagePyramidTileRenderOptions,
 } from '../data/imagePyramid'
 import type { TileBitmapDecoder } from '../workers/tileDecodePool'
@@ -16,6 +17,7 @@ export interface TileSource {
     col: number,
     row: number,
     signal?: AbortSignal,
+    options?: ImagePyramidTileFetchOptions,
   ): Promise<Uint8Array>
   tileDecodeOptions?(level: number, col: number, row: number): TiffTileDecodeMetadata
   loadTile?(
@@ -75,6 +77,13 @@ export interface ReadyTile {
   readonly sourceHeight: ImagePixels
 }
 
+interface CachedTileKey {
+  readonly level: number
+  readonly col: number
+  readonly row: number
+  readonly key: string
+}
+
 export class TileCache {
   private readonly cache = new Map<string, TileCacheEntry>()
   private readonly order: string[] = []
@@ -114,6 +123,7 @@ export class TileCache {
     col: number,
     row: number,
     signal?: AbortSignal,
+    fetchOptions?: ImagePyramidTileFetchOptions,
   ): Promise<TileCacheEntry> {
     const key = this.key(level, col, row)
     const existing = this.cache.get(key)
@@ -138,7 +148,14 @@ export class TileCache {
 
     const bounds = loader.tileBounds(level, col, row)
     const sourceSize = loader.tileSourceSize(level, col, row)
-    const promise = this.load(loader, level, col, row, key, bounds, sourceSize, signal)
+    const promise = this.load(
+      loader,
+      { level, col, row, key },
+      bounds,
+      sourceSize,
+      signal,
+      fetchOptions,
+    )
     const entry: TileLoadingEntry = {
       state: 'loading',
       bounds,
@@ -192,20 +209,25 @@ export class TileCache {
 
   private async load(
     loader: TileSource,
-    level: number,
-    col: number,
-    row: number,
-    key: string,
+    { level, col, row, key }: CachedTileKey,
     bounds: BBox,
     sourceSize: TileSourceSize,
     signal?: AbortSignal,
+    fetchOptions?: ImagePyramidTileFetchOptions,
   ): Promise<TileCacheEntry> {
     try {
       throwIfAborted(signal)
       const loadTile = loader.loadTile?.bind(loader)
       const decoded =
         loadTile === undefined
-          ? await this.decodeFetchedTile(loader, level, col, row, signal)
+          ? await this.decodeFetchedTile(
+              loader,
+              level,
+              col,
+              row,
+              signal,
+              this.uncachedFetchOptions(level, fetchOptions),
+            )
           : await this.decodeInDisplayWindow(signal, () =>
               loadTile(
                 level,
@@ -327,18 +349,37 @@ export class TileCache {
     }
   }
 
+  // Tiles this cache holds, loading or loaded, are not worth reading again
+  // with another tile.
+  private uncachedFetchOptions(
+    level: number,
+    options: ImagePyramidTileFetchOptions | undefined,
+  ): ImagePyramidTileFetchOptions | undefined {
+    if (options?.upcoming === undefined) {
+      return options
+    }
+
+    return {
+      ...options,
+      upcoming: options.upcoming.filter(
+        (tile) => !this.cache.has(this.key(level, tile.col, tile.row)),
+      ),
+    }
+  }
+
   private async decodeFetchedTile(
     loader: TileSource,
     level: number,
     col: number,
     row: number,
     signal?: AbortSignal,
+    fetchOptions?: ImagePyramidTileFetchOptions,
   ): Promise<ImagePyramidDecodedTile> {
     if (loader.fetchTileBytes === undefined) {
       throw new Error('Tile source does not expose tile bytes or decoded tiles.')
     }
 
-    const bytes = await loader.fetchTileBytes(level, col, row, signal)
+    const bytes = await loader.fetchTileBytes(level, col, row, signal, fetchOptions)
     throwIfAborted(signal)
     return this.decodeInDisplayWindow(signal, () =>
       this.decodeTile(bytes, this.decodeOptions(loader, level, col, row)),

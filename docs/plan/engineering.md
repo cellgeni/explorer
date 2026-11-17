@@ -191,8 +191,9 @@ From a run of `npm test` and the repository:
   smoke tests before it attaches the app zip; `pages.yml` deploys GitHub
   Pages. `audit.yml` runs `npm audit` from the lockfile on every PR, push to
   `main` and at 06:00 UTC on weekdays: `--omit=dev` fails on any advisory,
-  and the full audit on high and critical ones. It is outside `ci.yml` so
-  that a new advisory cannot stop `pages.yml` deploying `main`.
+  and the full audit on critical ones (on high ones too before 2026-11-17;
+  see Open). It is outside `ci.yml` so that a new advisory cannot stop
+  `pages.yml` deploying `main`.
 - The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
   by hand against the dev server, not in CI.
 - Recount on 2026-11-16 (`bea26d2`): 292 Vitest files with 2,468 tests,
@@ -253,6 +254,11 @@ From a run of `npm test` and the repository:
 - [x] CI pipeline: `ci.yml` gates every PR (see the inventory).
 - [x] Dependency audit: `audit.yml` runs `npm audit` on every PR and each
       weekday (2026-11-16; see the inventory).
+- [ ] Restore `--audit-level=high` for the dev tools' audit in `audit.yml`.
+      Since 2026-11-17 it fails only on critical advisories, because
+      `picomatch` advisory GHSA-fc5q-39xc-vjpf (high) covers every release up
+      to 4.0.7 and has no fix. It reaches only Vite, Vitest,
+      typescript-eslint and `patch-package`.
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
       `main`. See [Open Items](open-items.md) for what a preview would need.
 - [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
@@ -309,6 +315,12 @@ Testing:
   - Since 2026-11-16, the Bin card opened with a mouse click held for
     400 ms, which mjolnir.js dropped before (see
     [Phase 6](phases/06-visium-hd.md#closed-open-items)).
+  - Since 2026-11-17, a dataset with only a 2 µm tier (a manifest listing the
+    reference's 2 µm bins, answered by the test): 3,443,936 bins and no
+    positions request, then a gene coloured zoomed out; about 17 s locally.
+  - Since 2026-11-17, the clusterings: `graphclust` loaded at 16 µm (54,504
+    bins), read again at 8 µm (215,196), and cleared at 2 µm; about 15 s
+    locally.
 - [x] Direct tests for small helpers. About 14 pure helpers have no test, for
       example `slug.ts`, `mapWithConcurrency.ts`, `asyncLimiter.ts`,
       `readMaybeGzipText.ts`, `omeZarrUrl.ts` and `fallbackNotice.ts`, and the

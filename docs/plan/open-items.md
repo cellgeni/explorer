@@ -29,8 +29,12 @@ Sequencing:
       Slice ranges, memory, and bundles. Partly done: Feature Slice and
       matrix reads go through the range-read H5 worker (#122,
       `visiumFeatureSlice.ts`), and segmentation GeoJSON is parsed once, in a
-      worker (`visiumHdSegmentationIndex.worker.ts`). Profiling, memory,
-      bundles and the main-thread Parquet reads (below) are left.
+      worker (`visiumHdSegmentationIndex.worker.ts`). Profiled 2026-11-17
+      ([Phase 6](phases/06-visium-hd.md#closed-open-items)): 16 µm first
+      paint is ready in 3.6 s with one 296 ms long task, and the Visium HD
+      chunks are small. Left: the 2 µm tier keeps an object, polygon and
+      index entry per bin, about 1.8 GB of heap and 2–3 s blocks for the
+      reference's 3.4 million bins; a columnar grid would remove most of it.
 
 Other gaps found in the review:
 
@@ -47,7 +51,8 @@ Other gaps found in the review:
       `FetchStore` (`zarrStores.ts`) still have neither.
 - [ ] Main-thread exceptions to the worker convention: hyparquet reads other
       than the Xenium overview and SpatialData shapes (Visium HD positions and
-      barcode mappings), and the fetching and assembly in zarrita reads. The
+      barcode mappings; the positions decode for about 0.6 s in short tasks,
+      measured 2026-11-17), and the fetching and assembly in zarrita reads. The
       AnnData table code also runs there, for both H5AD backends. On the
       598,222-cell 460-plex zip that is making the cell IDs unique (about 240 ms
       in one task, a `Map` of all 598,222), converting numeric columns to number
@@ -74,8 +79,6 @@ Other gaps found in the review:
       image blob URLs, which are never revoked (`h5adDataset.ts`). Collections
       make this matter more, since one tab can now open many datasets. One
       `releaseDataset(url)` could cover them all.
-- [ ] Visium HD: with only a 2 µm tier the default load fails, and 2 µm
-      detection needs a positions file that is never read.
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](phases/11-dataset-manifest.md)).
@@ -148,11 +151,10 @@ Features:
       Browse File is offered for a SpatialData shapes element's
       `shapes.parquet` that a consolidated store does not list
       (`parquetFileOf` in `storeStructureModel.ts`).
-- [ ] SVS: show the thumbnail, label, and macro images, and draw the minimap
-      from the thumbnail. Also: read runs of adjacent tiles for QPTIFF and
-      OME-TIFF too (SVS only now), stop tiles waiting on a shared run from
-      holding scheduler slots, and try a fluorescence SVS (see
-      [Phase 16](phases/16-svs.md#known-gaps)).
+- [ ] SVS: read an Aperio FL scan's `.afi` file as one image with a channel
+      per listed file (each file opens on its own now). Also: a pyramidal
+      OME-TIFF opens in about 24 rounds of sequential range requests before
+      its first tile (see [Phase 16](phases/16-svs.md#known-gaps)).
 - [ ] NDPI: files over 4 GB (64-bit offsets; test files and what support
       needs in [Phase 19](phases/19-ndpi.md#64-bit-ndpi-files-over-4-gb)),
       NDPI URLs without a `.ndpi` suffix, a `Z plane` control for other focal
@@ -160,13 +162,10 @@ Features:
       decoder (see [Phase 19](phases/19-ndpi.md#known-gaps)). Also: a level
       whose restart intervals do not divide its MCU rows fails when its tiles
       load rather than at open, and no fluorescence NDPI has been tried.
-- [ ] Visium HD dataset annotations from `analysis/` (original Phase 6).
 - [ ] The Zarr transcript estimate counts every transcript in a tile, so it
       ignores `Min QV` and `Gene-only calls` (87.5% of a sampled demo tile
       passes the defaults) and assumes even density within each 250 µm tile.
 - [ ] Codeword-level density (needs a dataset with `/density/codeword`).
-- [ ] Streaming or viewport-scoped 2 µm barcode reads for very large deployments
-      (`barcodes.tsv.gz` is still buffered).
 
 Original-brief items with no outcome:
 
@@ -213,6 +212,12 @@ Testing:
       previews. Without a URL, CI could upload each PR's build as an
       artifact.
 - [ ] The golden fixture bundle (a committed, Xenium-shaped one).
+- [ ] Restore `--audit-level=high` for the dev tools' audit in `audit.yml`
+      once `picomatch` fixes
+      [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+      (high, ReDoS, every release up to 4.0.7). Since 2026-11-17 it fails
+      only on critical advisories (see
+      [Testing And CI](engineering.md#open)).
 
 ## Known Gaps From The Phase Files
 

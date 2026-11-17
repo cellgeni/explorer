@@ -47,7 +47,23 @@ export interface VisiumFeatureSliceMetadata {
   readonly nrows: number
   readonly ncols: number
   readonly spotPitchMicrometers: number
+  // `transform_matrices.spot_colrow_to_microscope_colrow`: the 3×3 projective
+  // transform, row-major, from a spot's (col, row, 1) to its full-resolution
+  // pixel (col, row, w). Space Ranger computes every bin position from it.
+  readonly spotToFullresTransform?: VisiumFeatureSliceTransform
 }
+
+export type VisiumFeatureSliceTransform = readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+]
 
 export interface VisiumFeatureSliceTarget<ElementId extends string = string> {
   readonly id: ElementId
@@ -134,12 +150,52 @@ export function parseVisiumFeatureSliceMetadata(
   }
 
   const source = parsed as Record<string, unknown>
+  const spotToFullresTransform = readTransformMatrix(
+    source.transform_matrices,
+    'spot_colrow_to_microscope_colrow',
+  )
 
   return {
     nrows: readFiniteNumber(source, 'nrows'),
     ncols: readFiniteNumber(source, 'ncols'),
     spotPitchMicrometers: readFiniteNumber(source, 'spot_pitch'),
+    ...(spotToFullresTransform === undefined ? {} : { spotToFullresTransform }),
   }
+}
+
+// The file's metadata alone, without its feature names.
+export function readVisiumFeatureSliceMetadata(
+  file: H5FileLike,
+): VisiumFeatureSliceMetadata {
+  return parseVisiumFeatureSliceMetadata(
+    file.get_attribute(METADATA_JSON_ATTR_NAME, false),
+  )
+}
+
+// A 3×3 matrix stored as three rows of three numbers, else undefined: the
+// transforms are optional, and older files may not have them.
+function readTransformMatrix(
+  transforms: unknown,
+  key: string,
+): VisiumFeatureSliceTransform | undefined {
+  if (transforms === null || typeof transforms !== 'object') {
+    return undefined
+  }
+
+  const rows = (transforms as Record<string, unknown>)[key]
+
+  if (!Array.isArray(rows) || rows.length !== 3) {
+    return undefined
+  }
+
+  const values = rows.flatMap((row: unknown) =>
+    Array.isArray(row) && row.length === 3 ? (row as unknown[]) : [Number.NaN],
+  )
+
+  return values.length === 9 &&
+    values.every((value) => typeof value === 'number' && Number.isFinite(value))
+    ? (values as unknown as VisiumFeatureSliceTransform)
+    : undefined
 }
 
 export function featureSliceBinningScale(
@@ -226,9 +282,7 @@ function appendGeneCount(
 }
 
 export function createVisiumFeatureSliceCache(file: H5FileLike): VisiumFeatureSliceCache {
-  const metadata = parseVisiumFeatureSliceMetadata(
-    file.get_attribute(METADATA_JSON_ATTR_NAME, false),
-  )
+  const metadata = readVisiumFeatureSliceMetadata(file)
   const featureNames = expectStringArray(
     readH5Dataset(file, FEATURE_NAME_DATASET).value,
     FEATURE_NAME_DATASET,

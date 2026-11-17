@@ -330,7 +330,8 @@ cell-summary transcript-count hint. Exact molecule points require a readable
 
 Use Cells › Clusters to load built-in analysis labels or import local CSV/JSON
 cell annotations when the active platform supports cell-id annotations. H5AD
-categorical `obs` tracks appear as annotation sets. Clusters is below the
+categorical `obs` tracks appear as annotation sets, and Visium HD lists the
+Space Ranger clusterings of the bin size shown (Bins › Clusters). Clusters is below the
 gene list in Cells; with cells coloured by a set, "+n more in Cells ›
 Clusters" in the legend jumps there. Unchecking a class fades its cells, so
 the classes left stand out against a faint outline of the tissue.
@@ -435,9 +436,15 @@ enter the manifest's URL.
 Visium HD datasets show a `Visium HD dataset` panel in Bins › Appearance. Use
 the bin-size segmented control to switch between detected 16 µm, 8 µm, and
 2 µm tiers. The 2 µm tier uses filtered matrix barcodes and a grid basis derived
-from a coarser tier; it does not read the full 2 µm
-`tissue_positions.parquet` for first paint. With 2 µm selected, the view shows
-16 µm bins until you zoom in past zoom level 3.
+from a coarser tier, or from `feature_slice.h5` when there is no coarser tier;
+it does not read the 2 µm `tissue_positions.parquet`. With 2 µm selected, the
+view shows 16 µm bins until you zoom in past zoom level 3. 2 µm bins are
+memory-hungry: the 3.4 million of the reference dataset take about 1.8 GB.
+
+Bins › Clusters lists Space Ranger's graph-based and k-means clusterings of
+the 8 µm and 16 µm bins; `graphclust` is chosen. A clustering belongs to its
+bin size, so after you switch sizes, a loaded clustering is read again for the
+new size, and cleared at 2 µm, which has none.
 
 When segmented outputs are present, `Cell boundaries` and `Nucleus boundaries`
 load viewport-scoped segmentation overlays. Annotated segmentation GeoJSON
@@ -497,6 +504,9 @@ files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
 TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF, SVS, and NDPI use
 their own layouts); see
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
+For an SVS slide, the info drawer's Slide images section shows the slide's
+label, its macro (a photograph of the whole glass slide), and its thumbnail;
+`Open` beside each opens it on its own in a new tab.
 
 For image-only sources, use the Image section for image channels and custom
 image layers, the Box and Lasso selection tools (with the New shape card) for

@@ -3,6 +3,7 @@ import {
   type VisiumHdBarcodeMappingsReader,
   type VisiumHdFeatureGenePanelReader,
   type VisiumHdFeatureMatrixReader,
+  type VisiumHdFeatureSliceMetadataReader,
   type VisiumHdFeatureSliceReader,
   type VisiumHdFilteredMatrixBarcodeReader,
   type VisiumHdScalefactorsReader,
@@ -13,7 +14,7 @@ import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { FallbackNotifier } from '../data/fallbackNotice'
 import type {
   ReadVisiumHdFilteredMatrixBarcodesOptions,
-  VisiumHdSquareBarcode,
+  VisiumHdSquareBarcodeColumns,
 } from './visiumHdBarcodes'
 import type {
   VisiumHdSegmentedOutputPaths,
@@ -25,6 +26,7 @@ import type {
   VisiumHdBarcodeMappingCellAssignment,
 } from './visiumHdBarcodeMappings'
 import type { Compressors } from 'hyparquet'
+import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
 import type { BBox } from '../data/coords'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type {
@@ -87,6 +89,7 @@ export interface VisiumHdDatasetOptions {
   readonly featureMatrixReader?: VisiumHdFeatureMatrixReader
   readonly featureSliceH5Path?: string
   readonly featureSliceReader?: VisiumHdFeatureSliceReader
+  readonly featureSliceMetadataReader?: VisiumHdFeatureSliceMetadataReader
   readonly maxTwoMicrometerFilteredBarcodes?: number
   readonly maxInteractiveFeatureSliceBytes?: number
   readonly maxInteractiveSegmentationGeojsonBytes?: number
@@ -97,6 +100,14 @@ export interface VisiumHdDatasetOptions {
 
 export interface VisiumHdGeneExpressionQueryOptions extends GeneExpressionQueryOptions {
   readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
+}
+
+// A set id from annotationGroups names its tier; without one, the
+// clusterings of `binSizeMicrometers` (by default the first tier shown).
+export interface VisiumHdAnnotationQueryOptions {
+  readonly groupId?: string
+  readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
+  readonly signal?: AbortSignal
 }
 
 export interface VisiumHdBarcodeMappingQueryOptions {
@@ -156,14 +167,23 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
     return this.readers.genePanel(binSizeMicrometers, options)
   }
 
-  annotations(): Promise<readonly Annotation<SpatialElementId>[]> {
-    return Promise.reject(visiumHdNotImplementedError('annotation loading'))
+  annotationGroups(
+    binSizeMicrometers?: VisiumHdBinSizeMicrometers,
+    options: VisiumHdAnnotationQueryOptions = {},
+  ): Promise<readonly AnalysisAnnotationGroupOption[]> {
+    return this.readers.annotationGroups(binSizeMicrometers, options)
+  }
+
+  annotations(
+    options: VisiumHdAnnotationQueryOptions = {},
+  ): Promise<readonly Annotation<SpatialElementId>[]> {
+    return this.readers.annotations(options)
   }
 
   filteredMatrixBarcodes(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
     options: ReadVisiumHdFilteredMatrixBarcodesOptions = {},
-  ): Promise<readonly VisiumHdSquareBarcode[]> {
+  ): Promise<VisiumHdSquareBarcodeColumns> {
     return this.readers.filteredMatrixBarcodes(binSizeMicrometers, options)
   }
 
@@ -222,8 +242,4 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<VisiumHdBinnedOverview> {
     return this.readers.readBinnedOverview(binSizeMicrometers)
   }
-}
-
-function visiumHdNotImplementedError(capability: string): Error {
-  return new Error(`Visium HD ${capability} is not implemented yet.`)
 }

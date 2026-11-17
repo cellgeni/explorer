@@ -99,7 +99,7 @@ describe('spatial dataset detection', () => {
 
   it('detects Visium HD binned outputs and segmented output sidecars', async () => {
     const fetcher = fetcherForOkPaths([
-      '/visium/binned_outputs/square_002um/spatial/tissue_positions.parquet',
+      '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz',
       '/visium/binned_outputs/square_002um/spatial/scalefactors_json.json',
       '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
       '/visium/binned_outputs/square_008um/spatial/tissue_positions.parquet',
@@ -140,6 +140,31 @@ describe('spatial dataset detection', () => {
       scalefactorsPath: 'binned_outputs/square_016um/spatial/scalefactors_json.json',
       filteredMatrixH5Path: 'binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
     })
+  })
+
+  it('detects a 2 µm tier by its barcodes, not its unread positions file', async () => {
+    const twoMicrometerOnly = (positionsOrBarcodes: string) =>
+      fetcherForOkPaths([
+        `/visium/binned_outputs/square_002um/${positionsOrBarcodes}`,
+        '/visium/binned_outputs/square_002um/spatial/scalefactors_json.json',
+        '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
+      ])
+
+    const detection = await detectSpatialDataset('https://example.test/visium/', {
+      fetcher: twoMicrometerOnly('filtered_feature_bc_matrix/barcodes.tsv.gz'),
+    })
+
+    expect(detection).toMatchObject({ platform: 'visium-hd' })
+    expect(
+      detection.platform === 'visium-hd'
+        ? detection.bins.map((bin) => bin.binSizeMicrometers)
+        : [],
+    ).toEqual([2])
+    await expect(
+      detectSpatialDataset('https://example.test/visium/', {
+        fetcher: twoMicrometerOnly('spatial/tissue_positions.parquet'),
+      }),
+    ).resolves.toMatchObject({ platform: 'unknown' })
   })
 
   it('detects standard Visium Space Ranger output before Visium HD tiers', async () => {

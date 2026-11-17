@@ -101,7 +101,9 @@ Serve a folder:
 node scripts/range-server.mjs /path/to/data --port 4199
 ```
 
-Then open, for example, `http://127.0.0.1:4199/heart.h5ad`.
+Then open, for example, `http://127.0.0.1:4199/heart.h5ad`. Add `--delay 300`
+to answer each request 300 ms after it arrives, as a distant host would, to
+see how many requests a load makes one after another.
 
 Mirror one remote file, such as a zipped SpatialData store or a large H5AD:
 

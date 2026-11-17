@@ -5,6 +5,7 @@ import {
   featureSliceBinningScale,
   gexFromVisiumFeatureSliceH5,
   parseVisiumFeatureSliceMetadata,
+  readVisiumFeatureSliceH5Metadata,
 } from './visiumFeatureSlice'
 
 describe('Visium HD Feature Slice H5', () => {
@@ -22,6 +23,49 @@ describe('Visium HD Feature Slice H5', () => {
       ncols: 3340,
       spotPitchMicrometers: 2,
     })
+  })
+
+  it('parses the spot-to-pixel transform, and leaves out one it cannot read', () => {
+    const metadata = (transform: unknown) =>
+      parseVisiumFeatureSliceMetadata({
+        nrows: 3350,
+        ncols: 3350,
+        spot_pitch: 2,
+        transform_matrices: { spot_colrow_to_microscope_colrow: transform },
+      })
+
+    expect(
+      metadata([
+        [-9.03, 0.025, 32358.3],
+        [0.025, 9.03, 6582.9],
+        [2e-9, 1e-9, 1],
+      ]).spotToFullresTransform,
+    ).toEqual([-9.03, 0.025, 32358.3, 0.025, 9.03, 6582.9, 2e-9, 1e-9, 1])
+
+    for (const malformed of [
+      undefined,
+      'identity',
+      [
+        [1, 0, 0],
+        [0, 1, 0],
+      ],
+      [
+        [1, 0, 0],
+        [0, 1],
+        [0, 0, 1],
+      ],
+      [
+        [1, 0, 0],
+        [0, 1, null],
+        [0, 0, 1],
+      ],
+    ]) {
+      expect(metadata(malformed)).toEqual({
+        nrows: 3350,
+        ncols: 3350,
+        spotPitchMicrometers: 2,
+      })
+    }
   })
 
   it('normalizes integer binning scales from 2 µm feature slices', () => {
@@ -141,6 +185,34 @@ describe('Visium HD Feature Slice H5', () => {
       )
 
       expect(second.cells.get('BC-0')).toEqual({ geneNames: ['Actb'], counts: [5] })
+      expect(fetcher).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('reads a hosted file metadata in the worker its gene reads then use', async () => {
+    const bytes = await createTinyFeatureSliceH5()
+    const fetcher = vi.fn(async () => new Response(bytes.slice()))
+    const url = 'https://example.test/visium/metadata/feature_slice.h5'
+    vi.stubGlobal('fetch', fetcher)
+
+    try {
+      await expect(readVisiumFeatureSliceH5Metadata(url)).resolves.toEqual({
+        nrows: 32,
+        ncols: 32,
+        spotPitchMicrometers: 2,
+        spotToFullresTransform: [8, 0, 100, 0, 8, 200, 0, 0, 1],
+      })
+
+      const genes = await gexFromVisiumFeatureSliceH5(
+        url,
+        [{ id: 'BC-0', row: 0, col: 0 }],
+        ['Actb'],
+        { backend: 'lazy-range-worker', binSizeMicrometers: 16 },
+      )
+
+      expect(genes.cells.get('BC-0')).toEqual({ geneNames: ['Actb'], counts: [5] })
       expect(fetcher).toHaveBeenCalledTimes(1)
     } finally {
       vi.unstubAllGlobals()

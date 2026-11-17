@@ -860,6 +860,68 @@
   overflow-wrap: anywhere;
 }
 
+/* Slide images: an SVS label, macro and thumbnail, each drawn whole. */
+
+.slide-images {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.slide-image {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  min-width: 0;
+}
+
+.slide-image-frame {
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--canvas);
+}
+
+.slide-image figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-size: var(--font-control);
+}
+
+.slide-image-title {
+  color: var(--text-1);
+  font-weight: 650;
+}
+
+.slide-image-size {
+  color: var(--text-2);
+}
+
+.slide-image figcaption a {
+  margin-left: auto;
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+.slide-image figcaption a:focus-visible {
+  border-radius: 2px;
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.slide-image-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-control);
+  overflow-wrap: anywhere;
+}
+
 .shell-layer-stack p {
   margin: 0;
   color: var(--text-2);

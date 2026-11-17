@@ -1969,3 +1969,86 @@ test('switches Visium HD to 2 um bins, read exactly once zoomed in @live', async
     timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
   })
 })
+
+test('opens a Visium HD dataset with only a 2 um tier and colours a gene zoomed out @live', async ({
+  page,
+}) => {
+  test.setTimeout(VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS)
+  test.slow()
+
+  // A manifest listing only the reference run's 2 µm bins: they are placed by
+  // feature_slice.h5's spot transform, with no positions file read.
+  const manifestUrl = 'https://manifest.test/visium-hd-2um-only.json'
+  await page.route(manifestUrl, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({
+        version: 1,
+        platform: 'visium-hd',
+        root: VISIUM_HD_REFERENCE_URL,
+        files: { bins: [{ size: 2, path: 'binned_outputs/square_002um' }] },
+      }),
+    }),
+  )
+  const positionsRequests: string[] = []
+  page.on('request', (request) => {
+    if (request.url().includes('tissue_positions')) {
+      positionsRequests.push(request.url())
+    }
+  })
+
+  await page.goto(`/#xv=2&dataset=${encodeURIComponent(manifestUrl)}`)
+  const visiumPanel = page.getByRole('region', { name: 'Visium HD dataset' })
+  await expect(visiumPanel).toContainText('3,443,936 at 2 µm', {
+    timeout: VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS,
+  })
+  expect(positionsRequests).toEqual([])
+
+  // Zoomed out, 16 µm bins made from the 2 µm ones are coloured.
+  const genesPanel = await openControls(page, 'genes')
+  await genesPanel.getByRole('button', { name: 'A2M', exact: true }).click()
+  await expect(genesPanel.locator('.analysis-status')).toContainText(
+    /Expression all bins: [1-9][0-9,]* positive bins across 3,443,936 slide bins/,
+    { timeout: VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS },
+  )
+})
+
+test('loads Visium HD clusters for each bin size @live', async ({ page }) => {
+  test.setTimeout(VISIUM_HD_TWO_MICROMETER_TIMEOUT_MS)
+
+  const visiumPanel = await openVisiumHdReferenceTissueLink(page)
+  const clusters = await openControls(page, 'clusters')
+  const annotationSet = clusters.getByLabel('Annotation set')
+  // Space Ranger's clusterings of the 16 µm bins; graph-based is chosen.
+  await expect(annotationSet).toHaveValue(
+    'visium-hd-clusters:16:gene_expression_graphclust',
+    { timeout: VISIUM_HD_LOAD_TIMEOUT_MS },
+  )
+  await expect(annotationSet.locator('option', { hasText: 'kmeans 10' })).toHaveCount(1)
+  await clusters.getByRole('button', { name: 'Load Annotations' }).click()
+  const labels = clusters.getByRole('region', { name: 'graphclust labels' })
+  await expect(labels).toContainText('54,504 bins', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+  await expect(labels).toContainText('Cluster 1')
+  await expect(page.getByRole('region', { name: 'Legend' })).toContainText('Cluster 1')
+
+  // The 8 µm bins have their own clustering, read when the size changes.
+  await visiumPanel.getByRole('button', { name: '8 µm' }).click()
+  await expect(visiumPanel).toContainText('215,320 at 8 µm', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+  await expect(annotationSet).toHaveValue(
+    'visium-hd-clusters:8:gene_expression_graphclust',
+  )
+  await expect(labels).toContainText('215,196 bins', {
+    timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
+  })
+
+  // 2 µm bins are not clustered.
+  await visiumPanel.getByRole('button', { name: '2 µm' }).click()
+  await expect(labels).toHaveCount(0, { timeout: VISIUM_HD_LOAD_TIMEOUT_MS })
+  await expect(annotationSet).toHaveValue('none')
+})

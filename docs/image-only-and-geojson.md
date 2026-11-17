@@ -56,8 +56,11 @@ SVS slides are also read as they come from the scanner, JPEG or JPEG 2000:
 every tiled IFD is a pyramid level, the slide is shown in its own colours,
 and the pixel size comes from `MPP` in the image description. An SVS saved
 under a `.tif` name is recognized from its `Aperio` image description. The
-thumbnail, label, and macro images are not shown. See
-[SVS](./modalities/image.md#svs).
+info drawer (ⓘ) shows the slide's label, macro (the whole glass slide), and
+thumbnail, each with a link that opens it on its own, and the minimap draws
+the thumbnail. An Aperio fluorescence channel file is named by its dye and
+drawn in its display colour; open the other channel files of the scan as
+custom layers. See [SVS](./modalities/image.md#svs).
 
 An image with more than six channels, such as a multiplexed QPTIFF, opens with
 the first six channels on; turn others on in the Image section. Each is

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import { micrometers } from '../data/coords'
+import { gridCellCenter } from './spatialGrid'
+import { parseVisiumHdFilteredMatrixBarcodes } from './visiumHdBarcodes'
 import {
   DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET,
   VisiumHdDataset,
@@ -16,9 +18,11 @@ import {
   readVisiumHdTissuePositions,
 } from './visiumHdOverview'
 import type { AsyncBuffer } from 'hyparquet'
+import type { VisiumHdFeatureSliceReader } from './visiumHdDatasetReaders'
 import type {
   ReadVisiumHdTissuePositionsOptions,
   VisiumHdBinDescriptor,
+  VisiumHdDatasetOptions,
   VisiumHdParquetReadObjectsOptions,
   VisiumHdScalefactors,
 } from './visiumHdDataset'
@@ -26,6 +30,10 @@ import type { VisiumHdBarcodeMapping } from './visiumHdBarcodeMappings'
 import type { ReadVisiumHdSegmentationElementsOptions } from './visiumHdSegmentations'
 import { visiumHdSegmentationIndexFromElements } from './visiumHdSegmentationIndex'
 import type { ReadVisiumHdSegmentationIndexOptions } from './visiumHdSegmentationIndexWorker'
+
+function barcodeColumns(barcodes: readonly string[]) {
+  return parseVisiumHdFilteredMatrixBarcodes(barcodes.join('\n'))
+}
 
 const fakeFile: AsyncBuffer = {
   byteLength: 8,
@@ -154,14 +162,9 @@ describe('Visium HD dataset readers', () => {
 
   it('loads and caches filtered matrix barcodes for the selected bin', async () => {
     const fetcher = vi.fn(async () => new Response('unused'))
-    const filteredMatrixBarcodeReader = vi.fn(async () => [
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2 as const,
-        row: 1,
-        col: 2,
-      },
-    ])
+    const filteredMatrixBarcodeReader = vi.fn(async () =>
+      barcodeColumns(['s_002um_000001_000002-1']),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin2],
@@ -169,22 +172,12 @@ describe('Visium HD dataset readers', () => {
       filteredMatrixBarcodeReader,
     })
 
-    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual([
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-        row: 1,
-        col: 2,
-      },
-    ])
-    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual([
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-        row: 1,
-        col: 2,
-      },
-    ])
+    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual(
+      barcodeColumns(['s_002um_000001_000002-1']),
+    )
+    await expect(dataset.filteredMatrixBarcodes(2)).resolves.toEqual(
+      barcodeColumns(['s_002um_000001_000002-1']),
+    )
     expect(filteredMatrixBarcodeReader).toHaveBeenCalledTimes(1)
     expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
       'https://example.test/visium',
@@ -995,14 +988,9 @@ describe('Visium HD dataset readers', () => {
         visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
       ]),
     )
-    const filteredMatrixBarcodeReader = vi.fn(async () => [
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2 as const,
-        row: 1,
-        col: 2,
-      },
-    ])
+    const filteredMatrixBarcodeReader = vi.fn(async () =>
+      barcodeColumns(['s_002um_000001_000002-1']),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16, bin2],
@@ -1030,14 +1018,9 @@ describe('Visium HD dataset readers', () => {
       visiumPositionRow('BC-1', 1, 1, 0, 402, 232),
       visiumPositionRow('BC-2', 1, 0, 1, 432, 204),
     ])
-    const filteredMatrixBarcodeReader = vi.fn(async () => [
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2 as const,
-        row: 1,
-        col: 2,
-      },
-    ])
+    const filteredMatrixBarcodeReader = vi.fn(async () =>
+      barcodeColumns(['s_002um_000001_000002-1']),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16, bin2],
@@ -1074,14 +1057,9 @@ describe('Visium HD dataset readers', () => {
 
   it('prefers the 8 µm basis source for 2 µm filtered-barcode overview reads', async () => {
     const tissuePositionUrls: string[] = []
-    const filteredMatrixBarcodeReader = vi.fn(async () => [
-      {
-        barcode: 's_002um_000000_000000-1',
-        binSizeMicrometers: 2 as const,
-        row: 0,
-        col: 0,
-      },
-    ])
+    const filteredMatrixBarcodeReader = vi.fn(async () =>
+      barcodeColumns(['s_002um_000000_000000-1']),
+    )
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin16, bin8, bin2],
@@ -1122,20 +1100,7 @@ describe('Visium HD dataset readers', () => {
   it('creates a binned overview from filtered matrix square barcodes and a derived basis', () => {
     const overview = createVisiumHdBinnedOverviewFromSquareBarcodes(
       bin2,
-      [
-        {
-          barcode: 's_002um_000001_000002-1',
-          binSizeMicrometers: 2,
-          row: 1,
-          col: 2,
-        },
-        {
-          barcode: 's_002um_000003_000004-1',
-          binSizeMicrometers: 2,
-          row: 3,
-          col: 4,
-        },
-      ],
+      barcodeColumns(['s_002um_000001_000002-1', 's_002um_000003_000004-1']),
       { ...scalefactors, binSizeMicrometers: 2 },
       {
         origin: { x: micrometers(0), y: micrometers(0) },
@@ -1170,14 +1135,7 @@ describe('Visium HD dataset readers', () => {
     expect(() =>
       createVisiumHdBinnedOverviewFromSquareBarcodes(
         bin2,
-        [
-          {
-            barcode: 's_008um_000001_000002-1',
-            binSizeMicrometers: 8,
-            row: 1,
-            col: 2,
-          },
-        ],
+        barcodeColumns(['s_008um_000001_000002-1']),
         scalefactors,
         {
           origin: { x: micrometers(0), y: micrometers(0) },
@@ -1185,7 +1143,7 @@ describe('Visium HD dataset readers', () => {
           colStep: { x: micrometers(2), y: micrometers(0) },
         },
       ),
-    ).toThrow('Expected 2 µm barcode, received 8 µm')
+    ).toThrow('Expected 2 µm barcodes, received 8 µm.')
   })
 
   it('does not choose 2 µm as a first-paint default tier', async () => {
@@ -1223,43 +1181,86 @@ describe('Visium HD dataset readers', () => {
     expect(tissuePositionsReader).toHaveBeenCalledTimes(1)
   })
 
-  it('allows 2 µm-only datasets to construct while requiring a coarser basis source', async () => {
-    const filteredMatrixBarcodeReader = vi.fn(async () => [
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2 as const,
-        row: 1,
-        col: 2,
-      },
-    ])
+  it('places 2 µm-only bins by feature_slice.h5 spot transform', async () => {
+    // The reference dataset's transform and scale, and four of its bins with
+    // their tissue_positions.parquet pixels.
+    const micronsPerPixel = 0.22133875377751464
+    const referenceBins = [
+      { row: 0, col: 0, pixelRow: 6582.892163416542, pixelCol: 32358.338088837063 },
+      { row: 2431, col: 532, pixelRow: 28559.885151044124, pixelCol: 27613.6730391326 },
+      { row: 3349, col: 3349, pixelRow: 36924.80285608932, pixelCol: 2186.325333105375 },
+      { row: 283, col: 582, pixelRow: 9154.454903778922, pixelCol: 27107.29198086367 },
+    ]
+    const featureSliceMetadataReader = vi.fn(async () => ({
+      nrows: 3350,
+      ncols: 3350,
+      spotPitchMicrometers: 2,
+      spotToFullresTransform: [
+        -9.034722779218013, 0.02547004877948748, 32358.338088837063, 0.025298926557287604,
+        9.034820220172847, 6582.892163416542, 2.332202510734218e-9, 1.131534283724163e-9,
+        1,
+      ] as const,
+    }))
     const dataset = new VisiumHdDataset({
       baseUrl: 'https://example.test/visium/',
       bins: [bin2],
-      filteredMatrixBarcodeReader,
+      scalefactorsReader: async () => ({ ...scalefactors, micronsPerPixel }),
+      filteredMatrixBarcodeReader: async () =>
+        barcodeColumns(
+          referenceBins.map(
+            ({ row, col }) =>
+              `s_002um_${String(row).padStart(5, '0')}_${String(col).padStart(5, '0')}-1`,
+          ),
+        ),
+      featureSliceMetadataReader,
     })
 
-    await expect(dataset.readBinnedOverview()).rejects.toThrow(
-      '2 µm overview loading requires a detected 8 µm or 16 µm tier',
+    const overview = await dataset.readBinnedOverview()
+
+    expect(overview.binSizeMicrometers).toBe(2)
+    expect(featureSliceMetadataReader).toHaveBeenCalledWith(
+      'https://example.test/visium/feature_slice.h5',
+      {},
     )
-    await expect(dataset.filteredMatrixBarcodes()).resolves.toEqual([
-      {
-        barcode: 's_002um_000001_000002-1',
-        binSizeMicrometers: 2,
-        row: 1,
-        col: 2,
-      },
-    ])
+
+    for (const bin of referenceBins) {
+      const center = gridCellCenter(overview.grid, bin.row, bin.col)
+      // Within 0.1 full-resolution pixels of where Space Ranger put it.
+      expect(Math.abs(center.x / micronsPerPixel - bin.pixelCol)).toBeLessThan(0.1)
+      expect(Math.abs(center.y / micronsPerPixel - bin.pixelRow)).toBeLessThan(0.1)
+    }
   })
 
-  it('rejects 2 µm overview reads when no coarser basis source exists', async () => {
-    const dataset = new VisiumHdDataset({
-      baseUrl: 'https://example.test/visium/',
-      bins: [bin2],
-      maxTwoMicrometerFilteredBarcodes: 10,
-    })
+  it('explains a 2 µm-only dataset whose Feature Slice cannot place its bins', async () => {
+    const twoMicrometerOnly = (
+      featureSliceMetadataReader: VisiumHdDatasetOptions['featureSliceMetadataReader'],
+    ) =>
+      new VisiumHdDataset({
+        baseUrl: 'https://example.test/visium/',
+        bins: [bin2],
+        scalefactorsReader: async () => scalefactors,
+        filteredMatrixBarcodeReader: async () =>
+          barcodeColumns(['s_002um_00001_00002-1']),
+        ...(featureSliceMetadataReader === undefined
+          ? {}
+          : { featureSliceMetadataReader }),
+      })
 
-    await expect(dataset.readBinnedOverview()).rejects.toThrow(
-      '2 µm overview loading requires a detected 8 µm or 16 µm tier',
+    await expect(
+      twoMicrometerOnly(async () => {
+        throw new Error('feature_slice.h5 returned HTTP 404.')
+      }).readBinnedOverview(),
+    ).rejects.toThrow(
+      'With no 8 µm or 16 µm tier, the 2 µm bins are placed by feature_slice.h5, which could not be read: feature_slice.h5 returned HTTP 404.',
+    )
+    await expect(
+      twoMicrometerOnly(async () => ({
+        nrows: 3350,
+        ncols: 3350,
+        spotPitchMicrometers: 2,
+      })).readBinnedOverview(),
+    ).rejects.toThrow(
+      'feature_slice.h5 has no spot transform (transform_matrices.spot_colrow_to_microscope_colrow), and there is no 8 µm or 16 µm tier to place the 2 µm bins from.',
     )
   })
 
@@ -1280,6 +1281,114 @@ describe('Visium HD dataset readers', () => {
       'https://example.test/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
       ['BC-0'],
       {},
+    )
+  })
+
+  it('reads 16 µm expression for a 2 µm-only dataset from bins made of its 2 µm ones', async () => {
+    const featureSliceReader = vi.fn<VisiumHdFeatureSliceReader>(
+      async (_url, targets) => ({
+        geneNames: ['Actb'],
+        cells: new Map(
+          targets.map((target) => [target.id, { geneNames: ['Actb'], counts: [1] }]),
+        ),
+      }),
+    )
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin2],
+      scalefactorsReader: async () => scalefactors,
+      // Four 2 µm bins: three in 16 µm bin (0, 0), one in (1, 2).
+      filteredMatrixBarcodeReader: async () =>
+        barcodeColumns([
+          's_002um_00000_00000-1',
+          's_002um_00007_00007-1',
+          's_002um_00003_00005-1',
+          's_002um_00008_00017-1',
+        ]),
+      featureSliceMetadataReader: async () => ({
+        nrows: 3350,
+        ncols: 3350,
+        spotPitchMicrometers: 2,
+        spotToFullresTransform: [4, 0, 0, 0, 4, 0, 0, 0, 1] as const,
+      }),
+      featureSliceReader,
+    })
+
+    const batch = await dataset.geneExpression(
+      {
+        minX: micrometers(-1_000),
+        maxX: micrometers(1_000),
+        minY: micrometers(-1_000),
+        maxY: micrometers(1_000),
+      },
+      ['Actb'],
+      { binSizeMicrometers: 16 },
+    )
+
+    expect(featureSliceReader).toHaveBeenCalledWith(
+      'https://example.test/visium/feature_slice.h5',
+      [
+        expect.objectContaining({ id: 's_016um_00000_00000-1', row: 0, col: 0 }),
+        expect.objectContaining({ id: 's_016um_00001_00002-1', row: 1, col: 2 }),
+      ],
+      ['Actb'],
+      expect.objectContaining({ binSizeMicrometers: 16 }),
+    )
+    expect(batch.elements.map((element) => element.binSizeMicrometers)).toEqual([16, 16])
+    // The 16 µm bin (1, 2) is centred on the 2 µm spots 8–15 and 16–23.
+    expect(batch.elements[1]?.position.x).toBeCloseTo(19.5 * 2)
+    expect(batch.elements[1]?.position.y).toBeCloseTo(11.5 * 2)
+  })
+
+  it('lists a tier clusterings and reads a set by the tier its id names', async () => {
+    const present = new Set([
+      'https://example.test/visium/binned_outputs/square_016um/analysis/clustering/gene_expression_graphclust/clusters.csv',
+      'https://example.test/visium/binned_outputs/square_008um/analysis/clustering/gene_expression_graphclust/clusters.csv',
+    ])
+    const fetcher = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (!present.has(String(url))) {
+        return new Response(null, { status: 404 })
+      }
+
+      return init?.method === 'HEAD'
+        ? new Response(null)
+        : new Response(
+            String(url).includes('square_008um')
+              ? 'Barcode,Cluster\ns_008um_00001_00002-1,1\n'
+              : 'Barcode,Cluster\ns_016um_00001_00002-1,2\n',
+          )
+    })
+    const dataset = new VisiumHdDataset({
+      baseUrl: 'https://example.test/visium/',
+      bins: [bin2, bin8, bin16],
+      fetcher,
+    })
+
+    await expect(dataset.annotationGroups()).resolves.toEqual([
+      expect.objectContaining({ id: 'visium-hd-clusters:16:gene_expression_graphclust' }),
+    ])
+    await expect(dataset.annotationGroups(2)).resolves.toEqual([])
+    await dataset.annotationGroups()
+    // One HEAD per clustering per tier, read once.
+    expect(
+      fetcher.mock.calls.filter(([url]) => String(url).includes('square_016um')),
+    ).toHaveLength(10)
+
+    await expect(
+      dataset.annotations({ groupId: 'visium-hd-clusters:8:gene_expression_graphclust' }),
+    ).resolves.toEqual([
+      {
+        id: 'analysis:gene_expression_graphclust:1',
+        label: 'graphclust: Cluster 1',
+        cellIds: ['s_008um_00001_00002-1'],
+      },
+    ])
+    // Without a set, every clustering of the tier asked for.
+    await expect(dataset.annotations({ binSizeMicrometers: 16 })).resolves.toEqual([
+      expect.objectContaining({ cellIds: ['s_016um_00001_00002-1'] }),
+    ])
+    await expect(dataset.annotations({ groupId: 'analysis:0' })).rejects.toThrow(
+      'Visium HD has no annotation set analysis:0.',
     )
   })
 

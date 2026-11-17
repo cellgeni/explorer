@@ -38,6 +38,7 @@ import {
   type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
 import { MERSCOPE_CSV_MAX_BYTES } from '../datasets/merscopeFormat'
+import { visiumHdFilteredBarcodesPath } from '../datasets/visiumHdStrategy'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
@@ -1514,18 +1515,21 @@ async function runVisiumHdDiagnostics(
   for (const bin of selectedBin.bins) {
     const suffix = `${bin.binSizeMicrometers}um`
 
-    checks.push(
-      await checkRangeFile(
-        detection.baseUrl,
-        {
-          id: `visium-hd-${suffix}-positions`,
-          label: `Visium HD ${suffix} positions`,
-          path: bin.tissuePositionsPath,
-        },
-        true,
-        options,
-      ),
-    )
+    // 2 µm bins come from the filtered barcodes, checked below.
+    if (bin.binSizeMicrometers !== 2) {
+      checks.push(
+        await checkRangeFile(
+          detection.baseUrl,
+          {
+            id: `visium-hd-${suffix}-positions`,
+            label: `Visium HD ${suffix} positions`,
+            path: bin.tissuePositionsPath,
+          },
+          true,
+          options,
+        ),
+      )
+    }
     checks.push(
       await checkReadableFile(
         detection.baseUrl,
@@ -1573,7 +1577,7 @@ async function runVisiumHdDiagnostics(
           {
             id: `visium-hd-${suffix}-barcodes`,
             label: `Visium HD ${suffix} barcodes`,
-            path: `${bin.outputPath}/filtered_feature_bc_matrix/barcodes.tsv.gz`,
+            path: visiumHdFilteredBarcodesPath(bin.outputPath),
           },
           true,
           options,
@@ -1602,12 +1606,16 @@ async function runVisiumHdDiagnostics(
     )
   }
 
+  // With no 8 or 16 µm tier, the 2 µm bins are placed by feature_slice.h5's
+  // spot transform, so the dataset cannot be drawn without it.
+  const featureSliceRequired = !detection.bins.some((bin) => bin.binSizeMicrometers !== 2)
+
   for (const file of VISIUM_HD_ROOT_RANGE_FILES) {
     checks.push(
       await checkRangeFile(
         detection.baseUrl,
         roleFile(detection.baseUrl, file),
-        false,
+        featureSliceRequired && file.role === 'featureSlice',
         options,
       ),
     )

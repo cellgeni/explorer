@@ -267,18 +267,20 @@ GEO deposits name every file `<sample>_<name>.gz`, for example
 
 | Key                | Standard name                                          | Notes                                                                                                                                                                                                                              |
 | ------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `bins`             | The `binned_outputs/square_{002,008,016}um` that exist | A list of `{ "size": 2 \| 8 \| 16, "path": "<bin folder>" }`. Each bin may also set `tissuePositions`, `scalefactors`, `filteredMatrix`                                                                                            |
+| `bins`             | The `binned_outputs/square_{002,008,016}um` that exist | A list of `{ "size": 2 \| 8 \| 16, "path": "<bin folder>" }`. Each bin may also set `tissuePositions` (not read for 2 µm), `scalefactors`, `filteredMatrix`                                                                        |
 | `featureSlice`     | `feature_slice.h5`                                     |                                                                                                                                                                                                                                    |
 | `barcodeMappings`  | `barcode_mappings.parquet`                             |                                                                                                                                                                                                                                    |
 | `segmentedOutputs` | The `segmented_outputs/` files that exist              | Keys: `scalefactors`, `filteredMatrix`, `rawMatrix`, `cellSegmentations`, `nucleusSegmentations`, `nucleusInstanceMask`, `graphclustCellSegmentations`, `graphclustNucleusSegmentations`. When set, only the listed files are used |
 
 Within a bin, files default to `<path>/spatial/tissue_positions.parquet`,
 `<path>/spatial/scalefactors_json.json`, and
-`<path>/filtered_feature_bc_matrix.h5`. The tissue images and barcode and
-feature lists are always read from under `<path>`; the UMAP and t-SNE
-projections from `<path>/analysis/`, else the root's `analysis/`. The viewer
-checks the three bin files with `HEAD` and stops with an error naming the
-missing file. Without `bins`, the standard tiers under the manifest root are
+`<path>/filtered_feature_bc_matrix.h5`. The tissue images, barcode and
+feature lists, and clusterings are always read from under `<path>`; the UMAP
+and t-SNE projections from `<path>/analysis/`, else the root's `analysis/`.
+The viewer checks the three bin files with `HEAD` (for 2 µm,
+`<path>/filtered_feature_bc_matrix/barcodes.tsv.gz` in place of the positions)
+and stops with an error naming the missing file. A manifest listing only a
+2 µm bin also needs `featureSlice`, whose spot transform places the bins. Without `bins`, the standard tiers under the manifest root are
 probed as usual.
 
 ### H5AD, SpatialData, And Image
