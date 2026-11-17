@@ -145,11 +145,10 @@ Features:
       Browse File is offered for a SpatialData shapes element's
       `shapes.parquet` that a consolidated store does not list
       (`parquetFileOf` in `storeStructureModel.ts`).
-- [ ] SVS: show the thumbnail, label, and macro images, and draw the minimap
-      from the thumbnail. Also: read runs of adjacent tiles for QPTIFF and
-      OME-TIFF too (SVS only now), stop tiles waiting on a shared run from
-      holding scheduler slots, and try a fluorescence SVS (see
-      [Phase 16](phases/16-svs.md#known-gaps)).
+- [ ] SVS: read an Aperio FL scan's `.afi` file as one image with a channel
+      per listed file (each file opens on its own now). Also: a pyramidal
+      OME-TIFF opens in about 24 rounds of sequential range requests before
+      its first tile (see [Phase 16](phases/16-svs.md#known-gaps)).
 - [ ] NDPI: files over 4 GB (64-bit offsets; test files and what support
       needs in [Phase 19](phases/19-ndpi.md#64-bit-ndpi-files-over-4-gb)),
       NDPI URLs without a `.ndpi` suffix, a `Z plane` control for other focal

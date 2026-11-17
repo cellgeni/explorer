@@ -35,6 +35,8 @@ import type { AteraImageChoice, AteraImageControlState } from '../dataset/ateraI
 import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
+import type { ImagePyramidLoader } from '../../data/imagePyramid'
+import type { SlideImagesSource } from './slideImagesModel'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
 // and diagnostics (plan 15.2-A): the info drawer, the dataset
@@ -43,6 +45,8 @@ export interface DatasetInfoModel {
   // What is open, for the info drawer's Dataset section (15.2-F). Empty
   // before a dataset is ready.
   readonly facts: readonly DatasetFact[]
+  // The dataset image, when it stores slide images beside it (SVS).
+  readonly slideImages: SlideImagesSource | null
   readonly open: OpenDatasetModel
   readonly share: ShareLinkModel
   readonly about: DatasetManifestAbout | null
@@ -199,6 +203,8 @@ export interface DatasetInfoModelInput {
   readonly datasetAbout: DatasetManifestAbout | null
   // The loaded dataset, once it is ready.
   readonly datasetFactsInput: DatasetFactsInput | null
+  // The dataset's image, once it is open.
+  readonly datasetImageLoader: ImagePyramidLoader | null
   readonly datasetUrl: string
   readonly debugLog: readonly DebugLogEntry[]
   readonly debugMode: boolean
@@ -242,6 +248,7 @@ export function useDatasetInfoModel({
   cellFeatureMatrixCapabilityState,
   datasetAbout,
   datasetFactsInput,
+  datasetImageLoader,
   datasetUrl,
   debugLog,
   debugMode,
@@ -280,6 +287,7 @@ export function useDatasetInfoModel({
 
   return {
     facts: datasetFactsInput === null ? [] : datasetFacts(datasetFactsInput),
+    slideImages: slideImagesSource(datasetImageLoader),
     open: {
       datasetUrl,
       onDatasetUrlChange: setDatasetUrl,
@@ -388,4 +396,10 @@ export function withZarrCodecWorkerNotice(
         { id: 0, timestamp: failure.timestamp, ...zarrCodecWorkerNotice(failure) },
         ...notices,
       ]
+}
+
+function slideImagesSource(loader: ImagePyramidLoader | null): SlideImagesSource | null {
+  return loader?.associatedImages === undefined
+    ? null
+    : (loader as ImagePyramidLoader & SlideImagesSource)
 }

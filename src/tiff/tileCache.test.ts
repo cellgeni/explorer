@@ -43,6 +43,34 @@ class MetadataTileSource extends FakeTileSource {
 }
 
 describe('TileCache', () => {
+  it('passes fetch options on, without upcoming tiles it already holds', async () => {
+    const source = new FakeTileSource()
+    const fetchTileBytes = vi.spyOn(source, 'fetchTileBytes')
+    const decodeTile = vi.fn(async () => ({
+      bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+      width: 2,
+      height: 1,
+      lo: 0,
+      hi: 1,
+    }))
+    const cache = new TileCache({ displayWindow: { lo: 0, hi: 1 }, decodeTile })
+    const onSharedRead = vi.fn()
+
+    await cache.request(source, 0, 1, 0)
+    await cache.request(source, 0, 0, 0, undefined, {
+      upcoming: [
+        { col: 1, row: 0 },
+        { col: 2, row: 0 },
+      ],
+      onSharedRead,
+    })
+
+    expect(fetchTileBytes).toHaveBeenLastCalledWith(0, 0, 0, undefined, {
+      upcoming: [{ col: 2, row: 0 }],
+      onSharedRead,
+    })
+  })
+
   it('loads, caches, and returns ready tiles', async () => {
     const source = new FakeTileSource()
     const bitmap = { close: vi.fn() } as unknown as ImageBitmap
