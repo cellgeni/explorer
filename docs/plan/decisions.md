@@ -103,7 +103,9 @@ Later additions:
   answers reads by path. H5AD and Visium bytes are downloaded on the main
   thread, as before, and transferred; the worker reads the Xenium matrix
   itself, so it never reaches the main thread, and since 2026-11-15 reads it
-  by range, so only the parts HDF5 reads are fetched. H5AD files send back their
+  by range, so only the parts HDF5 reads are fetched. Since 2026-11-17 an
+  H5AD over 64 MiB is read by range the same way, its tree walk limited to
+  the groups the viewer reads. H5AD files send back their
   groups, datasets and attributes once, and the reader then reads datasets as
   before; the Xenium fallback's cell rows are read in the worker and come back
   packed in typed arrays. One worker per file, because h5wasm's heap cannot

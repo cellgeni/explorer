@@ -4,13 +4,15 @@ import type { SharedLoad } from '../utils/sharedLoad'
 import type { GexResult } from './gexTypes'
 import type {
   H5FileFeatureSliceTarget,
+  H5FileRangeStats,
+  H5FileSlice,
   H5FileSource,
   H5FileWorkerRequest,
   H5FileWorkerResponse,
   H5TreeGroup,
   H5TreeNode,
 } from '../workers/h5FileMessages'
-import type { H5FileHandler } from '../workers/h5FileCore'
+import type { H5FileHandler, H5FileHandlerOptions } from '../workers/h5FileCore'
 
 // An HDF5 file opened with h5wasm in its own worker, so copying it into
 // h5wasm's file system and decoding its datasets stay off the main thread.
@@ -29,14 +31,33 @@ export type H5WorkerFactory = () => H5WorkerLike
 export interface OpenH5WorkerFileOptions {
   // Return the file's groups, datasets and attributes as `tree`.
   readonly tree?: boolean
+  // Walk only these paths and the groups above them (see `H5FileOpenRequest`).
+  readonly treePaths?: readonly string[]
   readonly signal?: AbortSignal
   readonly workerFactory?: H5WorkerFactory
 }
 
+export interface OpenH5WorkerFileFromUrlOptions extends OpenH5WorkerFileOptions {
+  // Fail with an error named `H5_RANGE_UNSUPPORTED_ERROR`, rather than read the
+  // file whole, when the server does not answer range requests.
+  readonly rangeOnly?: boolean
+}
+
+export interface H5WorkerFileReadOptions {
+  // A hyperslab of a numeric dataset rather than its whole value.
+  readonly slice?: H5FileSlice
+  readonly signal?: AbortSignal
+}
+
 export interface H5WorkerFile {
   readonly tree: H5TreeGroup | null
-  // A dataset's whole value: a typed array, strings, or a scalar.
-  read(path: string): Promise<unknown>
+  // The file's size and the range reads that opened it; null unless it is
+  // read by range.
+  readonly range: H5FileRangeStats | null
+  // A dataset's whole value: a typed array, strings, or a scalar; or a slice.
+  read(path: string, options?: H5WorkerFileReadOptions): Promise<unknown>
+  // The range reads made so far; null unless the file is read by range.
+  rangeStats(): Promise<H5FileRangeStats | null>
   // Rows of a 10x feature-barcode matrix (`/matrix`) by barcode.
   matrixCells<ElementId extends string>(
     elementIds: readonly ElementId[],
@@ -116,9 +137,17 @@ export function openH5WorkerFile(
 export function openH5WorkerFileFromUrl(
   url: string,
   label: string,
-  options: OpenH5WorkerFileOptions = {},
+  options: OpenH5WorkerFileFromUrlOptions = {},
 ): Promise<H5WorkerFile> {
-  return openH5WorkerFileFromSource({ kind: 'url', url, label }, options)
+  return openH5WorkerFileFromSource(
+    {
+      kind: 'url',
+      url,
+      label,
+      ...(options.rangeOnly === true ? { rangeOnly: true } : {}),
+    },
+    options,
+  )
 }
 
 async function openH5WorkerFileFromSource(
@@ -131,11 +160,22 @@ async function openH5WorkerFileFromSource(
 
   try {
     const response = await connection.request(
-      (id) => ({ id, op: 'open', source, tree: options.tree === true }),
+      (id) => ({
+        id,
+        op: 'open',
+        source,
+        tree: options.tree === true,
+        ...(options.treePaths === undefined ? {} : { treePaths: options.treePaths }),
+      }),
       source.kind === 'bytes' ? transferablesOf(source.bytes) : [],
       options.signal,
     )
-    return createH5WorkerFile(connection, response.op === 'open' ? response.tree : null)
+
+    if (response.op !== 'open') {
+      throw new Error('The H5 file worker answered an open with another reply.')
+    }
+
+    return createH5WorkerFile(connection, response.tree, response.range)
   } catch (error) {
     connection.terminate()
     throw error
@@ -145,12 +185,27 @@ async function openH5WorkerFileFromSource(
 function createH5WorkerFile(
   connection: H5WorkerConnection,
   tree: H5TreeGroup | null,
+  range: H5FileRangeStats | null,
 ): H5WorkerFile {
   const file: H5WorkerFile = {
     tree,
-    async read(path) {
-      const response = await connection.request((id) => ({ id, op: 'read', path }), [])
+    range,
+    async read(path, options = {}) {
+      const response = await connection.request(
+        (id) => ({
+          id,
+          op: 'read',
+          path,
+          ...(options.slice === undefined ? {} : { slice: options.slice }),
+        }),
+        [],
+        options.signal,
+      )
       return response.op === 'read' ? response.value : undefined
+    },
+    async rangeStats() {
+      const response = await connection.request((id) => ({ id, op: 'stats' }), [])
+      return response.op === 'stats' ? response.range : null
     },
     async matrixCells(elementIds, signal) {
       const response = await connection.request(
@@ -348,7 +403,10 @@ function createDefaultH5Worker(): H5WorkerLike {
 }
 
 // Runs the worker's handler on this thread, for environments without Worker.
-export function createInProcessH5Worker(): H5WorkerLike {
+// Tests pass `createRangeRead` to read a URL by range as the worker does.
+export function createInProcessH5Worker(
+  handlerOptions: H5FileHandlerOptions = {},
+): H5WorkerLike {
   let handler: Promise<H5FileHandler> | null = null
   let terminated = false
   const worker: H5WorkerLike = {
@@ -360,7 +418,7 @@ export function createInProcessH5Worker(): H5WorkerLike {
           if (!terminated) {
             worker.onmessage?.({ data: response } as MessageEvent<H5FileWorkerResponse>)
           }
-        }),
+        }, handlerOptions),
       )
       void handler.then((current) => (terminated ? undefined : current.handle(message)))
     },

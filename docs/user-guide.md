@@ -448,9 +448,13 @@ a supported embedding such as `/obsm/X_umap`. The app reads genes from `var`,
 observations from `obs`, and expression from `/X` for supported dense, CSR, and
 CSC layouts.
 
-Files up to 300 MiB are downloaded whole and opened with the browser HDF5
-reader. Larger hosted H5AD files need a sibling kerchunk reference JSON named
-`DATASET.h5ad.json`, or an Icechunk repository named `DATASET.h5ad.icechunk`;
+Files up to 64 MiB are downloaded whole and opened with the browser HDF5
+reader. Larger files are read by range, so only the parts the viewer shows are
+fetched, not tissue images, `raw` or `layers`: the 226 MB CELLxGENE Visium
+heart example reads about 22 MB. This needs a host that answers Range
+requests; on one that does not, files up to 300 MiB are downloaded whole.
+Over 300 MiB, a sibling kerchunk reference JSON named `DATASET.h5ad.json`, or
+an Icechunk repository named `DATASET.h5ad.icechunk`, is used when present;
 [Large H5AD files](./h5ad-reference.md) explains how to generate one. An
 AnnData Zarr store opens from its URL and is read a chunk at a time, so it
 needs no reference. An Icechunk repository holding AnnData, SpatialData, or

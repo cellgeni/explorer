@@ -744,17 +744,19 @@ Method:
 
 Where the values come from:
 
-- Standard Visium, MERSCOPE, and `.h5ad` files read whole (up to 300 MiB):
-  the matrix in memory, so the panel reads nothing more.
+- Standard Visium, MERSCOPE, and `.h5ad` files whose `/X` is read whole at
+  load (files up to 300 MiB, and larger ones whose `/X` decodes to 300 MiB or
+  less): the matrix in memory, so the panel reads nothing more.
 - Xenium: each gene's slice of the feature-major `cell_features` in
   `cell_feature_matrix.zarr.zip`. A Xenium output without that file fails
   with a message naming it.
 - Atera: each gene's column of the CSC matrix, the columns the expression
   overlay reads.
-- AnnData read over HTTP (references, Icechunk, AnnData Zarr) and
-  SpatialData tables: a CSC `X` reads each gene's column; a dense `X` reads
-  every chunk that holds the gene; a CSR `X` reads all of `X` in batches of
-  rows, whichever genes are asked for.
+- AnnData read over HTTP (references, Icechunk, AnnData Zarr, and `.h5ad`
+  files whose `/X` is sliced per request) and SpatialData tables: a CSC `X`
+  reads each gene's column; a dense `X` reads every chunk that holds the gene,
+  or for an `.h5ad` all of it in bands of whole cells; a CSR `X` reads all of
+  `X` in batches of rows, whichever genes are asked for.
 
 Before reading, the panel works out the size of the values and indices the
 read decodes (plan 22-D7). The download is often much smaller: the CSR table

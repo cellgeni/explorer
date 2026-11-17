@@ -2,8 +2,9 @@
 
 A reference lists every array in an H5AD file and the byte range of each of its
 chunks, so the viewer can read the parts it needs with Range requests instead
-of downloading the whole file. The viewer needs one, hosted next to the H5AD,
-for files over 300 MiB. It reads two forms:
+of downloading the whole file. Since 2026-11-17 the viewer reads most files
+over 300 MiB by range without one, but uses one hosted next to the H5AD when
+it is there (see [Do You Need One?](#do-you-need-one)). It reads two forms:
 
 - **`sample.h5ad.json`:** one JSON file in
   [kerchunk's reference format](https://fsspec.github.io/kerchunk/spec.html).
@@ -19,31 +20,41 @@ the viewer the same arrays; the JSON loads a little faster (see
 
 ## Do You Need One?
 
-Only for files over 300 MiB (314,572,800 bytes). The viewer checks the size
-with a `HEAD` request first (`readH5ad`, `src/datasets/h5adDataset.ts`):
+Not for the viewer, since 2026-11-17: it reads an H5AD of any size by range,
+and a host that does not answer Range requests could not serve a reference's
+chunks either. It still uses one it finds next to a file over 300 MiB
+(314,572,800 bytes). The viewer checks the size with a `HEAD`
+request first (`readH5ad`, `src/datasets/h5adDataset.ts`):
 
-- **Up to 300 MiB:** the whole file is downloaded with one `GET` and opened
-  with `h5wasm`, the HDF5 library compiled to WebAssembly, in a worker. The
-  file sits in the tab's memory, and nothing shows until the download
-  finishes. A reference
-  next to such a file is not used.
-- **Over 300 MiB:** the file is not downloaded. The viewer fetches
+- **Up to 64 MiB:** the whole file is downloaded with one `GET` and opened
+  with `h5wasm`, the HDF5 library compiled to WebAssembly, in a worker.
+- **Over 64 MiB, up to 300 MiB, or of unknown size:** the worker opens the
+  file from its URL and reads it by range (`readH5adByRange`): the groups the
+  viewer reads, not tissue images, `raw` or `layers`. `/X` is read whole. A
+  host that ignores Range requests gets the file downloaded whole instead,
+  up to 300 MiB. A reference next to such a file is not used.
+- **Over 300 MiB:** the file is never downloaded whole. The viewer fetches
   `<H5AD URL>.json`, or if there is none opens the `<H5AD URL>.icechunk`
-  repository, and reads chunks of the H5AD through it. With neither, the load
-  stops with "H5AD file is 318.0 MB, exceeding the browser load limit of
-  300.0 MB, and no readable kerchunk reference file was found at
-  …/sample.h5ad.json, nor an Icechunk repository at …/sample.h5ad.icechunk."
-  (Sizes in this message are MiB.)
+  repository, and reads chunks of the H5AD through it. With neither, it reads
+  the file by range as above, `/X` whole only if it decodes to 300 MiB or
+  less and otherwise a slice per request. If the host does not answer Range
+  requests, the load stops with "H5AD file is 318.0 MB, exceeding the browser
+  load limit of 300.0 MB, and no readable kerchunk reference file was found
+  at …/sample.h5ad.json, nor an Icechunk repository at
+  …/sample.h5ad.icechunk." (Sizes in this message are MiB.)
 
-If the server sends no `Content-Length`, the download starts anyway and
-switches to the reference once it passes 300 MiB.
-
-Why not read the H5AD directly with Range requests? An HDF5 file has no table
-of contents. Where each array's chunks are is recorded in object headers and
-B-tree nodes spread through the file, and each node points to the next, so
-finding them over HTTP is a long chain of small reads that each wait for the
-one before. The reference does that walk once, in advance, and stores the
-result (see [Can It Be Made On The Fly?](#can-it-be-made-on-the-fly)).
+An HDF5 file has no table of contents. Where each array's chunks are is
+recorded in object headers and B-tree nodes spread through the file, and each
+node points to the next, so finding them over HTTP is a chain of small reads
+that each wait for the one before. Reading by range keeps the chain short in
+two ways: the walk visits only the groups the viewer reads, and each miss
+fetches 1 MiB around it, so headers and the `obs` columns next to them come in
+a few requests. On the 333 MB heart file below, the viewer was ready in 7.1 s
+after 22 requests (12.4 MB), against 37–39 s and about 356 requests through
+its JSON reference, which reads each `obs` chunk as its own request
+(measured from the UK, 2026-11-17 and 2026-11-10). A reference is still
+useful for opening the same arrays from Python (Icechunk), and makes the
+viewer read the file through it, as described here.
 
 ## What It Contains
 
@@ -347,11 +358,10 @@ machine that wrote it, or a machine in the bucket's region), and generate the
 reference once. Over a high-latency link, remote generation takes longer than
 the download, and it reads a large part of the file anyway.
 
-The viewer could do the same walk itself with an HDF5 reader over Range
-requests ("Move remote HDF5 reads to a worker-backed lazy Range path" in
-[Phase 7](plan/phases/07-h5ad.md), not done). It would face the same
-chain of dependent reads before showing anything, on every load for every
-user. A reference turns that into a one-off step.
+The viewer does its own walk over Range requests since 2026-11-17
+([Phase 7](plan/phases/07-h5ad.md#range-reads-2026-11-17)), but only of the
+groups it reads, and without the chunk B-trees until an array is read: about
+15 requests on the heart file, against the 146 to 334 above.
 
 ## Writing An H5AD That Works Well
 
@@ -403,8 +413,7 @@ aws s3 sync /data/sample.h5ad.icechunk s3://bucket/path/sample.h5ad.icechunk
 
 The repository can also be entered as the dataset URL
 (`…/sample.h5ad.icechunk`). Its chunks are then read from the H5AD next to it,
-with no size check, so even an H5AD under 300 MiB loads lazily instead of
-being downloaded whole. Diagnose dataset checks a repository entered this way
+with no size check, so even a small H5AD is read through it. Diagnose dataset checks a repository entered this way
 (it reads the first chunk of `/X`), but not one found next to an H5AD.
 
 ## Reading It In Python
