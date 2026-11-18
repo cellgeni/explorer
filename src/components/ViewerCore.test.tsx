@@ -484,7 +484,7 @@ describe('ViewerCore', () => {
       lineColor: [174, 241, 214, 230],
     }
 
-    render(<ViewerCore cells={[cell]} boundaries={[boundary]} />)
+    render(<ViewerCore cells={[cell]} boundaries={[boundary]} cellBoundaryOpacity={1} />)
 
     expect(boundaryPathColorAt(0)).toEqual([174, 241, 214, 230])
   })
@@ -1863,6 +1863,7 @@ describe('ViewerCore', () => {
       <ViewerCore
         cells={cells}
         boundaries={boundaries}
+        cellBoundaryOpacity={1}
         expressionElements={expressionElements}
         geneExpressionActive
         initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}

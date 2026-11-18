@@ -1,5 +1,6 @@
 export const DEFAULT_LAYER_OPACITY = 1
 export const DEFAULT_CELL_FILL_OPACITY = 0.5
+export const DEFAULT_CELL_BOUNDARY_OPACITY = 0.5
 
 export function normalizeLayerOpacity(value: number): number {
   if (!Number.isFinite(value)) {

@@ -189,7 +189,7 @@ describe('App', () => {
     openControls('cell-appearance')
     expect(screen.getByRole('slider', { name: 'Cell fill opacity' })).toHaveValue('50')
     expect(screen.getByRole('slider', { name: 'Cell boundary opacity' })).toHaveValue(
-      '100',
+      '50',
     )
 
     openControls('settings')

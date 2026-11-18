@@ -91,7 +91,7 @@ function getBoundaryFillData(layer: SolidPolygonLayer): BoundaryFillLayerData {
 
 describe('deck layer factory', () => {
   it('creates the scaffolded cell overview layer', () => {
-    const layers = createOverviewLayers(fixtureCells)
+    const layers = createOverviewLayers(fixtureCells, [], { cellBoundaryOpacity: 1 })
 
     expect(spatialOverviewView.id).toBe('spatial-overview')
     expect(bundledDeckVersion).toMatch(/^9\./)
@@ -299,7 +299,9 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const layers = createOverviewLayers(fixtureCells, boundaries)
+    const layers = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryOpacity: 1,
+    })
 
     expect(layers).toHaveLength(2)
     expect(layers[0]).toBeInstanceOf(PathLayer)
