@@ -8,6 +8,7 @@ import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {
   AnnotationLoader,
   DatasetOverviewLoader,
+  DatasetRetainer,
   GeneExpressionLoader,
   SpatialDatasetDetector,
   SpatialDatasetLoader,
@@ -26,6 +27,8 @@ export interface CollectionPreviewLoaders {
   readonly loadDatasetOverview: DatasetOverviewLoader
   readonly loadGeneExpression: GeneExpressionLoader
   readonly loadAnnotations: AnnotationLoader
+  // Keeps the datasets opened for a URL while a preview reads it.
+  readonly retainDataset?: DatasetRetainer
   readonly fetchImpl?: typeof fetch
 }
 
@@ -155,32 +158,26 @@ export async function openPreviewSource(
     }
   }
 
-  const dataset = await loaders.getSpatialDataset(url)
+  const opened = await previewDataset(url, loaders)
   throwIfAborted(signal)
 
-  if (!hasMethod(dataset, 'overview') || !hasMethod(dataset, 'geneExpression')) {
+  if (!hasMethod(opened, 'overview') || !hasMethod(opened, 'geneExpression')) {
     throw new PreviewUnavailableError({ reason: 'no-cells' })
   }
 
-  const readOverview = dataset.overview as () => Promise<readonly CellOverviewPoint[]>
-  const readGeneExpression = dataset.geneExpression as (
-    bbox: BBox,
-    genes: readonly string[],
-    options: { readonly signal?: AbortSignal },
-  ) => Promise<GeneExpressionBatch>
-  const readAnnotations = hasMethod(dataset, 'annotations')
-    ? (dataset.annotations as (options: {
-        readonly groupId?: string
-        readonly signal?: AbortSignal
-      }) => Promise<readonly Annotation<string>[]>)
-    : null
+  const hasAnnotations = hasMethod(opened, 'annotations')
+  // Each read asks for the dataset again rather than keeping it, so a dataset
+  // the cache has disposed is opened again (see datasetCache.ts).
+  const dataset = () => previewDataset(url, loaders)
 
   return {
     cells: async (cellSignal) =>
-      previewCells(await readOverview.call(dataset), cellSignal),
+      previewCells(await (await dataset()).overview(), cellSignal),
     scores: async (bounds, genes, scoreMode, scoreSignal) =>
       previewScores(
-        await readGeneExpression.call(dataset, boundsBbox(bounds), genes, {
+        await (
+          await dataset()
+        ).geneExpression(boundsBbox(bounds), genes, {
           ...(scoreSignal === undefined ? {} : { signal: scoreSignal }),
         }),
         scoreMode,
@@ -190,15 +187,39 @@ export async function openPreviewSource(
     classes: async (cells, groupId, classSignal) =>
       previewClasses(
         cells,
-        readAnnotations === null
-          ? []
-          : await readAnnotations.call(dataset, {
+        hasAnnotations
+          ? await (
+              await dataset()
+            ).annotations({
               groupId,
               ...(classSignal === undefined ? {} : { signal: classSignal }),
-            }),
+            })
+          : [],
         classSignal,
       ),
   }
+}
+
+// The reads a preview makes of a dataset other than Xenium; openPreviewSource
+// checks they are there.
+interface PreviewDataset {
+  overview(): Promise<readonly CellOverviewPoint[]>
+  geneExpression(
+    bbox: BBox,
+    genes: readonly string[],
+    options: { readonly signal?: AbortSignal },
+  ): Promise<GeneExpressionBatch>
+  annotations(options: {
+    readonly groupId?: string
+    readonly signal?: AbortSignal
+  }): Promise<readonly Annotation<string>[]>
+}
+
+async function previewDataset(
+  url: string,
+  loaders: CollectionPreviewLoaders,
+): Promise<PreviewDataset> {
+  return (await loaders.getSpatialDataset(url)) as unknown as PreviewDataset
 }
 
 function previewCells(

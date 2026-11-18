@@ -379,6 +379,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadDatasetOverview,
       loadExamplesIndex,
       loadGenePanel,
+      retainDataset,
       warmDatasetForRoi,
     },
     morphology: {
@@ -775,6 +776,19 @@ export function App({ dependencies }: AppProps = {}) {
   const isLoading =
     loadState.status === 'loading' || pendingDatasetLoadState.status === 'loading'
   const loadedDatasetUrl = loadState.status === 'ready' ? loadState.url : null
+  // The dataset shown, and one being opened in its place, stay open however
+  // many others the collection previews open.
+  const shownDatasetUrl = loadState.status === 'idle' ? null : loadState.url
+  const openingDatasetUrl =
+    pendingDatasetLoadState.status === 'loading' ? pendingDatasetLoadState.url : null
+  useEffect(() => {
+    if (shownDatasetUrl === null) return
+    return retainDataset(shownDatasetUrl)
+  }, [retainDataset, shownDatasetUrl])
+  useEffect(() => {
+    if (openingDatasetUrl === null) return
+    return retainDataset(openingDatasetUrl)
+  }, [openingDatasetUrl, retainDataset])
   const linkNamesDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
   // Set below, where the functions that open datasets are defined.
   const openCollectionDatasetRef = useRef<
@@ -3956,6 +3970,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadDatasetOverview,
       loadGeneExpression,
       loadAnnotations,
+      retainDataset,
     }),
     [
       detectSpatialDataset,
@@ -3963,6 +3978,7 @@ export function App({ dependencies }: AppProps = {}) {
       loadAnnotations,
       loadDatasetOverview,
       loadGeneExpression,
+      retainDataset,
     ],
   )
   // Previews take the loaded annotation set while cells are coloured by it.

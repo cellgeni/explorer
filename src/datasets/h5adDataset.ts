@@ -271,6 +271,8 @@ interface H5adCache {
   // view needs.
   readonly visium: H5adVisiumLayout | null
   readonly visiumSource: H5adVisiumSource | null
+  // Ends the H5 file worker the arrays are read from, for a file read in one.
+  readonly close?: () => void
 }
 
 interface H5adVisiumSource {
@@ -1443,6 +1445,17 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return this.spotElementsPromise
   }
 
+  // Ends the H5 file worker and drops the arrays read; a later read opens
+  // the file again.
+  dispose(): void {
+    const base = this.baseCachePromise
+    this.baseCachePromise = null
+    this.cachePromise = null
+    this.spotElementsPromise = null
+    this.overviewPoints = null
+    void base?.then((cache) => cache.close?.()).catch(() => undefined)
+  }
+
   private cache(): Promise<H5adCache> {
     if (this.cachePromise === null) {
       const view = this.visiumView
@@ -1735,7 +1748,7 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
   reportH5adProgress(onProgress, 'H5AD file loaded; opening AnnData arrays')
 
   // The worker stays open for reads after load (embeddings, tissue images)
-  // and ends when the dataset is no longer referenced.
+  // and ends when the dataset is disposed or no longer referenced.
   const file = await openH5WorkerFile(bytes, {
     tree: true,
     treePaths: H5AD_TREE_PATHS,
@@ -1745,7 +1758,10 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
   })
 
   try {
-    return await readH5adCacheFromGroup(url, hydrateH5WorkerGroup(file))
+    return {
+      ...(await readH5adCacheFromGroup(url, hydrateH5WorkerGroup(file))),
+      close: () => file.close(),
+    }
   } catch (error) {
     file.close()
     throw error
@@ -1803,7 +1819,7 @@ async function readH5adByRange(
         isMatrixInMemory(cache.matrix) ? '' : '; /X is read by range when needed'
       }`,
     )
-    return cache
+    return { ...cache, close: () => file.close() }
   } catch (error) {
     file.close()
     throw error

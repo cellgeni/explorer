@@ -1,7 +1,14 @@
+import { DatasetCache, normalizeDatasetUrl } from '../datasets/datasetCache'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
 
-const datasetCache = new Map<string, Promise<XeniumDataset>>()
-const transcriptDatasetCache = new Map<string, Promise<XeniumDataset>>()
+// Instances of their own for annotations and for transcript reads, apart from
+// the viewer's dataset (datasetFactory.ts), each with its own DuckDB client.
+// Besides the ones in use, the one used last is kept.
+const MAX_INACTIVE_XENIUM_DATASETS = 1
+const datasetCache = new DatasetCache<XeniumDataset>(MAX_INACTIVE_XENIUM_DATASETS)
+const transcriptDatasetCache = new DatasetCache<XeniumDataset>(
+  MAX_INACTIVE_XENIUM_DATASETS,
+)
 
 export function cachedXeniumDataset(baseUrl: string): Promise<XeniumDataset> {
   return cachedDataset(baseUrl, datasetCache)
@@ -13,18 +20,13 @@ export function cachedXeniumTranscriptDataset(baseUrl: string): Promise<XeniumDa
 
 function cachedDataset(
   baseUrl: string,
-  cache: Map<string, Promise<XeniumDataset>>,
+  cache: DatasetCache<XeniumDataset>,
 ): Promise<XeniumDataset> {
-  const normalizedUrl = baseUrl.replace(/\/+$/, '')
-  const existing = cache.get(normalizedUrl)
+  const normalizedUrl = normalizeDatasetUrl(baseUrl)
 
-  if (existing !== undefined) {
-    return existing
-  }
-
-  const datasetPromise = import('../datasets/xeniumDataset').then(
-    ({ XeniumDataset }) => new XeniumDataset({ baseUrl: normalizedUrl }),
+  return cache.get(normalizedUrl, normalizedUrl, () =>
+    import('../datasets/xeniumDataset').then(
+      ({ XeniumDataset }) => new XeniumDataset({ baseUrl: normalizedUrl }),
+    ),
   )
-  cache.set(normalizedUrl, datasetPromise)
-  return datasetPromise
 }

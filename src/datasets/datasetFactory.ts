@@ -51,6 +51,7 @@ import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
 import { visiumHdRequiredBinPaths } from './visiumHdStrategy'
+import { DatasetCache } from './datasetCache'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -231,7 +232,11 @@ const VISIUM_HD_SEGMENTED_OUTPUT_PROBES = [
   readonly path: string
 }[]
 
-const spatialDatasetCache = new Map<string, Promise<AnySpatialDataset>>()
+// Besides the datasets in use, the few opened last are kept for reopening.
+const MAX_INACTIVE_SPATIAL_DATASETS = 2
+const spatialDatasetCache = new DatasetCache<AnySpatialDataset>(
+  MAX_INACTIVE_SPATIAL_DATASETS,
+)
 // Coordinate system, image, and unit choices per SpatialData store URL. Kept
 // here so every caller that only knows the URL gets the matching instance.
 const spatialDataSelections = new Map<string, SpatialDataSelection>()
@@ -250,11 +255,7 @@ export function setSpatialDataSelection(
 
   // Drop instances built for earlier selections so their tables, label
   // traces, and chunk caches can be released.
-  for (const cacheKey of spatialDatasetCache.keys()) {
-    if (cacheKey.startsWith(`${key}\n`)) {
-      spatialDatasetCache.delete(cacheKey)
-    }
-  }
+  spatialDatasetCache.delete((cacheKey) => cacheKey.startsWith(`${key}\n`))
 }
 
 // The viewer's selection, else the dataset manifest's `options`. A manifest
@@ -1637,30 +1638,18 @@ export function cachedSpatialDataset(
     spatialDataSelectionFor(normalizedBaseUrl),
     collectionImageFor(normalizedBaseUrl),
   )
-  const existing = spatialDatasetCache.get(cacheKey)
-
-  if (existing !== undefined) {
-    return existing
-  }
-
-  const promise = createSpatialDataset(normalizedBaseUrl, {
-    ...(maxTwoMicrometerFilteredBarcodes === undefined
-      ? {}
-      : {
-          visiumHdMaxTwoMicrometerFilteredBarcodes: maxTwoMicrometerFilteredBarcodes,
-        }),
-    ...(options.onH5adLoadProgress === undefined
-      ? {}
-      : { onH5adLoadProgress: options.onH5adLoadProgress }),
-  }).catch((error: unknown) => {
-    if (spatialDatasetCache.get(cacheKey) === promise) {
-      spatialDatasetCache.delete(cacheKey)
-    }
-
-    throw error
-  })
-  spatialDatasetCache.set(cacheKey, promise)
-  return promise
+  return spatialDatasetCache.get(cacheKey, normalizedBaseUrl, () =>
+    createSpatialDataset(normalizedBaseUrl, {
+      ...(maxTwoMicrometerFilteredBarcodes === undefined
+        ? {}
+        : {
+            visiumHdMaxTwoMicrometerFilteredBarcodes: maxTwoMicrometerFilteredBarcodes,
+          }),
+      ...(options.onH5adLoadProgress === undefined
+        ? {}
+        : { onH5adLoadProgress: options.onH5adLoadProgress }),
+    }),
+  )
 }
 
 async function probeDatasetPath(

@@ -94,6 +94,7 @@ export function appTestDependencies({
   readParquetRows,
   readParquetStructure,
   readStoreStructure,
+  retainDataset,
   runDatasetDiagnostics,
   warmDatasetForRoi,
 }: AppTestDependencyProps = {}): AppDependencyOverrides {
@@ -121,6 +122,7 @@ export function appTestDependencies({
   if (detectSpatialDataset !== undefined)
     dataset.detectSpatialDataset = detectSpatialDataset
   if (getSpatialDataset !== undefined) dataset.getSpatialDataset = getSpatialDataset
+  if (retainDataset !== undefined) dataset.retainDataset = retainDataset
   if (warmDatasetForRoi !== undefined) dataset.warmDatasetForRoi = warmDatasetForRoi
 
   // Never the network: the real loader fetched the demo dataset's morphology TIFFs

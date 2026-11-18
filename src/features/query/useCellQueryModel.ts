@@ -162,6 +162,8 @@ export interface CellQueryModel {
   readonly canSave: boolean
   readonly onSaveClass: () => void
   readonly exporting: boolean
+  // A current, successful result with rows, its columns read.
+  readonly canExport: boolean
   readonly onExportCsv: () => void
 }
 
@@ -307,6 +309,15 @@ export function useCellQueryModel({
       unlistedDatasetSetColumn(columnId, annotationGroups),
     [annotationGroups, columnOptions],
   )
+  // The sort, while the dataset lists its column: one kept from another
+  // dataset is left out until it does, as conditions are, rather than
+  // waiting on a column that never comes.
+  const activeSort =
+    sort === null ||
+    sort.columnId === CELL_QUERY_ID_COLUMN ||
+    resolveColumn(sort.columnId) !== null
+      ? sort
+      : null
 
   // Columns the conditions, table and sort use.
   const tableColumnIds = useMemo(
@@ -321,14 +332,14 @@ export function useCellQueryModel({
     () =>
       uniqueStrings([
         ...tableColumnIds,
-        ...(sort === null || sort.columnId === CELL_QUERY_ID_COLUMN
+        ...(activeSort === null || activeSort.columnId === CELL_QUERY_ID_COLUMN
           ? []
-          : [sort.columnId]),
+          : [activeSort.columnId]),
       ]).flatMap((id) => {
         const column = resolveColumn(id)
         return column === null ? [] : [column]
       }),
-    [resolveColumn, sort, tableColumnIds],
+    [activeSort, resolveColumn, tableColumnIds],
   )
 
   // Values read on demand: dataset sets, metadata tracks and the saved
@@ -437,7 +448,9 @@ export function useCellQueryModel({
   )
   const usedColumnIds = [
     ...activeConditions.map((condition) => condition.columnId),
-    ...(sort === null || sort.columnId === CELL_QUERY_ID_COLUMN ? [] : [sort.columnId]),
+    ...(activeSort === null || activeSort.columnId === CELL_QUERY_ID_COLUMN
+      ? []
+      : [activeSort.columnId]),
   ]
   const runnable =
     active && usedColumnIds.every((id) => columnInputs.get(id)?.status === 'ready')
@@ -448,7 +461,7 @@ export function useCellQueryModel({
   // The rows the results are for: the dataset's cells as drawn.
   const rowsKey = `${datasetUrl ?? ''}|${objectId(cells)}`
   const runKey = `${rowsKey}|${JSON.stringify(activeConditions, numbersInJson)}|${JSON.stringify(
-    sort,
+    activeSort,
   )}|${readyKey}`
 
   const [result, setResult] = useState<QueryResult | null>(null)
@@ -473,9 +486,9 @@ export function useCellQueryModel({
   }, [cells, datasetUrl])
 
   // The latest inputs, read by the effect below without restarting it.
-  const latestRef = useRef({ columnInputs, activeConditions, sort, createSession })
+  const latestRef = useRef({ columnInputs, activeConditions, activeSort, createSession })
   useEffect(() => {
-    latestRef.current = { columnInputs, activeConditions, sort, createSession }
+    latestRef.current = { columnInputs, activeConditions, activeSort, createSession }
   })
 
   // Sends changed columns, then matches once edits pause (23-D4).
@@ -522,7 +535,7 @@ export function useCellQueryModel({
     const key = runKey
     const timer = setTimeout(() => {
       const startedAt = performance.now()
-      entry.session.run(latest.activeConditions, latest.sort).then(
+      entry.session.run(latest.activeConditions, latest.activeSort).then(
         (queryResult) => {
           if (entryRef.current !== entry) return
           setResult({
@@ -703,7 +716,7 @@ export function useCellQueryModel({
       label: elementNoun === 'spots' ? 'Spot' : 'Cell',
       kind: 'id',
       removable: false,
-      sort: sort?.columnId === CELL_QUERY_ID_COLUMN ? sort.direction : null,
+      sort: activeSort?.columnId === CELL_QUERY_ID_COLUMN ? activeSort.direction : null,
     },
     ...tableColumnIds.map((id): CellQueryTableColumn => {
       const column = columnKinds.get(id) ?? null
@@ -713,7 +726,7 @@ export function useCellQueryModel({
         kind: column?.kind ?? 'category',
         unit: column?.unit,
         removable: !conditionColumnIds.has(id),
-        sort: sort?.columnId === id ? sort.direction : null,
+        sort: activeSort?.columnId === id ? activeSort.direction : null,
       }
     }),
   ]
@@ -765,7 +778,8 @@ export function useCellQueryModel({
     }
   })
 
-  // Save as class and export (23-D7, 23-D8).
+  // Save as class and export (23-D7, 23-D8), for the query as it stands: an
+  // edit's rows stay listed until its own result arrives.
   const resultIsCurrent = currentResult !== null && currentResult.key === runKey
   const saveNamePlaceholder = defaultQueryClassName(annotations)
   const handleSaveClass = useCallback(() => {
@@ -780,9 +794,17 @@ export function useCellQueryModel({
   const exportColumns = tableColumns.filter(
     (column) => column.kind === 'id' || readyTableColumnIds.includes(column.id),
   )
+  // A current, successful result, once no table column is still being read
+  // so the file leaves none out.
+  const canExport =
+    resultIsCurrent &&
+    currentResult.error === null &&
+    currentResult.rows.length > 0 &&
+    !exporting &&
+    tableColumnIds.every((id) => columnInputs.get(id)?.status !== 'loading')
   const handleExportCsv = useCallback(() => {
     const entry = entryRef.current
-    if (entry === null || rows === null || datasetUrl === null) return
+    if (!canExport || entry === null || rows === null || datasetUrl === null) return
 
     setExporting(true)
     setExportError(null)
@@ -797,7 +819,7 @@ export function useCellQueryModel({
         setExportError(`The CSV could not be written: ${errorMessage(error)}`)
       },
     )
-  }, [appendDebugEvent, cells, columnKinds, datasetUrl, exportColumns, rows])
+  }, [appendDebugEvent, canExport, cells, columnKinds, datasetUrl, exportColumns, rows])
 
   const matching = runnable && !resultIsCurrent
   const loadingColumns = conditionViews.some((view) => view.status === 'loading')
@@ -882,6 +904,7 @@ export function useCellQueryModel({
     canSave: resultIsCurrent && (rows?.length ?? 0) > 0,
     onSaveClass: handleSaveClass,
     exporting,
+    canExport,
     onExportCsv: handleExportCsv,
   }
 }

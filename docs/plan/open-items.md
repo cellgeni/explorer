@@ -54,21 +54,19 @@ Other gaps found in the review:
       Not listed until 2026-11-16: an annotation file named by
       `annotationUrl=` (`customAnnotations.ts`) and an embedding's projection
       CSV (`analysisEmbeddings.ts`) are parsed there too.
-- [ ] Dataset instances are cached per URL for the life of the tab
-      (`datasetFactory.ts`, `xeniumDatasetCache.ts`) and never released. A
-      `XeniumDataset` keeps its DuckDB worker after its first query, and
-      nothing calls the client's `close()` (`src/data/duckdb.ts`), so each
-      Xenium dataset opened in a tab can leave up to three DuckDB workers
-      running until reload. Found 2026-11-14. Other per-URL caches that are
-      never released (found 2026-11-16): one h5wasm worker per matrix file
-      (`h5MatrixCache` in `gex.ts`, which also keeps `h5WorkerFile.ts`'s
-      `FinalizationRegistry` from closing it), the Feature Slice files
-      (`visiumFeatureSlice.ts`), transcript Zarr metadata
+- [ ] Per-URL caches that are never released (found 2026-11-16): one
+      h5wasm worker per matrix file (`h5MatrixCache` in `gex.ts`, which also
+      keeps `h5WorkerFile.ts`'s `FinalizationRegistry` from closing it), the
+      Feature Slice files (`visiumFeatureSlice.ts`), transcript Zarr metadata
       (`transcriptZarr.ts`), the TIFF loader's caches, zip and Icechunk
       stores (`zarrZipStore.ts`, `icechunkStore.ts`), and the H5AD tissue
       image blob URLs, which are never revoked (`h5adDataset.ts`). Collections
-      make this matter more, since one tab can now open many datasets. One
-      `releaseDataset(url)` could cover them all.
+      make this matter more, since one tab can now open many datasets. The
+      dataset instances themselves are bounded since 2026-11-18
+      (`datasetCache.ts`): the viewer retains the dataset it shows, a preview
+      the one it reads, and of the rest the two used last are kept; older
+      ones are disposed, which closes a `XeniumDataset`'s DuckDB client and an
+      H5AD's file worker. These caches could hang off the same retain.
 - [ ] Dataset manifest: declare files absent; set the H5AD coordinate key,
       annotation set, channel colours and contrast, and initial camera (see
       [Phase 11](phases/11-dataset-manifest.md)).

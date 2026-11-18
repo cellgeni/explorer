@@ -117,36 +117,64 @@ export async function createDuckDbClient(
   }
 
   const worker = new Worker(bundle.mainWorker)
-  const logger = options.logger ?? new duckdb.ConsoleLogger()
-  const db = new duckdb.AsyncDuckDB(logger, worker)
+  let db: duckdb.AsyncDuckDB | null = null
+  let conn: duckdb.AsyncDuckDBConnection | null = null
 
-  await db.instantiate(
-    bundle.mainModule,
-    bundle.pthreadWorker,
-    options.onInstantiationProgress,
-  )
+  // A step that fails leaves the caller no client to close, so what was
+  // started is shut down here, and the step's error is the one thrown.
+  try {
+    const logger = options.logger ?? new duckdb.ConsoleLogger()
+    db = new duckdb.AsyncDuckDB(logger, worker)
 
-  const conn = await db.connect()
-  await configureDuckDb(conn, {
-    // Remote reads still work through DuckDB-WASM's own HTTP file system, but
-    // counting cells.parquet that way took 3.7 s instead of 0.5 s.
-    onHttpfsLoadError(error) {
-      console.warn(
-        'DuckDB could not load the httpfs extension, so remote Parquet reads will be slower.',
-        error,
-      )
-    },
-  })
+    await db.instantiate(
+      bundle.mainModule,
+      bundle.pthreadWorker,
+      options.onInstantiationProgress,
+    )
 
-  return {
-    db,
-    conn,
-    bundle,
-    version: await db.getVersion(),
-    loadSpatial: () => loadDuckDbSpatial(conn),
-    async close() {
-      await conn.close()
-      await db.terminate()
-    },
+    conn = await db.connect()
+    await configureDuckDb(conn, {
+      // Remote reads still work through DuckDB-WASM's own HTTP file system, but
+      // counting cells.parquet that way took 3.7 s instead of 0.5 s.
+      onHttpfsLoadError(error) {
+        console.warn(
+          'DuckDB could not load the httpfs extension, so remote Parquet reads will be slower.',
+          error,
+        )
+      },
+    })
+
+    const version = await db.getVersion()
+    const client = { db, conn, worker }
+
+    return {
+      db,
+      conn,
+      bundle,
+      version,
+      loadSpatial: () => loadDuckDbSpatial(client.conn),
+      close: () => shutDownDuckDb(client),
+    }
+  } catch (error) {
+    await shutDownDuckDb({ db, conn, worker }).catch(() => undefined)
+    throw error
+  }
+}
+
+// Closes the connection, then terminates the database, and with it the
+// worker, even when the connection does not close.
+async function shutDownDuckDb(client: {
+  readonly db: duckdb.AsyncDuckDB | null
+  readonly conn: duckdb.AsyncDuckDBConnection | null
+  readonly worker: Worker
+}): Promise<void> {
+  try {
+    await client.conn?.close()
+  } finally {
+    try {
+      await client.db?.terminate()
+    } finally {
+      client.worker.terminate()
+    }
   }
 }

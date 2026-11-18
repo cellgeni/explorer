@@ -144,6 +144,28 @@ describe('CollectionPreviewStore', () => {
     expect(fake.overviewCalls).toEqual([A, B, C])
   })
 
+  it('keeps a dataset retained while its preview reads it', async () => {
+    const fake = fakeDatasets()
+    const retained = new Map<string, number>()
+    const retainDataset = vi.fn((url: string) => {
+      retained.set(url, (retained.get(url) ?? 0) + 1)
+      return () => retained.set(url, (retained.get(url) ?? 0) - 1)
+    })
+    store = new CollectionPreviewStore(URLS, { ...fake.loaders, retainDataset })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+
+    expect(fake.overviewCalls).toEqual([A])
+    expect(retained.get(A)).toBe(1)
+
+    fake.finishOverview(A)
+    await flush()
+
+    expect(store.entry(A).cells).not.toBeNull()
+    expect(retained.get(A)).toBe(0)
+  })
+
   it('reads the sections shown side by side first, in view or not', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore(URLS, fake.loaders, { concurrency: 1 })

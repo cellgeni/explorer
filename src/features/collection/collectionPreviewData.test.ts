@@ -98,6 +98,26 @@ describe('openPreviewSource', () => {
     expect(bbox.maxY).toBeGreaterThan(4)
   })
 
+  it('asks for the dataset again on each read, so a disposed one is reopened', async () => {
+    const opened = [
+      { overview: vi.fn(async () => [point(0, 0)]), geneExpression: vi.fn() },
+      { overview: vi.fn(async () => [point(1, 1)]), geneExpression: vi.fn() },
+    ]
+    const getSpatialDataset = vi.fn(async () => opened.shift() as never)
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'h5ad', h5adUrl: URL_A, source: 'zarr' },
+        { getSpatialDataset },
+      ),
+    )
+
+    const cells = await source.cells()
+
+    expect([...cells.positions]).toEqual([1, 1])
+    expect(getSpatialDataset).toHaveBeenCalledTimes(2)
+  })
+
   it('reads Xenium through the loaders the main view uses', async () => {
     const loadDatasetOverview = vi.fn(async () => [point(1, 1), point(5, 9)])
     const loadGeneExpression = vi.fn(async () => ({

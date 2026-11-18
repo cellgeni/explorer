@@ -373,8 +373,10 @@ describe('CollectionBar previews', () => {
     })
     const bar = screen.getByRole('navigation', { name: 'Collection' })
 
+    // Each of the three opens its dataset, then asks for it again to read
+    // the cells.
     await waitFor(() => {
-      expect(loaders.getSpatialDataset).toHaveBeenCalledTimes(3)
+      expect(loaders.getSpatialDataset).toHaveBeenCalledTimes(6)
     })
     expect(bar.querySelector('.collection-bar-scale')).toBe(null)
     expect(within(bar).queryByText(/^(max|top) /)).toBe(null)

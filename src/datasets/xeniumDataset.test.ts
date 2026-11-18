@@ -521,6 +521,94 @@ describe('XeniumDataset', () => {
     expect(conn.preparedSql[0]).toContain('FROM read_parquet( ? )')
   })
 
+  it('starts DuckDB again after a start fails, sharing each start between queries', async () => {
+    const cellId = intToCellId(1, 1)
+    const row = {
+      cell_id: cellId,
+      x_centroid: 1,
+      y_centroid: 2,
+      transcript_counts: 3,
+      cell_area: 4,
+    }
+    const conn = new FakeConnection([[row], [row]])
+    const createDuckDbClient = vi
+      .fn<() => Promise<DuckDbClientLike>>()
+      .mockRejectedValueOnce(new Error('extension download failed'))
+      .mockResolvedValue({ conn, loadSpatial: async () => {} })
+    const dataset = new XeniumDataset({
+      baseUrl: 'https://example.test/xenium/',
+      createDuckDbClient,
+      fetcher: async () => new Response(JSON.stringify({})),
+      openTiff: async () => ({}) as TiffPyramidLoader,
+    })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    await expect(dataset.cells(bbox)).rejects.toThrow('extension download failed')
+    const [first, second] = await Promise.all([dataset.cells(bbox), dataset.cells(bbox)])
+
+    expect(first.map((cell) => cell.id)).toEqual([cellId])
+    expect(second.map((cell) => cell.id)).toEqual([cellId])
+    expect(createDuckDbClient).toHaveBeenCalledTimes(2)
+  })
+
+  it('closes the DuckDB client it started when disposed, and starts another after', async () => {
+    const close = vi.fn(async () => {})
+    const conn = new FakeConnection([[], []])
+    const createDuckDbClient = vi.fn(
+      async (): Promise<DuckDbClientLike> => ({
+        conn,
+        loadSpatial: async () => {},
+        close,
+      }),
+    )
+    const dataset = new XeniumDataset({
+      baseUrl: 'https://example.test/xenium/',
+      createDuckDbClient,
+      fetcher: async () => new Response(JSON.stringify({})),
+      openTiff: async () => ({}) as TiffPyramidLoader,
+    })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    await dataset.cells(bbox)
+    dataset.dispose()
+    await vi.waitFor(() => expect(close).toHaveBeenCalledOnce())
+    await dataset.cells(bbox)
+
+    expect(createDuckDbClient).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves a DuckDB client passed in open when disposed', async () => {
+    const close = vi.fn(async () => {})
+    const dataset = makeDataset(new FakeConnection([[]]), {
+      duckDbClient: {
+        conn: new FakeConnection([[]]),
+        loadSpatial: async () => {},
+        close,
+      },
+    })
+
+    await dataset.cells({
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    })
+    dataset.dispose()
+    await Promise.resolve()
+
+    expect(close).not.toHaveBeenCalled()
+  })
+
   it('loads transcript expression directly for known cell ids', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([])
