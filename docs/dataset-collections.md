@@ -13,7 +13,8 @@ bar under the canvas. Choosing one opens it in place of the current dataset
 and keeps the selected genes, the annotation set and how cells are coloured,
 so you can step through sections with the same gene or cell type. One
 dataset is open at a time; sections registered to it can be shown
-[side by side](#side-by-side) with it, sharing its view.
+[side by side](#side-by-side) with it, sharing its view, and serial sections
+with depths can be [stacked in 3D](#3d-stack).
 
 The datasets of a collection are expected to share their genes and their
 annotation and metadata columns, such as one `cell_type` column with the
@@ -104,6 +105,7 @@ Unknown fields are errors, as in a dataset manifest.
 | `labels`           | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
 | `labelColumn`      | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
 | `coordinateSystem` | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                   |
+| `z`                | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`           |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -390,11 +392,64 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
   swaps it with the open one. A dataset outside the coordinate system closes
   the panels and fits the view.
 
+## 3D Stack
+
+Serial sections registered to each other can be stacked in 3D, each at its
+depth in the block, with the genes or cell types highlighted through all of
+them. Give each section of the coordinate system a `z`:
+
+```json
+{
+  "version": 1,
+  "datasets": [
+    { "dataset": "p1-s01.zarr", "name": "S01", "coordinateSystem": "patient-1", "z": 0 },
+    { "dataset": "p1-s02.zarr", "name": "S02", "coordinateSystem": "patient-1", "z": 10 },
+    { "dataset": "p1-s05.zarr", "name": "S05", "coordinateSystem": "patient-1", "z": 40 }
+  ]
+}
+```
+
+`z` is in the units the sections' cells are in, micrometres, such as each
+section's distance from the first one cut. Sections need not be evenly
+spaced or listed in order. Every section of a coordinate system has a `z`,
+or none does; a collection that mixes them is refused, naming the entries.
+The sections must be registered as for [side by side](#registered-coordinates):
+the viewer places each at its depth but does not move, rotate or warp it.
+
+With a stacked section open, the bar's `Stack in 3D` button (three layers)
+shows every section of its coordinate system over the views. `2D View`, or
+the button again, returns to them.
+
+- **What is drawn.** Each section's cells from its [preview](#previews) data,
+  as balls 10 µm across, coloured as the main view colours cells: by the
+  selected genes on the `Gene scale` (each section up to its own percentile,
+  or a typed top shared by all, as in the previews), or by the annotation
+  set's classes. Cells that score for the genes, or are in a shown class, are
+  solid. The others are a faint outline of the tissue that never hides a
+  coloured cell; `Other cells` turns it off. Without genes or an annotation
+  set, every cell is grey. `Cell point size` sizes the cells.
+- **Depth.** Sections a few micrometres apart across millimetres of tissue
+  are flat at their true spacing, so the stack opens stretched along z by a
+  power of two, to about a quarter as deep as it is wide. `Depth` shows the
+  stretch (×1 is the true spacing) and changes it from ×¼ to ×128.
+- **Moving.** Drag to rotate, Shift-drag to pan, scroll to zoom; the
+  fit button returns to the first view. Hovering a cell names its section and
+  the cell and its class, or gives its score.
+- **What is read.** Every section of the stack is read, whether the bar shows
+  it or not, four at a time. The panel lists the sections still being read,
+  and names those it cannot show: images, Visium HD and large plain `.h5ad`
+  files have no preview.
+- **Opening another section.** The bar stays under the stack. Choosing
+  another section of the stack keeps it, and so does a section of another
+  stacked coordinate system, which then shows its own stack. Any other dataset
+  opens in 2D.
+
 ## The Address
 
 The address keeps `collection=` next to `dataset=`, so a copied link reopens
-the collection with the same dataset and view, and a `compare=` for each
-section shown side by side, in order. It keeps the bar's `Expand`
+the collection with the same dataset and view, a `compare=` for each
+section shown side by side, in order, and `sectionView=3d` while the sections
+are stacked in 3D (not the 3D camera). It keeps the bar's `Expand`
 grid as `collectionView=grid` and `Previews` off as `collectionView=names`,
 so the bar opens the same way. Opening a dataset that is not
 in the collection, from the dataset menu or `Load Dataset`, closes the
@@ -429,7 +484,10 @@ as you type.
   can be shown beside it, and only their cells: no images or boundaries in
   the panels, and no side-by-side embedding views.
 - Panels draw every cell at one size, 10 µm across, so Visium spots are
-  smaller than in the main view.
+  smaller than in the main view. So does the 3D stack.
+- The 3D stack shows cells only: no images, boundaries or transcripts, and
+  sections are placed only by depth, so registration (rotation, warping)
+  must be done before the coordinates are written.
 - Class colours are kept while you switch datasets, not written into the
   address: a link restores the set, its hidden classes and whether it is
   hidden, with the dataset's own colours.

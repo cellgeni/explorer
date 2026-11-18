@@ -186,6 +186,19 @@ describe('shareableState', () => {
     ])
   })
 
+  it('round-trips the serial sections stacked in 3D', () => {
+    const hash = formatShareableState({
+      collectionUrl: 'https://example.test/c.json',
+      sectionView: '3d',
+      datasetUrl: 'https://example.test/s1.zarr',
+    })
+
+    expect(hash).toBe(
+      '#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&sectionView=3d&dataset=https%3A%2F%2Fexample.test%2Fs1.zarr',
+    )
+    expect(parseShareableState(hash).sectionView).toBe('3d')
+  })
+
   it('round-trips the MERSCOPE stain and plane', () => {
     const hash = formatShareableState({ merscopeImage: 'Cellbound1_z3' })
 

@@ -8,7 +8,6 @@ import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
 import { overviewCellRadiusMaxPixels } from '../../rendering/cellPointRenderer'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { fitExtentViewState } from '../../rendering/overviewViewState'
-import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   geneScaleBounds,
@@ -27,6 +26,7 @@ import {
   LINKED_SECTION_VIEW,
   linkedSectionLayers,
   scoredCells,
+  sectionOverlay,
 } from './linkedSectionLayers'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 
@@ -148,22 +148,10 @@ function LinkedSectionPanel({
       maxZoom: 10,
     }
   }, [cells, linkedView])
-  const overlay = useMemo((): PreviewOverlay | null => {
-    if (annotations !== null) {
-      if (classes === null) return null
-
-      const colors = colorsForAnnotations(classes.classes, annotations.colors)
-      return {
-        kind: 'classes',
-        classOf: classes.classOf,
-        colors: classes.classes.map(({ id }) =>
-          annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
-        ),
-      }
-    }
-
-    return showsGenes && scores !== null ? { kind: 'scores', scores } : null
-  }, [annotations, classes, scores, showsGenes])
+  const overlay = useMemo(
+    () => sectionOverlay({ scores, classes }, { genes: coloring.genes, annotations }),
+    [annotations, classes, coloring.genes, scores],
+  )
   // On Auto or a percentile top, each section tops out at that percentile of
   // its own scores above 0, as the main view does; a typed top is shared.
   const percentile = geneScalePercentile(scaleRange)

@@ -90,7 +90,12 @@ import {
   type CollectionView,
 } from './features/collection/collectionModel'
 import { useDatasetCollection } from './features/collection/useDatasetCollection'
-import { LinkedSections } from './features/collection/LinkedSections'
+import {
+  LinkedSections,
+  type LinkedSectionsColoring,
+} from './features/collection/LinkedSections'
+import { SectionStackViewer } from './features/collection/SectionStackViewer'
+import { stackSections } from './features/collection/sectionStackModel'
 import {
   compareUrlsAfterOpening,
   keepsViewOnOpening,
@@ -431,6 +436,13 @@ export function App({ dependencies }: AppProps = {}) {
     () => initialShareableState.compareUrls ?? [],
   )
   const [linkedViewChannel] = useState(() => new LinkedViewChannel())
+  // The collection whose open dataset's serial sections are stacked in 3D
+  // over the views (sectionView=3d), so the stack closes with it.
+  const [sectionStackCollectionUrl, setSectionStackCollectionUrl] = useState(() =>
+    initialShareableState.sectionView === '3d'
+      ? (initialShareableState.collectionUrl ?? null)
+      : null,
+  )
   // The view kept when a registered section opens in place of another.
   const [carriedView, setCarriedView] = useState<{
     readonly url: string
@@ -817,6 +829,22 @@ export function App({ dependencies }: AppProps = {}) {
     () => linkedSectionEntries(readyCollection, loadedDatasetUrl, compareUrls),
     [compareUrls, loadedDatasetUrl, readyCollection],
   )
+  const stackedSections = useMemo(
+    () => stackSections(readyCollection, loadedDatasetUrl),
+    [loadedDatasetUrl, readyCollection],
+  )
+  const openCollectionUrl =
+    datasetCollection.state.status === 'idle' ? null : datasetCollection.state.url
+  const sectionStackOpen =
+    sectionStackCollectionUrl !== null && sectionStackCollectionUrl === openCollectionUrl
+  const sectionStackShown = sectionStackOpen && stackedSections.length > 0
+  // Until the collection is read and its dataset open, the link's
+  // sectionView= stays as it was, like compare=.
+  const linkSectionView =
+    sectionStackOpen &&
+    (readyCollection === null || loadedDatasetUrl === null || stackedSections.length > 0)
+      ? '3d'
+      : undefined
   // Until the collection is read and its dataset open, the link's compare=
   // stays as it was.
   const linkCompareUrls =
@@ -3702,6 +3730,7 @@ export function App({ dependencies }: AppProps = {}) {
             collectionUrl: datasetCollection.state.url,
             collectionView: collectionViewForLink(collectionView),
             compareUrls: linkCompareUrls,
+            sectionView: linkSectionView,
           }),
       // The loaded dataset, not the address box: until a load finishes the
       // link keeps the dataset it was opened with (15.1-L).
@@ -4021,7 +4050,30 @@ export function App({ dependencies }: AppProps = {}) {
     annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
     paused: isLoading,
   })
-  const linkedSectionsKey = linkedSections.map((entry) => entry.url).join('\n')
+  // How the sections beside the open dataset, and those stacked in 3D, colour
+  // their cells: as the main view does.
+  const sectionColoring = useMemo(
+    (): LinkedSectionsColoring => ({
+      genes: collectionPreviewGenes,
+      colorScale: geneExpressionColorScale,
+      scaleRange: geneExpressionScaleRange,
+      annotations: collectionPreviewAnnotations,
+    }),
+    [
+      collectionPreviewAnnotations,
+      collectionPreviewGenes,
+      geneExpressionColorScale,
+      geneExpressionScaleRange,
+    ],
+  )
+  // The stacked sections are read whether in the bar or not, like those
+  // shown beside the open dataset.
+  const linkedSectionsKey = [
+    ...new Set([
+      ...linkedSections.map((entry) => entry.url),
+      ...(sectionStackShown ? stackedSections.map(({ entry }) => entry.url) : []),
+    ]),
+  ].join('\n')
   useEffect(() => {
     collectionPreviewStore?.setLinked(
       linkedSectionsKey === '' ? [] : linkedSectionsKey.split('\n'),
@@ -4049,6 +4101,11 @@ export function App({ dependencies }: AppProps = {}) {
         entry.url,
       ),
     )
+    // A section of another stack keeps the 3D view; any other dataset opens
+    // in 2D.
+    if (stackSections(readyCollection, entry.url).length === 0) {
+      setSectionStackCollectionUrl(null)
+    }
     handleOpenCollectionDataset(
       entry.url,
       collectionSwitchOpening({
@@ -4728,12 +4785,7 @@ export function App({ dependencies }: AppProps = {}) {
             entries={linkedSections}
             store={collectionPreviewStore}
             channel={linkedViewChannel}
-            coloring={{
-              genes: collectionPreviewGenes,
-              colorScale: geneExpressionColorScale,
-              scaleRange: geneExpressionScaleRange,
-              annotations: collectionPreviewAnnotations,
-            }}
+            coloring={sectionColoring}
             cellPointScale={cellPointScale}
             pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
             onOpen={handleSelectCollectionEntry}
@@ -4743,6 +4795,18 @@ export function App({ dependencies }: AppProps = {}) {
           />
         )}
       </div>
+      {sectionStackShown ? (
+        <SectionStackViewer
+          key={stackedSections[0]?.entry.coordinateSystem}
+          sections={stackedSections}
+          store={collectionPreviewStore}
+          coloring={sectionColoring}
+          cellPointScale={cellPointScale}
+          onClose={() => {
+            setSectionStackCollectionUrl(null)
+          }}
+        />
+      ) : null}
       {showStartScreen ? (
         <StartScreen
           open={datasetInfo.open}
@@ -4815,6 +4879,19 @@ export function App({ dependencies }: AppProps = {}) {
                   setCompareUrls(toggledCompareUrls(linkedSections, entry))
                 },
               }}
+              {...(stackedSections.length === 0
+                ? {}
+                : {
+                    stack: {
+                      sectionCount: stackedSections.length,
+                      shown: sectionStackShown,
+                      onToggle: () => {
+                        setSectionStackCollectionUrl(
+                          sectionStackShown ? null : openCollectionUrl,
+                        )
+                      },
+                    },
+                  })}
             />
           )
         }

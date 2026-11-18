@@ -254,6 +254,46 @@ describe('parseDatasetCollection', () => {
     ).toBe('collection.json: "datasets[0].coordinateSystem" must be a non-empty string.')
   })
 
+  it('keeps each serial section’s depth, and every section of a system has one or none does', () => {
+    const collection = parse({
+      version: 1,
+      datasets: [
+        { dataset: 's1.zarr', coordinateSystem: 'patient-1', z: 0 },
+        { dataset: 's2.zarr', coordinateSystem: 'patient-1', z: 12.5 },
+        { dataset: 'p2.zarr', coordinateSystem: 'patient-2' },
+        { dataset: 'atlas.zarr' },
+      ],
+    })
+
+    expect(collection.datasets.map((entry) => entry.z)).toEqual([
+      0,
+      12.5,
+      undefined,
+      undefined,
+    ])
+    expect(
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 's1.zarr', coordinateSystem: 'patient-1', z: '10' }],
+      }),
+    ).toBe('collection.json: "datasets[0].z" must be a number.')
+    expect(parseError({ version: 1, datasets: [{ dataset: 's1.zarr', z: 10 }] })).toBe(
+      'collection.json: "datasets[0].z" needs "datasets[0].coordinateSystem": a depth places a section among the others registered to it.',
+    )
+    expect(
+      parseError({
+        version: 1,
+        datasets: [
+          { dataset: 's1.zarr', coordinateSystem: 'patient-1' },
+          { dataset: 's2.zarr', coordinateSystem: 'patient-1', z: 10 },
+          { dataset: 'p2.zarr', coordinateSystem: 'patient-2' },
+        ],
+      }),
+    ).toBe(
+      'collection.json: "datasets[0]" has no "z", but "datasets[1]" in coordinate system "patient-1" has one; give every section of a coordinate system a "z", or none.',
+    )
+  })
+
   it('caps the number of datasets', () => {
     const datasets = Array.from({ length: MAX_COLLECTION_DATASETS + 1 }, (_, index) => ({
       dataset: `section-${index}.zarr`,

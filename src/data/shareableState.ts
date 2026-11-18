@@ -21,6 +21,9 @@ export interface ShareableState {
   // Registered sections of the collection shown beside the dataset, one
   // `compare=` each.
   readonly compareUrls?: readonly string[]
+  // `3d` when the collection's serial sections are stacked in 3D:
+  // `sectionView=`.
+  readonly sectionView?: string
   readonly datasetUrl?: string
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
@@ -124,6 +127,7 @@ export function parseShareableState(hash: string): ShareableState {
   const collectionUrl = readString(params, 'collection')
   const collectionView = readString(params, 'collectionView')
   const compareUrls = readStrings(params, 'compare')
+  const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readCsv(params, 'groups')
@@ -199,6 +203,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (compareUrls !== undefined) {
     state.compareUrls = compareUrls
+  }
+
+  if (sectionView !== undefined) {
+    state.sectionView = sectionView
   }
 
   if (datasetUrl !== undefined) {
@@ -456,6 +464,8 @@ export function formatShareableState(state: ShareableState): string {
       setOptionalString(params, 'compare', compareUrl, 'append')
     }
   }
+
+  setOptionalString(params, 'sectionView', state.sectionView)
 
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())

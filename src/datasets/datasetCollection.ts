@@ -43,6 +43,7 @@ export const DATASET_COLLECTION_ENTRY_KEYS = [
   'labels',
   'labelColumn',
   'coordinateSystem',
+  'z',
 ] as const
 
 // The dataset manifest defaults that make sense across datasets. Layer
@@ -80,6 +81,10 @@ export interface DatasetCollectionEntry {
   // same one put a point at the same place in each, so they can be shown
   // side by side with one view.
   readonly coordinateSystem?: string
+  // The section's depth in its coordinate system, in the same units as its
+  // cells (micrometres): serial sections with one stack in 3D. Every entry of
+  // a coordinate system has one, or none does.
+  readonly z?: number
 }
 
 export interface DatasetCollection {
@@ -140,6 +145,7 @@ export function parseDatasetCollection(
   const description = optionalString(json, 'description', '', fail)
   const source = parseSource(json.source, fail)
   const datasets = parseEntries(json.datasets, rootUrl, fail)
+  checkSectionDepths(datasets, fail)
   let defaults: DatasetCollectionDefaults | undefined
 
   if (json.defaults !== undefined) {
@@ -206,6 +212,13 @@ function parseEntries(
     const group = optionalString(entry, 'group', prefix, fail)
     const image = parseEntryImage(entry, rootUrl, prefix, fail)
     const coordinateSystem = optionalString(entry, 'coordinateSystem', prefix, fail)
+    const z = optionalFiniteNumber(entry, 'z', prefix, fail)
+
+    if (z !== undefined && coordinateSystem === undefined) {
+      fail(
+        `"${prefix}z" needs "${prefix}coordinateSystem": a depth places a section among the others registered to it.`,
+      )
+    }
 
     return {
       path,
@@ -214,8 +227,52 @@ function parseEntries(
       ...(group === undefined ? {} : { group }),
       ...(image === undefined ? {} : { image }),
       ...(coordinateSystem === undefined ? {} : { coordinateSystem }),
+      ...(z === undefined ? {} : { z }),
     }
   })
+}
+
+function optionalFiniteNumber(
+  entry: Readonly<Record<string, unknown>>,
+  key: string,
+  prefix: string,
+  fail: Fail,
+): number | undefined {
+  const value = entry[key]
+  if (value === undefined) return undefined
+
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fail(`"${prefix}${key}" must be a number.`)
+  }
+
+  return value
+}
+
+// A coordinate system's sections are stacked by depth, so a section without
+// one would have no place in the stack: either all have one or none does.
+function checkSectionDepths(
+  datasets: readonly DatasetCollectionEntry[],
+  fail: Fail,
+): void {
+  const firstWithDepth = new Map<string, number>()
+  const firstWithout = new Map<string, number>()
+
+  datasets.forEach((entry, index) => {
+    if (entry.coordinateSystem === undefined) return
+
+    const seen = entry.z === undefined ? firstWithout : firstWithDepth
+    if (!seen.has(entry.coordinateSystem)) seen.set(entry.coordinateSystem, index)
+  })
+
+  for (const [system, withDepth] of firstWithDepth) {
+    const without = firstWithout.get(system)
+
+    if (without !== undefined) {
+      fail(
+        `"datasets[${without}]" has no "z", but "datasets[${withDepth}]" in coordinate system ${JSON.stringify(system)} has one; give every section of a coordinate system a "z", or none.`,
+      )
+    }
+  }
 }
 
 function parseEntryImage(

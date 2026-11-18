@@ -83,12 +83,17 @@
           "type": "string",
           "minLength": 1,
           "description": "A name for registered coordinates, such as one patient's serial sections. Datasets with the same name put a point at the same place in each, so they can be shown side by side with one view, and switching between them keeps the view."
+        },
+        "z": {
+          "type": "number",
+          "description": "The section's depth in its coordinate system, in the same units as its cells (micrometres), such as its distance from the first section cut. Sections of a coordinate system with a `z` can be stacked in 3D. Give every section of a coordinate system a `z`, or none. Needs `coordinateSystem`."
         }
       },
       "dependentRequired": {
         "coordinates": ["image"],
         "labels": ["image"],
-        "labelColumn": ["labels"]
+        "labelColumn": ["labels"],
+        "z": ["coordinateSystem"]
       },
       "additionalProperties": false
     },

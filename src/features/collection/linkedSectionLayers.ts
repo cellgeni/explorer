@@ -7,8 +7,11 @@ import {
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import { colorsForAnnotations } from '../annotations/annotationModel'
+import type { CollectionBarAnnotations } from './CollectionBar'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 import { hexRgb, type PreviewOverlay } from './collectionPreviewRaster'
+import type { PreviewEntry } from './collectionPreviewStore'
 
 // The layers of a panel beside the main view: a registered section's cells
 // from its collection preview, coloured as the main view colours them. Each
@@ -54,6 +57,36 @@ export interface LinkedScoredCells {
   readonly colors: Uint8Array
   // Each drawn cell's index in PreviewScores.
   readonly order: Uint32Array
+}
+
+// What a section's cells are coloured by: the annotation set's classes, the
+// hidden ones faded, or else the genes' scores. Null draws the cells only,
+// as while what they are coloured by is read.
+export function sectionOverlay(
+  preview: Pick<PreviewEntry, 'scores' | 'classes'> | null,
+  coloring: {
+    readonly genes: readonly string[]
+    readonly annotations: CollectionBarAnnotations | null
+  },
+): PreviewOverlay | null {
+  const { annotations } = coloring
+
+  if (annotations !== null) {
+    const classes = preview?.classes ?? null
+    if (classes === null) return null
+
+    const colors = colorsForAnnotations(classes.classes, annotations.colors)
+    return {
+      kind: 'classes',
+      classOf: classes.classOf,
+      colors: classes.classes.map(({ id }) =>
+        annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
+      ),
+    }
+  }
+
+  const scores = preview?.scores ?? null
+  return coloring.genes.length > 0 && scores !== null ? { kind: 'scores', scores } : null
 }
 
 export function linkedSectionLayers(

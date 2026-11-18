@@ -39,5 +39,6 @@ export {
   RulerIcon,
   SettingsIcon,
   SideBySideIcon,
+  StackIcon,
   TargetIcon,
 } from './icons'

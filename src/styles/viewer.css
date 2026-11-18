@@ -1112,6 +1112,44 @@
   pointer-events: none;
 }
 
+/* Serial sections stacked in 3D, over every viewer: on the canvas colour,
+   so cells read as they do in the views. */
+.section-stack {
+  background: var(--canvas);
+}
+
+.section-stack .volume-viewer-hint {
+  color: var(--text-3);
+}
+
+.section-stack-summary {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.section-stack-scale {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-stack-scale-genes {
+  overflow: hidden;
+  color: var(--text-1);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.section-stack-scale-ramp {
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+}
+
 @media (max-width: 859.98px) {
   .volume-viewer-hint {
     display: none;
