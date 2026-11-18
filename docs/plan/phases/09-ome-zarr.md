@@ -25,6 +25,10 @@ Shipped on 2026-07-10 (`f9560ee`) with later fixes. Not planned in advance.
 - [x] A z-stack without a channel axis (`z, y, x`, such as the OME-NGFF 0.5
       SciVis `engine.ome.zarr`) is one grayscale channel, so it gets the
       `Z plane` control too (2026-11-18).
+- [x] A 3D view of OME-Zarr z-stacks: `View` › `3D` reads the enabled
+      channels at the finest level within 64 Mi voxels and 2,048 per side, and
+      ray-marches them in a deck.gl `OrbitView` with `Max intensity` and
+      `Translucent` modes and a `Depth` stretch (2026-11-18).
 - [x] An image group inside a `.zarr` store, such as `sample.zarr/images/he`
       or a bioformats2raw series `image.zarr/0`, is read as OME-Zarr: a path
       below a `.zarr` folder whose last part has no dot (#114, 2026-11-15).
@@ -36,5 +40,8 @@ Known gaps:
 - [x] Only `t = 0` and `z = 0` are shown. Since 2026-11-14 z planes have
       the `Z plane` control.
 - [ ] Only one `t` is shown: `omero.rdefs.defaultT`, else 0.
+- [ ] The 3D view: OME-TIFF z-stacks and custom layers, cells and transcripts
+      in 3D, the GPU's real 3D texture limit, and keeping the view in the
+      share link.
 - [ ] No IndexedDB caching of OME-Zarr chunks.
 - [ ] No smoke test; the nightly examples test loads one OME-Zarr image.

@@ -836,6 +836,56 @@ describe('OME-Zarr image loader', () => {
     ])
   })
 
+  it('reads a channel of a z-stack as a volume', async () => {
+    const rootUrl = 'https://example.test/images/stack.ome.zarr'
+    const fetcher = fetcherForFiles(
+      zStackOmeZarrFiles('/images/stack.ome.zarr', {
+        zAxisUnit: 'micrometer',
+        zScale: 2,
+      }),
+    )
+    const loader = await openOmeZarrImageWithOptions(`${rootUrl}#c=1&z=0`, { fetcher })
+    const progress: number[] = []
+
+    expect(loader.volumeLevels()).toEqual([
+      { level: 0, width: 2, height: 2, depth: 3, voxelSize: { x: 1, y: 1, z: 2 } },
+    ])
+
+    const volume = await loader.loadVolume(0, undefined, (planes) => {
+      progress.push(planes)
+    })
+
+    // Every plane of channel 1, whichever plane the URL selects.
+    expect(volume).toMatchObject({ width: 2, height: 2, depth: 3 })
+    expect(Array.from(volume.data)).toEqual([
+      11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13,
+    ])
+    expect(progress).toEqual([1, 2, 3])
+  })
+
+  it('leaves the plane spacing unknown when only x and y have units', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stack.ome.zarr',
+      {
+        fetcher: fetcherForFiles(
+          zStackOmeZarrFiles('/images/stack.ome.zarr', { xyUnit: 'micrometer' }),
+        ),
+      },
+    )
+
+    expect(loader.volumeLevels()[0]?.voxelSize).toEqual({ x: 1, y: 1 })
+  })
+
+  it('has no volume levels without a z axis', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/legacy.ome.zarr',
+      { fetcher: fetcherForFiles(legacyV2OmeZarrFiles('/images/legacy.ome.zarr')) },
+    )
+
+    expect(loader.volumeLevels()).toEqual([])
+    await expect(loader.loadVolume(0)).rejects.toThrow('no z axis')
+  })
+
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {
     await expect(
       openOmeZarrImageWithOptions('https://example.test/generic.zarr', {
@@ -902,8 +952,11 @@ function zStackOmeZarrFiles(
     readonly omero?: unknown
     readonly zAxisUnit?: string
     readonly zScale?: number
+    readonly xyUnit?: string
   } = {},
 ): Map<string, Uint8Array> {
+  const xyUnit = options.xyUnit === undefined ? {} : { unit: options.xyUnit }
+
   const files = new Map([
     [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
     [
@@ -919,8 +972,8 @@ function zStackOmeZarrFiles(
                 type: 'space',
                 ...(options.zAxisUnit === undefined ? {} : { unit: options.zAxisUnit }),
               },
-              { name: 'y', type: 'space' },
-              { name: 'x', type: 'space' },
+              { name: 'y', type: 'space', ...xyUnit },
+              { name: 'x', type: 'space', ...xyUnit },
             ],
             datasets: [
               {

@@ -1,4 +1,5 @@
 import { useId, useState, type FormEvent } from 'react'
+import { Segmented } from '../../components/ui'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
 import { MorphologyZPlaneControl } from '../morphology/MorphologyZPlaneControl'
@@ -42,6 +43,33 @@ export function ImageZPlaneControl({ image }: { readonly image: ImageSectionMode
       requestedZPlane={image.requestedZPlane}
       onZPlaneChange={image.onZPlaneChange}
     />
+  )
+}
+
+// 2D or 3D, for a z-stack the 3D view can show.
+export function ImageVolumeViewControl({ image }: { readonly image: ImageSectionModel }) {
+  const volumeView = image.volumeView
+
+  if (volumeView === null) {
+    return null
+  }
+
+  return (
+    <div className="ui-field ui-field--inline image-volume-view-control">
+      <span className="ui-field-label">View</span>
+      <Segmented
+        title="Show the image one z plane at a time, or the whole z-stack in 3D"
+        label="Image view"
+        value={volumeView.open ? '3d' : '2d'}
+        options={[
+          { value: '2d', label: '2D', title: 'Show one z plane at a time' },
+          { value: '3d', label: '3D', title: 'Show the whole z-stack in 3D' },
+        ]}
+        onChange={(value) => {
+          volumeView.onOpenChange(value === '3d')
+        }}
+      />
+    </div>
   )
 }
 

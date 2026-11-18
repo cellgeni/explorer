@@ -260,6 +260,9 @@ lets tests replace them.
   share its tiles, and its schedulers keep each canvas's wanted tiles apart,
   read the canvas with the lowest priority first, and can stay under one
   limit of requests in flight (`TileRequestSlots`).
+- `VolumeViewer` (`src/components/VolumeViewer.tsx`) draws an OME-Zarr
+  z-stack in 3D over the 2D view, with a deck.gl `OrbitView` and the
+  ray-marching `VolumeLayer` (`src/rendering/volumeLayer.ts`).
 
 ## Default Colours
 

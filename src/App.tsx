@@ -197,6 +197,8 @@ import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddi
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
+import { MorphologyVolumeView } from './features/morphology/MorphologyVolumeView'
+import { morphologyVolumeLevels } from './features/morphology/useMorphologyVolumeWorkflow'
 import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
 import { useCustomMorphologyLayerWorkflow } from './features/morphology/useCustomMorphologyLayerWorkflow'
 import { magicLensScopeLabel, magicLensStatusCopy } from './features/roi/magicLensModel'
@@ -3141,6 +3143,23 @@ export function App({ dependencies }: AppProps = {}) {
       refs: { loadRequestIdRef: loadRequestId },
       setters: { setMorphologyImage, setMorphologyState },
     })
+  // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
+  // dataset it was opened on: another dataset opens in 2D.
+  const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
+  const volumeViewAvailable = useMemo(
+    () => morphologyVolumeLevels(morphologyImage).length > 0,
+    [morphologyImage],
+  )
+  const volumeViewShown =
+    volumeViewAvailable &&
+    volumeViewDatasetUrl !== null &&
+    volumeViewDatasetUrl === loadedDatasetUrl
+  const setVolumeViewOpen = useCallback(
+    (open: boolean) => {
+      setVolumeViewDatasetUrl(open ? loadedDatasetUrl : null)
+    },
+    [loadedDatasetUrl],
+  )
   const { handleLoadCustomLayer, handleRemoveCustomLayer } =
     useCustomMorphologyLayerWorkflow({
       callbacks: {
@@ -4040,6 +4059,9 @@ export function App({ dependencies }: AppProps = {}) {
     setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
     setImageLayerOpacity,
     updateMorphologyChannel,
+    volumeViewAvailable,
+    volumeViewOpen: volumeViewShown,
+    setVolumeViewOpen,
   })
   const cellsSection = useCellsSectionModel({
     analysisHeaderCopy,
@@ -4623,6 +4645,15 @@ export function App({ dependencies }: AppProps = {}) {
               ? { boundaryErrorMessage: formatStructuredError(viewerBoundaryState.error) }
               : {})}
           />
+          {volumeViewShown ? (
+            <MorphologyVolumeView
+              image={morphologyImage}
+              settings={morphologyChannelSettings}
+              onClose={() => {
+                setVolumeViewOpen(false)
+              }}
+            />
+          ) : null}
           {linkedSections.length === 0 ? null : (
             <div className="viewer-tile-header">
               <span className="viewer-tile-name" title={loadedDatasetName ?? undefined}>
