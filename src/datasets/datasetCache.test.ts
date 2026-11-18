@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
-import { DatasetCache, retainDataset } from './datasetCache'
+import { DatasetCache, dropDatasets, retainDataset } from './datasetCache'
 import { XeniumDataset } from './xeniumDataset'
 import type { DuckDbClientLike, XeniumDuckDbConnection } from './xeniumDataset'
 import type { TiffPyramidLoader } from '../tiff/loader'
@@ -96,6 +96,27 @@ describe('dataset cache', () => {
     release()
     await settle()
     expect(dataset.disposals).toBe(1)
+  })
+
+  it("drops a URL's datasets from every cache, keeping other URLs", async () => {
+    const viewerCache = new DatasetCache<FakeDataset>(2)
+    const sideCache = new DatasetCache<FakeDataset>(2)
+    const url = 'https://example.test/cache-f/a'
+    const other = 'https://example.test/cache-f/b'
+    const open = (cache: DatasetCache<FakeDataset>, key: string, baseUrl: string) =>
+      cache.get(key, baseUrl, async () => new FakeDataset())
+    const viewerDataset = await open(viewerCache, `${url}\nselection=1`, url)
+    const sideDataset = await open(sideCache, url, url)
+    const kept = await open(viewerCache, other, other)
+
+    dropDatasets(`${url}/`)
+    await settle()
+
+    expect(viewerDataset.disposals).toBe(1)
+    expect(sideDataset.disposals).toBe(1)
+    expect(kept.disposals).toBe(0)
+    await expect(open(viewerCache, other, other)).resolves.toBe(kept)
+    await expect(open(sideCache, url, url)).resolves.not.toBe(sideDataset)
   })
 
   it('does not keep a dataset that failed to open', async () => {

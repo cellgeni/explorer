@@ -45,8 +45,10 @@ When the viewer probes a folder:
 - A manifest that fails validation stops the load with an error. It is not
   silently ignored.
 
-The manifest is fetched with `cache: no-cache`, so edits show on the next
-load. It needs CORS like every other file but not byte-range support.
+The manifest is fetched with `cache: no-cache` each time the dataset is
+loaded, so edits show on the next load: a dataset already opened under a
+different manifest is opened again from the new one. It needs CORS like every
+other file but not byte-range support.
 
 ## Example
 
@@ -83,7 +85,7 @@ its standard name in the manifest's folder.
 | Field         | Required | Value                                                                                                 |
 | ------------- | -------- | ----------------------------------------------------------------------------------------------------- |
 | `version`     | Yes      | `1`                                                                                                   |
-| `platform`    | Yes      | `xenium`, `atera`, `visium`, `visium-hd`, `h5ad`, `spatialdata`, or `image`                           |
+| `platform`    | Yes      | `xenium`, `atera`, `visium`, `visium-hd`, `merscope`, `h5ad`, `spatialdata`, or `image`               |
 | `name`        | No       | Display name, shown in the top bar, the info drawer, the log, and diagnostics                         |
 | `description` | No       | What the dataset shows, shown in the info drawer's About section                                      |
 | `source`      | No       | Where the data comes from. See [Source](#source)                                                      |
@@ -416,9 +418,13 @@ How defaults combine with other settings:
 
 ## Editor Support
 
-The schema is deployed with the viewer at `/schemas/explorer-manifest.v1.json`.
-Set `$schema` to that URL on your viewer's host (or a local copy) and editors
-such as VS Code will complete field names and flag errors as you type.
+The schema is deployed with the viewer, at `schemas/explorer-manifest.v1.json`
+under the viewer's address: for the hosted viewer,
+`https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json`; for a
+deployment at `https://viewer.example.org/xenium/`,
+`https://viewer.example.org/xenium/schemas/explorer-manifest.v1.json`. Set
+`$schema` to that URL (or a local copy) and editors such as VS Code will
+complete field names and flag errors as you type.
 
 ## How It Works
 
@@ -428,7 +434,10 @@ such as VS Code will complete field names and flag errors as you type.
    the manifest as `manifest`.
 2. Detection registers the manifest for the entered URL with
    `setDatasetManifest` (`src/data/datasetFiles.ts`), and clears it when a
-   later detection of the same URL finds none.
+   later detection of the same URL finds none. When a later detection finds
+   a different manifest, or none, the datasets opened for the URL are dropped
+   from every dataset cache (`dropDatasets`, `src/datasets/datasetCache.ts`),
+   so the next load reads the new files.
 3. Readers receive the entered URL, as before, and ask for files by role:
    `datasetFileUrlFor(baseUrl, 'cells')` returns the manifest URL or the
    standard one, and `datasetFileLabelFor` gives the name used in messages.

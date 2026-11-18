@@ -56,7 +56,9 @@ unzip "explorer-$TAG.zip"
 
 ## Build Locally
 
-Install dependencies and run the normal verification pass:
+Use Node.js 24, the version CI uses, as in the
+[README's Quick Start](../README.md#quick-start). From the repository root,
+install dependencies and run the normal verification pass:
 
 ```sh
 npm ci
@@ -74,9 +76,9 @@ Smoke test the production build before uploading:
 npm run preview
 ```
 
-The preview server is configured with the required cross-origin isolation
-headers. Load the app, run `Diagnose Dataset`, and load a known dataset before
-publishing.
+The preview server sends the cross-origin isolation headers recommended for
+production (see [Recommended Shape](#recommended-shape)). Load the app, run
+`Diagnose Dataset`, and load a known dataset before publishing.
 
 If a local build will be served from a subpath such as
 `https://viewer.example.org/xenium/`, build with a matching Vite base:
@@ -133,12 +135,11 @@ intentional serving model for your environment.
 
 ## Upload `dist/`
 
-Upload hashed Vite assets with a long immutable cache lifetime, then upload the
-HTML and any non-hashed root files with no-cache headers:
+Upload hashed Vite assets with a long immutable cache lifetime first, then
+upload the HTML and any non-hashed root files with no-cache headers:
 
 ```sh
 aws s3 sync dist/assets "s3://$APP_BUCKET/assets" \
-  --delete \
   --cache-control "public,max-age=31536000,immutable"
 
 aws s3 sync dist "s3://$APP_BUCKET" \
@@ -151,7 +152,6 @@ For S3-compatible storage, add the endpoint URL to the same commands:
 
 ```sh
 aws --endpoint-url "$S3_ENDPOINT_URL" s3 sync dist/assets "s3://$APP_BUCKET/assets" \
-  --delete \
   --cache-control "public,max-age=31536000,immutable"
 
 aws --endpoint-url "$S3_ENDPOINT_URL" s3 sync dist "s3://$APP_BUCKET" \
@@ -159,6 +159,20 @@ aws --endpoint-url "$S3_ENDPOINT_URL" s3 sync dist "s3://$APP_BUCKET" \
   --exclude "assets/*" \
   --cache-control "no-cache,max-age=0,must-revalidate"
 ```
+
+The assets upload leaves out `--delete` on purpose. The app loads most of its
+code when it is first needed: each platform's reader, for example, is loaded
+when a dataset of that platform is opened. A tab opened before the deploy
+still asks for the previous build's files, so deleting them would break that
+tab the next time it opens another kind of dataset. Order matters for the
+same reason: the new `index.html` must not be served before its assets are
+there. Excluded files are never deleted, so the second command's `--delete`
+removes only root files that the new build no longer has.
+
+To remove old assets, run the assets command again from the same build with
+`--delete` some time after the deploy (days, not minutes), when tabs opened
+before it are unlikely to still be in use. That deletes the assets of every
+earlier build.
 
 Do not run `aws s3 sync dist s3://bucket --delete` at the root of a bucket that
 also contains spatial datasets or image sources. Use a dedicated app bucket, or
@@ -205,19 +219,24 @@ the no-cache `Cache-Control` headers above so clients revalidate them.
 The app can point at Xenium output folders, Visium HD output folders, direct
 H5AD files, SpatialData Zarr stores, and image-only URLs, but the browser must
 be able to range-read large binary assets. For S3 or S3-compatible datasets,
-configure the dataset bucket, gateway, CDN, or reverse proxy with:
+configure the dataset bucket, gateway, CDN, or reverse proxy with this policy,
+saved as `cors.json`:
 
 ```json
-[
-  {
-    "AllowedOrigins": ["https://viewer.example.org"],
-    "AllowedMethods": ["GET", "HEAD"],
-    "AllowedHeaders": ["Range"],
-    "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges", "ETag"],
-    "MaxAgeSeconds": 3000
-  }
-]
+{
+  "CORSRules": [
+    {
+      "AllowedOrigins": ["https://viewer.example.org"],
+      "AllowedMethods": ["GET", "HEAD"],
+      "AllowedHeaders": ["Range"],
+      "ExposeHeaders": ["Content-Length", "Content-Range", "Accept-Ranges", "ETag"],
+      "MaxAgeSeconds": 3000
+    }
+  ]
+}
 ```
+
+The AWS S3 console's CORS editor takes only the list inside `CORSRules`.
 
 Apply it with:
 

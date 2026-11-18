@@ -25,8 +25,11 @@ TIFF requirements:
 - Tiled or stripped. A stripped image is read in bands of whole rows, so
   tiled images load faster, and compressed strips that decode to more than
   256 MiB each are refused.
-- Pyramid levels stored as `SubIFDs` of the base image. Pyramids stored as
-  extra top-level IFDs are ignored, so only full resolution is shown.
+- Pyramid levels stored as `SubIFDs` of the base image, or, without
+  OME-XML, as a [page pyramid](./modalities/image.md#page-pyramids): later
+  top-level IFDs tiled with the first one's tile size, each smaller, as SVS
+  stores them. Other top-level IFDs are not taken as levels; without a
+  pyramid, only full resolution is shown.
 - 8- or 16-bit samples with 1, 3, or 4 samples per pixel.
 - Pixel size from OME-XML `PhysicalSizeX`. Without OME-XML the viewer assumes
   0.2125 µm per pixel.

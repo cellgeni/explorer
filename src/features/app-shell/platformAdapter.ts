@@ -220,8 +220,8 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
   trueSizePoints: false,
   featureLoadEnabled: (loadState) => loadState.status === 'ready',
   effectiveTranscriptOverlay: () => false,
-  // Cell boundaries come from a label image a collection pairs with the
-  // table; without one the dataset returns none.
+  // Cell boundaries come from a label image a manifest or collection pairs
+  // with the table; without one the dataset returns none.
   cellBoundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
   geneExpressionOverlayEnabled: () => true,
   cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,

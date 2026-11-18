@@ -540,8 +540,11 @@ coordinate system, table, shapes, labels, and image are chosen.
 Image-only sources render the image pyramid without requiring transcriptomics
 files. Supported URL forms include `.ome.tif`, `.ome.tiff`, `.tif`, `.tiff`,
 `.qptiff`, `.svs`, `.ome.zarr`, `.zarr`, `zarr.json`, `.zattrs`, and `.ndpi`.
-TIFFs must be tiled with `SubIFD` pyramid levels (QPTIFF, SVS, and NDPI use
-their own layouts); see
+Tiled pyramidal TIFFs load fastest. Stripped TIFFs open too, but a large one
+without reduced levels is slow to show zoomed out. Pyramid levels are read
+from `SubIFDs`, or from later pages tiled like the first and smaller (a page
+pyramid); QPTIFF, SVS, and NDPI use their own layouts. Without either, only
+full resolution is shown. See
 [Image-only and GeoJSON](./image-only-and-geojson.md#supported-image-urls).
 For an SVS slide, the info drawer's Slide images section shows the slide's
 label, its macro (a photograph of the whole glass slide), and its thumbnail;

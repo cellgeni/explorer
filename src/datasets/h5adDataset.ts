@@ -712,7 +712,6 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  // Visium spot outlines; other AnnData has no element geometry.
   // Visium spot outlines, or outlines traced from the attached label image;
   // other AnnData has no element geometry.
   async elements(bbox?: BBox): Promise<ElementBatch<SpatialElementId>> {

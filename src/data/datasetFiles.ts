@@ -8,27 +8,33 @@ import {
   type DatasetManifest,
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
+import { dropDatasets } from '../datasets/datasetCache'
 import type { DatasetCollection } from '../datasets/datasetCollection'
 
-// Manifests found by detection, per dataset URL. Readers only receive the
-// dataset URL, so they look up relocated files here.
-const datasetManifests = new Map<string, DatasetManifest>()
+// Manifests found by detection, per dataset URL, and null where detection
+// found none. Readers only receive the dataset URL, so they look up relocated
+// files here.
+const datasetManifests = new Map<string, DatasetManifest | null>()
 
 export function setDatasetManifest(
   baseUrl: string,
   manifest: DatasetManifest | undefined,
 ): void {
   const key = datasetUrlKey(baseUrl)
+  const previous = datasetManifests.get(key)
+  const next = manifest ?? null
+  datasetManifests.set(key, next)
 
-  if (manifest === undefined) {
-    datasetManifests.delete(key)
-  } else {
-    datasetManifests.set(key, manifest)
+  // A dataset opened under another manifest holds the files that one named,
+  // and its readers would find the new ones here, so it is opened afresh.
+  // The first detection of a URL is the one its dataset opens with.
+  if (previous !== undefined && JSON.stringify(previous) !== JSON.stringify(next)) {
+    dropDatasets(key)
   }
 }
 
 export function datasetManifestFor(baseUrl: string): DatasetManifest | undefined {
-  return datasetManifests.get(datasetUrlKey(baseUrl))
+  return datasetManifests.get(datasetUrlKey(baseUrl)) ?? undefined
 }
 
 // Images that collections pair with their datasets, per dataset URL. A

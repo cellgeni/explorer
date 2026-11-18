@@ -118,7 +118,7 @@ the canvas, a `nav` named "Collection":
   or all share the Gene scale's range when its top is a score. When it is annotations, the cells of each class in its
   colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
-  MB file, read when opened" (a plain `.h5ad` over 64 MB), or "Preview
+  MB file, read when opened" (a plain `.h5ad` over 64 MiB), or "Preview
   failed" with the reason as its tooltip.
 - `Expand` (arrows out, `aria-expanded`), next to "Collection", lays the
   previews out as a grid over the canvas, with the heading and buttons
@@ -308,15 +308,15 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 **Appearance**
 
-| Control                 | Type                         | Default                                          | Notes                                                                                                                                                                                        |
-| ----------------------- | ---------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Cell boundaries`       | Checkbox                     | On for Xenium and SpatialData; off for Visium HD | Shown for H5AD but has no effect (no polygons)                                                                                                                                               |
-| `Nucleus boundaries`    | Checkbox                     | Off                                              | Xenium, Visium HD, Atera, and SpatialData stores with a nucleus shapes element (`nucleus_boundaries`)                                                                                        |
-| `Show off-tissue spots` | Checkbox                     | Off                                              | Visium, when obs `in_tissue` marks spots off the tissue. Reloads the dataset without reading the file again; genes, colours and the ROI are kept. `voff`                                     |
-| `Cell fill opacity`     | Slider 0–100%, step 5        | 50%                                              |                                                                                                                                                                                              |
-| `Cell boundary opacity` | Slider 0–100%, step 5        | 50%                                              |                                                                                                                                                                                              |
-| `Cell point size`       | Slider 0.5×–32×              | 1×                                               | Multiplies the size of cells drawn as points and their on-screen limits. Steps 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32. Cells without an area are 10–20 µm across at 1×. `cellSize` |
-| `Bin size`              | Segmented: 16 µm, 8 µm, 2 µm | 16 µm if present, else 8 µm                      | Visium HD, in the "Visium HD dataset" panel with "Dataset type" and "Active bins" rows. Undetected tiers are disabled                                                                        |
+| Control                 | Type                         | Default                                                                            | Notes                                                                                                                                                                                                              |
+| ----------------------- | ---------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Cell boundaries`       | Checkbox                     | On for Xenium and SpatialData, and AnnData with attached labels; off for Visium HD | For AnnData other than Visium, outlines come from a label image attached by a [manifest](./dataset-manifest.md#anndata-with-an-image) or [collection](./dataset-collections.md#labels); without one there are none |
+| `Nucleus boundaries`    | Checkbox                     | Off                                                                                | Xenium, Visium HD, Atera, and SpatialData stores with a nucleus shapes element (`nucleus_boundaries`)                                                                                                              |
+| `Show off-tissue spots` | Checkbox                     | Off                                                                                | Visium, when obs `in_tissue` marks spots off the tissue. Reloads the dataset without reading the file again; genes, colours and the ROI are kept. `voff`                                                           |
+| `Cell fill opacity`     | Slider 0–100%, step 5        | 50%                                                                                |                                                                                                                                                                                                                    |
+| `Cell boundary opacity` | Slider 0–100%, step 5        | 50%                                                                                |                                                                                                                                                                                                                    |
+| `Cell point size`       | Slider 0.5×–32×              | 1×                                                                                 | Multiplies the size of cells drawn as points and their on-screen limits. Steps 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32. Cells without an area are 10–20 µm across at 1×. `cellSize`                       |
+| `Bin size`              | Segmented: 16 µm, 8 µm, 2 µm | 16 µm if present, else 8 µm                                                        | Visium HD, in the "Visium HD dataset" panel with "Dataset type" and "Active bins" rows. Undetected tiers are disabled                                                                                              |
 
 **Colour by**
 
@@ -1283,7 +1283,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Cell card                                      | Cell Info + Z histogram | Observations + Z histogram (selected genes) | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
 | Cell-id annotations                            | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓                | —                |
 | GeoJSON shapes                                 | ✓                       | ✓                                           | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
-| Cell boundaries                                | ✓                       | ✓                                           | Spot outlines | Segmented outputs | ✓ (read whole)   | —                | ✓ (shapes)       | —                |
+| Cell boundaries                                | ✓                       | ✓                                           | Spot outlines | Segmented outputs | ✓ (read whole)   | Attached labels  | ✓ (shapes)       | —                |
 | Nucleus boundaries                             | ✓                       | ✓                                           | —             | ✓                 | —                | —                | ✓ (shapes)       | —                |
 | Selection card                                 | Cells                   | Cells                                       | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
 | Plots panel                                    | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
@@ -1367,8 +1367,11 @@ ROI is added to the selections as "Shared ROI" once ROI queries can run (after
 dataset preparation, or once Visium HD bins load); a saved selection with the
 same outline is shown instead, as after a Visium off-tissue toggle.
 
-Not saved: the layer panel collapse, the measurement line, a pinned transcript, saved gene sets, annotation colours
-and visibility, selections other than the card's, and GeoJSON shapes.
+Hidden annotation classes and sets are saved (`hiddenClasses`, `hiddenSets`)
+and applied when the link loads those annotations. Not saved: the layer panel
+collapse, the measurement line, a pinned transcript, saved gene sets,
+annotation colours, annotations made or imported in the viewer, selections
+other than the card's, and GeoJSON shapes.
 
 ## State
 
