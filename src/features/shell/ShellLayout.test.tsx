@@ -9,6 +9,7 @@ import {
   testEmbeddingModel,
   testImageSectionModel,
   testPlotsModel,
+  testCellQueryModel,
   testTopBarModel,
   testTranscriptsSectionModel,
   testViewSettingsModel,
@@ -17,6 +18,7 @@ import { plotTestInput } from '../../test/plotFixtures'
 import type { CardStackModel } from '../cards/cardModels'
 import { heatmapModel } from '../plots/heatmap'
 import type { PlotsModel } from '../plots/usePlotsModel'
+import type { CellQueryModel } from '../query/useCellQueryModel'
 import { DEFAULT_SHELL_PANELS, type ShellPanelState } from './shellLinkModel'
 import { ShellLayout } from './ShellLayout'
 import { NARROW_SCREEN_QUERY } from './useNarrowScreen'
@@ -543,6 +545,151 @@ describe('ShellLayout', () => {
 
       expect(screen.getByRole('button', { name: 'Show Embedding' })).toBeVisible()
       expect(screen.queryByRole('button', { name: 'Show Plots' })).toBeNull()
+    })
+  })
+
+  describe('the Cell Query window (plan 23-D9)', () => {
+    function QueryHarness({
+      initial,
+      query = testCellQueryModel(),
+      children = <div>canvas</div>,
+    }: {
+      readonly initial: ShellPanelState
+      readonly query?: CellQueryModel | null
+      readonly children?: ReactNode
+    }) {
+      const [panels, setPanels] = useState(initial)
+      return (
+        <ShellLayout
+          topBar={testTopBarModel()}
+          info={testDatasetInfoModel()}
+          library={testDatasetLibraryModel()}
+          settings={testViewSettingsModel()}
+          layerPanel={{
+            sections: [
+              {
+                id: 'cells',
+                title: 'Cells',
+                visible: true,
+                onVisibleChange: vi.fn(),
+                visibilityDisabled: false,
+                summary: 'graphclust',
+                loading: false,
+              },
+            ],
+          }}
+          image={testImageSectionModel()}
+          cells={testCellsSectionModel()}
+          transcripts={testTranscriptsSectionModel()}
+          annotations={testAnnotationsSectionModel()}
+          cards={NO_CARDS}
+          embedding={testEmbeddingModel()}
+          plots={testPlotsModel()}
+          query={query}
+          panels={panels}
+          onPanelsChange={setPanels}
+        >
+          {children}
+        </ShellLayout>
+      )
+    }
+
+    function queryWindow(): HTMLElement {
+      return screen.getByRole('region', { name: 'Cell Query' })
+    }
+
+    it('opens from Cells to the left of the Embedding and Plots windows', () => {
+      stubScreenWidth(false)
+      render(
+        <QueryHarness
+          initial={{
+            ...DEFAULT_SHELL_PANELS,
+            expanded: ['cells'],
+            embeddingOpen: true,
+            plotsOpen: true,
+          }}
+        />,
+      )
+
+      fireEvent.click(screen.getByRole('button', { name: 'Show Query' }))
+
+      expect(queryWindow()).toBeVisible()
+      // Past the 360 px Embedding and 480 px Plots windows, with gaps.
+      expect(queryWindow().style.right).toBe('868px')
+      expect(queryWindow().style.width).toBe('520px')
+      expect(screen.getByRole('button', { name: 'Hide Query' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+    })
+
+    it('shows one window at a time under 860 px', () => {
+      stubScreenWidth(true)
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], plotsOpen: true }}
+        />,
+      )
+      expect(screen.getByRole('region', { name: 'Plots' })).toBeVisible()
+
+      fireEvent.click(screen.getByRole('button', { name: /^Layers/ }))
+      fireEvent.click(screen.getByRole('button', { name: 'Show Query' }))
+
+      expect(queryWindow()).toBeVisible()
+      expect(queryWindow().style.right).toBe('')
+      expect(screen.queryByRole('region', { name: 'Plots' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Close cell query' }))
+      expect(screen.queryByRole('region', { name: 'Cell Query' })).toBeNull()
+    })
+
+    it('scrolls and reads the table without drawing the viewer again (23-D5)', async () => {
+      stubScreenWidth(false)
+      let viewerRenders = 0
+      function Viewer() {
+        viewerRenders += 1
+        return <div>canvas</div>
+      }
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], queryOpen: true }}
+          query={testCellQueryModel({ rowCount: 1000 })}
+        >
+          <Viewer />
+        </QueryHarness>,
+      )
+      const table = within(queryWindow()).getByRole('table', { name: 'Matching cells' })
+      await waitFor(() => {
+        expect(
+          within(table).getByRole('button', { name: 'c1' }).closest('[role="row"]'),
+        ).toHaveTextContent('10')
+      })
+      const rendersBefore = viewerRenders
+
+      table.scrollTop = 20_000
+      fireEvent.scroll(table)
+      await waitFor(() => {
+        expect(
+          within(table).getByRole('button', { name: 'c720' }).closest('[role="row"]'),
+        ).toHaveTextContent('7200')
+      })
+      fireEvent.keyDown(within(table).getByRole('button', { name: 'c720' }), {
+        key: 'ArrowDown',
+      })
+
+      expect(viewerRenders).toBe(rendersBefore)
+    })
+
+    it('leaves Show Query out where the cells cannot be queried', () => {
+      stubScreenWidth(false)
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }}
+          query={null}
+        />,
+      )
+
+      expect(screen.getByRole('button', { name: 'Show Plots' })).toBeVisible()
+      expect(screen.queryByRole('button', { name: 'Show Query' })).toBeNull()
     })
   })
 })

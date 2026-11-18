@@ -49,6 +49,9 @@ import { useEmbeddingModel } from './features/sections/embeddingModel'
 import type { PlotKind } from './features/plots/plotModel'
 import { parsePlotKind, plotDatasetSets } from './features/plots/plotsPanelModel'
 import { usePlotsModel } from './features/plots/usePlotsModel'
+import type { CellQueryCondition } from './features/query/cellQuery'
+import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
+import { useCellQueryModel } from './features/query/useCellQueryModel'
 import {
   cardForLink,
   cardFromLink,
@@ -327,6 +330,7 @@ const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []
 const EMPTY_GENE_EXPRESSION_ELEMENTS: readonly OverviewCellDatum[] = []
 const EMPTY_ANNOTATIONS: readonly Annotation[] = []
+const EMPTY_GROUPS: readonly { readonly id: string; readonly label: string }[] = []
 
 export type {
   AnalysisEmbeddingsLoader,
@@ -407,6 +411,10 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const [plotKind, setPlotKind] = useState<PlotKind>(() =>
     parsePlotKind(initialShareableState.plot),
+  )
+  // The Cell Query window's conditions, kept in the link (plan 23-D9).
+  const [queryConditions, setQueryConditions] = useState<readonly CellQueryCondition[]>(
+    () => parseCellQueryLink(initialShareableState.query),
   )
   const [collectionView, setCollectionView] = useState<CollectionView>(() =>
     collectionViewFromLink(initialShareableState),
@@ -2587,6 +2595,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
+    handleSaveQueryAnnotation,
     loadAnnotationGroup,
   } = useAnnotationWorkflow({
     callbacks: { appendDebugEvent },
@@ -3707,6 +3716,7 @@ export function App({ dependencies }: AppProps = {}) {
       }),
       tool: activeTool,
       plot: plotKind,
+      query: formatCellQueryLink(queryConditions),
       hiddenLayers: sharedHiddenLayers,
     },
   })
@@ -4313,6 +4323,39 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
   })
 
+  // The Cell Query window (plan 23): the cells matching conditions on their
+  // columns, in a table. Visium HD bins are not overview cells.
+  const queryAvailable =
+    platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd'
+  const cellQuery = useCellQueryModel({
+    open: shellPanels.queryOpen,
+    available: queryAvailable,
+    datasetUrl: loadedDatasetUrl,
+    datasetReady: loadState.status === 'ready',
+    cells: overviewCells,
+    elementNoun: platformAdapter.labels.embeddingElementPlural,
+    annotations:
+      annotationState.status === 'ready'
+        ? annotationState.annotations
+        : EMPTY_ANNOTATIONS,
+    datasetSets: plotsDatasetSets,
+    annotationGroups:
+      annotationGroupState.status === 'ready'
+        ? annotationGroupState.groups
+        : EMPTY_GROUPS,
+    loadSetAnnotations: loadActiveAnnotations,
+    savedSelections: selectionList.selections,
+    loadSelectionCells: loadActiveRoiCells,
+    metadataTracks: cellMetadataTracks,
+    loadMetadataTrackValues: loadActiveCellMetadataTrackValues,
+    conditions: queryConditions,
+    onConditionsChange: setQueryConditions,
+    selectedCellId: selectedCell?.id ?? null,
+    onSelectCell: handleEmbeddingCellSelect,
+    onSaveClass: handleSaveQueryAnnotation,
+    appendDebugEvent,
+  })
+
   // The cards (plan 15.2-D): Selection, Cell, Transcript and
   // Magic Lens.
   const elementPlural = platformAdapter.labels.embeddingElementPlural
@@ -4652,6 +4695,7 @@ export function App({ dependencies }: AppProps = {}) {
         cards={cards}
         embedding={platformAdapter.capabilities.cells ? embedding : null}
         plots={plotsAvailable ? plots : null}
+        query={queryAvailable ? cellQuery : null}
         panels={shellPanels}
         onPanelsChange={setShellPanels}
         layerReveal={layerReveal}

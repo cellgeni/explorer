@@ -3864,6 +3864,125 @@ describe('App', () => {
     }
   })
 
+  it('finds cells by their classes and values, and saves them as a class (plan 23)', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const h5adUrl = 'https://example.test/query.h5ad'
+    const query = 'set:dataset-set:analysis:cell-type|in|analysis:cell-type:b'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(h5adUrl)}&panel=cells%2Cquery&query=${encodeURIComponent(query)}`,
+    )
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+    const cellIds = ['cell-a', 'cell-b', 'cell-c', 'cell-d']
+    const cellTypes: readonly Annotation<string>[] = [
+      {
+        id: 'analysis:cell-type:t',
+        label: 'cell_type: T cell',
+        cellIds: ['cell-a', 'cell-b'],
+      },
+      {
+        id: 'analysis:cell-type:b',
+        label: 'cell_type: B cell',
+        cellIds: ['cell-c', 'cell-d'],
+      },
+    ]
+    const h5adDataset = {
+      overview: vi.fn(async () =>
+        cellIds.map((cellId, index) => ({
+          cellId,
+          position: { x: micrometers(index * 10), y: micrometers(index * 10) },
+          transcriptCount: 0,
+        })),
+      ),
+      genePanel: vi.fn(async () => ['Actb']),
+      geneExpression: vi.fn(async (_bbox: unknown, genes: readonly string[]) => ({
+        elements: [],
+        genes,
+        maxCount: 0,
+      })),
+      annotationGroups: vi.fn(async () => [
+        {
+          id: 'analysis:cell-type',
+          label: 'cell_type',
+          groupingName: 'cell_type',
+          groupCount: 2,
+        },
+      ]),
+      annotations: vi.fn(async () => cellTypes),
+      embeddingOptions: vi.fn(async () => []),
+      metadataTracks: vi.fn(async () => [
+        { id: 'h5ad:score', label: 'score', values: null, cellCount: 4, min: 0, max: 4 },
+      ]),
+      metadataTrackValues: vi.fn(async () =>
+        cellIds.map((cellId, index) => ({ cellId, value: index + 1 })),
+      ),
+      cells: vi.fn(async () => []),
+      matrix: vi.fn(async () => ({ geneNames: [], cells: new Map() })),
+    }
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset)}
+        />,
+      )
+
+      // The link's condition, read from the dataset's set alone.
+      const panel = await screen.findByRole('region', { name: 'Cell Query' })
+      expect(await within(panel).findByText('2 of 4 cells match')).toBeVisible()
+      const table = within(panel).getByRole('table', { name: 'Matching cells' })
+      await waitFor(() => {
+        expect(
+          within(table)
+            .getAllByRole('row')
+            .slice(1)
+            .map((row) => row.textContent),
+        ).toEqual(['cell-cB cell', 'cell-dB cell'])
+      })
+      expect(window.location.hash).not.toContain('groups=')
+
+      // A number condition on a metadata track, at least 4.
+      fireEvent.change(within(panel).getByRole('combobox', { name: 'Add condition' }), {
+        target: { value: 'track:h5ad:score' },
+      })
+      fireEvent.change(
+        await within(panel).findByRole('combobox', { name: 'score: comparison' }),
+        { target: { value: 'at-least' } },
+      )
+      const from = within(panel).getByRole('spinbutton', { name: 'From' })
+      fireEvent.change(from, { target: { value: '4' } })
+      fireEvent.blur(from)
+      expect(await within(panel).findByText('1 of 4 cells match')).toBeVisible()
+      await waitFor(() => {
+        expect(window.location.hash).toContain(
+          `query=${encodeURIComponent(`${query};track:h5ad:score|at-least|4`)}`,
+        )
+      })
+
+      fireEvent.click(await within(table).findByRole('button', { name: 'cell-d' }))
+      await waitFor(() => {
+        expect(window.location.hash).toContain('card=cell%3Acell-d')
+      })
+
+      fireEvent.click(within(panel).getByRole('button', { name: 'Save As Class' }))
+      await waitFor(() => {
+        expect(window.location.hash).toContain('cellColor=annotations')
+      })
+      expect(await screen.findAllByText('Query 1')).not.toHaveLength(0)
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('plots the selected genes by class, with a selection as its own group (plan 22)', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

@@ -381,12 +381,19 @@ function annotationSizeGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
     }
   }
 
+  // Cell Query's saved classes (plan 23-D7) are a set of their own.
+  if (annotation.id.startsWith('query:')) {
+    return { id: QUERY_ANNOTATION_SET_ID, label: 'Queries', rowLabel: annotation.label }
+  }
+
   return {
     id: 'loaded-annotations',
     label: 'Loaded annotations',
     rowLabel: annotation.label,
   }
 }
+
+export const QUERY_ANNOTATION_SET_ID = 'queries'
 
 // More categories than this, and a column labels cells rather than grouping
 // them.

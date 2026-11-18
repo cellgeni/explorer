@@ -201,8 +201,8 @@ export function appTestDependencies({
 }
 
 // Shows the controls for an area (see controlAreas.ts): opens the dataset
-// menu, the info drawer, a layer section, a popover, or the Embedding or
-// Plots panel, unless it is already open.
+// menu, the info drawer, a layer section, a popover, or the Embedding, Plots
+// or Cell Query window, unless it is already open.
 export function openControls(area: ControlArea): void {
   const place = CONTROL_AREAS[area]
 
@@ -241,6 +241,12 @@ export function openControls(area: ControlArea): void {
     case 'plots': {
       openControls('genes')
       const show = screen.queryByRole('button', { name: 'Show Plots' })
+      if (show !== null) fireEvent.click(show)
+      return
+    }
+    case 'query': {
+      openControls('genes')
+      const show = screen.queryByRole('button', { name: 'Show Query' })
       if (show !== null) fireEvent.click(show)
       return
     }

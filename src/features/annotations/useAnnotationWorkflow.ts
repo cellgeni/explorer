@@ -8,6 +8,7 @@ import {
   ALL_ANNOTATION_GROUP_ID,
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
+import type { CellId } from '../../data/cellid'
 import type { Annotation } from '../../datasets/spatialDataset'
 import {
   annotationPaletteColor,
@@ -27,6 +28,7 @@ import {
   createStructuredLoadError,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
+import { queryClassId } from '../query/cellQueryModel'
 import { defaultRoiName, type RoiState } from '../roi/roiModel'
 import {
   IDLE_ANNOTATION_STATE,
@@ -137,6 +139,9 @@ interface UseAnnotationWorkflowResult {
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleSaveRoiAnnotation: () => void
+  // Cell Query's Save As Class (plan 23-D7): the cells as one class of the
+  // Queries set, first, coloured by annotations as Save ROI does.
+  readonly handleSaveQueryAnnotation: (name: string, cellIds: readonly string[]) => void
 }
 
 interface AnnotationImportUrl {
@@ -649,6 +654,43 @@ export function useAnnotationWorkflow({
     setObservationColorMode,
   ])
 
+  const handleSaveQueryAnnotation = useCallback(
+    (name: string, cellIds: readonly string[]) => {
+      if (loadState.status !== 'ready') return
+
+      const current =
+        annotationState.status === 'ready' ? annotationState.annotations : []
+      const annotation: Annotation = {
+        id: queryClassId(current, name).id,
+        label: name,
+        // The overview's own cell IDs, so already the dataset's.
+        cellIds: cellIds as readonly CellId[],
+      }
+
+      appendDebugEvent(`Saved query class ${name}`)
+      setAnnotationState((state) =>
+        annotationLoadReady(
+          loadState.url,
+          [annotation, ...(state.status === 'ready' ? state.annotations : [])],
+          state.status === 'ready' ? state.groupId : undefined,
+        ),
+      )
+      setAnnotationColors((colors) => ({
+        ...colors,
+        [annotation.id]: annotationPaletteColor(Object.keys(colors).length),
+      }))
+      setObservationColorMode('annotations')
+    },
+    [
+      annotationState,
+      appendDebugEvent,
+      loadState,
+      setAnnotationColors,
+      setAnnotationState,
+      setObservationColorMode,
+    ],
+  )
+
   // Shown while the dataset it was imported into is open and labels or
   // tracks are loaded.
   const annotationImportNotice =
@@ -672,6 +714,7 @@ export function useAnnotationWorkflow({
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
+    handleSaveQueryAnnotation,
   }
 }
 

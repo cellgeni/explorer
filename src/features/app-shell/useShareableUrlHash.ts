@@ -55,6 +55,8 @@ interface ShareableViewHashOptions {
   readonly hiddenLayers: readonly string[]
   // The Plots panel's plot (plot=).
   readonly plot: string
+  // The Cell Query window's conditions (query=), if any.
+  readonly query?: string | undefined
 }
 
 interface ShareableLayerHashOptions {
@@ -192,6 +194,7 @@ export function useShareableUrlHash({
     hiddenLayers,
     panels,
     plot,
+    query,
     shareableViewState,
     tool,
   } = view
@@ -279,6 +282,7 @@ export function useShareableUrlHash({
           ...(card === undefined ? {} : { card }),
           tool,
           plot,
+          ...(query === undefined ? {} : { query }),
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
           ...(hiddenAnnotationSetIds === undefined ? {} : { hiddenAnnotationSetIds }),
@@ -361,6 +365,7 @@ export function useShareableUrlHash({
     hiddenLayers,
     panels,
     plot,
+    query,
     tool,
     annotationUrl,
     collectionUrl,

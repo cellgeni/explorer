@@ -364,7 +364,276 @@
   justify-content: flex-end;
 }
 
-/* Show Embedding and Show Plots, side by side. */
+/* Cell Query (23-D9): the conditions, which scroll past a third of the
+   window, then notes and actions, then the table, which takes the rest. */
+.shell-query-body {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.cell-query-conditions {
+  display: grid;
+  gap: var(--space-2);
+  max-height: 40vh;
+  min-height: 0;
+  overflow: auto;
+}
+
+.cell-query-condition-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cell-query-condition {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+}
+
+.cell-query-condition-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, auto) auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cell-query-condition-column {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-query-condition-note,
+.cell-query-empty {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
+.cell-query-empty {
+  padding: var(--space-2);
+}
+
+.cell-query-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-caption);
+}
+
+.cell-query-classes {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.cell-query-classes input[type='search'],
+.cell-query-name input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text-1);
+  font-size: var(--font-control);
+}
+
+.cell-query-class-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 2px var(--space-2);
+  max-height: 132px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.cell-query-class-list .ui-checkbox {
+  width: 100%;
+}
+
+.cell-query-class-list .ui-checkbox > span {
+  display: flex;
+  flex: 1 1 auto;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.cell-query-class-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-query-class-list small {
+  margin-left: auto;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-query-bounds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.cell-query-bounds .ui-number-field {
+  width: 136px;
+}
+
+.cell-query-footer {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.cell-query-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.cell-query-name {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+
+.cell-query-add-column {
+  flex: 0 1 168px;
+}
+
+/* One scroll box: the header sticks, and only rows in view are drawn,
+   placed by their index. */
+.cell-query-table {
+  position: relative;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-query-head {
+  position: sticky;
+  z-index: 1;
+  top: 0;
+  background: var(--surface-2);
+}
+
+.cell-query-header-row,
+.cell-query-row {
+  display: grid;
+  grid-template-columns: var(--cell-query-columns);
+}
+
+.cell-query-header-row {
+  height: 30px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.cell-query-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.cell-query-sort {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0 var(--space-2);
+  border: 0;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+}
+
+.cell-query-header.is-number .cell-query-sort {
+  justify-content: flex-end;
+}
+
+.cell-query-sort:hover,
+.cell-query-sort:focus-visible {
+  color: var(--text-1);
+}
+
+.cell-query-header-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-query-sort {
+  align-items: center;
+}
+
+.cell-query-remove-column {
+  flex: none;
+}
+
+.cell-query-body {
+  position: relative;
+}
+
+.cell-query-row {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 28px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cell-query-row.is-selected {
+  background: var(--surface-3);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.cell-query-cell {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  overflow: hidden;
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cell-query-cell.is-number {
+  justify-content: flex-end;
+}
+
+.cell-query-id {
+  overflow: hidden;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cell-query-id:hover {
+  text-decoration: underline;
+}
+
+/* Show Embedding, Show Plots and Show Query, side by side. */
 .shell-panel-buttons {
   display: flex;
   flex-wrap: wrap;

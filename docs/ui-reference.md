@@ -803,6 +803,47 @@ means only).
 Xenium's 1.4 million row IDs go to the worker as the integers the matrix
 stores and are made text there, off the page's thread.
 
+## Cell Query Panel
+
+The Cell Query panel finds cells by their classes and values and lists them
+in a table ([plan 23](plan/phases/23-cell-query.md); `src/features/query/`,
+`src/features/shell/QueryWindow.tsx`). It opens from Cells › `Show Query`
+and closes with `Close cell query` or Esc. It sits at the top right of the
+canvas, 520 × 460 px at first, to the left of the Embedding and Plots panels
+when they are open. Its grip resizes it from 360 × 300 px up to the canvas,
+as the Embedding panel's does. Its status line says how many cells match
+("1,234 of 56,789 cells match"). It is offered on every platform with cells
+or spots but Visium HD, whose bins are not listed one by one.
+
+| Control                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Add condition`             | Adds a condition on a column. Under `Cell`, the overview's own values where the platform has them (`Transcript count`, `Cell area` in µm², `Nucleus count`, `Segmentation`). Under `Classes`, the sets Plots' `Group by` lists: the loaded sets, the dataset's other sets (read for the query alone, leaving the map and Clusters as they are), and `Selections`. Under `Metadata`, the metadata tracks |
+| Comparison                  | Classes: `Is one of` or `Is not one of` the classes ticked below. Numbers: `Between`, `At least` or `At most`, with `From` and `To` fields that apply on Enter or when they lose focus. A number condition starts at the column's whole range                                                                                                                                                           |
+| Classes                     | A tick per class with its cell count; a search field over 12 classes. Up to 200 are listed at once; search for the others. A class condition with nothing ticked is left out until something is                                                                                                                                                                                                         |
+| `Remove the condition on …` | The × beside a condition                                                                                                                                                                                                                                                                                                                                                                                |
+| Class name                  | The name `Save As Class` gives; "Query 1", "Query 2" and so on when left empty                                                                                                                                                                                                                                                                                                                          |
+| `Save As Class`             | Adds the matching cells as one class of a set named Queries, ahead of the other classes, and colours cells by annotations, as `Save ROI` does. Cells in another shown class keep its colour; hide the other sets in Clusters to see the matches alone. Plots can group by the class, and `Export Annotations` includes it                                                                               |
+| `Export CSV`                | Every matching cell with the table's columns, in the table's order: `cell_id`, then each column (units in the header, numbers as stored). The file is `{dataset}-cell-query.csv`                                                                                                                                                                                                                        |
+| `Add column`                | Shows another column in the table. Columns added this way have a `Remove the … column` button in their header; a condition's column stays while the condition does                                                                                                                                                                                                                                      |
+| Table                       | A row per matching cell, with its ID and a column per condition and added column. The header buttons sort, ascending then descending; cells without a value come last either way. Clicking an ID selects the cell, opens its card and moves the view to it. Arrow keys, Page Up, Page Down, Home and End move between rows, and Tab leaves the table                                                    |
+
+How it matches:
+
+- Every cell of the dataset counts, not only those in view.
+- Conditions combine with AND; the classes ticked in one condition combine
+  with OR. A cell that two classes list is in both, so `Is not one of`
+  leaves it out if either is ticked.
+- A cell with no value for a number column never matches a number condition,
+  even over the whole range.
+- A column is read the first time a condition, table column or sort uses it,
+  and kept for the dataset. The columns and the matching live in the panel's
+  worker, so a million cells match and sort off the page's thread; edits wait
+  250 ms before matching. The table reads the values of the rows in view, 64
+  rows at a time.
+- Imported cell IDs that are not on the map are left out, with a note.
+- A condition on a column the dataset does not list, such as one from another
+  dataset's link, says so and is left out.
+
 ## Canvas
 
 ### Legend
@@ -1186,8 +1227,8 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   to at most 65% of the screen. It is the same panel as on wide screens, so a
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
-  layer sheet's handle. The Embedding and Plots panels take the canvas's
-  width, one at a time: opening one closes the other.
+  layer sheet's handle. The Embedding, Plots and Cell Query panels take the
+  canvas's width, one at a time: opening one closes the others.
 
 ## Platform Availability
 
@@ -1207,6 +1248,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Nucleus boundaries                             | ✓                       | ✓                                           | —             | ✓                 | —                | —                | ✓ (shapes)       | —                |
 | Selection card                                 | Cells                   | Cells                                       | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
 | Plots panel                                    | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
+| Cell Query panel                               | ✓                       | ✓                                           | Spots         | —                 | ✓                | ✓                | ✓                | —                |
 | Bin size control                               | —                       | —                                           | —             | ✓                 | —                | —                | —                | —                |
 | SpatialData view options                       | —                       | —                                           | —             | —                 | —                | —                | ✓                | —                |
 | Visium image, library, and off-tissue controls | —                       | —                                           | ✓             | —                 | —                | —                | —                | —                |
@@ -1252,9 +1294,10 @@ the page reloads that entry's link, with its view and settings.
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names. A dataset opened after it starts fitted to its extent                                                                                                                                                                                                                            |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens` |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer), `embedding` and `plots`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                       |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                              |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                       |
 | `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                               |
+| `query`                                                                                                   | Cell Query's conditions, `;`-separated: column, operator and values joined by `\|`; class IDs joined by `,`, or the bounds. `%`, `;`, `\|`, `,` in a part are `%25`, `%3B`, `%7C`, `%2C`                                                                                                                                               |
 | `card`                                                                                                    | `cell:<id>`, `bin:<id>` (Visium HD) or `boundary:<id>` (an outline without a cell): the selection, made again once it is loaded in the link's view                                                                                                                                                                                     |
 | `hidden`                                                                                                  | Hidden layers: `image`, `cells`, `annotations`                                                                                                                                                                                                                                                                                         |
 | `hiddenClasses`                                                                                           | Hidden annotation classes: comma-separated class IDs such as `analysis:leiden:3`; `%` and `,` inside an ID are written `%25` and `%2C`. Applied once the set loads                                                                                                                                                                     |

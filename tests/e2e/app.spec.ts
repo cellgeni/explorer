@@ -490,7 +490,7 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   const findings: AxeFindings = new Map()
 
   // Every layer section, the info drawer, the dataset menu, Help, Settings
-  // and the Embedding and Plots panels, empty and with data.
+  // and the Embedding, Plots and Cell Query windows, empty and with data.
   async function checkEachPlace(state: string) {
     const layers = page.getByRole('complementary', { name: 'Layers' })
     const sections = layers.getByRole('heading', { level: 3 }).getByRole('button')
@@ -518,6 +518,10 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
     await openControls(page, 'plots')
     await collectAxeFindings(page, `${state}, plots`, findings)
     await page.getByRole('button', { name: 'Close plots' }).click()
+
+    await openControls(page, 'query')
+    await collectAxeFindings(page, `${state}, cell query`, findings)
+    await page.getByRole('button', { name: 'Close cell query' }).click()
   }
 
   await routeTinyH5adFixture(page)
@@ -563,7 +567,67 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
     await collectAxeFindings(page, `H5AD fixture, ${option.toLowerCase()}`, findings)
   }
 
+  // A condition, its classes and the table of matches (plan 23-J).
+  const query = await openControls(page, 'query')
+  await query
+    .getByRole('combobox', { name: 'Add condition' })
+    .selectOption({ label: 'cluster (2)' })
+  await query.getByRole('checkbox', { name: /^B/ }).check()
+  await expect(query.getByText('2 of 4 cells match')).toBeVisible()
+  await collectAxeFindings(page, 'H5AD fixture, cell query', findings)
+
   expectAxeFindingsMatchBaseline(findings)
+})
+
+// Plan 23: find cells by a cluster, sort and select them, export the table
+// and save them as a class.
+test('finds cells by cluster, exports them and saves them as a class @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await routeTinyH5adFixture(page)
+  await page.goto('/')
+
+  await openControls(page, 'open-dataset')
+  await page
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/h5ad-smoke.h5ad', page.url()).toString())
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  const query = await openControls(page, 'query')
+  await expect(query.getByText('4 cells, no conditions')).toBeVisible()
+  await query
+    .getByRole('combobox', { name: 'Add condition' })
+    .selectOption({ label: 'cluster (2)' })
+  await query.getByRole('checkbox', { name: /^B/ }).check()
+  await expect(query.getByText('2 of 4 cells match')).toBeVisible()
+  await expect(page).toHaveURL(/panel=[^&]*query/)
+  await expect(page).toHaveURL(/[#&]query=[^&]*%7Cin%7C/)
+
+  const table = query.getByRole('table', { name: 'Matching cells' })
+  const rows = table.getByRole('row')
+  await expect(rows).toHaveCount(3)
+  await expect(rows.nth(1).getByRole('cell').nth(1)).toHaveText('B')
+  const firstId = (await rows.nth(1).getByRole('button').textContent()) ?? ''
+  await rows.nth(1).getByRole('button').click()
+  await expect(page).toHaveURL(
+    new RegExp(`[#&]card=cell%3A${encodeURIComponent(firstId)}`),
+  )
+
+  const download = page.waitForEvent('download')
+  await query.getByRole('button', { name: 'Export CSV' }).click()
+  const csv = await readFile(await (await download).path(), 'utf8')
+  expect((await download).suggestedFilename()).toBe('h5ad-smoke-cell-query.csv')
+  expect(csv.split('\n')).toHaveLength(3)
+  expect(csv.split('\n')[0]).toBe('cell_id,cluster')
+
+  await query.getByRole('button', { name: 'Save As Class' }).click()
+  await expect(page).toHaveURL(/[#&]cellColor=annotations(&|$)/)
+  await expect(page.getByText('Query 1').first()).toBeVisible()
 })
 
 // Plan 22: select genes, load a set, open Plots, read the numbers and
@@ -1625,6 +1689,33 @@ test('plots SNAP25 by the Xenium graph clusters @live', async ({ page }, testInf
     /SNAP25[1-9][0-9,]*[0-9.]+%/,
   )
   await expectLogEntry(page, /Plots: read 1 gene \(about [0-9.]+ MiB\) in /)
+})
+
+// Plan 23, M1: Cell Query matches the demo's 1.4 million cells by transcript
+// count and a graph cluster read for the query alone, in its worker. The
+// time to the first count goes into the report.
+test('finds Xenium cells by transcript count and graph cluster @live', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(300_000)
+  const startedAt = Date.now()
+  const query = 'cell:transcripts|at-least|400;set:dataset-set:analysis:0|in|analysis:0:0'
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&panel=query&query=${encodeURIComponent(query)}`,
+  )
+  const panel = page.getByRole('region', { name: 'Cell Query' })
+  await expect(panel.getByText(/^[1-9][0-9,]* of 1,414,155 cells match$/)).toBeVisible({
+    timeout: XENIUM_LOAD_TIMEOUT_MS,
+  })
+  testInfo.annotations.push({
+    type: 'Time to first count',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
+
+  const rows = panel.getByRole('table', { name: 'Matching cells' }).getByRole('row')
+  await expect(rows.nth(1)).toContainText('Cluster 1')
+  await expectLogEntry(page, /Cell query: [0-9,]+ of 1,414,155 match in /)
 })
 
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({

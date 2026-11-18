@@ -70,6 +70,7 @@ describe('panels in the link', () => {
       infoOpen: true,
       embeddingOpen: false,
       plotsOpen: false,
+      queryOpen: false,
     })
     // The drawer alone: every section closed (15.5-B).
     expect(panelsFromLink({ panels: ['info'] })).toEqual({
@@ -77,6 +78,7 @@ describe('panels in the link', () => {
       infoOpen: true,
       embeddingOpen: false,
       plotsOpen: false,
+      queryOpen: false,
     })
     expect(panelsFromLink({ panels: [] }).expanded).toEqual([])
   })
@@ -89,7 +91,13 @@ describe('panels in the link', () => {
     expect(panelsForLink(DEFAULT_SHELL_PANELS, cells)).toBeUndefined()
     expect(
       panelsForLink(
-        { expanded: null, infoOpen: true, embeddingOpen: false, plotsOpen: false },
+        {
+          expanded: null,
+          infoOpen: true,
+          embeddingOpen: false,
+          plotsOpen: false,
+          queryOpen: false,
+        },
         cells,
       ),
     ).toEqual(['cells', 'info'])
@@ -100,13 +108,32 @@ describe('panels in the link', () => {
           infoOpen: false,
           embeddingOpen: true,
           plotsOpen: false,
+          queryOpen: false,
         },
         cells,
       ),
     ).toEqual(['cells', 'transcripts', 'embedding'])
     expect(
       panelsForLink(
-        { expanded: [], infoOpen: false, embeddingOpen: false, plotsOpen: false },
+        {
+          expanded: null,
+          infoOpen: false,
+          embeddingOpen: false,
+          plotsOpen: true,
+          queryOpen: true,
+        },
+        cells,
+      ),
+    ).toEqual(['cells', 'plots', 'query'])
+    expect(
+      panelsForLink(
+        {
+          expanded: [],
+          infoOpen: false,
+          embeddingOpen: false,
+          plotsOpen: false,
+          queryOpen: false,
+        },
         cells,
       ),
     ).toEqual([])
@@ -119,8 +146,15 @@ describe('panels in the link', () => {
         infoOpen: true,
         embeddingOpen: false,
         plotsOpen: false,
+        queryOpen: false,
       },
-      { expanded: [], infoOpen: true, embeddingOpen: false, plotsOpen: false },
+      {
+        expanded: [],
+        infoOpen: true,
+        embeddingOpen: false,
+        plotsOpen: false,
+        queryOpen: false,
+      },
     ]) {
       const hash = formatShareableState({
         panels: panelsForLink(panels, ['cells']) ?? [],
@@ -131,7 +165,13 @@ describe('panels in the link', () => {
       formatShareableState({
         panels:
           panelsForLink(
-            { expanded: [], infoOpen: true, embeddingOpen: false, plotsOpen: false },
+            {
+              expanded: [],
+              infoOpen: true,
+              embeddingOpen: false,
+              plotsOpen: false,
+              queryOpen: false,
+            },
             ['cells'],
           ) ?? [],
       }),
@@ -141,6 +181,7 @@ describe('panels in the link', () => {
       infoOpen: false,
       embeddingOpen: false,
       plotsOpen: false,
+      queryOpen: false,
     })
   })
 })

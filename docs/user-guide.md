@@ -415,6 +415,29 @@ stored by cell (CSR) and read over HTTP, the panel says how large it is and
 waits for `Read`; it reads nothing over 256 MiB. See the
 [UI reference](ui-reference.md#plots-panel).
 
+The Cell Query panel, opened from Cells › `Show Query`, finds cells by their
+classes and values and lists them in a table:
+
+1. Choose `Show Query`. With no conditions, the table lists every cell.
+2. Under `Add condition`, choose a column: a cell's own value, such as
+   `Transcript count` or `Cell area`; a set of classes, loaded in Clusters or
+   read from the dataset for the query alone; your saved selections; or a
+   metadata track.
+3. For a set, tick the classes to keep, or choose `Is not one of` to leave
+   them out. For a number, choose `Between`, `At least` or `At most` and type
+   the bounds; Enter applies them. Each new condition narrows the cells
+   further: the status line says how many match.
+4. Click a column's header to sort by it, and `Add column` to show more
+   columns. Click a cell's ID to select it and move the view to it, or use the
+   arrow keys to go down the list.
+5. `Save As Class` adds the matching cells as a class in the Queries set and
+   colours the cells by their classes, as `Save ROI` does; Plots can then group
+   by it. `Export CSV` saves the table's columns for every matching cell.
+
+The conditions go into the link, so a shared link opens with the same query.
+The panel works on every platform except Visium HD and image-only datasets.
+See the [UI reference](ui-reference.md#cell-query-panel).
+
 ## Standard Visium
 
 Standard Visium datasets load from a Space Ranger `outs/` folder or from an

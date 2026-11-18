@@ -5,6 +5,8 @@ export const EMBEDDING_WINDOW_SIZE: FloatingWindowSize = { width: 360, height: 4
 export const EMBEDDING_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 280, height: 260 }
 export const PLOTS_WINDOW_SIZE: FloatingWindowSize = { width: 480, height: 420 }
 export const PLOTS_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 320, height: 280 }
+export const QUERY_WINDOW_SIZE: FloatingWindowSize = { width: 520, height: 460 }
+export const QUERY_WINDOW_MIN_SIZE: FloatingWindowSize = { width: 360, height: 300 }
 
 // The CSS inset from the canvas's right edge (--space-3), and the gap
 // between two windows (--space-2).
@@ -19,4 +21,14 @@ export function plotsWindowRightOffset(
   narrow: boolean,
 ): number | undefined {
   return embeddingOpen && !narrow ? RIGHT_INSET + embeddingWidth + WINDOW_GAP : undefined
+}
+
+// The Cell Query window opens to the left of the other open windows
+// (23-D9), whose widths are given right to left.
+export function queryWindowRightOffset(
+  openWidths: readonly number[],
+  narrow: boolean,
+): number | undefined {
+  if (narrow || openWidths.length === 0) return undefined
+  return openWidths.reduce((offset, width) => offset + width + WINDOW_GAP, RIGHT_INSET)
 }

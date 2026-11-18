@@ -42,6 +42,9 @@ export interface ShareableState {
   // The Plots panel's plot when it is not the dot plot: `plot=` (plan
   // 22-D8).
   readonly plot?: string
+  // The Cell Query window's conditions: `query=` (plan 23-D9), in the form
+  // `formatCellQueryLink` writes.
+  readonly query?: string
   // Hidden layers (image, cells, annotations): `hidden=`.
   readonly hiddenLayers?: readonly string[]
   // Hidden annotation classes, such as `analysis:leiden:3`: `hiddenClasses=`,
@@ -133,6 +136,7 @@ export function parseShareableState(hash: string): ShareableState {
   const card = readString(params, 'card')
   const tool = readString(params, 'tool')
   const plot = readString(params, 'plot')
+  const query = readString(params, 'query')
   const hiddenLayers = readCsv(params, 'hidden')
   const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
   const hiddenAnnotationSetIds = readEscapedCsv(params, 'hiddenSets')
@@ -244,6 +248,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (plot !== undefined) {
     state.plot = plot
+  }
+
+  if (query !== undefined) {
+    state.query = query
   }
 
   if (hiddenLayers !== undefined) {
@@ -489,6 +497,7 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'card', state.card)
   setOptionalString(params, 'tool', state.tool)
   setOptionalString(params, 'plot', state.plot)
+  setOptionalString(params, 'query', state.query)
 
   if (state.hiddenLayers !== undefined && state.hiddenLayers.length > 0) {
     params.set('hidden', state.hiddenLayers.join(','))

@@ -1,6 +1,7 @@
 # Phase 23 — Cell Query
 
-Planned 2026-11-18. Not started. Requested: filter the cells of a dataset by
+Planned 2026-11-18. M1 (query and table) implemented 2026-11-18; see
+[M1 Progress](#m1-progress). Requested: filter the cells of a dataset by
 their observations, classes, annotations and metadata, list the cells that
 match in a table, and show a picture of each cell in its row.
 
@@ -187,7 +188,7 @@ What is missing:
 
 ## Tasks
 
-- [ ] **A. Query columns and worker.** (M)
+- [x] **A. Query columns and worker.** (M) Done in M1.
   - `queryWorker.ts` and a pure `cellQuery` module with `setRows(ids)`, once
     per dataset, and `setCategoryColumn(id, classes)`,
     `setNumberColumn(id, values)`, `match(conditions)`,
@@ -197,16 +198,16 @@ What is missing:
   - Tests, with fast-check: the worker's matches equal a plain filter over
     the same cells; missing values never match; a class listing a cell twice
     counts it once; unmatched IDs are counted and reported.
-- [ ] **B. Conditions editor.** (M) Column picker grouped as Classes,
+- [x] **B. Conditions editor.** (M) Done in M1. Column picker grouped as Classes,
       Metadata and Cell; operators per kind (D2); a class pick-list with
       search for sets with many classes; number fields with the column's
       range from the track's `min` and `max`. The match count, and each
       column's loading or error state.
-- [ ] **C. Result table.** (M) Virtualised rows (D5), sticky header, sort
+- [x] **C. Result table.** (M) Done in M1. Virtualised rows (D5), sticky header, sort
       by header click, `Add column`, cut-short cells with the full text in
       `title`. A pure `cellQueryTableModel` with tests for paging and
       sorting.
-- [ ] **D. Window, link and selection.** (M)
+- [x] **D. Window, link and selection.** (M) Done in M1.
   - `QueryWindow` on `FloatingWindow`, `Show Query` in Cells › Panels,
     placement and the narrow-screen rule (D9).
   - `panel=query` in `shellLinkModel.ts`; `query=` in `shareableState.ts`,
@@ -215,7 +216,7 @@ What is missing:
   - A `query` control area in `src/test/controlAreas.ts`,
     `src/test/appTestHarness.ts` and `tests/e2e/controls.ts`. Gate on the
     platform adapter's `cells` capability and D1.
-- [ ] **E. Save as class and export.** (S) D7 and D8. Tests: a saved class
+- [x] **E. Save as class and export.** (S) Done in M1. D7 and D8. Tests: a saved class
       lists the matches, colours them and appears under Plots' `Group by`;
       the CSV matches the table.
 - [ ] **F. Shared tile store.** (M) Move the per-channel cache and scheduler
@@ -232,7 +233,9 @@ What is missing:
       `boundariesForCells(ids)`, a `cell_id IN (…)` query on Xenium and the
       readers' own lookups elsewhere, falling back to a query per cell.
       Measure on the Xenium demo before choosing.
-- [ ] **I. Docs and end-to-end tests.** (M) Docs listed in
+- [ ] **I. Docs and end-to-end tests.** (M) M1's done: the docs, the smoke
+      and axe tests, and the nightly test's time to the first count. The
+      first page of pictures waits for M2. Docs listed in
       [Docs To Update](#docs-to-update). E2E on fixtures: open Cell Query
       on the H5AD fixture, add a class and a number condition, sort, select
       a row, save the matches as a class, export CSV. The axe smoke test
@@ -242,16 +245,101 @@ What is missing:
 
 ## Order And Size
 
-| Milestone            | Contents        | Size           |
-| -------------------- | --------------- | -------------- |
-| M1 — Query and table | A, B, C, D, E   | about 2½ weeks |
-| M2 — Pictures        | F, then G and H | about 2 weeks  |
-| Throughout           | I               | —              |
+| Milestone            | Contents        | Size              |
+| -------------------- | --------------- | ----------------- |
+| M1 — Query and table | A, B, C, D, E   | Done (2026-11-18) |
+| M2 — Pictures        | F, then G and H | about 2 weeks     |
+| Throughout           | I               | —                 |
 
 - M1 is useful on its own, and M2 can be measured on real result lists.
 - F is a refactor, so it is its own PR, before G.
 - The total is about 4½ weeks.
 - Tag a release after M1 and after M2.
+
+## M1 Progress
+
+Implemented 2026-11-18 (branch `claude/cell-query-m1`, on the plan's
+branch). The window finds cells on every platform with cells or spots but
+Visium HD. Checked in the browser on the CELLxGENE Census Visium `.h5ad`
+(GSM6592057: `pathologist_annotation` and the T-cells score) and the Xenium
+demo (transcript count and graphclust).
+
+Built:
+
+- **A.** `CellQueryStore` (`src/features/query/cellQuery.ts`) holds columns
+  by overview row: numbers as `Float64Array` with NaN for no value, classes
+  as each row's first class with a map of further ones. `run` filters the
+  rows condition by condition and sorts them; `values` gives the columns'
+  values for given rows. It runs in `cellQuery.worker.ts` through
+  `createCellQuerySession`, which replays the rows and columns on the main
+  thread if the worker fails, or without one. A fast-check test matches it
+  against a plain filter.
+- **B.** `cellQueryModel.ts` lists the columns (`Cell`, `Classes`,
+  `Metadata`), each condition's start, and `query=`. `useCellQueryModel`
+  reads a column the first time a condition, table column or sort uses it:
+  dataset sets through the annotation loader and metadata tracks through the
+  track loader (`useOnDemandLoads`), saved selections through
+  `useSelectionCells`. `CellQueryPanel` is the editor.
+- **C.** `CellQueryTable`: a sticky header with sort buttons, rows of 28 px
+  of which only those in view are drawn, an ID button per row, arrow keys,
+  Page Up, Page Down, Home and End.
+- **D.** `QueryWindow` on `FloatingWindow`, `Show Query` in Cells › Panels,
+  `panel=query` and `query=`, placement left of the Embedding and Plots
+  windows (Plots now reports its width), one window at a time under 860 px.
+  A row click calls the Embedding panel's `handleEmbeddingCellSelect`. A
+  `query` control area in the test helpers.
+- **E.** `handleSaveQueryAnnotation` in the annotation workflow; `Export
+CSV` reads every match from the worker in chunks of 20,000 rows.
+- **I, in part.** UI reference, user guide and architecture. Unit tests for
+  the store, session, model and link; a component test of the panel on the
+  real hook; ShellLayout tests (placement, narrow screens, no viewer render
+  while scrolling); an `App.test.tsx` test from a link to a saved class; an
+  E2E smoke test (condition, row click, CSV, class); the axe test opens the
+  window empty and with a result, and the baseline stays `{}`; a nightly
+  `@live` test on the Xenium demo.
+
+Measured on the Xenium demo, 1,414,155 cells (dev build, browser pane):
+
+| Step                                                   | Time                              |
+| ------------------------------------------------------ | --------------------------------- |
+| Link to the first count (transcripts at least 400)     | 14 s, mostly the dataset's load   |
+| Same, headless with software WebGL (`@live` test)      | 37 s                              |
+| First read of graphclust's classes for the query       | 5.0 s                             |
+| Ticking a class to the new count (87,568 match)        | 0.38 s, with the 250 ms wait      |
+| Sorting 318,600 matches by transcript count            | 1.2 s, with the 250 ms wait       |
+| Posting 1.4 million cell IDs to a worker (main thread) | 22 ms; building the ID list 10 ms |
+
+Changed from the plan while building:
+
+- **The table keeps its values itself** (D5). The hook gives it
+  `readValues(start, end)`; the pages it has read and the rows in view are
+  the table's state, so scrolling renders the table alone, not App.
+- **Saved classes are a set of their own**, Queries (`query:` IDs), rather
+  than joining Save ROI's classes in "Loaded annotations". Plots' default set
+  skips them as it skips `roi:` classes.
+- **"Not on the map" notes only for imported sets.** A dataset's own columns
+  list cells the map leaves out, such as 4,622 Visium spots off the tissue,
+  which said nothing useful.
+- **A cell column is offered when some cell has a value other than 0**, as
+  H5AD cells carry a transcript count of 0.
+- **Numbers in the link are written in full** (`String(value)`), so a bound
+  at a column's lowest value keeps that cell; `At least` and `At most` write
+  only the bound they use. Values under 0.001 show in exponent form, so
+  3.9e-14 does not read as 0.
+- **Conditions stay when the dataset changes.** One on a column the new
+  dataset does not list says so and is left out; sections of a collection
+  often share their columns.
+- **A dataset set Clusters loads later keeps being read alone** for a
+  condition on it, so the condition and the link stay as they were.
+- **The window mounts the first time it opens, and draws its body only
+  while open.** Mounted and drawn while closed, as the Plots window is, it
+  rendered with every App update during a load: a collection App test took
+  0.3 s longer (1.55 s against 1.27 s) and its 1 s wait failed under the
+  full suite's load. It still stays mounted after closing, to keep its size.
+
+Left for M2 as planned: F (shared tile store), G (cell pictures), H
+(outlines for a page of cells), and the nightly test's first page of
+pictures (I).
 
 ## Testing
 
