@@ -28,7 +28,7 @@ files. Parsing happens in the browser:
 
 | Directory                               | Contents                                                                                                                                                                                 |
 | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/main.tsx`                          | Entry point: installs the worker Zarr codecs and renders `App` inside `AppErrorBoundary`                                                                                                 |
+| `src/main.tsx`                          | Entry point: installs the worker Zarr codecs and the zip folder fetch, and renders `App` inside `AppErrorBoundary`                                                                       |
 | `src/App.tsx`                           | Orchestration root: wires state, workflows, the section and card models, and the shell around the viewer                                                                                 |
 | `src/datasets/`                         | Detection (`datasetFactory.ts`), the `SpatialDataset` interface, and one implementation per platform                                                                                     |
 | `src/data/`                             | Platform-neutral readers and models: Parquet, Zarr, HDF5 matrices, transcripts, annotations, embeddings, ROI queries, caches, range probes, diagnostics, shareable state                 |
@@ -98,7 +98,7 @@ match:
 | 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here                    | The manifest's `platform`                                          |
 | 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                                                | `h5ad`                                                             |
 | 1b    | URL path ends in `.icechunk`: open the repository and read its root group; errors stop here                                             | `h5ad` (AnnData), `spatialdata`, or `image`                        |
-| 1c    | URL path ends in `.zip`, and `HEAD` succeeds; a zipped store that is neither SpatialData nor an OME-Zarr image is an error              | `spatialdata` or `image`                                           |
+| 1c    | URL path ends in `.zip`, and `HEAD` succeeds: a zipped store, else a zipped Atera run (`experiment.spatial`); anything else is an error | `spatialdata`, `image`, or `atera`                                 |
 | 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`, or names a group inside a `.zarr` store; root metadata `HEAD` succeeds | `spatialdata` or `h5ad` (AnnData) by root attributes, else `image` |
 | 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.svs`, `.ndpi`, and `HEAD` succeeds                                           | `image`                                                            |
 | 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                                                  | The manifest's `platform`                                          |
@@ -357,6 +357,15 @@ All screen↔data conversions go through `coords.ts`.
 
 ## HTTP Requirements In Code
 
+- **Zipped run folders.** A zip that holds an Atera run instead of a Zarr
+  store is registered as a folder (`registerZipFolder`,
+  `src/data/zipFolder.ts`), and `installZipFolderFetch` (called from
+  `main.tsx`) wraps the page's `fetch` so `<zip url>/<path>` is answered from
+  the zip: `HEAD` from its directory, and `GET`, with or without one `Range`,
+  from a `no-store` range of the zip at the entry's data offset (read once
+  from its local header). Readers, probes and diagnostics then open the run as
+  a folder. Other URLs pass through untouched. Workers keep the plain `fetch`,
+  which is why only Atera, read entirely on the main thread, opens from a zip.
 - **Range probe.** `assertHttpRangeSupport` (`src/data/rangeSupport.ts`) sends
   `GET` with `Range: bytes=0-0` before large reads and requires `206`.
   `Content-Range` is not required, because hosts that leave it out of

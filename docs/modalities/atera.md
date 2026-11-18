@@ -24,6 +24,44 @@ The layouts below were checked against a human whole-transcriptome kidney run
 (Xenium), then a `2xx` for `experiment.spatial` (Atera). Its body is not read
 at detection time.
 
+### Zipped Runs
+
+A whole output folder zipped into one file, such as
+`Atera_v1_WTA_S4C_Breast_Cancer_FF_outs.zip`, opens from its URL. A `.zip`
+URL is first tried as a zipped Zarr store (`detectZarrZip`); when the zip
+holds no Zarr metadata, detection reads its central directory
+(`readZipDirectory`, `src/data/zipArchive.ts`) and looks for
+`experiment.spatial` at the top of the zip or in the shallowest folder holding
+it, such as `outs/` (`zipFolderRoot`, ignoring `__MACOSX/`). The zip is then
+registered as the run's folder (`registerZipFolder`, `src/data/zipFolder.ts`)
+and the dataset's base URL is the zip's URL, so `<zip url>/cells.zarr.zip`
+names `outs/cells.zarr.zip` in the zip.
+
+The page's `fetch` answers those URLs from the zip, so every reader and
+diagnostic below works unchanged: `HEAD` from the directory (size, the zip's
+ETag), and `GET` with or without a `Range` as one range request of the zip at
+the entry's data offset, which is read once per file from its local header.
+Requests to the zip skip the HTTP cache (`cache: 'no-store'`), because
+Chromium serialises requests that share a URL's cache entry and every file is
+now one URL. The zipped stores and TIFF tiles still use the byte-range cache,
+keyed by the inner URL and versioned by the zip's ETag.
+
+Only stored (uncompressed) entries can be read in parts. A zip whose
+`cell_feature_matrix.zarr.zip` is deflated is refused at detection, with
+advice to zip with `zip -0 -r` or host the folder unzipped; other deflated
+files are read whole (and ranges of them only under 32 MiB), so a deflated
+TIFF or transcript zip fails when used. A zip holding a Xenium run
+(`experiment.xenium`) is refused: Xenium reads Parquet in workers, which do not
+see the zip. Detecting the same zip again in a page reuses the registered
+directory, so only the `HEAD` probe is repeated.
+
+Measured 2026-11-18 on the 89 GB breast cancer run on Sanger S3 (23 entries,
+all stored), with Playwright on the dev server: the overview of 485,985 cells
+appears in 9–12 s. Detection costs the `HEAD` probe and two reads of the zip's
+tail (the Zarr store attempt, then `readZipDirectory`); each file opened
+costs one 30-byte local-header read, and every request goes to the zip's own
+URL.
+
 ## File Locations
 
 Each file is located by, in order: the dataset manifest's `files` entry, the
@@ -327,6 +365,7 @@ which covers the 2D channel files only. On the reference run the switch took
 | `src/datasets/ateraTranscripts.ts`                  | `AteraTranscripts`: capabilities, per-gene density, exact points                                 |
 | `src/features/transcripts/useTranscriptWorkflow.ts` | Per-gene branch: cell summary, density, estimate, exact                                          |
 | `src/zarr/cachedZipStore.ts`                        | Range-cached zip stores and entry listing                                                        |
+| `src/data/zipFolder.ts`                             | Zipped run folders: registry and the `fetch` wrapper that reads files from the zip               |
 | `src/datasets/h5adDataset.ts`                       | AnnData readers used for the matrix                                                              |
 | `src/datasets/datasetFactory.ts`                    | `experiment.spatial` probe and construction                                                      |
 | `src/features/app-shell/platformAdapter.ts`         | `atera` adapter, boundary and transcript routing                                                 |
@@ -343,4 +382,6 @@ which covers the 2D channel files only. On the reference run the switch took
 - At a `Min QV` other than 20, a view whose selected genes have more than
   2,000,000 rows in the tiles under it shows the QV ≥ 20 squares, and says so.
 - One morphology image at a time: the 2D image or the 3D DAPI stack.
+- A zipped run must store its zips and OME-TIFFs uncompressed (see
+  [Zipped runs](#zipped-runs)); only Atera runs open from a zip.
 - Leiden classes have no stored colours; they take the viewer palette.

@@ -6,6 +6,7 @@
 // middle, so an entry is always read whole.
 
 import { fetchHead } from './hostResponses'
+import { responseValidator } from './persistentByteRangeCache'
 
 export interface ZipEntry {
   readonly name: string
@@ -19,6 +20,8 @@ export interface ZipEntry {
 export interface ZipDirectory {
   readonly url: string
   readonly byteLength: number
+  // The archive's ETag or Last-Modified from HEAD, when readable.
+  readonly validator?: string
   readonly entries: ReadonlyMap<string, ZipEntry>
 }
 
@@ -127,7 +130,14 @@ export async function readZipDirectory(
           options.signal,
         )
 
-  return { url, byteLength, entries: parseCentralDirectory(url, directory, entryCount) }
+  const validator = responseValidator(head.headers)
+
+  return {
+    url,
+    byteLength,
+    ...(validator === undefined ? {} : { validator }),
+    entries: parseCentralDirectory(url, directory, entryCount),
+  }
 }
 
 export function parseCentralDirectory(

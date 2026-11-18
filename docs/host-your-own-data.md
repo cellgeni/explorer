@@ -187,6 +187,18 @@ in the bundle, and leaving it out removes that choice.
 All the zips and OME-TIFFs need byte-range support. Keep the zips stored as
 written; do not recompress them.
 
+The whole output folder can also be hosted as one zip, such as
+`<run>_outs.zip`, and opened by its URL. The zip must store its files without
+compression, since the viewer reads them in place by byte range:
+
+```bash
+zip -0 -r run_outs.zip outs
+```
+
+`experiment.spatial` can be at the top of the zip or in a folder inside it.
+The zip needs byte-range support like the files above. See
+[Zipped runs](./modalities/atera.md#zipped-runs).
+
 ## Host Your Own Standard Visium Data
 
 Standard Visium means Visium v1 or v2 (CytAssist) with 55 µm spots, processed

@@ -121,3 +121,19 @@ run on the Sanger bucket. See [Atera](../../modalities/atera.md).
       reloads the dataset with `aimg=3d`, as the MERSCOPE stain choice does;
       the stack gets the existing `Z plane` control. A manifest's 2D sidecar
       is not applied to it. The switch showed plane 8 of 15 in 1.7 s.
+
+## Zipped Runs
+
+- [x] A whole output folder zipped into one file opens from its URL
+      (2026-11-18). **DECISION:** no reader picker; a `.zip` with no Zarr
+      store but `experiment.spatial` is detected as an Atera run, and a
+      manifest's `root` may name such a zip. The zip is registered as a
+      folder and the page's `fetch` answers `<zip url>/<path>` from byte
+      ranges of the zip (`src/data/zipFolder.ts`), so the readers are
+      unchanged. Only stored entries can be read in parts: a deflated matrix
+      is refused at detection. Xenium zips are refused, because Xenium reads
+      Parquet in workers, which do not see the zip. Checked against the
+      89 GB breast cancer run on the Sanger bucket: 485,985 cells in 9–12 s,
+      gene overlays, density, exact points, boundaries, the 3D stack, and
+      diagnostics all read from the zip. See
+      [Zipped runs](../../modalities/atera.md#zipped-runs).

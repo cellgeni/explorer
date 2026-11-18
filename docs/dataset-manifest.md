@@ -150,6 +150,11 @@ All entries are optional. Leave one out to use the path in
 `experiment.spatial`, or the standard name when that lists none. Atera
 `options` must be empty.
 
+`root` may be a run zipped whole, such as
+`"root": "https://host/run_outs.zip"`: paths then name files inside the zip
+(see [Zipped runs](./modalities/atera.md#zipped-runs)). Only an Atera
+manifest's `root` can be a zip.
+
 | Key                     | Standard name                                     | Notes                                                                                                                         |
 | ----------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
 | `experiment`            | `experiment.spatial`                              | Supplies the pixel size and the paths of the other files                                                                      |
