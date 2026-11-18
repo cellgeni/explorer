@@ -62,13 +62,18 @@ hovering names the section and the Aqp4 score.
 
 ## Known Gaps
 
-- [ ] No truly registered serial-section dataset has been opened in the
-      stack; SPCOX sections are not registered.
+- [x] A truly registered serial-section dataset in the stack (2026-11-18):
+      [`docs/collections/lynx-liver.json`](../../collections/lynx-liver.json),
+      seven LYNX liver Xenium sections 5 µm apart, each opened by a manifest
+      in its SpatialData store's `aligned` coordinate system. Pericentral
+      CYP3A4 zones run through all seven; the stack settles about 17 s after
+      `Stack in 3D` (headless Chromium with the GPU, 34 MB).
 - [ ] Cells only: no section images (a coarse level could be a textured
       plane at each depth), boundaries or transcripts.
 - [ ] Sections are placed by depth only. Rotation, flips or warping must be
-      applied before the coordinates are written; a per-section transform,
-      or a SpatialData store's transformations, are not read.
+      in the coordinates as read: a SpatialData manifest can choose a
+      registering coordinate system, but a per-section transform in the
+      collection is not read, and images rotated by it are not shown.
 - [ ] Not measured on large stacks (millions of cells). Each section is one
       or two point layers, and picking renders the solid ones on hover.
 - [ ] No way to show a range of sections (to see inside the stack), or to
