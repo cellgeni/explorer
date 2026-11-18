@@ -11,9 +11,15 @@ The scope is a floating Cell Query window with two parts:
 - a picture of each listed cell, cut from the dataset's image with the
   canvas's channels and contrast, with the cell's outline (M2).
 
-The decisions below are **proposed** defaults, not yet confirmed by the user.
-[Questions For The User](#questions-for-the-user) lists the ones that change
-the size.
+The user decided on 2026-11-18:
+
+- Conditions combine with AND only (D3).
+- The canvas shows matches only once they are saved with `Save as class`
+  (D7). The window does not fade cells as conditions change.
+- Pictures have a fixed field, chosen in `Picture`, not one fitted to each
+  cell (D10).
+- Pictures show the cell's outline (D10).
+- Standard Visium spots are in scope (D1).
 
 The plan rests on a code map made on 2026-11-18 at `ba01d76`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -30,8 +36,8 @@ Goals:
 - Xenium, Atera, standard Visium, MERSCOPE, H5AD (file, reference, Icechunk,
   AnnData Zarr) and SpatialData.
 - Clicking a row selects the cell and moves the view to it.
-- The matches can be shown on the canvas, saved as a class, and exported as
-  CSV.
+- The matches can be saved as a class, which shows them on the canvas, and
+  exported as CSV.
 - A picture of each listed cell, drawn only for the rows on screen.
 - The axe baseline stays empty and `nativeTitleAudit` passes.
 
@@ -39,6 +45,8 @@ Non-goals:
 
 - Conditions on gene expression. See [Later](#later).
 - Nested or OR-combined conditions (D3).
+- Fading the cells that do not match as conditions change (D7). See
+  [Later](#later).
 - Visium HD. Its bins are grid cells, not overview cells, and number in the
   millions at 2 µm. See [Later](#later).
 - Image-only datasets, which have no cells, and collections (one dataset at
@@ -71,6 +79,11 @@ What the window can take as it is:
 - **Joining IDs to rows.** `PlotStatsStore.setGroups` (`plotStats.ts:150`)
   maps class IDs to rows in the plot worker. It grouped the 1.4 million cells
   of the Xenium demo within 0.7 s ([Phase 22, M2](22-plots-panel.md#m2-progress)).
+- **Showing a set of cells.** `Save ROI` adds its cells as a `roi:` class
+  ahead of the others and colours cells by annotations
+  (`useAnnotationWorkflow.ts:615`). The first class listing a cell gives its
+  colour, and cells in no shown class fade (`cellStyling.ts:111`,
+  `UNCLASSED_CELL_COLOR` at `:43`).
 - **Select and focus.** `handleEmbeddingCellSelect`
   (`useAnalysisEmbeddingWorkflow.ts:176`) selects a cell by ID and calls
   `focusSpatialViewOnCell` (`App.tsx:1456`). The Cell card opens as for a
@@ -100,10 +113,6 @@ What is missing:
 - **No columns by row.** Classes come as ID lists per class, tracks as
   `{ cellId, value }` lists, and overview columns as fields of objects.
   Nothing holds several of them by row, except the plot store for one set.
-- **Fading only under Annotations.** Cells in no shown class fade
-  (`UNCLASSED_CELL_COLOR`, `cellStyling.ts:43` and `:126`), but only when
-  cells are coloured by annotations. Other colour modes have no way to fade a
-  set of cells.
 - **No shared tile cache.** Each `MorphologyCanvas` makes its own
   `TileCache` and `TileRequestScheduler` per channel
   (`MorphologyCanvas.tsx:469` and `:483`), with up to 4 requests in flight
@@ -115,7 +124,7 @@ What is missing:
 - **No table component.** The app's three `<table>`s (`ParquetRowsPanel`,
   `ParquetStructureView`, the Plots `Show numbers` table) draw every row.
 
-## Product Decisions (Proposed)
+## Product Decisions
 
 - **D1. Rows are the dataset's cells.** Every cell in `overviewCells`, or
   spot on standard Visium. Not Visium HD bins, not image-only datasets. In a
@@ -147,14 +156,15 @@ What is missing:
 - **D6. A row click selects the cell** and moves the view to it, as the
   Embedding panel does (`handleEmbeddingCellSelect`). Arrow keys move
   through rows and Enter selects.
-- **D7. Matches show on the canvas by fading the rest,** in every colour
-  mode, under a `Show on canvas` checkbox (on). The fade is applied where
-  colours are packed (`packCellPointColors`, `ViewerCore.tsx:906`) and in the
-  boundary styler, so cells keep their colours.
-- **D8. Save and export.** `Save as class` adds the matches as one class of
-  a `query:` set, as `Save ROI` adds a `roi:` class, so Plots can group by it
-  and the annotations export includes it. `Export CSV` writes the table's
-  columns for every match.
+- **D7. Matches show on the canvas once saved.** The window leaves the
+  canvas as it is while conditions change. `Save as class` adds the matches
+  as one class of a `query:` set ahead of the others and colours cells by
+  annotations, as `Save ROI` does: matches take the class colour, and hiding
+  the other sets leaves only them, with every other cell faded. Each save
+  adds a class, named `Query 1`, `Query 2` and so on, or the name typed
+  beside the button. Plots can group by it, and the annotations export
+  includes it.
+- **D8. Export.** `Export CSV` writes the table's columns for every match.
 - **D9. A window like Plots.** `Show Query` sits with `Show Embedding` and
   `Show Plots` in Cells › Panels. The window is 520 × 460 by default and at
   least 360 × 300, placed beside the other windows as Plots is (plan 22-D8),
@@ -163,10 +173,10 @@ What is missing:
 - **D10. A picture per row (M2).** Each row starts with a picture centred on
   the cell, drawn by `MorphologyCanvas` with the canvas's channels, colours
   and contrast; flat Visium images too. `Picture` offers Off, 20 µm, 40 µm
-  and 80 µm across; 40 µm is the default when the dataset has an image, and
-  rows grow from 28 to 72 px. The cell's outline is drawn over it where the
-  dataset has boundaries, a spot's circle on Visium, and otherwise a ring at
-  the cell's position.
+  and 80 µm across, the same for every row; 40 µm is the default when the
+  dataset has an image, and rows grow from 28 to 72 px. The cell's outline
+  is drawn over it where the dataset has boundaries, a spot's circle on
+  Visium, and otherwise a ring at the cell's position.
 - **D11. Pictures share one tile store.** The per-channel `TileCache` and
   `TileRequestScheduler` move out of `MorphologyCanvas` into a store that
   canvases can share. Pictures share one, with at most 6 requests in flight
@@ -174,18 +184,6 @@ What is missing:
   minimap keep their own.
 - **D12. Pictures for rows on screen only.** A picture is requested 150 ms
   after its row stops moving and cancelled when its row leaves the view.
-
-## Questions For The User
-
-1. AND only (D3), or AND/OR groups? Groups add a condition tree to the
-   editor, the worker and the link: about one more week.
-2. Fade the rest of the canvas in every colour mode (D7), or show matches
-   only through `Save as class`? The second saves task E.
-3. A fixed picture size (D10), or one fitted to each cell's outline? Fitting
-   needs the outline before the picture.
-4. Outlines on pictures (D10)? Without them task I goes, and pictures need
-   no boundary reads.
-5. Standard Visium spots in scope (D1)?
 
 ## Tasks
 
@@ -217,45 +215,42 @@ What is missing:
   - A `query` control area in `src/test/controlAreas.ts`,
     `src/test/appTestHarness.ts` and `tests/e2e/controls.ts`. Gate on the
     platform adapter's `cells` capability and D1.
-- [ ] **E. Fade on the canvas.** (M) A row mask into the packed point
-      colours and the boundary styler (D7), in every colour mode. One
-      repack per applied query, not per keystroke.
-- [ ] **F. Save as class and export.** (S) D8.
-- [ ] **G. Shared tile store.** (M) Move the per-channel cache and scheduler
+- [ ] **E. Save as class and export.** (S) D7 and D8. Tests: a saved class
+      lists the matches, colours them and appears under Plots' `Group by`;
+      the CSV matches the table.
+- [ ] **F. Shared tile store.** (M) Move the per-channel cache and scheduler
       out of `MorphologyCanvas` into a store that can be passed in (D11).
       A refactor with no change in behaviour: the main view, minimap and
       slide images keep their own store, and their tests pass unchanged.
-- [ ] **H. Cell pictures.** (M) A `CellPicture` component: a small
+- [ ] **G. Cell pictures.** (M) A `CellPicture` component: a small
       `MorphologyCanvas` on the shared store, with a view state centred on
       the cell at the chosen field (D10), the outline as SVG above it, and
       the D12 timing. A `Picture` control. Datasets without an image show
       the outline alone.
-- [ ] **I. Outlines for a page of cells.** (M) One boundary read for the
+- [ ] **H. Outlines for a page of cells.** (M) One boundary read for the
       rows in view, not one per cell: an optional dataset method
       `boundariesForCells(ids)`, a `cell_id IN (…)` query on Xenium and the
       readers' own lookups elsewhere, falling back to a query per cell.
       Measure on the Xenium demo before choosing.
-- [ ] **J. Docs and end-to-end tests.** (M) Docs listed in
+- [ ] **I. Docs and end-to-end tests.** (M) Docs listed in
       [Docs To Update](#docs-to-update). E2E on fixtures: open Cell Query
       on the H5AD fixture, add a class and a number condition, sort, select
-      a row, export CSV. The axe smoke test opens the window empty and with
-      a result, and the baseline stays `{}`. A nightly `@live` test on the
-      Xenium demo records the time to the first count and to the first page
-      of pictures.
+      a row, save the matches as a class, export CSV. The axe smoke test
+      opens the window empty and with a result, and the baseline stays
+      `{}`. A nightly `@live` test on the Xenium demo records the time to
+      the first count and to the first page of pictures.
 
 ## Order And Size
 
-| Milestone            | Contents         | Size          |
-| -------------------- | ---------------- | ------------- |
-| M1 — Query and table | A, B, C, D, E, F | about 3 weeks |
-| M2 — Pictures        | G, then H and I  | about 2 weeks |
-| Throughout           | J                | —             |
+| Milestone            | Contents        | Size           |
+| -------------------- | --------------- | -------------- |
+| M1 — Query and table | A, B, C, D, E   | about 2½ weeks |
+| M2 — Pictures        | F, then G and H | about 2 weeks  |
+| Throughout           | I               | —              |
 
 - M1 is useful on its own, and M2 can be measured on real result lists.
-- G is a refactor, so it is its own PR, before H.
-- The total is about 5 weeks. Question 1 adds about a week; question 2
-  (fade through `Save as class` only) and question 4 (no outlines) each
-  save about 3 days.
+- F is a refactor, so it is its own PR, before G.
+- The total is about 4½ weeks.
 - Tag a release after M1 and after M2.
 
 ## Testing
@@ -266,14 +261,15 @@ What is missing:
 - **Component.** The conditions editor and the table from fixtures; pictures
   with a mocked loader, as `MorphologyCanvas.test.tsx` does.
 - **`App.test.tsx`.** Open Cell Query from Cells, add a condition on a set,
-  check the count, click a row and check the Cell card and the view. Tests
-  route their reads through `offlineFetch`.
-- **E2E and accessibility.** Task J. `nativeTitleAudit` covers every new
+  check the count, click a row and check the Cell card and the view, then
+  save the matches as a class. Tests route their reads through
+  `offlineFetch`.
+- **E2E and accessibility.** Task I. `nativeTitleAudit` covers every new
   button, field and picture.
 - **Redraw guard.** The window sits outside `MemoDeckGL` and goes in the
-  no-redraw test: scrolling the table and loading pictures must not render
-  DeckGL, which costs about 9 s per render in headless runs. Applying a query
-  with `Show on canvas` renders it once.
+  no-redraw test: editing conditions, scrolling the table and loading
+  pictures must not render DeckGL, which costs about 9 s per render in
+  headless runs. `Save as class` renders it once, as `Save ROI` does.
 
 ## Docs To Update
 
@@ -289,16 +285,22 @@ What is missing:
 | Risk                                                       | Effect                                                     | Mitigation                                                                                    |
 | ---------------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Sending 1.4 million cell IDs to the worker stalls the page | A pause when the window first opens on a large dataset     | Send once per dataset and measure; Xenium IDs as integer pairs, as the plot worker takes them |
-| Fading repacks every cell's colour                         | Each applied query costs what a colour mode change costs   | Repack per applied query, after the 250 ms wait; the redraw guard                             |
+| The canvas does not follow the conditions                  | Users expect the matches to show as they edit              | The count and `Save as class` sit together, and the window says matches show once saved       |
+| Saved classes pile up                                      | Each save adds a class to the legend and the Clusters list | Each is named and can be removed, with undo, as any class can                                 |
 | Pictures are slow from a distant host                      | A page fills in seconds: matches are spread over the slide | Shared store, 6 requests, rows in view only, the 80 µm field reads a coarser level, `Off`     |
-| Outline lookups are slow                                   | Pictures wait for outlines, or outlines arrive late        | Draw the picture first; one read per page (task I); a ring at the position as fallback        |
+| Outline lookups are slow                                   | Pictures wait for outlines, or outlines arrive late        | Draw the picture first; one read per page (task H); a ring at the position as fallback        |
 | Picture tiles use too much memory                          | Many full-resolution tiles across the slide                | One bounded cache for all pictures, least recently used out                                   |
-| Large typed arrays pass through React props                | React 19 dev walks them on every render; dev tabs crash    | Columns and masks stay in the worker or in `#private` fields, not props                       |
+| Large typed arrays pass through React props                | React 19 dev walks them on every render; dev tabs crash    | Columns and matches stay in the worker or in `#private` fields, not props                     |
 | The picture and the canvas disagree                        | Channels or contrast differ                                | Pictures take `morphologyCanvasChannels`, the canvas's own list                               |
 
 ## Later
 
-- AND/OR groups (question 1).
+- AND/OR groups: a condition tree in the editor, the worker and the link,
+  about one more week.
+- Fading the cells that do not match as conditions change, in every colour
+  mode: a row mask where point colours are packed (`packCellPointColors`,
+  `ViewerCore.tsx:906`) and in the boundary styler, about M.
+- Pictures fitted to each cell's outline.
 - Conditions on gene expression, for example "CD3E above 2". The Plots
   panel's whole-dataset reader (`GeneValuesSource`, `geneValues.ts:50`) and
   read budget (`plotReadDecision`, `plotsPanelModel.ts:489`) make this about
