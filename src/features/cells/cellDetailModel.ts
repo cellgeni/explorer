@@ -419,7 +419,7 @@ function isCellBoundaryAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
 }
 
-function cellAreaToEquivalentDiameterMicrometers(
+export function cellAreaToEquivalentDiameterMicrometers(
   area: number | undefined,
 ): number | undefined {
   if (area === undefined || area <= 0 || !Number.isFinite(area)) {

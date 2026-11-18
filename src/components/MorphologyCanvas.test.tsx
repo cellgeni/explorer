@@ -1,6 +1,7 @@
 import { act, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
+import { MorphologyTileStore } from '../rendering/morphologyTileStore'
 import { TiffPyramidLoader } from '../tiff/loader'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import type { BBox, TileIndex } from '../data/coords'
@@ -426,6 +427,58 @@ describe('MorphologyCanvas', () => {
     })
     // The view's centre, frame (1175, 50), is in tile (5, 0).
     expect(requestedTileKeys()[0]).toBe('0:5:0')
+  })
+
+  describe('with a tile store shared by several canvases (plan 23-D11)', () => {
+    it('reads a tile two canvases show once', async () => {
+      mockCanvasContext()
+      const loader = placedLoader({ x: -600, y: -400 })
+      const store = new MorphologyTileStore({ prefetch: false })
+      const view: OverviewViewState = { ...viewState, target: [-300, 200, 0] }
+
+      render(
+        <>
+          <MorphologyCanvas loader={loader} viewState={view} tileStore={store} />
+          <MorphologyCanvas loader={loader} viewState={view} tileStore={store} />
+        </>,
+      )
+
+      // The view, x -400 to -200 and y -250 to -150, sees tiles (1, 0) and
+      // (1, 1); without a prefetch margin nothing more is read.
+      await waitFor(() => {
+        expect(requestedTileKeys().sort()).toEqual(['0:1:0', '0:1:1'])
+      })
+    })
+
+    it('keeps the tiles for the next canvas when one unmounts', async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const loader = mockLoader()
+      const store = new MorphologyTileStore()
+      const first = render(
+        <MorphologyCanvas loader={loader} viewState={viewState} tileStore={store} />,
+      )
+
+      await waitFor(() => {
+        expect(tileCacheMock.requests).toHaveLength(2)
+      })
+      await act(async () => {
+        for (const request of tileCacheMock.requests) request.resolve()
+        await Promise.all(tileCacheMock.requests.map((request) => request.promise))
+      })
+      first.unmount()
+      const drawsBefore = context.drawImage.mock.calls.length
+
+      render(<MorphologyCanvas loader={loader} viewState={viewState} tileStore={store} />)
+
+      await waitFor(() => {
+        expect(context.drawImage.mock.calls.length).toBe(drawsBefore + 2)
+      })
+      expect(tileCacheMock.requests).toHaveLength(2)
+    })
   })
 })
 

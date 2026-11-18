@@ -6,10 +6,10 @@ import { TOOL_ORDER } from './shortcuts'
 
 // The shell's part of a share link (plan 15.2-H, D7):
 // `panel=` lists the open layer sections, `info` (the info drawer),
-// `embedding` and `plots` (plan 22-D8); `tool=` the active tool; `card=` a card to restore; `hidden=`
+// `embedding`, `plots` (plan 22-D8) and `query` (23-D9); `tool=` the active tool; `card=` a card to restore; `hidden=`
 // the hidden layers. Each is left out at its default.
 
-export type ShellPanelId = LayerSectionId | 'info' | 'embedding' | 'plots'
+export type ShellPanelId = LayerSectionId | 'info' | 'embedding' | 'plots' | 'query'
 
 const LAYER_SECTION_IDS: readonly LayerSectionId[] = [
   'image',
@@ -29,6 +29,7 @@ export interface ShellPanelState {
   readonly infoOpen: boolean
   readonly embeddingOpen: boolean
   readonly plotsOpen: boolean
+  readonly queryOpen: boolean
 }
 
 export const DEFAULT_SHELL_PANELS: ShellPanelState = {
@@ -36,6 +37,7 @@ export const DEFAULT_SHELL_PANELS: ShellPanelState = {
   infoOpen: false,
   embeddingOpen: false,
   plotsOpen: false,
+  queryOpen: false,
 }
 
 // The sections open until the user opens or closes one: Cells, or Image
@@ -116,11 +118,12 @@ export function panelsFromLink(state: ShareableState): ShellPanelState {
     infoOpen: state.panels.includes('info'),
     embeddingOpen: state.panels.includes('embedding'),
     plotsOpen: state.panels.includes('plots'),
+    queryOpen: state.panels.includes('query'),
   }
 }
 
-// Left out at the default; with the drawer, Embedding or Plots open, the
-// default sections are written out.
+// Left out at the default; with the drawer or a window open, the default
+// sections are written out.
 export function panelsForLink(
   panels: ShellPanelState,
   defaultExpanded: readonly LayerSectionId[],
@@ -129,7 +132,8 @@ export function panelsForLink(
     panels.expanded === null &&
     !panels.infoOpen &&
     !panels.embeddingOpen &&
-    !panels.plotsOpen
+    !panels.plotsOpen &&
+    !panels.queryOpen
   ) {
     return undefined
   }
@@ -139,6 +143,7 @@ export function panelsForLink(
     ...(panels.infoOpen ? (['info'] as const) : []),
     ...(panels.embeddingOpen ? (['embedding'] as const) : []),
     ...(panels.plotsOpen ? (['plots'] as const) : []),
+    ...(panels.queryOpen ? (['query'] as const) : []),
   ]
 }
 

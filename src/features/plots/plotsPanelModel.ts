@@ -453,12 +453,15 @@ export function plotSetOptions(sources: PlotSetSources): readonly PlotSetOption[
 }
 
 // The dataset's own set: the first with a class that is not a saved
-// selection, since Save ROI puts its class first.
+// selection or query, since Save ROI and Save As Class put theirs first.
 export function defaultPlotSetId(
   annotations: readonly Annotation<string>[],
 ): string | null {
   const annotation =
-    annotations.find((candidate) => !candidate.id.startsWith('roi:')) ?? annotations[0]
+    annotations.find(
+      (candidate) =>
+        !candidate.id.startsWith('roi:') && !candidate.id.startsWith('query:'),
+    ) ?? annotations[0]
   return annotation === undefined ? null : annotationSetGrouping(annotation).id
 }
 

@@ -1,6 +1,6 @@
 import { PlotsPanel } from '../plots/PlotsPanel'
 import type { PlotsModel } from '../plots/usePlotsModel'
-import { FloatingWindow } from './FloatingWindow'
+import { FloatingWindow, type FloatingWindowSize } from './FloatingWindow'
 import { PLOTS_WINDOW_MIN_SIZE, PLOTS_WINDOW_SIZE } from './floatingWindowModel'
 
 // Plots of the selected genes by class (plan 22-D8): a window at the top
@@ -12,12 +12,14 @@ export function PlotsWindow({
   onClose,
   fullWidth = false,
   rightOffset,
+  onSizeChange,
 }: {
   readonly plots: PlotsModel
   readonly open: boolean
   readonly onClose: () => void
   readonly fullWidth?: boolean | undefined
   readonly rightOffset?: number | undefined
+  readonly onSizeChange?: ((size: FloatingWindowSize) => void) | undefined
 }) {
   return (
     <FloatingWindow
@@ -34,6 +36,7 @@ export function PlotsWindow({
       onClose={onClose}
       fullWidth={fullWidth}
       rightOffset={rightOffset}
+      onSizeChange={onSizeChange}
     >
       <PlotsPanel plots={plots} />
     </FloatingWindow>

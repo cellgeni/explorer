@@ -75,6 +75,10 @@ interface LayerPanelProps {
   // cells have no annotation sets.
   readonly plotsOpen?: boolean | undefined
   readonly onPlotsOpenChange?: ((open: boolean) => void) | undefined
+  // Cells › Show Query opens the Cell Query window (23-D9); left out where
+  // the cells cannot be queried.
+  readonly queryOpen?: boolean | undefined
+  readonly onQueryOpenChange?: ((open: boolean) => void) | undefined
   // Under 860 px the panel is a bottom sheet (15.2-I): a handle that names
   // what colours the cells, instead of the collapse button.
   readonly sheet?: LayerSheetProps | undefined
@@ -106,6 +110,8 @@ export function LayerPanel({
   onEmbeddingOpenChange,
   plotsOpen = false,
   onPlotsOpenChange,
+  queryOpen = false,
+  onQueryOpenChange,
   sheet,
   reveal = null,
 }: LayerPanelProps) {
@@ -129,6 +135,8 @@ export function LayerPanel({
         onEmbeddingOpenChange={onEmbeddingOpenChange}
         plotsOpen={plotsOpen}
         onPlotsOpenChange={onPlotsOpenChange}
+        queryOpen={queryOpen}
+        onQueryOpenChange={onQueryOpenChange}
       />
     ),
     transcripts: <TranscriptsSection transcripts={transcripts} />,
@@ -377,6 +385,8 @@ function CellsSection({
   onEmbeddingOpenChange,
   plotsOpen,
   onPlotsOpenChange,
+  queryOpen,
+  onQueryOpenChange,
 }: {
   readonly cells: CellsSectionModel
   readonly annotations: AnnotationsSectionModel
@@ -385,6 +395,8 @@ function CellsSection({
   readonly onEmbeddingOpenChange: (open: boolean) => void
   readonly plotsOpen: boolean
   readonly onPlotsOpenChange: ((open: boolean) => void) | undefined
+  readonly queryOpen: boolean
+  readonly onQueryOpenChange: ((open: boolean) => void) | undefined
 }) {
   return (
     <>
@@ -441,6 +453,21 @@ function CellsSection({
               }}
             >
               {plotsOpen ? 'Hide Plots' : 'Show Plots'}
+            </Button>
+          )}
+          {onQueryOpenChange === undefined ? null : (
+            <Button
+              title={
+                queryOpen
+                  ? 'Hide the cell query panel'
+                  : 'Find cells by their classes and values, in a table'
+              }
+              aria-pressed={queryOpen}
+              onClick={() => {
+                onQueryOpenChange(!queryOpen)
+              }}
+            >
+              {queryOpen ? 'Hide Query' : 'Show Query'}
             </Button>
           )}
         </div>

@@ -1,5 +1,10 @@
 import type { RoiSelection } from '../../data/roiSelection'
-import type { Platform } from '../../datasets/spatialDataset'
+import {
+  isCellOutlineDataset,
+  type CellOutlineRequest,
+  type Platform,
+  type SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type {
   CellBoundaryDatum,
@@ -596,6 +601,67 @@ export async function loadPlatformBoundaryElements(
   }
 
   return dataset.elements(bbox)
+}
+
+// Box reads in flight at once for a dataset without its own read for given
+// cells.
+const CELL_OUTLINE_BOX_READS = 3
+
+// The outlines of a page of cells for the Cell Query pictures (plan 23-H):
+// one read where the dataset has one for given cells (Xenium), otherwise the
+// Cell card's box read around each cell, a few at a time.
+export async function loadPlatformCellOutlines(
+  adapter: AppPlatformAdapter,
+  dependencies: {
+    readonly getSpatialDataset: SpatialDatasetLoader
+    readonly loadBoundaryElements: BoundaryElementsLoader
+  },
+  baseUrl: string,
+  cells: readonly CellOutlineRequest[],
+  options: { readonly signal?: AbortSignal } = {},
+): Promise<ReadonlyMap<string, SpatialElement>> {
+  const found = new Map<string, SpatialElement>()
+
+  if (adapter.kind === 'image' || cells.length === 0) {
+    return found
+  }
+
+  const dataset = await dependencies.getSpatialDataset(baseUrl)
+  const meta = await dataset.meta()
+
+  if (!meta.capabilities.cellBoundaries) {
+    return found
+  }
+
+  if (isCellOutlineDataset(dataset)) {
+    for (const element of await dataset.cellOutlines(cells, options)) {
+      found.set(String(element.id), element)
+    }
+    return found
+  }
+
+  let next = 0
+  const readNext = async (): Promise<void> => {
+    while (next < cells.length && options.signal?.aborted !== true) {
+      const cell = cells[next]
+      next += 1
+      if (cell === undefined) continue
+      const batch = await loadPlatformBoundaryElements(
+        adapter,
+        dependencies,
+        baseUrl,
+        cell.bbox,
+        options,
+      )
+      const element = batch.elements.find((candidate) => candidate.id === cell.id)
+      if (element !== undefined) found.set(cell.id, element)
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(CELL_OUTLINE_BOX_READS, cells.length) }, readNext),
+  )
+  return found
 }
 
 export async function loadPlatformNucleusBoundaryElements(

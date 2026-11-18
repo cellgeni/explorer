@@ -20,7 +20,7 @@ import {
 } from '../data/roiSelection'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
 import type { CellId } from '../data/cellid'
-import type { ElementBatch, SpatialElement } from './spatialDataset'
+import type { CellOutlineRequest, ElementBatch, SpatialElement } from './spatialDataset'
 import type {
   CellTranscriptZDistributionQueryOptions,
   DatasetCell,
@@ -110,6 +110,91 @@ export async function readXeniumBoundaryElements(
         },
       })),
   }
+}
+
+// cell_boundaries.parquet keeps each cell's vertices together, in the order
+// of cells.parquet, so a cell's vertices start near its row times the
+// vertices per cell. On the Xenium demo (1,414,155 cells, 25 vertices each
+// but for a few) the start was at most 27,352 rows short of that; this many
+// rows either side covers a file whose cells vary more.
+const OUTLINE_ROW_WINDOW_MIN = 30_000
+const OUTLINE_ROW_WINDOW_FRACTION = 0.002
+
+export interface XeniumBoundaryLayout {
+  readonly cellRows: number
+  readonly vertexRows: number
+}
+
+export async function readXeniumBoundaryLayout(
+  conn: XeniumDuckDbConnection,
+  urls: { readonly cells: string; readonly cellBoundaries: string },
+): Promise<XeniumBoundaryLayout> {
+  // Both counts come from the files' footers.
+  const stmt = await conn.prepare(`
+SELECT
+  (SELECT count(*) FROM read_parquet( ? )) AS cell_rows,
+  (SELECT count(*) FROM read_parquet( ? )) AS vertex_rows
+`)
+  const result = await stmt.query(urls.cells, urls.cellBoundaries)
+  const row = result.toArray()[0] ?? {}
+
+  return {
+    cellRows: Number(row.cell_rows),
+    vertexRows: Number(row.vertex_rows),
+  }
+}
+
+// The outlines of given cells (plan 23-H), each read from the rows around
+// where its vertices should start: DuckDB skips the row groups outside them,
+// so a cell costs one row group rather than every group its box overlaps
+// (27-83 ms against about 450 ms on the demo). A cell not found there is
+// left out, for the caller to read by its box.
+export async function readXeniumCellOutlines(
+  conn: XeniumDuckDbConnection,
+  url: string,
+  cells: readonly CellOutlineRequest[],
+  layout: XeniumBoundaryLayout,
+): Promise<readonly SpatialElement[]> {
+  if (cells.length === 0 || !(layout.cellRows > 0) || !(layout.vertexRows > 0)) {
+    return []
+  }
+
+  const perCell = layout.vertexRows / layout.cellRows
+  const window = Math.max(
+    OUTLINE_ROW_WINDOW_MIN,
+    Math.ceil(layout.vertexRows * OUTLINE_ROW_WINDOW_FRACTION),
+  )
+  const parameters: SqlParameter[] = []
+  const branches = cells.map((cell) => {
+    const start = Math.round(cell.overviewRow * perCell)
+    parameters.push(url, Math.max(0, start - window), start + window, cell.id)
+    // A number parameter binds as DOUBLE, and a cast column skips no row
+    // groups (see betweenSql), so the bounds are cast to the column's type.
+    return `SELECT cell_id, vertex_x AS x, vertex_y AS y, file_row_number
+FROM read_parquet( ?, file_row_number = true )
+WHERE file_row_number BETWEEN CAST(? AS BIGINT) AND CAST(? AS BIGINT)
+  AND cell_id = ?`
+  })
+  const stmt = await conn.prepare(`
+${branches.join('\nUNION ALL\n')}
+ORDER BY cell_id, file_row_number
+`)
+  const result = await stmt.query(...parameters)
+  const verticesByCell = new Map<CellId, DataPoint[]>()
+
+  for (const row of result.toArray()) {
+    const parsed = parseBoundaryRow(row)
+    const vertices = verticesByCell.get(parsed.cellId) ?? []
+    vertices.push(parsed.point)
+    verticesByCell.set(parsed.cellId, vertices)
+  }
+
+  return [...verticesByCell.entries()]
+    .filter(([, points]) => points.length >= 3)
+    .map(([cellId, points]) => ({
+      id: cellId,
+      geometry: { kind: 'polygon', rings: [points] },
+    }))
 }
 
 // Nuclei of the cells in the box, from nucleus_boundaries.parquet. A cell can

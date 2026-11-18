@@ -17,6 +17,8 @@ export type ControlAreaPlace =
   | { readonly kind: 'embedding' }
   // Cells › Show Plots.
   | { readonly kind: 'plots' }
+  // Cells › Show Query.
+  | { readonly kind: 'query' }
   // Shown on their own, such as cards, which appear with what they show.
   | { readonly kind: 'none' }
 
@@ -68,6 +70,8 @@ export const CONTROL_AREAS = {
   embedding: { kind: 'embedding' },
   // Plots panel (plan 22-D8): Group by, Scale, Colour, numbers and exports.
   plots: { kind: 'plots' },
+  // Cell Query window (plan 23-D9): conditions, table, Save As Class, export.
+  query: { kind: 'query' },
 } as const satisfies Record<string, ControlAreaPlace>
 
 export type ControlArea = keyof typeof CONTROL_AREAS

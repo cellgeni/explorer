@@ -66,7 +66,12 @@ import type {
   DatasetTranscript,
   GeneExpressionBatch,
 } from '../../datasets/xeniumDataset'
-import type { Annotation, ElementBatch } from '../../datasets/spatialDataset'
+import type {
+  Annotation,
+  CellOutlineRequest,
+  ElementBatch,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
@@ -109,6 +114,14 @@ export type BoundaryElementsLoader = (
   bbox: BBox,
   options?: { readonly signal?: AbortSignal },
 ) => Promise<ElementBatch>
+
+// The outlines of given cells, keyed by cell ID; cells left out have none
+// (plan 23-H).
+export type CellOutlinesLoader = (
+  baseUrl: string,
+  cells: readonly CellOutlineRequest[],
+  options?: { readonly signal?: AbortSignal },
+) => Promise<ReadonlyMap<string, SpatialElement>>
 
 export type GenePanelLoader = (
   baseUrl: string,

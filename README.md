@@ -9,9 +9,10 @@ OME-TIFF/TIFF/QPTIFF/SVS/NDPI/OME-Zarr URLs from object storage, and dataset
 collections that list several of them to browse together.
 It renders spatial cells, spots, bins, image pyramids, morphology channels, expression
 overlays, transcript density/exact overlays, annotations, ROI queries,
-shareable view state, and dataset diagnostics without a server-side data
-service. `Browse Store` and `Browse File` show what a Zarr store or Parquet
-file holds without opening it as a dataset.
+cell queries by class and value, shareable view state, and dataset
+diagnostics without a server-side data service. `Browse Store` and `Browse
+File` show what a Zarr store or Parquet file holds without opening it as a
+dataset.
 
 The implementation is a Vite + React application. It uses deck.gl for spatial
 rendering, DuckDB WASM and Hyparquet for browser-side Parquet queries, GeoTIFF,

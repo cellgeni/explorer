@@ -18,12 +18,19 @@ import type { ImageSectionModel } from '../sections/imageSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { PlotsModel } from '../plots/usePlotsModel'
+import type { CellQueryModel } from '../query/useCellQueryModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { EmbeddingWindow } from './EmbeddingWindow'
-import { EMBEDDING_WINDOW_SIZE, plotsWindowRightOffset } from './floatingWindowModel'
+import {
+  EMBEDDING_WINDOW_SIZE,
+  PLOTS_WINDOW_SIZE,
+  plotsWindowRightOffset,
+  queryWindowRightOffset,
+} from './floatingWindowModel'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
 import { PlotsWindow } from './PlotsWindow'
+import { QueryWindow } from './QueryWindow'
 import type { LayerPanelModel, LayerReveal } from './layerPanelModel'
 import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
@@ -47,8 +54,10 @@ interface ShellLayoutProps {
   readonly embedding: EmbeddingModel | null
   // Null where the cells have no annotation sets (images, Visium HD).
   readonly plots?: PlotsModel | null
-  // Open sections, the info drawer and the Embedding and Plots panels, which
-  // the link keeps (15.2-H, 22-D8).
+  // Null where the cells cannot be queried (images, Visium HD).
+  readonly query?: CellQueryModel | null
+  // Open sections, the info drawer and the Embedding, Plots and Cell Query
+  // windows, which the link keeps (15.2-H, 22-D8, 23-D9).
   readonly panels: ShellPanelState
   readonly onPanelsChange: (panels: ShellPanelState) => void
   // The open collection's datasets, under the canvas.
@@ -62,8 +71,8 @@ interface ShellLayoutProps {
 }
 
 // The shell (plan 15.2): the top bar, the canvas with ⓘ's
-// dataset info drawer and the cards over it, the Embedding and Plots panels
-// at its top right, the collection bar under it when a collection is open, and the
+// dataset info drawer and the cards over it, the Embedding, Plots and Cell
+// Query windows at its top right, the collection bar under it when a collection is open, and the
 // layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).
 export function ShellLayout({
@@ -79,6 +88,7 @@ export function ShellLayout({
   cards,
   embedding,
   plots = null,
+  query = null,
   panels,
   onPanelsChange,
   collection,
@@ -86,31 +96,54 @@ export function ShellLayout({
   storeStructure,
   children,
 }: ShellLayoutProps) {
-  const { infoOpen, embeddingOpen, plotsOpen } = panels
+  const { infoOpen, embeddingOpen, plotsOpen, queryOpen } = panels
   const narrow = useNarrowScreen()
   const setInfoOpen = (open: boolean) => {
     onPanelsChange({ ...panels, infoOpen: open })
   }
-  // Under 860 px each window is full width, so opening one closes the other
-  // (22-D8).
+  // Under 860 px each window is full width, so opening one closes the
+  // others (22-D8, 23-D9).
+  const narrowClosed = {
+    embeddingOpen: false,
+    plotsOpen: false,
+    queryOpen: false,
+  }
   const setEmbeddingOpen = (open: boolean) => {
     onPanelsChange({
       ...panels,
+      ...(open && narrow ? narrowClosed : {}),
       embeddingOpen: open,
-      ...(open && narrow ? { plotsOpen: false } : {}),
     })
   }
   const setPlotsOpen = (open: boolean) => {
     onPanelsChange({
       ...panels,
+      ...(open && narrow ? narrowClosed : {}),
       plotsOpen: open,
-      ...(open && narrow ? { embeddingOpen: false } : {}),
+    })
+  }
+  const setQueryOpen = (open: boolean) => {
+    onPanelsChange({
+      ...panels,
+      ...(open && narrow ? narrowClosed : {}),
+      queryOpen: open,
     })
   }
   const [embeddingWidth, setEmbeddingWidth] = useState(EMBEDDING_WINDOW_SIZE.width)
   const handleEmbeddingSizeChange = useCallback((size: { readonly width: number }) => {
     setEmbeddingWidth(size.width)
   }, [])
+  const [plotsWidth, setPlotsWidth] = useState(PLOTS_WINDOW_SIZE.width)
+  const handlePlotsSizeChange = useCallback((size: { readonly width: number }) => {
+    setPlotsWidth(size.width)
+  }, [])
+  const embeddingShown = embedding !== null && embeddingOpen
+  const plotsShown = plots !== null && plotsOpen
+  // The Cell Query window mounts the first time it opens, so a session that
+  // never uses it does not render it with every update, then stays mounted
+  // to keep its size.
+  const [queryMounted, setQueryMounted] = useState(queryOpen)
+  if (queryOpen && !queryMounted) setQueryMounted(true)
   const canvasRef = useRef<HTMLDivElement>(null)
   useCanvasCornerSizes(canvasRef, narrow)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
@@ -160,6 +193,8 @@ export function ShellLayout({
       onEmbeddingOpenChange={setEmbeddingOpen}
       plotsOpen={plotsOpen}
       onPlotsOpenChange={plots === null ? undefined : setPlotsOpen}
+      queryOpen={queryOpen}
+      onQueryOpenChange={query === null ? undefined : setQueryOpen}
       reveal={layerReveal}
       sheet={
         narrow
@@ -224,13 +259,31 @@ export function ShellLayout({
                 plots={plots}
                 fullWidth={narrow}
                 rightOffset={plotsWindowRightOffset(
-                  embedding !== null && embeddingOpen,
+                  embeddingShown,
                   embeddingWidth,
                   narrow,
                 )}
                 open={plotsOpen}
                 onClose={() => {
                   setPlotsOpen(false)
+                }}
+                onSizeChange={handlePlotsSizeChange}
+              />
+            )}
+            {query === null || !queryMounted ? null : (
+              <QueryWindow
+                query={query}
+                fullWidth={narrow}
+                rightOffset={queryWindowRightOffset(
+                  [
+                    ...(embeddingShown ? [embeddingWidth] : []),
+                    ...(plotsShown ? [plotsWidth] : []),
+                  ],
+                  narrow,
+                )}
+                open={queryOpen}
+                onClose={() => {
+                  setQueryOpen(false)
                 }}
               />
             )}

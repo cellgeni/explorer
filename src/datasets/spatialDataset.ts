@@ -153,6 +153,32 @@ export interface Annotation<ElementId extends SpatialElementId = CellId> {
   readonly color?: string
 }
 
+// A cell whose outline is wanted (plan 23-H): its ID, its row in the
+// dataset's overview, by which a dataset can find where it stores the
+// outline, and a box around it for the reads that look by position.
+export interface CellOutlineRequest {
+  readonly id: string
+  readonly overviewRow: number
+  readonly bbox: BBox
+}
+
+// A dataset that reads the outlines of given cells at once, rather than
+// those in a box. Cells it leaves out have none.
+export interface CellOutlineDataset {
+  cellOutlines(
+    cells: readonly CellOutlineRequest[],
+    options?: { readonly signal?: AbortSignal },
+  ): Promise<readonly SpatialElement[]>
+}
+
+export function isCellOutlineDataset(dataset: unknown): dataset is CellOutlineDataset {
+  return (
+    typeof dataset === 'object' &&
+    dataset !== null &&
+    typeof (dataset as Partial<CellOutlineDataset>).cellOutlines === 'function'
+  )
+}
+
 export interface SpatialDataset<ElementId extends SpatialElementId = SpatialElementId> {
   meta(): Promise<DatasetMeta>
   elements(bbox: BBox): Promise<ElementBatch<ElementId>>

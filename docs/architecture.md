@@ -35,8 +35,9 @@ files. Parsing happens in the browser:
 | `src/features/`                         | Feature modules: panels and blocks (`*.tsx`), workflow hooks (`use*Workflow.ts`), and pure models (`*Model.ts`)                                                                          |
 | `src/features/app-shell/`               | Dataset lifecycle, platform adapters, URL hash sync, viewer layer data, app dependencies                                                                                                 |
 | `src/features/sections/`                | Section models (`*Model.ts`) and the blocks that render them (`*Blocks.tsx`); see [Section Models](#section-models)                                                                      |
-| `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, the Embedding and Plots windows, link panel state, narrow layout                                         |
+| `src/features/shell/`                   | The shell (15.2): top bar, tools, the shortcut table, layer panel, info drawer, the Embedding, Plots and Cell Query windows, link panel state, narrow layout                             |
 | `src/features/plots/`                   | The Plots panel (plan 22): what it groups, the stats store and its worker session, the dot plot, violin and heatmap models, their SVGs and the heatmap canvas, exports                   |
+| `src/features/query/`                   | The Cell Query panel (plan 23): the columns it offers, the query store and its worker session, the conditions editor, the paged table, `query=`                                          |
 | `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
 | `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
@@ -252,6 +253,13 @@ lets tests replace them.
   drawing, measurement, and the Magic Lens overlay. Layer factories are in
   `src/rendering/deckLayers.ts`.
 - `MorphologyCanvas` draws image tiles on a 2D canvas underneath deck.gl.
+  Its decoded tiles, their requests and a flat image live in a
+  `MorphologyTileStore` (`src/rendering/morphologyTileStore.ts`): one per
+  channel and contrast, each a `TileCache` and a `TileRequestScheduler`. A
+  canvas makes its own store unless given one; the Cell Query pictures share
+  one, whose schedulers keep each picture's wanted tiles apart, read the
+  highest rows first, and stay under one limit of requests in flight
+  (`TileRequestSlots`).
 - `VolumeViewer` (`src/components/VolumeViewer.tsx`) draws an OME-Zarr
   z-stack in 3D over the 2D view, with a deck.gl `OrbitView` and the
   ray-marching `VolumeLayer` (`src/rendering/volumeLayer.ts`).
@@ -443,6 +451,7 @@ their own, and their cards stayed on "Loading".
 | `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                        |
 | `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                     |
 | `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)       |
+| `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                     |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD up to 64 MiB,
 standard Visium), writes them into its own h5wasm file system, and answers
@@ -517,6 +526,34 @@ to 128 MiB, least recently used first out, and answers for genes it no longer
 holds with their names, which the panel reads again. If the worker fails, or
 there is no `Worker`, the same store runs on the main thread. See
 [plan 22](plan/phases/22-plots-panel.md).
+
+The Cell Query panel keeps the columns its conditions and table use in its
+own worker (`src/features/query/cellQuery.ts`), started once per dataset and
+given the overview's cell IDs, so rows are the overview's cells in their
+order. Overview values (transcript count, area, nucleus count) go to it as
+one `Float64Array` per column, NaN where a cell has none, and the
+segmentation method as a code per row. Class sets and saved selections go as
+each class's cell IDs, and metadata tracks as IDs and values; the worker maps
+the IDs to rows once per column, keeping each row's first class and a map of
+further ones, as the plot worker does. A column is sent the first time a
+condition, table column or sort uses it, and again only when its values
+change. Matching filters the rows condition by condition and returns the
+matches, sorted, as a transferred `Uint32Array`; the table then asks for the
+values of 64 rows at a time, sending a copy of those rows. Sorting the IDs
+compares whole numbers by value and other text by character code, as a
+collator would take seconds over a million IDs. If the worker fails, or there
+is no `Worker`, the same store runs on the main thread, given the rows and
+columns again. See [plan 23](plan/phases/23-cell-query.md).
+
+The table's pictures are small `MorphologyCanvas`es on one shared tile store
+(above). Their outlines are read a page at a time by `CellOutlineReader`
+through `loadPlatformCellOutlines`, which uses a dataset's `cellOutlines`
+where it has one and otherwise the Cell card's box read around each cell,
+three at a time. Xenium's `cellOutlines` relies on `cell_boundaries.parquet`
+keeping each cell's vertices together in the order of `cells.parquet`: it
+reads the rows around the cell's overview row times the vertices per cell,
+one `UNION ALL` query per page, and DuckDB skips the row groups outside them.
+A cell not found there falls back to its box.
 
 Auto-contrast decodes and samples tiles off the main thread and gets back only
 the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile

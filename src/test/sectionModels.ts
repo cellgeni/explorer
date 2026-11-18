@@ -33,6 +33,7 @@ import type {
 } from '../features/sections/viewSettingsModel'
 import type { EmbeddingModel } from '../features/sections/embeddingModel'
 import type { PlotsModel } from '../features/plots/usePlotsModel'
+import type { CellQueryModel } from '../features/query/useCellQueryModel'
 import type { DatasetLibraryModel } from '../features/start/datasetLibraryModel'
 import { DEFAULT_EXAMPLES_INDEX_URL } from '../features/start/examplesIndex'
 import type { ToolGroupModel, TopBarModel } from '../features/shell/topBarModel'
@@ -479,6 +480,70 @@ export function testPlotsModel(overrides: Partial<PlotsModel> = {}): PlotsModel 
     onExportPng: vi.fn(),
     onExportCsv: vi.fn(),
     ...overrides,
+  }
+}
+
+// A Cell Query window listing `rowCount` cells, c0, c1 and so on, with a
+// transcript count of ten times the row.
+export function testCellQueryModel(
+  overrides: Partial<CellQueryModel> & { readonly rowCount?: number } = {},
+): CellQueryModel {
+  const { rowCount = 0, ...rest } = overrides
+  return {
+    status: `${rowCount.toLocaleString()} cells, no conditions`,
+    loading: false,
+    elementNoun: 'cells',
+    columnOptions: [],
+    conditions: [],
+    onAddCondition: vi.fn(),
+    onConditionChange: vi.fn(),
+    onRemoveCondition: vi.fn(),
+    matchCount: rowCount,
+    totalCount: rowCount,
+    matching: false,
+    notes: [],
+    errors: [],
+    table: {
+      columns: [
+        { id: 'cell:id', label: 'Cell', kind: 'id', removable: false, sort: null },
+        {
+          id: 'cell:transcripts',
+          label: 'Transcript count',
+          kind: 'number',
+          removable: true,
+          sort: null,
+        },
+      ],
+      rowCount,
+      cellIdAt: (index) => `c${index}`,
+      readValues: async (start, end) =>
+        Array.from(
+          { length: Math.max(0, Math.min(end, rowCount) - start) },
+          (_, offset) => ({
+            'cell:transcripts': String((start + offset) * 10),
+          }),
+        ),
+      valuesKey: 'test',
+      selectedCellId: null,
+      onSelectRow: vi.fn(),
+      onSort: vi.fn(),
+      addColumnOptions: [],
+      onAddColumn: vi.fn(),
+      onRemoveColumn: vi.fn(),
+      resultKey: 'test',
+      cellAt: () => null,
+      pictures: null,
+      pictureField: null,
+      onPictureFieldChange: vi.fn(),
+    },
+    saveName: '',
+    saveNamePlaceholder: 'Query 1',
+    onSaveNameChange: vi.fn(),
+    canSave: rowCount > 0,
+    onSaveClass: vi.fn(),
+    exporting: false,
+    onExportCsv: vi.fn(),
+    ...rest,
   }
 }
 

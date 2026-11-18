@@ -161,6 +161,77 @@ describe('XeniumDataset', () => {
     expect(conn.preparedSql[0]).toContain('y_centroid BETWEEN ? AND ?')
   })
 
+  it('reads the outlines of given cells by where the file keeps them (plan 23-H)', async () => {
+    const validateRangeSupport = vi.fn(async () => {})
+    const a = intToCellId(1, 1)
+    const b = intToCellId(2, 1)
+    const conn = new FakeConnection([
+      [{ cell_rows: 4n, vertex_rows: 100n }],
+      [
+        { cell_id: a, x: 0, y: 0, file_row_number: 75n },
+        { cell_id: a, x: 4, y: 0, file_row_number: 76n },
+        { cell_id: a, x: 4, y: 4, file_row_number: 77n },
+      ],
+      // b was not where its row says; the box read around it finds none.
+      [],
+    ])
+    const dataset = makeDataset(conn, { validateRangeSupport })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(10),
+    }
+
+    await expect(
+      dataset.cellOutlines([
+        { id: a, overviewRow: 3, bbox },
+        { id: b, overviewRow: 2_000_000, bbox },
+      ]),
+    ).resolves.toEqual([
+      {
+        id: a,
+        geometry: {
+          kind: 'polygon',
+          rings: [
+            [
+              { x: micrometers(0), y: micrometers(0) },
+              { x: micrometers(4), y: micrometers(0) },
+              { x: micrometers(4), y: micrometers(4) },
+            ],
+          ],
+        },
+      },
+    ])
+
+    expect(validateRangeSupport).toHaveBeenCalledWith(
+      'https://example.test/xenium/cell_boundaries.parquet',
+      { label: 'cell_boundaries.parquet' },
+    )
+    // 25 vertices per cell: a's start near row 75, 30,000 rows either side.
+    const boundaries = 'https://example.test/xenium/cell_boundaries.parquet'
+    expect(conn.statements[1]?.params).toEqual([
+      boundaries,
+      0,
+      30_075,
+      a,
+      boundaries,
+      50_000_000 - 30_000,
+      50_000_000 + 30_000,
+      b,
+    ])
+    // A number parameter binds as DOUBLE; the cast keeps row-group pruning.
+    expect(conn.preparedSql[1]).toContain(
+      'file_row_number BETWEEN CAST(? AS BIGINT) AND CAST(? AS BIGINT)',
+    )
+    expect(conn.preparedSql[1]).toContain('UNION ALL')
+    expect(conn.preparedSql[2]).toContain('x_centroid BETWEEN ? AND ?')
+
+    // The file's layout is read once.
+    await dataset.cellOutlines([{ id: a, overviewRow: 3, bbox }])
+    expect(conn.preparedSql.filter((sql) => sql.includes('count(*)'))).toHaveLength(1)
+  })
+
   it('lists cell and nucleus outlines read from Parquet', async () => {
     const conn = new FakeConnection([[{ minX: 1, maxX: 20, minY: 2, maxY: 30 }]])
 
