@@ -156,6 +156,14 @@ export function useMorphologyVolumeWorkflow({
         )
       }
 
+      // An aborted read settles after the read that replaced it started, so
+      // it forgets only itself.
+      const forgetRead = () => {
+        if (reads.controllers.get(id) === controller) {
+          reads.controllers.delete(id)
+        }
+      }
+
       reads.controllers.set(id, controller)
       loadVolume(level.level, controller.signal, (planesRead) => {
         update((state) => ({
@@ -171,7 +179,7 @@ export function useMorphologyVolumeWorkflow({
             volumes: withEntry(state.volumes, id, texture),
             progress: withoutEntry(state.progress, id),
           }))
-          reads.controllers.delete(id)
+          forgetRead()
         },
         (error: unknown) => {
           update((state) => ({
@@ -183,7 +191,7 @@ export function useMorphologyVolumeWorkflow({
               `Could not read ${channel.info.name} in 3D: ${errorMessage(error)}`,
             ),
           }))
-          reads.controllers.delete(id)
+          forgetRead()
         },
       )
     }
