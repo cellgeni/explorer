@@ -31,6 +31,7 @@ import {
 import type { ZarrChunkSource, ZarrChunkWindow } from '../workers/zarrDecodeMessages'
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
 import { isIcechunkUrl } from './icechunkUrl'
+import { isZarrZipUrl } from './zarrZipUrl'
 import {
   isSupportedPixelArray,
   newPixelArray,
@@ -296,7 +297,8 @@ export async function openOmeZarrImageWithOptions(
 
 // Uses consolidated metadata when the image root has it, so opening each
 // pyramid level needs no per-array metadata requests. An Icechunk repository's
-// snapshot holds every node's metadata.
+// snapshot holds every node's metadata. A zipped store is read from the zip's
+// directory, so it never requests files the zip lacks.
 async function openImageStore(
   url: string,
   options: Pick<OpenOmeZarrImageOptions, 'fetcher' | 'signal'>,
@@ -307,10 +309,10 @@ async function openImageStore(
     return consolidatedZarrStore(repository.store, repository.metadata)
   }
 
-  const base = createZarrFetchStore(
-    url,
-    options.fetcher === undefined ? {} : { fetcher: options.fetcher },
-  )
+  const fetcherOption = options.fetcher === undefined ? {} : { fetcher: options.fetcher }
+  const base = isZarrZipUrl(url)
+    ? await openZippedImageStore(url, fetcherOption)
+    : createZarrFetchStore(url, fetcherOption)
   const consolidated = await readConsolidatedZarrMetadata(
     base,
     options.signal === undefined ? {} : { signal: options.signal },
@@ -319,6 +321,14 @@ async function openImageStore(
   return consolidated === null
     ? base
     : consolidatedZarrStore(base, consolidated.knownMetadata)
+}
+
+async function openZippedImageStore(
+  url: string,
+  options: { readonly fetcher?: typeof fetch },
+): Promise<zarr.AsyncReadable> {
+  const { openZippedZarrStore } = await import('./zarrZipStore')
+  return (await openZippedZarrStore(url, options)).store
 }
 
 // The multiscale group of an OME-Zarr store, the first series of a

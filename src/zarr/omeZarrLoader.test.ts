@@ -5,6 +5,7 @@ import type { ImagePyramidLoader } from '../data/imagePyramid'
 import { morphologyImageFromPyramidLoader } from '../data/morphologyImage'
 import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
 import { chunkWindowSamples, decodeChunk } from '../workers/zarrDecodeCore'
 import type { ZarrDecodeRequest, ZarrDecodeResponse } from '../workers/zarrDecodeMessages'
 import { ZarrDecodePool, type ZarrDecodeWorkerLike } from '../workers/zarrDecodePool'
@@ -68,6 +69,41 @@ describe('OME-Zarr image loader', () => {
 
     // Pixel (x=4, y=4) of the image, whose value is 4 × its index.
     expect(tile.pixels[0]).toBe((4 * 8 + 4) * 4)
+  })
+
+  it('opens a zipped OME-Zarr image from a store folder in the zip', async () => {
+    const url = 'https://example.test/images/image.ome.zarr.zip'
+    const files = legacyV2OmeZarrFiles('image.ome.zarr')
+    // As macOS zips a folder: deflated entries and resource-fork copies.
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          url,
+          zipArchive([
+            ...Array.from(files, ([name, data]) => ({ name, data, deflate: true })),
+            { name: '__MACOSX/image.ome.zarr/._.zattrs', data: Uint8Array.of(0xa3) },
+          ]),
+        ],
+      ]),
+    )
+    const loader = await openOmeZarrImageWithOptions(url, { fetcher, decodePool: null })
+
+    expect([loader.imageWidth, loader.imageHeight]).toEqual([4, 4])
+    expect(loader.units.micrometersPerPixel).toBe(0.5)
+    expect(loader.channels.map((channel) => channel.sourceUrl)).toEqual([
+      undefined,
+      `${url}#c=1`,
+      `${url}#c=2`,
+    ])
+    // Chunk 1.0.0 of level 0 is the green channel's top-left tile.
+    const green = await openOmeZarrImageWithOptions(`${url}#c=1`, {
+      fetcher,
+      decodePool: null,
+    })
+
+    await expect(green.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([10, 20, 30, 40]),
+    })
   })
 
   it('opens legacy multiscales metadata and exposes RGB channel loaders', async () => {
