@@ -566,8 +566,8 @@ async function detectIcechunkRepository(
   }
 }
 
-// Routes a zipped Zarr store. Only SpatialData is read from a zip, so a zip
-// holding anything else throws: a file URL has no folder to probe further.
+// Routes a zipped Zarr store: SpatialData or an OME-Zarr image. A zip holding
+// anything else throws, since a file URL has no folder to probe further.
 async function detectZarrZip(
   url: string,
   options: DetectSpatialDatasetOptions,
@@ -621,8 +621,19 @@ async function detectZarrZip(
     return { platform: 'spatialdata', baseUrl: url, spatialDataUrl: url, checked }
   }
 
+  if (isOmeZarrImageRootAttributes(rootAttributes)) {
+    checked.push({ path: `${rootLabel} in the zip (OME-Zarr image)`, url, ok: true })
+    return {
+      platform: 'image',
+      baseUrl: url,
+      imageUrl: url,
+      imageKind: 'ome-zarr',
+      checked,
+    }
+  }
+
   throw new Error(
-    `The zip at ${url} holds a Zarr store (${rootLabel}) that is not SpatialData. Only SpatialData stores are read from a zip; unzip other stores and host them as folders.`,
+    `The zip at ${url} holds a Zarr store (${rootLabel}) that is neither SpatialData nor an OME-Zarr image. Only those are read from a zip; unzip other stores and host them as folders.`,
   )
 }
 
@@ -668,16 +679,19 @@ function icechunkRepositoryContent(repository: {
     return 'AnnData'
   }
 
-  const ome = attrs.ome
+  return isOmeZarrImageRootAttributes(attrs) ? 'OME-Zarr image' : null
+}
 
-  if (
+// An OME-Zarr image root: multiscales in v0.4 (`multiscales`) or v0.5
+// (`ome.multiscales`) attributes, or a bioformats2raw series container.
+function isOmeZarrImageRootAttributes(attrs: Readonly<Record<string, unknown>>): boolean {
+  const ome = objectOrNull(attrs.ome)
+
+  return (
     Array.isArray(attrs.multiscales) ||
-    (typeof ome === 'object' && ome !== null && 'multiscales' in ome)
-  ) {
-    return 'OME-Zarr image'
-  }
-
-  return null
+    (ome !== null && ('multiscales' in ome || 'bioformats2raw.layout' in ome)) ||
+    'bioformats2raw.layout' in attrs
+  )
 }
 
 // Reads a dataset manifest. 'required' (a manifest URL was entered) throws on
@@ -810,7 +824,7 @@ async function detectFromManifest(
       baseUrl,
       imageUrl,
       imageKind:
-        isOmeZarrImageUrl(imageUrl) || isIcechunkUrl(imageUrl)
+        isOmeZarrImageUrl(imageUrl) || isIcechunkUrl(imageUrl) || isZarrZipUrl(imageUrl)
           ? 'ome-zarr'
           : tiffImageKind(imageUrl),
       manifest,

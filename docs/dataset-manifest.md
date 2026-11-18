@@ -461,4 +461,5 @@ the parser accept the same fields and values.
 - The H5AD coordinate key, the annotation set to select, channel colours and
   contrast windows, and the initial camera cannot be set yet.
 - Image type comes from the path: an OME-Zarr image needs `.zarr` in its own
-  name or in the name of the store it sits in (`sample.zarr/images/he`).
+  name or in the name of the store it sits in (`sample.zarr/images/he`), or
+  is a zipped store ending in `.zip`.

@@ -6,6 +6,7 @@
 
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
+import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import {
   ATERA_FILE_DEFAULTS,
   ATERA_OPTIONAL_FILES,
@@ -556,7 +557,9 @@ export function parseDatasetManifest(
 
     if (
       zchunkstore !== undefined &&
-      (isOmeZarrImageUrl(image.url) || isIcechunkUrl(image.url))
+      (isOmeZarrImageUrl(image.url) ||
+        isIcechunkUrl(image.url) ||
+        isZarrZipUrl(image.url))
     ) {
       fail(
         '"files.zchunkstore" is only for TIFF images; remove it for an OME-Zarr image.',
