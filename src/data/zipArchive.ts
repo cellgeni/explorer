@@ -5,6 +5,8 @@
 // entries of up to a few hundred MB. A deflate stream cannot be read from the
 // middle, so an entry is always read whole.
 
+import { fetchHead } from './hostResponses'
+
 export interface ZipEntry {
   readonly name: string
   // 0 stored, 8 deflated.
@@ -57,10 +59,11 @@ export async function readZipDirectory(
   options: ZipReadOptions = {},
 ): Promise<ZipDirectory> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
-  const head = await fetcher(url, {
-    method: 'HEAD',
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
+  const head = await fetchHead(
+    fetcher,
+    url,
+    options.signal === undefined ? {} : { signal: options.signal },
+  )
 
   if (!head.ok) {
     throw new ZipArchiveError(url, `HEAD returned HTTP ${head.status}.`)

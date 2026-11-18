@@ -9,7 +9,7 @@ import {
   datasetFileUrlFor,
   xeniumManifestFileFor,
 } from './datasetFiles'
-import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
+import { fetchHead, likelyMissingFileError, noteReadableResponse } from './hostResponses'
 import { morphologyImagePathsFromExperiment } from './morphologyImage'
 import { assertHttpRangeSupport } from './rangeSupport'
 import {
@@ -1144,12 +1144,10 @@ async function probeChunks(
       }
 
       try {
-        const response = await (options.fetcher ?? fetch)(
+        const response = await fetchHead(
+          options.fetcher ?? fetch,
           datasetFileUrl(url, target.key),
-          {
-            method: 'HEAD',
-            ...(options.signal === undefined ? {} : { signal: options.signal }),
-          },
+          options.signal === undefined ? {} : { signal: options.signal },
         )
         results[index] = { ...target, status: response.status }
       } catch {
@@ -1435,10 +1433,11 @@ async function checkHeadFile(
     let response: Response
 
     try {
-      response = await (options.fetcher ?? fetch)(url, {
-        method: 'HEAD',
-        ...(options.signal === undefined ? {} : { signal: options.signal }),
-      })
+      response = await fetchHead(
+        options.fetcher ?? fetch,
+        url,
+        options.signal === undefined ? {} : { signal: options.signal },
+      )
     } catch (cause) {
       // A host that hides its error responses (EBI FTP) makes a missing file
       // look like a network failure.

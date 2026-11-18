@@ -1,5 +1,6 @@
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import { datasetFileUrl } from '../data/datasetFiles'
+import { fetchHead } from '../data/hostResponses'
 import type {
   SegmentationInfo,
   SpatialElement,
@@ -638,10 +639,7 @@ export async function assertSegmentationGeojsonWithinBudget(
     throw new RangeError('Segmentation GeoJSON full-file budget must be non-negative.')
   }
 
-  const response = await fetcher(url, {
-    method: 'HEAD',
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const response = await fetchHead(fetcher, url, signal === undefined ? {} : { signal })
 
   if (!response.ok) {
     throw new Error(`segmentation GeoJSON HEAD returned HTTP ${response.status}.`)

@@ -1,6 +1,6 @@
 import { formatGroupingName } from '../data/analysisAnnotations'
 import { datasetFileUrl } from '../data/datasetFiles'
-import { noteReadableResponse } from '../data/hostResponses'
+import { fetchHead, noteReadableResponse } from '../data/hostResponses'
 import { parseVisiumClustersCsv } from './visiumFormat'
 import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
 import type { Annotation, SpatialElementId } from './spatialDataset'
@@ -73,10 +73,11 @@ export async function readVisiumHdClusteringGroups(
       const url = datasetFileUrl(baseUrl, visiumHdClusteringPath(bin, clustering))
 
       try {
-        const response = await fetcher(url, {
-          method: 'HEAD',
-          ...(options.signal === undefined ? {} : { signal: options.signal }),
-        })
+        const response = await fetchHead(
+          fetcher,
+          url,
+          options.signal === undefined ? {} : { signal: options.signal },
+        )
         noteReadableResponse(url, response.status)
         return response.ok
       } catch (error) {

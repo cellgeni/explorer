@@ -27,6 +27,7 @@ import type {
 } from '../data/customAnnotations'
 import type { CellMetadata } from '../data/cellMetadata'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
+import { fetchHead } from '../data/hostResponses'
 import {
   columnSlicesReadBytes,
   csrReadBytes,
@@ -3207,7 +3208,12 @@ async function readObservationTracks(
 }
 
 async function fetchH5adHead(url: string, fetcher: typeof fetch): Promise<Response> {
-  return fetchH5adRequest(url, fetcher, { method: 'HEAD' }, 'H5AD file metadata')
+  return fetchH5adRequest(
+    url,
+    (input, init) => fetchHead(fetcher, String(input), init),
+    {},
+    'H5AD file metadata',
+  )
 }
 
 async function fetchH5adFile(url: string, fetcher: typeof fetch): Promise<Response> {

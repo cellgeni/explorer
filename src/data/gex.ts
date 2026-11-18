@@ -6,6 +6,7 @@ import { getWholeArray } from '../zarr/zarrWholeArray'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
 import { coalesceCellMajorRanges, emptyCellsFor } from './featureBarcodeMatrixH5'
 import { createGeneFeatureIndex } from './geneFeatures'
+import { fetchHead } from './hostResponses'
 import { selectionToSql } from './gexSelection'
 import {
   columnSlicesReadBytes,
@@ -1518,10 +1519,7 @@ async function assertFullFileReadWithinBudget(
     throw new RangeError(`Full-file matrix byte budget must be non-negative.`)
   }
 
-  const response = await fetch(url, {
-    method: 'HEAD',
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const response = await fetchHead(fetch, url, signal === undefined ? {} : { signal })
 
   if (!response.ok) {
     throw new Error(`cell_feature_matrix.h5 HEAD returned HTTP ${response.status}.`)

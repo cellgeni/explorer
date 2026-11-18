@@ -11,7 +11,7 @@ import {
   readFolderListing,
   setFolderListing,
 } from '../data/folderListing'
-import { noteReadableResponse } from '../data/hostResponses'
+import { fetchHead, noteReadableResponse } from '../data/hostResponses'
 import { datasetDetectionError } from './datasetDetectionError'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
@@ -1684,10 +1684,11 @@ async function probeDirectDatasetUrl(
   }
 
   try {
+    const fetcher = options.fetcher ?? fetch
     const response = await fetchWithTimeout(
-      options.fetcher ?? fetch,
+      (input, init) => fetchHead(fetcher, String(input), init),
       url,
-      { method: 'HEAD' },
+      {},
       options.signal,
       DATASET_PROBE_TIMEOUT_MS,
     )
@@ -1719,6 +1720,8 @@ type ZarrStoreContent = 'SpatialData' | 'AnnData'
 
 // Reads the root metadata the probes found and names the store's content when
 // it is SpatialData or AnnData. Other Zarr roots are taken as OME-Zarr images.
+// AnnData before 0.8 wrote no root attributes, so a `.zarr` store without them
+// is AnnData when obs is a dataframe.
 async function probeZarrRootContent(
   rootUrl: string,
   metadataProbes: readonly DatasetProbeResult[],
@@ -1727,6 +1730,8 @@ async function probeZarrRootContent(
   readonly content: ZarrStoreContent
   readonly probe: DatasetProbeResult
 } | null> {
+  let rootAttributes = false
+
   for (const probe of metadataProbes) {
     if (!probe.ok) {
       continue
@@ -1744,7 +1749,8 @@ async function probeZarrRootContent(
       )
 
       noteReadableResponse(url, response.status)
-      const content = response.ok ? zarrStoreContent(await response.json()) : null
+      const metadata: unknown = response.ok ? await response.json() : null
+      const content = metadata === null ? null : zarrStoreContent(metadata)
 
       if (content !== null) {
         return {
@@ -1757,12 +1763,50 @@ async function probeZarrRootContent(
           },
         }
       }
+
+      rootAttributes ||=
+        probe.path !== '.zattrs' || Object.keys(objectOrNull(metadata) ?? {}).length > 0
     } catch {
       // Unreadable or non-JSON metadata names no content.
     }
   }
 
-  return null
+  return rootAttributes || !/\.zarr\/*$/i.test(new URL(rootUrl).pathname)
+    ? null
+    : probeLegacyAnnDataRoot(rootUrl, options)
+}
+
+async function probeLegacyAnnDataRoot(
+  rootUrl: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<{
+  readonly content: ZarrStoreContent
+  readonly probe: DatasetProbeResult
+} | null> {
+  const path = 'obs/.zattrs'
+  const url = joinUrl(rootUrl, path)
+
+  try {
+    const response = await fetchWithTimeout(
+      options.fetcher ?? fetch,
+      url,
+      {},
+      options.signal,
+      DATASET_PROBE_TIMEOUT_MS,
+    )
+
+    noteReadableResponse(url, response.status)
+    const attrs = response.ok ? objectOrNull(await response.json()) : null
+
+    return attrs?.['encoding-type'] === 'dataframe'
+      ? {
+          content: 'AnnData',
+          probe: { path: `${path} (AnnData)`, url, ok: true, status: response.status },
+        }
+      : null
+  } catch {
+    return null
+  }
 }
 
 // `metadata` is a v3 zarr.json or a v2 .zattrs.

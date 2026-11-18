@@ -13,6 +13,8 @@ interface OriginResponses {
 }
 
 const originResponses = new Map<string, OriginResponses>()
+// Whether each origin answers HEAD readably, or only GET.
+const originHeadSupport = new Map<string, 'head' | 'get'>()
 
 export class LikelyMissingFileError extends Error {
   constructor(message: string, options?: ErrorOptions) {
@@ -53,8 +55,95 @@ export function likelyMissingFileError(
   )
 }
 
+// A HEAD request for hosts whose CORS rules allow GET only (the
+// azimuth-vitessce S3 bucket): they answer HEAD without CORS headers, so it
+// fails like a network error. When HEAD fails on an origin where none has
+// succeeded, a one-byte Range GET stands in, returned as a bodiless response
+// whose Content-Length is the file's size from Content-Range. An origin that
+// answers it is sent that GET from then on instead of HEAD.
+export async function fetchHead(
+  fetcher: typeof fetch,
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const origin = originOf(url)
+  const support = origin === undefined ? undefined : originHeadSupport.get(origin)
+
+  if (support === 'get') {
+    return fetchFirstByteAsHead(fetcher, url, init)
+  }
+
+  try {
+    const response = await fetcher(url, { ...init, method: 'HEAD' })
+
+    if (origin !== undefined) {
+      originHeadSupport.set(origin, 'head')
+    }
+
+    return response
+  } catch (cause) {
+    // Read again: a HEAD sent alongside this one may have succeeded since.
+    if (
+      origin === undefined ||
+      originHeadSupport.get(origin) === 'head' ||
+      !isFailedFetch(cause) ||
+      init.signal?.aborted === true
+    ) {
+      throw cause
+    }
+
+    let response: Response
+
+    try {
+      response = await fetchFirstByteAsHead(fetcher, url, init)
+    } catch {
+      throw cause
+    }
+
+    originHeadSupport.set(origin, 'get')
+    return response
+  }
+}
+
+async function fetchFirstByteAsHead(
+  fetcher: typeof fetch,
+  url: string,
+  init: RequestInit,
+): Promise<Response> {
+  const requestHeaders = new Headers(init.headers)
+  requestHeaders.set('Range', 'bytes=0-0')
+  const response = await fetcher(url, {
+    ...init,
+    method: 'GET',
+    headers: requestHeaders,
+    cache: 'no-store',
+  })
+  // A host that ignores Range sends the whole file.
+  void response.body?.cancel().catch(() => undefined)
+
+  const headers = new Headers(response.headers)
+  const size = /\/(\d+)\s*$/.exec(response.headers.get('Content-Range') ?? '')?.[1]
+  // An empty file has no first byte: 416 with `bytes */0`.
+  const partial = response.status === 206 || (response.status === 416 && size === '0')
+
+  if (partial) {
+    if (size === undefined) {
+      headers.delete('Content-Length')
+    } else {
+      headers.set('Content-Length', size)
+    }
+  }
+
+  return new Response(null, {
+    status: partial ? 200 : response.status,
+    statusText: partial ? 'OK' : response.statusText,
+    headers,
+  })
+}
+
 export function clearHostResponses(): void {
   originResponses.clear()
+  originHeadSupport.clear()
 }
 
 function isFailedFetch(cause: unknown): boolean {

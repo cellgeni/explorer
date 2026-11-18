@@ -1,7 +1,7 @@
 import { datasetFileUrl } from '../data/datasetFiles'
 import { notifyFallback } from '../data/fallbackNotice'
 import { isListedAsMissing } from '../data/folderListing'
-import { noteReadableResponse } from '../data/hostResponses'
+import { fetchHead, noteReadableResponse } from '../data/hostResponses'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from '../data/gex'
 import type {
   VisiumFeatureSliceMetadata,
@@ -1033,7 +1033,7 @@ async function probeTissueImage(
   }
 
   try {
-    const response = await fetcher(url, { method: 'HEAD' })
+    const response = await fetchHead(fetcher, url)
     noteReadableResponse(url, response.status)
     return response.ok ? null : `could not be read (HTTP ${response.status})`
   } catch (error) {
