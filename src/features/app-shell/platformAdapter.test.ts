@@ -24,6 +24,7 @@ import {
   PLATFORM_NAMES,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
+  loadPlatformCellOutlines,
   loadPlatformCellTranscriptDistribution,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
@@ -422,6 +423,92 @@ describe('platformAdapter', () => {
       ['Actb'],
       {},
     )
+  })
+
+  describe('cell outlines for the Cell Query pictures (plan 23-H)', () => {
+    const outline = (id: string) => ({
+      id,
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [[{ x: micrometers(0), y: micrometers(0) }]],
+      },
+    })
+    const cells = [
+      { id: 'a', overviewRow: 0, bbox: selection.bbox },
+      { id: 'b', overviewRow: 1, bbox: selection.bbox },
+    ]
+
+    it("uses the dataset's own read for given cells", async () => {
+      const adapter = appPlatformAdapterFor(readyLoadState, 'xenium')
+      const dataset = {
+        meta: vi.fn(async () => ({ capabilities: { cellBoundaries: true } })),
+        cellOutlines: vi.fn(async () => [outline('b')]),
+      }
+      const loadBoundaryElements = vi.fn()
+
+      const found = await loadPlatformCellOutlines(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        cells,
+      )
+
+      expect([...found.keys()]).toEqual(['b'])
+      expect(dataset.cellOutlines).toHaveBeenCalledWith(cells, {})
+      expect(loadBoundaryElements).not.toHaveBeenCalled()
+    })
+
+    it('reads around each cell where the dataset has no such read', async () => {
+      const adapter = appPlatformAdapterFor(readyLoadState, 'spatialdata')
+      const dataset = {
+        meta: vi.fn(async () => ({ capabilities: { cellBoundaries: true } })),
+        elements: vi.fn(async () => ({ elements: [outline('a'), outline('c')] })),
+      }
+
+      const found = await loadPlatformCellOutlines(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: vi.fn() as unknown as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        cells,
+      )
+
+      // Each box finds a and c; only the cells asked for are kept.
+      expect([...found.keys()]).toEqual(['a'])
+      expect(dataset.elements).toHaveBeenCalledTimes(2)
+    })
+
+    it('reads nothing for a dataset without outlines', async () => {
+      const adapter = appPlatformAdapterFor(readyLoadState, 'h5ad')
+      const dataset = {
+        meta: vi.fn(async () => ({ capabilities: { cellBoundaries: false } })),
+        elements: vi.fn(),
+      }
+
+      const found = await loadPlatformCellOutlines(
+        adapter,
+        {
+          getSpatialDataset: vi.fn(
+            async () => dataset,
+          ) as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: vi.fn() as unknown as BoundaryElementsLoader,
+        },
+        readyLoadState.url,
+        cells,
+      )
+
+      expect(found.size).toBe(0)
+      expect(dataset.elements).not.toHaveBeenCalled()
+    })
   })
 
   it('reads Xenium nuclei from the dataset when it lists nucleus outlines', async () => {

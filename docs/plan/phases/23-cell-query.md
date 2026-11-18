@@ -1,7 +1,8 @@
 # Phase 23 — Cell Query
 
 Planned 2026-11-18. M1 (query and table) implemented 2026-11-18; see
-[M1 Progress](#m1-progress). Requested: filter the cells of a dataset by
+[M1 Progress](#m1-progress). M2 (pictures) implemented 2026-11-18; see
+[M2 Progress](#m2-progress). Requested: filter the cells of a dataset by
 their observations, classes, annotations and metadata, list the cells that
 match in a table, and show a picture of each cell in its row.
 
@@ -224,19 +225,19 @@ What is missing:
       passed in (D11). A refactor with no change in behaviour: the main
       view, minimap and slide images keep their own store, and their tests
       pass unchanged.
-- [ ] **G. Cell pictures.** (M) A `CellPicture` component: a small
-      `MorphologyCanvas` on the shared store, with a view state centred on
-      the cell at the chosen field (D10), the outline as SVG above it, and
-      the D12 timing. A `Picture` control. Datasets without an image show
-      the outline alone.
-- [ ] **H. Outlines for a page of cells.** (M) One boundary read for the
-      rows in view, not one per cell: an optional dataset method
-      `boundariesForCells(ids)`, a `cell_id IN (…)` query on Xenium and the
-      readers' own lookups elsewhere, falling back to a query per cell.
-      Measure on the Xenium demo before choosing.
-- [ ] **I. Docs and end-to-end tests.** (M) M1's done: the docs, the smoke
-      and axe tests, and the nightly test's time to the first count. The
-      first page of pictures waits for M2. Docs listed in
+- [x] **G. Cell pictures.** (M) Done in M2. A `CellPicture` component: a
+      small `MorphologyCanvas` on the shared store, with a view state
+      centred on the cell at the chosen field (D10), the outline as SVG
+      above it, and the D12 timing. A `Picture` control. Datasets without an
+      image show the outline alone.
+- [x] **H. Outlines for a page of cells.** (M) Done in M2. One boundary read
+      for the rows in view, not one per cell: an optional dataset method
+      (`cellOutlines`), a windowed query on Xenium (measured below; a
+      `cell_id IN (…)` query was no faster), falling back to a query per
+      cell elsewhere.
+- [x] **I. Docs and end-to-end tests.** (M) M1's docs, smoke and axe tests
+      and the nightly test's time to the first count; M2's docs and the
+      nightly test's time to the first page of pictures. Docs listed in
       [Docs To Update](#docs-to-update). E2E on fixtures: open Cell Query
       on the H5AD fixture, add a class and a number condition, sort, select
       a row, save the matches as a class, export CSV. The axe smoke test
@@ -249,7 +250,7 @@ What is missing:
 | Milestone            | Contents        | Size              |
 | -------------------- | --------------- | ----------------- |
 | M1 — Query and table | A, B, C, D, E   | Done (2026-11-18) |
-| M2 — Pictures        | F, then G and H | about 2 weeks     |
+| M2 — Pictures        | F, then G and H | Done (2026-11-18) |
 | Throughout           | I               | —                 |
 
 - M1 is useful on its own, and M2 can be measured on real result lists.
@@ -342,7 +343,83 @@ Left for M2 as planned: F (shared tile store), G (cell pictures), H
 (outlines for a page of cells), and the nightly test's first page of
 pictures (I).
 
-## Testing
+## M2 Progress
+
+Implemented 2026-11-18 (branch `claude/cell-query-tile-store`, on M1's
+branch). Checked in the browser on the Xenium demo.
+
+Built:
+
+- **F.** `MorphologyTileStore` (`src/rendering/morphologyTileStore.ts`)
+  holds a `TileCache` and `TileRequestScheduler` per channel and contrast,
+  and decodes a flat image once. `MorphologyCanvas` takes one as
+  `tileStore`, or makes its own as before. The scheduler now takes the
+  wanted tiles of several canvases (`client`, `priority`) and releases one
+  canvas without cancelling tiles another still wants; `TileRequestSlots`
+  caps the requests of several schedulers. The canvas, minimap and slide
+  image tests pass unchanged.
+- **G.** `CellPicture` and `cellPictureModel.ts`: a 64 px picture centred
+  on the cell, in 72 px rows, with the outline as SVG (D10). `Picture` in
+  the actions offers `No pictures`, 20, 40 and 80 µm. Checked on standard
+  Visium too (the Census `.h5ad`): the hires image with each spot's circle. Only rows in view have
+  pictures; a row's picture is read once the table has stopped scrolling for
+  150 ms, highest rows first, and a row that leaves the view releases its
+  requests (D12). The pictures' store allows 6 requests in flight in all and
+  reads no prefetch margin (D11).
+- **H.** `CellOutlineReader` reads the outlines of the rows in view as one
+  page and keeps them for the dataset. `loadPlatformCellOutlines` uses a
+  dataset's `cellOutlines` where it has one, and otherwise the Cell card's
+  box read around each cell, three at a time. Xenium's `cellOutlines` reads
+  each cell from the rows of `cell_boundaries.parquet` around its overview
+  row times the vertices per cell, in one `UNION ALL` query per page.
+- **I.** UI reference, user guide and architecture; unit tests for the
+  shared scheduler and store, the picture model, the outline reader, the
+  Xenium query and the platform loader; component tests of the pictures on
+  the real hook and of the D12 timing; the nightly `@live` test records the
+  time to the first page of pictures.
+
+Measured on the Xenium demo (dev build, browser pane, 1,414,155 cells, 36
+row groups of a million vertices in `cell_boundaries.parquet`, 25 vertices
+per cell but for a few). The `cell_id` column has no statistics, and each
+row group's vertices span much of the slide, so a cell's 50 µm box still
+overlaps 4 to 9 row groups:
+
+| Outlines of 12 cells spread over the slide                           | Time                        |
+| -------------------------------------------------------------------- | --------------------------- |
+| The Cell card's box read, one cell at a time                         | about 450 ms a cell, warm   |
+| One query per cell on the boundaries alone, by box                   | about 200 ms a cell, warm   |
+| The same, joined with `UNION ALL`                                    | 8.6 s cold, 3.0 s warm      |
+| `cell_id IN (…)` over the whole file                                 | 5.7 s cold, 2.0 s warm      |
+| **Rows around overview row × 25, by `file_row_number`, `UNION ALL`** | **2.8 s cold, 0.73 s warm** |
+| The same, one cell                                                   | 51 ms                       |
+
+- After sorting 318,600 matches by transcript count, the new rows showed in
+  0.9 s and every outline of the page (9 rows) in 1.8 s.
+- The first page after opening the link waits for DuckDB to start: 2
+  outlines in 4.4 s.
+- The nightly `@live` test, headless with software WebGL: the first count
+  27.6 s after opening the link, and the first page of pictures with
+  outlines 2.9 s later (30.5 s).
+- A cell's vertices started at most 27,352 rows before its row × 25; the
+  window is 30,000 rows or 0.2% of the file either side, whichever is more.
+
+Changed from the plan while building:
+
+- **Outlines by row, not by ID.** The plan's `cell_id IN (…)` query reads
+  the whole `cell_id` column (2 s warm for any page). Each cell's own row
+  window lets DuckDB skip all but one row group. The window's bounds are
+  cast to `BIGINT`: a number parameter binds as `DOUBLE`, and the cast
+  column then skips nothing (4.9 s for 5 cells).
+- **The method is `cellOutlines(cells)`**, given each cell's overview row
+  and box as well as its ID, so a dataset can find it by either.
+- **Visium spots start at 80 µm**, the smallest field that shows a whole
+  55 µm spot with a margin; 40 µm would cut its circle off.
+- **Pictures show the image even when the canvas hides it**, so the image
+  checkbox and opacity are for the canvas alone.
+- **The flat Visium image is decoded once per store**, not once per
+  canvas: a picture each would hold a copy of the whole image.
+- **A page's outlines read after it has scrolled away are kept**, as they
+  were read.
 
 - **Unit.** `cellQuery` against a plain filter (fast-check), the table model,
   the `query=` round trip, the picture view state for a cell and a field, and

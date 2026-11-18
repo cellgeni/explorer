@@ -825,7 +825,8 @@ or spots but Visium HD, whose bins are not listed one by one.
 | `Save As Class`             | Adds the matching cells as one class of a set named Queries, ahead of the other classes, and colours cells by annotations, as `Save ROI` does. Cells in another shown class keep its colour; hide the other sets in Clusters to see the matches alone. Plots can group by the class, and `Export Annotations` includes it                                                                               |
 | `Export CSV`                | Every matching cell with the table's columns, in the table's order: `cell_id`, then each column (units in the header, numbers as stored). The file is `{dataset}-cell-query.csv`                                                                                                                                                                                                                        |
 | `Add column`                | Shows another column in the table. Columns added this way have a `Remove the … column` button in their header; a condition's column stays while the condition does                                                                                                                                                                                                                                      |
-| Table                       | A row per matching cell, with its ID and a column per condition and added column. The header buttons sort, ascending then descending; cells without a value come last either way. Clicking an ID selects the cell, opens its card and moves the view to it. Arrow keys, Page Up, Page Down, Home and End move between rows, and Tab leaves the table                                                    |
+| `Picture`                   | `No pictures`, or a picture of each cell 20, 40 or 80 µm across. 40 µm when the dataset has an image (80 µm for Visium spots, 55 µm across), no pictures when it has none; the choice stays when the dataset changes                                                                                                                                                                                    |
+| Table                       | A row per matching cell, with its picture, its ID and a column per condition and added column. The header buttons sort, ascending then descending; cells without a value come last either way. Clicking an ID selects the cell, opens its card and moves the view to it. Arrow keys, Page Up, Page Down, Home and End move between rows, and Tab leaves the table                                       |
 
 How it matches:
 
@@ -843,6 +844,23 @@ How it matches:
 - Imported cell IDs that are not on the map are left out, with a note.
 - A condition on a column the dataset does not list, such as one from another
   dataset's link, says so and is left out.
+
+How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-decisions)):
+
+- A picture is 64 px square, centred on the cell, in a row 72 px tall. It
+  shows the canvas's enabled channels with their colours and contrast, or a
+  standard Visium image, whether or not the canvas shows the image now.
+- Over it, the cell's outline where the dataset has outlines; a spot's
+  circle on standard Visium; otherwise a dashed ring at the cell's position,
+  as wide as its area where the dataset gives one. Datasets without an image
+  show the outline alone.
+- Only rows in view have pictures. A row's picture is read once the table
+  has stopped scrolling for 150 ms, and its reads stop when the row leaves
+  the view. The outlines of the rows in view are read together, once per
+  page, and kept for the dataset.
+- Pictures share one tile cache, with at most 6 image requests in flight in
+  all, and read nothing outside their field; the canvas and minimap keep
+  their own.
 
 ## Canvas
 

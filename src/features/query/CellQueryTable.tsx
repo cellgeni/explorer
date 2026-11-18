@@ -7,6 +7,15 @@ import {
   type KeyboardEvent,
 } from 'react'
 import { CloseIcon, IconButton } from '../../components/ui'
+import { MorphologyTileStore } from '../../rendering/morphologyTileStore'
+import { CellPicture } from './CellPicture'
+import {
+  CELL_PICTURE_ROW_HEIGHT,
+  CELL_PICTURE_SETTLE_MS,
+  CELL_PICTURE_SIZE,
+  CELL_PICTURE_TILE_REQUESTS,
+  type CellPictureOutline,
+} from './cellPictureModel'
 import type {
   CellQueryRowValues,
   CellQueryTableColumn,
@@ -17,7 +26,8 @@ import type {
 // only those in view are drawn, under a sticky header whose buttons sort.
 // Their values are read from the query worker a page at a time and kept
 // here, so scrolling renders the table alone. A row's ID selects the cell;
-// the arrow keys move between rows.
+// the arrow keys move between rows. With Picture on, each row starts with a
+// picture of the cell (23-G), read once the rows stop moving.
 
 export const CELL_QUERY_ROW_HEIGHT = 28
 const HEADER_HEIGHT = 30
@@ -29,6 +39,7 @@ const ID_COLUMN_WIDTH = 150
 // Rows read from the worker at a time.
 const PAGE_SIZE = 64
 const VALUE_COLUMN_WIDTH = 120
+const PICTURE_COLUMN_WIDTH = CELL_PICTURE_SIZE + 8
 
 export function CellQueryTable({
   table,
@@ -51,7 +62,16 @@ export function CellQueryTable({
     key: '',
     pages: new Set(),
   })
-  const { rowCount, readValues, valuesKey } = table
+  const { rowCount, readValues, valuesKey, pictures, cellAt } = table
+  const rowHeight = pictures === null ? CELL_QUERY_ROW_HEIGHT : CELL_PICTURE_ROW_HEIGHT
+  const tileStore = usePictureTileStore(pictures?.key ?? null)
+  // Rows stop moving this long after the last scroll (23-D12).
+  const [settledTop, setSettledTop] = useState(0)
+  const settled = settledTop === scrollTop
+  const [outlines, setOutlines] = useState<{
+    readonly key: string
+    readonly outlines: ReadonlyMap<string, CellPictureOutline | null>
+  }>({ key: '', outlines: new Map() })
 
   // New rows start from the top.
   useLayoutEffect(() => {
@@ -76,12 +96,53 @@ export function CellQueryTable({
     }
   }, [])
 
+  useEffect(() => {
+    if (settledTop === scrollTop) return
+    const timer = window.setTimeout(() => {
+      setSettledTop(scrollTop)
+    }, CELL_PICTURE_SETTLE_MS)
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [scrollTop, settledTop])
+
   const bodyTop = Math.max(0, scrollTop)
-  const start = Math.max(0, Math.floor(bodyTop / CELL_QUERY_ROW_HEIGHT) - OVERSCAN_ROWS)
-  const end = Math.min(
-    rowCount,
-    Math.ceil((bodyTop + viewportHeight) / CELL_QUERY_ROW_HEIGHT) + OVERSCAN_ROWS,
+  const firstInView = Math.floor(bodyTop / rowHeight)
+  const lastInView = Math.min(
+    rowCount - 1,
+    Math.ceil((bodyTop + viewportHeight) / rowHeight) - 1,
   )
+  const start = Math.max(0, firstInView - OVERSCAN_ROWS)
+  const end = Math.min(rowCount, lastInView + 1 + OVERSCAN_ROWS)
+
+  // The outlines of the rows in view, once they stop moving (23-H).
+  useEffect(() => {
+    if (pictures === null || !settled || lastInView < firstInView) return
+    const controller = new AbortController()
+    const { key } = pictures
+
+    pictures
+      .readOutlines(firstInView, lastInView + 1, controller.signal, (cellId, outline) => {
+        setOutlines((current) => {
+          if (current.key === key && current.outlines.get(cellId) === outline) {
+            return current
+          }
+          return {
+            key,
+            outlines: new Map(current.key === key ? current.outlines : []).set(
+              cellId,
+              outline,
+            ),
+          }
+        })
+      })
+      .catch(() => {
+        // An aborted page, or a failed read: those pictures keep a ring.
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [firstInView, lastInView, pictures, settled])
 
   // The pages of values the rows in view need, each read once per rows
   // and columns.
@@ -141,8 +202,8 @@ export function CellQueryTable({
     const target = Math.max(0, Math.min(rowCount - 1, index))
     const element = scrollRef.current
     if (element !== null) {
-      const top = target * CELL_QUERY_ROW_HEIGHT
-      const bottom = top + CELL_QUERY_ROW_HEIGHT
+      const top = target * rowHeight
+      const bottom = top + rowHeight
       const height = element.clientHeight - HEADER_HEIGHT
       if (top < element.scrollTop) element.scrollTop = top
       else if (height > 0 && bottom > element.scrollTop + height) {
@@ -158,7 +219,7 @@ export function CellQueryTable({
     const index = Number((event.target as HTMLElement).dataset.rowIndex)
     if (!Number.isInteger(index)) return
 
-    const page = Math.max(1, Math.floor(viewportHeight / CELL_QUERY_ROW_HEIGHT) - 1)
+    const page = Math.max(1, Math.floor(viewportHeight / rowHeight) - 1)
     const next =
       event.key === 'ArrowDown'
         ? index + 1
@@ -179,20 +240,25 @@ export function CellQueryTable({
   }
 
   const valueColumns = table.columns.filter((column) => column.kind !== 'id')
+  const pictureWidth = pictures === null ? 0 : PICTURE_COLUMN_WIDTH
   const template = [
+    ...(pictures === null ? [] : [`${PICTURE_COLUMN_WIDTH}px`]),
     `minmax(${ID_COLUMN_WIDTH}px, 1.4fr)`,
     ...valueColumns.map(() => `minmax(${VALUE_COLUMN_WIDTH}px, 1fr)`),
   ].join(' ')
   const gridStyle = {
     '--cell-query-columns': template,
-    minWidth: `${ID_COLUMN_WIDTH + valueColumns.length * VALUE_COLUMN_WIDTH}px`,
+    minWidth: `${pictureWidth + ID_COLUMN_WIDTH + valueColumns.length * VALUE_COLUMN_WIDTH}px`,
   } as CSSProperties
+  const pictureOutlines =
+    pictures !== null && outlines.key === pictures.key ? outlines.outlines : null
   const focusIndex = Math.min(activeIndex, Math.max(0, rowCount - 1))
   const rows = Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
     const index = start + offset
     const cellId = table.cellIdAt(index)
     const values = valuesAt(index)
     const selected = cellId !== '' && cellId === table.selectedCellId
+    const cell = pictures === null ? null : cellAt(index)
 
     return (
       <div
@@ -200,8 +266,24 @@ export function CellQueryTable({
         role="row"
         aria-rowindex={index + 2}
         className={selected ? 'cell-query-row is-selected' : 'cell-query-row'}
-        style={{ top: `${index * CELL_QUERY_ROW_HEIGHT}px` }}
+        style={{ top: `${index * rowHeight}px`, height: `${rowHeight}px` }}
       >
+        {pictures === null ? null : (
+          <div role="cell" className="cell-query-cell cell-query-picture-cell">
+            {cell === null || index < firstInView || index > lastInView ? null : (
+              <CellPicture
+                key={cell.id}
+                cell={cell}
+                field={pictures.field}
+                image={pictures.image}
+                tileStore={tileStore}
+                priority={index}
+                settled={settled}
+                outline={pictureOutlines?.get(cell.id)}
+              />
+            )}
+          </div>
+        )}
         <div role="cell" className="cell-query-cell">
           <button
             type="button"
@@ -265,6 +347,11 @@ export function CellQueryTable({
     >
       <div role="rowgroup" className="cell-query-head" style={gridStyle}>
         <div role="row" aria-rowindex={1} className="cell-query-header-row">
+          {pictures === null ? null : (
+            <div role="columnheader" className="cell-query-header is-picture">
+              <span className="cell-query-header-label">Picture</span>
+            </div>
+          )}
           {table.columns.map((column) => (
             <HeaderCell
               key={column.id}
@@ -283,7 +370,7 @@ export function CellQueryTable({
         <div
           role="rowgroup"
           className="cell-query-body"
-          style={{ ...gridStyle, height: `${rowCount * CELL_QUERY_ROW_HEIGHT}px` }}
+          style={{ ...gridStyle, height: `${rowCount * rowHeight}px` }}
           onKeyDown={handleKeyDown}
         >
           {rows}
@@ -291,6 +378,28 @@ export function CellQueryTable({
       )}
     </div>
   )
+}
+
+// One tile store for every picture of a dataset (23-D11), emptied when the
+// table unmounts or the dataset changes.
+function usePictureTileStore(key: string | null): MorphologyTileStore {
+  const [held, setHeld] = useState(() => ({ key, store: pictureTileStore() }))
+  if (held.key !== key) setHeld({ key, store: pictureTileStore() })
+
+  useEffect(
+    () => () => {
+      held.store.dispose()
+    },
+    [held.store],
+  )
+  return held.store
+}
+
+function pictureTileStore(): MorphologyTileStore {
+  return new MorphologyTileStore({
+    maxConcurrentRequests: CELL_PICTURE_TILE_REQUESTS,
+    prefetch: false,
+  })
 }
 
 function HeaderCell({

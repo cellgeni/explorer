@@ -1691,9 +1691,10 @@ test('plots SNAP25 by the Xenium graph clusters @live', async ({ page }, testInf
   await expectLogEntry(page, /Plots: read 1 gene \(about [0-9.]+ MiB\) in /)
 })
 
-// Plan 23, M1: Cell Query matches the demo's 1.4 million cells by transcript
-// count and a graph cluster read for the query alone, in its worker. The
-// time to the first count goes into the report.
+// Plan 23: Cell Query matches the demo's 1.4 million cells by transcript
+// count and a graph cluster read for the query alone, in its worker, and
+// draws the first page of pictures with their outlines. The times to the
+// first count and to the first page of pictures go into the report.
 test('finds Xenium cells by transcript count and graph cluster @live', async ({
   page,
 }, testInfo) => {
@@ -1715,7 +1716,19 @@ test('finds Xenium cells by transcript count and graph cluster @live', async ({
 
   const rows = panel.getByRole('table', { name: 'Matching cells' }).getByRole('row')
   await expect(rows.nth(1)).toContainText('Cluster 1')
+
+  // Pictures (plan 23-G, 23-H): 40 µm across, with the cell's outline from
+  // cell_boundaries.parquet.
+  const firstPicture = panel.getByRole('img', { name: /, 40 µm across$/ }).first()
+  await expect(firstPicture.locator('.cell-query-outline path')).toBeAttached({
+    timeout: XENIUM_BOUNDARY_TIMEOUT_MS,
+  })
+  testInfo.annotations.push({
+    type: 'Time to first page of pictures',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
   await expectLogEntry(page, /Cell query: [0-9,]+ of 1,414,155 match in /)
+  await expectLogEntry(page, /Cell query: [0-9,]+ outlines? in [0-9,]+ ms/)
 })
 
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({

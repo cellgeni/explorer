@@ -9,7 +9,11 @@ import { formatCsv } from '../../utils/csv'
 import type { CellQueryColumnRequest } from '../../workers/cellQueryMessages'
 import { annotationSetGrouping } from '../annotations/annotationModel'
 import type { CellMetadataTrackValuesLoader } from '../annotations/useCellMetadataTrackValues'
-import type { AnnotationLoader, RoiCellsLoader } from '../app-shell/appDependencies'
+import type {
+  AnnotationLoader,
+  CellOutlinesLoader,
+  RoiCellsLoader,
+} from '../app-shell/appDependencies'
 import { downloadTextFile, type AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import { plotFileName } from '../plots/plotExport'
 import {
@@ -22,6 +26,10 @@ import {
 } from '../plots/plotsPanelModel'
 import { useSelectionCells } from '../plots/useSelectionCells'
 import type { SavedSelection } from '../roi/selectionListModel'
+import { selectedCellBoundaryBbox } from '../cells/cellDetailModel'
+import { CellOutlineReader } from './cellOutlineReader'
+import { defaultCellPictureField, type CellPictureOutline } from './cellPictureModel'
+import type { CellQueryPictureImage } from './CellPicture'
 import {
   CELL_QUERY_ID_COLUMN,
   type CellQueryClassInput,
@@ -105,6 +113,29 @@ export interface CellQueryTableModel {
   readonly onRemoveColumn: (columnId: string) => void
   // Changes when the rows do, so the table scrolls back to the top.
   readonly resultKey: string
+  readonly cellAt: (index: number) => OverviewCellDatum | null
+  // Null while Picture is Off.
+  readonly pictures: CellQueryPictures | null
+  // Micrometres across, or null for Off.
+  readonly pictureField: number | null
+  readonly onPictureFieldChange: (field: number | null) => void
+}
+
+// A picture per row (plan 23-D10).
+export interface CellQueryPictures {
+  // Changes with the dataset, whose tiles and outlines are dropped.
+  readonly key: string
+  readonly field: number
+  // Null for a dataset without an image: outlines alone.
+  readonly image: CellQueryPictureImage | null
+  // Tells the outline of each cell in rows start to end, at once for those
+  // read before.
+  readonly readOutlines: (
+    start: number,
+    end: number,
+    signal: AbortSignal,
+    onOutline: (cellId: string, outline: CellPictureOutline | null) => void,
+  ) => Promise<void>
 }
 
 export interface CellQueryModel {
@@ -159,6 +190,10 @@ export interface CellQueryModelInput {
   readonly selectedCellId: string | null
   readonly onSelectCell: (cellId: string) => void
   readonly onSaveClass: (name: string, cellIds: readonly string[]) => void
+  // The canvas's image, for the pictures; null for none.
+  readonly pictureImage: CellQueryPictureImage | null
+  // The pictures' outlines (plan 23-H).
+  readonly loadCellOutlines: CellOutlinesLoader
   readonly appendDebugEvent: AppendDebugEvent
   readonly createSession?: () => CellQuerySession
 }
@@ -232,11 +267,16 @@ export function useCellQueryModel({
   selectedCellId,
   onSelectCell,
   onSaveClass,
+  pictureImage,
+  loadCellOutlines,
   appendDebugEvent,
   createSession = createCellQuerySession,
 }: CellQueryModelInput): CellQueryModel {
   const active = open && available && datasetReady && datasetUrl !== null
   const [extraColumnIds, setExtraColumnIds] = useState<readonly string[]>([])
+  // 'default' follows the dataset: 40 µm with an image (80 µm for Visium
+  // spots), Off without.
+  const [pictureChoice, setPictureChoice] = useState<number | null | 'default'>('default')
   const [sort, setSort] = useState<CellQuerySort | null>(null)
   const [saveName, setSaveName] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -565,6 +605,72 @@ export function useCellQueryModel({
     },
     [cells, rows],
   )
+  const cellAt = useCallback(
+    (index: number) => {
+      const row = rows?.[index]
+      return row === undefined ? null : (cells[row] ?? null)
+    },
+    [cells, rows],
+  )
+
+  // Pictures (23-G, 23-H).
+  const pictureField =
+    pictureChoice === 'default'
+      ? pictureImage === null
+        ? null
+        : defaultCellPictureField(cells[0])
+      : pictureChoice
+  const outlineReader = useMemo(
+    () =>
+      datasetUrl === null
+        ? null
+        : new CellOutlineReader((requests, signal) =>
+            loadCellOutlines(datasetUrl, requests, { signal }),
+          ),
+    [datasetUrl, loadCellOutlines],
+  )
+  const pictures = useMemo<CellQueryPictures | null>(
+    () =>
+      pictureField === null || outlineReader === null || datasetUrl === null
+        ? null
+        : {
+            key: datasetUrl,
+            field: pictureField,
+            image: pictureImage,
+            readOutlines: async (start, end, signal, onOutline) => {
+              const requests = Array.from(rows?.slice(start, end) ?? [], (row) => {
+                const cell = cells[row]
+                return cell === undefined
+                  ? null
+                  : {
+                      id: cell.id,
+                      overviewRow: row,
+                      bbox: selectedCellBoundaryBbox(cell),
+                    }
+              }).filter((request) => request !== null)
+              const startedAt = performance.now()
+              const read = await outlineReader.read(requests, signal, onOutline)
+              if (read > 0 && !signal.aborted) {
+                appendDebugEvent(
+                  `Cell query: ${read.toLocaleString()} ${read === 1 ? 'outline' : 'outlines'} in ${Math.round(performance.now() - startedAt).toLocaleString()} ms`,
+                )
+              }
+            },
+          },
+    [
+      appendDebugEvent,
+      cells,
+      datasetUrl,
+      outlineReader,
+      pictureField,
+      pictureImage,
+      rows,
+    ],
+  )
+  const onPictureFieldChange = useCallback((field: number | null) => {
+    setPictureChoice(field)
+  }, [])
+
   const onSelectRow = useCallback(
     (index: number) => {
       const cellId = cellIdAt(index)
@@ -765,6 +871,10 @@ export function useCellQueryModel({
       onAddColumn,
       onRemoveColumn,
       resultKey: currentResult?.key ?? '',
+      cellAt,
+      pictures,
+      pictureField,
+      onPictureFieldChange,
     },
     saveName,
     saveNamePlaceholder,

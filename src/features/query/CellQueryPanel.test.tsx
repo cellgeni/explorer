@@ -3,7 +3,12 @@ import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CellId } from '../../data/cellid'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
+import { micrometers } from '../../data/coords'
+import type {
+  Annotation,
+  CellOutlineRequest,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import type { CellQueryCondition } from './cellQuery'
 import { createCellQuerySession } from './cellQuerySession'
@@ -82,6 +87,8 @@ function Harness({
     selectedCellId: null,
     onSelectCell: () => undefined,
     onSaveClass: () => undefined,
+    pictureImage: null,
+    loadCellOutlines: async () => new Map(),
     appendDebugEvent: () => undefined,
     createSession: () => createCellQuerySession(null),
     ...overrides,
@@ -314,6 +321,86 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
     )
     await waitFor(() => {
       expect(screen.getByTestId('status')).toHaveTextContent('4 cells, no conditions')
+    })
+  })
+
+  describe('pictures (plan 23-G, 23-H)', () => {
+    const IMAGE = { loader: null, channels: [], flatImage: null }
+    const square = (id: string): SpatialElement => ({
+      id,
+      geometry: {
+        kind: 'polygon',
+        rings: [
+          [
+            { x: micrometers(-5), y: micrometers(-5) },
+            { x: micrometers(5), y: micrometers(-5) },
+            { x: micrometers(5), y: micrometers(5) },
+          ],
+        ],
+      },
+    })
+
+    it('starts each row in view with a picture and the outlines read for those rows', async () => {
+      const loadCellOutlines = vi.fn(
+        async (_url: string, cells: readonly CellOutlineRequest[]) =>
+          new Map(
+            cells
+              .filter((cell) => cell.id === 'c1')
+              .map((cell) => [cell.id, square(cell.id)]),
+          ),
+      )
+      render(<Harness overrides={{ pictureImage: IMAGE, loadCellOutlines }} />)
+
+      // With an image, 40 µm is the default.
+      const picture = await screen.findByRole('img', { name: 'c1, 40 µm across' })
+      expect(screen.getByRole('combobox', { name: 'Picture' })).toHaveValue('40')
+      expect(screen.getByRole('columnheader', { name: 'Picture' })).toBeVisible()
+      await waitFor(() => {
+        expect(picture.querySelector('.cell-query-outline path')).not.toBeNull()
+      })
+      // c2 has no outline: a dashed ring at its position.
+      expect(
+        screen
+          .getByRole('img', { name: 'c2, 40 µm across' })
+          .querySelector('.cell-query-outline.is-fallback'),
+      ).not.toBeNull()
+      // One read for the rows in view, each by its overview row.
+      expect(loadCellOutlines).toHaveBeenCalledOnce()
+      expect(loadCellOutlines.mock.calls[0]?.[0]).toBe(DATASET)
+      expect(
+        loadCellOutlines.mock.calls[0]?.[1].map((cell) => [cell.id, cell.overviewRow]),
+      ).toEqual([
+        ['c1', 0],
+        ['c2', 1],
+        ['c3', 2],
+        ['c4', 3],
+      ])
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Picture' }), {
+        target: { value: 'off' },
+      })
+      expect(screen.queryByRole('img', { name: /across/ })).toBeNull()
+      expect(screen.queryByRole('columnheader', { name: 'Picture' })).toBeNull()
+    })
+
+    it('leaves pictures off without an image, and draws outlines alone when chosen', async () => {
+      const loadCellOutlines = vi.fn(async () => new Map<string, SpatialElement>())
+      render(<Harness overrides={{ loadCellOutlines }} />)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('4 cells, no conditions')
+      })
+      expect(screen.getByRole('combobox', { name: 'Picture' })).toHaveValue('off')
+      expect(loadCellOutlines).not.toHaveBeenCalled()
+
+      fireEvent.change(screen.getByRole('combobox', { name: 'Picture' }), {
+        target: { value: '20' },
+      })
+      const picture = await screen.findByRole('img', { name: 'c1, 20 µm across' })
+      await waitFor(() => {
+        expect(picture.querySelector('.cell-query-outline')).not.toBeNull()
+      })
+      expect(picture.querySelector('canvas')).toBeNull()
     })
   })
 })

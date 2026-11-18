@@ -429,7 +429,9 @@ classes and values and lists them in a table:
    further: the status line says how many match.
 4. Click a column's header to sort by it, and `Add column` to show more
    columns. Click a cell's ID to select it and move the view to it, or use the
-   arrow keys to go down the list.
+   arrow keys to go down the list. Where the dataset has an image, each row
+   starts with a picture of the cell and its outline, 40 µm across (80 µm for
+   Visium spots); `Picture` changes the width or turns them off.
 5. `Save As Class` adds the matching cells as a class in the Queries set and
    colours the cells by their classes, as `Save ROI` does; Plots can then group
    by it. `Export CSV` saves the table's columns for every matching cell.

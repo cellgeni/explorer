@@ -50,6 +50,7 @@ import type { PlotKind } from './features/plots/plotModel'
 import { parsePlotKind, plotDatasetSets } from './features/plots/plotsPanelModel'
 import { usePlotsModel } from './features/plots/usePlotsModel'
 import type { CellQueryCondition } from './features/query/cellQuery'
+import type { CellQueryPictureImage } from './features/query/CellPicture'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import {
@@ -122,6 +123,7 @@ import {
   isAnnDataPlatform,
   isVisiumHdPlatform,
   loadPlatformBoundaryElements,
+  loadPlatformCellOutlines,
   loadPlatformCellTranscriptDistribution,
   loadPlatformGeneExpression,
   loadPlatformNucleusBoundaryElements,
@@ -145,6 +147,7 @@ import {
   type AnnotationLoader,
   type AppProps,
   type BoundaryElementsLoader,
+  type CellOutlinesLoader,
   type CellTranscriptDistributionLoader,
   type GeneExpressionLoader,
   type RoiCellsLoader,
@@ -1997,6 +2000,15 @@ export function App({ dependencies }: AppProps = {}) {
   const loadActiveBoundaryElements = useCallback<BoundaryElementsLoader>(
     (...args) =>
       loadPlatformBoundaryElements(
+        platformAdapter,
+        { getSpatialDataset, loadBoundaryElements },
+        ...args,
+      ),
+    [getSpatialDataset, loadBoundaryElements, platformAdapter],
+  )
+  const loadActiveCellOutlines = useCallback<CellOutlinesLoader>(
+    (...args) =>
+      loadPlatformCellOutlines(
         platformAdapter,
         { getSpatialDataset, loadBoundaryElements },
         ...args,
@@ -4327,6 +4339,23 @@ export function App({ dependencies }: AppProps = {}) {
   // columns, in a table. Visium HD bins are not overview cells.
   const queryAvailable =
     platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd'
+  // Pictures take the canvas's channels, colours and contrast (plan
+  // 23-D10), whether or not the canvas shows the image now.
+  const cellQueryPictureImage = useMemo<CellQueryPictureImage | null>(() => {
+    const loader = morphologyImage?.loader ?? null
+    if (
+      loader === null &&
+      morphologyCanvasChannels.length === 0 &&
+      flatMorphologyImage === null
+    ) {
+      return null
+    }
+    return {
+      loader,
+      channels: morphologyCanvasChannels.map((channel) => ({ ...channel, opacity: 1 })),
+      flatImage: flatMorphologyImage,
+    }
+  }, [flatMorphologyImage, morphologyCanvasChannels, morphologyImage])
   const cellQuery = useCellQueryModel({
     open: shellPanels.queryOpen,
     available: queryAvailable,
@@ -4353,6 +4382,8 @@ export function App({ dependencies }: AppProps = {}) {
     selectedCellId: selectedCell?.id ?? null,
     onSelectCell: handleEmbeddingCellSelect,
     onSaveClass: handleSaveQueryAnnotation,
+    pictureImage: cellQueryPictureImage,
+    loadCellOutlines: loadActiveCellOutlines,
     appendDebugEvent,
   })
 

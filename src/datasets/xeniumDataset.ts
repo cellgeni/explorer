@@ -9,7 +9,9 @@ import {
 import {
   isMissingParquetColumnError,
   readXeniumBoundaryElements,
+  readXeniumBoundaryLayout,
   readXeniumCellIdsForSelection,
+  readXeniumCellOutlines,
   readXeniumCellTranscriptZDistributionForCellId,
   readXeniumCellsForSelection,
   readXeniumExperimentMetadata,
@@ -21,6 +23,7 @@ import {
   readXeniumTranscriptsForSelection,
   readXeniumTranscriptsForViewport,
   readXeniumTranscriptsInBbox,
+  type XeniumBoundaryLayout,
   type XeniumSelectedGeneRowsReader,
 } from './xeniumDatasetReaders'
 import type { CellId } from '../data/cellid'
@@ -50,6 +53,8 @@ import type {
 } from '../data/geneValues'
 import type {
   Annotation,
+  CellOutlineDataset,
+  CellOutlineRequest,
   DatasetMeta,
   ElementBatch,
   ImageSource,
@@ -266,7 +271,7 @@ const gexFromTranscriptsParquetLazy: TranscriptReader = async (
   return gexFromTranscriptsParquet(conn, url, selection, scope, cellIds, minQv)
 }
 
-export class XeniumDataset implements SpatialDataset<CellId> {
+export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset {
   private readonly baseUrl: string
   private readonly fetcher: typeof fetch
   private readonly duckFactory: () => Promise<DuckDbClientLike>
@@ -290,6 +295,7 @@ export class XeniumDataset implements SpatialDataset<CellId> {
   private metaPromise: Promise<DatasetMeta> | null = null
   // Cleared when nucleus_boundaries.parquet has no label_id column.
   private nucleusLabelIds = true
+  private boundaryLayoutPromise: Promise<XeniumBoundaryLayout> | null = null
 
   constructor(options: XeniumDatasetOptions) {
     this.baseUrl = normalizeBaseUrl(options.baseUrl)
@@ -365,6 +371,45 @@ export class XeniumDataset implements SpatialDataset<CellId> {
       },
       bbox,
     )
+  }
+
+  // The Cell Query pictures' outlines (plan 23-H): one query for a page of
+  // cells by where cell_boundaries.parquet keeps them, and a box query for
+  // each it does not find there.
+  async cellOutlines(
+    cells: readonly CellOutlineRequest[],
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly SpatialElement[]> {
+    const urls = {
+      cells: this.urlFor('cells'),
+      cellBoundaries: this.urlFor('cellBoundaries'),
+    }
+    await this.validateRangeSupport(urls.cellBoundaries, {
+      label: datasetFileLabelFor(this.baseUrl, 'cellBoundaries'),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+    const conn = await this.conn()
+    this.boundaryLayoutPromise ??= readXeniumBoundaryLayout(conn, urls).catch(
+      (error: unknown) => {
+        this.boundaryLayoutPromise = null
+        throw error
+      },
+    )
+    const layout = await this.boundaryLayoutPromise
+    throwIfAborted(options.signal)
+    const found = await readXeniumCellOutlines(conn, urls.cellBoundaries, cells, layout)
+    const foundIds = new Set<string>(found.map((element) => element.id))
+    const outlines: SpatialElement[] = [...found]
+
+    for (const cell of cells) {
+      if (foundIds.has(cell.id)) continue
+      throwIfAborted(options.signal)
+      const around = await this.elements(cell.bbox)
+      const element = around.elements.find((candidate) => candidate.id === cell.id)
+      if (element !== undefined) outlines.push(element)
+    }
+
+    return outlines
   }
 
   async segmentationElements(
@@ -688,4 +733,12 @@ function spatialSelectionFor(selectionInput: RoiSelectionInput): Selection | nul
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (signal?.aborted !== true) return
+  if (signal.reason instanceof Error) throw signal.reason
+  const error = new Error('Cell outline read aborted.')
+  error.name = 'AbortError'
+  throw error
 }

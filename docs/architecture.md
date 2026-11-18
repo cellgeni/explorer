@@ -256,10 +256,10 @@ lets tests replace them.
   Its decoded tiles, their requests and a flat image live in a
   `MorphologyTileStore` (`src/rendering/morphologyTileStore.ts`): one per
   channel and contrast, each a `TileCache` and a `TileRequestScheduler`. A
-  canvas makes its own store unless given one; canvases given the same store
-  share its tiles, and its schedulers keep each canvas's wanted tiles apart,
-  read the canvas with the lowest priority first, and can stay under one
-  limit of requests in flight (`TileRequestSlots`).
+  canvas makes its own store unless given one; the Cell Query pictures share
+  one, whose schedulers keep each picture's wanted tiles apart, read the
+  highest rows first, and stay under one limit of requests in flight
+  (`TileRequestSlots`).
 
 ## Default Colours
 
@@ -541,6 +541,16 @@ compares whole numbers by value and other text by character code, as a
 collator would take seconds over a million IDs. If the worker fails, or there
 is no `Worker`, the same store runs on the main thread, given the rows and
 columns again. See [plan 23](plan/phases/23-cell-query.md).
+
+The table's pictures are small `MorphologyCanvas`es on one shared tile store
+(above). Their outlines are read a page at a time by `CellOutlineReader`
+through `loadPlatformCellOutlines`, which uses a dataset's `cellOutlines`
+where it has one and otherwise the Cell card's box read around each cell,
+three at a time. Xenium's `cellOutlines` relies on `cell_boundaries.parquet`
+keeping each cell's vertices together in the order of `cells.parquet`: it
+reads the rows around the cell's overview row times the vertices per cell,
+one `UNION ALL` query per page, and DuckDB skips the row groups outside them.
+A cell not found there falls back to its box.
 
 Auto-contrast decodes and samples tiles off the main thread and gets back only
 the sampled pixels. TIFF tile bytes, fetched on the main thread, go to a tile

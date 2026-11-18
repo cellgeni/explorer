@@ -21,6 +21,7 @@ import {
   type CellQueryColumn,
 } from './cellQueryModel'
 import { CellQueryTable } from './CellQueryTable'
+import { CELL_PICTURE_FIELDS } from './cellPictureModel'
 import type {
   CellQueryClassOption,
   CellQueryConditionView,
@@ -38,6 +39,14 @@ export function CellQueryPanel({ query }: { readonly query: CellQueryModel }) {
     </>
   )
 }
+
+const PICTURE_OPTIONS: readonly SelectOption<string>[] = [
+  { value: 'off', label: 'No pictures' },
+  ...CELL_PICTURE_FIELDS.map((field) => ({
+    value: field.toString(),
+    label: `Pictures, ${field.toString()} µm`,
+  })),
+]
 
 // More classes than this, and the list can be searched.
 const CLASS_SEARCH_THRESHOLD = 12
@@ -392,6 +401,17 @@ function CellQueryActions({ query }: { readonly query: CellQueryModel }) {
           disabled={query.table.addColumnOptions.length === 0}
           onChange={(columnId) => {
             if (columnId !== '') query.table.onAddColumn(columnId)
+          }}
+        />
+        <Select
+          title={`Start each row with a picture of the ${query.elementNoun.replace(/s$/, '')} from the image, this wide`}
+          label="Picture"
+          hideLabel
+          className="cell-query-picture-field"
+          value={query.table.pictureField?.toString() ?? 'off'}
+          options={PICTURE_OPTIONS}
+          onChange={(value) => {
+            query.table.onPictureFieldChange(value === 'off' ? null : Number(value))
           }}
         />
       </div>
