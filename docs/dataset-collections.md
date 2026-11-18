@@ -78,6 +78,19 @@ about 30 s to open. The nine sections of patient AT15 are Visium CytAssist
 11 mm, with counts about ten times higher than the others, so on a shared
 scale (a top score typed in `Gene scale`) they leave the other sections dim.
 
+[`docs/collections/lynx-liver.json`](./collections/lynx-liver.json) stacks
+seven serial Xenium sections of human liver from the
+[LYNX study](https://zenodo.org/records/21110855), 5 µm apart, in
+[3D](#3d-stack). Each entry is a dataset manifest in
+[`lynx-liver/`](./collections/lynx-liver/) that opens the section's zipped
+SpatialData store in the store's `aligned` coordinate system, which registers
+its cells to section 04, and sets the stores' scale, 0.2125 µm per unit.
+Section 04, the reference, opens in `global` over its morphology image. The
+other sections' images are rotated in `aligned`, so they are not shown. In
+headless Chromium with the GPU, the first section and the previews in view
+settle about 23 s after the link opens (48 MB), and the stack about 17 s
+after `Stack in 3D` (34 MB more).
+
 ## Fields
 
 | Field         | Required | Value                                                                                                    |
@@ -415,6 +428,9 @@ spaced or listed in order. Every section of a coordinate system has a `z`,
 or none does; a collection that mixes them is refused, naming the entries.
 The sections must be registered as for [side by side](#registered-coordinates):
 the viewer places each at its depth but does not move, rotate or warp it.
+For SpatialData stores, a dataset manifest can open each section in the
+coordinate system that registers it, as
+[`lynx-liver.json`](./collections/lynx-liver.json) does.
 
 With a stacked section open, the bar's `Stack in 3D` button (three layers)
 shows every section of its coordinate system over the views. `2D View`, or

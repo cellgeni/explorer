@@ -11,6 +11,7 @@ import {
 import {
   DATASET_IMAGE_COORDINATES,
   DATASET_MANIFEST_SOURCE_KEYS,
+  parseDatasetManifest,
 } from './datasetManifest'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
@@ -59,21 +60,39 @@ describe('dataset collection JSON Schema', () => {
   })
 })
 
-// The collections in docs/collections/ are opened from their raw GitHub URLs.
+// The collections in docs/collections/ are opened from their raw GitHub URLs,
+// so their datasets must be on data hosts, or be dataset manifests in this
+// repository that point at the data there.
 describe('documented collections', () => {
+  const rawMain = 'https://raw.githubusercontent.com/cellgeni/explorer/main/'
   const folder = join(process.cwd(), 'docs/collections')
   const files = readdirSync(folder).filter((file) => file.endsWith('.json'))
 
-  it.each(files)('%s is a valid collection with absolute dataset URLs', (file) => {
+  it.each(files)('%s is a valid collection with readable dataset URLs', (file) => {
     const collection = parseDatasetCollection(
       JSON.parse(readFileSync(join(folder, file), 'utf8')),
-      `https://raw.githubusercontent.com/cellgeni/explorer/main/docs/collections/${file}`,
+      `${rawMain}docs/collections/${file}`,
     )
 
     expect(collection.name).toBeDefined()
 
     for (const entry of collection.datasets) {
-      expect(entry.url).not.toContain('raw.githubusercontent.com')
+      if (!entry.url.startsWith(rawMain)) {
+        expect(entry.url).not.toContain('raw.githubusercontent.com')
+        continue
+      }
+
+      const path = entry.url.slice(rawMain.length)
+      const manifest = parseDatasetManifest(
+        JSON.parse(readFileSync(join(process.cwd(), path), 'utf8')),
+        entry.url,
+      )
+
+      for (const manifestFile of Object.values(manifest.files)) {
+        expect(manifestFile.url, `${path} points at its data`).not.toContain(
+          'raw.githubusercontent.com',
+        )
+      }
     }
   })
 })
