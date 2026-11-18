@@ -253,6 +253,9 @@ lets tests replace them.
   drawing, measurement, and the Magic Lens overlay. Layer factories are in
   `src/rendering/deckLayers.ts`.
 - `MorphologyCanvas` draws image tiles on a 2D canvas underneath deck.gl.
+- `VolumeViewer` (`src/components/VolumeViewer.tsx`) draws an OME-Zarr
+  z-stack in 3D over the 2D view, with a deck.gl `OrbitView` and the
+  ray-marching `VolumeLayer` (`src/rendering/volumeLayer.ts`).
 
 ## Default Colours
 

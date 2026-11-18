@@ -154,6 +154,12 @@ Later additions:
   coordinates are scaled to µm when used, and outlines are built only for
   cells in view. If the worker fails to start, the file is read on the main
   thread.
+- **3D view (2026-11-18).** An OME-Zarr z-stack can be drawn in 3D on a
+  second deck.gl canvas with an `OrbitView`, over the 2D view, only while the
+  3D view is open. A custom `VolumeLayer` ray-marches one luma.gl 3D texture
+  per channel in its fragment shader; Viv's volume layer was not brought
+  back (see 4.4). The texture is one pyramid level read whole, so the 2D
+  view's tile scheduling does not apply.
 
 ## 4.6 Data-Source Abstraction — Capability-Based
 

@@ -22,6 +22,9 @@ function input(overrides: Partial<ImageSectionModelInput> = {}): ImageSectionMod
     setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
     updateMorphologyChannel: vi.fn(),
+    volumeViewAvailable: false,
+    volumeViewOpen: false,
+    setVolumeViewOpen: vi.fn(),
     ...overrides,
   }
 }
@@ -68,5 +71,19 @@ describe('useImageSectionModel', () => {
     expect(options.updateMorphologyChannel).toHaveBeenCalledWith('channel:0', {
       enabled: false,
     })
+  })
+
+  it('offers the 3D view only for an image that has one', () => {
+    expect(
+      renderHook(() => useImageSectionModel(input())).result.current.volumeView,
+    ).toBe(null)
+
+    const options = input({ volumeViewAvailable: true, volumeViewOpen: true })
+    const { result } = renderHook(() => useImageSectionModel(options))
+
+    expect(result.current.volumeView?.open).toBe(true)
+    result.current.volumeView?.onOpenChange(false)
+    expect(options.setVolumeViewOpen).toHaveBeenCalledWith(false)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Image view: 2D')
   })
 })

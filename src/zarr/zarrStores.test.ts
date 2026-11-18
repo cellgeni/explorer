@@ -67,6 +67,27 @@ describe('Zarr stores', () => {
     )
   })
 
+  it('sends Range reads past the HTTP cache', async () => {
+    const requests: Request[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      requests.push(input as Request)
+      return new Response(new Uint8Array(4), { status: 206 })
+    }) as unknown as typeof fetch
+    const store = createZarrFetchStore('https://example.test/data/store.zarr/', {
+      fetcher,
+    })
+
+    await store.get('/0/zarr.json')
+    await store.getRange('/0/c/0/0', { offset: 8, length: 4 })
+
+    expect(
+      requests.map((request) => [request.headers.get('Range'), request.cache]),
+    ).toEqual([
+      [null, 'default'],
+      ['bytes=8-11', 'no-store'],
+    ])
+  })
+
   it('enumerates chunk keys for v2 and v3 encodings', () => {
     expect(zarrChunkKeys(v2Array('<f4', [5, 3], [2, 2]))).toEqual([
       '0.0',

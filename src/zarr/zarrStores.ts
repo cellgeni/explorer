@@ -52,7 +52,15 @@ export function createZarrFetchStore(
 
   return new zarr.FetchStore(url, {
     async fetch(request: Request) {
-      const response = await (fetcher ?? fetch)(request)
+      // Range reads (sharded chunks and shard indexes) skip Chromium's HTTP
+      // cache, as TIFF tiles do. Two Range requests for the same bytes of a
+      // file at once, such as the 2D and 3D views reading one chunk, can get
+      // a truncated body from it, and Range requests to one file otherwise
+      // wait for each other.
+      const sent = request.headers.has('Range')
+        ? new Request(request, { cache: 'no-store' })
+        : request
+      const response = await (fetcher ?? fetch)(sent)
 
       if (response.status !== 403) {
         return response
