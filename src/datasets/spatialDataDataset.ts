@@ -1,7 +1,6 @@
 import * as zarr from 'zarrita'
 import {
   micrometers,
-  placeFrameBbox,
   type BBox,
   type DataPoint,
   type UnitsDescriptor,
@@ -24,7 +23,7 @@ import type {
   AnnotationGroupOption,
   LoadDatasetAnnotationsOptions,
 } from '../data/datasetAnnotations'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import { placedImageExtent, type ImagePyramidLoader } from '../data/imagePyramid'
 import { datasetFileUrl } from '../data/datasetFiles'
 import {
   openOmeZarrImageWithOptions,
@@ -56,7 +55,12 @@ import {
   type SpatialDataShapesReader,
 } from './spatialDataShapes'
 import { readSpatialDataShapesInWorker } from './spatialDataShapesWorker'
-import { applyAffine, composeAffine, type Affine2D } from './spatialDataTransforms'
+import {
+  affineScale,
+  applyAffine,
+  composeAffine,
+  type Affine2D,
+} from './spatialDataTransforms'
 import { SpatialDataLabelsReader } from './spatialDataLabels'
 import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {
@@ -67,6 +71,8 @@ import {
   formatSpatialDataUnits,
   overrideSpatialDataUnits,
   UNKNOWN_SPATIALDATA_UNITS,
+  XENIUM_MORPHOLOGY_IMAGES,
+  xeniumPixelSizeUnits,
   type SpatialDataUnits,
 } from './spatialDataUnits'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
@@ -235,6 +241,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private readonly openImage: SpatialDataImageOpener
   private readonly openLabels: SpatialDataLabelsOpener
   private statePromise: Promise<SpatialDataState> | null = null
+  private presetUnitsPromise: Promise<SpatialDataUnits | null> | null = null
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
   private boundaryIndexPromise: Promise<BoundaryIndex> | null = null
   private nucleusIndexPromise: Promise<BoundaryIndex> | null = null
@@ -315,11 +322,13 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   // Micrometers per coordinate-system unit. Estimating it may read the table.
   async units(): Promise<SpatialDataUnits> {
-    const { staticUnits, table } = await this.state()
+    const preset = await this.presetUnits()
 
-    if (staticUnits !== null) {
-      return staticUnits
+    if (preset !== null) {
+      return preset
     }
+
+    const { table } = await this.state()
 
     // Reading the table places its rows, which resolves the units.
     if (table !== null) {
@@ -347,20 +356,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     }
 
     if (loader !== null) {
-      const origin = loader.tileBounds(0, 0, 0)
-      const frame: BBox = {
-        minX: origin.minX,
-        minY: origin.minY,
-        maxX: micrometers(
-          origin.minX + loader.imageWidth * loader.units.micrometersPerPixel,
-        ),
-        maxY: micrometers(
-          origin.minY + loader.imageHeight * loader.units.micrometersPerPixel,
-        ),
-      }
-      extents.push(
-        loader.placement === undefined ? frame : placeFrameBbox(loader.placement, frame),
-      )
+      extents.push(placedImageExtent(loader))
     }
 
     return {
@@ -635,17 +631,12 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
               path: tableInfo.path,
               nodes: catalog.nodes,
               label: `SpatialData table ${tableInfo.name}`,
-              resolveCoordinates: (obs) =>
-                this.resolveTableCoordinates(view, staticUnits, obs),
+              resolveCoordinates: (obs) => this.resolveTableCoordinates(view, obs),
               describeError: (error) =>
                 this.describeTableError(store, tableInfo.path, error),
               onReady: () => this.reportMissingTableChunks(store, tableInfo.path),
             },
           })
-
-    if (table === null) {
-      this.resolvedUnits = staticUnits ?? UNKNOWN_SPATIALDATA_UNITS
-    }
 
     return {
       store,
@@ -656,6 +647,51 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       table,
       staticUnits,
     }
+  }
+
+  // Units known before the table's rows are placed: the override or declared
+  // axis units, else the pixel size a spatialdata-io Xenium table keeps. The
+  // image opens with them, so it need not wait for the region shapes.
+  private presetUnits(): Promise<SpatialDataUnits | null> {
+    if (this.presetUnitsPromise === null) {
+      this.presetUnitsPromise = this.readPresetUnits().catch((error: unknown) => {
+        this.presetUnitsPromise = null
+        throw error
+      })
+    }
+
+    return this.presetUnitsPromise
+  }
+
+  private async readPresetUnits(): Promise<SpatialDataUnits | null> {
+    const { store, catalog, view, staticUnits } = await this.state()
+    const table = view.table
+    const morphology = view.images.find((entry) =>
+      XENIUM_MORPHOLOGY_IMAGES.includes(entry.element.name),
+    )
+    const path = table === undefined ? '' : `${table.path}/uns/xenium/pixel_size`
+
+    if (
+      staticUnits !== null ||
+      table === undefined ||
+      morphology === undefined ||
+      !catalog.nodes.some((node) => node.kind === 'array' && node.path === path)
+    ) {
+      return staticUnits
+    }
+
+    const pixelSize = await readNumericScalar(store, path).catch((error: unknown) => {
+      this.onProgress?.(
+        `SpatialData table ${table.name}: ${path} unreadable, estimating units instead. ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    })
+
+    return pixelSize === null
+      ? null
+      : xeniumPixelSizeUnits(pixelSize, affineScale(morphology.affine), table.name)
   }
 
   private describeTableError(
@@ -684,7 +720,6 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   private async resolveTableCoordinates(
     view: SpatialDataView,
-    staticUnits: SpatialDataUnits | null,
     obs: AnnDataObsAccess,
   ): Promise<readonly DataPoint[] | null> {
     const table = view.table
@@ -695,33 +730,35 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     ) {
       // The table does not annotate an element placed in this coordinate
       // system; fall back to raw obsm coordinates.
-      this.resolvedUnits = staticUnits ?? UNKNOWN_SPATIALDATA_UNITS
+      this.resolvedUnits = (await this.presetUnits()) ?? UNKNOWN_SPATIALDATA_UNITS
       return null
     }
 
-    const [instances, regions, obsmPoints, shapesByRegion] = await Promise.all([
-      table.instanceKey === undefined
-        ? Promise.resolve(null)
-        : obs.readObsColumn(table.instanceKey),
-      table.regionKey === undefined
-        ? Promise.resolve(null)
-        : obs.readObsColumn(table.regionKey).catch((error: unknown) => {
-            // A single-region table does not need its region column.
-            if (
-              table.regions.length !== 1 ||
-              !(error instanceof ZarrChunkUnavailableError)
-            ) {
-              throw error
-            }
+    const [staticUnits, instances, regions, obsmPoints, shapesByRegion] =
+      await Promise.all([
+        this.presetUnits(),
+        table.instanceKey === undefined
+          ? Promise.resolve(null)
+          : obs.readObsColumn(table.instanceKey),
+        table.regionKey === undefined
+          ? Promise.resolve(null)
+          : obs.readObsColumn(table.regionKey).catch((error: unknown) => {
+              // A single-region table does not need its region column.
+              if (
+                table.regions.length !== 1 ||
+                !(error instanceof ZarrChunkUnavailableError)
+              ) {
+                throw error
+              }
 
-            this.onProgress?.(
-              `SpatialData table ${table.name}: region column unreadable, using ${table.regions[0] ?? ''}. ${error.message}`,
-            )
-            return null
-          }),
-      view.regionLabels.length > 0 ? obs.readObsmPoints() : Promise.resolve(null),
-      this.loadRegionShapes(view.regionShapes),
-    ])
+              this.onProgress?.(
+                `SpatialData table ${table.name}: region column unreadable, using ${table.regions[0] ?? ''}. ${error.message}`,
+              )
+              return null
+            }),
+        view.regionLabels.length > 0 ? obs.readObsmPoints() : Promise.resolve(null),
+        this.loadRegionShapes(view.regionShapes),
+      ])
     const labelValues =
       view.regionLabels.length > 0
         ? await readLabelValues(obs, instances, table.instanceKey)
@@ -1414,6 +1451,25 @@ async function readLabelValues(
   }
 
   return null
+}
+
+// A 0-d numeric array, such as an AnnData `uns` value.
+async function readNumericScalar(
+  store: SpatialDataStore,
+  path: string,
+): Promise<number | null> {
+  const array = await zarr.open(zarr.root(store).resolve(path), { kind: 'array' })
+  const value: unknown = await zarr.get(array)
+  const first =
+    typeof value === 'object' && value !== null && 'data' in value
+      ? (value.data as ArrayLike<unknown>)[0]
+      : value
+
+  return typeof first === 'number'
+    ? first
+    : typeof first === 'bigint'
+      ? Number(first)
+      : null
 }
 
 function numericOrNaN(value: string | number | null | undefined): number {

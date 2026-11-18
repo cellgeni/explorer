@@ -86,6 +86,32 @@ export function declaredSpatialDataUnits(
   return null
 }
 
+// The images spatialdata-io's Xenium reader makes from the morphology stack.
+export const XENIUM_MORPHOLOGY_IMAGES: readonly string[] = [
+  'morphology_focus',
+  'morphology_mip',
+]
+
+// spatialdata-io keeps a Xenium run's experiment.xenium in the table's
+// `uns/xenium`, and its `pixel_size` is µm per morphology image pixel. The
+// morphology image's scale into the coordinate system (units per pixel)
+// turns it into µm per unit.
+export function xeniumPixelSizeUnits(
+  pixelSize: number,
+  unitsPerPixel: number,
+  tableName: string,
+): SpatialDataUnits | null {
+  const micrometersPerUnit = pixelSize / unitsPerPixel
+
+  return Number.isFinite(micrometersPerUnit) && micrometersPerUnit > 0
+    ? {
+        micrometersPerUnit,
+        source: 'declared',
+        detail: `Xenium pixel_size ${formatFactor(pixelSize)} µm in table ${tableName}`,
+      }
+    : null
+}
+
 // Cell areas in µm² (Xenium `cell_area`, `area`) against the same cells'
 // geometric areas in coordinate-system units².
 export function estimateUnitsFromAreas(

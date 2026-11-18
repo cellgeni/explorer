@@ -452,6 +452,44 @@ describe('SpatialDataDataset units and labels', () => {
     })
   })
 
+  it('opens the image on a Xenium table pixel size without reading shapes', async () => {
+    const readShapes = shapesReaderFixture({ cells: polygonRows() })
+    const openImage = imageOpenerFixture()
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(withXeniumPixelSize(storeFixture(), 0.25)),
+      readShapes,
+      openImage,
+    })
+
+    await dataset.image()
+    expect(readShapes).not.toHaveBeenCalled()
+    expect(openImage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `${STORE_URL}/images/he`,
+        transform: { scaleX: 0.125, scaleY: 0.125, translateX: 5, translateY: 2.5 },
+      }),
+    )
+    await expect(dataset.units()).resolves.toEqual({
+      micrometersPerUnit: 0.25,
+      source: 'declared',
+      detail: 'Xenium pixel_size 0.25 µm in table table',
+    })
+    const overview = await dataset.overview()
+    expect(overview[0]?.position).toEqual({ x: 0.25, y: 0.25 })
+  })
+
+  it('reads a Xenium pixel size only beside a Xenium morphology image', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(withXeniumPixelSize(storeFixture(), 0.25, 'if')),
+      readShapes: shapesReaderFixture({ cells: polygonRows() }),
+      openImage: imageOpenerFixture(),
+    })
+
+    await expect(dataset.units()).resolves.toMatchObject({ source: 'unknown' })
+  })
+
   it('selects a requested image from the coordinate system', async () => {
     const dataset = new SpatialDataDataset({
       url: STORE_URL,
@@ -1205,6 +1243,44 @@ function withNullableTableStrings(
   }
 
   output.set('/zmetadata', new TextEncoder().encode(JSON.stringify(consolidated)))
+  return output
+}
+
+// A spatialdata-io Xenium store: the morphology image in pixels of the
+// coordinate system, and the run's pixel size (µm per pixel) in the table's
+// uns/xenium.
+function withXeniumPixelSize(
+  files: ReadonlyMap<string, Uint8Array>,
+  pixelSize: number,
+  imageName = 'morphology_focus',
+): ReadonlyMap<string, Uint8Array> {
+  const consolidated = JSON.parse(new TextDecoder().decode(files.get('/zmetadata'))) as {
+    metadata: Record<string, unknown>
+  }
+  Object.assign(consolidated.metadata, {
+    [`images/${imageName}/.zgroup`]: { zarr_format: 2 },
+    [`images/${imageName}/.zattrs`]: {
+      multiscales: [
+        {
+          axes: CYX.axes,
+          datasets: [{ path: '0' }],
+          coordinateTransformations: [
+            { type: 'identity', input: CYX, output: { name: 'global', axes: CYX.axes } },
+          ],
+        },
+      ],
+    },
+    'tables/table/uns/.zgroup': { zarr_format: 2 },
+    'tables/table/uns/xenium/.zgroup': { zarr_format: 2 },
+    'tables/table/uns/xenium/pixel_size/.zarray': arrayMeta([], '<f8'),
+    'tables/table/uns/xenium/pixel_size/.zattrs': { 'encoding-type': 'numeric-scalar' },
+  })
+  const output = new Map(files)
+  output.set('/zmetadata', new TextEncoder().encode(JSON.stringify(consolidated)))
+  output.set(
+    '/tables/table/uns/xenium/pixel_size/0',
+    bytes(new Float64Array([pixelSize])),
+  )
   return output
 }
 

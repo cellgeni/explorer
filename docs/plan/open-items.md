@@ -123,7 +123,12 @@ Features:
       since 2026-11-13, then filtered to the viewport. spatialdata-io's
       `shapes.parquet` cannot be read by viewport: the 460-plex
       `cell_boundaries` is one row group of 598,222 rows with no per-shape
-      bounding-box column.
+      bounding-box column. Since 2026-11-18 the image opens alongside the
+      table when the units are known without it (an override, declared axis
+      units, or a Xenium table's `pixel_size`). With estimated units it still
+      waits for the region shapes; it could open at 1 µm per unit and be
+      rescaled. The cells wait for the region shapes even when
+      `obsm/spatial` could place them.
 - [ ] Collections: list them in the start-screen gallery and `Load Dataset`,
       previews by metadata and sorted by expression, class colours in links,
       an embedding beside the view, `labels` without an `image`, and the

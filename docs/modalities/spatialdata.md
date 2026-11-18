@@ -76,7 +76,11 @@ stores from `src/zarr/zarrStores.ts`:
   `ZipFileStore` over `CachedHttpRangeReader` (`src/zarr/cachedZipStore.ts`),
   with keys relative to the store root inside the zip. Each entry is read with
   two ranges, its local header and its data; ranges up to 8 MiB go through
-  the persistent byte-range cache. Entries stored without compression are
+  the persistent byte-range cache. Range requests are sent with
+  `cache: 'no-store'`: Chromium's HTTP cache lets one Range request to a URL
+  through at a time, and every entry of a zip shares its URL, so image tiles
+  and table chunks waited behind the shapes download. On the 460-plex at
+  32 Mbit/s the cells were ready 11 s sooner (2026-11-18). Entries stored without compression are
   read by range; deflated entries are read and inflated whole. The opened zip
   is returned as `zip` and kept in a four-entry cache, so detection, the
   dataset, and diagnostics share one central-directory read; diagnostics
@@ -279,11 +283,22 @@ start with their first six channels on.
 
 - Coordinates are scaled to micrometers by a factor per coordinate system
   (`src/datasets/spatialDataUnits.ts`): the View options `µm per unit`
-  override (`sdUm`), else the x/y axis unit the elements declare, else an
-  estimate (`cell_area` against segmentation areas, the Visium 100 µm spot
-  pitch, or Visium HD `square_NNNum` bin names). When none applies the factor
-  is 1 and distances are labelled as units. spatialdata-io stores usually
-  declare `unit`, for example full-resolution pixels for Visium.
+  override (`sdUm`), else the x/y axis unit the elements declare, else the
+  Xenium pixel size, else an estimate (`cell_area` against segmentation areas,
+  the Visium 100 µm spot pitch, or Visium HD `square_NNNum` bin names). When
+  none applies the factor is 1 and distances are labelled as units.
+  spatialdata-io stores usually declare `unit`, for example full-resolution
+  pixels for Visium.
+- spatialdata-io's Xenium reader copies the run's `experiment.xenium` into
+  the table's `uns/xenium`. Its `pixel_size` (µm per morphology pixel),
+  divided by the scale of the `morphology_focus` (or `morphology_mip`) image
+  into the coordinate system, is the factor (`xeniumPixelSizeUnits`, source
+  `declared`). It is read only when the consolidated metadata lists the
+  array and that image is placed in the coordinate system.
+- An override, declared units, or the pixel size are known before the
+  table's rows are placed (`presetUnits`), so the image opens without waiting
+  for the region shapes. Estimated units wait for the placement, and the image
+  with them.
 - `extent` is the union of the table points' bounding box and the image.
 - `capabilities.cellBoundaries` is true when there is a table and at least one
   region shapes or labels element. Boundary loading reads `meta()` first, and
@@ -297,10 +312,14 @@ start with their first six channels on.
 1. Sets the platform to `spatialdata`; cell boundaries default to on and
    nucleus boundaries to off, unless the link says otherwise
    (`nucleusBounds`).
-2. Logs `summary()`: coordinate system, image, table, skipped elements.
-3. Runs the shared `loadAnnDataOverview` (cells, gene panel, annotation sets,
+2. If `Morphology image` is enabled, starts loading the image in the
+   background, alongside the steps below: it needs the store's metadata and
+   units, not the shapes that place the table's rows. When another dataset is
+   open, the image is shown once the new cells replace it. On a first load it
+   can show before the cells, and the view fits the image until they arrive.
+3. Logs `summary()`: coordinate system, image, table, skipped elements.
+4. Runs the shared `loadAnnDataOverview` (cells, gene panel, annotation sets,
    embedding options).
-4. If `Morphology image` is enabled, loads the image in the background.
 
 Gating is in `SPATIALDATA_PLATFORM_ADAPTER`
 (`src/features/app-shell/platformAdapter.ts`): boundaries come from

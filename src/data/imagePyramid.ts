@@ -1,11 +1,13 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
-import type {
-  BBox,
-  ImageFramePlacement,
-  ImagePixels,
-  TileIndex,
-  UnitsDescriptor,
+import {
+  micrometers,
+  placeFrameBbox,
+  type BBox,
+  type ImageFramePlacement,
+  type ImagePixels,
+  type TileIndex,
+  type UnitsDescriptor,
 } from './coords'
 import type { FallbackNotifier } from './fallbackNotice'
 import type { TileSamples, TileSampling } from './tileSamples'
@@ -210,6 +212,22 @@ export interface ImagePyramidLoader {
   // Pictures stored beside the image, such as a slide scanner's label and
   // macro (the whole glass slide), read when asked for.
   associatedImages?(signal?: AbortSignal): Promise<readonly ImagePyramidAssociatedImage[]>
+}
+
+// The image's bounds in the dataset: its level 0 frame from the first tile's
+// origin, turned into place when the image is flipped or its axes swapped.
+export function placedImageExtent(loader: ImagePyramidLoader): BBox {
+  const origin = loader.tileBounds(0, 0, 0)
+  const frame: BBox = {
+    minX: origin.minX,
+    minY: origin.minY,
+    maxX: micrometers(origin.minX + loader.imageWidth * loader.units.micrometersPerPixel),
+    maxY: micrometers(
+      origin.minY + loader.imageHeight * loader.units.micrometersPerPixel,
+    ),
+  }
+
+  return loader.placement === undefined ? frame : placeFrameBbox(loader.placement, frame)
 }
 
 // An associated image (see ImagePyramidLoader.associatedImages): a one-level
