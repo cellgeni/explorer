@@ -30,6 +30,7 @@ import {
   CustomImageLayers,
   ImageChannelControls,
   ImageOpacityControl,
+  ImageVolumeViewControl,
   ImageZPlaneControl,
 } from '../sections/ImageSectionBlocks'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
@@ -365,6 +366,7 @@ function ImageSection({
       <div className="layer-opacity-controls">
         <ImageOpacityControl image={image} />
         <ImageZPlaneControl image={image} />
+        <ImageVolumeViewControl image={image} />
       </div>
       <VisiumTissueImageSelect visium={viewOptions.visium} />
       <MerscopeImageSelect merscope={viewOptions.merscope} />

@@ -19,6 +19,8 @@ export interface ImageSectionModel {
   readonly zStack: MorphologyImageZStack | undefined
   readonly requestedZPlane: number | null
   readonly onZPlaneChange: (zPlane: number) => void
+  // Set when the dataset image is a z-stack the 3D view can show.
+  readonly volumeView: ImageVolumeViewModel | null
   readonly channels: readonly MorphologyImageChannel[]
   readonly channelSettings: readonly MorphologyChannelSetting[]
   readonly autoContrastChannelIds: readonly string[]
@@ -28,6 +30,11 @@ export interface ImageSectionModel {
     patch: Partial<Omit<MorphologyChannelSetting, 'id'>>,
   ) => void
   readonly customLayers: CustomImageLayersModel
+}
+
+export interface ImageVolumeViewModel {
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
 }
 
 export interface CustomImageLayersModel {
@@ -62,6 +69,9 @@ export interface ImageSectionModelInput {
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
   readonly updateMorphologyChannel: ImageSectionModel['onUpdateChannel']
+  readonly volumeViewAvailable: boolean
+  readonly volumeViewOpen: boolean
+  readonly setVolumeViewOpen: (open: boolean) => void
 }
 
 export function useImageSectionModel({
@@ -83,6 +93,9 @@ export function useImageSectionModel({
   setCustomLayerOpacity,
   setImageLayerOpacity,
   updateMorphologyChannel,
+  volumeViewAvailable,
+  volumeViewOpen,
+  setVolumeViewOpen,
 }: ImageSectionModelInput): ImageSectionModel {
   return {
     opacity: imageLayerOpacity,
@@ -95,6 +108,15 @@ export function useImageSectionModel({
     zStack: morphologyZStack,
     requestedZPlane: requestedMorphologyZPlane,
     onZPlaneChange: selectMorphologyZPlane,
+    volumeView: volumeViewAvailable
+      ? {
+          open: volumeViewOpen,
+          onOpenChange: (open) => {
+            setVolumeViewOpen(open)
+            appendDebugEvent(open ? 'Image view: 3D' : 'Image view: 2D')
+          },
+        }
+      : null,
     channels: morphologyChannels,
     channelSettings: morphologyChannelSettings,
     autoContrastChannelIds,

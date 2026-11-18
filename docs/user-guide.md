@@ -226,7 +226,10 @@ in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
 or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, the Atera 3D DAPI
 stack chosen under `Morphology`, or a BioImage Archive OME-Zarr), `Z plane`
 picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
-rendering settings name. Xenium, H5AD,
+rendering settings name. For an OME-Zarr z-stack, `View` › `3D` shows the
+whole stack as a volume you can rotate, with `Max intensity` and
+`Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
+is unknown; `2D View` returns to the plane. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
 `nucleus_boundaries.parquet`, Atera nuclei, and a SpatialData store's

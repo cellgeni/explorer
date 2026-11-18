@@ -270,6 +270,7 @@ Alt-click on a class's checkbox shows only that class.
 | --------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `Dataset image opacity`           | Slider 0–100%, step 5                                                      | 100%                                                    | With channel controls present, opacity is applied per channel                          |
 | `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                              | When the dataset image is an OME-TIFF or OME-Zarr z-stack                              |
+| `View`                            | Segmented: 2D, 3D                                                          | 2D                                                      | OME-Zarr z-stacks. 3D shows the [3D view](#3d-view) over the canvas; not in the link   |
 | `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                       | Visium. Lists the images the dataset can place; switches in place; `vimg`              |
 | `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg` |
 | `Morphology`                      | Select: 2D (all stains), 3D DAPI stack                                     | 2D                                                      | Atera with both images. A change reloads the dataset; the stack gets `Z plane`; `aimg` |
@@ -863,6 +864,26 @@ How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-
   their own.
 
 ## Canvas
+
+### 3D View
+
+`VolumeViewer` (`src/components/VolumeViewer.tsx`) covers the canvas when
+the Image section's `View` is `3D`. It draws the dataset image's enabled
+channels (up to six) as a volume on black, with their colours and contrast
+windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
+scrolling zooms.
+
+| Control     | Type                                  | Default       | Notes                                                                   |
+| ----------- | ------------------------------------- | ------------- | ----------------------------------------------------------------------- |
+| `Rendering` | Segmented: Max intensity, Translucent | Max intensity | Brightest value along each line of sight, or nearer structures in front |
+| `Depth`     | Slider ×0.25–×16, in powers of 2      | ×1            | Stretches z; planes of unknown spacing are as thick as a voxel is wide  |
+| `Opacity`   | Slider 0–100%, step 5                 | 50%           | Translucent only: how much bright structures hide what is behind them   |
+| Reset (fit) | Icon button                           |               | Back to the first, tilted view of the whole volume                      |
+| `2D View`   | Button                                |               | Returns to the 2D view, which kept its place                            |
+
+The status at the bottom left gives the level read ("Level 4 of 7, 1,097 ×
+281 × 41 voxels"), planes read while loading, why nothing is drawn (no
+channel on, or no level small enough), or a channel that could not be read.
 
 ### Legend
 
