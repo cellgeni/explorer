@@ -97,6 +97,30 @@ export interface ImagePyramidTileFetchOptions {
   readonly onSharedRead?: () => void
 }
 
+// A level of a z-stack that can be read whole, for the 3D view.
+export interface ImagePyramidVolumeLevel {
+  readonly level: number
+  readonly width: number
+  readonly height: number
+  readonly depth: number
+  // Voxel size along each axis, in the units of `units.micrometersPerPixel`.
+  // `z` is unset when the image does not give the plane spacing in those
+  // units.
+  readonly voxelSize: {
+    readonly x: number
+    readonly y: number
+    readonly z?: number
+  }
+}
+
+// One channel of a z-stack level, plane after plane, each row by row.
+export interface ImagePyramidVolume {
+  readonly data: ImagePyramidPixelArray
+  readonly width: number
+  readonly height: number
+  readonly depth: number
+}
+
 export interface ImagePyramidDecodedTile {
   readonly bitmap: ImageBitmap
   readonly width: number
@@ -169,6 +193,16 @@ export interface ImagePyramidLoader {
     sampling: TileSampling,
     signal?: AbortSignal,
   ): Promise<TileSamples | null>
+  // The levels of a z-stack that `loadVolume` reads, finest first; unset when
+  // the loader cannot read along z.
+  volumeLevels?(): readonly ImagePyramidVolumeLevel[]
+  // The loader's channel at every plane of a level. `onProgress` gets the
+  // planes read so far.
+  loadVolume?(
+    level: number,
+    signal?: AbortSignal,
+    onProgress?: (planesRead: number) => void,
+  ): Promise<ImagePyramidVolume>
   // A small picture of the whole image over the image's extent, such as an
   // SVS slide's thumbnail, which the minimap draws instead of the coarsest
   // level. It has the image's channels.
