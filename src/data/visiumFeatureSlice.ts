@@ -6,6 +6,7 @@ import {
 } from './h5WorkerFile'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import type { CellFeatureMatrixReadOptions, GexResult } from './gexTypes'
+import { fetchHead } from './hostResponses'
 import {
   createVisiumFeatureSliceCache,
   elapsedMs,
@@ -245,10 +246,11 @@ async function assertFeatureSliceFullFileReadWithinBudget(
     throw new RangeError(`Feature Slice full-file budget must be non-negative.`)
   }
 
-  const response = await (fetcher ?? fetch)(url, {
-    method: 'HEAD',
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const response = await fetchHead(
+    fetcher ?? fetch,
+    url,
+    signal === undefined ? {} : { signal },
+  )
 
   if (!response.ok) {
     throw new Error(`feature_slice.h5 HEAD returned HTTP ${response.status}.`)

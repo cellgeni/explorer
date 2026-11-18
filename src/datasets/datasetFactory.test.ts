@@ -9,6 +9,7 @@ import {
   setDatasetManifest,
 } from '../data/datasetFiles'
 import { clearFolderListings, isListedAsMissing } from '../data/folderListing'
+import { clearHostResponses } from '../data/hostResponses'
 import {
   cachedSpatialDataset,
   createSpatialDataset,
@@ -1735,6 +1736,71 @@ describe('Icechunk repositories', () => {
 })
 
 describe('AnnData Zarr stores', () => {
+  afterEach(() => {
+    clearHostResponses()
+  })
+
+  it('detects AnnData written without root attributes on a host that allows GET only', async () => {
+    // anndata 0.7 wrote no root .zattrs; S3 buckets whose CORS rules allow
+    // only GET answer HEAD without CORS headers, so it fails to fetch.
+    const fixtureFetcher = annDataZarrFixtureFetcher({
+      hidden: ['/tiny.zarr/.zmetadata', '/tiny.zarr/.zattrs'],
+    })
+    const methods: string[] = []
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = init?.method ?? 'GET'
+      methods.push(method)
+
+      if (method === 'HEAD') {
+        throw new TypeError('Failed to fetch')
+      }
+
+      return fixtureFetcher(input, init)
+    }) as typeof fetch
+    const url = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
+    const detection = await detectSpatialDataset(`${url}/`, { fetcher })
+
+    expect(detection).toMatchObject({
+      platform: 'h5ad',
+      baseUrl: url,
+      h5adUrl: url,
+      source: 'zarr',
+    })
+    expect(detection.checked.at(-1)).toEqual({
+      path: 'obs/.zattrs (AnnData)',
+      url: `${url}/obs/.zattrs`,
+      ok: true,
+      status: 200,
+    })
+    // Once the origin answered GET, it is not sent HEAD again.
+    expect(methods.filter((method) => method === 'HEAD').length).toBeLessThanOrEqual(2)
+
+    const dataset = await createSpatialDataset(url, { fetcher })
+
+    expect(dataset).toBeInstanceOf(AnnDataH5adDataset)
+    await expect((dataset as AnnDataH5adDataset).genePanel()).resolves.toEqual([
+      'Actb',
+      'Gad1',
+      'Gapdh',
+      'Sst',
+    ])
+  })
+
+  it('does not look for a pre-0.8 AnnData store in folders not named .zarr', async () => {
+    const requests: string[] = []
+    const fetcher = annDataZarrFixtureFetcher({
+      aliases: { '/datasets/heart': '/tiny.zarr' },
+      hidden: ['/tiny.zarr/.zmetadata', '/tiny.zarr/.zattrs'],
+      requests,
+    })
+
+    await detectSpatialDataset(`${ANNDATA_ZARR_FIXTURE_ORIGIN}/datasets/heart/`, {
+      fetcher,
+    })
+
+    expect(requests).not.toContain('/datasets/heart/obs/.zattrs')
+  })
+
   it('detects AnnData from the root attributes of a .zarr URL and creates an AnnData dataset', async () => {
     const fetcher = annDataZarrFixtureFetcher({ hidden: ['/tiny.zarr/.zmetadata'] })
     const url = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
