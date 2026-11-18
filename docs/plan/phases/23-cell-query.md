@@ -219,10 +219,11 @@ What is missing:
 - [x] **E. Save as class and export.** (S) Done in M1. D7 and D8. Tests: a saved class
       lists the matches, colours them and appears under Plots' `Group by`;
       the CSV matches the table.
-- [ ] **F. Shared tile store.** (M) Move the per-channel cache and scheduler
-      out of `MorphologyCanvas` into a store that can be passed in (D11).
-      A refactor with no change in behaviour: the main view, minimap and
-      slide images keep their own store, and their tests pass unchanged.
+- [x] **F. Shared tile store.** (M) Done in M2. Move the per-channel cache
+      and scheduler out of `MorphologyCanvas` into a store that can be
+      passed in (D11). A refactor with no change in behaviour: the main
+      view, minimap and slide images keep their own store, and their tests
+      pass unchanged.
 - [ ] **G. Cell pictures.** (M) A `CellPicture` component: a small
       `MorphologyCanvas` on the shared store, with a view state centred on
       the cell at the chosen field (D10), the outline as SVG above it, and

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
-import { TileRequestScheduler } from './tileRequestScheduler'
+import { TileRequestScheduler, TileRequestSlots } from './tileRequestScheduler'
 import type { ImagePyramidTileFetchOptions } from '../data/imagePyramid'
 import type { TileCacheEntry } from './tileCache'
 
@@ -203,5 +203,114 @@ describe('tile request scheduler', () => {
     ])
     cache.pending[2]?.fetchOptions?.onSharedRead?.()
     expect(cache.pending).toHaveLength(4)
+  })
+
+  describe('shared by several canvases (plan 23-D11)', () => {
+    const update = (
+      scheduler: TileRequestScheduler<string>,
+      client: string,
+      cols: readonly number[],
+      options: { readonly priority?: number; readonly onSettled?: () => void } = {},
+    ) => {
+      scheduler.update({
+        loader: 'image',
+        level: 0,
+        tiles: tiles(...cols),
+        maxConcurrentRequests: 10,
+        onSettled: options.onSettled ?? (() => {}),
+        client,
+        ...(options.priority === undefined ? {} : { priority: options.priority }),
+      })
+    }
+
+    it('reads a tile two canvases want once and tells both', async () => {
+      const cache = fakeCache()
+      const scheduler = new TileRequestScheduler(cache)
+      const first = vi.fn()
+      const second = vi.fn()
+
+      update(scheduler, 'a', [0, 1], { onSettled: first })
+      update(scheduler, 'b', [1, 2], { onSettled: second })
+
+      expect(cache.pending.map((request) => request.key)).toEqual([
+        '0:0:0',
+        '0:1:0',
+        '0:2:0',
+      ])
+
+      cache.pending[1]?.resolve()
+      await vi.waitFor(() => {
+        expect(second).toHaveBeenCalledOnce()
+      })
+      expect(first).toHaveBeenCalledOnce()
+    })
+
+    it('keeps a tile another canvas still wants and cancels it once none does', () => {
+      const cache = fakeCache()
+      const scheduler = new TileRequestScheduler(cache)
+
+      update(scheduler, 'a', [0])
+      update(scheduler, 'b', [0])
+      scheduler.release('a')
+      expect(cache.pending[0]?.signal?.aborted).toBe(false)
+
+      scheduler.release('b')
+      expect(cache.pending[0]?.signal?.aborted).toBe(true)
+    })
+
+    it('reads the tiles of the canvas with the lowest priority first', async () => {
+      const cache = fakeCache()
+      const scheduler = new TileRequestScheduler(cache)
+      const updateOne = (client: string, cols: readonly number[], priority: number) => {
+        scheduler.update({
+          loader: 'image',
+          level: 0,
+          tiles: tiles(...cols),
+          maxConcurrentRequests: 1,
+          onSettled: () => {},
+          client,
+          priority,
+        })
+      }
+
+      updateOne('below', [5, 6], 3)
+      updateOne('above', [7], 1)
+      expect(cache.pending.map((request) => request.key)).toEqual(['0:5:0'])
+
+      // Tile 5 had started; tile 7 goes next, before the rest of 'below'.
+      cache.pending[0]?.resolve()
+      await vi.waitFor(() => {
+        expect(cache.pending.map((request) => request.key)).toEqual(['0:5:0', '0:7:0'])
+      })
+    })
+
+    it('keeps the requests of several schedulers under one limit', async () => {
+      const slots = new TileRequestSlots(3)
+      const firstCache = fakeCache()
+      const secondCache = fakeCache()
+      const first = new TileRequestScheduler(firstCache, slots)
+      const second = new TileRequestScheduler(secondCache, slots)
+
+      update(first, 'a', [0, 1])
+      update(second, 'a', [0, 1, 2])
+
+      expect(firstCache.pending).toHaveLength(2)
+      expect(secondCache.pending).toHaveLength(1)
+      expect(slots.inUse).toBe(3)
+
+      // A tile of the first scheduler settles; the second takes its slot.
+      firstCache.pending[0]?.resolve()
+      await vi.waitFor(() => {
+        expect(secondCache.pending).toHaveLength(2)
+      })
+      expect(slots.inUse).toBe(3)
+
+      // Cancelling frees the first's slot, and the second's last tile starts.
+      first.cancel()
+      expect(secondCache.pending).toHaveLength(3)
+      expect(slots.inUse).toBe(3)
+      second.release('a')
+      expect(slots.inUse).toBe(0)
+    })
   })
 })

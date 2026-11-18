@@ -253,6 +253,13 @@ lets tests replace them.
   drawing, measurement, and the Magic Lens overlay. Layer factories are in
   `src/rendering/deckLayers.ts`.
 - `MorphologyCanvas` draws image tiles on a 2D canvas underneath deck.gl.
+  Its decoded tiles, their requests and a flat image live in a
+  `MorphologyTileStore` (`src/rendering/morphologyTileStore.ts`): one per
+  channel and contrast, each a `TileCache` and a `TileRequestScheduler`. A
+  canvas makes its own store unless given one; canvases given the same store
+  share its tiles, and its schedulers keep each canvas's wanted tiles apart,
+  read the canvas with the lowest priority first, and can stay under one
+  limit of requests in flight (`TileRequestSlots`).
 
 ## Default Colours
 
