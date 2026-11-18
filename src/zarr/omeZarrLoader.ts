@@ -14,8 +14,11 @@ import {
   type ImagePyramidChannelInfo,
   type ImagePyramidDecodedTile,
   type ImagePyramidLoader,
+  type ImagePyramidPixelArray,
   type ImagePyramidTilePixels,
   type ImagePyramidTileRenderOptions,
+  type ImagePyramidVolume,
+  type ImagePyramidVolumeLevel,
   type ImagePyramidZStack,
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
@@ -45,6 +48,9 @@ const DEFAULT_TILE_SIZE = 256
 const MAX_VIRTUAL_TILE_SIZE = 512
 const DECODED_CHUNK_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
+// Slabs of a volume read at once: enough to hide request latency when each
+// slab is one plane, few enough to keep decoded slabs small.
+const VOLUME_SLAB_CONCURRENCY = 4
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]
@@ -126,6 +132,8 @@ interface OmeZarrLevelMeta {
   readonly tileHeight: ImagePixels
   readonly xMicrometersPerPixel: number
   readonly yMicrometersPerPixel: number
+  // Plane spacing in the units of xMicrometersPerPixel, when known.
+  readonly zVoxelSize?: number
 }
 
 interface OmeZarrLoaderOptions {
@@ -135,6 +143,7 @@ interface OmeZarrLoaderOptions {
   readonly axes: readonly OmeZarrAxis[]
   readonly xAxis: number
   readonly yAxis: number
+  readonly zAxis?: number
   readonly channelAxis?: number
   readonly selectedChannelIndex?: number
   // Index read on each axis other than x, y and channel, at level 0.
@@ -211,6 +220,7 @@ export async function openOmeZarrImageWithOptions(
         path: dataset.path,
         xAxis,
         yAxis,
+        ...(zAxis === undefined ? {} : { zAxis }),
         ...(planarTransform === undefined
           ? {}
           : {
@@ -276,6 +286,7 @@ export async function openOmeZarrImageWithOptions(
     axes,
     xAxis,
     yAxis,
+    ...(zStack === undefined || zAxis === undefined ? {} : { zAxis }),
     ...(channelAxis === undefined ? {} : { channelAxis }),
     ...(selection.channelIndex === undefined
       ? {}
@@ -403,6 +414,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly axes: readonly OmeZarrAxis[]
   private readonly xAxis: number
   private readonly yAxis: number
+  private readonly zAxis: number | undefined
   private readonly channelAxis: number | undefined
   private readonly selectedChannelIndex: number | undefined
   private readonly planeIndices: readonly number[]
@@ -424,6 +436,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.axes = options.axes
     this.xAxis = options.xAxis
     this.yAxis = options.yAxis
+    this.zAxis = options.zAxis
     this.channelAxis = options.channelAxis
     this.selectedChannelIndex = options.selectedChannelIndex
     this.planeIndices = options.planeIndices
@@ -567,6 +580,113 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       outputAxes: selection.outputAxes,
       width: selection.width,
     })
+  }
+
+  // Empty unless the image is a z-stack.
+  volumeLevels(): readonly ImagePyramidVolumeLevel[] {
+    const zAxis = this.zAxis
+
+    if (zAxis === undefined) {
+      return []
+    }
+
+    return this.levels.map((meta, level) => ({
+      level,
+      width: meta.width,
+      height: meta.height,
+      depth: meta.array.shape[zAxis] ?? 1,
+      voxelSize: {
+        x: meta.xMicrometersPerPixel,
+        y: meta.yMicrometersPerPixel,
+        ...(meta.zVoxelSize === undefined ? {} : { z: meta.zVoxelSize }),
+      },
+    }))
+  }
+
+  // Reads the level in slabs one chunk deep, so each chunk is decoded once,
+  // several slabs at a time.
+  async loadVolume(
+    level: number,
+    signal?: AbortSignal,
+    onProgress?: (planesRead: number) => void,
+  ): Promise<ImagePyramidVolume> {
+    const zAxis = this.zAxis
+
+    if (zAxis === undefined) {
+      throw new Error('This OME-Zarr image has no z axis to show in 3D.')
+    }
+
+    const meta = this.levelMetaFor(level)
+    const { width, height } = meta
+    const depth = meta.array.shape[zAxis] ?? 1
+    const slabDepth = Math.max(1, meta.array.chunks[zAxis] ?? 1)
+    const slabStarts = Array.from(
+      { length: Math.ceil(depth / slabDepth) },
+      (_value, index) => index * slabDepth,
+    )
+    let data: ImagePyramidPixelArray | null = null
+    let planesRead = 0
+
+    const readSlab = async (zStart: number): Promise<void> => {
+      const zEnd = Math.min(depth, zStart + slabDepth)
+      const projection = this.axes.map((_axis, axis) =>
+        axis === zAxis
+          ? zarr.slice(zStart, zEnd)
+          : axis === this.xAxis || axis === this.yAxis
+            ? zarr.slice(null)
+            : axis === this.channelAxis
+              ? (this.selectedChannelIndex ?? 0)
+              : this.planeIndexAt(meta, axis),
+      )
+      const slab = await zarr.get(meta.array, projection, {
+        ...(signal === undefined ? {} : { signal }),
+      })
+      throwIfAborted(signal)
+
+      if (typeof slab === 'number' || typeof slab === 'bigint') {
+        throw new Error('OME-Zarr volume selection unexpectedly returned a scalar.')
+      }
+
+      if (!isSupportedPixelArray(slab.data)) {
+        throw new Error('Unsupported OME-Zarr image dtype for the 3D view.')
+      }
+
+      data ??= newPixelArray(slab.data, width * height * depth)
+      copySlabPixels({
+        slab: { data: slab.data, stride: slab.stride },
+        outputAxes: projection.flatMap((index, axis) =>
+          typeof index === 'number' ? [] : [axis],
+        ),
+        axes: { x: this.xAxis, y: this.yAxis, z: zAxis },
+        target: data,
+        width,
+        height,
+        zStart,
+        planes: zEnd - zStart,
+      })
+      planesRead += zEnd - zStart
+      onProgress?.(planesRead)
+    }
+
+    let next = 0
+    await Promise.all(
+      Array.from(
+        { length: Math.min(VOLUME_SLAB_CONCURRENCY, slabStarts.length) },
+        async () => {
+          while (next < slabStarts.length) {
+            const zStart = slabStarts[next] ?? 0
+            next += 1
+            await readSlab(zStart)
+          }
+        },
+      ),
+    )
+
+    if (data === null) {
+      throw new Error('OME-Zarr volume has no planes.')
+    }
+
+    return { data, width, height, depth }
   }
 
   async loadTile(
@@ -1152,6 +1272,7 @@ function levelMetaFromArray(options: {
   readonly path: string
   readonly xAxis: number
   readonly yAxis: number
+  readonly zAxis?: number
   readonly planarScale?: { readonly x: number; readonly y: number }
 }): OmeZarrLevelMeta {
   const chunkShape = options.array.chunks
@@ -1169,6 +1290,18 @@ function levelMetaFromArray(options: {
     multiscale: options.multiscale,
     ...(options.planarScale === undefined ? {} : { planarScale: options.planarScale.y }),
   })
+
+  const zScale =
+    options.zAxis === undefined
+      ? undefined
+      : zVoxelSizeForAxis({
+          axis: options.zAxis,
+          axes: options.axes,
+          dataset: options.dataset,
+          multiscale: options.multiscale,
+          xAxis: options.xAxis,
+          planar: options.planarScale !== undefined,
+        })
 
   const chunkWidth = positiveDimension(
     chunkShape[options.xAxis] ?? DEFAULT_TILE_SIZE,
@@ -1190,6 +1323,7 @@ function levelMetaFromArray(options: {
     tileHeight: imagePixels(virtualTileSize(chunkHeight)),
     xMicrometersPerPixel: xScale,
     yMicrometersPerPixel: yScale,
+    ...(zScale === undefined ? {} : { zVoxelSize: zScale }),
   }
 }
 
@@ -1247,6 +1381,38 @@ function micrometersPerPlaneForAxis(options: {
   readonly multiscale: OmeZarrMultiscaleMetadata
 }): number | undefined {
   const unitMultiplier = micrometersPerLengthUnit(options.axes[options.axis]?.unit)
+
+  if (unitMultiplier === undefined) {
+    return undefined
+  }
+
+  const value =
+    scaleForAxis(options.axis, options.multiscale.coordinateTransformations) *
+    scaleForAxis(options.axis, options.dataset.coordinateTransformations) *
+    unitMultiplier
+
+  return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+// Plane spacing at a level in the units of the x and y pixel sizes: micrometres
+// when z has a length unit, or the store's own units when no spatial axis has
+// one (x and y are then read as micrometres too). Unknown when only x and y
+// have units, as in bioformats2raw output without a z spacing.
+function zVoxelSizeForAxis(options: {
+  readonly axis: number
+  readonly axes: readonly OmeZarrAxis[]
+  readonly dataset: OmeZarrDatasetMetadata
+  readonly multiscale: OmeZarrMultiscaleMetadata
+  readonly xAxis: number
+  // Set when x and y are placed by a SpatialData transform.
+  readonly planar: boolean
+}): number | undefined {
+  const unitMultiplier =
+    micrometersPerLengthUnit(options.axes[options.axis]?.unit) ??
+    (!options.planar &&
+    micrometersPerLengthUnit(options.axes[options.xAxis]?.unit) === undefined
+      ? 1
+      : undefined)
 
   if (unitMultiplier === undefined) {
     return undefined
@@ -1564,6 +1730,49 @@ function copyTilePixels(options: {
     pixels,
     width: options.width,
     height: options.height,
+  }
+}
+
+// Copies a slab of planes, whose output axes are in array order, into a
+// volume stored plane after plane, each row by row.
+function copySlabPixels(options: {
+  readonly slab: {
+    readonly data: ImagePyramidPixelArray
+    readonly stride: readonly number[]
+  }
+  // The array axis of each slab axis.
+  readonly outputAxes: readonly number[]
+  readonly axes: { readonly x: number; readonly y: number; readonly z: number }
+  readonly target: ImagePyramidPixelArray
+  readonly width: number
+  readonly height: number
+  readonly zStart: number
+  readonly planes: number
+}): void {
+  const { slab, target, width, height } = options
+  const strideOf = (axis: number) => slab.stride[options.outputAxes.indexOf(axis)] ?? 0
+  const xStride = strideOf(options.axes.x)
+  const yStride = strideOf(options.axes.y)
+  const zStride = strideOf(options.axes.z)
+  const planeSize = width * height
+
+  if (xStride === 1 && yStride === width && zStride === planeSize) {
+    target.set(
+      slab.data.subarray(0, planeSize * options.planes),
+      options.zStart * planeSize,
+    )
+    return
+  }
+
+  for (let z = 0; z < options.planes; z += 1) {
+    for (let y = 0; y < height; y += 1) {
+      const source = z * zStride + y * yStride
+      const row = ((options.zStart + z) * height + y) * width
+
+      for (let x = 0; x < width; x += 1) {
+        target[row + x] = slab.data[source + x * xStride] ?? 0
+      }
+    }
   }
 }
 

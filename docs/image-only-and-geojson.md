@@ -70,7 +70,8 @@ OME-Zarr sources must expose OME multiscales metadata with `x` and `y` axes.
 An image without a `c` axis is one grayscale channel. A z-stack, with or
 without a channel axis, opens on the plane its OMERO rendering settings name
 (`omero.rdefs.defaultZ`), or the middle plane, and `Z plane` shows another;
-the depth is shown when the `z` axis declares a length unit. Each channel and
+the depth is shown when the `z` axis declares a length unit. `View` › `3D`
+shows the whole z-stack in 3D at a resolution the GPU can hold. Each channel and
 plane opens as a `#c=N&z=M` loader. Only one time point is shown:
 `omero.rdefs.defaultT`, or the first.
 

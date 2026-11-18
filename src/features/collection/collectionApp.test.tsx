@@ -320,6 +320,14 @@ describe('App with a dataset collection', () => {
 
     const bar = await screen.findByRole('navigation', { name: 'Collection' })
     openControls('clusters')
+    // Wait for the load with a cheap check. A label query walks the whole
+    // document for each element, and repeated on every change while the
+    // dataset loads it took most of the 1 s limit.
+    await waitFor(() => {
+      expect(datasets.get(SHAM_A)?.annotations).toHaveBeenCalledWith(
+        expect.objectContaining({ groupId: 'analysis:type' }),
+      )
+    })
     const astroColor = await screen.findByLabelText('type: astro color')
     await waitFor(() => {
       expect(screen.getByLabelText('type: neuron visible')).not.toBeChecked()
