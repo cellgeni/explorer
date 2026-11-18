@@ -107,6 +107,28 @@ matter on real stores.
 
 ## Closed Open Items
 
+- [x] The image no longer waits for the cell shapes (2026-11-18). On the
+      460-plex zip the image opened only after the cells, for three reasons:
+      the lifecycle loaded it after the overview; the units it is scaled by
+      were estimated from the 101 MB `cell_boundaries` polygons; and
+      Chromium's HTTP cache let one Range request to the zip's URL through at
+      a time. Now the lifecycle starts the image alongside the table, shown
+      once the load replaces an open dataset (on a first load the view fits
+      it until the cells arrive). spatialdata-io Xenium stores take their
+      units from the table's `uns/xenium/pixel_size`: 0.2125 µm per unit on
+      the 460-plex, where the `cell_area` estimate gave 0.2175 (2.4% off).
+      Zip Range requests are sent with `cache: 'no-store'`. Measured on a
+      local mirror throttled to 32 Mbit/s and 100 ms (Metal GPU, two runs
+      each, within 1.2 s): main opened the image with the cells at 58 s and
+      had its coarsest tiles at 70 s. With all three changes the image opens
+      at 2.5 s, its tiles are in at 17.5 s, and the cells are ready at 57 s.
+      `no-store` alone brings the cells to 47 s, since the table's 246 chunk
+      reads stop waiting for each other. The coarsest level is one
+      3,619 × 3,371 chunk per channel (44 MB), and sharing the bandwidth with
+      it costs the cells about 10 s of that gain. Unthrottled, the load takes
+      about 5 s either way. Stores with estimated units still open the image
+      after the table's rows are placed (see
+      [Open Items](../open-items.md)).
 - [x] `nucleus_boundaries` shapes are drawn (2026-11-17). A non-region
       shapes element named like `nucleus_boundaries` is the nucleus layer
       (`nucleusCandidates` in the view); a table that annotates the nuclei

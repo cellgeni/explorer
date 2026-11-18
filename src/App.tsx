@@ -282,6 +282,7 @@ import {
 import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
+import { placedImageExtent } from './data/imagePyramid'
 import type { ShareableState } from './data/shareableState'
 import {
   appendTelemetryEvent,
@@ -1202,12 +1203,21 @@ export function App({ dependencies }: AppProps = {}) {
     () => geometricAnnotationsToLayerData(geometricAnnotations),
     [geometricAnnotations],
   )
+  // An image shown before a load's cells (a SpatialData image opens
+  // alongside the table) is fitted until the cells arrive and are fitted.
+  const fitsLoadingImage =
+    loadState.status === 'loading' &&
+    overviewCells.length === 0 &&
+    spatialGridCells.length === 0 &&
+    morphologyImage !== null
   const imageFitExtent = useMemo(
     () =>
       platformAdapter.kind === 'image'
         ? imageFitExtentFromMorphologyImage(morphologyImage)
-        : null,
-    [morphologyImage, platformAdapter.kind],
+        : fitsLoadingImage && morphologyImage !== null
+          ? placedImageExtent(morphologyImage.loader)
+          : null,
+    [fitsLoadingImage, morphologyImage, platformAdapter.kind],
   )
   const viewerImageStatus =
     customMorphologyLayerState.status === 'error' ||
@@ -1222,7 +1232,9 @@ export function App({ dependencies }: AppProps = {}) {
         ? morphologyState.error
         : null
   const viewerViewResetKey =
-    loadState.status === 'idle' ? 'idle' : `${loadState.status}:${loadState.url}`
+    loadState.status === 'idle'
+      ? 'idle'
+      : `${loadState.status}:${loadState.url}${fitsLoadingImage ? ':image' : ''}`
   const viewerOverviewRenderCellLimit = isAnnDataPlatform(platformAdapter)
     ? null
     : performanceBudget.overviewRenderCellLimit

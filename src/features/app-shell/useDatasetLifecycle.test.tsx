@@ -601,6 +601,84 @@ describe('useDatasetLifecycle', () => {
       ])
     })
 
+    it('opens a SpatialData image before the cells and shows it once they replace the open dataset', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const overview = deferred<[]>()
+      const updates: string[] = []
+      const channel = {
+        id: 'Channel:0:0',
+        index: 0,
+        name: 'DAPI',
+        color: [88, 144, 255] as const,
+        contrast: { min: 0, max: 255 },
+      }
+      const dataset = {
+        overview: vi.fn(() => overview.promise),
+        genePanel: vi.fn(async () => []),
+        annotationGroups: vi.fn(async () => []),
+        embeddingOptions: vi.fn(async () => []),
+        metadataTracks: vi.fn(async () => []),
+        image: vi.fn(async () => ({
+          kind: 'pyramid' as const,
+          loader: { url: `${NEXT_URL}/images/he`, channels: [channel] },
+        })),
+        summary: vi.fn(async () => ({
+          coordinateSystem: 'global',
+          coordinateSystems: ['global'],
+          images: ['he'],
+          tables: [],
+          regions: [],
+          skippedElements: [],
+          units: { micrometersPerUnit: 1, source: 'unknown', detail: '' },
+        })),
+      }
+      const setMorphologyImage = vi.fn((image: unknown) => {
+        updates.push(image === null ? 'image:null' : 'image')
+      })
+      const setLoadState = vi.fn((state: unknown) => {
+        updates.push(`load:${statusOf(state)}`)
+      })
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          detectSpatialDataset={vi.fn(async () => ({
+            platform: 'spatialdata' as const,
+            baseUrl: NEXT_URL,
+            spatialDataUrl: NEXT_URL,
+            checked: [],
+          }))}
+          getSpatialDataset={
+            vi.fn(
+              async () => dataset,
+            ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+          }
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+          extraSetters={{ setMorphologyImage }}
+        />,
+      )
+
+      let load: Promise<void> | undefined
+      await act(async () => {
+        load = startDatasetLoadRef.current?.(NEXT_URL, true)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+
+      // The image opened while the cells load, but the open dataset stays.
+      expect(dataset.image).toHaveBeenCalled()
+      expect(updates).toEqual([])
+
+      await act(async () => {
+        overview.resolve([])
+        await load
+      })
+
+      expect(updates).toEqual(['image:null', 'load:loading', 'image', 'load:ready'])
+    })
+
     it('keeps colours changed while loading, and drops old Visium HD reads', async () => {
       const refs = createLifecycleRefs()
       const startDatasetLoadRef = startLoad()

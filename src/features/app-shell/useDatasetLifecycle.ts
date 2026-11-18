@@ -932,52 +932,57 @@ export function useDatasetLifecycle({
               return
             }
 
-            if (image === null) {
-              setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
-              return
-            }
+            // A SpatialData image opens alongside the cells, so it can be
+            // ready while another dataset is still on screen; it is shown
+            // once this load replaces that one.
+            whenCommitted(() => {
+              if (image === null) {
+                setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
+                return
+              }
 
-            const defaultChannelIds =
-              options.enableFirstChannelsByDefault === true
-                ? defaultEnabledChannelIds(image.channelLoaders)
-                : undefined
-            const enabledChannelIds =
-              options.channelSelection === undefined
-                ? defaultChannelIds
-                : resolveMorphologyChannelSelection(
-                    image.channelLoaders,
-                    options.channelSelection,
-                    defaultChannelIds,
-                  )
-            const channelSettings = createMorphologyChannelSettings(
-              image,
-              enabledChannelIds === undefined ? {} : { enabledChannelIds },
-            )
+              const defaultChannelIds =
+                options.enableFirstChannelsByDefault === true
+                  ? defaultEnabledChannelIds(image.channelLoaders)
+                  : undefined
+              const enabledChannelIds =
+                options.channelSelection === undefined
+                  ? defaultChannelIds
+                  : resolveMorphologyChannelSelection(
+                      image.channelLoaders,
+                      options.channelSelection,
+                      defaultChannelIds,
+                    )
+              const channelSettings = createMorphologyChannelSettings(
+                image,
+                enabledChannelIds === undefined ? {} : { enabledChannelIds },
+              )
 
-            setMorphologyImage(image)
-            setMorphologyChannelSettings((current) =>
-              mergeMorphologyChannelSettings({
-                baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
-                currentSettings: current,
-                nextBaseSettings: channelSettings,
-              }),
-            )
-            setMorphologyState(morphologyLoadReady(image.url))
-            appendDebugEvent('Morphology image ready')
+              setMorphologyImage(image)
+              setMorphologyChannelSettings((current) =>
+                mergeMorphologyChannelSettings({
+                  baseChannelIds: image.channelLoaders.map((channel) => channel.info.id),
+                  currentSettings: current,
+                  nextBaseSettings: channelSettings,
+                }),
+              )
+              setMorphologyState(morphologyLoadReady(image.url))
+              appendDebugEvent('Morphology image ready')
 
-            // Stretching R, G, and B independently shifts colour in brightfield
-            // (H&E) images, so native RGB keeps its full 0-255 window.
-            if (
-              options.skipNativeRgbAutoContrast === true &&
-              isNativeRgbMorphologyImage(image)
-            ) {
-              return
-            }
+              // Stretching R, G, and B independently shifts colour in brightfield
+              // (H&E) images, so native RGB keeps its full 0-255 window.
+              if (
+                options.skipNativeRgbAutoContrast === true &&
+                isNativeRgbMorphologyImage(image)
+              ) {
+                return
+              }
 
-            queueAutoContrast(
-              channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
-              { requestId: committedRequestId(), signal },
-            )
+              queueAutoContrast(
+                channelsToAutoContrastOnLoad(image.channelLoaders, channelSettings),
+                { requestId: committedRequestId(), signal },
+              )
+            })
           })
           .catch((error) => {
             if (isAbortError(error)) {
@@ -988,12 +993,14 @@ export function useDatasetLifecycle({
               return
             }
 
-            setMorphologyState(
-              morphologyLoadFailed(
-                requestedUrl,
-                createStructuredLoadError('Morphology image', error),
-              ),
-            )
+            whenCommitted(() => {
+              setMorphologyState(
+                morphologyLoadFailed(
+                  requestedUrl,
+                  createStructuredLoadError('Morphology image', error),
+                ),
+              )
+            })
             appendDebugEvent('Morphology image failed')
           })
       }
@@ -1333,7 +1340,7 @@ export function useDatasetLifecycle({
           notifyAttachedImageUnused('only AnnData datasets take an image this way')
         }
 
-        // A dataset's pyramid image, loaded once its cells are drawn.
+        // A dataset's pyramid image, loaded in the background.
         const loadPyramidImageInBackground = (dataset: {
           image(): Promise<ImageSource | null>
         }) => {
@@ -1631,6 +1638,12 @@ export function useDatasetLifecycle({
             onH5adLoadProgress: appendDebugEvent,
           })
 
+          // The image needs only the store's metadata and units, not the
+          // shapes that place the table's rows, so it opens alongside them.
+          if (loadImage) {
+            loadPyramidImageInBackground(dataset)
+          }
+
           if (isSpatialDataSummaryDataset(dataset)) {
             const summary = await dataset.summary()
             const selection = spatialDataSelectionFor(detection.baseUrl)
@@ -1654,10 +1667,8 @@ export function useDatasetLifecycle({
 
           if (!loadImage) {
             setMorphologyState(IDLE_MORPHOLOGY_LOAD_STATE)
-            return
           }
 
-          loadPyramidImageInBackground(dataset)
           return
         }
 

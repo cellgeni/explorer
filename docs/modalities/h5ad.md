@@ -315,7 +315,7 @@ SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
   the image is placed by its own pixel size. If the image cannot be opened,
   the coordinates are used as they are, with a line in the log.
 - **Drawing.** After the cells are drawn, the lifecycle loads `image()` as a
-  pyramid in the background, as for SpatialData: channels, contrast, opacity
+  pyramid in the background: channels, contrast, opacity
   and the minimap work as for any image, and `meta()` reports the image's
   units, `pyramidImage` and `multiChannel`.
 - **Labels.** With `labels`, `labelCellsFor` maps label values to cells, once

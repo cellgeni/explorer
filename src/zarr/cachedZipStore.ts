@@ -78,7 +78,12 @@ export class CachedHttpRangeReader {
       start: offset,
       end: offset + size,
       fetchRange: async () => {
+        // Chromium's HTTP cache lets one Range request to a URL through at a
+        // time, so without no-store every read of the zip (image tiles, table
+        // chunks, shapes) waits behind the one in flight. The persistent
+        // cache above keeps the ranges instead.
         const response = await this.fetcher(this.url, {
+          cache: 'no-store',
           headers: {
             Range: `bytes=${offset}-${offset + size - 1}`,
           },
