@@ -19,7 +19,9 @@ npx vite preview --outDir /tmp/explorer-base --host 127.0.0.1 --port 4198 --stri
 Avoid port 4173: the E2E config uses it, and Playwright reuses a server
 already listening there, which may be another checkout's build.
 
-Then profile a load in headless Chromium:
+Then profile a load in headless Chromium. The script uses Playwright's
+Chromium, installed as for the E2E tests (see the
+[README](../README.md#quick-start)):
 
 ```sh
 node scripts/profile-load.mjs http://127.0.0.1:4198 <dataset-url> --gene SNAP25

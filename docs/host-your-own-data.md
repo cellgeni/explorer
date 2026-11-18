@@ -370,9 +370,15 @@ that fails and the file exceeds 300 MiB does it open the JSON with Zarrita
 referenced HDF5 chunks. Chunk references are always
 redirected to the H5AD URL, so the URL stored inside the reference does not
 matter. AnnData written straight into an Icechunk repository opens from its
-`.icechunk` URL; see [AnnData in Icechunk](./modalities/h5ad.md#anndata-in-icechunk). With the reference backend, or a CSC `/X` over
-300 MiB read by range, all-gene reads (selected-cell profile, ROI gene stats)
-are not supported.
+`.icechunk` URL; see [AnnData in Icechunk](./modalities/h5ad.md#anndata-in-icechunk).
+All-gene reads (selected-cell profile, ROI gene stats) depend on the layout
+of `/X` when it is read per request, through a reference or by range in a
+file over 300 MiB whose `/X` decodes to more than 300 MiB. A CSR `/X` reads
+the selected cells' rows, and a dense one the chunks that hold them (refused
+when one cell's chunks hold over 256 MiB of values). A CSC `/X` cannot: every
+gene's column would be read. See
+[How The Viewer Uses It](./h5ad-reference.md#how-the-viewer-uses-it) and
+[Choosing CSR Or CSC](./h5ad-reference.md#choosing-csr-or-csc).
 
 Reference hosted fixture:
 

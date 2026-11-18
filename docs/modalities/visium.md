@@ -284,12 +284,13 @@ diagnostics.
   `aggr_tissue_positions.csv`) is not detected; use one sample's `count`
   output, or a manifest per sample.
 - A multi-library `.h5ad` shows one library at a time.
-- The filtered matrix and `.h5ad` files are read whole, up to 300 MB (larger
-  `.h5ad` files need a kerchunk reference or Icechunk repository, as for any
-  H5AD; see
+- The Space Ranger filtered matrix is read whole, up to 300 MB. A Visium
+  `.h5ad` is read like any H5AD: up to 64 MiB downloaded whole, larger files
+  by range, and a kerchunk reference or Icechunk repository only for a file
+  over 300 MiB that cannot be read by range (see
   [Large H5AD files](../h5ad-reference.md)). CELLxGENE Visium files are often
-  over the limit only because of a full-resolution image in `uns`, which the
-  reference skips.
+  large only because of a full-resolution image in `uns`, which a range read
+  or a reference leaves unread.
 - The full-resolution microscope image is not shown, only the hires and
   lowres images.
 - Only the graph-based clustering is read from `analysis/`; k-means

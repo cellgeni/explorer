@@ -21,6 +21,9 @@ cell-feature matrices, Feature Slice H5, H5AD, and native transcript LOD access.
 
 ## Quick Start
 
+Use Node.js 24, the version CI uses, with the npm it comes with, and run the
+commands from the repository root:
+
 ```sh
 npm ci
 npm run dev
@@ -41,12 +44,26 @@ report to `coverage/`, and fails below the thresholds in `vitest.config.ts`. CI
 runs it on every pull request in a separate job that reports but does not block;
 `npm test` is the required check.
 
-End-to-end tests use the built app through Vite preview:
+End-to-end tests use the built app through Vite preview, in Playwright's
+Chromium. Install it once, and again after Playwright is updated (on Linux,
+`npx playwright install --with-deps chromium` also installs the system
+packages it needs):
+
+```sh
+npx playwright install chromium
+```
+
+The `@smoke` tests answer data requests from fixtures and need no network;
+they are the ones CI runs on every pull request:
 
 ```sh
 npm run build
-npm run test:e2e
+npm run test:e2e -- --grep @smoke
 ```
+
+`npm run test:e2e` on its own runs the full suite, which adds the `@live`
+tests: they load hosted datasets and every example in `examples/`, so they
+need the network and take much longer.
 
 One smoke test runs the axe accessibility rules (WCAG 2.2 A and AA) on the
 layer sections, the info drawer, the dataset menu, Help, Settings and the
@@ -59,8 +76,10 @@ rewrite the list, run:
 UPDATE_AXE_BASELINE=1 npx playwright test --grep "axe baseline"
 ```
 
-The Vite dev and preview servers are configured with cross-origin isolation
-headers needed by the browser-side WASM and decoding paths.
+The Vite dev and preview servers send cross-origin isolation headers
+(`Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy`), which
+[Deploy to S3](docs/deploy-to-s3.md) recommends for production too. The current
+build works without them: nothing needs `SharedArrayBuffer`.
 
 To measure main-thread work and load times, or to serve datasets locally with
 byte ranges, see [Profiling](docs/profiling.md).

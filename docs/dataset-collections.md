@@ -297,8 +297,9 @@ once per dataset and selection, like a gene.
   dataset. `Previews` (the picture icon next to "Collection") turns them off and
   lists names only.
 - **No preview.** Image-only and Visium HD datasets show "No cells to
-  preview". A plain `.h5ad` over 64 MB shows its size instead: the viewer
-  reads such a file whole, which only opening it should do.
+  preview". A plain `.h5ad` whose reported size is over 64 MiB shows its size
+  instead: such a file is read by range, at a cost that depends on how it is
+  laid out, so it is left to be opened, which reads it as usual.
 
 How much a preview reads depends on how each dataset stores its expression
 matrix. A matrix chunked by gene, such as an AnnData Zarr `X` written in
@@ -413,10 +414,14 @@ datasets it lists can be on any hosts the viewer can read.
 
 ## Editor Support
 
-The schema is deployed with the viewer at
-`/schemas/explorer-collection.v1.json`. Set `$schema` to that URL on your
-viewer's host and editors such as VS Code will complete field names and flag
-errors as you type.
+The schema is deployed with the viewer, at
+`schemas/explorer-collection.v1.json` under the viewer's address: for the
+hosted viewer,
+`https://cellgeni.github.io/explorer/schemas/explorer-collection.v1.json`, as
+in the [example](#example); for your own deployment, the same path under the
+address the viewer is served from, including any subpath. Set `$schema` to
+that URL and editors such as VS Code will complete field names and flag errors
+as you type.
 
 ## Known Limitations
 

@@ -516,6 +516,43 @@ describe('spatial dataset detection', () => {
     }
   })
 
+  it('opens a dataset afresh once its manifest is edited', async () => {
+    const url = 'https://example.test/edited/image.json'
+    let image = 'first.ome.zarr'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) =>
+        new URL(String(input)).pathname === '/edited/image.json'
+          ? Response.json({ version: 1, platform: 'image', files: { image } })
+          : new Response(null, { status: 404 }),
+      ),
+    )
+    // The viewer detects the URL again on every load, then asks for the dataset.
+    const load = async () => {
+      await detectSpatialDataset(url)
+      return cachedSpatialDataset(url)
+    }
+
+    try {
+      const first = await load()
+      expect((first as ImageOnlyDataset).imageUrl).toBe(
+        'https://example.test/edited/first.ome.zarr',
+      )
+      await expect(load()).resolves.toBe(first)
+
+      image = 'second.ome.zarr'
+      const second = await load()
+      expect(second).not.toBe(first)
+      expect((second as ImageOnlyDataset).imageUrl).toBe(
+        'https://example.test/edited/second.ome.zarr',
+      )
+      await expect(load()).resolves.toBe(second)
+    } finally {
+      setDatasetManifest(url, undefined)
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('gives an AnnData dataset the image and labels its collection entry names', async () => {
     const url = 'https://example.test/sections/a.h5ad'
     const collection = (image?: string) =>

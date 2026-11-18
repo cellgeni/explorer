@@ -16,7 +16,10 @@ interface DatasetCacheEntry<T> {
 }
 
 const retainedUrls = new Map<string, number>()
-const caches = new Set<{ readonly released: (url: string) => void }>()
+const caches = new Set<{
+  readonly released: (url: string) => void
+  readonly delete: (matches: (key: string, url: string) => boolean) => void
+}>()
 
 export function normalizeDatasetUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
@@ -43,6 +46,14 @@ export function retainDataset(baseUrl: string): () => void {
 
     for (const cache of caches) cache.released(url)
   }
+}
+
+// Drops every dataset opened for `baseUrl`, from every cache, so the next
+// read opens it again. One still in use is disposed once its URL is released.
+export function dropDatasets(baseUrl: string): void {
+  const url = normalizeDatasetUrl(baseUrl)
+
+  for (const cache of caches) cache.delete((_key, entryUrl) => entryUrl === url)
 }
 
 function isRetained(url: string): boolean {
@@ -87,10 +98,11 @@ export class DatasetCache<T extends DisposableDataset> {
     return promise
   }
 
-  // Drops the entries whose keys `matches`, so the next read opens them again.
-  delete(matches: (key: string) => boolean): void {
+  // Drops the entries whose keys, or the URLs that retain them, `matches`, so
+  // the next read opens them again.
+  delete(matches: (key: string, url: string) => boolean): void {
     for (const [key, entry] of this.entries) {
-      if (!matches(key)) continue
+      if (!matches(key, entry.url)) continue
 
       this.entries.delete(key)
       this.dropped.add(entry)
