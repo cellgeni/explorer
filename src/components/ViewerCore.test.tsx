@@ -183,6 +183,25 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
   })
 
+  it('dismisses an error message until a different error replaces it', () => {
+    const { rerender } = render(
+      <ViewerCore
+        imageStatus="error"
+        imageErrorMessage="Network request failed: Failed to fetch"
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+
+    expect(screen.queryByText('Network request failed: Failed to fetch')).toBeNull()
+
+    rerender(
+      <ViewerCore imageStatus="error" imageErrorMessage="HTTP 500 response: HTTP 500" />,
+    )
+
+    expect(screen.getByText('HTTP 500 response: HTTP 500')).toBeInTheDocument()
+  })
+
   it('renders grid-cell polygons without overview cells', () => {
     render(<ViewerCore gridCells={gridCellColumns()} />)
 

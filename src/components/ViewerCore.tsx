@@ -14,7 +14,7 @@ import { removeDeckFromTabOrder } from './deckTabOrder'
 import type { LinkedViewChannel } from './linkedView'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
-import { FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
+import { CloseIcon, FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
 import { ViewerLegend } from './ViewerLegend'
 import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import { ViewerMinimap } from './ViewerMinimap'
@@ -1333,7 +1333,12 @@ function ViewerSurface({
     () => new Set(loadingTasks.map((task) => task.id)),
     [loadingTasks],
   )
-  const viewportMessage = readViewportMessage(
+  // The error message last dismissed; the Issues card keeps the error, and a
+  // different error is shown again.
+  const [dismissedViewportError, setDismissedViewportError] = useState<string | null>(
+    null,
+  )
+  const readMessage = readViewportMessage(
     status,
     imageStatus,
     boundaryStatus,
@@ -1344,6 +1349,10 @@ function ViewerSurface({
     },
     loadingTaskIds,
   )
+  const viewportMessage =
+    readMessage?.kind === 'error' && readMessage.text === dismissedViewportError
+      ? null
+      : readMessage
   const mouseCoordinateText =
     !canTrackMouseCoordinates || mouseCoordinate === null
       ? null
@@ -2352,11 +2361,19 @@ function ViewerSurface({
             onShowMore={onLegendShowMore}
           />
           <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
-          {viewportMessage === null ? null : (
-            <p
-              className={`viewport-message${viewportMessage.kind === 'error' ? ' viewport-message-error' : ''}`}
-              aria-live={viewportMessage.kind === 'error' ? 'assertive' : 'polite'}
-            >
+          {viewportMessage === null ? null : viewportMessage.kind === 'error' ? (
+            <div className="viewport-message viewport-message-error">
+              <p aria-live="assertive">{viewportMessage.text}</p>
+              <IconButton
+                title="Dismiss"
+                icon={<CloseIcon />}
+                onClick={() => {
+                  setDismissedViewportError(viewportMessage.text)
+                }}
+              />
+            </div>
+          ) : (
+            <p className="viewport-message" aria-live="polite">
               {viewportMessage.text}
             </p>
           )}
