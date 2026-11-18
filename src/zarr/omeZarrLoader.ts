@@ -1304,11 +1304,10 @@ function buildOmeZarrChannels(options: {
   // Plane count of a z-stack, whose channels list their planes.
   readonly sizeZ?: number
 }): readonly ImagePyramidChannelInfo[] {
-  if (options.channelAxis === undefined) {
-    return []
-  }
-
-  const channelCount = options.array.shape[options.channelAxis] ?? 0
+  // An image without a channel axis is one grayscale channel, as a
+  // single-sample TIFF is, so that a z-stack of it lists its planes.
+  const grayscale = options.channelAxis === undefined
+  const channelCount = grayscale ? 1 : (options.array.shape[options.channelAxis] ?? 0)
 
   if (!Number.isInteger(channelCount) || channelCount <= 0) {
     return []
@@ -1334,9 +1333,12 @@ function buildOmeZarrChannels(options: {
   return Array.from({ length: channelCount }, (_value, index) => {
     const omeroChannel = omeroChannels[index] as OmeZarrOmeroChannel | undefined
     const rgbChannel = nativeRgb ? RGB_CHANNELS[index] : undefined
+    const defaultColor = grayscale
+      ? undefined
+      : DEFAULT_CHANNEL_COLORS[index % DEFAULT_CHANNEL_COLORS.length]
     const color = rgbChannel?.color ??
       parseOmeroColor(omeroChannel?.color) ??
-      DEFAULT_CHANNEL_COLORS[index % DEFAULT_CHANNEL_COLORS.length] ?? [255, 255, 255]
+      defaultColor ?? [255, 255, 255]
     const name =
       rgbChannel?.name ??
       (typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''

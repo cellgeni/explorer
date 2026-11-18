@@ -514,7 +514,9 @@ transform.
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
 - Axes come from `axes`, else array dimension names, else positional
-  `…, c, y, x`. `x` and `y` are required; `t` and `z` are fixed at index 0.
+  `…, c, y, x`. `x` and `y` are required. `z` starts at
+  `omero.rdefs.defaultZ`, else the middle plane, and other planes open as
+  `#z=N` loaders; `t` is `defaultT`, else 0.
 - µm/px is the product of multiscale and dataset `scale` values for x, with
   unit conversion (nm, µm, mm, m). Unknown units count as µm; a missing scale
   gives 1 µm/px. `translation` is ignored except for SpatialData placement.
@@ -522,7 +524,9 @@ transform.
   are served as several virtual tiles of at most 512 pixels that share one
   decoded chunk.
 - `omero.channels` gives names, `RRGGBB` colours, and windows (`start`/`end`,
-  else `min`/`max`). Channels after the first open as `#c=N` loaders.
+  else `min`/`max`). Channels after the first open as `#c=N` loaders. An
+  image without a `c` axis is one channel, white unless omero gives a colour,
+  so a `z, y, x` volume gets the `Z plane` control.
 - Three channels with no omero data, or labelled/coloured R, G, B, are treated
   as native RGB.
 - Chunk bytes are fetched on the main thread. Decoding and RGBA conversion run
@@ -645,8 +649,8 @@ fails, tiles are decoded and sampled on the main thread.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only `t = 0`, `z = 0` of OME-Zarr images is shown, and only `t = 0` of
-  OME-TIFFs.
+- Only one time point of OME-Zarr images (`defaultT`, else 0) is shown, and
+  only `t = 0` of OME-TIFFs.
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
 - Switching to a plane not opened recently reads its IFD, `SubIFDs`, and tile

@@ -22,6 +22,9 @@ Shipped on 2026-07-10 (`f9560ee`) with later fixes. Not planned in advance.
       empty; its `defaultZ` is the middle of 41.
 - [x] The `Z plane` control for OME-Zarr z-stacks, starting on `defaultZ` or
       else the middle plane (`4144364`, 2026-11-14, #97).
+- [x] A z-stack without a channel axis (`z, y, x`, such as the OME-NGFF 0.5
+      SciVis `engine.ome.zarr`) is one grayscale channel, so it gets the
+      `Z plane` control too (2026-11-18).
 - [x] An image group inside a `.zarr` store, such as `sample.zarr/images/he`
       or a bioformats2raw series `image.zarr/0`, is read as OME-Zarr: a path
       below a `.zarr` folder whose last part has no dot (#114, 2026-11-15).
