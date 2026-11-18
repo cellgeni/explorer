@@ -27,11 +27,15 @@ export interface ZippedZarrStore {
 
 export class ZarrZipRootError extends Error {
   readonly url: string
+  // 'none' when the zip holds no Zarr metadata at all, so it may be a zipped
+  // dataset folder instead.
+  readonly stores: 'none' | 'several'
 
-  constructor(url: string, detail: string) {
+  constructor(url: string, detail: string, stores: 'none' | 'several') {
     super(`The zip at ${url} ${detail}`)
     this.name = 'ZarrZipRootError'
     this.url = url
+    this.stores = stores
   }
 }
 
@@ -182,6 +186,7 @@ export function zarrRootInZip(url: string, names: readonly string[]): string {
     throw new ZarrZipRootError(
       url,
       'holds no Zarr store: no zarr.json, .zgroup, .zattrs, or zmetadata file was found.',
+      'none',
     )
   }
 
@@ -189,6 +194,7 @@ export function zarrRootInZip(url: string, names: readonly string[]): string {
     throw new ZarrZipRootError(
       url,
       `holds more than one Zarr store (${[root, ...others].map((folder) => folder || '/').join(', ')}). Zip one store per file.`,
+      'several',
     )
   }
 

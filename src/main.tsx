@@ -3,9 +3,11 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import './index.css'
+import { installZipFolderFetch } from './data/zipFolder'
 import { installWorkerZarrCodecs } from './zarr/workerZarrCodecs'
 
 installWorkerZarrCodecs()
+installZipFolderFetch()
 
 const rootElement = document.getElementById('root')
 

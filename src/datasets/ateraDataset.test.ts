@@ -1,14 +1,18 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
+import { clearZipFolders, withZipFolders } from '../data/zipFolder'
 import {
   array,
   categorical,
   group,
   json,
+  storedZip,
   strings,
   typed,
   v2Array,
 } from '../test/ateraFixtures'
+import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
+import { createSpatialDataset } from './datasetFactory'
 import {
   AteraDataset,
   isAteraTableMetadataKey,
@@ -531,6 +535,63 @@ describe('AteraDataset', () => {
     })
 
     await expect(dataset.geneExpression(WHOLE_SLIDE, ['GENEA'])).rejects.toThrow()
+  })
+})
+
+describe('Atera run zipped whole', () => {
+  afterEach(() => {
+    clearZipFolders()
+    vi.unstubAllGlobals()
+  })
+
+  it('opens the run from the zip, reading its files in place', async () => {
+    const url = 'https://example.test/zips/run_outs.zip'
+    const requests: ByteRangeRequest[] = []
+    const fetcher = withZipFolders(
+      byteRangeFetcher(
+        new Map([
+          [
+            url,
+            zipArchive([
+              {
+                name: 'run_outs/experiment.spatial',
+                data: json({
+                  pixel_size: 0.2125,
+                  explorer_files: {
+                    cell_feature_viz_zarr_filepath: 'matrices/csc.zarr.zip',
+                  },
+                }),
+              },
+              {
+                name: 'run_outs/cell_feature_matrix.zarr.zip',
+                data: storedZip(matrixStore()),
+              },
+              { name: 'run_outs/matrices/csc.zarr.zip', data: storedZip(cscStore()) },
+              { name: 'run_outs/cells.zarr.zip', data: storedZip(cellsStore()) },
+            ]),
+          ],
+        ]),
+        requests,
+      ),
+    )
+    // The zipped stores read through the page's fetch.
+    vi.stubGlobal('fetch', fetcher)
+
+    const dataset = await createSpatialDataset(url, { fetcher })
+
+    expect(dataset).toBeInstanceOf(AteraDataset)
+    const overview = await (dataset as AteraDataset).overview()
+
+    expect(overview).toHaveLength(3)
+    expect(overview[1]).toMatchObject({
+      cellId: 'aaaaaaab-1',
+      position: { x: 30, y: 10 },
+      nucleusCount: 2,
+    })
+    await expect(
+      (dataset as AteraDataset).geneExpression(WHOLE_SLIDE, ['GENEB']),
+    ).resolves.toMatchObject({ maxCount: 5 })
+    expect(new Set(requests.map((request) => request.url))).toEqual(new Set([url]))
   })
 })
 

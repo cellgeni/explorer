@@ -12,7 +12,8 @@ top bar, which has the same form, recent datasets and examples. A link that
 names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
 
 - Xenium output folders containing `experiment.xenium`.
-- Atera output folders containing `experiment.spatial`.
+- Atera output folders containing `experiment.spatial`, or such a folder
+  zipped whole without compression, such as `<run>_outs.zip`.
 - Standard Visium (55 µm spots) Space Ranger `outs/` folders.
 - Visium HD Space Ranger output folders containing `binned_outputs/`.
 - Vizgen MERSCOPE region folders containing `cell_by_gene.csv` and

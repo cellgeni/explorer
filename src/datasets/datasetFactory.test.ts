@@ -31,7 +31,12 @@ import {
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
-import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
+import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
+import { clearZipFolders, withZipFolders } from '../data/zipFolder'
+
+afterEach(() => {
+  clearZipFolders()
+})
 
 describe('spatial dataset detection', () => {
   it('detects Xenium from experiment.xenium', async () => {
@@ -1730,6 +1735,130 @@ describe('Icechunk repositories', () => {
       platform: 'unknown',
       checked: [expect.objectContaining({ path: 'store.zip', ok: false, status: 404 })],
     })
+  })
+
+  it('detects an Atera run zipped whole and reads its files from the zip', async () => {
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const zips = 'https://example.test/zips'
+    const requests: ByteRangeRequest[] = []
+    const fetcher = withZipFolders(
+      byteRangeFetcher(
+        new Map([
+          [
+            `${zips}/run_outs.zip`,
+            zipArchive([
+              { name: 'run_outs/experiment.spatial', data: json({ pixel_size: 0.2125 }) },
+              {
+                name: 'run_outs/cell_feature_matrix.zarr.zip',
+                data: Uint8Array.of(1, 2),
+              },
+            ]),
+          ],
+          [
+            `${zips}/deflated_outs.zip`,
+            zipArchive([
+              { name: 'experiment.spatial', data: json({}) },
+              {
+                name: 'cell_feature_matrix.zarr.zip',
+                data: new Uint8Array(100),
+                deflate: true,
+              },
+            ]),
+          ],
+          [
+            `${zips}/xenium_outs.zip`,
+            zipArchive([{ name: 'outs/experiment.xenium', data: json({}) }]),
+          ],
+          [`${zips}/notes.zip`, zipArchive([{ name: 'notes.txt', data: json({}) }])],
+        ]),
+        requests,
+      ),
+    )
+
+    await expect(
+      detectSpatialDataset(`${zips}/run_outs.zip`, { fetcher }),
+    ).resolves.toEqual({
+      platform: 'atera',
+      baseUrl: `${zips}/run_outs.zip`,
+      checked: [
+        expect.objectContaining({ path: 'store.zip', ok: true }),
+        {
+          path: 'run_outs/experiment.spatial in the zip (Atera run)',
+          url: `${zips}/run_outs.zip`,
+          ok: true,
+        },
+      ],
+    })
+    await expect(
+      (await fetcher(`${zips}/run_outs.zip/experiment.spatial`)).json(),
+    ).resolves.toEqual({ pixel_size: 0.2125 })
+
+    // Detecting it again only checks that the zip is there.
+    requests.length = 0
+    await expect(
+      detectSpatialDataset(`${zips}/run_outs.zip`, { fetcher }),
+    ).resolves.toMatchObject({ platform: 'atera' })
+    expect(requests).toEqual([
+      { method: 'HEAD', url: `${zips}/run_outs.zip`, range: null },
+    ])
+
+    await expect(
+      detectSpatialDataset(`${zips}/deflated_outs.zip`, { fetcher }),
+    ).rejects.toThrow(
+      'holds an Atera run, but cell_feature_matrix.zarr.zip is compressed in it, so it cannot be read in parts.',
+    )
+    await expect(
+      detectSpatialDataset(`${zips}/xenium_outs.zip`, { fetcher }),
+    ).rejects.toThrow('holds a Xenium run (outs/experiment.xenium).')
+    await expect(detectSpatialDataset(`${zips}/notes.zip`, { fetcher })).rejects.toThrow(
+      'holds no Zarr store: no zarr.json, .zgroup, .zattrs, or zmetadata file was found. Nor does it hold an Atera run (experiment.spatial).',
+    )
+  })
+
+  it('reads an Atera manifest whose root is a zipped run', async () => {
+    const zip = 'https://example.test/zips/manifest_outs.zip'
+    const host = byteRangeFetcher(
+      new Map([
+        [
+          zip,
+          zipArchive([
+            { name: 'experiment.spatial', data: new TextEncoder().encode('{}') },
+          ]),
+        ],
+      ]),
+    )
+    const manifests = fetcherForJsonPaths({
+      '/manifests/zipped.json': {
+        version: 1,
+        platform: 'atera',
+        root: '../zips/manifest_outs.zip',
+      },
+      '/manifests/zipped-xenium.json': {
+        version: 1,
+        platform: 'xenium',
+        root: '../zips/manifest_outs.zip',
+      },
+    })
+    const fetcher = withZipFolders((input, init) =>
+      String(input).endsWith('.json') ? manifests(input, init) : host(input, init),
+    )
+
+    const dataset = await createSpatialDataset(
+      'https://example.test/manifests/zipped.json',
+      { fetcher },
+    )
+
+    expect(dataset).toBeInstanceOf(AteraDataset)
+    await expect((dataset as AteraDataset).fileUrl('cells')).resolves.toBe(
+      `${zip}/cells.zarr.zip`,
+    )
+    await expect(
+      detectSpatialDataset('https://example.test/manifests/zipped-xenium.json', {
+        fetcher,
+      }),
+    ).rejects.toThrow(
+      'which can only be the root of an "atera" manifest whose zip holds an Atera run',
+    )
   })
 
   it('detects SpatialData and OME-Zarr images in Icechunk repositories', async () => {

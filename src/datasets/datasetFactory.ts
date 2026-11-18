@@ -12,6 +12,8 @@ import {
   setFolderListing,
 } from '../data/folderListing'
 import { fetchHead, noteReadableResponse } from '../data/hostResponses'
+import { readZipDirectory, ZIP_METHOD_STORED } from '../data/zipArchive'
+import { registerZipFolder, zipFolderFor, zipFolderRoot } from '../data/zipFolder'
 import { datasetDetectionError } from './datasetDetectionError'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
@@ -49,7 +51,7 @@ import {
 } from './visiumFormat'
 import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
-import { ATERA_EXPERIMENT_FILE } from './ateraFormat'
+import { ATERA_EXPERIMENT_FILE, ATERA_FILE_DEFAULTS } from './ateraFormat'
 import { visiumHdRequiredBinPaths } from './visiumHdStrategy'
 import { DatasetCache } from './datasetCache'
 import type { CellId } from '../data/cellid'
@@ -311,7 +313,7 @@ async function detectSpatialDatasetLayout(
       options,
       checked,
     )
-    await registerFolderListing(manifest.rootUrl, options)
+    await registerManifestRoot(manifest, options)
 
     return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
   }
@@ -420,7 +422,7 @@ async function detectSpatialDatasetLayout(
 
   if (manifest !== undefined) {
     if (normalizeBaseUrl(manifest.rootUrl) !== normalizedBaseUrl) {
-      await registerFolderListing(manifest.rootUrl, options)
+      await registerManifestRoot(manifest, options)
     }
 
     return detectFromManifest(normalizedBaseUrl, manifest, options, checked)
@@ -567,8 +569,9 @@ async function detectIcechunkRepository(
   }
 }
 
-// Routes a zipped Zarr store: SpatialData or an OME-Zarr image. A zip holding
-// anything else throws, since a file URL has no folder to probe further.
+// Routes a zipped Zarr store: SpatialData or an OME-Zarr image. A zip with no
+// Zarr store may be a zipped Atera run folder; anything else throws, since a
+// file URL has no folder to probe further.
 async function detectZarrZip(
   url: string,
   options: DetectSpatialDatasetOptions,
@@ -581,11 +584,27 @@ async function detectZarrZip(
     return { platform: 'unknown', baseUrl: url, checked }
   }
 
-  const { openZippedZarrStore } = await import('../zarr/zarrZipStore')
-  const zip = await openZippedZarrStore(
-    url,
-    options.fetcher === undefined ? {} : { fetcher: options.fetcher },
-  )
+  // A zip that an earlier detection registered as a run folder is not opened
+  // as a Zarr store again.
+  if (zipFolderFor(url) !== undefined) {
+    return detectZippedRun(url, '', options, checked)
+  }
+
+  const { openZippedZarrStore, ZarrZipRootError } = await import('../zarr/zarrZipStore')
+  let zip: Awaited<ReturnType<typeof openZippedZarrStore>>
+
+  try {
+    zip = await openZippedZarrStore(
+      url,
+      options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+    )
+  } catch (error) {
+    if (error instanceof ZarrZipRootError && error.stores === 'none') {
+      return detectZippedRun(url, error.message, options, checked)
+    }
+
+    throw error
+  }
   const rootPath = zip.entry('zarr.json') === undefined ? '.zattrs' : 'zarr.json'
   const rootBytes = await zip.store.get(`/${rootPath}`)
   const rootMetadata =
@@ -636,6 +655,71 @@ async function detectZarrZip(
   throw new Error(
     `The zip at ${url} holds a Zarr store (${rootLabel}) that is neither SpatialData nor an OME-Zarr image. Only those are read from a zip; unzip other stores and host them as folders.`,
   )
+}
+
+// An Atera run folder zipped whole, such as `<run>_outs.zip`, with
+// experiment.spatial at the top of the zip or in a folder inside it. The zip
+// is registered as a folder, so the run's files are read in place under
+// `<zip url>/`.
+async function detectZippedRun(
+  url: string,
+  noStoreMessage: string,
+  options: DetectSpatialDatasetOptions,
+  checked: DatasetProbeResult[],
+): Promise<SpatialDatasetDetection> {
+  const root = await registerZippedRunFolder(url, options)
+
+  if (root.atera === undefined) {
+    throw new Error(
+      root.xenium === undefined
+        ? `${noStoreMessage} Nor does it hold an Atera run (${ATERA_EXPERIMENT_FILE}). A zip can hold a SpatialData store, an OME-Zarr image, or an Atera run folder.`
+        : `The zip at ${url} holds a Xenium run (${root.xenium}experiment.xenium). Only Atera runs can be opened from a zip; unzip the run and host its folder.`,
+    )
+  }
+
+  checked.push({
+    path: `${root.atera}${ATERA_EXPERIMENT_FILE} in the zip (Atera run)`,
+    url,
+    ok: true,
+  })
+  return { platform: 'atera', baseUrl: url, checked }
+}
+
+// Reads the zip's directory and, when it holds an Atera run, registers it as
+// the run's folder. The matrix is read in parts, so a run whose matrix was
+// compressed into the zip is refused here rather than failing later. A zip
+// registered before is kept until the page reloads, as opened zip stores are.
+async function registerZippedRunFolder(
+  url: string,
+  options: DetectSpatialDatasetOptions,
+): Promise<{ readonly atera?: string; readonly xenium?: string }> {
+  const registered = zipFolderFor(url)
+
+  if (registered !== undefined) {
+    return { atera: registered.root }
+  }
+
+  const directory = await readZipDirectory(url, {
+    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  })
+  const atera = zipFolderRoot(directory.entries.keys(), ATERA_EXPERIMENT_FILE)
+
+  if (atera === undefined) {
+    const xenium = zipFolderRoot(directory.entries.keys(), 'experiment.xenium')
+    return xenium === undefined ? {} : { xenium }
+  }
+
+  const matrix = directory.entries.get(`${atera}${ATERA_FILE_DEFAULTS.cellFeatureMatrix}`)
+
+  if (matrix !== undefined && matrix.method !== ZIP_METHOD_STORED) {
+    throw new Error(
+      `The zip at ${url} holds an Atera run, but ${ATERA_FILE_DEFAULTS.cellFeatureMatrix} is compressed in it, so it cannot be read in parts. Zip the run folder without compression (zip -0 -r) or host it unzipped.`,
+    )
+  }
+
+  registerZipFolder({ url, root: atera, directory }, options.fetcher)
+  return { atera }
 }
 
 const SPATIALDATA_ELEMENT_GROUPS = [
@@ -1865,6 +1949,29 @@ async function fetchWithTimeout(
 // Reads and registers the folder's index page, so detection and the readers
 // skip the files it does not list. Clears the folder's listing when the host
 // serves none.
+// A manifest's root is a folder, or a zipped Atera run read as one.
+async function registerManifestRoot(
+  manifest: DatasetManifest,
+  options: DetectSpatialDatasetOptions,
+): Promise<void> {
+  if (!isZarrZipUrl(manifest.rootUrl)) {
+    await registerFolderListing(manifest.rootUrl, options)
+    return
+  }
+
+  const root =
+    manifest.platform === 'atera'
+      ? await registerZippedRunFolder(manifest.rootUrl, options)
+      : {}
+
+  if (root.atera === undefined) {
+    throw new DatasetManifestError(
+      manifest.url,
+      `"root" is a zip (${manifest.rootUrl}), which can only be the root of an "atera" manifest whose zip holds an Atera run (${ATERA_EXPERIMENT_FILE}).`,
+    )
+  }
+}
+
 async function registerFolderListing(
   folderUrl: string,
   options: DetectSpatialDatasetOptions,

@@ -27,10 +27,11 @@ export interface ZipStoreWithEntries {
 // metadata whose layout has to be discovered from the zip directory.
 export async function cachedZipFileStoreWithEntries(
   url: string,
+  fetcher?: typeof fetch,
 ): Promise<ZipStoreWithEntries> {
   let entryNames: readonly string[] = []
   const store = new ZipFileStore(
-    new CachedHttpRangeReader(url, defaultPersistentByteRangeCache()),
+    new CachedHttpRangeReader(url, defaultPersistentByteRangeCache(), fetcher),
     {
       transformEntries: (entries) => {
         entryNames = Object.keys(entries)
