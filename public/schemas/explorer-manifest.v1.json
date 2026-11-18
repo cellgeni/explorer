@@ -553,6 +553,10 @@
         "transcripts": {
           "type": "boolean",
           "description": "Show the transcript overlay (Xenium, Atera)."
+        },
+        "imageView": {
+          "enum": ["2d", "3d"],
+          "description": "The Image section's View: 3d opens an OME-Zarr z-stack in the 3D view."
         }
       },
       "additionalProperties": false

@@ -3151,6 +3151,18 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [loadedDatasetUrl],
   )
+  // In the link while the image can be shown in 3D; while the image opens, a
+  // 3D view the link or manifest asked for stays in it.
+  const shareableImageView = volumeViewAvailable
+    ? volumeViewShown
+      ? '3d'
+      : '2d'
+    : morphologyImage === null &&
+        morphologyState.status === 'loading' &&
+        volumeViewDatasetUrl !== null &&
+        volumeViewDatasetUrl === datasetUrl
+      ? '3d'
+      : undefined
   const { handleLoadCustomLayer, handleRemoveCustomLayer } =
     useCustomMorphologyLayerWorkflow({
       callbacks: {
@@ -3332,6 +3344,7 @@ export function App({ dependencies }: AppProps = {}) {
       setCellBoundaryOpacity,
       setCellFillOpacity,
       setCellPointScale,
+      setVolumeViewDatasetUrl,
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,
@@ -3690,6 +3703,7 @@ export function App({ dependencies }: AppProps = {}) {
       measurementUnit,
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
       morphologyZPlane: shareableMorphologyZPlane,
+      imageView: shareableImageView,
       observationColorMode,
       shouldLoadMorphology,
       showCellBoundaries,

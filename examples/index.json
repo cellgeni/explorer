@@ -130,6 +130,22 @@
       }
     },
     {
+      "id": "idr/idr0062-blastocyst",
+      "path": "idr/idr0062-blastocyst.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0062-blastocyst.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0062-blastocyst.json",
+      "platform": "image",
+      "name": "Mouse blastocyst, confocal z-stack (3D)",
+      "description": "Confocal z-stack of a whole E3.5 mouse blastocyst, 236 planes stained for the nuclear lamina (Lamin B1) and DNA (DAPI), as OME-Zarr; opens in the 3D view, which you can rotate, and View › 2D steps through the planes.",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0062",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-801",
+        "license": "CC BY 4.0",
+        "citation": "Blin G et al. (2019) Nessys: A new set of tools for the automated detection of nuclei within intact tissues and dense 3D cultures. PLoS Biol 17(8):e3000388. doi:10.1371/journal.pbio.3000388"
+      }
+    },
+    {
       "id": "spatialdata-sandbox/visium_associated_xenium_io",
       "path": "spatialdata-sandbox/visium_associated_xenium_io.json",
       "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/spatialdata-sandbox/visium_associated_xenium_io.json",

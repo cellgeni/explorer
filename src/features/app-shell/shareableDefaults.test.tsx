@@ -8,6 +8,7 @@ import {
 } from '../../data/shareableState'
 import { formatGeneScaleRange } from '../genes/geneScaleRange'
 import { parsePlotKind } from '../plots/plotsPanelModel'
+import { parseImageView } from '../sections/imageSectionModel'
 import { DEFAULT_SHAREABLE_STATE, withoutShareableDefaults } from './shareableDefaults'
 import { useAppDomainState } from './useAppDomainState'
 
@@ -24,6 +25,8 @@ function initialSettings(initialShareableState: ShareableState = {}) {
     tool: tools.activeTool,
     // App keeps the plot, as it reads it here.
     plot: parsePlotKind(initialShareableState.plot),
+    // App keeps the image view too, and the load applies the link's.
+    imageView: parseImageView(initialShareableState.imageView) ?? '2d',
     hiddenLayers: (['image', 'cells', 'annotations'] as const).filter(
       (layer) => !layers.layerVisibility[layer],
     ),
@@ -115,6 +118,15 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     // Back at the app's opacity: written, or the manifest's 0.5 would return.
     expect(withoutShareableDefaults({ imageOpacity: 1 }, manifest)).toEqual({
       imageOpacity: 1,
+    })
+  })
+
+  it('writes the 2D view only to undo a manifest’s 3D view', () => {
+    expect(withoutShareableDefaults({ imageView: '2d' })).toEqual({})
+    expect(withoutShareableDefaults({ imageView: '3d' })).toEqual({ imageView: '3d' })
+    expect(withoutShareableDefaults({ imageView: '3d' }, { imageView: '3d' })).toEqual({})
+    expect(withoutShareableDefaults({ imageView: '2d' }, { imageView: '3d' })).toEqual({
+      imageView: '2d',
     })
   })
 

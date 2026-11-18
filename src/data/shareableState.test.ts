@@ -197,6 +197,13 @@ describe('shareableState', () => {
     expect(parseShareableState('#mimg=none').merscopeImage).toBe('none')
   })
 
+  it('round-trips the 3D view of a z-stack image', () => {
+    const hash = formatShareableState({ imageView: '3d' })
+
+    expect(hash).toContain('imageView=3d')
+    expect(parseShareableState(hash)).toEqual({ linkVersion: 2, imageView: '3d' })
+  })
+
   it('round-trips the Atera image choice', () => {
     const hash = formatShareableState({ ateraImage: '3d' })
 

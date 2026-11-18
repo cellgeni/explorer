@@ -240,6 +240,7 @@ import {
   type GridCellColumns,
 } from '../../rendering/gridCellColumns'
 import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
+import { parseImageView } from '../sections/imageSectionModel'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 
@@ -402,6 +403,9 @@ interface UseDatasetLifecycleSetters {
   readonly setShowTranscriptOverlay?: Setter<boolean>
   // From manifest defaults and from a link's state, such as a collection's.
   readonly setCellPointScale?: Setter<number>
+  // The dataset the 3D view is open for, which shows it once its image is a
+  // z-stack.
+  readonly setVolumeViewDatasetUrl?: Setter<string | null>
   // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   // The manifest's defaults, which the dataset's links leave out.
@@ -588,6 +592,7 @@ export function useDatasetLifecycle({
     setCellBoundaryOpacity,
     setCellFillOpacity,
     setCellPointScale,
+    setVolumeViewDatasetUrl,
     setImageLayerOpacity,
     setShowTranscriptOverlay,
     setDatasetAbout,
@@ -1273,6 +1278,13 @@ export function useDatasetLifecycle({
           restoreState.morphologyZPlane === undefined
             ? {}
             : { zPlane: restoreState.morphologyZPlane }
+        const restoredImageView = parseImageView(restoreState.imageView)
+
+        if (restoredImageView !== undefined) {
+          whenCommitted(() => {
+            setVolumeViewDatasetUrl?.(restoredImageView === '3d' ? requestedUrl : null)
+          })
+        }
 
         if (manifest !== undefined) {
           appendDebugEvent(
