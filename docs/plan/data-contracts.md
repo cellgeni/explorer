@@ -160,8 +160,9 @@ matrices.
   shown, `defaultT` or 0. A bioformats2raw store opens its first series.
 - µm/px is the product of multiscale and dataset `scale` values for `x`, with
   unit conversion; a missing scale gives 1 µm/px.
-- `omero.channels` gives names, colours, and windows. Three channels with no
-  omero data, or labelled or coloured red, green, and blue, are native RGB.
+- `omero.channels` gives names, colours, and windows. An image without a `c`
+  axis is one grayscale channel. Three channels with no omero data, or
+  labelled or coloured red, green, and blue, are native RGB.
 - Tile size is the x/y chunk shape; chunks over 512 px are served as virtual
   tiles that share one decoded chunk.
 

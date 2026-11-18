@@ -771,6 +771,71 @@ describe('OME-Zarr image loader', () => {
     await expect(channelFirstPixels(restored.channelLoaders)).resolves.toEqual([2, 12])
   })
 
+  it('opens other z planes of a z-stack without a channel axis', async () => {
+    const rootPath = '/images/volume.ome.zarr'
+    const rootUrl = `https://example.test${rootPath}`
+    const fetcher = fetcherForFiles(
+      new Map([
+        [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+        [
+          `${rootPath}/.zattrs`,
+          jsonBytes({
+            omero: { channels: [{ label: 'CT', window: { start: 1, end: 150 } }] },
+            multiscales: [
+              {
+                axes: [
+                  { name: 'z', type: 'space' },
+                  { name: 'y', type: 'space' },
+                  { name: 'x', type: 'space' },
+                ],
+                datasets: [{ path: '0' }],
+              },
+            ],
+          }),
+        ],
+        [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([3, 2, 2], [1, 2, 2]))],
+        ...[0, 1, 2].map(
+          (z) =>
+            [`${rootPath}/0/${z.toString()}.0.0`, new Uint8Array(4).fill(z + 1)] as const,
+        ),
+      ]),
+    )
+    const openImage = vi.fn((url: string) =>
+      openOmeZarrImageWithOptions(url, { fetcher }),
+    )
+    const baseLoader = await openImage(rootUrl)
+
+    // The image is one grayscale channel, so the z-stack has planes to list.
+    expect(baseLoader.zStack).toEqual({ sizeZ: 3, defaultZPlane: 1 })
+    expect(baseLoader.channels).toEqual([
+      {
+        id: 'Channel:0',
+        index: 0,
+        name: 'CT',
+        color: [255, 255, 255],
+        contrast: { min: 1, max: 150 },
+        zPlanes: [{ zIndex: 0 }, { zIndex: 1 }, { zIndex: 2 }],
+      },
+    ])
+
+    const image = await morphologyImageFromPyramidLoader(rootUrl, baseLoader, {
+      openImage,
+    })
+
+    expect(image.zStack).toMatchObject({ sizeZ: 3, zPlane: 1 })
+    expect(image.channelLoaders[0]?.loader).toBe(baseLoader)
+    await expect(channelFirstPixels(image.channelLoaders)).resolves.toEqual([2])
+
+    const firstPlane = await image.zStack?.openPlane(0)
+
+    expect(firstPlane?.channelLoaders.map((channel) => channel.loader.url)).toEqual([
+      `${rootUrl}#z=0`,
+    ])
+    await expect(channelFirstPixels(firstPlane?.channelLoaders ?? [])).resolves.toEqual([
+      1,
+    ])
+  })
+
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {
     await expect(
       openOmeZarrImageWithOptions('https://example.test/generic.zarr', {
