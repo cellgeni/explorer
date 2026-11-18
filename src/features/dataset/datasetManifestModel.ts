@@ -15,6 +15,7 @@ import {
   parseGeneScalePercentile,
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
+import { parseImageView } from '../sections/imageSectionModel'
 
 // What the info drawer shows about a dataset described by a manifest.
 export type DatasetManifestAbout = Pick<
@@ -93,6 +94,7 @@ export function manifestDefaultsToShareableState(
     defaults.geneScoreMode,
     parseGeneExpressionScoreMode,
   )
+  const imageView = enumValue('imageView', defaults.imageView, parseImageView)
 
   const fields: {
     readonly [Key in keyof ShareableState]: ShareableState[Key] | undefined
@@ -116,6 +118,7 @@ export function manifestDefaultsToShareableState(
         ? undefined
         : normalizeCellPointScale(defaults.cellPointScale),
     transcriptOverlay: defaults.transcripts,
+    imageView,
   }
   const state = Object.fromEntries(
     Object.entries(fields).filter(([, value]) => value !== undefined),

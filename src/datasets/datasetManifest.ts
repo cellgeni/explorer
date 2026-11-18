@@ -121,6 +121,8 @@ export interface DatasetManifestDefaults {
   // The Cell point size multiplier; snapped to the slider's steps.
   readonly cellPointScale?: number
   readonly transcripts?: boolean
+  // `3d` opens an OME-Zarr z-stack in the 3D view.
+  readonly imageView?: string
 }
 
 // Where the data comes from, shown in the info drawer so viewers can find,
@@ -745,7 +747,12 @@ export const DATASET_MANIFEST_SOURCE_KEYS = [
 ] as const
 
 const DEFAULT_STRING_LIST_KEYS = ['genes', 'channels'] as const
-const DEFAULT_STRING_KEYS = ['colorCellsBy', 'geneColorScale', 'geneScoreMode'] as const
+const DEFAULT_STRING_KEYS = [
+  'colorCellsBy',
+  'geneColorScale',
+  'geneScoreMode',
+  'imageView',
+] as const
 const DEFAULT_BOOLEAN_KEYS = [
   'cellBoundaries',
   'nucleusBoundaries',

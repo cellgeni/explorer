@@ -575,6 +575,10 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
   when no spatial axis has a unit (the store's own units). Otherwise the
   spacing is unknown, and a plane is drawn as thick as a voxel of the level
   is wide. `Depth` stretches z from ×0.25 to ×16.
+- **Link and manifest.** The share link carries `imageView=3d` while the 3D
+  view is open, and a dataset manifest's `"imageView": "3d"` default opens it
+  (`imageView=2d` in a link undoes that). Either applies once the image is
+  read; an image that is not an OME-Zarr z-stack opens in 2D.
 
 ## Rendering
 
@@ -695,8 +699,8 @@ fails, tiles are decoded and sampled on the main thread.
 - The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or
   custom layers, and only the image: cells, outlines, transcripts, ROI and
   measurement are 2D. It assumes the GPU takes 3D textures of 2,048 voxels a
-  side; WebGL2 only promises 256. The view and its settings are not kept in
-  the share link.
+  side; WebGL2 only promises 256. The link keeps only whether the 3D view is
+  open, not its camera, rendering, depth or opacity.
 - Switching to a plane not opened recently reads its IFD, `SubIFDs`, and tile
   offset arrays (a few sequential range requests) before its tiles load.
 - QPTIFF: the stripped smallest pyramid level is not shown. A QPTIFF whose

@@ -459,6 +459,7 @@ describe('parseDatasetManifest', () => {
           channels: ['DAPI'],
           transcripts: true,
           geneRange: [null, 40],
+          imageView: '3d',
         },
       }).defaults,
     ).toEqual({
@@ -470,6 +471,7 @@ describe('parseDatasetManifest', () => {
       channels: ['DAPI'],
       transcripts: true,
       geneRange: [null, 40],
+      imageView: '3d',
     })
 
     const defaults = (value: unknown) =>
@@ -486,6 +488,9 @@ describe('parseDatasetManifest', () => {
     )
     expect(defaults({ cellBoundaries: 'yes' })).toContain(
       '"defaults.cellBoundaries" must be true or false',
+    )
+    expect(defaults({ imageView: true })).toContain(
+      '"defaults.imageView" must be a non-empty string',
     )
     for (const geneRange of [
       [10, 2],

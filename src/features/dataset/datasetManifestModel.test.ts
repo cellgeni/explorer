@@ -25,6 +25,7 @@ describe('manifestDefaultsToShareableState', () => {
         cellBoundaryOpacity: 0.75,
         cellPointScale: 10,
         transcripts: true,
+        imageView: '3d',
       }),
     ).toEqual({
       state: {
@@ -43,6 +44,7 @@ describe('manifestDefaultsToShareableState', () => {
         // Snapped to the nearest slider step.
         cellPointScale: 12,
         transcriptOverlay: true,
+        imageView: '3d',
       },
       ignored: [],
     })
@@ -62,6 +64,7 @@ describe('manifestDefaultsToShareableState', () => {
       manifestDefaultsToShareableState({
         colorCellsBy: 'cluster',
         geneScoreMode: 'median',
+        imageView: '4d',
         cellBoundaries: true,
       }),
     ).toEqual({
@@ -69,6 +72,7 @@ describe('manifestDefaultsToShareableState', () => {
       ignored: [
         'defaults.colorCellsBy "cluster" is not a known value',
         'defaults.geneScoreMode "median" is not a known value',
+        'defaults.imageView "4d" is not a known value',
       ],
     })
     expect(manifestDefaultsToShareableState(undefined)).toEqual({

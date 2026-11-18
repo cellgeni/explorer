@@ -863,6 +863,43 @@ describe('OME-Zarr image loader', () => {
     expect(progress).toEqual([1, 2, 3])
   })
 
+  it("reads a slab again when another read's abort reaches it", async () => {
+    const rootUrl = 'https://example.test/images/stack.ome.zarr'
+    const files = fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr'))
+    let failed = false
+    // The first read of plane 1 fails with the abort of a read it shared,
+    // as zarrita's shard index reads are shared.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (!failed && requestUrl(input).pathname.endsWith('/0/1.1.0.0')) {
+        failed = true
+        throw new DOMException('signal is aborted without reason', 'AbortError')
+      }
+
+      return files(input)
+    }) as unknown as typeof fetch
+    const loader = await openOmeZarrImageWithOptions(`${rootUrl}#c=1`, { fetcher })
+
+    const volume = await loader.loadVolume(0)
+
+    expect(failed).toBe(true)
+    expect(Array.from(volume.data)).toEqual([
+      11, 11, 11, 11, 12, 12, 12, 12, 13, 13, 13, 13,
+    ])
+  })
+
+  it('stops a volume read when its own signal aborts', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stack.ome.zarr#c=1',
+      { fetcher: fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr')) },
+    )
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(loader.loadVolume(0, controller.signal)).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+  })
+
   it('leaves the plane spacing unknown when only x and y have units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/images/stack.ome.zarr',

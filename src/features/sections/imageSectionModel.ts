@@ -74,6 +74,13 @@ export interface ImageSectionModelInput {
   readonly setVolumeViewOpen: (open: boolean) => void
 }
 
+// The Image section's View: one z plane at a time, or the 3D view.
+export type ImageView = '2d' | '3d'
+
+export function parseImageView(value: string | undefined): ImageView | undefined {
+  return value === '2d' || value === '3d' ? value : undefined
+}
+
 export function useImageSectionModel({
   appendDebugEvent,
   autoContrastChannelIds,

@@ -32,6 +32,7 @@ export const DEFAULT_SHAREABLE_STATE = {
   measurementUnit: 'um',
   shouldLoadMorphology: true,
   imageOpacity: 1,
+  imageView: '2d',
   cellFillOpacity: DEFAULT_CELL_FILL_OPACITY,
   cellPointScale: DEFAULT_CELL_POINT_SCALE,
   showCellBoundaries: true,

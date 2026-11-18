@@ -51,6 +51,10 @@ const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
 // Slabs of a volume read at once: enough to hide request latency when each
 // slab is one plane, few enough to keep decoded slabs small.
 const VOLUME_SLAB_CONCURRENCY = 4
+// zarrita shares a shard's pending index read among the reads that need it,
+// under the signal of the read that started it, so cancelling a 2D tile read
+// can abort a volume read too. Such a slab is read again, this many times.
+const VOLUME_SLAB_FOREIGN_ABORT_RETRIES = 3
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]
@@ -638,9 +642,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
               ? (this.selectedChannelIndex ?? 0)
               : this.planeIndexAt(meta, axis),
       )
-      const slab = await zarr.get(meta.array, projection, {
-        ...(signal === undefined ? {} : { signal }),
-      })
+      const slab = await getVolumeSlab(meta.array, projection, signal)
       throwIfAborted(signal)
 
       if (typeof slab === 'number' || typeof slab === 'bigint') {
@@ -1677,6 +1679,27 @@ function chunkByteLength(chunk: zarr.Chunk<DataType>): number {
     : typeof data.length === 'number'
       ? data.length * 8
       : 0
+}
+
+// A slab of a volume; an abort that is not `signal`'s reads it again.
+async function getVolumeSlab(
+  array: ZarrArray<DataType, zarr.Readable>,
+  projection: (zarr.Slice | number)[],
+  signal: AbortSignal | undefined,
+) {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await zarr.get(array, projection, signal === undefined ? {} : { signal })
+    } catch (error) {
+      if (
+        signal?.aborted === true ||
+        (error as { readonly name?: unknown } | null)?.name !== 'AbortError' ||
+        attempt >= VOLUME_SLAB_FOREIGN_ABORT_RETRIES
+      ) {
+        throw error
+      }
+    }
+  }
 }
 
 // Store errors and aborts are final; worker failures fall back to the main
