@@ -54,6 +54,7 @@ export function testImageSectionModel(
     zStack: undefined,
     requestedZPlane: null,
     onZPlaneChange: vi.fn(),
+    volumeView: null,
     channels: [],
     channelSettings: [],
     autoContrastChannelIds: [],

@@ -536,6 +536,45 @@ transform.
   tile is decoded on the main thread with `zarr.get`, through a 256 MiB
   decoded-chunk cache. Store errors (for example a `403` chunk) are not retried.
   No IndexedDB cache is used.
+- Range reads (a sharded array's chunks and shard indexes) are sent with
+  `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
+  truncated body to one of two Range requests for the same bytes at once:
+  opening the 3D view while the 2D view was loading the same chunks of the
+  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18).
+
+### 3D View
+
+An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
+`3D` in the Image section (2026-11-18).
+
+- **Level.** `volumeLevels()` lists each level's size and voxel size.
+  `chooseVolumeLevel` (`src/data/imageVolume.ts`) takes the finest level
+  whose sides are at most 2,048 voxels (the 3D texture size of desktop GPUs)
+  and whose enabled channels together hold at most 64 Mi voxels. The SciVis
+  `engine.ome.zarr` (256 × 256 × 128) is read at full resolution; S-BIAD493
+  (8,781 × 2,253 × 41, 3 channels) at level 4 of 7, 1,097 × 281 × 41.
+- **Reading.** `loadVolume` reads the loader's channel at every plane of the
+  level with `zarr.get`, in slabs one chunk deep so each chunk is decoded
+  once, four slabs at a time, and reports planes read. Codecs run in the Zarr
+  decode workers, as for other zarrita reads. Up to six enabled channels are
+  read, each once while the 3D view stays open; moving the `Z plane` slider
+  does not read them again. Leaving 3D drops them.
+- **Textures.** An 8-bit volume is uploaded as it is (`r8unorm`). Other dtypes
+  are divided by their largest magnitude and uploaded as half floats
+  (`r16float`), so the contrast window still applies to raw values.
+- **Drawing.** `VolumeViewer` (`src/components/VolumeViewer.tsx`) is a second
+  deck.gl canvas with an `OrbitView`, drawn over the 2D view, which stays
+  mounted. `VolumeLayer` (`src/rendering/volumeLayer.ts`) draws the box's back
+  faces and marches a ray through one 3D texture per channel, about one sample
+  per voxel crossed. `Max intensity` adds each channel's colour times its
+  brightest windowed value along the ray, like the 2D view adds channels.
+  `Translucent` composites front to back; a voxel's opacity grows with the
+  square of its windowed value, so faint background does not fog the volume,
+  and `Opacity` sets how many full-intensity voxels hide what is behind.
+- **Depth.** Planes are spaced by the z scale when `z` has a length unit, or
+  when no spatial axis has a unit (the store's own units). Otherwise the
+  spacing is unknown, and a plane is drawn as thick as a voxel of the level
+  is wide. `Depth` stretches z from ×0.25 to ×16.
 
 ## Rendering
 
@@ -653,6 +692,11 @@ fails, tiles are decoded and sampled on the main thread.
   only `t = 0` of OME-TIFFs.
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
+- The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or
+  custom layers, and only the image: cells, outlines, transcripts, ROI and
+  measurement are 2D. It assumes the GPU takes 3D textures of 2,048 voxels a
+  side; WebGL2 only promises 256. The view and its settings are not kept in
+  the share link.
 - Switching to a plane not opened recently reads its IFD, `SubIFDs`, and tile
   offset arrays (a few sequential range requests) before its tiles load.
 - QPTIFF: the stripped smallest pyramid level is not shown. A QPTIFF whose

@@ -1056,3 +1056,64 @@
 .dataset-load-toast-action {
   color: var(--text-2);
 }
+
+/* 3D view (VolumeViewer.tsx): the z-stack over the 2D view, on black like
+   a fluorescence image, with its settings at the top left. */
+.volume-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-legend);
+  background: #000;
+}
+
+.volume-viewer-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.volume-viewer-toolbar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: grid;
+  width: min(260px, calc(100% - 24px));
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-1);
+  box-shadow: var(--shadow-1);
+}
+
+.volume-viewer-actions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.volume-viewer-status {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  display: grid;
+  width: min(420px, calc(100% - 24px));
+  gap: 6px;
+  pointer-events: none;
+}
+
+.volume-viewer-hint {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  margin: 0;
+  color: rgb(255 255 255 / 70%);
+  font-size: var(--font-control);
+  pointer-events: none;
+}
+
+@media (max-width: 859.98px) {
+  .volume-viewer-hint {
+    display: none;
+  }
+}
