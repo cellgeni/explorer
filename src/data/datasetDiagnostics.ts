@@ -9,11 +9,7 @@ import {
   datasetFileUrlFor,
   xeniumManifestFileFor,
 } from './datasetFiles'
-import {
-  fetchHead,
-  likelyMissingFileError,
-  noteReadableResponse,
-} from './hostResponses'
+import { fetchHead, likelyMissingFileError, noteReadableResponse } from './hostResponses'
 import { morphologyImagePathsFromExperiment } from './morphologyImage'
 import { assertHttpRangeSupport } from './rangeSupport'
 import {

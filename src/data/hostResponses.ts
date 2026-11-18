@@ -124,8 +124,7 @@ async function fetchFirstByteAsHead(
   const headers = new Headers(response.headers)
   const size = /\/(\d+)\s*$/.exec(response.headers.get('Content-Range') ?? '')?.[1]
   // An empty file has no first byte: 416 with `bytes */0`.
-  const partial =
-    response.status === 206 || (response.status === 416 && size === '0')
+  const partial = response.status === 206 || (response.status === 416 && size === '0')
 
   if (partial) {
     if (size === undefined) {

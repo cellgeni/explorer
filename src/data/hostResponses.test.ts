@@ -138,9 +138,9 @@ describe('HEAD requests on hosts whose CORS rules allow GET only', () => {
     }) as unknown as typeof fetch
 
     await fetchHead(fetcher, 'https://bucket.example.test/present')
-    await expect(fetchHead(fetcher, 'https://bucket.example.test/missing')).rejects.toThrow(
-      'Failed to fetch',
-    )
+    await expect(
+      fetchHead(fetcher, 'https://bucket.example.test/missing'),
+    ).rejects.toThrow('Failed to fetch')
     expect(fetcher).toHaveBeenCalledTimes(2)
   })
 
