@@ -150,6 +150,23 @@ describe('useMorphologyVolumeWorkflow', () => {
     expect(result.current).toMatchObject({ enabledChannelCount: 0, progress: null })
   })
 
+  it('keeps one read of a channel turned off and on while the first settles', async () => {
+    const reads: Read[] = []
+    const image = volumeImage('https://example.test/stack.ome.zarr', reads)
+    const { rerender } = renderWorkflow({ image, settings: settings(['A']) })
+
+    rerender({ image, settings: settings([]) })
+    rerender({ image, settings: settings(['A']) })
+    // The stopped read settles while its replacement is still reading.
+    await act(async () => {
+      reads[0]?.reject(new DOMException('Aborted', 'AbortError'))
+      await Promise.resolve()
+    })
+    rerender({ image, settings: settings(['A']) })
+
+    expect(reads.map((read) => read.signal?.aborted)).toEqual([true, false])
+  })
+
   it('reports a failed read without reading it again', async () => {
     const reads: Read[] = []
     const image = volumeImage('https://example.test/stack.ome.zarr', reads)
