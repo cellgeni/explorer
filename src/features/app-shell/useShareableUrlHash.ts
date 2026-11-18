@@ -24,6 +24,8 @@ interface ShareableDatasetHashOptions {
   readonly collectionView?: string | undefined
   // Its registered sections shown beside the dataset (compare=).
   readonly compareUrls?: readonly string[] | undefined
+  // `3d` while its serial sections are stacked in 3D (sectionView=).
+  readonly sectionView?: string | undefined
   readonly datasetUrl: string
   // The loaded dataset's manifest defaults (15.1-L).
   readonly datasetDefaults?: ShareableState | undefined
@@ -175,6 +177,7 @@ export function useShareableUrlHash({
     datasetUrl,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
+    sectionView,
   } = dataset
   // As a string, so a new array with the same URLs writes nothing.
   const compareKey = dataset.compareUrls?.join('\n') ?? ''
@@ -272,6 +275,7 @@ export function useShareableUrlHash({
           ...(collectionUrl === undefined ? {} : { collectionUrl }),
           ...(collectionView === undefined ? {} : { collectionView }),
           ...(compareKey === '' ? {} : { compareUrls: compareKey.split('\n') }),
+          ...(sectionView === undefined ? {} : { sectionView }),
           datasetUrl,
           annotationUrl,
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
@@ -374,6 +378,7 @@ export function useShareableUrlHash({
     collectionUrl,
     collectionView,
     compareKey,
+    sectionView,
     boundaryCellLimit,
     cellMetadataTrackId,
     coordinateUnit,

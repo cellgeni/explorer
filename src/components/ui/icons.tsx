@@ -198,6 +198,16 @@ export function SideBySideIcon() {
   )
 }
 
+// Sections stacked in 3D.
+export function StackIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M8 2.5l5.5 2.75L8 8 2.5 5.25z" />
+      <path d="M2.5 8L8 10.75 13.5 8M2.5 10.75L8 13.5l5.5-2.75" />
+    </svg>
+  )
+}
+
 // Annotation sets.
 
 export function EyeIcon() {

@@ -6,6 +6,7 @@ import {
   IconButton,
   ImageIcon,
   SideBySideIcon,
+  StackIcon,
 } from '../../components/ui'
 import {
   collectionEntryFor,
@@ -60,6 +61,14 @@ export interface CollectionBarBeside {
   readonly onToggle: (entry: DatasetCollectionEntry) => void
 }
 
+// Serial sections stacked in 3D: the open dataset's coordinate system, when
+// the collection gives its sections depths.
+export interface CollectionBarStack {
+  readonly sectionCount: number
+  readonly shown: boolean
+  readonly onToggle: () => void
+}
+
 export interface CollectionBarAnnotations {
   readonly groupId: string
   readonly label: string
@@ -84,6 +93,8 @@ interface CollectionBarProps {
   readonly previews?: CollectionBarPreviews
   // Without it, no section can be shown beside the open one.
   readonly beside?: CollectionBarBeside
+  // Without it, the open dataset's sections cannot be stacked.
+  readonly stack?: CollectionBarStack
 }
 
 const NO_GENES: readonly string[] = []
@@ -102,6 +113,7 @@ export function CollectionBar({
   onViewChange,
   previews,
   beside,
+  stack,
 }: CollectionBarProps) {
   const collection = state.status === 'ready' ? state.collection : null
   const loadedEntry =
@@ -222,6 +234,20 @@ export function CollectionBar({
                   onViewChange(showPreviews ? 'names' : 'row')
                 }}
               />
+              {stack === undefined ? null : (
+                <IconButton
+                  className="collection-bar-action"
+                  title={
+                    stack.shown
+                      ? 'Stacked in 3D. Click to return to the 2D view'
+                      : `Stack in 3D: show the ${stack.sectionCount.toLocaleString()} serial sections of the open dataset at their depths, coloured by the selected genes or annotation set`
+                  }
+                  aria-label="Stack in 3D"
+                  aria-pressed={stack.shown}
+                  icon={<StackIcon />}
+                  onClick={stack.onToggle}
+                />
+              )}
             </span>
           )}
         </div>

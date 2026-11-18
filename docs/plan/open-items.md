@@ -131,6 +131,12 @@ Features:
       Side-by-side panels show cells only (no image, boundaries, transcripts
       or tools), and Visium HD and image-only datasets cannot be panels (see
       [Phase 20](phases/20-dataset-collections.md#known-gaps)).
+- [ ] 3D section stack: cells only (no section images, boundaries or
+      transcripts), placed by depth only (no per-section transform or
+      SpatialData transformations), not measured on large stacks, no section
+      range or click to open, camera not in the link, and no registered test
+      dataset or E2E test (see
+      [Phase 24](phases/24-section-stack.md#known-gaps)).
 - [ ] Store and file browser: non-Zarr files in consolidated stores read over
       HTTP, and SpatialData points as one table rather than part by part;
       also min and max for binary columns, Rows for writers that store a

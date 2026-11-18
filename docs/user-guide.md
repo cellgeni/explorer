@@ -188,6 +188,14 @@ panel to swap that section into the main view, with its image and tools, at
 the same place. A link from `Share` opens with the same sections beside the
 dataset. See [Side by Side](./dataset-collections.md#side-by-side).
 
+When the collection also gives each of those sections its depth (`z`), the
+bar's `Stack in 3D` button (three layers) stacks them all in 3D over the
+view, coloured by the selected genes or annotation set, so you can follow a
+gene or cell type through the block. Drag to rotate; `Depth` stretches the
+stack along z, as serial sections are thin next to their width; `Other cells`
+shows or hides the faint outline of cells that are not highlighted. `2D View`
+returns to the view. See [3D Stack](./dataset-collections.md#3d-stack).
+
 ## Spatial Navigation
 
 Use mouse pan and zoom for normal navigation. The spatial view is also keyboard

@@ -26,19 +26,25 @@ const deckView = vi.hoisted(() => ({
   onChange: undefined as MockViewStateChange | undefined,
   linked: undefined as MockViewState | undefined,
   onLinkedChange: undefined as MockViewStateChange | undefined,
+  // The layer IDs of the sections stacked in 3D.
+  stackLayerIds: undefined as readonly string[] | undefined,
 }))
 
 vi.mock('@deck.gl/react', () => ({
   DeckGL: ({
     viewState,
     views,
+    layers,
     onViewStateChange,
   }: {
     readonly viewState?: MockViewState
     readonly views?: { readonly id?: string }
+    readonly layers?: readonly { readonly id: string }[]
     readonly onViewStateChange?: MockViewStateChange
   }) => {
-    if (views?.id === 'linked-section') {
+    if (views?.id === 'section-stack') {
+      deckView.stackLayerIds = layers?.map((layer) => layer.id)
+    } else if (views?.id === 'linked-section') {
       deckView.linked = viewState
       deckView.onLinkedChange = onViewStateChange
     } else {
@@ -445,6 +451,7 @@ describe('App with a dataset collection', () => {
     afterEach(() => {
       deckView.linked = undefined
       deckView.onLinkedChange = undefined
+      deckView.stackLayerIds = undefined
     })
 
     it('shows a section beside the open one, with one view, and swaps them', async () => {
@@ -525,6 +532,117 @@ describe('App with a dataset collection', () => {
         expect(deckView.current?.target?.[0]).toBeCloseTo(5)
       })
       expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
+
+    it('stacks serial sections in 3D, in the link, until a dataset outside opens', async () => {
+      const stacked = parseDatasetCollection(
+        {
+          version: 1,
+          datasets: [
+            { dataset: 's1.h5ad', name: 'Section 1', coordinateSystem: 'cord', z: 0 },
+            { dataset: 's2.h5ad', name: 'Section 2', coordinateSystem: 'cord', z: 10 },
+            { dataset: 'atlas.h5ad', name: 'Atlas' },
+          ],
+        },
+        'https://example.test/cord/collection.json',
+      )
+      window.history.replaceState(
+        null,
+        '',
+        `/?collection=${encodeURIComponent(stacked.url)}`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => stacked}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const bar = await screen.findByRole('navigation', { name: 'Collection' })
+      const toggle = await within(bar).findByRole('button', { name: 'Stack in 3D' })
+      expect(toggle).toHaveAttribute('aria-pressed', 'false')
+      fireEvent.click(toggle)
+      expect(toggle).toHaveAttribute('aria-pressed', 'true')
+
+      const stack = await screen.findByRole('region', { name: '3D section stack' })
+      expect(within(stack).getByText('2 sections, z 0 to 10 µm')).toBeInTheDocument()
+      // Both sections are read, the second though it was never previewed.
+      await waitFor(() => {
+        expect(deckView.stackLayerIds).toEqual([
+          'section-stack-0-cells',
+          'section-stack-1-cells',
+        ])
+      })
+      expect((await hashAfterWrite()).get('sectionView')).toBe('3d')
+
+      fireEvent.click(within(stack).getByRole('button', { name: '2D View' }))
+      expect(
+        screen.queryByRole('region', { name: '3D section stack' }),
+      ).not.toBeInTheDocument()
+      expect((await hashAfterWrite()).has('sectionView')).toBe(false)
+
+      // Opening a section of the stack keeps it; the atlas opens in 2D.
+      fireEvent.click(toggle)
+      fireEvent.click(within(bar).getByRole('button', { name: 'Section 2' }))
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Section 2' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      expect(screen.getByRole('region', { name: '3D section stack' })).toBeInTheDocument()
+      fireEvent.click(within(bar).getByRole('button', { name: 'Atlas' }))
+      await waitFor(() => {
+        expect(within(bar).getByRole('button', { name: 'Atlas' })).toHaveAttribute(
+          'aria-current',
+          'true',
+        )
+      })
+      expect(
+        screen.queryByRole('region', { name: '3D section stack' }),
+      ).not.toBeInTheDocument()
+      expect(
+        within(bar).queryByRole('button', { name: 'Stack in 3D' }),
+      ).not.toBeInTheDocument()
+      expect((await hashAfterWrite()).has('sectionView')).toBe(false)
+    })
+
+    it('opens a link’s stack once its collection and dataset are read', async () => {
+      const stacked = parseDatasetCollection(
+        {
+          version: 1,
+          datasets: [
+            { dataset: 's1.h5ad', name: 'Section 1', coordinateSystem: 'cord', z: 0 },
+            { dataset: 's2.h5ad', name: 'Section 2', coordinateSystem: 'cord', z: 10 },
+          ],
+        },
+        'https://example.test/cord/collection.json',
+      )
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(stacked.url)}&dataset=${encodeURIComponent(SECTION_2)}&sectionView=3d`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => stacked}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      expect(
+        await screen.findByRole('region', { name: '3D section stack' }),
+      ).toBeInTheDocument()
+      const bar = screen.getByRole('navigation', { name: 'Collection' })
+      expect(within(bar).getByRole('button', { name: 'Stack in 3D' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
+      expect((await hashAfterWrite()).get('sectionView')).toBe('3d')
     })
 
     it("opens the link's sections side by side at its view, and closes one", async () => {
