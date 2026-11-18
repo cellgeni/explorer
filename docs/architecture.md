@@ -97,7 +97,7 @@ match:
 | 0     | URL path ends in `.json` (not `zarr.json`): read it as a [dataset manifest](./dataset-manifest.md); errors stop here                    | The manifest's `platform`                                          |
 | 1     | URL ends in `.h5ad`, and `HEAD` succeeds                                                                                                | `h5ad`                                                             |
 | 1b    | URL path ends in `.icechunk`: open the repository and read its root group; errors stop here                                             | `h5ad` (AnnData), `spatialdata`, or `image`                        |
-| 1c    | URL path ends in `.zip`, and `HEAD` succeeds; a zipped store that is not SpatialData is an error                                        | `spatialdata`                                                      |
+| 1c    | URL path ends in `.zip`, and `HEAD` succeeds; a zipped store that is neither SpatialData nor an OME-Zarr image is an error              | `spatialdata` or `image`                                           |
 | 2     | URL path ends in `.zarr`, `.ome.zarr`, `/zarr.json`, `/.zattrs`, or names a group inside a `.zarr` store; root metadata `HEAD` succeeds | `spatialdata` or `h5ad` (AnnData) by root attributes, else `image` |
 | 3     | URL ends in `.tif`, `.tiff`, `.ome.tif(f)`, `.qptif(f)`, `.svs`, `.ndpi`, and `HEAD` succeeds                                           | `image`                                                            |
 | 4a    | `GET <url>/explorer.json` returns a manifest (run alongside 4b and 4c)                                                                  | The manifest's `platform`                                          |

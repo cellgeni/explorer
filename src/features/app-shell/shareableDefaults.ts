@@ -7,7 +7,10 @@ import {
   DEFAULT_TRANSCRIPT_POINT_COLOR_MODE,
 } from '../../rendering/deckLayers'
 import { DEFAULT_CELL_POINT_SCALE } from '../../rendering/cellPointStyle'
-import { DEFAULT_CELL_FILL_OPACITY } from '../../rendering/layerOpacity'
+import {
+  DEFAULT_CELL_BOUNDARY_OPACITY,
+  DEFAULT_CELL_FILL_OPACITY,
+} from '../../rendering/layerOpacity'
 import { AUTO_GENE_SCALE_RANGE, formatGeneScaleRange } from '../genes/geneScaleRange'
 
 // The value of each shareable setting when neither the link nor the dataset
@@ -34,7 +37,7 @@ export const DEFAULT_SHAREABLE_STATE = {
   showCellBoundaries: true,
   showNucleusBoundaries: true,
   showHoverTooltips: true,
-  cellBoundaryOpacity: 1,
+  cellBoundaryOpacity: DEFAULT_CELL_BOUNDARY_OPACITY,
   transcriptOverlay: false,
   transcriptDetailMode: 'auto',
   transcriptMinQv: 20,

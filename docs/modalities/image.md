@@ -21,6 +21,7 @@ URL shape before any Xenium probe:
 | Ends in `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff`, `.qptiff`, `.qptif`, `.svs`, or `.ndpi` (query/hash allowed)                | One `HEAD` on the URL                                                        | Image (`imageKind: 'tiff'`, `'qptiff'`, `'svs'`, or `'ndpi'`)                         |
 | Any other folder URL                                                                                                          | After the `experiment.xenium` probe fails, `HEAD` on `zarr.json` / `.zattrs` | SpatialData, or image pointing at that metadata file                                  |
 | Path ends in `.icechunk` (an [Icechunk](https://icechunk.io/) repository)                                                     | Opens the repository's `repo` file and snapshot                              | AnnData, SpatialData, or, with root `multiscales`, image (`imageKind: 'ome-zarr'`)    |
+| Path ends in `.zip` (a zipped Zarr store, such as `image.ome.zarr.zip`)                                                       | `HEAD`, then the zip's central directory and root metadata                   | SpatialData, or, with root `multiscales` or `bioformats2raw.layout`, image            |
 
 A group inside a store is a path below a folder named `.zarr` whose last part
 has no dot, such as a SpatialData store's `sample.zarr/images/he` or a
@@ -505,7 +506,11 @@ transform.
   (`src/zarr/zarrStores.ts`). Metadata-key `403`s are treated as missing. An
   Icechunk repository is read with `icechunk-js`, its snapshot serving as the
   consolidated metadata (see
-  [AnnData in Icechunk](./h5ad.md#anndata-in-icechunk)).
+  [AnnData in Icechunk](./h5ad.md#anndata-in-icechunk)). A zipped store
+  (`.zip`) is read from the zip's directory by byte range
+  (`src/zarr/zarrZipStore.ts`); its root may sit in a folder inside the zip,
+  and macOS `__MACOSX/` entries are ignored. Deflated entries are fetched and
+  inflated whole, so each chunk costs its compressed size.
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
 - Axes come from `axes`, else array dimension names, else positional

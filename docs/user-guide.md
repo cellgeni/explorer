@@ -26,8 +26,9 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   such as `sample.zarr.zip`.
 - Icechunk repository URLs ending in `.icechunk` that hold AnnData,
   SpatialData, or an OME-Zarr image.
-- Direct OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr image URLs.
-  An OME-Zarr written by bioformats2raw (as in the BioImage Archive) opens
+- Direct OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr image URLs, including
+  a zipped OME-Zarr such as `image.ome.zarr.zip`. An OME-Zarr written by
+  bioformats2raw (as in the BioImage Archive) opens
   its first image series. An OME-Zarr z-stack opens on the plane its OMERO
   rendering settings name (`defaultZ`), or the middle plane; `#z=N` on the
   image URL opens plane N, as `#c=N` opens channel N.

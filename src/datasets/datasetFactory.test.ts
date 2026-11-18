@@ -1578,7 +1578,7 @@ describe('Icechunk repositories', () => {
     await expect((dataset as AnnDataH5adDataset).overview()).resolves.toHaveLength(6)
   })
 
-  it('detects SpatialData in a zip, at its root or in a store folder', async () => {
+  it('detects SpatialData and OME-Zarr images in a zip, at its root or in a store folder', async () => {
     const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
     const fetcher = byteRangeFetcher(
       new Map([
@@ -1612,13 +1612,28 @@ describe('Icechunk repositories', () => {
           ]),
         ],
         [
-          'https://example.test/zips/image.zarr.zip',
+          // An OME-Zarr image whose labels group is not a SpatialData element.
+          'https://example.test/zips/image.ome.zarr.zip',
           zipArchive([
+            { name: '__MACOSX/image.ome.zarr/._.zattrs', data: Uint8Array.of(0xa3) },
             {
-              name: 'image.zarr/.zattrs',
+              name: 'image.ome.zarr/.zattrs',
               data: json({ multiscales: [{ datasets: [{ path: '0' }] }] }),
             },
-            { name: 'image.zarr/labels/.zgroup', data: json({ zarr_format: 2 }) },
+            { name: 'image.ome.zarr/labels/.zgroup', data: json({ zarr_format: 2 }) },
+          ]),
+        ],
+        [
+          'https://example.test/zips/raw.zip',
+          zipArchive([
+            { name: 'raw.zarr/.zattrs', data: json({ 'bioformats2raw.layout': 3 }) },
+            { name: 'raw.zarr/0/.zattrs', data: json({ multiscales: [] }) },
+          ]),
+        ],
+        [
+          'https://example.test/zips/table.zarr.zip',
+          zipArchive([
+            { name: 'table.zarr/.zattrs', data: json({ 'encoding-type': 'anndata' }) },
           ]),
         ],
       ]),
@@ -1652,8 +1667,26 @@ describe('Icechunk repositories', () => {
       ],
     })
     await expect(
-      detectSpatialDataset('https://example.test/zips/image.zarr.zip', { fetcher }),
-    ).rejects.toThrow('holds a Zarr store (image.zarr/.zattrs) that is not SpatialData')
+      detectSpatialDataset('https://example.test/zips/image.ome.zarr.zip', { fetcher }),
+    ).resolves.toMatchObject({
+      platform: 'image',
+      imageUrl: 'https://example.test/zips/image.ome.zarr.zip',
+      imageKind: 'ome-zarr',
+      checked: [
+        expect.objectContaining({ path: 'store.zip', ok: true }),
+        expect.objectContaining({
+          path: 'image.ome.zarr/.zattrs in the zip (OME-Zarr image)',
+        }),
+      ],
+    })
+    await expect(
+      detectSpatialDataset('https://example.test/zips/raw.zip', { fetcher }),
+    ).resolves.toMatchObject({ platform: 'image', imageKind: 'ome-zarr' })
+    await expect(
+      detectSpatialDataset('https://example.test/zips/table.zarr.zip', { fetcher }),
+    ).rejects.toThrow(
+      'holds a Zarr store (table.zarr/.zattrs) that is neither SpatialData nor an OME-Zarr image',
+    )
     await expect(
       detectSpatialDataset('https://example.test/zips/missing.zarr.zip', { fetcher }),
     ).resolves.toMatchObject({
