@@ -191,6 +191,30 @@ describe('usePlotsWorkflow (plan 22-D12)', () => {
     expect(result.current.stats.has('Actb')).toBe(true)
   })
 
+  it('reads the rows again on retry when reading them failed', async () => {
+    const geneValuesRowIds = vi
+      .fn<GeneValuesSource['geneValuesRowIds']>()
+      .mockRejectedValueOnce(new Error('Row IDs unreadable'))
+      .mockResolvedValue(ROW_IDS)
+    const dataset = { ...source(), geneValuesRowIds }
+    const { result } = renderHook((props) => usePlotsWorkflow(props), {
+      initialProps: input(dataset),
+    })
+    await waitFor(() => {
+      expect(result.current.status).toBe('error')
+    })
+    expect(result.current.message).toBe('Row IDs unreadable')
+
+    act(() => {
+      result.current.retry()
+    })
+    await waitFor(() => {
+      expect(result.current.status).toBe('ready')
+    })
+    expect(geneValuesRowIds).toHaveBeenCalledTimes(2)
+    expect(result.current.stats.has('Actb')).toBe(true)
+  })
+
   it('waits for Read before a large read, then reads that size without asking', async () => {
     // A CSR matrix over HTTP: every read fetches all of it.
     const dataset = source(undefined, async (genes) => ({

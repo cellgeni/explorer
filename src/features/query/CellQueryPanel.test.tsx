@@ -11,9 +11,13 @@ import type {
 } from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import type { CellQueryCondition } from './cellQuery'
-import { createCellQuerySession } from './cellQuerySession'
+import { createCellQuerySession, type CellQuerySession } from './cellQuerySession'
 import { CellQueryPanel } from './CellQueryPanel'
-import { useCellQueryModel, type CellQueryModelInput } from './useCellQueryModel'
+import {
+  useCellQueryModel,
+  type CellQueryModel,
+  type CellQueryModelInput,
+} from './useCellQueryModel'
 
 const DATASET = 'https://example.test/sample.h5ad'
 
@@ -53,12 +57,44 @@ const TRACK: ContinuousCellMetadataTrack = {
   max: 1,
 }
 
+// Sessions whose runs wait while `held`, so a test can act before a result
+// arrives.
+function heldSessions() {
+  const waiting: (() => void)[] = []
+  const sessions = {
+    held: false,
+    waiting,
+    release() {
+      sessions.held = false
+      for (const resume of waiting.splice(0)) resume()
+    },
+    create(): CellQuerySession {
+      const session = createCellQuerySession(null)
+      return {
+        ...session,
+        run: async (conditions, sort) => {
+          if (sessions.held) {
+            await new Promise<void>((resolve) => {
+              waiting.push(resolve)
+            })
+          }
+          return session.run(conditions, sort)
+        },
+      }
+    },
+  }
+  return sessions
+}
+
 function Harness({
   initial = [],
   overrides = {},
+  onQuery,
 }: {
   readonly initial?: readonly CellQueryCondition[]
   readonly overrides?: Partial<CellQueryModelInput>
+  // Sees each render's model, so a test can call its handlers directly.
+  readonly onQuery?: (query: CellQueryModel) => void
 }) {
   const [conditions, setConditions] = useState(initial)
   const query = useCellQueryModel({
@@ -93,6 +129,7 @@ function Harness({
     createSession: () => createCellQuerySession(null),
     ...overrides,
   })
+  onQuery?.(query)
 
   return (
     <div>
@@ -237,6 +274,42 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
     })
   })
 
+  it('still matches when the sort column is not in the next dataset, and sorts again on return', async () => {
+    const { rerender } = render(<Harness />)
+    await waitFor(() => {
+      expect(rowTexts()).toHaveLength(4)
+    })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Add column' }), {
+      target: { value: 'cell:transcripts' },
+    })
+    fireEvent.click(await screen.findByRole('button', { name: /^Transcript count/ }))
+    await waitFor(() => {
+      expect(rowTexts()).toEqual(['c4 | 5', 'c1 | 10', 'c2 | 25', 'c3 | 40'])
+    })
+
+    // H5AD cells, whose transcript counts of 0 list no Transcript count column.
+    const otherCells = [cell('d1', 0, 20), cell('d2', 0, 10), cell('d3', 0, 30)]
+    rerender(
+      <Harness
+        overrides={{ datasetUrl: 'https://example.test/other.h5ad', cells: otherCells }}
+      />,
+    )
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('3 cells, no conditions')
+    })
+    await waitFor(() => {
+      expect(rowTexts()).toEqual(['d1 | ', 'd2 | ', 'd3 | '])
+    })
+    expect(
+      screen.getByRole('columnheader', { name: /cell:transcripts/ }),
+    ).toHaveAttribute('aria-sort', 'none')
+
+    rerender(<Harness />)
+    await waitFor(() => {
+      expect(rowTexts()).toEqual(['c4 | 5', 'c1 | 10', 'c2 | 25', 'c3 | 40'])
+    })
+  })
+
   it('moves between rows with the arrow keys', async () => {
     render(<Harness />)
     await waitFor(() => {
@@ -299,6 +372,73 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
       expect(blobs).toHaveLength(1)
     })
     expect(await blobs[0]?.text()).toBe('cell_id,leiden\nc3,B cells\nc4,B cells')
+  })
+
+  it('exports the matches of the query as it stands, not those of the edit before', async () => {
+    const blobs: Blob[] = []
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+      blobs.push(blob as Blob)
+      return 'blob:cell-query'
+    })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+    const sessions = heldSessions()
+    let latest: CellQueryModel | null = null
+    render(
+      <Harness
+        overrides={{ createSession: sessions.create }}
+        onQuery={(query) => {
+          latest = query
+        }}
+        initial={[
+          {
+            kind: 'number',
+            columnId: 'cell:transcripts',
+            operator: 'at-least',
+            min: 0,
+            max: Infinity,
+          },
+        ]}
+      />,
+    )
+    const exportCsv = screen.getByRole('button', { name: 'Export CSV' })
+    await waitFor(() => {
+      expect(exportCsv).toBeEnabled()
+    })
+    expect(rowTexts()).toHaveLength(4)
+
+    // The edit's run waits, with the four rows before it still listed.
+    sessions.held = true
+    const from = screen.getByRole('spinbutton', { name: 'From' })
+    fireEvent.change(from, { target: { value: '20' } })
+    fireEvent.blur(from)
+    await waitFor(() => {
+      expect(sessions.waiting).not.toHaveLength(0)
+    })
+    expect(screen.getByTestId('status')).toHaveTextContent('Matching')
+    expect(rowTexts()).toHaveLength(4)
+    expect(exportCsv).toBeDisabled()
+    fireEvent.click(exportCsv)
+    act(() => {
+      latest?.onExportCsv()
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    })
+    expect(blobs).toHaveLength(0)
+
+    sessions.release()
+    await waitFor(() => {
+      expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+    })
+    await waitFor(() => {
+      expect(exportCsv).toBeEnabled()
+    })
+    fireEvent.click(exportCsv)
+    await waitFor(() => {
+      expect(blobs).toHaveLength(1)
+    })
+    expect(await blobs[0]?.text()).toBe('cell_id,Transcript count\nc2,25\nc3,40')
   })
 
   it('says when a condition names a column the dataset does not list', async () => {

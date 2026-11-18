@@ -147,7 +147,11 @@ platform's code is a separate chunk:
 | `image`       | `ImageOnlyDataset` (`src/datasets/imageOnlyDataset.ts`)                           | [Image sources](./modalities/image.md)     |
 
 `cachedSpatialDataset` memoizes the instance per URL and drops failed
-instances so a retry starts fresh.
+instances so a retry starts fresh. Instances are kept in a `DatasetCache`
+(`src/datasets/datasetCache.ts`): the viewer retains the dataset it shows
+and a collection preview the one it is reading (`retainDataset`), and of the
+others the two used last are kept. Older ones are disposed (`dispose()`),
+which closes a Xenium dataset's DuckDB client and an H5AD's file worker.
 
 All implementations satisfy `SpatialDataset` (`src/datasets/spatialDataset.ts`):
 
@@ -390,18 +394,18 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 
 ## Caching
 
-| Cache                                                  | Scope                                                                                                                        | Limits                                        | File                                                |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | --------------------------------------------------- |
-| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU | `src/data/persistentByteRangeCache.ts`              |
-| Dataset instances                                      | Per URL                                                                                                                      | Dropped on failure, else kept until reload    | `datasetFactory.ts`, `xeniumDatasetCache.ts`        |
-| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL        | `src/data/datasetFiles.ts`                          |
-| Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                            | `rangeSupport.ts`                                   |
-| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder     | `src/data/folderListing.ts`                         |
-| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up    | `src/data/gex.ts`                                   |
-| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB    | 128 MiB of blocks each; dropped on failure    | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts` |
-| SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                   | `src/zarr/zarrStores.ts`                            |
-| Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                            | `src/tiff/tileCache.ts`                             |
-| Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                   | `visiumHdDatasetReaders.ts`                         |
+| Cache                                                  | Scope                                                                                                                        | Limits                                                                                   | File                                                            |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU                                            | `src/data/persistentByteRangeCache.ts`                          |
+| Dataset instances                                      | Per URL                                                                                                                      | Retained while in use, else last 2 (1 for the Xenium side instances); dropped on failure | `datasetCache.ts`, `datasetFactory.ts`, `xeniumDatasetCache.ts` |
+| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL                                                   | `src/data/datasetFiles.ts`                                      |
+| Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                                                                       | `rangeSupport.ts`                                               |
+| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder                                                | `src/data/folderListing.ts`                                     |
+| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up                                               | `src/data/gex.ts`                                               |
+| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB    | 128 MiB of blocks each; dropped on failure                                               | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts`             |
+| SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                                                              | `src/zarr/zarrStores.ts`                                        |
+| Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                                                                       | `src/tiff/tileCache.ts`                                         |
+| Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                                                              | `visiumHdDatasetReaders.ts`                                     |
 
 The byte-range cache (database version 3) keeps each range's bytes, each
 range's size and last access, and the cache's totals in three object stores. A

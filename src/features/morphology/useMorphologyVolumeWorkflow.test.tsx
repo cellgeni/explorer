@@ -194,6 +194,46 @@ describe('useMorphologyVolumeWorkflow', () => {
     expect(result.current.channels.map((channel) => channel.id)).toEqual(['A'])
   })
 
+  it('stops and ignores the reads of earlier images that settle late', async () => {
+    const reads: Read[] = []
+    const { result, rerender } = renderWorkflow({
+      image: volumeImage('https://example.test/first.ome.zarr', reads),
+      settings: settings(['A']),
+    })
+
+    rerender({
+      image: volumeImage('https://example.test/second.ome.zarr', reads),
+      settings: settings(['A']),
+    })
+
+    // The first image's stopped read rejects after the second image's starts.
+    await act(async () => {
+      reads[0]?.reject(new DOMException('The read was stopped', 'AbortError'))
+      await Promise.resolve()
+    })
+    rerender({
+      image: volumeImage('https://example.test/third.ome.zarr', reads),
+      settings: settings(['A']),
+    })
+
+    expect(reads.map((read) => read.signal?.aborted)).toEqual([true, true, false])
+
+    // The second image's read settles after the third image's.
+    await act(async () => {
+      reads[2]?.resolve(volume(3))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      reads[1]?.onProgress?.(2)
+      reads[1]?.resolve(volume(2))
+      await Promise.resolve()
+    })
+
+    expect(reads).toHaveLength(3)
+    expect(result.current).toMatchObject({ progress: null, error: null })
+    expect(result.current.channels.map((channel) => channel.texture.data[0])).toEqual([3])
+  })
+
   it('stops reading when it unmounts', () => {
     const reads: Read[] = []
     const { unmount } = renderWorkflow({

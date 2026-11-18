@@ -50,7 +50,133 @@ describe('cached zip range reader', () => {
     await expect(readTail(resized)).resolves.toEqual([2, 2, 2, 2])
     await expect(readTail(rewritten)).resolves.toEqual([3, 3, 3, 3])
   })
+
+  it('refuses a host that ignores Range without reading the whole zip', async () => {
+    const cache = new MemoryByteRangeCache()
+    const body = countedBody(100, 10)
+    const reader = new CachedHttpRangeReader(
+      ZIP_URL,
+      cache,
+      rangeReplies(() => new Response(body.stream, { status: 200 })),
+    )
+
+    await expect(reader.read(96, 4)).rejects.toThrow(
+      'the host ignored the range request (HTTP 200 for bytes 96-99)',
+    )
+    expect(body.cancelled()).toBe(true)
+    expect(body.pulled()).toBeLessThan(100)
+    expect(cache.keys()).toEqual([])
+  })
+
+  it('refuses a range shorter than asked for', async () => {
+    const cache = new MemoryByteRangeCache()
+    const reader = new CachedHttpRangeReader(
+      ZIP_URL,
+      cache,
+      rangeReplies(() => new Response(new Uint8Array(3), { status: 206 })),
+    )
+
+    await expect(reader.read(96, 4)).rejects.toThrow(
+      '3 bytes returned for bytes 96-99 (4 expected)',
+    )
+    expect(cache.keys()).toEqual([])
+  })
+
+  it('stops reading a range longer than asked for', async () => {
+    const body = countedBody(1_000, 10)
+    const reader = new CachedHttpRangeReader(
+      ZIP_URL,
+      null,
+      rangeReplies(() => new Response(body.stream, { status: 206 })),
+    )
+
+    await expect(reader.read(96, 4)).rejects.toThrow(
+      'more than 4 bytes returned for bytes 96-99',
+    )
+    expect(body.cancelled()).toBe(true)
+    expect(body.pulled()).toBe(10)
+  })
+
+  it('refuses a range whose headers name other bytes before reading it', async () => {
+    const replies = [
+      { 'Content-Range': 'bytes 0-3/100' },
+      { 'Content-Range': 'bytes 0-99/100' },
+      { 'Content-Length': '100' },
+    ]
+
+    for (const headers of replies) {
+      const body = countedBody(4, 4)
+      const reader = new CachedHttpRangeReader(
+        ZIP_URL,
+        null,
+        rangeReplies(() => new Response(body.stream, { status: 206, headers })),
+      )
+
+      await expect(reader.read(96, 4)).rejects.toThrow('bytes 96-99')
+      expect(body.cancelled()).toBe(true)
+      expect(body.pulled()).toBe(0)
+    }
+  })
+
+  it('reads a range whose headers match it', async () => {
+    const reader = new CachedHttpRangeReader(
+      ZIP_URL,
+      null,
+      rangeReplies(
+        () =>
+          new Response(Uint8Array.of(1, 2, 3, 4), {
+            status: 206,
+            headers: { 'Content-Range': 'bytes 96-99/100', 'Content-Length': '4' },
+          }),
+      ),
+    )
+
+    await expect(reader.read(96, 4)).resolves.toEqual(Uint8Array.of(1, 2, 3, 4))
+  })
 })
+
+// A 100-byte zip whose range requests get `reply`.
+function rangeReplies(reply: () => Response): typeof fetch {
+  return (async (_input: RequestInfo | URL, init?: RequestInit) =>
+    init?.method === 'HEAD'
+      ? new Response(null, { headers: { 'Content-Length': '100' } })
+      : reply()) as typeof fetch
+}
+
+// A body of `byteLength` bytes sent `chunkLength` at a time, counting the
+// bytes the reader pulled and whether it was cancelled.
+function countedBody(
+  byteLength: number,
+  chunkLength: number,
+): {
+  readonly stream: ReadableStream<Uint8Array>
+  readonly pulled: () => number
+  readonly cancelled: () => boolean
+} {
+  let pulled = 0
+  let cancelled = false
+  const stream = new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        const length = Math.min(chunkLength, byteLength - pulled)
+
+        if (length === 0) {
+          controller.close()
+          return
+        }
+
+        pulled += length
+        controller.enqueue(new Uint8Array(length))
+      },
+      cancel() {
+        cancelled = true
+      },
+    },
+    { highWaterMark: 0 },
+  )
+
+  return { stream, pulled: () => pulled, cancelled: () => cancelled }
+}
 
 // A zip of `byteLength` bytes, all `value`, recording each request.
 function zipServer(file: {

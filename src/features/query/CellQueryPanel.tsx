@@ -386,7 +386,7 @@ function CellQueryActions({ query }: { readonly query: CellQueryModel }) {
         </Button>
         <Button
           title={`Download the table's columns for every matching ${query.elementNoun.replace(/s$/, '')} as CSV`}
-          disabled={query.table.rowCount === 0 || query.exporting}
+          disabled={!query.canExport}
           onClick={query.onExportCsv}
         >
           {query.exporting ? 'Exporting…' : 'Export CSV'}

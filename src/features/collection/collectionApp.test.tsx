@@ -195,6 +195,47 @@ describe('App with a dataset collection', () => {
     expect(document.title).toBe('1dpi-a.h5ad · Spatial Omics Explorer')
   })
 
+  it('keeps the dataset shown open, and lets it go once another is shown', async () => {
+    window.history.replaceState(null, '', `/?collection=${COLLECTION_URL}`)
+    const retained = new Map<string, number>()
+    const retainDataset = vi.fn((url: string) => {
+      retained.set(url, (retained.get(url) ?? 0) + 1)
+      return () => retained.set(url, (retained.get(url) ?? 0) - 1)
+    })
+
+    render(
+      <TestApp
+        loadCollection={async () => COLLECTION}
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        retainDataset={retainDataset}
+      />,
+    )
+
+    const bar = await screen.findByRole('navigation', { name: 'Collection' })
+    expect(await within(bar).findByRole('button', { name: 'Sham A' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    await waitFor(() => expect(retained.get(SHAM_A)).toBe(1))
+
+    fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))
+
+    expect(await within(bar).findByRole('button', { name: '1 dpi A' })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    // Previews retain only while they read, so only the shown one stays.
+    await waitFor(() => {
+      expect(retained.get(DPI_A)).toBe(1)
+      expect(retained.get(SHAM_A)).toBe(0)
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+    })
+    expect(retained.get(DPI_A)).toBe(1)
+  })
+
   it('fits the next dataset rather than keeping the link view', async () => {
     window.history.replaceState(
       null,

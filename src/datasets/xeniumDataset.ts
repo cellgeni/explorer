@@ -291,6 +291,7 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
     options?: AnalysisAnnotationQueryOptions,
   ) => Promise<readonly Annotation[]>
   private readonly validateRangeSupport: DatasetRangeValidator
+  private readonly ownsDuckClient: boolean
   private duckClientPromise: Promise<DuckDbClientLike> | null = null
   private metaPromise: Promise<DatasetMeta> | null = null
   // Cleared when nucleus_boundaries.parquet has no label_id column.
@@ -336,6 +337,8 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
           await import('../data/analysisAnnotations')
         return readAnalysisZarrAnnotations(analysisUrl, matrixUrl, annotationOptions)
       })
+    this.ownsDuckClient =
+      options.createDuckDbClient !== undefined || options.duckDbClient === undefined
     this.duckFactory =
       options.createDuckDbClient ??
       (() => {
@@ -355,6 +358,14 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
   meta(): Promise<DatasetMeta> {
     this.metaPromise ??= this.loadMeta()
     return this.metaPromise
+  }
+
+  // Closes the DuckDB client this dataset started, ending its worker. A
+  // client passed in belongs to the caller. A later query starts another.
+  dispose(): void {
+    const client = this.ownsDuckClient ? this.duckClientPromise : null
+    this.duckClientPromise = null
+    void client?.then((started) => started.close?.()).catch(() => undefined)
   }
 
   async warm(): Promise<void> {
@@ -702,8 +713,17 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
     return client.conn
   }
 
+  // Concurrent callers share one start. A start that fails is forgotten, so
+  // the next query tries again rather than repeating the failure.
   private duckClient(): Promise<DuckDbClientLike> {
-    this.duckClientPromise ??= this.duckFactory()
+    if (this.duckClientPromise === null) {
+      const starting = this.duckFactory()
+      this.duckClientPromise = starting
+      starting.catch(() => {
+        if (this.duckClientPromise === starting) this.duckClientPromise = null
+      })
+    }
+
     return this.duckClientPromise
   }
 

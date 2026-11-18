@@ -189,6 +189,9 @@ export class CollectionPreviewStore {
   private async run(url: string): Promise<void> {
     const controller = new AbortController()
     const { signal } = controller
+    // The datasets read stay open until the reads end, however many others
+    // are opened meanwhile.
+    const release = this.loaders.retainDataset?.(url)
     this.running.set(url, controller)
     this.changed()
 
@@ -229,6 +232,8 @@ export class CollectionPreviewStore {
         this.errors.set(url, error instanceof Error ? error.message : String(error))
       }
     } finally {
+      release?.()
+
       if (this.running.get(url) === controller) {
         this.running.delete(url)
         this.changed()

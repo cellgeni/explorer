@@ -45,6 +45,7 @@ import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { readParquetRows } from '../../data/parquetRows'
 import { readParquetStructure } from '../../data/parquetStructure'
 import { readZarrStructure } from '../../zarr/zarrStructure'
+import { retainDataset } from '../../datasets/datasetCache'
 import {
   cachedSpatialDataset,
   detectSpatialDataset,
@@ -258,12 +259,17 @@ export type SpatialDatasetLoader = (
   options?: CachedSpatialDatasetOptions,
 ) => Promise<AnySpatialDataset>
 
+// Keeps the datasets opened for a URL from being disposed until the returned
+// release is called (datasetCache.ts).
+export type DatasetRetainer = (baseUrl: string) => () => void
+
 export interface AppDependencies {
   readonly dataset: {
     readonly loadDatasetOverview: DatasetOverviewLoader
     readonly loadGenePanel: GenePanelLoader
     readonly detectSpatialDataset: SpatialDatasetDetector
     readonly getSpatialDataset: SpatialDatasetLoader
+    readonly retainDataset: DatasetRetainer
     readonly warmDatasetForRoi: DatasetWarmupLoader
     readonly loadExamplesIndex: ExamplesIndexLoader
     readonly loadCollection: CollectionLoader
@@ -333,6 +339,7 @@ export type AppDependencySlotOverrides = Partial<{
   readonly readParquetRows: ParquetRowsReader
   readonly detectSpatialDataset: SpatialDatasetDetector
   readonly getSpatialDataset: SpatialDatasetLoader
+  readonly retainDataset: DatasetRetainer
   readonly computeAutoChannelContrast: AutoChannelContrastLoader
   readonly loadExamplesIndex: ExamplesIndexLoader
   readonly loadCollection: CollectionLoader
@@ -348,6 +355,7 @@ export const defaultAppDependencies = {
     loadGenePanel,
     detectSpatialDataset,
     getSpatialDataset: cachedSpatialDataset,
+    retainDataset,
     warmDatasetForRoi,
     loadExamplesIndex: fetchExamplesIndex,
     loadCollection: fetchDatasetCollection,

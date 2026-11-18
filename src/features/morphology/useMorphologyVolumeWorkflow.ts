@@ -146,8 +146,12 @@ export function useMorphologyVolumeWorkflow({
       }
 
       const controller = new AbortController()
+      // A stopped read can settle after a newer read of the same channel id
+      // has taken its place; only the read in flight reports or ends.
+      const inFlight = () =>
+        !controller.signal.aborted && reads.controllers.get(id) === controller
       const update = (change: (state: LoadedVolumes) => LoadedVolumes) => {
-        if (controller.signal.aborted) {
+        if (!inFlight()) {
           return
         }
 
@@ -164,6 +168,10 @@ export function useMorphologyVolumeWorkflow({
         }))
       }).then(
         (volume) => {
+          if (!inFlight()) {
+            return
+          }
+
           const texture = volumeTextureData(volume)
 
           update((state) => ({
@@ -174,6 +182,10 @@ export function useMorphologyVolumeWorkflow({
           reads.controllers.delete(id)
         },
         (error: unknown) => {
+          if (!inFlight()) {
+            return
+          }
+
           update((state) => ({
             ...state,
             progress: withoutEntry(state.progress, id),

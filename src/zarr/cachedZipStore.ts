@@ -84,13 +84,7 @@ export class CachedHttpRangeReader {
           },
         })
 
-        if (!response.ok) {
-          throw new Error(
-            `failed http request ${this.url}, status: ${response.status} offset: ${offset} size: ${size}: ${response.statusText}`,
-          )
-        }
-
-        return new Uint8Array(await response.arrayBuffer())
+        return readRangeBody(this.url, response, offset, size)
       },
     })
 
@@ -124,4 +118,81 @@ export class CachedHttpRangeReader {
     }
     return this.head
   }
+}
+
+// The bytes of a 206 reply to `bytes=offset-(offset+size-1)`. A host that
+// ignores Range answers 200 with the whole zip, so anything but 206 is
+// refused unread. Content-Range and Content-Length are checked when CORS
+// exposes them, and the body is read only up to `size` bytes, so a reply
+// longer than asked for is cancelled rather than downloaded.
+async function readRangeBody(
+  url: string,
+  response: Response,
+  offset: number,
+  size: number,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const range = `bytes ${offset}-${offset + size - 1}`
+  const refuse = async (reason: string): Promise<never> => {
+    await response.body?.cancel().catch(() => undefined)
+    throw new Error(`failed http request ${url}, ${reason}`)
+  }
+
+  if (response.status !== 206) {
+    return refuse(
+      response.status === 200
+        ? `the host ignored the range request (HTTP 200 for ${range})`
+        : `status: ${response.status} for ${range}: ${response.statusText}`,
+    )
+  }
+
+  const contentRange = response.headers.get('Content-Range')
+  const returned =
+    contentRange === null ? null : /^bytes (\d+)-(\d+)\//i.exec(contentRange.trim())
+
+  if (
+    contentRange !== null &&
+    (returned === null ||
+      Number(returned[1]) !== offset ||
+      Number(returned[2]) !== offset + size - 1)
+  ) {
+    return refuse(`Content-Range ${contentRange} does not match ${range}`)
+  }
+
+  const contentLength = response.headers.get('Content-Length')
+
+  if (contentLength !== null && Number(contentLength) !== size) {
+    return refuse(`${contentLength} bytes returned for ${range} (${size} expected)`)
+  }
+
+  if (response.body === null) {
+    return refuse(`no body returned for ${range}`)
+  }
+
+  const bytes = new Uint8Array(size)
+  const reader = response.body.getReader()
+  let received = 0
+
+  for (;;) {
+    const { done, value } = await reader.read()
+
+    if (done) break
+
+    if (received + value.byteLength > size) {
+      await reader.cancel().catch(() => undefined)
+      throw new Error(
+        `failed http request ${url}, more than ${size} bytes returned for ${range}`,
+      )
+    }
+
+    bytes.set(value, received)
+    received += value.byteLength
+  }
+
+  if (received !== size) {
+    throw new Error(
+      `failed http request ${url}, ${received} bytes returned for ${range} (${size} expected)`,
+    )
+  }
+
+  return bytes
 }

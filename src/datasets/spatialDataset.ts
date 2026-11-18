@@ -192,4 +192,7 @@ export interface SpatialDataset<ElementId extends SpatialElementId = SpatialElem
     scope: TranscriptScope,
     minQv: number,
   ): Promise<GexResult<ElementId>>
+  // Ends the workers the dataset started, once the viewer has stopped using
+  // it (see datasetCache.ts).
+  dispose?(): void
 }

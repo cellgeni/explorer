@@ -129,8 +129,8 @@ interface DatasetEntry {
   readonly url: string
   readonly session: PlotStatsSession
   readonly source: Promise<PlotsSource>
-  // The source has opened, or failed to; a failed one is opened again on
-  // Try again.
+  // The source has opened and its rows are read, or either failed; a failed
+  // one is opened again, rows and all, on Try again.
   opened: 'pending' | 'ready' | 'failed'
   readonly geneErrors: Map<string, string>
   groups: GroupsEntry | null
@@ -252,19 +252,20 @@ async function runPlots(
     const created: DatasetEntry = {
       url,
       session,
-      source: openSource(url).then(
-        async (opened) => {
+      // Failing to read the rows fails the entry too, so Try again does not
+      // keep the rejected promise.
+      source: openSource(url)
+        .then(async (opened) => {
           if (opened.kind === 'ready') {
             session.setRows(await opened.source.geneValuesRowIds())
           }
           created.opened = 'ready'
           return opened
-        },
-        (error: unknown) => {
+        })
+        .catch((error: unknown) => {
           created.opened = 'failed'
           throw error
-        },
-      ),
+        }),
       opened: 'pending',
       geneErrors: new Map(),
       groups: null,

@@ -542,6 +542,7 @@ export function testCellQueryModel(
     canSave: rowCount > 0,
     onSaveClass: vi.fn(),
     exporting: false,
+    canExport: rowCount > 0,
     onExportCsv: vi.fn(),
     ...rest,
   }
