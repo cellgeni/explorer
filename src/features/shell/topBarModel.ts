@@ -6,7 +6,7 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import { TOOL_LABELS, TOOL_ORDER, TOOL_SHORTCUT_KEYS } from './shortcuts'
 
 // The top bar (plan 15.2-B): the dataset name, a
-// summary chip, the tools, and Share, Help and Settings.
+// summary chip, the tools, the window toggles, and Share, Help and Settings.
 export interface TopBarModel {
   // Null before a dataset is ready.
   readonly datasetName: string | null
@@ -29,6 +29,14 @@ export interface ToolGroupModel {
   readonly active: ActiveTool
   readonly options: readonly ToolOption[]
   readonly onSelect: (tool: ActiveTool) => void
+}
+
+// A window the top bar opens and closes: Embedding (15.2-G), Plots (22-D8)
+// or Cell Query (23-D9).
+export interface PanelToggle {
+  readonly panel: 'embedding' | 'plots' | 'query'
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
 }
 
 // The lens radius, and Summarise View, which scans the whole view (D14).

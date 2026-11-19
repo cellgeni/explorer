@@ -4,8 +4,8 @@ import { FloatingWindow, type FloatingWindowSize } from './FloatingWindow'
 import { EMBEDDING_WINDOW_MIN_SIZE, EMBEDDING_WINDOW_SIZE } from './floatingWindowModel'
 
 // The embedding beside the tissue (plan 15.2-G, F23): a window at the top
-// right of the canvas, opened from Cells › Show Embedding. Closing returns
-// focus to Show Embedding (15.5-D).
+// right of the canvas, opened from the top bar's Embedding toggle. Closing
+// returns focus to the toggle (15.5-D).
 export function EmbeddingWindow({
   embedding,
   open,

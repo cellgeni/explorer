@@ -78,9 +78,6 @@ function panelProps(): LayerPanelProps {
     viewOptions: testDatasetInfoModel().viewOptions,
     expanded: null,
     onExpandedChange: vi.fn(),
-    embeddingOpen: false,
-    plotsOpen: false,
-    onEmbeddingOpenChange: vi.fn(),
   }
 }
 
@@ -189,8 +186,6 @@ describe('LayerPanel', () => {
         transcripts={testTranscriptsSectionModel()}
         annotations={testAnnotationsSectionModel()}
         viewOptions={testDatasetInfoModel().viewOptions}
-        embeddingOpen={false}
-        onEmbeddingOpenChange={vi.fn()}
       />,
     )
 
@@ -241,39 +236,9 @@ describe('LayerPanel', () => {
         transcripts={testTranscriptsSectionModel()}
         annotations={testAnnotationsSectionModel()}
         viewOptions={testDatasetInfoModel().viewOptions}
-        embeddingOpen={false}
-        onEmbeddingOpenChange={vi.fn()}
       />,
     )
     expect(options()).toContain('Gene expression')
-  })
-
-  it('opens the Embedding panel from Cells', () => {
-    const onEmbeddingOpenChange = vi.fn()
-    const { rerender } = renderPanel({ onEmbeddingOpenChange })
-
-    const cells = screen.getByRole('region', { name: /^Cells/ })
-    fireEvent.click(within(cells).getByRole('button', { name: 'Show Embedding' }))
-    expect(onEmbeddingOpenChange).toHaveBeenCalledWith(true)
-
-    rerender(
-      <StatefulLayerPanel
-        panel={{ sections: [header('cells', 'Cells')] }}
-        collapsed={false}
-        onCollapsedChange={vi.fn()}
-        image={testImageSectionModel()}
-        cells={testCellsSectionModel()}
-        transcripts={testTranscriptsSectionModel()}
-        annotations={testAnnotationsSectionModel()}
-        viewOptions={testDatasetInfoModel().viewOptions}
-        embeddingOpen
-        onEmbeddingOpenChange={onEmbeddingOpenChange}
-      />,
-    )
-    expect(screen.getByRole('button', { name: 'Hide Embedding' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
   })
 
   it('opens the sections a link names, and reports changes', () => {

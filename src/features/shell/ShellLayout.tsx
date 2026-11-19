@@ -36,7 +36,7 @@ import type { ShellPanelState } from './shellLinkModel'
 import { isLayerPanelKey } from './shortcuts'
 import { TopBar } from './TopBar'
 import { useNarrowScreen } from './useNarrowScreen'
-import type { TopBarModel } from './topBarModel'
+import type { PanelToggle, TopBarModel } from './topBarModel'
 
 interface ShellLayoutProps {
   readonly topBar: TopBarModel
@@ -72,8 +72,9 @@ interface ShellLayoutProps {
 
 // The shell (plan 15.2): the top bar, the canvas with ⓘ's
 // dataset info drawer and the cards over it, the Embedding, Plots and Cell
-// Query windows at its top right, the collection bar under it when a collection is open, and the
-// layer panel docked on the right. Under 860 px the panel is a bottom sheet and the
+// Query windows at its top right, opened from the top bar, the collection bar
+// under it when a collection is open, and the layer panel docked on the
+// right. Under 860 px the panel is a bottom sheet and the
 // cards dock at the bottom (15.2-I).
 export function ShellLayout({
   topBar,
@@ -174,6 +175,22 @@ export function ShellLayout({
     }
   }, [])
 
+  // The top bar opens and closes the windows the dataset has.
+  const panelToggles: PanelToggle[] = []
+  if (embedding !== null) {
+    panelToggles.push({
+      panel: 'embedding',
+      open: embeddingOpen,
+      onOpenChange: setEmbeddingOpen,
+    })
+  }
+  if (plots !== null) {
+    panelToggles.push({ panel: 'plots', open: plotsOpen, onOpenChange: setPlotsOpen })
+  }
+  if (query !== null) {
+    panelToggles.push({ panel: 'query', open: queryOpen, onOpenChange: setQueryOpen })
+  }
+
   // The same element whatever the width, so the sections keep their state.
   const layerPanelContent = (
     <LayerPanel
@@ -189,12 +206,6 @@ export function ShellLayout({
       onExpandedChange={(expanded) => {
         onPanelsChange({ ...panels, expanded })
       }}
-      embeddingOpen={embeddingOpen}
-      onEmbeddingOpenChange={setEmbeddingOpen}
-      plotsOpen={plotsOpen}
-      onPlotsOpenChange={plots === null ? undefined : setPlotsOpen}
-      queryOpen={queryOpen}
-      onQueryOpenChange={query === null ? undefined : setQueryOpen}
       reveal={layerReveal}
       sheet={
         narrow
@@ -217,6 +228,7 @@ export function ShellLayout({
         settings={settings}
         infoOpen={infoOpen}
         onInfoOpenChange={setInfoOpen}
+        panels={panelToggles}
         narrow={narrow}
       />
       <div

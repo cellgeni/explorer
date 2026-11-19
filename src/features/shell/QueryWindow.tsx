@@ -4,8 +4,8 @@ import { FloatingWindow, type FloatingWindowSize } from './FloatingWindow'
 import { QUERY_WINDOW_MIN_SIZE, QUERY_WINDOW_SIZE } from './floatingWindowModel'
 
 // Cell Query (plan 23-D9): conditions on the cells' columns and a table of
-// the cells that match, opened from Cells › Show Query, to the left of the
-// other open windows.
+// the cells that match, opened from the top bar's Query toggle, to the left
+// of the other open windows.
 export function QueryWindow({
   query,
   open,

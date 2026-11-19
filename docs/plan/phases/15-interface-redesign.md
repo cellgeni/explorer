@@ -914,7 +914,9 @@ viewport`; the pinned transcript is in the Transcript card, and the
     - `EmbeddingPanel` redraws when its canvas is resized (a
       `ResizeObserver`).
     - The Cells section has Embedding › `Show Embedding`. With the embeddings
-      gone from the HUD, the new shell renders no HUD.
+      gone from the HUD, the new shell renders no HUD. **Superseded
+      (2026-11-19):** the toggle is `Embedding` in the top bar; see
+      [Additions After The Close-Out](#additions-after-the-close-out).
 - [x] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
       version 1 `tab=` values. (S)
   - dataset → info drawer
@@ -1733,6 +1735,17 @@ Each PR updates the docs it affects. The full list:
 - [x] Outlines with no cell colour are drawn in a dimmer neutral grey, not
       mint over a green fill (#118, 2026-11-15). `docs/architecture.md` lists
       where the default colours are set.
+- [x] The window toggles moved to the top bar (2026-11-19). `Show
+    Embedding`, `Show Plots` and `Show Query` sat in Cells › Panels, below
+      the genes and clusters, about 1,280 px down the panel at 1024 × 768,
+      and people did not find them. They are now `Embedding`, `Plots` and
+      `Query` (`aria-pressed`, one name whether open or not) in a `Panels`
+      group between the tools and Share, above where the windows open. From
+      1100 px they show icon and name; from 860 px the icon only, as the
+      names would run under the tools; under 860 px a `Panels` menu, as the
+      tools have. The dataset name now shrinks, after the summary chip, so
+      ⓘ no longer runs under the tools at 860–1000 px (it did before) or on
+      phones.
 
 Gene scale and annotation class changes are in
 [Phase 4](04-genes-annotations.md#gene-scale-and-annotation-classes-november-2026),

@@ -391,18 +391,22 @@ annotations, a GeoJSON shape or a saved gene set — shows a toast with `Undo`
 for 8 seconds (Ctrl+Z or Cmd+Z also works). Undo only puts things back while
 nothing they cover has changed since.
 
-The Embedding panel, opened from Cells › `Show Embedding`, loads UMAP/t-SNE or
+The Embedding, Plots and Cell Query panels open and close from `Embedding`,
+`Plots` and `Query` at the right of the top bar; on a narrow screen they are
+in its `Panels` menu. A dataset shows only the panels it has.
+
+The Embedding panel, opened from `Embedding` in the top bar, loads UMAP/t-SNE or
 H5AD `obsm` embeddings when the dataset provides them. Clicking an embedding
 point selects the matching spatial cell or Visium HD bin. Selecting a spatial
 or embedding cell also opens the Cell card with metadata, expression, shape
 metrics when boundary geometry is available, and, for Xenium, a compact z-axis
 distribution of molecules/transcripts assigned to that cell.
 
-The Plots panel, opened from Cells › `Show Plots`, plots the selected genes
+The Plots panel, opened from `Plots` in the top bar, plots the selected genes
 by the classes of one of the dataset's sets, or by your selections:
 
 1. Select genes in Cells › Genes (up to 32 are plotted).
-2. Choose `Show Plots`. The dot plot comes first: each dot's size is the
+2. Choose `Plots`. The dot plot comes first: each dot's size is the
    share of the class's cells expressing the gene, and its colour the class's
    mean, with zeros counted.
 3. Under `Group by`, choose the set. `Loaded` lists the sets loaded in Cells ›
@@ -429,10 +433,10 @@ stored by cell (CSR) and read over HTTP, the panel says how large it is and
 waits for `Read`; it reads nothing over 256 MiB. See the
 [UI reference](ui-reference.md#plots-panel).
 
-The Cell Query panel, opened from Cells › `Show Query`, finds cells by their
+The Cell Query panel, opened from `Query` in the top bar, finds cells by their
 classes and values and lists them in a table:
 
-1. Choose `Show Query`. With no conditions, the table lists every cell.
+1. Choose `Query`. With no conditions, the table lists every cell.
 2. Under `Add condition`, choose a column: a cell's own value, such as
    `Transcript count` or `Cell area`; a set of classes, loaded in Clusters or
    read from the dataset for the query alone; your saved selections; or a

@@ -1,5 +1,5 @@
 import { useEffect, useEffectEvent, useId, useRef, type ReactNode } from 'react'
-import { Button, ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
+import { ChevronRightIcon, Disclosure, IconButton } from '../../components/ui'
 import { classNames } from '../../components/ui/classNames'
 import {
   AnnotationLabelLists,
@@ -68,17 +68,6 @@ interface LayerPanelProps {
   // link).
   readonly expanded: readonly LayerSectionId[] | null
   readonly onExpandedChange: (expanded: readonly LayerSectionId[]) => void
-  // Cells › Show Embedding opens the Embedding panel (15.2-G).
-  readonly embeddingOpen: boolean
-  readonly onEmbeddingOpenChange: (open: boolean) => void
-  // Cells › Show Plots opens the Plots panel (22-D8); left out where the
-  // cells have no annotation sets.
-  readonly plotsOpen?: boolean | undefined
-  readonly onPlotsOpenChange?: ((open: boolean) => void) | undefined
-  // Cells › Show Query opens the Cell Query window (23-D9); left out where
-  // the cells cannot be queried.
-  readonly queryOpen?: boolean | undefined
-  readonly onQueryOpenChange?: ((open: boolean) => void) | undefined
   // Under 860 px the panel is a bottom sheet (15.2-I): a handle that names
   // what colours the cells, instead of the collapse button.
   readonly sheet?: LayerSheetProps | undefined
@@ -106,12 +95,6 @@ export function LayerPanel({
   viewOptions,
   expanded: chosenExpanded,
   onExpandedChange,
-  embeddingOpen,
-  onEmbeddingOpenChange,
-  plotsOpen = false,
-  onPlotsOpenChange,
-  queryOpen = false,
-  onQueryOpenChange,
   sheet,
   reveal = null,
 }: LayerPanelProps) {
@@ -127,17 +110,7 @@ export function LayerPanel({
   const bodies: Readonly<Record<LayerSectionId, ReactNode>> = {
     image: <ImageSection image={image} viewOptions={viewOptions} />,
     cells: (
-      <CellsSection
-        cells={cells}
-        annotations={annotations}
-        viewOptions={viewOptions}
-        embeddingOpen={embeddingOpen}
-        onEmbeddingOpenChange={onEmbeddingOpenChange}
-        plotsOpen={plotsOpen}
-        onPlotsOpenChange={onPlotsOpenChange}
-        queryOpen={queryOpen}
-        onQueryOpenChange={onQueryOpenChange}
-      />
+      <CellsSection cells={cells} annotations={annotations} viewOptions={viewOptions} />
     ),
     transcripts: <TranscriptsSection transcripts={transcripts} />,
     annotations: (
@@ -381,22 +354,10 @@ function CellsSection({
   cells,
   annotations,
   viewOptions,
-  embeddingOpen,
-  onEmbeddingOpenChange,
-  plotsOpen,
-  onPlotsOpenChange,
-  queryOpen,
-  onQueryOpenChange,
 }: {
   readonly cells: CellsSectionModel
   readonly annotations: AnnotationsSectionModel
   readonly viewOptions: DatasetViewOptionsModel
-  readonly embeddingOpen: boolean
-  readonly onEmbeddingOpenChange: (open: boolean) => void
-  readonly plotsOpen: boolean
-  readonly onPlotsOpenChange: ((open: boolean) => void) | undefined
-  readonly queryOpen: boolean
-  readonly onQueryOpenChange: ((open: boolean) => void) | undefined
 }) {
   return (
     <>
@@ -426,51 +387,6 @@ function CellsSection({
         <AnnotationSetControls sets={annotations.sets} />
         <AnnotationLabelLists sets={annotations.sets} />
         <MetadataTracksPanel metadataTracks={annotations.metadataTracks} />
-
-        <SubHeading>Panels</SubHeading>
-        <div className="shell-panel-buttons">
-          <Button
-            title={
-              embeddingOpen ? 'Hide the embedding panel' : 'Show the UMAP or t-SNE panel'
-            }
-            aria-pressed={embeddingOpen}
-            onClick={() => {
-              onEmbeddingOpenChange(!embeddingOpen)
-            }}
-          >
-            {embeddingOpen ? 'Hide Embedding' : 'Show Embedding'}
-          </Button>
-          {onPlotsOpenChange === undefined ? null : (
-            <Button
-              title={
-                plotsOpen
-                  ? 'Hide the plots panel'
-                  : 'Show a dot plot of the selected genes by class'
-              }
-              aria-pressed={plotsOpen}
-              onClick={() => {
-                onPlotsOpenChange(!plotsOpen)
-              }}
-            >
-              {plotsOpen ? 'Hide Plots' : 'Show Plots'}
-            </Button>
-          )}
-          {onQueryOpenChange === undefined ? null : (
-            <Button
-              title={
-                queryOpen
-                  ? 'Hide the cell query panel'
-                  : 'Find cells by their classes and values, in a table'
-              }
-              aria-pressed={queryOpen}
-              onClick={() => {
-                onQueryOpenChange(!queryOpen)
-              }}
-            >
-              {queryOpen ? 'Hide Query' : 'Show Query'}
-            </Button>
-          )}
-        </div>
 
         <Disclosure title="Advanced cell options" summary="Advanced">
           <ExpressionDetailControl colour={cells.colour} />
