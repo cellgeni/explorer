@@ -70,13 +70,15 @@ from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
   without storage the list lasts until the page closes.
 - **Examples**: a card per entry of `examples/index.json` with name,
   platform, description, and source and licence (the source links to the
-  repository). The index is read when the start screen or the dataset menu
+  repository). A collection's card says `Collection of {n} datasets` in place
+  of the platform, and its name is a `collection=` link, which reloads the
+  viewer. The index is read when the start screen or the dataset menu
   first opens, from `EXAMPLES_INDEX_URL`
   (`src/features/start/examplesIndex.ts`): GitHub's raw `main` unless the
   build sets `VITE_EXAMPLES_INDEX_URL`. The request gives up after 5 s, and
   the result is kept in `sessionStorage` for the session. Entries without an
-  id, a name or an http(s) manifest URL are skipped, and all text is shown as
-  text.
+  id, a name or an http(s) manifest or collection URL are skipped, and all
+  text is shown as text.
 - If the index cannot be read: "Examples couldn't be loaded from GitHub."
   with `Retry`, and the Xenium demo dataset as a card. An empty index also
   shows the demo.

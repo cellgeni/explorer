@@ -147,7 +147,9 @@ The start screen's examples are public datasets listed in the repository's
 [`examples/`](../examples/README.md) folder, read from GitHub when the start
 screen opens. Each card names the dataset, its platform and where the data
 comes from. Clicking a card opens the example in place; Ctrl-click or
-Cmd-click opens it in a new tab. If GitHub cannot be reached, the start
+Cmd-click opens it in a new tab. A card for a [collection](#collections)
+says how many datasets it lists, and reloads the viewer with the collection
+and its first dataset. If GitHub cannot be reached, the start
 screen says so, offers `Retry`, and still offers the Xenium demo dataset.
 
 The last eight datasets you opened are listed under Recent, in this browser

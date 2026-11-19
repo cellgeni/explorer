@@ -87,8 +87,10 @@ Measured in the browser:
 
 ## Known Gaps
 
-- [ ] Collections cannot be listed in the start-screen gallery or opened from
-      `Load Dataset`.
+- [ ] Collections cannot be opened from `Load Dataset`. Since 2026-11-19
+      the gallery lists collections in `examples/` (a `collectionUrl`
+      instead of a `manifestUrl` in `index.json`, which older viewers
+      skip), but a card is a `collection=` link that reloads the viewer.
 - [ ] No previews by metadata column, and no sorting of previews by
       expression.
 - [ ] Class colours are not written into links.

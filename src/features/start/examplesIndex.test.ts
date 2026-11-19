@@ -5,6 +5,7 @@ import {
   examplesIndexUrl,
   ExamplesIndexError,
   fetchExamplesIndex,
+  isCollectionExample,
   parseExamplesIndex,
   readCachedExamples,
   writeCachedExamples,
@@ -27,6 +28,18 @@ const SKIN = {
     license: 'CC0 1.0',
     citation: 'Steele L et al. (2025)',
   },
+}
+
+const LIVER = {
+  id: 'zenodo/21110855-liver-sections',
+  path: 'zenodo/21110855-liver-sections.json',
+  collectionUrl:
+    'https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json',
+  viewerUrl: 'https://cellgeni.github.io/explorer/?collection=…',
+  platform: 'collection',
+  datasets: 7,
+  name: 'Human liver serial sections, 3D (LYNX NIH_F5)',
+  source: { repository: 'Zenodo', accession: '21110855', license: 'CC BY-NC-ND 4.0' },
 }
 
 describe('examplesIndexUrl', () => {
@@ -88,6 +101,46 @@ describe('parseExamplesIndex', () => {
       manifestUrl: 'http://example.test/explorer.json',
       source: { license: 'CC BY 4.0' },
     })
+  })
+
+  it('reads collections, which have a collection URL instead of a manifest', () => {
+    const examples = parseExamplesIndex({
+      version: 1,
+      examples: [
+        LIVER,
+        { ...LIVER, id: 'no-count', datasets: 'seven' },
+        { ...LIVER, id: 'script', collectionUrl: 'javascript:alert(1)' },
+        { ...LIVER, id: 'both', manifestUrl: SKIN.manifestUrl },
+      ],
+    })
+
+    expect(examples).toEqual([
+      {
+        id: 'zenodo/21110855-liver-sections',
+        name: 'Human liver serial sections, 3D (LYNX NIH_F5)',
+        collectionUrl: LIVER.collectionUrl,
+        datasets: 7,
+        platform: 'collection',
+        source: LIVER.source,
+      },
+      {
+        id: 'no-count',
+        name: LIVER.name,
+        collectionUrl: LIVER.collectionUrl,
+        platform: 'collection',
+        source: LIVER.source,
+      },
+      // A manifest URL makes it a dataset.
+      {
+        id: 'both',
+        name: LIVER.name,
+        manifestUrl: SKIN.manifestUrl,
+        platform: 'collection',
+        source: LIVER.source,
+      },
+    ])
+    expect(isCollectionExample(examples[0]!)).toBe(true)
+    expect(isCollectionExample(examples[2]!)).toBe(false)
   })
 
   it('accepts only version 1 with an examples list', () => {
@@ -178,8 +231,9 @@ describe('fetchExamplesIndex', () => {
 describe('the session cache', () => {
   it('keeps the parsed examples per index URL', () => {
     const storage = memoryStorage()
-    const examples = parseExamplesIndex({ version: 1, examples: [SKIN] })
+    const examples = parseExamplesIndex({ version: 1, examples: [SKIN, LIVER] })
 
+    expect(examples).toHaveLength(2)
     expect(readCachedExamples(storage, DEFAULT_EXAMPLES_INDEX_URL)).toBeNull()
     writeCachedExamples(storage, DEFAULT_EXAMPLES_INDEX_URL, examples)
     expect(readCachedExamples(storage, DEFAULT_EXAMPLES_INDEX_URL)).toEqual(examples)
