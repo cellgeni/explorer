@@ -11,19 +11,22 @@ import { testDatasetInfoModel, testDatasetLibraryModel } from '../../test/sectio
 import { DEMO_DATASET_URL } from '../../store/viewerStore'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import {
+  collectionLinkHref,
   datasetLinkHref,
+  exampleKindLabel,
   examplesUnavailableMessage,
   platformDisplayName,
 } from './datasetLibraryModel'
 import {
   DEFAULT_EXAMPLES_INDEX_URL,
   fetchExamplesIndex,
-  type Example,
+  type CollectionExample,
+  type DatasetExample,
 } from './examplesIndex'
 import { StartScreen } from './StartScreen'
 import { useExamplesIndex } from './useExamplesIndex'
 
-const SKIN: Example = {
+const SKIN: DatasetExample = {
   id: 'bia/S-BIAD2214',
   name: 'Human skin, inflamed eczema (Xenium 5K)',
   manifestUrl:
@@ -36,6 +39,16 @@ const SKIN: Example = {
     url: 'https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214',
     license: 'CC0 1.0',
   },
+}
+
+const LIVER: CollectionExample = {
+  id: 'zenodo/21110855-liver-sections',
+  name: 'Human liver serial sections, 3D (LYNX NIH_F5)',
+  collectionUrl:
+    'https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json',
+  datasets: 7,
+  platform: 'collection',
+  source: { repository: 'Zenodo', accession: '21110855', license: 'CC BY-NC-ND 4.0' },
 }
 
 function renderStartScreen(
@@ -57,6 +70,25 @@ describe('datasetLibraryModel', () => {
     expect(datasetLinkHref(SKIN.manifestUrl, '/explorer/')).toBe(
       `/explorer/?dataset=${encodeURIComponent(SKIN.manifestUrl)}`,
     )
+  })
+
+  it('links to a collection with it in the query', () => {
+    expect(collectionLinkHref(LIVER.collectionUrl, '/explorer/')).toBe(
+      `/explorer/?collection=${encodeURIComponent(LIVER.collectionUrl)}`,
+    )
+  })
+
+  it('says what an example is', () => {
+    expect(exampleKindLabel(SKIN)).toBe('Xenium')
+    expect(exampleKindLabel(LIVER)).toBe('Collection of 7 datasets')
+    expect(exampleKindLabel({ ...LIVER, datasets: 1 })).toBe('Collection of 1 dataset')
+    expect(
+      exampleKindLabel({
+        id: LIVER.id,
+        name: LIVER.name,
+        collectionUrl: LIVER.collectionUrl,
+      }),
+    ).toBe('Collection')
   })
 
   it('names platforms', () => {
@@ -123,6 +155,27 @@ describe('StartScreen', () => {
 
     fireEvent.click(link)
     expect(library.onOpen).toHaveBeenCalledWith(SKIN.manifestUrl)
+  })
+
+  it('links a collection card to the collection, which reloads the viewer', () => {
+    const library = testDatasetLibraryModel({
+      examples: { status: 'ready', examples: [LIVER] },
+    })
+    const start = renderStartScreen(library)
+    const card = within(within(start).getByRole('list', { name: 'Examples' })).getByRole(
+      'listitem',
+    )
+
+    expect(card).toHaveTextContent('Collection of 7 datasets')
+    expect(card).toHaveTextContent('Zenodo 21110855 · CC BY-NC-ND 4.0')
+
+    const link = within(card).getByRole('link', { name: LIVER.name })
+    expect(link).toHaveAttribute(
+      'href',
+      `/?collection=${encodeURIComponent(LIVER.collectionUrl)}`,
+    )
+    fireEvent.click(link)
+    expect(library.onOpen).not.toHaveBeenCalled()
   })
 
   it('offers Retry and the demo when the examples cannot be loaded', () => {

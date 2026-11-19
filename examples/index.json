@@ -162,109 +162,14 @@
       }
     },
     {
-      "id": "zenodo/21110855-section-01",
-      "path": "zenodo/21110855-section-01.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-01.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-01.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 01 (Xenium, SpatialData)",
-      "description": "Serial section 01 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 52,808 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-02",
-      "path": "zenodo/21110855-section-02.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-02.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-02.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 02 (Xenium, SpatialData)",
-      "description": "Serial section 02 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 51,117 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-04",
-      "path": "zenodo/21110855-section-04.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-04.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-04.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 04 (Xenium, SpatialData)",
-      "description": "Serial section 04 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 54,210 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-05",
-      "path": "zenodo/21110855-section-05.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-05.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-05.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 05 (Xenium, SpatialData)",
-      "description": "Serial section 05 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 54,835 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-06",
-      "path": "zenodo/21110855-section-06.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-06.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-06.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 06 (Xenium, SpatialData)",
-      "description": "Serial section 06 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 59,854 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-07",
-      "path": "zenodo/21110855-section-07.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-07.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-07.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 07 (Xenium, SpatialData)",
-      "description": "Serial section 07 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 60,220 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
-      "source": {
-        "repository": "Zenodo",
-        "accession": "21110855",
-        "url": "https://zenodo.org/records/21110855",
-        "license": "CC BY-NC-ND 4.0",
-        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
-      }
-    },
-    {
-      "id": "zenodo/21110855-section-08",
-      "path": "zenodo/21110855-section-08.json",
-      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-08.json",
-      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-section-08.json",
-      "platform": "spatialdata",
-      "name": "Human liver, serial section 08 (Xenium, SpatialData)",
-      "description": "Serial section 08 of human liver sample NIH_F5 (seven Xenium sections, 01 to 08 without 03) on the 377-gene Multi-Tissue panel, read from a zipped SpatialData store: 53,497 cells with their boundaries and annotated cell types over the morphology image; opens on CYP3A4 (pericentral hepatocytes).",
+      "id": "zenodo/21110855-liver-sections",
+      "path": "zenodo/21110855-liver-sections.json",
+      "collectionUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?collection=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json",
+      "platform": "collection",
+      "datasets": 7,
+      "name": "Human liver serial sections, 3D (LYNX NIH_F5)",
+      "description": "Seven serial Xenium sections of human liver sample NIH_F5, 5 µm apart (01 to 08; the deposit has no section 03), on the 377-gene Multi-Tissue panel. Each section opens in its store's aligned coordinate system, which registers its cells to section 04, so the sections line up side by side and stack in 3D. Only section 04 shows its morphology image: the others' are rotated in that frame.",
       "source": {
         "repository": "Zenodo",
         "accession": "21110855",

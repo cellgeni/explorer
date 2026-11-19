@@ -10,7 +10,7 @@
     "license": "CC BY-NC-ND 4.0",
     "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
   },
-  "root": "lynx-liver/",
+  "root": "21110855-liver-sections/",
   "datasets": [
     {
       "dataset": "section-01.json",

@@ -63,7 +63,7 @@ hovering names the section and the Aqp4 score.
 ## Known Gaps
 
 - [x] A truly registered serial-section dataset in the stack (2026-11-18):
-      [`docs/collections/lynx-liver.json`](../../collections/lynx-liver.json),
+      [`examples/zenodo/21110855-liver-sections.json`](../../../examples/zenodo/21110855-liver-sections.json),
       seven LYNX liver Xenium sections 5 µm apart, each opened by a manifest
       in its SpatialData store's `aligned` coordinate system. Pericentral
       CYP3A4 zones run through all seven; the stack settles about 17 s after

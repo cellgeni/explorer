@@ -1,5 +1,9 @@
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
-import { DEFAULT_EXAMPLES_INDEX_URL } from './examplesIndex'
+import {
+  DEFAULT_EXAMPLES_INDEX_URL,
+  isCollectionExample,
+  type Example,
+} from './examplesIndex'
 import type { RecentDataset } from './recentDatasets'
 import type { ExamplesState } from './useExamplesIndex'
 
@@ -22,6 +26,21 @@ export interface DatasetLibraryModel {
 // own host.
 export function datasetLinkHref(datasetUrl: string, pathname: string): string {
   return `${pathname}?dataset=${encodeURIComponent(datasetUrl)}`
+}
+
+// The address that opens a collection, on this deployment. The viewer reads
+// a collection only from the address, so following it reloads the page.
+export function collectionLinkHref(collectionUrl: string, pathname: string): string {
+  return `${pathname}?collection=${encodeURIComponent(collectionUrl)}`
+}
+
+// What an example card says it is: its platform, or a collection and its size.
+export function exampleKindLabel(example: Example): string | null {
+  if (!isCollectionExample(example)) return platformDisplayName(example.platform)
+
+  const count = example.datasets
+  if (count === undefined) return 'Collection'
+  return `Collection of ${count.toLocaleString()} ${count === 1 ? 'dataset' : 'datasets'}`
 }
 
 // "Xenium" for 'xenium'; an unknown platform as written, capitalised.

@@ -9,16 +9,58 @@ import {
   EXAMPLES_README_FILE,
   exampleManifestPaths,
   exampleManifestUrl,
+  isCollectionExample,
 } from '../../scripts/examples-index.ts'
-import { DATASET_MANIFEST_SOURCE_KEYS, parseDatasetManifest } from './datasetManifest'
+import { parseDatasetCollection } from './datasetCollection'
+import {
+  DATASET_MANIFEST_SOURCE_KEYS,
+  parseDatasetManifest,
+  type DatasetManifest,
+} from './datasetManifest'
 
-// The manifests in examples/ are opened from their raw GitHub URLs, so they
-// must validate as they are and must not point back into the repository.
+// The manifests and collections in examples/ are opened from their raw GitHub
+// URLs, so they must validate as they are and their data must not point back
+// into the repository.
 const rootDir = process.cwd()
-const paths = exampleManifestPaths(rootDir)
+const allPaths = exampleManifestPaths(rootDir)
 
-function readExample(path: string): unknown {
-  return JSON.parse(readFileSync(join(rootDir, EXAMPLES_DIR, path), 'utf8'))
+function readExample(path: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(rootDir, EXAMPLES_DIR, path), 'utf8')) as Record<
+    string,
+    unknown
+  >
+}
+
+const paths = allPaths.filter((path) => !isCollectionExample(readExample(path)))
+const collectionPaths = allPaths.filter((path) => isCollectionExample(readExample(path)))
+
+function expectNamedAfterAccession(path: string, accession: string): void {
+  const fileName =
+    path
+      .split('/')
+      .at(-1)
+      ?.replace(/\.json$/, '') ?? ''
+  expect(
+    fileName === accession || fileName.startsWith(`${accession}-`),
+    `${path} is named after its accession, ${accession}`,
+  ).toBe(true)
+}
+
+function expectDataOutsideExamples(manifest: DatasetManifest): void {
+  // Single-file platforms read only their files; the others also read
+  // standard file names from the root.
+  const readsFromRoot = !['h5ad', 'spatialdata', 'image'].includes(manifest.platform)
+  const dataUrls = [
+    ...(readsFromRoot ? [manifest.rootUrl] : []),
+    ...Object.values(manifest.files).map((file) => file.url),
+  ]
+
+  for (const url of dataUrls) {
+    expect(
+      url.startsWith(EXAMPLES_RAW_BASE_URL),
+      `${url} points into examples/ on GitHub`,
+    ).toBe(false)
+  }
 }
 
 describe('example manifests', () => {
@@ -36,30 +78,35 @@ describe('example manifests', () => {
       expect(manifest.source?.[key], `source.${key}`).toBeDefined()
     }
 
-    const fileName =
-      path
-        .split('/')
-        .at(-1)
-        ?.replace(/\.json$/, '') ?? ''
-    const accession = manifest.source?.accession ?? ''
-    expect(
-      fileName === accession || fileName.startsWith(`${accession}-`),
-      `${path} is named after its accession, ${accession}`,
-    ).toBe(true)
+    expectNamedAfterAccession(path, manifest.source?.accession ?? '')
+    expectDataOutsideExamples(manifest)
+  })
 
-    // Single-file platforms read only their files; the others also read
-    // standard file names from the root.
-    const readsFromRoot = !['h5ad', 'spatialdata', 'image'].includes(manifest.platform)
-    const dataUrls = [
-      ...(readsFromRoot ? [manifest.rootUrl] : []),
-      ...Object.values(manifest.files).map((file) => file.url),
-    ]
+  // A collection's datasets are on data hosts, or are dataset manifests in a
+  // folder beside it, which the gallery does not list.
+  it.each(collectionPaths)('%s is a valid collection with its source', (path) => {
+    const collection = parseDatasetCollection(readExample(path), exampleManifestUrl(path))
 
-    for (const url of dataUrls) {
-      expect(
-        url.startsWith(EXAMPLES_RAW_BASE_URL),
-        `${url} points into examples/ on GitHub`,
-      ).toBe(false)
+    expect(collection.name).toBeDefined()
+    expect(collection.description).toBeDefined()
+
+    for (const key of DATASET_MANIFEST_SOURCE_KEYS) {
+      expect(collection.source?.[key], `source.${key}`).toBeDefined()
+    }
+
+    expectNamedAfterAccession(path, collection.source?.accession ?? '')
+
+    for (const entry of collection.datasets) {
+      if (!entry.url.startsWith(EXAMPLES_RAW_BASE_URL)) {
+        expect(entry.url).not.toContain('raw.githubusercontent.com')
+        continue
+      }
+
+      const datasetPath = entry.url.slice(EXAMPLES_RAW_BASE_URL.length)
+      expect(allPaths, `${datasetPath} is not listed as an example`).not.toContain(
+        datasetPath,
+      )
+      expectDataOutsideExamples(parseDatasetManifest(readExample(datasetPath), entry.url))
     }
   })
 

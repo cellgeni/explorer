@@ -1,4 +1,4 @@
-import type { OpenJpegModule } from '@cornerstonejs/codec-openjpeg'
+import type { OpenJpegModule } from '@cornerstonejs/codec-openjpeg/decodewasmjs'
 
 export type Jpeg2000Pixels = Uint8Array | Uint16Array
 
@@ -145,11 +145,33 @@ export function normaliseToRgba(
 export const decodeJ2K = decodeJpeg2000
 export const normaliseToRGBA = normaliseToRgba
 
+// The decode-only WebAssembly build, its .wasm a separate asset. The package's
+// default export is OpenJPEG compiled to JavaScript (wasm2js), which took
+// about ten times as long per Xenium DAPI tile (2026-11-19).
 function ensureDecoderModule(): Promise<OpenJpegModule> {
-  decoderModulePromise ??= import('@cornerstonejs/codec-openjpeg').then(
-    ({ default: createOpenJpegModule }) => createOpenJpegModule(),
-  )
+  decoderModulePromise ??= Promise.all([
+    import('@cornerstonejs/codec-openjpeg/decodewasmjs'),
+    import('@cornerstonejs/codec-openjpeg/decodewasm?url'),
+  ])
+    .then(([{ default: createOpenJpegModule }, { default: wasmUrl }]) =>
+      createOpenJpegModule({
+        // Under Node (vitest) the glue reads the .wasm beside itself with fs;
+        // the bundler's URL is a dev-server path there.
+        locateFile: (path, scriptDirectory) =>
+          runsUnderNode() ? scriptDirectory + path : wasmUrl,
+      }),
+    )
+    .catch((cause: unknown) => {
+      // Lets the next tile fetch the .wasm again after a network failure.
+      decoderModulePromise = null
+      throw cause
+    })
   return decoderModulePromise
+}
+
+function runsUnderNode(): boolean {
+  const process = (globalThis as { process?: { versions?: { node?: unknown } } }).process
+  return typeof process?.versions?.node === 'string'
 }
 
 function percentileWindow(pixels: Jpeg2000Pixels): DisplayWindow {

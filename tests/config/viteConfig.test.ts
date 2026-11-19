@@ -28,7 +28,7 @@ describe('vite config', () => {
       expect.arrayContaining(['@duckdb/duckdb-wasm', 'h5wasm']),
     )
     expect(config.optimizeDeps?.include).toEqual(
-      expect.arrayContaining(['@cornerstonejs/codec-openjpeg']),
+      expect.arrayContaining(['@cornerstonejs/codec-openjpeg/decodewasmjs']),
     )
   })
 

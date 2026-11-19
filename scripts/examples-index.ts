@@ -1,5 +1,7 @@
 // Builds examples/index.json and the table in examples/README.md from the
-// example manifests in examples/<repository>/<ACCESSION>[-<slug>].json.
+// example manifests in examples/<repository>/<ACCESSION>[-<slug>].json. An
+// example can also be a dataset collection, whose own dataset manifests go in
+// a folder beside it, which is not listed.
 //
 //   node scripts/examples-index.ts           write both files
 //   node scripts/examples-index.ts --check   exit 1 if either is out of date
@@ -35,9 +37,15 @@ export interface ExampleEntry {
   // `<repository folder>/<file name without .json>`.
   readonly id: string
   readonly path: string
-  readonly manifestUrl: string
+  // A collection has a collectionUrl instead, so viewers that cannot list
+  // collections skip it.
+  readonly manifestUrl?: string
+  readonly collectionUrl?: string
   readonly viewerUrl: string
+  // `collection` for a collection.
   readonly platform: string
+  // How many datasets a collection lists.
+  readonly datasets?: number
   readonly name: string
   readonly description: string
   readonly source: ExampleSource
@@ -49,7 +57,8 @@ export interface ExamplesBuild {
   readonly readme: string
 }
 
-// Paths of the example manifests, relative to the examples folder, sorted.
+// Paths of the example manifests and collections, relative to the examples
+// folder, sorted.
 export function exampleManifestPaths(rootDir: string): string[] {
   const examplesDir = join(rootDir, EXAMPLES_DIR)
 
@@ -67,8 +76,16 @@ export function exampleManifestUrl(path: string): string {
   return `${EXAMPLES_RAW_BASE_URL}${path}`
 }
 
-export function exampleViewerUrl(manifestUrl: string): string {
-  return `${EXAMPLES_VIEWER_URL}?dataset=${manifestUrl}`
+export function exampleViewerUrl(
+  url: string,
+  param: 'dataset' | 'collection' = 'dataset',
+): string {
+  return `${EXAMPLES_VIEWER_URL}?${param}=${url}`
+}
+
+// A dataset collection lists its datasets; a dataset manifest has none.
+export function isCollectionExample(json: Record<string, unknown>): boolean {
+  return Array.isArray(json.datasets)
 }
 
 export async function buildExamples(rootDir: string): Promise<ExamplesBuild> {
@@ -76,17 +93,33 @@ export async function buildExamples(rootDir: string): Promise<ExamplesBuild> {
     const json = JSON.parse(
       readFileSync(join(rootDir, EXAMPLES_DIR, path), 'utf8'),
     ) as Record<string, unknown>
-    const manifestUrl = exampleManifestUrl(path)
-
-    return {
-      id: path.replace(/\.json$/, ''),
-      path,
-      manifestUrl,
-      viewerUrl: exampleViewerUrl(manifestUrl),
-      platform: String(json.platform),
+    const url = exampleManifestUrl(path)
+    const shared = {
       name: String(json.name ?? path),
       description: String(json.description ?? ''),
       source: (json.source ?? {}) as ExampleSource,
+    }
+    const id = path.replace(/\.json$/, '')
+
+    if (isCollectionExample(json)) {
+      return {
+        id,
+        path,
+        collectionUrl: url,
+        viewerUrl: exampleViewerUrl(url, 'collection'),
+        platform: 'collection',
+        datasets: (json.datasets as readonly unknown[]).length,
+        ...shared,
+      }
+    }
+
+    return {
+      id,
+      path,
+      manifestUrl: url,
+      viewerUrl: exampleViewerUrl(url),
+      platform: String(json.platform),
+      ...shared,
     }
   })
   const indexPath = join(rootDir, EXAMPLES_DIR, EXAMPLES_INDEX_FILE)
@@ -122,9 +155,15 @@ function replaceReadmeTable(readme: string, entries: readonly ExampleEntry[]): s
     const sourceLabel = [repository, accession].filter(Boolean).join(' ')
     const source = url === undefined ? sourceLabel : `[${sourceLabel}](${url})`
 
-    return `| [${cell(entry.name)}](${entry.viewerUrl}) | ${entry.platform} | ${cell(
+    const platform =
+      entry.datasets === undefined
+        ? entry.platform
+        : `${entry.platform} of ${entry.datasets.toLocaleString('en')}`
+    const file = entry.collectionUrl === undefined ? 'manifest' : 'collection'
+
+    return `| [${cell(entry.name)}](${entry.viewerUrl}) | ${platform} | ${cell(
       entry.description,
-    )} | ${source} | ${cell(license ?? '')} | [manifest](${entry.path}) |`
+    )} | ${source} | ${cell(license ?? '')} | [${file}](${entry.path}) |`
   })
   const table = [
     '| Example | Platform | What it shows | Source | Licence | |',

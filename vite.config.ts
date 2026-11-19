@@ -64,7 +64,8 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['@duckdb/duckdb-wasm', 'h5wasm'],
-    include: ['@cornerstonejs/codec-openjpeg'],
+    // The decode-only OpenJPEG glue is CommonJS; its .wasm is a separate asset.
+    include: ['@cornerstonejs/codec-openjpeg/decodewasmjs'],
   },
   plugins: [react(), buildCommitMeta()],
   preview: {
