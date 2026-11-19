@@ -1,6 +1,8 @@
 import type * as zarr from 'zarrita'
+import type { TileCellSums } from '../data/tileCellMeasure'
 import type { TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
+import type { TileMeasure } from './tileDecodeMessages'
 
 // Zarr array metadata as stored (`.zarray` for v2, `zarr.json` for v3), so a
 // worker can rebuild the codec pipeline for one chunk.
@@ -68,6 +70,18 @@ export interface ZarrTraceLabelsMessage {
   readonly levelWidth: number
 }
 
+// Per-cell sums of a window of a chunk (plan 26), for Cell Query's image
+// columns. The chunk comes with the request and is not kept, so a pass over
+// a whole level leaves the canvas's cached chunks alone.
+export interface ZarrMeasureChunkMessage {
+  readonly type: 'measure-chunk'
+  readonly id: number
+  readonly source: ZarrChunkSource
+  readonly bytes: ArrayBuffer | null
+  readonly window: ZarrChunkWindow
+  readonly measure: TileMeasure
+}
+
 type ZarrCodecLoader = typeof zarr.registry extends Map<string, infer Load> ? Load : never
 
 // An entry of zarrita's codec registry, and the chunk metadata zarrita
@@ -102,6 +116,7 @@ export type ZarrDecodeRequest =
   | ZarrRenderTileMessage
   | ZarrSampleTileMessage
   | ZarrTraceLabelsMessage
+  | ZarrMeasureChunkMessage
   | ZarrDecodeCodecMessage
 
 export type ZarrDecodeResponse =
@@ -121,6 +136,7 @@ export type ZarrDecodeResponse =
       readonly pixelCount: number
     }
   | { readonly type: 'labels'; readonly id: number; readonly trace: PackedLabelTrace }
+  | ({ readonly type: 'cell-sums'; readonly id: number } & TileCellSums)
   | { readonly type: 'codec-bytes'; readonly id: number; readonly bytes: ArrayBuffer }
   | ({ readonly type: 'codec-chunk'; readonly id: number } & ZarrCodecChunk)
   // The worker no longer holds the chunk; the caller resends it.

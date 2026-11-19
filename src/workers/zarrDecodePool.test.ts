@@ -17,9 +17,11 @@ class FakeWorker implements ZarrDecodeWorkerLike {
   onerror: ((event: ErrorEvent) => void) | null = null
   readonly chunks = new Set<string>()
   readonly messages: ZarrDecodeRequest[] = []
+  readonly transfers: Transferable[][] = []
 
-  postMessage(message: ZarrDecodeRequest): void {
+  postMessage(message: ZarrDecodeRequest, transfer: Transferable[] = []): void {
     this.messages.push(message)
+    this.transfers.push(transfer)
 
     if (message.type === 'put-chunk') {
       this.chunks.add(message.cacheKey)
@@ -49,6 +51,18 @@ class FakeWorker implements ZarrDecodeWorkerLike {
           bounds: new Int32Array(4),
           pixelCounts: Uint32Array.from([1]),
         },
+      }
+    }
+
+    // Each cell's x as its sum, over one pixel.
+    if (message.type === 'measure-chunk') {
+      const { cells } = message.measure
+      return {
+        type: 'cell-sums',
+        id: message.id,
+        sum: Float64Array.from(cells.x),
+        count: new Uint32Array(cells.x.length).fill(1),
+        above: new Uint32Array(cells.x.length),
       }
     }
 
@@ -295,5 +309,49 @@ describe('ZarrDecodePool', () => {
     await expect(pool.decodeCodec(GZIP, Uint8Array.from([0]))).rejects.toThrow(
       new ZarrDecodeWorkerError('Zarr decode worker failed.'),
     )
+  })
+  it('measures a chunk on the workers in turn, sending it with its cells', async () => {
+    const workers: FakeWorker[] = []
+    const pool = new ZarrDecodePool({
+      size: 2,
+      workerFactory: () => {
+        const worker = new FakeWorker()
+        workers.push(worker)
+        return worker
+      },
+    })
+    const measure = () => ({
+      cells: {
+        x: Float32Array.from([1.5, 2.5]),
+        y: Float32Array.from([0.5, 0.5]),
+        radius: Float32Array.from([1, 1]),
+      },
+      width: 2,
+      height: 2,
+      threshold: 10,
+    })
+
+    const sums = await pool.measureChunk({
+      source: SOURCE,
+      bytes: Uint8Array.from([1, 2, 3, 4]),
+      window: WINDOW,
+      measure: measure(),
+    })
+    await pool.measureChunk({
+      source: SOURCE,
+      bytes: undefined,
+      window: WINDOW,
+      measure: measure(),
+    })
+
+    expect(Array.from(sums.sum)).toEqual([1.5, 2.5])
+    expect(workers).toHaveLength(2)
+    // No chunk is kept: the bytes go with the request, copied, with the cells.
+    expect(workers.flatMap((worker) => worker.messages.map((m) => m.type))).toEqual([
+      'measure-chunk',
+      'measure-chunk',
+    ])
+    expect(workers[0]?.transfers[0]).toHaveLength(4)
+    expect(workers[1]?.transfers[0]).toHaveLength(3)
   })
 })

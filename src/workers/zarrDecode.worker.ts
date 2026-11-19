@@ -4,12 +4,18 @@ import type * as zarr from 'zarrita'
 import { labelWindow, traceLabelEdges } from '../datasets/spatialDataLabelTrace'
 import { numericPixelsToRgba } from '../zarr/omeZarrPixels'
 import { decodeZarrCodec } from './zarrCodecCore'
-import { chunkWindow, chunkWindowSamples, decodeChunk } from './zarrDecodeCore'
+import {
+  chunkWindow,
+  chunkWindowSamples,
+  decodeChunk,
+  measureChunkCells,
+} from './zarrDecodeCore'
 import type {
   ZarrChunkSource,
   ZarrDecodeCodecMessage,
   ZarrDecodeRequest,
   ZarrDecodeResponse,
+  ZarrMeasureChunkMessage,
   ZarrRenderTileMessage,
   ZarrSampleTileMessage,
   ZarrTraceLabelsMessage,
@@ -42,6 +48,11 @@ workerScope.onmessage = (event: MessageEvent<ZarrDecodeRequest>) => {
 
   if (message.type === 'sample-tile') {
     void sampleTile(message)
+    return
+  }
+
+  if (message.type === 'measure-chunk') {
+    void measureChunk(message)
     return
   }
 
@@ -187,6 +198,24 @@ async function traceLabels(message: ZarrTraceLabelsMessage): Promise<void> {
       trace.edges.buffer,
       trace.bounds.buffer,
       trace.pixelCounts.buffer,
+    ])
+  } catch (error) {
+    respond({ type: 'error', id: message.id, error: errorMessage(error) })
+  }
+}
+
+async function measureChunk(message: ZarrMeasureChunkMessage): Promise<void> {
+  try {
+    const sums = await measureChunkCells(
+      message.source,
+      message.bytes,
+      message.window,
+      message.measure,
+    )
+    respond({ type: 'cell-sums', id: message.id, ...sums }, [
+      sums.sum.buffer,
+      sums.count.buffer,
+      sums.above.buffer,
     ])
   } catch (error) {
     respond({ type: 'error', id: message.id, error: errorMessage(error) })

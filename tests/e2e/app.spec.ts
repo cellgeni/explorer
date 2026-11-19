@@ -917,16 +917,18 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
 })
 
-// Serves src/test/fixtures/icechunk/<repository> (see make_fixtures.py there)
-// at the same path, with Range support.
-async function routeIcechunkFixture(page: Page, repository: string) {
-  await page.route(`**/${repository}/**`, async (route) => {
+// Serves src/test/fixtures/<folder>/<name> (see make_fixtures.py and the
+// other scripts there) at /<name>, with byte ranges, suffix ranges and HEAD
+// as a bucket answers them: sharded Zarr v3 arrays read their index from the
+// end of a shard.
+async function routeFixtureFolder(page: Page, folder: string, name: string) {
+  await page.route(`**/${name}/**`, async (route) => {
     const path = new URL(route.request().url()).pathname
     let bytes: Buffer
 
     try {
       bytes = await readFile(
-        new URL(`../../src/test/fixtures/icechunk${path}`, import.meta.url),
+        new URL(`../../src/test/fixtures/${folder}${path}`, import.meta.url),
       )
     } catch {
       await route.fulfill({
@@ -936,21 +938,39 @@ async function routeIcechunkFixture(page: Page, repository: string) {
       return
     }
 
-    const match = /^bytes=(\d+)-(\d+)$/.exec(route.request().headers()['range'] ?? '')
-    const start = match === null ? 0 : Number(match[1])
-    const end = match === null ? bytes.byteLength - 1 : Number(match[2])
-    await route.fulfill({
-      status: match === null ? 200 : 206,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/octet-stream',
-        ...(match === null
-          ? {}
-          : { 'Content-Range': `bytes ${start}-${end}/${bytes.byteLength}` }),
-      },
-      body: bytes.subarray(start, end + 1),
-    })
+    const match = /^bytes=(\d*)-(\d*)$/.exec(route.request().headers()['range'] ?? '')
+    const suffix = match !== null && match[1] === ''
+    const start =
+      match === null ? 0 : suffix ? bytes.byteLength - Number(match[2]) : Number(match[1])
+    const end =
+      match === null || suffix || match[2] === ''
+        ? bytes.byteLength - 1
+        : Math.min(bytes.byteLength - 1, Number(match[2]))
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+      'Content-Type': 'application/octet-stream',
+      'Content-Length': String(end - start + 1),
+      ...(match === null
+        ? {}
+        : { 'Content-Range': `bytes ${start}-${end}/${bytes.byteLength}` }),
+    }
+    await route.fulfill(
+      route.request().method() === 'HEAD'
+        ? { status: 200, headers }
+        : {
+            status: match === null ? 200 : 206,
+            headers,
+            body: bytes.subarray(start, end + 1),
+          },
+    )
   })
+}
+
+// Serves src/test/fixtures/icechunk/<repository> (see make_fixtures.py there)
+// at the same path.
+async function routeIcechunkFixture(page: Page, repository: string) {
+  await routeFixtureFolder(page, 'icechunk', repository)
 }
 
 test('loads AnnData from an Icechunk repository with gene expression @smoke', async ({
@@ -1269,6 +1289,134 @@ test('shows a MERSCOPE .vzg stain and switches it off @smoke', async ({ page }) 
   await expect(
     (await openControls(page, 'image')).getByTitle('MERSCOPE stain to show'),
   ).toHaveValue('', { timeout: H5AD_LOAD_TIMEOUT_MS })
+})
+
+// Plan 26: Cell Query measures the .vzg stain under each cell, a disc of
+// the Radius field's 5 µm as MERSCOPE cells have no area. The fixture's
+// cells' DAPI means at 2 µm/px are about 1,927, 1,987 and 1,430
+// (tifffile and numpy), and 1,810, 1,926 and 1,304 at 0.5 µm/px.
+test('finds MERSCOPE cells by a stain measured under each @smoke', async ({ page }) => {
+  test.setTimeout(120_000)
+  await routeMerscopeFixture(page, '/merscope-vzg', { vzg: true })
+  await page.goto('/')
+
+  await openControls(page, 'open-dataset')
+  await page
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/merscope-vzg/', page.url()).toString())
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /MERSCOPE ready: 3 cells/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expectLogEntry(page, /Morphology image ready/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+
+  const query = await openControls(page, 'query')
+  const addCondition = query.getByRole('combobox', { name: 'Add condition' })
+  const mean = addCondition.locator('optgroup[label="Image"] option', {
+    hasText: /^DAPI mean \(2 µm\/px, radius 5 µm\)$/,
+  })
+  await addCondition.selectOption((await mean.getAttribute('value')) ?? '')
+  const from = query.getByRole('spinbutton', { name: 'From' })
+  await from.fill('1700')
+  await from.press('Enter')
+
+  await expect(query.getByText('2 of 3 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page).toHaveURL(
+    /[#&]query=image%3Amean%3A2%3Ar5%3A[^&]*%7Cat-least%7C1700/,
+  )
+  await expect(query.getByRole('spinbutton', { name: 'Radius' })).toHaveValue('5')
+  await expectLogEntry(page, /Cell query: measured DAPI at level 2 in /)
+
+  const findings: AxeFindings = new Map()
+  await openControls(page, 'query')
+  await collectAxeFindings(page, 'MERSCOPE fixture, image condition', findings)
+  expectAxeFindingsMatchBaseline(findings)
+
+  // A finer level is another column, measured again.
+  await query.getByRole('combobox', { name: 'Resolution' }).selectOption({ index: 0 })
+  await expect(
+    query.getByTitle('DAPI mean (0.5 µm/px, radius 5 µm)', { exact: true }),
+  ).toBeVisible()
+  await expect(query.getByText('2 of 3 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(page, /Cell query: measured DAPI at level 0 in /)
+})
+
+// Plan 26, M2: a SpatialData store's OME-Zarr image, measured chunk by
+// chunk. The store (src/test/fixtures/spatialdata/make_image_store.py) has 6
+// cells at the centres of 24 µm blocks of one value each: DAPI 500 to 5,500
+// in steps of 1,000, and CD3 4,000 and 1,000 in turn. Discs of the Radius
+// field's 5 µm stay inside the blocks, so they measure those values.
+test('finds SpatialData cells by image channels measured under each @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await routeFixtureFolder(page, 'spatialdata', 'image_cells.zarr')
+  await page.goto('/')
+
+  await openControls(page, 'open-dataset')
+  await page
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/image_cells.zarr', page.url()).toString())
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /SpatialData ready: 6 cells/, {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(page, /Morphology image ready/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+
+  const query = await openControls(page, 'query')
+  const addCondition = query.getByRole('combobox', { name: 'Add condition' })
+  const option = (label: RegExp) =>
+    addCondition.locator('optgroup[label="Image"] option', { hasText: label })
+  await addCondition.selectOption(
+    (await option(/^DAPI mean \(2 µm\/px, radius 5 µm\)$/).getAttribute('value')) ?? '',
+  )
+  const from = query.getByRole('spinbutton', { name: 'From' })
+  await from.fill('3000')
+  await from.press('Enter')
+
+  await expect(query.getByText('3 of 6 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page).toHaveURL(
+    /[#&]query=image%3Amean%3A1%3Ar5%3AChannel%3A0%7Cat-least%7C3000/,
+  )
+  await expectLogEntry(page, /Cell query: measured DAPI at level 1 in /)
+  // Each level's read is at most its chunks decoded.
+  await expect(
+    query.getByRole('combobox', { name: 'Resolution' }).locator('option'),
+  ).toHaveText(['1 µm/px, under 0.1 MiB', '2 µm/px, under 0.1 MiB (default)'])
+
+  // CD3 above Otsu's threshold over at least half of each disc.
+  await addCondition.selectOption(
+    (await option(/^CD3 % above [\d,]+ \(2 µm\/px, radius 5 µm\)$/).getAttribute(
+      'value',
+    )) ?? '',
+  )
+  await expect(query.getByText('1 of 6 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  const findings: AxeFindings = new Map()
+  await openControls(page, 'query')
+  await collectAxeFindings(page, 'SpatialData fixture, image conditions', findings)
+  expectAxeFindingsMatchBaseline(findings)
+
+  // The finer level, measured again.
+  await query
+    .getByRole('combobox', { name: 'Resolution' })
+    .first()
+    .selectOption({ index: 0 })
+  await expect(
+    query.getByTitle('DAPI mean (1 µm/px, radius 5 µm)', { exact: true }),
+  ).toBeVisible()
+  await expect(query.getByText('1 of 6 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(page, /Cell query: measured DAPI at level 0 in /)
 })
 
 test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', async ({
@@ -1885,6 +2033,33 @@ test('finds Xenium cells by transcript count and graph cluster @live', async ({
   })
   await expectLogEntry(page, /Cell query: [0-9,]+ of 1,414,155 match in /)
   await expectLogEntry(page, /Cell query: [0-9,]+ outlines? in [0-9,]+ ms/)
+})
+
+// Plan 26: a link with an image condition measures the demo's DAPI under
+// all 1.4 million cells at the default level, 0.85 µm/px (180 MB), as it
+// opens. The time to the count goes into the report.
+test('finds Xenium cells by DAPI measured under each @live', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(400_000)
+  const startedAt = Date.now()
+  const query = 'image:above:2:t2188:Channel:0|at-least|50'
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&panel=query&query=${encodeURIComponent(query)}`,
+  )
+  const panel = page.getByRole('region', { name: 'Cell Query' })
+  await expect(panel.getByText(/^Measuring DAPI… [0-9]+%$/)).toBeVisible({
+    timeout: XENIUM_LOAD_TIMEOUT_MS,
+  })
+  await expect(panel.getByText(/^[1-9][0-9,]* of 1,414,155 cells match$/)).toBeVisible({
+    timeout: 300_000,
+  })
+  testInfo.annotations.push({
+    type: 'Time to measure DAPI',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
+  await expectLogEntry(page, /Cell query: measured DAPI at level 2 in [0-9.]+ s/)
 })
 
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({

@@ -9,8 +9,12 @@ import type {
   CellOutlineRequest,
   SpatialElement,
 } from '../../datasets/spatialDataset'
+import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
+import { fakeCellImage, fakeOmeZarrCellImage } from '../../test/cellImageFixtures'
+import type { CellImageLoader } from './cellImageMeasurer'
 import type { CellQueryCondition } from './cellQuery'
+import type { CellQueryImageChannel } from './cellQueryImage'
 import { createCellQuerySession, type CellQuerySession } from './cellQuerySession'
 import { CellQueryPanel } from './CellQueryPanel'
 import {
@@ -125,6 +129,8 @@ function Harness({
     onSaveClass: () => undefined,
     pictureImage: null,
     loadCellOutlines: async () => new Map(),
+    imageChannels: [],
+    imageZPlane: null,
     appendDebugEvent: () => undefined,
     createSession: () => createCellQuerySession(null),
     ...overrides,
@@ -541,6 +547,278 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
         expect(picture.querySelector('.cell-query-outline')).not.toBeNull()
       })
       expect(picture.querySelector('canvas')).toBeNull()
+    })
+  })
+
+  describe('image channels (plan 26)', () => {
+    // 8 x 8 µm, 1 µm per pixel: the left half 10, the right half 100.
+    function imageChannel(
+      overrides: Partial<CellQueryImageChannel> = {},
+      loader: CellImageLoader = fakeCellImage({
+        width: 8,
+        height: 8,
+        pixel: (x) => (x >= 4 ? 100 : 10),
+      }).loader,
+    ): CellQueryImageChannel {
+      return {
+        id: 'Channel:0',
+        name: 'DAPI',
+        loader: loader as unknown as ImagePyramidLoader,
+        rgb: false,
+        histogram: {
+          bins: [4, 0, 0, 4],
+          maxCount: 4,
+          min: 0,
+          max: 100,
+          sampleCount: 8,
+          threshold: 50,
+        },
+        ...overrides,
+      }
+    }
+
+    // Two cells on each half, of area π (radius 1 µm), or without an area
+    // as discs of the Radius field's.
+    function imageCell(id: string, x: number, y: number, cellArea?: number) {
+      return {
+        id,
+        position: [x, -y, 0],
+        radiusPixels: 2,
+        fillColor: [0, 0, 0, 255],
+        ...(cellArea === undefined ? {} : { cellArea }),
+      } satisfies OverviewCellDatum
+    }
+    const PLACES = [
+      ['c1', 1, 1],
+      ['c2', 6, 1],
+      ['c3', 6, 6],
+      ['c4', 1, 6],
+    ] as const
+    const IMAGE_CELLS = PLACES.map(([id, x, y]) => imageCell(id, x, y, Math.PI))
+
+    function imageOptions() {
+      return within(screen.getByRole('combobox', { name: 'Add condition' }))
+        .getAllByRole('option')
+        .filter((option) => option.closest('optgroup')?.getAttribute('label') === 'Image')
+    }
+
+    it('lists each channel, and measures it under every cell for a condition', async () => {
+      const appendDebugEvent = vi.fn()
+      render(
+        <Harness
+          overrides={{
+            cells: IMAGE_CELLS,
+            imageChannels: [imageChannel()],
+            appendDebugEvent,
+          }}
+        />,
+      )
+
+      expect(imageOptions().map((option) => option.textContent)).toEqual([
+        'DAPI mean (1 µm/px)',
+        'DAPI % above 50 (1 µm/px)',
+      ])
+      addCondition('image:mean:0:Channel:0')
+
+      // The mean starts at Otsu's threshold.
+      expect(screen.getByRole('spinbutton', { name: 'From' })).toHaveValue(50)
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+      await waitFor(() => {
+        expect(rowTexts()).toEqual(['c2 | 100', 'c3 | 100'])
+      })
+      expect(screen.getByText('Range 10 to 100')).toBeVisible()
+      expect(appendDebugEvent).toHaveBeenCalledWith(
+        expect.stringMatching(/^Cell query: measured DAPI at level 0 in /),
+      )
+    })
+
+    it('measures again with another threshold, shown on the histogram', async () => {
+      render(
+        <Harness overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel()] }} />,
+      )
+
+      addCondition('image:above:0:t50:Channel:0')
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+      expect(
+        screen.getByRole('img', { name: 'DAPI histogram, threshold 50' }),
+      ).toBeVisible()
+
+      const threshold = screen.getByRole('spinbutton', { name: 'Threshold' })
+      fireEvent.change(threshold, { target: { value: '5' } })
+      fireEvent.blur(threshold)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('4 of 4 cells match')
+      })
+      expect(
+        within(screen.getByRole('group', { name: 'Conditions' })).getByText(
+          'DAPI % above 5 (1 µm/px)',
+        ),
+      ).toBeVisible()
+    })
+
+    it('measures discs of the radius set for cells without an area', async () => {
+      const cells = PLACES.map(([id, x, y]) => imageCell(id, x, y))
+      render(<Harness overrides={{ cells, imageChannels: [imageChannel()] }} />)
+
+      addCondition('image:mean:0:r5:Channel:0')
+      expect(screen.getByRole('spinbutton', { name: 'Radius' })).toHaveValue(5)
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent(/of 4 cells match/)
+      })
+
+      const radius = screen.getByRole('spinbutton', { name: 'Radius' })
+      fireEvent.change(radius, { target: { value: '1' } })
+      fireEvent.blur(radius)
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+    })
+
+    it('asks before a large read, and measures once told to', async () => {
+      const loader = {
+        ...fakeCellImage({ width: 8, height: 8, pixel: (x) => (x >= 4 ? 100 : 10) })
+          .loader,
+        tileReadBytes: async () => 2 * 1024 ** 3,
+      }
+      render(
+        <Harness
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel({}, loader)] }}
+        />,
+      )
+
+      addCondition('image:mean:0:Channel:0')
+      expect(await screen.findByText('Measuring DAPI reads 2.0 GiB.')).toBeVisible()
+      // Each level with its size, from the tile index.
+      expect(
+        await screen.findByRole('option', { name: '1 µm/px, 2.0 GiB (default)' }),
+      ).toBeInTheDocument()
+      expect(screen.getByTestId('status')).toHaveTextContent('Waiting to measure')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Measure' }))
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+    })
+
+    // Plan 26, M2: read chunk by chunk, each level sized as its chunks
+    // decoded at most.
+    it('measures an OME-Zarr image', async () => {
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 8,
+        height: 8,
+        pixel: (x) => (x >= 4 ? 100 : 10),
+      })
+      render(
+        <Harness
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel({}, loader)] }}
+        />,
+      )
+
+      addCondition('image:mean:0:Channel:0')
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+      expect(
+        await screen.findByRole('option', { name: '1 µm/px, under 0.1 MiB (default)' }),
+      ).toBeInTheDocument()
+    })
+
+    it('cancels a measurement, and measures again when asked', async () => {
+      let release: () => void = () => undefined
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const base = fakeCellImage({
+        width: 8,
+        height: 8,
+        pixel: (x) => (x >= 4 ? 100 : 10),
+      })
+      const loader: CellImageLoader = {
+        ...base.loader,
+        fetchTileBytes: async (...args) => {
+          await gate
+          return base.loader.fetchTileBytes?.(...args) ?? new Uint8Array(0)
+        },
+      }
+      render(
+        <Harness
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel({}, loader)] }}
+        />,
+      )
+
+      addCondition('image:mean:0:Channel:0')
+      expect(await screen.findByText('Measuring DAPI… 0%')).toBeVisible()
+      // The count waits for the measurement.
+      expect(screen.getByTestId('status')).toHaveTextContent(/^Measuring$/)
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      expect(await screen.findByText('Measuring DAPI was cancelled.')).toBeVisible()
+
+      release()
+      fireEvent.click(screen.getByRole('button', { name: 'Measure' }))
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+    })
+
+    it('measures a link’s image conditions on opening', async () => {
+      render(
+        <Harness
+          initial={[
+            {
+              kind: 'number',
+              columnId: 'image:above:0:t50:Channel:0',
+              operator: 'at-least',
+              min: 50,
+              max: Infinity,
+            },
+          ]}
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel()] }}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+    })
+
+    it('measures three channels at a time', async () => {
+      const channels = ['A', 'B', 'C', 'D'].map((name, index) =>
+        imageChannel({ id: `Channel:${index.toString()}`, name }),
+      )
+      render(<Harness overrides={{ cells: IMAGE_CELLS, imageChannels: channels }} />)
+
+      addCondition('image:mean:0:Channel:0')
+      addCondition('image:mean:0:Channel:1')
+      addCondition('image:mean:0:Channel:2')
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+      const fourth = imageOptions().find(
+        (option) => option.textContent === 'D mean (1 µm/px)',
+      )
+      expect(fourth).toBeDisabled()
+    })
+
+    it('says why an RGB image’s channels are not listed', () => {
+      render(
+        <Harness
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel({ rgb: true })] }}
+        />,
+      )
+
+      expect(
+        imageOptions().map((option) => [
+          option.textContent,
+          option.hasAttribute('disabled'),
+        ]),
+      ).toEqual([['RGB images are not measured', true]])
     })
   })
 })

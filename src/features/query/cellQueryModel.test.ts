@@ -3,17 +3,23 @@ import { describe, expect, it } from 'vitest'
 import type { CellQueryCondition } from './cellQuery'
 import {
   cellQueryColumns,
+  cellQueryImageColumns,
   defaultCellQueryCondition,
   defaultQueryClassName,
   formatCellQueryLink,
   formatCellQueryNumber,
+  imageColumn,
+  imageColumnId,
   isConditionComplete,
   overviewCellColumns,
   overviewNumberColumn,
   overviewSegmentationColumn,
   parseCellQueryLink,
+  parseImageColumnId,
   queryClassId,
   withNumberOperator,
+  type CellQueryImageChannelOption,
+  type CellQueryImageColumnSpec,
 } from './cellQueryModel'
 
 const CELLS = [
@@ -186,6 +192,177 @@ describe('query= (plan 23-D9)', () => {
         expect(condition).toMatchObject({ min: expected, max: expected })
       }),
     )
+  })
+})
+
+describe('image columns (plan 26-D1, D9)', () => {
+  const DAPI: CellQueryImageChannelOption = {
+    id: 'Channel:0',
+    name: 'DAPI',
+    levels: [0.2125, 0.425, 0.8500331, 1.7],
+    defaultLevel: 2,
+    threshold: 2176,
+  }
+
+  it('writes the statistic, level, plane, threshold and radius before the channel', () => {
+    expect(imageColumnId({ stat: 'mean', level: 2, channelId: 'Channel:0' })).toBe(
+      'image:mean:2:Channel:0',
+    )
+    expect(
+      imageColumnId({
+        stat: 'above',
+        level: 1,
+        z: 3,
+        threshold: 2176,
+        radius: 5,
+        channelId: 'layer:Channel:1',
+      }),
+    ).toBe('image:above:1:z3:t2176:r5:layer:Channel:1')
+    // The mean has no threshold.
+    expect(
+      imageColumnId({ stat: 'mean', level: 2, threshold: 9, channelId: 'Channel:0' }),
+    ).toBe('image:mean:2:Channel:0')
+  })
+
+  it('reads the IDs back, channels with colons included', () => {
+    fc.assert(
+      fc.property(
+        fc.record(
+          {
+            stat: fc.constantFrom('mean' as const, 'above' as const),
+            level: fc.nat(12),
+            z: fc.nat(200),
+            // A link writes -0 as 0.
+            threshold: fc
+              .double({ min: -1e6, max: 1e6, noNaN: true })
+              .map((value) => value + 0),
+            radius: fc.double({ min: 0.01, max: 100, noNaN: true }),
+            channelId: fc.constantFrom('Channel:0', 'layer:Channel:12', 'DAPI'),
+          },
+          { requiredKeys: ['stat', 'level', 'channelId'] },
+        ),
+        (spec) => {
+          const { threshold, ...rest } = spec
+          const expected: CellQueryImageColumnSpec =
+            spec.stat === 'above' && threshold !== undefined ? spec : rest
+          expect(parseImageColumnId(imageColumnId(spec))).toEqual(expected)
+        },
+      ),
+    )
+  })
+
+  it('reads nothing from IDs that are not image columns', () => {
+    for (const id of [
+      'cell:area',
+      'image:max:2:Channel:0',
+      'image:mean:two:Channel:0',
+      'image:mean:2',
+      'image:mean:2:r0:Channel:0',
+    ]) {
+      expect(parseImageColumnId(id)).toBeNull()
+    }
+  })
+
+  it('names the channel, statistic and level in the label', () => {
+    expect(
+      imageColumn({ stat: 'mean', level: 2, channelId: 'Channel:0' }, DAPI),
+    ).toMatchObject({
+      label: 'DAPI mean (0.85 µm/px)',
+      kind: 'number',
+      group: 'Image',
+    })
+    expect(
+      imageColumn(
+        {
+          stat: 'above',
+          level: 1,
+          z: 4,
+          threshold: 2176,
+          radius: 5,
+          channelId: 'Channel:0',
+        },
+        DAPI,
+      ).label,
+    ).toBe('DAPI % above 2,176 (z 4, 0.42 µm/px, radius 5 µm)')
+  })
+
+  it('lists each channel at its default level, waiting for a threshold where needed', () => {
+    const columns = cellQueryImageColumns({
+      channels: [DAPI, { ...DAPI, id: 'Channel:1', name: '18S', threshold: 'finding' }],
+      z: undefined,
+      radius: undefined,
+      channelsInUse: [],
+    })
+
+    expect(columns.map((column) => [column.id, column.disabled])).toEqual([
+      ['image:mean:2:Channel:0', undefined],
+      ['image:above:2:t2176:Channel:0', undefined],
+      ['image:mean:2:Channel:1', undefined],
+      ['image:above:2:Channel:1', 'Finding a threshold…'],
+    ])
+  })
+
+  it('lists a fourth channel but cannot add it while three are in use', () => {
+    const channels = ['A', 'B', 'C', 'D'].map((name, index) => ({
+      ...DAPI,
+      id: `Channel:${index.toString()}`,
+      name,
+    }))
+    const columns = cellQueryImageColumns({
+      channels,
+      z: 2,
+      radius: 5,
+      channelsInUse: ['Channel:0', 'Channel:1', 'Channel:2'],
+    })
+
+    expect(
+      columns.find((column) => column.id === 'image:mean:2:z2:r5:Channel:0')?.disabled,
+    ).toBeUndefined()
+    expect(
+      columns.find((column) => column.id === 'image:mean:2:z2:r5:Channel:3')?.disabled,
+    ).toBe('Up to 3 channels are measured at a time: A, B and C are in use.')
+  })
+
+  it('starts a condition at half the pixels above, or a mean at the threshold', () => {
+    const above = imageColumn(
+      { stat: 'above', level: 2, threshold: 2176, channelId: 'Channel:0' },
+      DAPI,
+    )
+    const mean = imageColumn({ stat: 'mean', level: 2, channelId: 'Channel:0' }, DAPI)
+
+    expect(defaultCellQueryCondition(above, 2176)).toMatchObject({
+      operator: 'at-least',
+      min: 50,
+    })
+    expect(defaultCellQueryCondition(mean, 2176)).toMatchObject({
+      operator: 'at-least',
+      min: 2176,
+    })
+  })
+
+  it('keeps image conditions in the link', () => {
+    const conditions: CellQueryCondition[] = [
+      {
+        kind: 'number',
+        columnId: 'image:above:2:t2176:Channel:0',
+        operator: 'at-least',
+        min: 40,
+        max: Infinity,
+      },
+      {
+        kind: 'number',
+        columnId: 'image:mean:2:r5:Channel:0',
+        operator: 'at-least',
+        min: 300,
+        max: Infinity,
+      },
+    ]
+    const link = formatCellQueryLink(conditions)
+
+    expect(link).toBe(
+      'image:above:2:t2176:Channel:0|at-least|40;image:mean:2:r5:Channel:0|at-least|300',
+    )
+    expect(parseCellQueryLink(link)).toEqual(conditions)
   })
 })
 

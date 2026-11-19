@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useState, useSyncExternalStore } from 'react'
 import {
   Button,
   Checkbox,
@@ -8,17 +8,26 @@ import {
   Select,
   type SelectOption,
 } from '../../components/ui'
+import type { ChannelHistogram } from '../../data/morphologyContrast'
 import type {
   CellQueryCategoryOperator,
   CellQueryCondition,
   CellQueryNumberOperator,
 } from './cellQuery'
 import {
+  formatCellImageReadSize,
+  type CellQueryConditionImage,
+  type CellQueryImageProgress,
+  type CellQueryMeasurementView,
+} from './cellQueryImage'
+import {
   CATEGORY_OPERATOR_LABELS,
   formatCellQueryNumber,
+  imageColumnId,
   NUMBER_OPERATOR_LABELS,
   withNumberOperator,
   type CellQueryColumn,
+  type CellQueryImageColumnSpec,
 } from './cellQueryModel'
 import { CellQueryTable } from './CellQueryTable'
 import { CELL_PICTURE_FIELDS } from './cellPictureModel'
@@ -53,20 +62,30 @@ const CLASS_SEARCH_THRESHOLD = 12
 // Classes listed at once; a search finds the others.
 const CLASS_LIST_LIMIT = 200
 
+// The image's note (plan 26-D1) stands in for its channels.
+const IMAGE_NOTE_OPTION = 'image-note'
+
 function columnSelectOptions(
   columns: readonly CellQueryColumn[],
   placeholder: string,
+  imageNote: string | null,
 ): readonly SelectOption<string>[] {
   return [
     { value: '', label: placeholder },
     ...columns.map((column) => ({
       value: column.id,
       label:
-        column.classCount === undefined
-          ? column.label
-          : `${column.label} (${column.classCount.toLocaleString()})`,
+        column.classCount !== undefined
+          ? `${column.label} (${column.classCount.toLocaleString()})`
+          : column.disabled === 'Finding a threshold…'
+            ? `${column.label} (finding a threshold…)`
+            : column.label,
       group: column.group,
+      disabled: column.disabled !== undefined,
     })),
+    ...(imageNote === null
+      ? []
+      : [{ value: IMAGE_NOTE_OPTION, label: imageNote, group: 'Image', disabled: true }]),
   ]
 }
 
@@ -84,6 +103,7 @@ function CellQueryConditions({ query }: { readonly query: CellQueryModel }) {
               <ConditionEditor
                 view={view}
                 noun={query.elementNoun}
+                progress={query.imageProgress}
                 onChange={(condition) => {
                   query.onConditionChange(view.index, condition)
                 }}
@@ -96,15 +116,21 @@ function CellQueryConditions({ query }: { readonly query: CellQueryModel }) {
         </ol>
       )}
       <Select
-        title="Filter on a column: the cells' own values, a class set or a metadata track"
+        title="Filter on a column: the cells' own values, a class set, a metadata track or an image channel"
         label="Add condition"
         hideLabel
         className="cell-query-add"
         value=""
-        options={columnSelectOptions(query.columnOptions, 'Add condition…')}
+        options={columnSelectOptions(
+          query.columnOptions,
+          'Add condition…',
+          query.imageNote,
+        )}
         disabled={query.columnOptions.length === 0}
         onChange={(columnId) => {
-          if (columnId !== '') query.onAddCondition(columnId)
+          if (columnId !== '' && columnId !== IMAGE_NOTE_OPTION) {
+            query.onAddCondition(columnId)
+          }
         }}
       />
     </div>
@@ -114,11 +140,13 @@ function CellQueryConditions({ query }: { readonly query: CellQueryModel }) {
 function ConditionEditor({
   view,
   noun,
+  progress,
   onChange,
   onRemove,
 }: {
   readonly view: CellQueryConditionView
   readonly noun: string
+  readonly progress: CellQueryImageProgress
   readonly onChange: (condition: CellQueryCondition) => void
   readonly onRemove: () => void
 }) {
@@ -167,12 +195,23 @@ function ConditionEditor({
           onClick={onRemove}
         />
       </div>
-      {view.status === 'loading' ? (
+      {view.image === null ? null : (
+        <ImageSettings
+          image={view.image}
+          label={label}
+          onChange={(spec) => {
+            onChange({ ...condition, columnId: imageColumnId(spec) })
+          }}
+        />
+      )}
+      {view.image !== null ? (
+        <MeasurementStatus measurement={view.image.measurement} progress={progress} />
+      ) : view.status === 'loading' ? (
         <p className="cell-query-condition-note" role="status">
           Reading {label}…
         </p>
       ) : null}
-      {view.message === null ? null : (
+      {view.message === null || view.image !== null ? null : (
         <p className="cell-query-error" role="alert">
           {view.message}
         </p>
@@ -342,11 +381,198 @@ function NumberBounds({
   )
 }
 
+// An image condition's level, threshold and radius (plan 26-D4 to D6).
+// Each is part of the column, so changing one measures again.
+function ImageSettings({
+  image,
+  label,
+  onChange,
+}: {
+  readonly image: CellQueryConditionImage
+  readonly label: string
+  readonly onChange: (spec: CellQueryImageColumnSpec) => void
+}) {
+  const { spec, channelName } = image
+
+  return (
+    <div className="cell-query-image" role="group" aria-label={`${label} measurement`}>
+      <Select
+        title={`The image resolution ${channelName} is measured at: finer reads more and takes longer`}
+        label="Resolution"
+        className="cell-query-image-level"
+        value={spec.level.toString()}
+        options={image.levels.map((level) => ({
+          value: level.level.toString(),
+          label: level.label,
+        }))}
+        onChange={(value) => {
+          onChange({ ...spec, level: Number(value) })
+        }}
+      />
+      {spec.stat === 'above' ? (
+        <NumberField
+          title={`Pixels at or above this ${channelName} value count as above; changing it measures again`}
+          label="Threshold"
+          value={spec.threshold ?? Number.NaN}
+          onChange={(threshold) => {
+            onChange({ ...spec, threshold })
+          }}
+        />
+      ) : null}
+      {spec.radius === undefined ? null : (
+        <NumberField
+          title="Each cell is a disc this wide around its centre, as the cells have no area; changing it measures again"
+          label="Radius"
+          value={spec.radius}
+          min={0.1}
+          unit="µm"
+          onChange={(radius) => {
+            onChange({ ...spec, radius })
+          }}
+        />
+      )}
+      {spec.stat === 'above' && image.histogram !== null ? (
+        <ThresholdHistogram
+          histogram={image.histogram}
+          threshold={spec.threshold}
+          label={channelName}
+        />
+      ) : null}
+    </div>
+  )
+}
+
+// Auto-contrast's histogram of the channel with the threshold over it.
+function ThresholdHistogram({
+  histogram,
+  threshold,
+  label,
+}: {
+  readonly histogram: ChannelHistogram
+  readonly threshold: number | undefined
+  readonly label: string
+}) {
+  const range = Math.max(1, histogram.max - histogram.min)
+  const at =
+    threshold === undefined
+      ? null
+      : Math.max(0, Math.min(1, (threshold - histogram.min) / range))
+
+  return (
+    <div
+      className="channel-histogram cell-query-threshold-histogram"
+      role="img"
+      aria-label={`${label} histogram${threshold === undefined ? '' : `, threshold ${formatCellQueryNumber(threshold)}`}`}
+      title={`${label} histogram from ${formatCellQueryNumber(histogram.min)} to ${formatCellQueryNumber(histogram.max)}${threshold === undefined ? '' : `; the line is the threshold, ${formatCellQueryNumber(threshold)}`}`}
+    >
+      {histogram.bins.map((count, index) => (
+        <span
+          className="channel-histogram-bar"
+          key={index}
+          style={{ transform: `scaleY(${Math.max(0.04, count / histogram.maxCount)})` }}
+        />
+      ))}
+      {at === null ? null : (
+        <span className="cell-query-threshold-line" style={{ left: `${at * 100}%` }} />
+      )}
+    </div>
+  )
+}
+
+// A measurement's progress, question or failure (plan 26-D3, D7).
+function MeasurementStatus({
+  measurement,
+  progress,
+}: {
+  readonly measurement: CellQueryMeasurementView
+  readonly progress: CellQueryImageProgress
+}) {
+  const fraction = useSyncExternalStore(
+    progress.subscribeProgress,
+    () => progress.progress(measurement.key),
+    () => progress.progress(measurement.key),
+  )
+  const name = measurement.channelName
+  const canMeasure = measurement.key !== ''
+
+  switch (measurement.status) {
+    case 'ready':
+      return null
+    case 'measuring':
+      return (
+        <div className="cell-query-measurement">
+          <p className="cell-query-condition-note" role="status">
+            {fraction === null
+              ? `Measuring ${name}…`
+              : `Measuring ${name}… ${Math.floor(fraction * 100).toString()}%`}
+          </p>
+          <Button
+            title={`Stop measuring ${name} under every cell`}
+            onClick={measurement.onCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      )
+    case 'asking':
+      return (
+        <div className="cell-query-measurement">
+          <p className="cell-query-condition-note" role="status">
+            {`Measuring ${name} reads ${formatCellImageReadSize(measurement.size ?? { bytes: 0, exact: true })}.`}
+          </p>
+          <Button
+            title={`Read ${name} under every cell at this resolution`}
+            onClick={measurement.onMeasure}
+          >
+            Measure
+          </Button>
+        </div>
+      )
+    case 'cancelled':
+      return (
+        <div className="cell-query-measurement">
+          <p className="cell-query-condition-note" role="status">
+            {`Measuring ${name} was cancelled.`}
+          </p>
+          <Button
+            title={`Measure ${name} under every cell again`}
+            onClick={measurement.onMeasure}
+          >
+            Measure
+          </Button>
+        </div>
+      )
+    case 'refused':
+    case 'error':
+      return (
+        <div className="cell-query-measurement">
+          <p className="cell-query-error" role="alert">
+            {measurement.message}
+          </p>
+          {measurement.status === 'error' && canMeasure ? (
+            <Button
+              title={`Measure ${name} under every cell again`}
+              onClick={measurement.onMeasure}
+            >
+              Measure
+            </Button>
+          ) : null}
+        </div>
+      )
+  }
+}
+
 function CellQueryActions({ query }: { readonly query: CellQueryModel }) {
   const nameId = useId()
 
   return (
     <div className="cell-query-footer">
+      {query.tableMeasurements.map((measurement) => (
+        <div key={measurement.label} className="cell-query-table-measurement">
+          <span className="cell-query-condition-note">{measurement.label}</span>
+          <MeasurementStatus measurement={measurement} progress={query.imageProgress} />
+        </div>
+      ))}
       {query.notes.length === 0 ? null : (
         <ul className="plots-notes">
           {query.notes.map((note) => (
@@ -397,10 +623,16 @@ function CellQueryActions({ query }: { readonly query: CellQueryModel }) {
           hideLabel
           className="cell-query-add-column"
           value=""
-          options={columnSelectOptions(query.table.addColumnOptions, 'Add column…')}
+          options={columnSelectOptions(
+            query.table.addColumnOptions,
+            'Add column…',
+            query.imageNote,
+          )}
           disabled={query.table.addColumnOptions.length === 0}
           onChange={(columnId) => {
-            if (columnId !== '') query.table.onAddColumn(columnId)
+            if (columnId !== '' && columnId !== IMAGE_NOTE_OPTION) {
+              query.table.onAddColumn(columnId)
+            }
           }}
         />
         <Select

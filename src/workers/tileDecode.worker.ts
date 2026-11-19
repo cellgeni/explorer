@@ -12,6 +12,7 @@ import type {
   TileStripBandRequest,
   WorkerDecodedTile,
 } from './tileDecodeMessages'
+import { handleTileMeasureRequest } from './tileMeasureCore'
 import { handleTileSamplesRequest } from './tileSamplesCore'
 import { traceTiffLabelTile } from './tiffLabelTraceCore'
 
@@ -22,6 +23,13 @@ workerScope.onmessage = (event: MessageEvent<TileDecodeWorkerRequest>) => {
 
   if ('sampling' in request) {
     void handleTileSamplesRequest(request, (response, transfer) => {
+      workerScope.postMessage(response, transfer)
+    })
+    return
+  }
+
+  if ('measure' in request) {
+    void handleTileMeasureRequest(request, (response, transfer) => {
       workerScope.postMessage(response, transfer)
     })
     return

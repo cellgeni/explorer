@@ -1,5 +1,7 @@
+import type { TileCellSums } from '../data/tileCellMeasure'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
+import type { TileMeasure } from './tileDecodeMessages'
 import type {
   ZarrChunkSource,
   ZarrChunkWindow,
@@ -143,6 +145,43 @@ export class ZarrDecodePool {
 
     throw new Error(
       response.type === 'error' ? response.error : 'Unexpected label trace response.',
+    )
+  }
+
+  // Per-cell sums of a chunk's window (plan 26). The chunk is decoded for this
+  // request alone, in the workers in turn, and not cached.
+  async measureChunk(request: {
+    readonly source: ZarrChunkSource
+    readonly bytes: Uint8Array | undefined
+    readonly window: ZarrChunkWindow
+    readonly measure: TileMeasure
+  }): Promise<TileCellSums> {
+    const bytes = request.bytes === undefined ? null : transferableCopy(request.bytes)
+    const { cells } = request.measure
+    const response = await this.send(
+      this.takeTurn(),
+      (id) => ({
+        type: 'measure-chunk',
+        id,
+        source: request.source,
+        bytes,
+        window: request.window,
+        measure: request.measure,
+      }),
+      [
+        ...(bytes === null ? [] : [bytes]),
+        cells.x.buffer,
+        cells.y.buffer,
+        cells.radius.buffer,
+      ] as Transferable[],
+    )
+
+    if (response.type === 'cell-sums') {
+      return { sum: response.sum, count: response.count, above: response.above }
+    }
+
+    throw new Error(
+      response.type === 'error' ? response.error : 'Unexpected Zarr measure response.',
     )
   }
 

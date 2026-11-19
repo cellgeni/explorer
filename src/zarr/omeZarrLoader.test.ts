@@ -647,6 +647,33 @@ describe('OME-Zarr image loader', () => {
     }
   })
 
+  // Plan 26: Cell Query measures a level chunk by chunk.
+  it('reads a chunk as stored, with the window of its channel and plane', async () => {
+    const fetcher = fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr'))
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stack.ome.zarr#c=1&z=2',
+      { fetcher, decodePool: null },
+    )
+
+    expect(loader.chunkGrid(0)).toEqual({ chunkWidth: 2, chunkHeight: 2, chunkBytes: 4 })
+    const chunk = await loader.readChunk(0, 0, 0)
+
+    expect(chunk.source).toMatchObject({ chunkKey: '1.2.0.0', coords: [1, 2, 0, 0] })
+    expect(Array.from(chunk.bytes ?? [])).toEqual([13, 13, 13, 13])
+    expect(chunk.window).toEqual({
+      xAxis: 3,
+      yAxis: 2,
+      x0: 0,
+      y0: 0,
+      width: 2,
+      height: 2,
+      fixedAxes: [
+        { axis: 0, index: 0 },
+        { axis: 1, index: 0 },
+      ],
+    })
+  })
+
   it('selects a z plane with a z hash parameter beside the channel selector', async () => {
     const rootUrl = 'https://example.test/images/stack.ome.zarr'
     const fetcher = fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr'))

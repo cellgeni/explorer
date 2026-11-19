@@ -877,6 +877,81 @@ describe('TiffPyramidLoader', () => {
     expect(byteRangeCache.keys()).toHaveLength(3)
   })
 
+  it('reads cached tiles but adds none when told not to persist', async () => {
+    const byteRangeCache = new MemoryByteRangeCache()
+    const fetches: string[] = []
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: new Map([
+        ['0/0/0', { offset: 10, length: 4 }],
+        ['0/0/1', { offset: 14, length: 4 }],
+        ['0/0/2', { offset: 18, length: 4 }],
+      ]),
+      levelMeta: new Map([
+        [0, { width: imagePixels(300), height: imagePixels(100), nCols: 3, nRows: 1 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(300),
+      imageHeight: imagePixels(100),
+      byteRangeCache,
+      fetcher: async (_input, init) => {
+        const range = new Headers(init?.headers).get('Range') ?? ''
+        fetches.push(range)
+        const [start = 0, end = 0] = range.replace('bytes=', '').split('-').map(Number)
+        return new Response(new Uint8Array(end - start + 1).fill(start), { status: 206 })
+      },
+    })
+
+    await loader.fetchTileBytes(0, 0, 0)
+    // Cached, so read from the cache.
+    await expect(
+      loader.fetchTileBytes(0, 0, 0, undefined, { persist: false }),
+    ).resolves.toEqual(new Uint8Array(4).fill(10))
+    // Not cached: read together, and neither kept.
+    await loader.fetchTileBytes(0, 1, 0, undefined, {
+      persist: false,
+      upcoming: [{ col: 2, row: 0 }],
+    })
+    await loader.fetchTileBytes(0, 2, 0, undefined, { persist: false })
+
+    expect(fetches).toEqual(['bytes=10-13', 'bytes=14-21'])
+    expect(byteRangeCache.keys()).toHaveLength(1)
+  })
+
+  it('adds up the bytes a set of tiles reads', async () => {
+    const loader = new TiffPyramidLoader({
+      url: 'https://example.test/image.ome.tif',
+      chunkIndex: new Map([
+        ['0/0/0', { offset: 10, length: 4 }],
+        ['0/0/1', { offset: 14, length: 0 }],
+        ['0/1/0', { offset: 14, length: 9 }],
+      ]),
+      levelMeta: new Map([
+        [0, { width: imagePixels(200), height: imagePixels(200), nCols: 2, nRows: 2 }],
+      ]),
+      units,
+      tileWidth: imagePixels(100),
+      tileHeight: imagePixels(100),
+      numLevels: 1,
+      imageWidth: imagePixels(200),
+      imageHeight: imagePixels(200),
+      byteRangeCache: null,
+    })
+
+    await expect(
+      loader.tileReadBytes(0, [
+        { col: 0, row: 0 },
+        { col: 1, row: 0 },
+        { col: 0, row: 1 },
+        // Not in the index.
+        { col: 1, row: 1 },
+      ]),
+    ).resolves.toBe(13)
+  })
+
   it('selects intermediate pyramid levels by source pixel screen size', () => {
     const levels = new Map<number, TiffLevelMeta>([
       [0, { width: imagePixels(800), height: imagePixels(800), nCols: 8, nRows: 8 }],

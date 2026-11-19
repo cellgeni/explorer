@@ -18,6 +18,9 @@ export interface ChannelHistogram {
   readonly min: number
   readonly max: number
   readonly sampleCount: number
+  // Otsu's threshold on the samples other than 0, the default for Cell
+  // Query's `% above` (plan 26-D6); unset when fewer than two values remain.
+  readonly threshold?: number
 }
 
 export interface AutoContrastTileLoader {
@@ -123,10 +126,82 @@ export async function computeChannelAutoContrast(
   const max = Math.ceil(high)
   const contrast = max > min ? { min, max } : { min, max: min + 1 }
 
+  const threshold = otsuThreshold(samples)
+
   return {
     ...contrast,
-    histogram: buildHistogram(samples, contrast.min, contrast.max),
+    histogram: {
+      ...buildHistogram(samples, contrast.min, contrast.max),
+      ...(threshold === undefined ? {} : { threshold }),
+    },
   }
+}
+
+const OTSU_BINS = 256
+
+// Otsu's threshold on sorted samples, leaving out zeros: an image's area
+// outside the scan is 0 and would otherwise be a class of its own (17% of
+// the Xenium demo's DAPI). Values at or above it are the brighter class.
+// Whole for whole-number samples.
+export function otsuThreshold(sortedSamples: Float64Array): number | undefined {
+  let first = 0
+
+  while (first < sortedSamples.length && (sortedSamples[first] ?? 0) <= 0) {
+    first += 1
+  }
+
+  const low = sortedSamples[first]
+  const high = sortedSamples[sortedSamples.length - 1]
+
+  if (low === undefined || high === undefined || !(high > low)) {
+    return undefined
+  }
+
+  const width = (high - low) / OTSU_BINS
+  const counts = new Float64Array(OTSU_BINS)
+  const sums = new Float64Array(OTSU_BINS)
+  let wholeNumbers = true
+
+  for (let index = first; index < sortedSamples.length; index += 1) {
+    const value = sortedSamples[index] ?? 0
+    const bin = Math.min(OTSU_BINS - 1, Math.floor((value - low) / width))
+    counts[bin] = (counts[bin] ?? 0) + 1
+    sums[bin] = (sums[bin] ?? 0) + value
+    wholeNumbers &&= Number.isInteger(value)
+  }
+
+  const total = sortedSamples.length - first
+  const totalSum = sums.reduce((sum, value) => sum + value, 0)
+  let belowCount = 0
+  let belowSum = 0
+  let bestSplit = -1
+  let bestVariance = -1
+
+  // The split after bin `split` with the largest between-class variance.
+  for (let split = 0; split < OTSU_BINS - 1; split += 1) {
+    belowCount += counts[split] ?? 0
+    belowSum += sums[split] ?? 0
+    const aboveCount = total - belowCount
+
+    if (belowCount === 0 || aboveCount === 0) {
+      continue
+    }
+
+    const meanDifference = belowSum / belowCount - (totalSum - belowSum) / aboveCount
+    const variance = belowCount * aboveCount * meanDifference * meanDifference
+
+    if (variance > bestVariance) {
+      bestVariance = variance
+      bestSplit = split
+    }
+  }
+
+  if (bestSplit < 0) {
+    return undefined
+  }
+
+  const edge = low + (bestSplit + 1) * width
+  return wholeNumbers ? Math.ceil(edge) : Number(edge.toPrecision(4))
 }
 
 // At most `maxTiles` of `tiles`, from evenly spaced rows and evenly spaced

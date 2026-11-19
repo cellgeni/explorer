@@ -24,8 +24,27 @@ export type CellQueryColumnSource =
   // saved selections.
   | { readonly kind: 'set'; readonly setKind: PlotSetKind; readonly setId: string }
   | { readonly kind: 'track'; readonly trackId: string }
+  // An image channel measured under each cell (plan 26).
+  | { readonly kind: 'image'; readonly spec: CellQueryImageColumnSpec }
 
-export type CellQueryColumnGroup = 'Cell' | 'Classes' | 'Metadata'
+export type CellQueryColumnGroup = 'Cell' | 'Classes' | 'Metadata' | 'Image'
+
+// What an image column measures (plan 26-D1, D9): the mean of each cell's
+// pixels in a channel, or the share of them at or above a threshold.
+export type CellQueryImageStat = 'mean' | 'above'
+
+export interface CellQueryImageColumnSpec {
+  readonly stat: CellQueryImageStat
+  // The pyramid level read (26-D5).
+  readonly level: number
+  // The z plane of a z-stack (26-D10).
+  readonly z?: number
+  // `% above`'s threshold, in the image's units (26-D6).
+  readonly threshold?: number
+  // The disc's radius in micrometres, where cells have no area (26-D4).
+  readonly radius?: number
+  readonly channelId: string
+}
 
 export interface CellQueryColumn {
   readonly id: string
@@ -39,6 +58,8 @@ export interface CellQueryColumn {
   readonly range?: CellQueryRange
   // Classes in a set, where known before reading.
   readonly classCount?: number
+  // Listed but not to be chosen now, and why.
+  readonly disabled?: string
 }
 
 export interface CellQueryRange {
@@ -147,6 +168,186 @@ export function trackColumnId(trackId: string): string {
   return `track:${trackId}`
 }
 
+const IMAGE_COLUMN_PREFIX = 'image:'
+
+// `image:{stat}:{level}:[z{n}:][t{threshold}:][r{radius}:]{channel}`, the
+// channel last as it may hold colons (`Channel:0`, `{layer}:Channel:0`).
+export function imageColumnId(spec: CellQueryImageColumnSpec): string {
+  return [
+    'image',
+    spec.stat,
+    spec.level.toString(),
+    ...(spec.z === undefined ? [] : [`z${spec.z.toString()}`]),
+    ...(spec.stat === 'above' && spec.threshold !== undefined
+      ? [`t${String(spec.threshold)}`]
+      : []),
+    ...(spec.radius === undefined ? [] : [`r${String(spec.radius)}`]),
+    spec.channelId,
+  ].join(':')
+}
+
+const LINK_NUMBER = String.raw`-?\d+(?:\.\d+)?(?:e[-+]?\d+)?`
+const IMAGE_COLUMN_PARTS: readonly (readonly [keyof CellQueryImageColumnSpec, RegExp])[] =
+  [
+    ['z', /^z(\d+)$/],
+    ['threshold', new RegExp(`^t(${LINK_NUMBER})$`, 'i')],
+    ['radius', new RegExp(`^r(${LINK_NUMBER})$`, 'i')],
+  ]
+
+export function isImageColumnId(columnId: string): boolean {
+  return columnId.startsWith(IMAGE_COLUMN_PREFIX)
+}
+
+export function parseImageColumnId(columnId: string): CellQueryImageColumnSpec | null {
+  if (!isImageColumnId(columnId)) return null
+  const parts = columnId.split(':')
+  const [, stat, levelText = ''] = parts
+  const level = Number(levelText)
+  if ((stat !== 'mean' && stat !== 'above') || !/^\d+$/.test(levelText)) return null
+
+  const spec: { -readonly [Key in keyof CellQueryImageColumnSpec]?: unknown } = {
+    stat,
+    level,
+  }
+  let at = 3
+  for (const [key, pattern] of IMAGE_COLUMN_PARTS) {
+    const match = pattern.exec(parts[at] ?? '')
+    if (match === null) continue
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || (key === 'radius' && value <= 0)) return null
+    spec[key] = value
+    at += 1
+  }
+  if (stat === 'mean') delete spec.threshold
+
+  const channelId = parts.slice(at).join(':')
+  return channelId === '' ? null : ({ ...spec, channelId } as CellQueryImageColumnSpec)
+}
+
+// "DAPI mean (0.85 µm/px)", "DAPI % above 2,176 (z 3, 0.85 µm/px, radius
+// 5 µm)": the level, plane and radius change the values, so the label and
+// the CSV header say them (26-D5).
+export function imageColumnLabel(
+  channelName: string,
+  spec: CellQueryImageColumnSpec,
+  micrometersPerPixel: number | undefined,
+): string {
+  const stat =
+    spec.stat === 'mean'
+      ? 'mean'
+      : spec.threshold === undefined
+        ? '% above'
+        : `% above ${formatCellQueryNumber(spec.threshold)}`
+  const details = [
+    ...(spec.z === undefined ? [] : [`z ${spec.z.toString()}`]),
+    micrometersPerPixel === undefined
+      ? `level ${spec.level.toString()}`
+      : `${formatMicrometersPerPixel(micrometersPerPixel)} µm/px`,
+    ...(spec.radius === undefined
+      ? []
+      : [`radius ${formatCellQueryNumber(spec.radius)} µm`]),
+  ]
+  return `${channelName} ${stat} (${details.join(', ')})`
+}
+
+export function formatMicrometersPerPixel(value: number): string {
+  return Number(value.toPrecision(2)).toLocaleString()
+}
+
+// A channel as the Image group lists it.
+export interface CellQueryImageChannelOption {
+  readonly id: string
+  readonly name: string
+  // Micrometres per pixel of each level, finest first.
+  readonly levels: readonly number[]
+  readonly defaultLevel: number
+  // Otsu's threshold (26-D6); 'finding' while it is read.
+  readonly threshold: number | 'finding' | undefined
+}
+
+// Each channel's mean and `% above` at its default level, in the Image
+// group. Channels past the three in use are listed but cannot be chosen
+// (26-D2).
+export function cellQueryImageColumns({
+  channels,
+  z,
+  radius,
+  channelsInUse,
+}: {
+  readonly channels: readonly CellQueryImageChannelOption[]
+  readonly z: number | undefined
+  // For cells without an area.
+  readonly radius: number | undefined
+  readonly channelsInUse: readonly string[]
+}): readonly CellQueryColumn[] {
+  const full = channelsInUse.length >= IMAGE_CHANNEL_LIMIT
+  const inUseNames = channelsInUse.map(
+    (id) => channels.find((channel) => channel.id === id)?.name ?? id,
+  )
+
+  return channels.flatMap((channel) => {
+    const base = {
+      level: channel.defaultLevel,
+      ...(z === undefined ? {} : { z }),
+      ...(radius === undefined ? {} : { radius }),
+      channelId: channel.id,
+    }
+    const limit =
+      full && !channelsInUse.includes(channel.id)
+        ? { disabled: imageChannelLimitCopy(inUseNames) }
+        : {}
+    const threshold =
+      typeof channel.threshold === 'number' ? channel.threshold : undefined
+    const specs: readonly CellQueryImageColumnSpec[] = [
+      { stat: 'mean', ...base },
+      { stat: 'above', ...base, ...(threshold === undefined ? {} : { threshold }) },
+    ]
+    return specs.map((spec): CellQueryColumn => {
+      const waiting =
+        spec.stat === 'above' && threshold === undefined
+          ? {
+              disabled:
+                channel.threshold === 'finding'
+                  ? 'Finding a threshold…'
+                  : 'The channel has no threshold.',
+            }
+          : {}
+      return {
+        ...imageColumn(spec, channel),
+        ...waiting,
+        ...limit,
+      }
+    })
+  })
+}
+
+export function imageColumn(
+  spec: CellQueryImageColumnSpec,
+  channel: Pick<CellQueryImageChannelOption, 'name' | 'levels'>,
+  range?: CellQueryRange,
+): CellQueryColumn {
+  return {
+    id: imageColumnId(spec),
+    label: imageColumnLabel(channel.name, spec, channel.levels[spec.level]),
+    kind: 'number',
+    group: 'Image',
+    source: { kind: 'image', spec },
+    ...(range === undefined ? {} : { range }),
+  }
+}
+
+// Channels measured at a time (26-D2).
+export const IMAGE_CHANNEL_LIMIT = 3
+
+export function imageChannelLimitCopy(inUse: readonly string[]): string {
+  return `Up to ${IMAGE_CHANNEL_LIMIT.toString()} channels are measured at a time: ${listPhrase(inUse)} are in use.`
+}
+
+function listPhrase(items: readonly string[]): string {
+  if (items.length <= 1) return items.join('')
+  return `${items.slice(0, -1).join(', ')} and ${items.at(-1) ?? ''}`
+}
+
 // Every column, grouped as the Add menus list them: the cell's own, then
 // classes, then metadata.
 export function cellQueryColumns({
@@ -213,10 +414,25 @@ export function cellQueryColumns({
 }
 
 // A new condition on a column: every class to choose from, or the column's
-// whole range, which matches every cell with a value.
-export function defaultCellQueryCondition(column: CellQueryColumn): CellQueryCondition {
+// whole range, which matches every cell with a value. An image column is
+// not measured yet: half its pixels above the threshold, or a mean at
+// least the threshold.
+export function defaultCellQueryCondition(
+  column: CellQueryColumn,
+  imageThreshold?: number,
+): CellQueryCondition {
   if (column.kind === 'category') {
     return { kind: 'category', columnId: column.id, operator: 'in', classIds: [] }
+  }
+
+  if (column.source.kind === 'image' && column.range === undefined) {
+    return {
+      kind: 'number',
+      columnId: column.id,
+      operator: 'at-least',
+      min: column.source.spec.stat === 'above' ? 50 : (imageThreshold ?? 0),
+      max: Infinity,
+    }
   }
 
   return {

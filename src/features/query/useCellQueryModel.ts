@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
@@ -19,6 +26,7 @@ import { plotFileName } from '../plots/plotExport'
 import {
   datasetSetGroupId,
   datasetSetOptionId,
+  formatReadSize,
   plotSetOptions,
   SELECTIONS_SET_ID,
   type PlotDatasetSet,
@@ -27,6 +35,11 @@ import {
 import { useSelectionCells } from '../plots/useSelectionCells'
 import type { SavedSelection } from '../roi/selectionListModel'
 import { selectedCellBoundaryBbox } from '../cells/cellDetailModel'
+import { DEFAULT_CELL_IMAGE_RADIUS } from './cellImageMeasurer'
+import {
+  CellImageMeasurements,
+  type CellImageMeasurementsSnapshot,
+} from './cellImageMeasurements'
 import { CellOutlineReader } from './cellOutlineReader'
 import { defaultCellPictureField, type CellPictureOutline } from './cellPictureModel'
 import type { CellQueryPictureImage } from './CellPicture'
@@ -37,17 +50,35 @@ import {
   type CellQuerySort,
 } from './cellQuery'
 import {
+  formatCellImageReadSize,
+  imageChannelOptions,
+  imageColumnNeeds,
+  imageGroupNote,
+  imageLevelOptions,
+  measuredRange,
+  measurementView,
+  type CellQueryConditionImage,
+  type CellQueryImageChannel,
+  type CellQueryImageProgress,
+  type CellQueryMeasurementView,
+} from './cellQueryImage'
+import {
   cellQueryColumns,
   cellQueryCountCopy,
+  cellQueryImageColumns,
   defaultCellQueryCondition,
   defaultQueryClassName,
   formatCellQueryNumber,
+  imageColumn,
   isConditionComplete,
+  isImageColumnId,
   overviewCellColumns,
   overviewNumberColumn,
   overviewSegmentationColumn,
+  parseImageColumnId,
   setColumnId,
   type CellQueryColumn,
+  type CellQueryImageChannelOption,
 } from './cellQueryModel'
 import {
   createCellQuerySession,
@@ -83,6 +114,8 @@ export interface CellQueryConditionView {
   readonly message: string | null
   readonly classes: readonly CellQueryClassOption[]
   readonly complete: boolean
+  // For an image column (plan 26): its settings and measurement.
+  readonly image: CellQueryConditionImage | null
 }
 
 export interface CellQueryTableColumn {
@@ -165,6 +198,11 @@ export interface CellQueryModel {
   // A current, successful result with rows, its columns read.
   readonly canExport: boolean
   readonly onExportCsv: () => void
+  // Why the image's channels are not listed, or null (plan 26-D1).
+  readonly imageNote: string | null
+  // Measurements for table columns no condition shows.
+  readonly tableMeasurements: readonly CellQueryMeasurementView[]
+  readonly imageProgress: CellQueryImageProgress
 }
 
 export interface CellQueryModelInput {
@@ -196,12 +234,19 @@ export interface CellQueryModelInput {
   readonly pictureImage: CellQueryPictureImage | null
   // The pictures' outlines (plan 23-H).
   readonly loadCellOutlines: CellOutlinesLoader
+  // The canvas's image channels, measured for image columns (plan 26).
+  readonly imageChannels: readonly CellQueryImageChannel[]
+  // The plane the canvas shows of a z-stack, or null.
+  readonly imageZPlane: number | null
   readonly appendDebugEvent: AppendDebugEvent
   readonly createSession?: () => CellQuerySession
+  readonly createImageMeasurements?: () => CellImageMeasurements
 }
 
 type ColumnInput =
   | { readonly status: 'loading' }
+  // An image column waiting for Measure (plan 26-D7) or after Cancel.
+  | { readonly status: 'waiting' }
   | { readonly status: 'error'; readonly message: string }
   | {
       readonly status: 'ready'
@@ -246,8 +291,13 @@ function objectId(value: object): number {
 }
 
 const EMPTY_CLASSES: readonly CellQueryClassOption[] = []
+const NO_MEASUREMENTS: readonly CellQueryMeasurementView[] = []
 const NO_ERRORS: ReadonlyMap<string, string> = new Map()
 const NO_COUNTS: ReadonlyMap<string, number> = new Map()
+
+function createCellImageMeasurements(): CellImageMeasurements {
+  return new CellImageMeasurements()
+}
 
 export function useCellQueryModel({
   open,
@@ -271,8 +321,11 @@ export function useCellQueryModel({
   onSaveClass,
   pictureImage,
   loadCellOutlines,
+  imageChannels,
+  imageZPlane,
   appendDebugEvent,
   createSession = createCellQuerySession,
+  createImageMeasurements = createCellImageMeasurements,
 }: CellQueryModelInput): CellQueryModel {
   const active = open && available && datasetReady && datasetUrl !== null
   const [extraColumnIds, setExtraColumnIds] = useState<readonly string[]>([])
@@ -299,15 +352,54 @@ export function useCellQueryModel({
       }),
     [annotations, datasetSets, savedSelectionList.length],
   )
-  const columnOptions = useMemo(
+  // Image columns (plan 26), measured by a store of the dataset's
+  // measurements whose state changes render the window.
+  const [measurements] = useState(createImageMeasurements)
+  const imageSnapshot = useSyncExternalStore(
+    measurements.subscribe,
+    measurements.getSnapshot,
+    measurements.getSnapshot,
+  )
+  const imageChannelList = useMemo(
+    () => (active ? imageChannelOptions(imageChannels, imageSnapshot) : []),
+    [active, imageChannels, imageSnapshot],
+  )
+  // Cells without an area are discs of a radius set in the condition (26-D4).
+  const imageRadius =
+    cellColumns.numbers.cellArea === undefined ? DEFAULT_CELL_IMAGE_RADIUS : undefined
+  const resolveImageColumn = useCallback(
+    (columnId: string): CellQueryColumn | null => {
+      const spec = parseImageColumnId(columnId)
+      const channel =
+        spec === null
+          ? undefined
+          : imageChannelList.find((candidate) => candidate.id === spec.channelId)
+      if (spec === null || channel === undefined) return null
+      const state = imageMeasurementState(imageSnapshot, columnId)
+      const values =
+        state?.status !== 'ready'
+          ? undefined
+          : spec.stat === 'mean'
+            ? state.result.mean
+            : state.result.above
+      return imageColumn(
+        spec,
+        channel,
+        values === undefined ? undefined : measuredRange(values),
+      )
+    },
+    [imageChannelList, imageSnapshot],
+  )
+  const nonImageColumns = useMemo(
     () => cellQueryColumns({ cellColumns, setOptions, tracks: metadataTracks }),
     [cellColumns, metadataTracks, setOptions],
   )
   const resolveColumn = useCallback(
     (columnId: string): CellQueryColumn | null =>
-      columnOptions.find((column) => column.id === columnId) ??
+      resolveImageColumn(columnId) ??
+      nonImageColumns.find((column) => column.id === columnId) ??
       unlistedDatasetSetColumn(columnId, annotationGroups),
-    [annotationGroups, columnOptions],
+    [annotationGroups, nonImageColumns, resolveImageColumn],
   )
   // The sort, while the dataset lists its column: one kept from another
   // dataset is left out until it does, as conditions are, rather than
@@ -340,6 +432,83 @@ export function useCellQueryModel({
         return column === null ? [] : [column]
       }),
     [activeSort, resolveColumn, tableColumnIds],
+  )
+  const imageNeeds = useMemo(
+    () => imageColumnNeeds(neededColumns, imageChannelList),
+    [imageChannelList, neededColumns],
+  )
+  const columnOptions = useMemo(
+    () => [
+      ...nonImageColumns,
+      ...cellQueryImageColumns({
+        channels: imageChannelList,
+        z: imageZPlane ?? undefined,
+        radius: imageRadius,
+        channelsInUse: imageNeeds.channelsInUse,
+      }),
+    ],
+    [
+      imageChannelList,
+      imageNeeds.channelsInUse,
+      imageRadius,
+      imageZPlane,
+      nonImageColumns,
+    ],
+  )
+
+  // Measures what the image columns need while the window is open; another
+  // dataset, or other cells, start again.
+  const imageChannelsRef = useRef({ imageChannels, imageZPlane })
+  useEffect(() => {
+    imageChannelsRef.current = { imageChannels, imageZPlane }
+  })
+  useEffect(() => {
+    measurements.reset()
+  }, [cells, datasetUrl, measurements])
+  useEffect(() => {
+    measurements.sync(active ? imageNeeds.needs : [], {
+      cells,
+      loaderFor: (channelId, z) => {
+        const current = imageChannelsRef.current
+        if (z !== current.imageZPlane) return null
+        return (
+          current.imageChannels.find((channel) => channel.id === channelId)?.loader ??
+          null
+        )
+      },
+      onMeasured: (spec, ms, bytes) => {
+        const name =
+          imageChannelsRef.current.imageChannels.find(
+            (channel) => channel.id === spec.channelId,
+          )?.name ?? spec.channelId
+        appendDebugEvent(
+          `Cell query: measured ${name} at level ${spec.level.toString()} in ${(ms / 1000).toFixed(1)} s (${formatReadSize(bytes)})`,
+        )
+      },
+    })
+  }, [active, appendDebugEvent, cells, imageNeeds.needs, measurements])
+  useEffect(() => {
+    if (!active) return
+    measurements.findThresholds(
+      imageChannels.filter(
+        (channel) =>
+          channel.histogram?.threshold === undefined &&
+          imageChannelList.some((option) => option.id === channel.id),
+      ),
+    )
+  }, [active, imageChannelList, imageChannels, measurements])
+  // Each level's size for the Resolution lists of the channels in use.
+  useEffect(() => {
+    if (!active) return
+    measurements.findLevelSizes(
+      imageChannels.filter((channel) => imageNeeds.channelsInUse.includes(channel.id)),
+    )
+  }, [active, imageChannels, imageNeeds.channelsInUse, measurements])
+  useEffect(
+    () => () => {
+      measurements.reset()
+    },
+    [measurements],
   )
 
   // Values read on demand: dataset sets, metadata tracks and the saved
@@ -421,6 +590,8 @@ export function useCellQueryModel({
           savedSelections,
           metadataTracks,
           trackLoads,
+          imageSnapshot,
+          imageOverLimit: imageNeeds.overLimit,
         }),
       )
     }
@@ -430,6 +601,8 @@ export function useCellQueryModel({
     cellColumns,
     cells,
     datasetSetLoads,
+    imageNeeds.overLimit,
+    imageSnapshot,
     metadataTracks,
     neededColumns,
     savedSelections,
@@ -736,9 +909,23 @@ export function useCellQueryModel({
     (columnId: string) => {
       const column = resolveColumn(columnId)
       if (column === null) return
-      onConditionsChange([...conditions, defaultCellQueryCondition(column)])
+      const threshold =
+        column.source.kind === 'image'
+          ? imageChannelList.find(
+              (channel) =>
+                column.source.kind === 'image' &&
+                channel.id === column.source.spec.channelId,
+            )?.threshold
+          : undefined
+      onConditionsChange([
+        ...conditions,
+        defaultCellQueryCondition(
+          column,
+          typeof threshold === 'number' ? threshold : undefined,
+        ),
+      ])
     },
-    [conditions, onConditionsChange, resolveColumn],
+    [conditions, imageChannelList, onConditionsChange, resolveColumn],
   )
   const onConditionChange = useCallback(
     (index: number, condition: CellQueryCondition) => {
@@ -754,6 +941,40 @@ export function useCellQueryModel({
     },
     [conditions, onConditionsChange],
   )
+
+  const imageMeasurementView = (
+    column: CellQueryColumn,
+  ): CellQueryMeasurementView | null => {
+    if (column.source.kind !== 'image') return null
+    const { spec } = column.source
+    const key = imageSnapshot.keyFor(column.id)
+    return measurementView(
+      column,
+      imageChannelList.find((channel) => channel.id === spec.channelId)?.name ??
+        spec.channelId,
+      key,
+      key === undefined ? undefined : imageSnapshot.state(key),
+      imageNeeds.overLimit.get(column.id),
+      measurements,
+    )
+  }
+  const conditionImage = (
+    column: CellQueryColumn | null,
+  ): CellQueryConditionImage | null => {
+    if (column?.source.kind !== 'image') return null
+    const { spec } = column.source
+    const channel = imageChannelList.find((candidate) => candidate.id === spec.channelId)
+    const measurement = imageMeasurementView(column)
+    if (channel === undefined || measurement === null) return null
+    return {
+      spec,
+      channelName: channel.name,
+      levels: imageLevelOptions(channel, imageSnapshot.levelSizes(channel.id)),
+      histogram:
+        imageChannels.find((candidate) => candidate.id === channel.id)?.histogram ?? null,
+      measurement,
+    }
+  }
 
   const conditionViews = conditions.map((condition, index): CellQueryConditionView => {
     const column = resolveColumn(condition.columnId)
@@ -771,11 +992,21 @@ export function useCellQueryModel({
             : 'loading',
       message:
         column === null
-          ? 'The dataset no longer lists this column.'
+          ? isImageColumnWaiting(condition.columnId, imageChannels)
+            ? 'Waiting for the image.'
+            : 'The dataset no longer lists this column.'
           : (error ?? (input?.status === 'error' ? input.message : null)),
       classes: input?.status === 'ready' ? input.classes : EMPTY_CLASSES,
       complete: isConditionComplete(condition),
+      image: conditionImage(column),
     }
+  })
+  const tableMeasurements = tableColumnIds.flatMap((id) => {
+    if (conditionColumnIds.has(id)) return []
+    const column = columnKinds.get(id)
+    const view =
+      column === undefined || column === null ? null : imageMeasurementView(column)
+    return view === null || view.status === 'ready' ? [] : [view]
   })
 
   // Save as class and export (23-D7, 23-D8), for the query as it stands: an
@@ -822,7 +1053,19 @@ export function useCellQueryModel({
   }, [appendDebugEvent, canExport, cells, columnKinds, datasetUrl, exportColumns, rows])
 
   const matching = runnable && !resultIsCurrent
-  const loadingColumns = conditionViews.some((view) => view.status === 'loading')
+  const waitingColumns = usedColumnIds.some(
+    (id) => columnInputs.get(id)?.status === 'waiting',
+  )
+  // The count waits for a measurement (plan 26-D3) rather than showing the
+  // last one.
+  const measuringColumns = usedColumnIds.some(
+    (id) => isImageColumnId(id) && columnInputs.get(id)?.status === 'loading',
+  )
+  const loadingColumns = conditionViews.some(
+    (view) =>
+      view.status === 'loading' &&
+      columnInputs.get(view.condition.columnId)?.status !== 'waiting',
+  )
   const matchCount = currentResult === null ? null : currentResult.rows.length
   const totalCount = cells.length
   // Imported sets' cells not on the map; a dataset's own columns also list
@@ -845,6 +1088,13 @@ export function useCellQueryModel({
         ? [`${saved.name} stopped at its cell limit.`]
         : [],
     ),
+    ...imageOutsideNotes(
+      tableColumnIds,
+      columnKinds,
+      imageSnapshot,
+      imageChannelList,
+      elementNoun,
+    ),
   ]
   const errors = [
     ...(currentResult?.error === null || currentResult === null
@@ -860,12 +1110,16 @@ export function useCellQueryModel({
         : 'No dataset'
       : blocked
         ? 'A condition could not be read'
-        : matching || matchCount === null
-          ? // The status line adds "…" while loading.
-            'Matching'
-          : activeConditions.length === 0
-            ? `${totalCount.toLocaleString()} ${elementNoun}, no conditions`
-            : cellQueryCountCopy(matchCount, totalCount, elementNoun),
+        : waitingColumns
+          ? 'Waiting to measure'
+          : measuringColumns
+            ? 'Measuring'
+            : matching || matchCount === null
+              ? // The status line adds "…" while loading.
+                'Matching'
+              : activeConditions.length === 0
+                ? `${totalCount.toLocaleString()} ${elementNoun}, no conditions`
+                : cellQueryCountCopy(matchCount, totalCount, elementNoun),
     loading: matching || loadingColumns || exporting,
     elementNoun,
     columnOptions,
@@ -906,6 +1160,10 @@ export function useCellQueryModel({
     exporting,
     canExport,
     onExportCsv: handleExportCsv,
+    imageNote: active ? imageGroupNote(imageChannels) : null,
+    tableMeasurements:
+      tableMeasurements.length === 0 ? NO_MEASUREMENTS : tableMeasurements,
+    imageProgress: measurements,
   }
 }
 
@@ -941,6 +1199,9 @@ interface ColumnInputContext {
     string,
     OnDemandLoad<readonly ContinuousCellMetadataValue[]>
   >
+  readonly imageSnapshot: CellImageMeasurementsSnapshot
+  // Image columns past the three channels measured at once, and why.
+  readonly imageOverLimit: ReadonlyMap<string, string>
 }
 
 // A column's values as the worker takes them, once they are known.
@@ -974,6 +1235,43 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
         columnId: column.id,
         values: overviewNumberColumn(cells, field),
       }),
+    }
+  }
+
+  if (source.kind === 'image') {
+    const overLimit = context.imageOverLimit.get(column.id)
+    if (overLimit !== undefined) return { status: 'error', message: overLimit }
+    if (source.spec.stat === 'above' && source.spec.threshold === undefined) {
+      return { status: 'error', message: 'Set a threshold to measure.' }
+    }
+    const key = context.imageSnapshot.keyFor(column.id)
+    const state = key === undefined ? undefined : context.imageSnapshot.state(key)
+    switch (state?.status) {
+      case 'ready': {
+        const { result } = state
+        return {
+          status: 'ready',
+          key: `image:${objectId(result)}`,
+          classes: EMPTY_CLASSES,
+          request: () => ({
+            type: 'number-column',
+            columnId: column.id,
+            values: source.spec.stat === 'mean' ? result.mean : result.above,
+          }),
+        }
+      }
+      case 'error':
+        return { status: 'error', message: state.message }
+      case 'refused':
+        return {
+          status: 'error',
+          message: `The read is over the limit (${formatCellImageReadSize(state.size)}).`,
+        }
+      case 'asking':
+      case 'cancelled':
+        return { status: 'waiting' }
+      default:
+        return { status: 'loading' }
     }
   }
 
@@ -1154,6 +1452,48 @@ async function exportCsv(
   }
 
   return formatCsv(lines)
+}
+
+// The measurement an image column reads, if any.
+function imageMeasurementState(
+  snapshot: CellImageMeasurementsSnapshot,
+  columnId: string,
+) {
+  const key = snapshot.keyFor(columnId)
+  return key === undefined ? undefined : snapshot.state(key)
+}
+
+// An image column from a link before the image has loaded.
+function isImageColumnWaiting(
+  columnId: string,
+  imageChannels: readonly CellQueryImageChannel[],
+): boolean {
+  return parseImageColumnId(columnId) !== null && imageChannels.length === 0
+}
+
+// Cells outside the image get no value (26-D3); one note per channel.
+function imageOutsideNotes(
+  columnIds: readonly string[],
+  columns: ReadonlyMap<string, CellQueryColumn | null>,
+  snapshot: CellImageMeasurementsSnapshot,
+  channels: readonly CellQueryImageChannelOption[],
+  noun: string,
+): readonly string[] {
+  const notes = new Map<string, string>()
+  for (const id of columnIds) {
+    const source = columns.get(id)?.source
+    if (source?.kind !== 'image' || notes.has(source.spec.channelId)) continue
+    const state = imageMeasurementState(snapshot, id)
+    if (state?.status !== 'ready' || state.result.cellsOutside === 0) continue
+    const name =
+      channels.find((channel) => channel.id === source.spec.channelId)?.name ??
+      source.spec.channelId
+    notes.set(
+      source.spec.channelId,
+      `${state.result.cellsOutside.toLocaleString()} ${noun} are outside the image and have no ${name} values.`,
+    )
+  }
+  return [...notes.values()]
 }
 
 function isImportedSetColumn(columnId: string): boolean {
