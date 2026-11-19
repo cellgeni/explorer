@@ -444,6 +444,16 @@ export function transcriptDensityScaleAriaLabel(scaleMax: number | undefined): s
   )} transcripts per square.`
 }
 
+export function transcriptGeneMarkerScaleAriaLabel(scaleMax: number | undefined): string {
+  if (scaleMax === undefined || !Number.isFinite(scaleMax) || scaleMax <= 0) {
+    return 'Gene marker sizes unavailable until density renders.'
+  }
+
+  return `Gene marker area follows the count, up to ${formatTranscriptDensityScaleValue(
+    scaleMax,
+  )} transcripts filling a square.`
+}
+
 export function retainedTranscriptLayerState<
   ErrorType extends TranscriptLoadErrorSummary,
 >(layerState: TranscriptLayerState<ErrorType>): TranscriptRetainedLayerState | undefined {

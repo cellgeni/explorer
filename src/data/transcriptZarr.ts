@@ -4,9 +4,14 @@ import { micrometers } from './coords'
 import type { BBox } from './coords'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isGeneFeature } from './geneFeatures'
+import {
+  addTranscriptFeatureTally,
+  topTranscriptFeatures,
+  transcriptFeatureGroups,
+  type TranscriptFeatureTally,
+} from './transcriptFeatureTally'
 import type {
   TranscriptAggregateBin,
-  TranscriptAggregateFeatureSummary,
   TranscriptAggregateResult,
   TranscriptGroupSummary,
   TranscriptLodLevel,
@@ -145,7 +150,12 @@ type DensityGeneDataChunkCache = Map<number, Promise<DensityGeneDataChunk>>
 
 type DensityBinMap = Map<
   string,
-  { binX: number; binY: number; count: number; featureCounts: Map<string, number> }
+  {
+    binX: number
+    binY: number
+    count: number
+    features: Map<string, TranscriptFeatureTally>
+  }
 >
 
 type SelectedGeneDensity =
@@ -983,12 +993,12 @@ function selectedGeneDensityBins(
         let bin = binMap.get(key)
 
         if (bin === undefined) {
-          bin = { binX, binY, count: 0, featureCounts: new Map() }
+          bin = { binX, binY, count: 0, features: new Map() }
           binMap.set(key, bin)
         }
 
         bin.count += count
-        bin.featureCounts.set(gene.name, (bin.featureCounts.get(gene.name) ?? 0) + count)
+        addTranscriptFeatureTally(bin.features, gene.name, count, x, y)
         visibleTranscriptCount += count
       }
     }
@@ -1167,7 +1177,11 @@ function densityBinMapToAggregateBins(
   return [...binMap.entries()]
     .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
     .map(([, bin]) => {
-      const topFeatures = topFeatureSummaries(bin.featureCounts)
+      const featureGroups = transcriptFeatureGroups(bin.features)
+      const topFeatures = topTranscriptFeatures(
+        featureGroups,
+        TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT,
+      )
 
       return {
         id: `native-zarr-density:${level}:${bin.binX}:${bin.binY}`,
@@ -1184,7 +1198,7 @@ function densityBinMapToAggregateBins(
         binSizeMicrometers,
         count: bin.count,
         selectedGeneCount: bin.count,
-        ...(topFeatures.length === 0 ? {} : { topFeatures }),
+        ...(topFeatures.length === 0 ? {} : { topFeatures, featureGroups }),
       }
     })
 }
@@ -1200,16 +1214,6 @@ function transcriptLodLevelFromBins(
     gridKeys: bins.map((bin) => `${bin.binX},${bin.binY}`),
     transcriptCounts: bins.map((bin) => bin.count),
   }
-}
-
-function topFeatureSummaries(
-  featureCounts: ReadonlyMap<string, number>,
-  limit = TRANSCRIPT_DENSITY_FEATURE_SUMMARY_LIMIT,
-): readonly TranscriptAggregateFeatureSummary[] {
-  return [...featureCounts.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, Math.max(0, Math.floor(limit)))
-    .map(([featureName, count]) => ({ featureName, count }))
 }
 
 export function transcriptGroupsFromPoints(

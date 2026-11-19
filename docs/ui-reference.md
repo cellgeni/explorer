@@ -415,26 +415,27 @@ Atera stores transcripts per gene (see
 - `Export Transcripts` and the Cell card's z histogram cover the selected
   genes, and ask for genes when none are selected.
 
-| Control              | Type             | Range / default                                | Notes                                                                                  |
-| -------------------- | ---------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `Show transcripts`   | Checkbox         | Off                                            | Enables the overlay                                                                    |
-| `Detail`             | Select           | **Auto**, Density, Exact                       | Auto shows exact points when the visible estimate fits the budget, else density        |
-| `Exact points`       | Meter            | "{estimate} of {budget} points"                | Fills with the view's transcripts; warning colour over the budget                      |
-| `Edit Max`           | Button           | Shows `Exact budget`                           | `Exact budget`: number, 1–1,000,000, step 1,000; 100,000; commits on Enter or blur     |
-| `Feature filter`     | Select           | **Selected genes**, All features               | Selected genes needs at least one selected gene; applies to density and exact points   |
-| Feature chips        | Chips with ×     |                                                | × (`Remove {gene} from transcript features`) removes it from the shared gene selection |
-| `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection` | Adds the gene and switches the filter to Selected genes                                |
-| Gene list            | Rows             | See below                                      | With exact points coloured by Feature (Phase 15.4-C)                                   |
-| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal     | Normalized to the largest square on the slide at the current square size               |
-| `Point color`        | Select           | **Feature**, QV                                | Exact points                                                                           |
-| `Min QV`             | Number           | 0–40; 20                                       | Exact points; Atera density too                                                        |
-| `Gene-only calls`    | Checkbox         | On                                             | Excludes control probes                                                                |
-| `Transcript opacity` | Slider 0–100%    | 85%                                            |                                                                                        |
-| `Point size`         | Slider 1–6 px    | 2 px                                           |                                                                                        |
+| Control              | Type             | Range / default                                          | Notes                                                                                             |
+| -------------------- | ---------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `Show transcripts`   | Checkbox         | Off                                                      | Enables the overlay                                                                               |
+| `Detail`             | Select           | **Auto**, Density, Exact                                 | Auto shows exact points when the visible estimate fits the budget, else density                   |
+| `Exact points`       | Meter            | "{estimate} of {budget} points"                          | Fills with the view's transcripts; warning colour over the budget                                 |
+| `Edit Max`           | Button           | Shows `Exact budget`                                     | `Exact budget`: number, 1–1,000,000, step 1,000; 100,000; commits on Enter or blur                |
+| `Feature filter`     | Select           | **Selected genes**, All features                         | Selected genes needs at least one selected gene; applies to density and exact points              |
+| Feature chips        | Chips with ×     |                                                          | × (`Remove {gene} from transcript features`) removes it from the shared gene selection            |
+| `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection`           | Adds the gene and switches the filter to Selected genes                                           |
+| Gene list            | Rows             | See below                                                | With exact points coloured by Feature (Phase 15.4-C), or gene markers                             |
+| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal, Gene markers | Normalized to the largest square on the slide at the current square size. Gene markers: see below |
+| `Point color`        | Select           | **Feature**, QV                                          | Exact points                                                                                      |
+| `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too                                                                   |
+| `Gene-only calls`    | Checkbox         | On                                                       | Excludes control probes                                                                           |
+| `Transcript opacity` | Slider 0–100%    | 85%                                                      |                                                                                                   |
+| `Point size`         | Slider 1–6 px    | 2 px                                                     |                                                                                                   |
 
 The gene list (`src/features/sections/TranscriptGeneListBlock.tsx`,
 `src/features/transcripts/useTranscriptGeneLegend.ts`) shows, while exact
-points are coloured by Feature, the genes coloured on the canvas: the
+points are coloured by Feature or density is drawn as gene markers, the genes
+coloured on the canvas: the
 selected genes in order with Selected genes, or the 24 genes with most points
 in view with All features ("+n more genes in view"). Each row has:
 
@@ -442,15 +443,31 @@ in view with All features ("+n more genes in view"). Each row has:
   12 colours no other selected gene has, and keeps it while others are added
   or removed; other genes keep the colour from their name. A colour chosen
   here is kept for that gene, also in other datasets, for the session.
-- an eye (`{gene} transcripts visible`), which hides that gene's points.
-  `Show All` shows them again. Hidden genes reset when another dataset opens,
-  and QV colours show every point.
-- the number of its points loaded in view, hidden ones included.
+- an eye (`{gene} transcripts visible`), which hides that gene's points or
+  markers. `Show All` shows them again. Hidden genes reset when another
+  dataset opens, and QV colours show every point.
+- the number of its points loaded in view, hidden ones included; with gene
+  markers, its transcripts in the squares drawn.
 
 The canvas legend lists the same genes under "Transcripts" (the first 12,
 then "+n more in Transcripts", a link that opens this section), and its checkboxes are the same eyes; it
 stays while every gene in view is hidden. With density squares or QV colours
 there is no list; the section says why.
+
+**Gene markers** (`Density color`, `txDensity=gene`) group nearby
+transcripts of one gene into one marker, like 10x Explorer's bins coloured
+by gene, but without mixing colours. Each density square of the Selected
+genes filter gets a circle per gene, in the gene list's colour, at the
+count-weighted centre of that gene's transcripts in the square (of its native
+bins, or of the transcripts themselves for Atera density at a `Min QV` other
+than 20). Circle area follows the count, so a count equal to the scale's
+largest square fills the square; circles are at least 18% of the square's
+half-width and 1.5 px, and smaller ones are drawn on top. The preview shows
+three sizes with the counts they stand for. The hover card names the gene and
+its count. Squares that count all transcripts (All features, cell-summary
+squares, Xenium outputs without `density/gene`) keep Thermal squares.
+`transcriptGeneMarkers` (`src/rendering/transcriptRenderer.ts`) builds them
+from each square's `featureGroups`.
 
 At ≥ 80% of the budget, `Load exact viewport` must be pressed.
 
@@ -909,9 +926,9 @@ category lists last:
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
   40 µm bin") with the density scale; points coloured by quality: QV 0 to
-  40+; or points coloured by Feature: "Transcripts", each gene with an eye,
-  its swatch and its points in view (15.4-C), as in the Transcripts section's
-  gene list.
+  40+; or points coloured by Feature, or gene markers: "Transcripts", each
+  gene with an eye, its swatch and its points (or transcripts in the squares)
+  in view (15.4-C), as in the Transcripts section's gene list.
 
 Transcript count, the default, has no legend. Hidden cells drop their legend.
 

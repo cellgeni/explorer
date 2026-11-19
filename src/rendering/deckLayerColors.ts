@@ -8,6 +8,7 @@ import type {
   GeneExpressionScoreModeOption,
   TranscriptDensityColorScale,
   TranscriptDensityColorScaleOption,
+  TranscriptDensityRampScale,
   TranscriptPointColorMode,
   TranscriptPointColorModeOption,
 } from './deckLayerTypes'
@@ -16,6 +17,7 @@ export const DEFAULT_GENE_EXPRESSION_COLOR_SCALE: GeneExpressionColorScale = 'pl
 export const DEFAULT_GENE_EXPRESSION_SCORE_MODE: GeneExpressionScoreMode = 'sum'
 export const DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE: TranscriptDensityColorScale =
   'thermal'
+const TRANSCRIPT_GENE_MARKER_FALLBACK_RAMP: TranscriptDensityRampScale = 'thermal'
 export const DEFAULT_TRANSCRIPT_POINT_COLOR_MODE: TranscriptPointColorMode = 'feature'
 
 export const GENE_EXPRESSION_COLOR_SCALE_OPTIONS: readonly GeneExpressionColorScaleOption[] =
@@ -44,6 +46,7 @@ export const TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS: readonly TranscriptDensityC
     { id: 'viridis', label: 'Viridis' },
     { id: 'cividis', label: 'Cividis' },
     { id: 'teal', label: 'Teal' },
+    { id: 'gene', label: 'Gene markers' },
   ]
 
 export const TRANSCRIPT_POINT_COLOR_MODE_OPTIONS: readonly TranscriptPointColorModeOption[] =
@@ -110,7 +113,7 @@ const GENE_EXPRESSION_COLOR_STOPS: Record<
 }
 
 const TRANSCRIPT_DENSITY_COLOR_STOPS: Record<
-  TranscriptDensityColorScale,
+  TranscriptDensityRampScale,
   readonly [ColorStop, ColorStop, ColorStop]
 > = {
   thermal: [
@@ -192,8 +195,17 @@ export function transcriptDensityColor(
   colorScale: TranscriptDensityColorScale,
   intensity: number,
 ): Color {
-  const [lowStop, middleStop, highStop] = TRANSCRIPT_DENSITY_COLOR_STOPS[colorScale]
+  const [lowStop, middleStop, highStop] =
+    TRANSCRIPT_DENSITY_COLOR_STOPS[transcriptDensityRamp(colorScale)]
   return interpolateColorStops(lowStop, middleStop, highStop, intensity)
+}
+
+// The ramp squares use: gene markers fall back to the default for squares
+// that count all transcripts.
+export function transcriptDensityRamp(
+  colorScale: TranscriptDensityColorScale,
+): TranscriptDensityRampScale {
+  return colorScale === 'gene' ? TRANSCRIPT_GENE_MARKER_FALLBACK_RAMP : colorScale
 }
 
 // CSS gradients for the scale previews and legends, low on the left. They use
@@ -207,7 +219,9 @@ export function geneExpressionScaleGradient(
 export function transcriptDensityScaleGradient(
   colorScale: TranscriptDensityColorScale,
 ): string {
-  return colorStopsGradient(TRANSCRIPT_DENSITY_COLOR_STOPS[colorScale])
+  return colorStopsGradient(
+    TRANSCRIPT_DENSITY_COLOR_STOPS[transcriptDensityRamp(colorScale)],
+  )
 }
 
 function colorStopsGradient(stops: readonly [ColorStop, ColorStop, ColorStop]): string {

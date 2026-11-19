@@ -74,14 +74,15 @@ export interface ViewerLegendInput {
       readonly content: TranscriptDensityContent
     } | null
     readonly pointColorMode: TranscriptPointColorMode | null
-    // Genes coloured on the canvas, with points by gene (15.4-C).
+    // Genes coloured on the canvas, with points by gene (15.4-C) or gene
+    // markers, when there are no points.
     readonly genes?: TranscriptGeneLegend | null
   }
 }
 
 // The legend for what the canvas shows: the cell colour mode, then the
 // transcripts when they are drawn as density, coloured by quality, or
-// coloured by gene (15.4-C). Lists of categories go last, so they cannot
+// coloured by gene, as points (15.4-C) or gene markers. Lists of categories go last, so they cannot
 // push a scale out of view. Transcript count is the plain default and needs
 // no legend.
 export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSection[] {
@@ -111,7 +112,10 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
       min: '0',
       max: `${TRANSCRIPT_QUALITY_SCALE_MAX}+`,
     })
-  } else if (pointColorMode === 'feature' && input.transcripts.genes != null) {
+  } else if (
+    (pointColorMode === 'feature' || pointColorMode === null) &&
+    input.transcripts.genes != null
+  ) {
     const { items, moreCount } = input.transcripts.genes
     sections.push({
       kind: 'categories',

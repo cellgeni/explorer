@@ -236,6 +236,8 @@ or exact points.
   - Squares are the finest power-of-two multiple of 10 µm whose occupied
     squares number at most 1,500. Colours are scaled to the largest square
     on the slide at that size, so they do not change while panning.
+  - Each square keeps each gene's count and the count-weighted centre of its
+    10 µm cells, for the hover card and gene markers.
   - A request whose new genes span more than 32 data chunks reads nothing and
     says so (`TRANSCRIPT_GENE_DENSITY_CHUNK_LIMIT`). Measured on the demo
     (whole slide, Node, Sanger bucket): 1 gene 0.2 s and 2.2 MB, 8 genes

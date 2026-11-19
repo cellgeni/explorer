@@ -2,8 +2,14 @@ import { act, renderHook } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
-import type { TranscriptPoint } from '../../data/transcriptOverlay'
-import type { TranscriptPointColorMode } from '../../rendering/deckLayers'
+import type {
+  TranscriptAggregateBin,
+  TranscriptPoint,
+} from '../../data/transcriptOverlay'
+import type {
+  TranscriptDensityColorScale,
+  TranscriptPointColorMode,
+} from '../../rendering/deckLayers'
 import { TRANSCRIPT_GENE_PALETTE } from './transcriptGeneLegendModel'
 import type { TranscriptLayerState } from './transcriptLayerModel'
 import { useTranscriptGeneLegend } from './useTranscriptGeneLegend'
@@ -24,10 +30,23 @@ const READY: TranscriptLayerState = {
   points: [point('GFAP', 1), point('GFAP', 2), point('SNAP25', 3)],
 } as unknown as TranscriptLayerState
 
+function group(featureName: string, count: number) {
+  return { featureName, count, position: { x: micrometers(5), y: micrometers(5) } }
+}
+
+const DENSITY: TranscriptLayerState = {
+  status: 'aggregate',
+  bins: [
+    { featureGroups: [group('GFAP', 4), group('SNAP25', 1)] },
+    { featureGroups: [group('SNAP25', 2)] },
+  ] as unknown as readonly TranscriptAggregateBin[],
+} as unknown as TranscriptLayerState
+
 function useHarness(
   colorMode: TranscriptPointColorMode,
   layerState = READY,
   selectedGenes: readonly string[] = ['SNAP25', 'GFAP'],
+  densityColorScale: TranscriptDensityColorScale = 'thermal',
 ) {
   const [colors, setColors] = useState<Readonly<Record<string, string>>>({})
   const [hidden, setHidden] = useState<readonly string[]>([])
@@ -35,6 +54,7 @@ function useHarness(
     appendDebugEvent: vi.fn(),
     colorMode,
     colors,
+    densityColorScale,
     filterMode: 'selected',
     hiddenGenes: hidden,
     layerState,
@@ -90,8 +110,30 @@ describe('useTranscriptGeneLegend', () => {
       useHarness('feature', { status: 'idle' } as TranscriptLayerState),
     )
     expect(density.result.current.model.note).toBe(
-      'Gene colours show when transcripts are drawn as points.',
+      'Gene colours show when transcripts are drawn as points, or as density with Density color set to Gene markers.',
     )
+    expect(
+      renderHook(() => useHarness('feature', DENSITY)).result.current.model.active,
+    ).toBe(false)
+  })
+
+  it('lists the genes of gene markers, with their transcripts in the squares', () => {
+    const { result } = renderHook(() =>
+      useHarness('quality', DENSITY, ['SNAP25', 'GFAP'], 'gene'),
+    )
+
+    expect(result.current.markersShown).toBe(true)
+    expect(result.current.model.note).toBeNull()
+    expect(result.current.legend?.items).toEqual([
+      { gene: 'SNAP25', color: TRANSCRIPT_GENE_PALETTE[0], visible: true, count: 3 },
+      { gene: 'GFAP', color: TRANSCRIPT_GENE_PALETTE[1], visible: true, count: 4 },
+    ])
+
+    // QV point colours do not stop gene markers hiding genes.
+    act(() => {
+      result.current.model.onVisibilityChange('GFAP', false)
+    })
+    expect(result.current.hiddenGenes.has('GFAP')).toBe(true)
   })
 
   it('keeps each selected gene’s colour when another is added', () => {

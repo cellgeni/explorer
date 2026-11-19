@@ -1061,6 +1061,7 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     colorMode: transcriptPointColorMode,
     colors: transcriptGeneColors,
+    densityColorScale: transcriptDensityColorScale,
     filterMode: effectiveTranscriptFeatureFilterMode,
     hiddenGenes: hiddenTranscriptGenes,
     layerState: transcriptLayerState,
@@ -1647,7 +1648,9 @@ export function App({ dependencies }: AppProps = {}) {
         cellAreaMax: legendCellAreaMax,
         transcripts: {
           density:
-            effectiveShowTranscriptOverlay && transcriptDensityContent !== null
+            effectiveShowTranscriptOverlay &&
+            transcriptDensityContent !== null &&
+            !transcriptGenes.markersShown
               ? {
                   colorScale: transcriptDensityColorScale,
                   labels: transcriptDensityScaleLabels,
@@ -1683,6 +1686,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptDensityContent,
       transcriptDensityScaleLabels,
       transcriptGenes.legend,
+      transcriptGenes.markersShown,
       transcriptLayerState,
       transcriptPointColorMode,
     ],
