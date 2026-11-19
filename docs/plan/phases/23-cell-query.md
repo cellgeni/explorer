@@ -477,3 +477,6 @@ Changed from the plan while building:
 - Exporting the pictures as one image.
 - Neighbourhood conditions: within a distance of a class.
 - Queries across the sections of a collection.
+- Conditions on image channels: a cell's mean intensity and the share of
+  its pixels above a threshold. Planned in
+  [Phase 25](25-image-channel-conditions.md).
