@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { imagePixels } from './coords'
-import { computeChannelAutoContrast, spreadTiles } from './morphologyContrast'
+import {
+  computeChannelAutoContrast,
+  otsuThreshold,
+  spreadTiles,
+} from './morphologyContrast'
 import type { DecodedJpeg2000 } from '../codecs/jpeg2000'
 import type {
   TileDecodeResponse,
@@ -152,6 +156,69 @@ describe('computeChannelAutoContrast', () => {
       max: 20,
       min: 5,
     })
+  })
+})
+
+describe('otsuThreshold', () => {
+  const sorted = (values: readonly number[]) => Float64Array.from(values).sort()
+
+  it('splits two groups of values between them', () => {
+    const threshold = otsuThreshold(
+      sorted([
+        ...Array.from({ length: 300 }, (_, index) => 900 + (index % 200)),
+        ...Array.from({ length: 100 }, (_, index) => 5000 + (index % 400)),
+      ]),
+    )
+
+    expect(threshold).toBeGreaterThan(1099)
+    expect(threshold).toBeLessThanOrEqual(5000)
+  })
+
+  it('leaves out zeros, which would otherwise be a class of their own', () => {
+    const values = [
+      ...Array.from({ length: 2000 }, () => 0),
+      ...Array.from({ length: 300 }, (_, index) => 900 + (index % 200)),
+      ...Array.from({ length: 100 }, (_, index) => 5000 + (index % 400)),
+    ]
+
+    const threshold = otsuThreshold(sorted(values))
+
+    expect(threshold).toBeGreaterThan(1099)
+    expect(threshold).toBeLessThanOrEqual(5000)
+  })
+
+  it('keeps fractions for samples that are not whole numbers', () => {
+    const threshold = otsuThreshold(sorted([0.1, 0.11, 0.12, 0.9, 0.91, 0.92]))
+
+    expect(threshold).toBeGreaterThan(0.12)
+    expect(threshold).toBeLessThanOrEqual(0.9)
+    expect(Number.isInteger(threshold)).toBe(false)
+  })
+
+  it('has none for a single value or none at all', () => {
+    expect(otsuThreshold(sorted([0, 0, 7, 7]))).toBeUndefined()
+    expect(otsuThreshold(sorted([0, 0]))).toBeUndefined()
+    expect(otsuThreshold(sorted([]))).toBeUndefined()
+  })
+
+  it('is kept beside the histogram', async () => {
+    const loader = fakeLoader({
+      numLevels: 1,
+      tiles: [{ col: 0, row: 0 }],
+      sourceWidth: 6,
+      sourceHeight: 1,
+    })
+
+    const contrast = await computeChannelAutoContrast(loader, {
+      decodeTile: async () => ({
+        width: 6,
+        height: 1,
+        pixels: new Uint16Array([0, 0, 10, 12, 50, 52]),
+      }),
+    })
+
+    expect(contrast.histogram.threshold).toBeGreaterThan(12)
+    expect(contrast.histogram.threshold).toBeLessThanOrEqual(50)
   })
 })
 

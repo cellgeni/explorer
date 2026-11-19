@@ -2153,7 +2153,7 @@ export class TiffPyramidLoader {
 
       const sampleBytes = await Promise.all(
         chunk.sampleChunks.map((sampleChunk) =>
-          this.fetchChunkBytes(sampleChunk, signal),
+          this.fetchChunkBytes(sampleChunk, signal, undefined, options?.persist),
         ),
       )
       const totalByteLength = sampleBytes.reduce(
@@ -2171,7 +2171,41 @@ export class TiffPyramidLoader {
       return bytes
     }
 
-    return this.fetchChunkBytes(chunk, signal, { level, row, col, chunks, options })
+    return this.fetchChunkBytes(
+      chunk,
+      signal,
+      { level, row, col, chunks, options },
+      options?.persist,
+    )
+  }
+
+  async tileReadBytes(
+    level: number,
+    tiles: readonly TileIndex[],
+    signal?: AbortSignal,
+  ): Promise<number | null> {
+    // Strip and NDPI tiles are cut from reads shared between tiles.
+    if (this.stripLevels.has(level) || this.ndpiLevels.has(level)) {
+      return null
+    }
+
+    const chunks = await this.chunkIndex(level)
+    signal?.throwIfAborted()
+    let bytes = 0
+
+    for (const tile of tiles) {
+      const chunk = chunks.get(tiffChunkKey(level, tile.row, tile.col))
+
+      if (chunk === undefined) {
+        continue
+      }
+
+      bytes += hasSampleChunks(chunk)
+        ? chunk.sampleChunks.reduce((total, sample) => total + sample.length, 0)
+        : chunk.length
+    }
+
+    return bytes
   }
 
   // A stripped level's tile, cut from the bands of rows across it.
@@ -2419,6 +2453,7 @@ export class TiffPyramidLoader {
     chunk: TiffChunk,
     signal?: AbortSignal,
     adjacent?: AdjacentTileContext,
+    persist = true,
   ): Promise<Uint8Array> {
     // A zero-length tile was never written (Aperio leaves blank areas out);
     // decoders draw it transparent.
@@ -2441,6 +2476,7 @@ export class TiffPyramidLoader {
         adjacent === undefined
           ? this.fetchRange(start, end, rangeSignal)
           : this.adjacentTileBytes(adjacent, chunk, rangeSignal),
+      write: persist,
     })
   }
 

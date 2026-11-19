@@ -71,6 +71,8 @@ export interface FetchByteRangeWithCacheOptions {
   readonly end: number
   readonly signal?: AbortSignal
   readonly fetchRange: (signal?: AbortSignal) => Promise<Uint8Array>
+  // False reads the cache but does not add what it fetches. True by default.
+  readonly write?: boolean
 }
 
 export interface AsyncByteSource {
@@ -376,7 +378,7 @@ function writeCachedBytes(
   options: FetchByteRangeWithCacheOptions,
   bytes: Uint8Array,
 ): void {
-  if (options.cache === null || options.cache === undefined) {
+  if (options.cache === null || options.cache === undefined || options.write === false) {
     return
   }
 

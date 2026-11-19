@@ -12,9 +12,11 @@ class FakeWorker implements DecodeWorkerLike {
   onerror: ((event: ErrorEvent) => void) | null = null
   readonly terminate = vi.fn()
   readonly posted: TileDecodeWorkerRequest[] = []
+  readonly transfers: Transferable[][] = []
 
-  postMessage(message: TileDecodeWorkerRequest): void {
+  postMessage(message: TileDecodeWorkerRequest, transfer: Transferable[]): void {
     this.posted.push(message)
+    this.transfers.push(transfer)
   }
 
   resolve(response: TileDecodeResponse): void {
@@ -52,7 +54,10 @@ describe('TileDecodeWorkerPool', () => {
     })
     const posted = workers[0]?.posted[0]
     const request =
-      posted !== undefined && !('sampling' in posted) && !('stripRows' in posted)
+      posted !== undefined &&
+      !('sampling' in posted) &&
+      !('measure' in posted) &&
+      !('stripRows' in posted)
         ? posted
         : undefined
 
@@ -129,6 +134,41 @@ describe('TileDecodeWorkerPool', () => {
     await expect(promise).resolves.toEqual({
       samples: Float64Array.from([2]),
       pixelCount: 2,
+    })
+  })
+
+  it('decodes a tile into per-cell sums, transferring the cells', async () => {
+    const { pool, workers } = makePool({ size: 1 })
+    const cells = {
+      x: Float32Array.from([1]),
+      y: Float32Array.from([1]),
+      radius: Float32Array.from([1]),
+    }
+    const promise = pool.measure(
+      new Uint8Array([1, 2]),
+      { compression: 1, bitsPerSample: [8], tileWidth: 2, tileHeight: 1 },
+      { cells, width: 2, height: 1, threshold: 2 },
+    )
+    const request = workers[0]?.posted[0]
+
+    expect(request).toMatchObject({
+      compression: 1,
+      measure: { width: 2, height: 1, threshold: 2 },
+    })
+    expect(workers[0]?.transfers[0]).toHaveLength(4)
+
+    workers[0]?.resolve({
+      id: request?.id ?? -1,
+      ok: true,
+      sum: Float64Array.from([3]),
+      count: Uint32Array.from([2]),
+      above: Uint32Array.from([1]),
+    })
+
+    await expect(promise).resolves.toEqual({
+      sum: Float64Array.from([3]),
+      count: Uint32Array.from([2]),
+      above: Uint32Array.from([1]),
     })
   })
 

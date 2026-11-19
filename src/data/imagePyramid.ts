@@ -97,6 +97,12 @@ export interface ImagePyramidTileFetchOptions {
   // Called when the tile's bytes come from a request made for another tile,
   // so that the caller can stop counting it against its request limit.
   readonly onSharedRead?: () => void
+  // False reads the persistent byte-range cache but adds nothing to it, so a
+  // pass over a whole level (Cell Query's image measurements, plan 25-D8)
+  // does not evict what the canvas and the other readers keep there. True
+  // by default. TIFF tiles cut from strips or NDPI blocks share their reads
+  // with the canvas and are still kept.
+  readonly persist?: boolean
 }
 
 // A level of a z-stack that can be read whole, for the 3D view.
@@ -173,6 +179,13 @@ export interface ImagePyramidLoader {
     col?: number,
     row?: number,
   ): ImagePyramidTileRenderOptions
+  // The bytes that fetching these tiles of a level reads, from the file's
+  // tile index; null when the loader cannot tell.
+  tileReadBytes?(
+    level: number,
+    tiles: readonly TileIndex[],
+    signal?: AbortSignal,
+  ): Promise<number | null>
   loadTile?(
     level: number,
     col: number,

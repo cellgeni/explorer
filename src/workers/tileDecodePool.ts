@@ -1,11 +1,14 @@
 import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
+import type { TileCellSums } from '../data/tileCellMeasure'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import type {
   TileDecodeOptions,
   TileDecodeResponse,
   TileDecodeSuccess,
   TileDecodeWorkerRequest,
+  TileMeasure,
+  TileMeasureSuccess,
   TileSamplesSuccess,
   TileStripBandSuccess,
   WorkerDecodedTile,
@@ -33,6 +36,7 @@ export interface TileDecodeWorkerPoolOptions {
 type TileDecodeWorkerSuccess =
   | TileDecodeSuccess
   | TileSamplesSuccess
+  | TileMeasureSuccess
   | TileStripBandSuccess
 
 interface PendingDecode {
@@ -97,6 +101,27 @@ export class TileDecodeWorkerPool {
     return { samples: response.samples, pixelCount: response.pixelCount }
   }
 
+  // Decodes a tile and returns per-cell sums (plan 25). The cells' arrays
+  // are transferred, so the caller no longer has them.
+  async measure(
+    bytes: Uint8Array,
+    options: TiffTileDecodeMetadata,
+    measure: TileMeasure,
+  ): Promise<TileCellSums> {
+    const { cells } = measure
+    const response = await this.post(
+      bytes,
+      (id, payload) => ({ id, bytes: payload, ...options, measure }),
+      [cells.x.buffer, cells.y.buffer, cells.radius.buffer],
+    )
+
+    if (!('sum' in response)) {
+      throw new Error('Tile decode worker did not return per-cell sums.')
+    }
+
+    return { sum: response.sum, count: response.count, above: response.above }
+  }
+
   // Decodes a band of TIFF strips (see decodeTiffStripBand).
   async decodeStripBand(
     bytes: Uint8Array,
@@ -129,6 +154,7 @@ export class TileDecodeWorkerPool {
   private post(
     bytes: Uint8Array,
     request: (id: number, payload: ArrayBuffer) => TileDecodeWorkerRequest,
+    transfer: readonly ArrayBufferLike[] = [],
   ): Promise<TileDecodeWorkerSuccess> {
     const id = this.nextRequestId
     this.nextRequestId += 1
@@ -146,7 +172,10 @@ export class TileDecodeWorkerPool {
       this.pending.set(id, { resolve, reject, workerIndex })
 
       try {
-        worker.postMessage(request(id, payload), [payload])
+        worker.postMessage(request(id, payload), [
+          payload,
+          ...(transfer as readonly ArrayBuffer[]),
+        ])
       } catch (cause) {
         this.pending.delete(id)
         this.decrementWorker(workerIndex)
