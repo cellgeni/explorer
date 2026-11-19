@@ -1,7 +1,7 @@
 # Phase 25 — Image Channel Conditions
 
-Planned 2026-11-19. The spike (task A) ran the same day; nothing else is
-started. Requested: filter cells by the presence or
+Planned 2026-11-19. The spike (task A) and the decoder switch (task A2)
+were done the same day, and M1 started. Requested: filter cells by the presence or
 intensity of up to three image channels inside each cell, in the Cell Query
 window ([Phase 23](23-cell-query.md)).
 
@@ -83,8 +83,8 @@ measured; the other three channels' files may differ in size.
 - About three quarters of the tiles hold tissue (over 100 KB). The rest
   are nearly empty background.
 - JPEG 2000 decode in Node 25 on one thread, including a sum over every
-  pixel, with the decode-only wasm build of `@cornerstonejs/codec-openjpeg`.
-  The app loads the package's slower default build
+  pixel, with the decode-only wasm build of `@cornerstonejs/codec-openjpeg`,
+  which the app loads since task A2
   ([Spike Results](#spike-results-2026-11-19)).
   - level 0: 67 ms for a 615 KB tile (75th percentile size), 89 ms for the
     largest (929 KB);
@@ -129,14 +129,24 @@ bucketing the cells to the last tile.
 | Decode-only wasm | 1     | Panning | 910   | 643 | 70 s  | 9.2  | 98 ms, 135 ms                   | Network |
 | Decode-only wasm | 2     | Idle    | 248   | 180 | 20 s  | 8.9  | 102 ms, 147 ms                  | Network |
 
-- **The app decodes JPEG 2000 with the slow build.** `jpeg2000.ts:149`
-  imports the package's default build, `openjpegjs.js`. Its decode-only
-  wasm build, `openjpegwasm_decode.js`, decodes the same tiles 4.2 times
-  faster in the browser, with identical values. In Node it is 2.4–3 times
+- **The app decoded JPEG 2000 with the slow build.** `jpeg2000.ts:149`
+  imported the package's default build, `openjpegjs.js`, which is OpenJPEG
+  compiled to JavaScript by wasm2js. Its decode-only wasm build,
+  `openjpegwasm_decode.js`, decodes the same tiles 4.2 times faster in the
+  spike's measurer, with identical values. In Node it is 2.4–3 times
   faster: 74 against 223 ms for a level-0 tile, 112 against 270 ms for a
-  level-2 tile. With the app's build the decode workers are busy for the
-  whole run. Switching builds is its own change, started 2026-11-19. M1
-  needs it, and the canvas gains from it too.
+  level-2 tile. With the old build the decode workers were busy for the
+  whole run.
+- **Task A2 switched the app to the fast build**
+  ([PR #192](https://github.com/cellgeni/explorer/pull/192), merged
+  2026-11-19). Its record is in the
+  [optimization pass](optimization-pass.md#jpeg-2000-decode-only-wasm-build-2026-11-19).
+  Zooming and panning the demo, the canvas's 1024² tiles took 130–141 ms
+  at the median from request to reply, against 1.20–1.51 s, and a decode
+  took 91–112 ms of worker CPU, against 866–1,127 ms. Auto-contrast samples
+  took 41–97 ms per channel, against 290–522 ms. The tile worker shrank
+  from 965 to 301 kB, plus a 255 kB `.wasm`. The measurer's rows above for
+  the decode-only build are what M1 can expect.
 - **With the fast build, the network is the limit.** The same 643 MB took
   70–146 s as the bucket moved between 4.4 and 9.2 MB/s. `curl` on the same
   Mac got 7.0 MB/s on one connection and 7.9 MB/s on six. The bucket serves
@@ -457,10 +467,10 @@ D5 and D6 after the spike; the others stand as proposed.
     comparison shows whether the pyramid averages or subsamples.
   - Record the numbers in this file. If one channel takes over 90 s on the
     dev Mac, revisit D3 and D5 before going on.
-- [ ] **A2. The fast JPEG 2000 decoder.** (S) Load the decode-only wasm
-      build of `@cornerstonejs/codec-openjpeg` in `jpeg2000.ts`
-      ([Spike Results](#spike-results-2026-11-19)). Started as its own
-      change on 2026-11-19; M1 needs it.
+- [x] **A2. The fast JPEG 2000 decoder.** (S; done 2026-11-19 in
+      [PR #192](https://github.com/cellgeni/explorer/pull/192)) Load the
+      decode-only wasm build of `@cornerstonejs/codec-openjpeg` in
+      `jpeg2000.ts` ([Spike Results](#spike-results-2026-11-19)).
 - [ ] **B. Measuring a tile.** (M) A pure
       `measureTileCells(pixels, width, height, cells, threshold)` in
       `src/data/`, beside `tileSamples.ts`.
@@ -522,7 +532,7 @@ D5 and D6 after the spike; the others stand as proposed.
 
 | Milestone        | Contents                       | Size             |
 | ---------------- | ------------------------------ | ---------------- |
-| M0 — Spike       | A (done), A2                   | S                |
+| M0 — Spike       | A, A2 (both done)              | S                |
 | M1 — TIFF images | B, C (TIFF), D, E, F, G        | About 2–2½ weeks |
 | M2 — OME-Zarr    | C (OME-Zarr), SpatialData test | M                |
 
@@ -538,7 +548,7 @@ D5 and D6 after the spike; the others stand as proposed.
 | Risk                                        | Effect                                                      | Mitigation                                                                                              |
 | ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | A slow host (BioImage Archive, 3–10 MB/s)   | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                         |
-| The app's slow JPEG 2000 decoder            | Decoding, not the network, sets the pace: 156 s per channel | Task A2 switches to the decode-only wasm build, 4.2 times faster                                        |
+| The app's slow JPEG 2000 decoder            | Decoding, not the network, sets the pace: 156 s per channel | Done: task A2 switched to the decode-only wasm build (PR #192)                                          |
 | A threshold of 0 by default                 | `% above` is 100 for every cell on the demo                 | Otsu's threshold, leaving out zeros (D6)                                                                |
 | A disc is not the cell                      | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference  |
 | Values depend on the level                  | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                                |
