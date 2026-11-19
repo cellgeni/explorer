@@ -5,7 +5,7 @@ import { PLOTS_WINDOW_MIN_SIZE, PLOTS_WINDOW_SIZE } from './floatingWindowModel'
 
 // Plots of the selected genes by class (plan 22-D8): a window at the top
 // right of the canvas, or to the left of the Embedding window, opened from
-// Cells › Show Plots.
+// the top bar's Plots toggle.
 export function PlotsWindow({
   plots,
   open,

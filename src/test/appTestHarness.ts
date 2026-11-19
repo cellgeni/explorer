@@ -234,22 +234,12 @@ export function openControls(area: ControlArea): void {
     case 'popover':
       openButton(screen.getByRole('button', { name: place.title }))
       return
-    case 'embedding': {
-      openControls('genes')
-      const show = screen.queryByRole('button', { name: 'Show Embedding' })
-      if (show !== null) fireEvent.click(show)
-      return
-    }
-    case 'plots': {
-      openControls('genes')
-      const show = screen.queryByRole('button', { name: 'Show Plots' })
-      if (show !== null) fireEvent.click(show)
-      return
-    }
-    case 'query': {
-      openControls('genes')
-      const show = screen.queryByRole('button', { name: 'Show Query' })
-      if (show !== null) fireEvent.click(show)
+    case 'panel': {
+      const toggle = within(screen.getByRole('group', { name: 'Panels' })).getByRole(
+        'button',
+        { name: place.name },
+      )
+      if (toggle.getAttribute('aria-pressed') !== 'true') fireEvent.click(toggle)
       return
     }
     case 'none':

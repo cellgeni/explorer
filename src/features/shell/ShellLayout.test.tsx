@@ -433,22 +433,27 @@ describe('ShellLayout', () => {
       return screen.getByRole('region', { name: 'Plots' })
     }
 
-    it('opens from Cells beside an open Embedding window', () => {
+    it('opens from the top bar beside an open Embedding window', () => {
       stubScreenWidth(false)
       render(
         <PanelsHarness
           initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], embeddingOpen: true }}
         />,
       )
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      expect(within(toggles).getByRole('button', { name: 'Embedding' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      )
 
-      fireEvent.click(screen.getByRole('button', { name: 'Show Plots' }))
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Plots' }))
 
       expect(plotsWindow()).toBeVisible()
       expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
       // To the left of the 360 px Embedding window, with a gap.
       expect(plotsWindow().style.right).toBe('380px')
       expect(plotsWindow().style.width).toBe('480px')
-      expect(screen.getByRole('button', { name: 'Hide Plots' })).toHaveAttribute(
+      expect(within(toggles).getByRole('button', { name: 'Plots' })).toHaveAttribute(
         'aria-pressed',
         'true',
       )
@@ -463,9 +468,16 @@ describe('ShellLayout', () => {
       )
       expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
 
-      fireEvent.click(screen.getByRole('button', { name: /^Layers/ }))
-      fireEvent.click(screen.getByRole('button', { name: 'Show Plots' }))
+      // The toggles are in a menu, which closes when one is picked.
+      expect(screen.queryByRole('group', { name: 'Panels' })).toBeNull()
+      fireEvent.click(screen.getByRole('button', { name: 'Panels' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Panels' })).getByRole('button', {
+          name: 'Plots',
+        }),
+      )
 
+      expect(screen.queryByRole('dialog', { name: 'Panels' })).toBeNull()
       expect(plotsWindow()).toBeVisible()
       expect(plotsWindow().style.right).toBe('')
       expect(screen.queryByRole('region', { name: 'Embedding' })).toBeNull()
@@ -508,7 +520,7 @@ describe('ShellLayout', () => {
       expect(viewerRenders).toBe(rendersBefore)
     })
 
-    it('leaves Show Plots out where cells have no annotation sets', () => {
+    it('leaves Plots out where cells have no annotation sets', () => {
       stubScreenWidth(false)
       render(
         <ShellLayout
@@ -543,8 +555,9 @@ describe('ShellLayout', () => {
         </ShellLayout>,
       )
 
-      expect(screen.getByRole('button', { name: 'Show Embedding' })).toBeVisible()
-      expect(screen.queryByRole('button', { name: 'Show Plots' })).toBeNull()
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      expect(within(toggles).getByRole('button', { name: 'Embedding' })).toBeVisible()
+      expect(within(toggles).queryByRole('button', { name: 'Plots' })).toBeNull()
     })
   })
 
@@ -598,7 +611,7 @@ describe('ShellLayout', () => {
       return screen.getByRole('region', { name: 'Cell Query' })
     }
 
-    it('opens from Cells to the left of the Embedding and Plots windows', () => {
+    it('opens from the top bar to the left of the Embedding and Plots windows', () => {
       stubScreenWidth(false)
       render(
         <QueryHarness
@@ -611,13 +624,14 @@ describe('ShellLayout', () => {
         />,
       )
 
-      fireEvent.click(screen.getByRole('button', { name: 'Show Query' }))
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Query' }))
 
       expect(queryWindow()).toBeVisible()
       // Past the 360 px Embedding and 480 px Plots windows, with gaps.
       expect(queryWindow().style.right).toBe('868px')
       expect(queryWindow().style.width).toBe('520px')
-      expect(screen.getByRole('button', { name: 'Hide Query' })).toHaveAttribute(
+      expect(within(toggles).getByRole('button', { name: 'Query' })).toHaveAttribute(
         'aria-pressed',
         'true',
       )
@@ -632,8 +646,12 @@ describe('ShellLayout', () => {
       )
       expect(screen.getByRole('region', { name: 'Plots' })).toBeVisible()
 
-      fireEvent.click(screen.getByRole('button', { name: /^Layers/ }))
-      fireEvent.click(screen.getByRole('button', { name: 'Show Query' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Panels' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Panels' })).getByRole('button', {
+          name: 'Query',
+        }),
+      )
 
       expect(queryWindow()).toBeVisible()
       expect(queryWindow().style.right).toBe('')
@@ -679,7 +697,7 @@ describe('ShellLayout', () => {
       expect(viewerRenders).toBe(rendersBefore)
     })
 
-    it('leaves Show Query out where the cells cannot be queried', () => {
+    it('leaves Query out where the cells cannot be queried', () => {
       stubScreenWidth(false)
       render(
         <QueryHarness
@@ -688,8 +706,9 @@ describe('ShellLayout', () => {
         />,
       )
 
-      expect(screen.getByRole('button', { name: 'Show Plots' })).toBeVisible()
-      expect(screen.queryByRole('button', { name: 'Show Query' })).toBeNull()
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      expect(within(toggles).getByRole('button', { name: 'Plots' })).toBeVisible()
+      expect(within(toggles).queryByRole('button', { name: 'Query' })).toBeNull()
     })
   })
 })

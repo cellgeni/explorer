@@ -667,13 +667,6 @@
   stroke-dasharray: 3 2;
 }
 
-/* Show Embedding, Show Plots and Show Query, side by side. */
-.shell-panel-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
 /* Cards (15.2-D): top left, above the legend, scrolling when they outgrow
    the canvas. */
 .shell-card-stack {
@@ -878,7 +871,14 @@
   font-weight: 700;
 }
 
+/* Where the bar is tight, the summary gives way first, then the name, so
+   neither runs under the tools. */
+.shell-top-bar-start > .ui-popover-anchor {
+  min-width: 0;
+}
+
 .shell-top-bar .shell-dataset-name {
+  min-width: 0;
   max-width: 280px;
   color: var(--text-1);
   font-size: var(--font-body);
@@ -892,6 +892,7 @@
 }
 
 .shell-summary {
+  flex-shrink: 100;
   min-width: 0;
   overflow: hidden;
   color: var(--text-2);
@@ -950,6 +951,53 @@
 .shell-tool:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+/* Embedding, Plots and Cell Query: toggles for the windows that open below
+   them, set off from Share by a rule. */
+
+.shell-panel-toggles {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 2px;
+  align-items: center;
+  margin-right: var(--space-1);
+  padding-right: var(--space-2);
+  border-right: 1px solid var(--border);
+}
+
+.shell-panel-toggle.ui-button {
+  padding: 0 8px;
+}
+
+.shell-panel-toggle .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.shell-panel-toggle[aria-pressed='true'],
+.shell-panel-toggle[aria-pressed='true']:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* The names take about 400 px with Share, Help and Settings, which the bar's
+   right side has from 1100 px, with the Measure options showing too; below
+   that only the icons show, and the names are still read. */
+@media (max-width: 1099.98px) {
+  .shell-panel-toggle.ui-button {
+    width: 28px;
+    padding: 0;
+  }
+
+  .shell-panel-toggle-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 
 /* Share, Help, Settings */
@@ -1562,12 +1610,12 @@
     max-width: 40vw;
   }
 
-  .shell-top-bar-start,
-  .shell-top-bar-end {
-    flex: 0 1 auto;
-  }
-
   .shell-top-bar-start {
     flex: 1 1 auto;
+  }
+
+  /* Its buttons cannot get smaller; the dataset name gives way. */
+  .shell-top-bar-end {
+    flex: 0 0 auto;
   }
 }

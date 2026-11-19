@@ -185,9 +185,20 @@ shown sections first (`setLinked`).
 | Tools          | Pan `P`, Box selection `R`, Lasso selection `L`, Measure `M`, Magic Lens `O`; the active one is pressed. A tool that cannot be used says why                                                    |
 | Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                       |
 | Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                  |
+| Panels         | `Embedding`, `Plots` and `Query` open and close the [Embedding](#embedding-panel), [Plots](#plots-panel) and [Cell Query](#cell-query-panel) panels; an open one is pressed. See below          |
 | `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                      |
 | `Help`         | `?` opens and closes it. Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read, and links to the guides on GitHub (`HELP_LINKS`)  |
 | `Settings`     | See [Settings](#settings)                                                                                                                                                                       |
+
+**Panels** (the `Panels` group, `PanelToggles` in `TopBar.tsx`): the
+windows' toggles sit at the right of the bar, above where the windows open.
+A dataset shows only the ones it has: none on images, no `Plots` or `Query`
+on Visium HD, whose bins have no annotation sets. From 1100 px wide each
+shows its icon and name; between 860 and 1100 px only the icon, with the
+name still read and in the tooltip. Under 860 px they fold into a menu (see
+[Narrow Screens](#narrow-screens)). Until 2026-11-19 they were Cells ›
+Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the genes and
+clusters.
 
 The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
 leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in
@@ -404,10 +415,6 @@ Loaded state:
   are not counted, here or in the legend.
 - **Metadata tracks**: every track, with its label, cell count, range, and
   `x` (the panel scrolls, not the list).
-
-**Panels**: `Show Embedding` opens the [Embedding panel](#embedding-panel),
-and `Show Plots` the [Plots panel](#plots-panel). Visium HD has no `Show
-Plots`: its bins have no annotation sets.
 
 **Advanced**: `Expression detail`, a select of **Auto LOD**, Exact region and
 All cells.
@@ -707,14 +714,14 @@ on, a circle and a compact summary also follow the mouse
 ## Embedding Panel
 
 The Embedding panel (UMAP, t-SNE or the dataset's `obsm` views) opens from
-Cells › `Show Embedding` and closes with `Close embedding` or Esc
+`Embedding` in the top bar and closes with `Close embedding` or Esc
 (`src/features/shell/EmbeddingWindow.tsx`). It sits at the top right of the
 canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
 260 px up to the canvas, and the plot redraws at its new size. The grip's
 description is the size ("360 by 400 px"), announced again after each change.
 Opening the panel moves focus into it, and closing it returns focus to
-`Show Embedding`.
+`Embedding` (or, under 860 px, the `Panels` menu's button).
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -728,7 +735,7 @@ The Plots panel plots the selected genes by the classes of one annotation
 set, with the active selection as one more group, or by the saved
 selections: a dot plot, a violin plot or a group-mean heatmap ([plan 22](plan/phases/22-plots-panel.md);
 `src/features/plots/`, `src/features/shell/PlotsWindow.tsx`). It opens from
-Cells › `Show Plots` and closes with `Close plots` or Esc. It sits at the top
+`Plots` in the top bar and closes with `Close plots` or Esc. It sits at the top
 right of the canvas, 480 × 420 px at first, or to the left of the Embedding
 panel when that is open. Its grip resizes it from 320 × 280 px up to the
 canvas, as the Embedding panel's does.
@@ -858,7 +865,7 @@ stores and are made text there, off the page's thread.
 
 The Cell Query panel finds cells by their classes and values and lists them
 in a table ([plan 23](plan/phases/23-cell-query.md); `src/features/query/`,
-`src/features/shell/QueryWindow.tsx`). It opens from Cells › `Show Query`
+`src/features/shell/QueryWindow.tsx`). It opens from `Query` in the top bar
 and closes with `Close cell query` or Esc. It sits at the top right of the
 canvas, 520 × 460 px at first, to the left of the Embedding and Plots panels
 when they are open. Its grip resizes it from 360 × 300 px up to the canvas,
@@ -1310,7 +1317,11 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   Pan"), and it lists each tool with its key and, when off, why. Picking one
   closes the menu and returns focus to its button. The brand is
   hidden, the summary chip is read out but not shown, and Share shows only its
-  icon. The Magic Lens options appear only while the lens is on.
+  icon. The Magic Lens options appear only while the lens is on. The dataset
+  name gives way to the buttons, ending in "…".
+- The window toggles fold into a `Panels` menu beside Share, listing
+  `Embedding`, `Plots` and `Query` with the open one pressed. Picking one
+  closes the menu.
 - The layer panel becomes a bottom sheet whose 56 px handle says "Layers" and
   what colours the cells ("Cells: graphclust"). Tapping it, or `\`, opens it
   to at most 65% of the screen. It is the same panel as on wide screens, so a

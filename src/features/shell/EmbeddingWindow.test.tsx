@@ -30,15 +30,15 @@ describe('EmbeddingWindow', () => {
     function Harness({ open }: { readonly open: boolean }) {
       return (
         <>
-          <button type="button" title="Show the embedding panel">
-            Show Embedding
+          <button type="button" title="Show the UMAP or t-SNE panel">
+            Embedding
           </button>
           <EmbeddingWindow embedding={embedding} open={open} onClose={vi.fn()} />
         </>
       )
     }
     const { rerender } = render(<Harness open={false} />)
-    const opener = screen.getByRole('button', { name: 'Show Embedding' })
+    const opener = screen.getByRole('button', { name: 'Embedding' })
     opener.focus()
 
     rerender(<Harness open />)
