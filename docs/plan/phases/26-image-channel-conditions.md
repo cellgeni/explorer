@@ -1,4 +1,4 @@
-# Phase 25 — Image Channel Conditions
+# Phase 26 — Image Channel Conditions
 
 Planned 2026-11-19. The spike (task A) and the decoder switch (task A2)
 were done the same day, and M1 started. Requested: filter cells by the presence or

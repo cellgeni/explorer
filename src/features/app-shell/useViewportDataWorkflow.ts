@@ -42,6 +42,7 @@ import {
 import {
   IDLE_BOUNDARY_LOAD_STATE,
   boundaryLoadFailed,
+  boundaryLoadOverLimit,
   boundaryLoadReady,
   boundaryLoadStarted,
   type BoundaryLoadState,
@@ -122,6 +123,10 @@ interface ViewportDataWorkflowControls {
   readonly geneExpressionScaleKey: string
   readonly geneExpressionScoreMode: GeneExpressionScoreMode
   readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
+  // Counts the outlines in a box when the viewer has no cells to count (an
+  // image's imported segmentation); replaces the viewer's count for
+  // boundary requests.
+  readonly viewportCellCount?: ((bbox: BBox) => number) | undefined
 }
 
 interface ViewportDataWorkflowData {
@@ -154,6 +159,7 @@ export function useViewportDataWorkflow({
     geneExpressionScaleKey,
     geneExpressionScoreMode,
     visiumHdBinSizeMicrometers,
+    viewportCellCount,
   },
   data: { loadState, overviewExtent, selectedGenes },
   loaders,
@@ -252,11 +258,15 @@ export function useViewportDataWorkflow({
       }
 
       const boundaryLoadingEnabled = boundaryLayers.some((layer) => layer.enabled)
+      const boundaryDetail =
+        viewportCellCount === undefined || !boundaryLoadingEnabled
+          ? detail
+          : { ...detail, visibleCellCount: viewportCellCount(detail.bbox) }
 
-      if (!shouldLoadBoundaryPolygons(detail, { cellLimit: boundaryCellLimit })) {
-        if (boundaryLoadingEnabled && detail.visibleCellCount > 0) {
+      if (!shouldLoadBoundaryPolygons(boundaryDetail, { cellLimit: boundaryCellLimit })) {
+        if (boundaryLoadingEnabled && boundaryDetail.visibleCellCount > 0) {
           appendDebugEvent(
-            `Boundaries deferred: ${detail.visibleCellCount.toLocaleString()} visible cells exceed the ${boundaryCellLimit.toLocaleString()} boundary limit. Zoom in or raise Boundary limit to load true polygons.`,
+            `Boundaries deferred: ${boundaryDetail.visibleCellCount.toLocaleString()} visible cells exceed the ${boundaryCellLimit.toLocaleString()} boundary limit. Zoom in or raise Boundary limit to load true polygons.`,
             { coalesceKey: 'boundary-query' },
           )
         }
@@ -267,7 +277,7 @@ export function useViewportDataWorkflow({
       } else {
         for (const layer of boundaryLayers) {
           if (layer.enabled) {
-            requestBoundaryLayer(layer, detail, {
+            requestBoundaryLayer(layer, boundaryDetail, {
               appendDebugEvent,
               baseUrl: loadState.url,
               boundaryCellLimit,
@@ -519,6 +529,7 @@ export function useViewportDataWorkflow({
       setGeneExpressionBatch,
       setGeneExpressionState,
       setShareableViewState,
+      viewportCellCount,
     ],
   )
 
@@ -675,7 +686,7 @@ function requestBoundaryLayer(
   )
 
   void layer
-    .load(baseUrl, requestBbox, { signal: request.signal })
+    .load(baseUrl, requestBbox, { signal: request.signal, cellLimit: boundaryCellLimit })
     .then((batch) => {
       if (!request.isCurrent()) {
         return
@@ -688,8 +699,18 @@ function requestBoundaryLayer(
         durationMs,
       )
 
+      if (batch.overLimit !== undefined) {
+        // Nothing was drawn here, so any zoom or pan asks again.
+        layer.areaRef.current = null
+        boundaryViewportKeyRef.current = null
+      }
+
       layer.setElements(batch.elements)
-      layer.setState(boundaryLoadReady(baseUrl, batch.elements.length))
+      layer.setState(
+        batch.overLimit === undefined
+          ? boundaryLoadReady(baseUrl, batch.elements.length)
+          : boundaryLoadOverLimit(baseUrl, batch.overLimit.count),
+      )
       recordTelemetry(
         telemetryEvent(copy.telemetryName, 'success', {
           startedAt,

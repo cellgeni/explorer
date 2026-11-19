@@ -113,7 +113,12 @@ export type CustomMorphologyLayerLoader = (
 export type BoundaryElementsLoader = (
   baseUrl: string,
   bbox: BBox,
-  options?: { readonly signal?: AbortSignal },
+  options?: {
+    readonly signal?: AbortSignal
+    // The boundary limit, for a source that only learns how many outlines a
+    // box holds by reading them (an image's label mask).
+    readonly cellLimit?: number
+  },
 ) => Promise<ElementBatch>
 
 // The outlines of given cells, keyed by cell ID; cells left out have none

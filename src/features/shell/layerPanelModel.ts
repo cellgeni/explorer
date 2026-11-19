@@ -11,12 +11,21 @@ import type {
 } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
+import {
+  segmentationSummary,
+  type SegmentationSectionModel,
+} from '../sections/segmentationSectionModel'
 import type { TranscriptsSectionModel } from '../sections/transcriptsSectionModel'
 
 // The layer panel (plan 15.2-C): one accordion
 // section per layer, each header with a visibility checkbox, the name and a
 // one-line state.
-export type LayerSectionId = 'image' | 'cells' | 'transcripts' | 'annotations'
+export type LayerSectionId =
+  | 'image'
+  | 'cells'
+  | 'segmentation'
+  | 'transcripts'
+  | 'annotations'
 
 // A part of the panel to bring into view, such as the class list from the
 // legend's "+N more": the panel opens, then the section, and the anchor (or
@@ -177,7 +186,8 @@ export interface LayerPanelModelInput {
   readonly capabilities: Pick<
     AppPlatformCapabilities,
     'cells' | 'geometricAnnotations' | 'transcripts'
-  >
+  > &
+    Partial<Pick<AppPlatformCapabilities, 'segmentationImport'>>
   readonly cells: CellsSectionModel
   // 'cells', 'spots' or 'bins', which titles the Cells section.
   readonly elementNoun: string
@@ -186,6 +196,9 @@ export interface LayerPanelModelInput {
   readonly imageAvailable: boolean
   readonly layerVisibility: LayerVisibility
   readonly loadingAreas: ReadonlySet<LoadingTaskArea>
+  // An image's imported segmentation; its section shows where the platform
+  // offers one.
+  readonly segmentation?: SegmentationSectionModel | null
   readonly setLayerVisibility: Dispatch<SetStateAction<LayerVisibility>>
   readonly transcripts: TranscriptsSectionModel
 }
@@ -200,6 +213,7 @@ export function useLayerPanelModel({
   imageAvailable,
   layerVisibility,
   loadingAreas,
+  segmentation = null,
   setLayerVisibility,
   transcripts,
 }: LayerPanelModelInput): LayerPanelModel {
@@ -236,6 +250,18 @@ export function useLayerPanelModel({
         cellsSummary(cells, annotations),
       ),
     )
+  }
+
+  if (capabilities.segmentationImport === true && segmentation !== null) {
+    sections.push({
+      id: 'segmentation',
+      title: 'Segmentation',
+      visible: segmentation.show,
+      onVisibleChange: segmentation.onShowChange,
+      visibilityDisabled: segmentation.state.status !== 'ready',
+      summary: segmentationSummary(segmentation),
+      loading: loadingAreas.has('segmentation'),
+    })
   }
 
   if (capabilities.transcripts) {

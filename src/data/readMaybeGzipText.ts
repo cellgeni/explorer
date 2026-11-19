@@ -84,6 +84,37 @@ export async function forEachMaybeGzipLine(
   }
 }
 
+// Calls `onText` with the body's text as it arrives, inflated as
+// readMaybeGzipBytes does. Throwing from `onText` stops the read and cancels
+// the download.
+export async function forEachMaybeGzipText(
+  response: Response,
+  onText: (text: string) => void,
+): Promise<void> {
+  if (response.body === null) {
+    return
+  }
+
+  const reader = (await maybeInflatedBody(response.body)).getReader()
+  const decoder = new TextDecoder()
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+
+      if (done) {
+        onText(decoder.decode())
+        return
+      }
+
+      onText(decoder.decode(value, { stream: true }))
+    }
+  } catch (error) {
+    await reader.cancel(error).catch(() => undefined)
+    throw error
+  }
+}
+
 function lineWithoutCarriageReturn(line: string): string {
   return line.endsWith('\r') ? line.slice(0, -1) : line
 }

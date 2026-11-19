@@ -8,10 +8,12 @@ import type {
   TileDecodeRequest,
   TileDecodeResponse,
   TileDecodeWorkerRequest,
+  TileLabelTraceRequest,
   TileStripBandRequest,
   WorkerDecodedTile,
 } from './tileDecodeMessages'
 import { handleTileSamplesRequest } from './tileSamplesCore'
+import { traceTiffLabelTile } from './tiffLabelTraceCore'
 
 const workerScope = self as DedicatedWorkerGlobalScope
 
@@ -30,6 +32,11 @@ workerScope.onmessage = (event: MessageEvent<TileDecodeWorkerRequest>) => {
     return
   }
 
+  if ('labelTrace' in request) {
+    void traceLabelTile(request)
+    return
+  }
+
   void decodeTile(request)
 }
 
@@ -39,6 +46,29 @@ async function decodeStripBand(request: TileStripBandRequest): Promise<void> {
     const response: TileDecodeResponse = { id: request.id, ok: true, band: band.buffer }
 
     workerScope.postMessage(response, [band.buffer])
+  } catch (cause) {
+    const response: TileDecodeResponse = {
+      id: request.id,
+      ok: false,
+      error: cause instanceof Error ? cause.message : String(cause),
+    }
+
+    workerScope.postMessage(response)
+  }
+}
+
+async function traceLabelTile(request: TileLabelTraceRequest): Promise<void> {
+  try {
+    const trace = await traceTiffLabelTile(new Uint8Array(request.bytes), request)
+    const response: TileDecodeResponse = { id: request.id, ok: true, trace }
+
+    workerScope.postMessage(response, [
+      trace.labels.buffer,
+      trace.edgeOffsets.buffer,
+      trace.edges.buffer,
+      trace.bounds.buffer,
+      trace.pixelCounts.buffer,
+    ])
   } catch (cause) {
     const response: TileDecodeResponse = {
       id: request.id,

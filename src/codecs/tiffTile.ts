@@ -35,6 +35,9 @@ export interface TiffTileDecodeMetadata {
   readonly planarSampleByteLengths?: readonly number[]
   // TIFF PhotometricInterpretation: 2 RGB, 6 YCbCr.
   readonly photometric?: number
+  // TIFF SampleFormat: 1 unsigned integer (the default), 2 signed integer,
+  // 3 floating point. Only label images read it.
+  readonly sampleFormat?: number
   readonly littleEndian?: boolean
   readonly jpegTables?: Uint8Array
   // JPEG: decode only each 8 x 8 block's DC term, one pixel per block, for
@@ -550,9 +553,32 @@ function undoPredictor(
     return buffer
   }
 
+  if (bitsPerSample === 32) {
+    // Label images (Cellpose masks over 65,535 cells); sums wrap like the
+    // writer's differences.
+    const view = new DataView(buffer)
+    const sampleCount = Math.floor(buffer.byteLength / 4)
+
+    for (let rowStart = 0; rowStart < sampleCount; rowStart += rowSamples) {
+      const rowEnd = Math.min(sampleCount, rowStart + rowSamples)
+
+      for (let index = rowStart + stride; index < rowEnd; index += 1) {
+        view.setUint32(
+          index * 4,
+          (view.getUint32(index * 4, options.littleEndian) +
+            view.getUint32((index - stride) * 4, options.littleEndian)) >>>
+            0,
+          options.littleEndian,
+        )
+      }
+    }
+
+    return buffer
+  }
+
   if (bitsPerSample !== 16) {
     throw new Error(
-      `Unsupported TIFF predictor bit depth ${bitsPerSample}. Only 8-bit and 16-bit samples are supported.`,
+      `Unsupported TIFF predictor bit depth ${bitsPerSample}. Only 8-, 16- and 32-bit samples are supported.`,
     )
   }
 
