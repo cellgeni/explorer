@@ -451,7 +451,7 @@ describe('ShellLayout', () => {
       expect(plotsWindow()).toBeVisible()
       expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
       // To the left of the 360 px Embedding window, with a gap.
-      expect(plotsWindow().style.right).toBe('380px')
+      expect(plotsWindow().style.getPropertyValue('--floating-right')).toBe('380px')
       expect(plotsWindow().style.width).toBe('480px')
       expect(within(toggles).getByRole('button', { name: 'Plots' })).toHaveAttribute(
         'aria-pressed',
@@ -476,7 +476,7 @@ describe('ShellLayout', () => {
       const moveGrip = screen.getByRole('button', { name: 'Move the plots panel' })
       moveGrip.focus()
       fireEvent.keyDown(moveGrip, { key: 'ArrowDown' })
-      expect(plotsWindow()).toHaveClass('is-moved', 'is-front')
+      expect(plotsWindow()).toHaveClass('is-front')
       expect(plotsWindow().style.getPropertyValue('--floating-right')).toBe('380px')
       expect(plotsWindow().style.getPropertyValue('--floating-top')).toBe('32px')
 
@@ -666,7 +666,7 @@ describe('ShellLayout', () => {
 
       expect(queryWindow()).toBeVisible()
       // Past the 360 px Embedding and 480 px Plots windows, with gaps.
-      expect(queryWindow().style.right).toBe('868px')
+      expect(queryWindow().style.getPropertyValue('--floating-right')).toBe('868px')
       expect(queryWindow().style.width).toBe('520px')
       expect(within(toggles).getByRole('button', { name: 'Query' })).toHaveAttribute(
         'aria-pressed',

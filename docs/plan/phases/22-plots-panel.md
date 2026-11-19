@@ -177,7 +177,10 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   [Phase 15](15-interface-redesign.md#additions-after-the-close-out)). The window is 480 × 420 by default and at least
   320 × 280. It stays in the link as `panel=plots`, with the plot as
   `plot=dot|violin|heatmap`. It opens at the top right; when Embedding is
-  open, it opens to the left of it. Under 860 px both are full width, so
+  open, it opens to the left of it (**Changed 2026-11-19:** at full size as
+  far left as it fits, over Embedding, when the canvas is too narrow for both;
+  [Phase 15](15-interface-redesign.md#additions-after-the-close-out)). Under
+  860 px both are full width, so
   opening one closes the other. The controls are `Plot` (Dot plot, Violin,
   Heatmap), `Group by`, `Scale`, and for the dot plot and heatmap `Colour`
   (Shared across genes, Per gene, like Scanpy's `standard_scale='var'`).

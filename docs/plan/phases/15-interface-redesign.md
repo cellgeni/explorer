@@ -1757,6 +1757,18 @@ Each PR updates the docs it affects. The full list:
       keep their slots, so nothing moves on its own. The window last
       clicked or focused is drawn over the others. Under 860 px the windows
       span the canvas and do not move. Opening a window still focuses Close.
+- [x] A window with no room beside the others opens at full size over them
+      (2026-11-19). Each opened to the left of the open ones with its width
+      cut to the room left: with Embedding and Plots open, Cell Query was
+      about 200 px wide on a 1,080 px canvas (1440 px screen), and Plots was
+      272 px, under its 320 px minimum, at 1024 px. Every window now keeps its
+      size and slides only as far left (or up) as the canvas allows, over the
+      others and in front, since opening focuses it. The same CSS clamp keeps
+      moved windows inside the canvas. Resizing a window the canvas has
+      pushed from its slot first pins it where it is drawn, so its right edge
+      stays put and the grip follows the pointer. The Move button's
+      description is where the window is drawn, from the canvas's size while
+      the window is open.
 
 Gene scale and annotation class changes are in
 [Phase 4](04-genes-annotations.md#gene-scale-and-annotation-classes-november-2026),

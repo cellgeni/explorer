@@ -80,7 +80,6 @@ describe('EmbeddingWindow', () => {
     const { container } = render(
       <EmbeddingWindow embedding={testEmbeddingModel()} open onClose={vi.fn()} />,
     )
-    const panel = screen.getByRole('region', { name: 'Embedding' })
     const grip = screen.getByRole('button', { name: 'Move the embedding panel' })
     const title = screen.getByRole('heading', { name: 'Embedding' })
 
@@ -88,7 +87,6 @@ describe('EmbeddingWindow', () => {
     expect(grip).toHaveAccessibleDescription('12 px from the top, 12 px from the right')
     fireEvent.keyDown(grip, { key: 'ArrowLeft' })
     fireEvent.keyDown(grip, { key: 'ArrowDown' })
-    expect(panel).toHaveClass('is-moved')
     expect(panelStyle().getPropertyValue('--floating-right')).toBe('32px')
     expect(panelStyle().getPropertyValue('--floating-top')).toBe('32px')
     expect(grip).toHaveAccessibleDescription('32 px from the top, 32 px from the right')
@@ -143,6 +141,7 @@ describe('EmbeddingWindow', () => {
     ).not.toBeInTheDocument()
     fireEvent.pointerDown(title, { clientX: 100, clientY: 100, pointerId: 1 })
     fireEvent.pointerMove(title, { clientX: 0, clientY: 150, pointerId: 1 })
-    expect(screen.getByRole('region', { name: 'Embedding' })).not.toHaveClass('is-moved')
+    expect(panelStyle().getPropertyValue('--floating-right')).toBe('')
+    expect(panelStyle().getPropertyValue('--floating-top')).toBe('')
   })
 })

@@ -724,8 +724,11 @@ Dragging its title bar moves it anywhere over the canvas; a press that moves
 less than 3 px leaves it in place. The ⠿ button beside Close (`Move the
 embedding panel`) moves it 20 px per arrow key, and its description is the
 place ("12 px from the top, 12 px from the right"), announced again after
-each move. A moved panel keeps its distance from the canvas's top right,
-stays inside the canvas when the canvas shrinks, no longer follows the other
+each move, saying where the panel is drawn. Every panel stays inside the
+canvas at its full size where the canvas has room, so one in a place without
+room slides toward the canvas's left or top edge. Resizing from the grip
+keeps the panel's top right corner where it is drawn. A moved panel keeps
+its distance from the canvas's top right, no longer follows the other
 panels' widths, and keeps its place while closed. The panel last clicked or
 focused is drawn over the others. Under 860 px it spans the canvas and does
 not move. Opening the panel moves focus to `Close embedding`, and closing it
@@ -746,7 +749,9 @@ selections: a dot plot, a violin plot or a group-mean heatmap ([plan 22](plan/ph
 `src/features/plots/`, `src/features/shell/PlotsWindow.tsx`). It opens from
 `Plots` in the top bar and closes with `Close plots` or Esc. It sits at the top
 right of the canvas, 480 × 420 px at first, or to the left of the Embedding
-panel when that is open. Its grip resizes it from 320 × 280 px up to the
+panel when that is open. Where the canvas has no room there, it opens at its
+full size as far left as it fits, over the Embedding panel and in front of
+it, rather than narrower. Its grip resizes it from 320 × 280 px up to the
 canvas, and its title bar and `Move the plots panel` move it, as the
 Embedding panel's do.
 
@@ -878,7 +883,8 @@ in a table ([plan 23](plan/phases/23-cell-query.md); `src/features/query/`,
 `src/features/shell/QueryWindow.tsx`). It opens from `Query` in the top bar
 and closes with `Close cell query` or Esc. It sits at the top right of the
 canvas, 520 × 460 px at first, to the left of the Embedding and Plots panels
-when they are open. Its grip resizes it from 360 × 300 px up to the canvas,
+when they are open, or as far left as it fits over them, as Plots does. Its
+grip resizes it from 360 × 300 px up to the canvas,
 and its title bar and `Move the cell query panel` move it, as the Embedding
 panel's do. Its status line says how many cells match
 ("1,234 of 56,789 cells match"). It is offered on every platform with cells

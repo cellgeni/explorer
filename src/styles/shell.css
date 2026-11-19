@@ -38,8 +38,22 @@
 .shell-floating {
   position: absolute;
   z-index: var(--z-cards);
-  top: var(--space-3);
-  right: var(--space-3);
+  /* From the top right, but inside the canvas at full size where it has
+     room: a window with no room beside the others slides over them. */
+  top: max(
+    var(--space-3),
+    min(
+      var(--floating-top, var(--space-3)),
+      calc(100% - var(--floating-height, 0px) - var(--space-3))
+    )
+  );
+  right: max(
+    var(--space-3),
+    min(
+      var(--floating-right, var(--space-3)),
+      calc(100% - var(--floating-width, 0px) - var(--space-3))
+    )
+  );
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   max-width: calc(100% - 2 * var(--space-3));
@@ -127,19 +141,6 @@
 
 .shell-floating-move.ui-button {
   cursor: move;
-}
-
-/* A moved window keeps its place from the top right, but stays inside the
-   canvas when the canvas shrinks under it. */
-.shell-floating.is-moved {
-  top: max(
-    var(--space-3),
-    min(var(--floating-top), calc(100% - var(--floating-height) - var(--space-3)))
-  );
-  right: max(
-    var(--space-3),
-    min(var(--floating-right), calc(100% - var(--floating-width) - var(--space-3)))
-  );
 }
 
 /* The window last clicked or focused is drawn over the others. */

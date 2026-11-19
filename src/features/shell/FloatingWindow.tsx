@@ -18,8 +18,8 @@ export interface FloatingWindowSize {
   readonly height: number
 }
 
-// Where a moved window sits: its distance from the canvas's right and top
-// edges, so it stays put as the grip at its bottom left resizes it.
+// Where a window sits: its distance from the canvas's right and top edges,
+// so it stays put as the grip at its bottom left resizes it.
 interface FloatingWindowPosition {
   readonly right: number
   readonly top: number
@@ -55,8 +55,15 @@ function clampWindowSize(
   }
 }
 
-// Keeps a moved window inside the canvas, as .shell-floating.is-moved does
-// when the canvas shrinks under it.
+function elementSize(element: HTMLElement | null | undefined): FloatingWindowSize | null {
+  return element === null || element === undefined || element.clientWidth === 0
+    ? null
+    : { width: element.clientWidth, height: element.clientHeight }
+}
+
+// Keeps a window inside the canvas at its full size where the canvas has
+// room, as .shell-floating does with the same numbers: a window with no room
+// in its place slides toward the canvas's left or top edge.
 function clampWindowPosition(
   position: FloatingWindowPosition,
   size: FloatingWindowSize,
@@ -95,7 +102,8 @@ export interface FloatingWindowProps {
   // Narrow screens (15.2-I): the canvas's width, less a margin.
   readonly fullWidth?: boolean | undefined
   // How far from the canvas's right edge it sits, in pixels; the CSS inset
-  // by default. A second window opens to the left of the first (22-D8).
+  // by default. A second window opens to the left of the first (22-D8), or,
+  // without room there, as far left as it fits, over the first.
   readonly rightOffset?: number | undefined
   readonly onSizeChange?: ((size: FloatingWindowSize) => void) | undefined
   // Drawn over the other windows: the one last clicked or focused.
@@ -152,20 +160,53 @@ export function FloatingWindow({
   const moved = fullWidth ? null : position
   const placed = moved ?? { right: offset ?? RIGHT_INSET, top: TOP_INSET }
 
+  // The canvas's size while open, so the move grip can say where the window
+  // is drawn. The handlers read it afresh.
+  const [canvasBox, setCanvasBox] = useState<FloatingWindowSize | null>(null)
+  const drawn = clampWindowPosition(placed, size, canvasBox)
+
   useEffect(() => {
     onSizeChange?.(size)
   }, [onSizeChange, size])
 
-  function canvasSize(): FloatingWindowSize | null {
+  useEffect(() => {
     const canvas = panelRef.current?.parentElement
-    return canvas === null || canvas === undefined || canvas.clientWidth === 0
-      ? null
-      : { width: canvas.clientWidth, height: canvas.clientHeight }
+    if (
+      !open ||
+      canvas === null ||
+      canvas === undefined ||
+      typeof ResizeObserver === 'undefined'
+    ) {
+      return
+    }
+
+    const observer = new ResizeObserver(() => {
+      setCanvasBox(elementSize(canvas))
+    })
+    observer.observe(canvas)
+    return () => {
+      observer.disconnect()
+    }
+  }, [open])
+
+  function canvasSize(): FloatingWindowSize | null {
+    return elementSize(panelRef.current?.parentElement)
   }
 
   // Where the window is drawn now, within the canvas.
   function currentPosition(): FloatingWindowPosition {
-    return moved === null ? placed : clampWindowPosition(moved, size, canvasSize())
+    return clampWindowPosition(placed, size, canvasSize())
+  }
+
+  // Resizing keeps the top right corner where it is drawn. A window the
+  // canvas holds away from its place, as one with no room beside the others,
+  // is first pinned there, or its right edge would move instead of the grip.
+  function pinPlace() {
+    if (fullWidth) return
+    const current = currentPosition()
+    if (current.right !== placed.right || current.top !== placed.top) {
+      setPosition(current)
+    }
   }
 
   function maxSize(): FloatingWindowSize {
@@ -192,6 +233,7 @@ export function FloatingWindow({
 
   function handlePointerDown(event: PointerEvent<HTMLButtonElement>) {
     event.currentTarget.setPointerCapture?.(event.pointerId)
+    pinPlace()
     dragRef.current = { x: event.clientX, y: event.clientY, size }
   }
 
@@ -222,6 +264,7 @@ export function FloatingWindow({
     if (step === undefined) return
 
     event.preventDefault()
+    pinPlace()
     resize((current) => ({
       width: current.width + step.width,
       height: current.height + step.height,
@@ -282,27 +325,15 @@ export function FloatingWindow({
 
   function windowStyle(): CSSProperties {
     if (fullWidth) return { height: size.height }
-    if (moved !== null) {
-      // .shell-floating.is-moved keeps it inside the canvas from these.
-      return {
-        width: size.width,
-        height: size.height,
-        '--floating-right': `${moved.right}px`,
-        '--floating-top': `${moved.top}px`,
-        '--floating-width': `${size.width}px`,
-        '--floating-height': `${size.height}px`,
-      } as CSSProperties
-    }
+    // .shell-floating keeps it inside the canvas from these.
     return {
       width: size.width,
       height: size.height,
-      ...(offset === undefined
-        ? {}
-        : {
-            right: offset,
-            maxWidth: `calc(100% - ${offset + RIGHT_INSET}px)`,
-          }),
-    }
+      '--floating-right': `${placed.right}px`,
+      '--floating-top': `${placed.top}px`,
+      '--floating-width': `${size.width}px`,
+      '--floating-height': `${size.height}px`,
+    } as CSSProperties
   }
 
   return (
@@ -312,7 +343,6 @@ export function FloatingWindow({
         'shell-floating',
         className,
         fullWidth && 'is-full-width',
-        moved !== null && 'is-moved',
         front && 'is-front',
       )}
       aria-labelledby={headingId}
@@ -383,7 +413,7 @@ export function FloatingWindow({
       </span>
       {fullWidth ? null : (
         <span id={positionId} className="visually-hidden" aria-live="polite">
-          {`${placed.top} px from the top, ${placed.right} px from the right`}
+          {`${drawn.top} px from the top, ${drawn.right} px from the right`}
         </span>
       )}
     </section>
