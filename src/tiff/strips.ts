@@ -95,6 +95,8 @@ export function tiffStripLevel(options: {
   readonly tags: TiffStripTags
   readonly decodeMetadata: TiffTileDecodeMetadata
   readonly tileHeight: number
+  // A label image, whose 32-bit samples are read too (as raw values).
+  readonly labels?: boolean
 }): TiffStripLevel {
   const { decodeMetadata, height, level, tags, width } = options
   const bitsPerSample =
@@ -107,9 +109,12 @@ export function tiffStripLevel(options: {
   const planarConfiguration = decodeMetadata.planarConfiguration ?? 1
   const compression = decodeMetadata.compression ?? TIFF_COMPRESSION_NONE
 
-  if ((bits !== 8 && bits !== 16) || bitsPerSample.some((value) => value !== bits)) {
+  if (
+    (bits !== 8 && bits !== 16 && (options.labels !== true || bits !== 32)) ||
+    bitsPerSample.some((value) => value !== bits)
+  ) {
     throw new Error(
-      `TIFF level ${level} is stored in strips of ${bitsPerSample.join('/')}-bit samples; only 8- and 16-bit samples can be read from strips.`,
+      `TIFF level ${level} is stored in strips of ${bitsPerSample.join('/')}-bit samples; only ${options.labels === true ? '8-, 16- and 32-bit' : '8- and 16-bit'} samples can be read from strips.`,
     )
   }
 
@@ -192,6 +197,9 @@ export function tiffStripLevel(options: {
       ...(decodeMetadata.littleEndian === undefined
         ? {}
         : { littleEndian: decodeMetadata.littleEndian }),
+      ...(decodeMetadata.sampleFormat === undefined
+        ? {}
+        : { sampleFormat: decodeMetadata.sampleFormat }),
       compression: TIFF_COMPRESSION_NONE,
       bitsPerSample,
       samplesPerPixel,

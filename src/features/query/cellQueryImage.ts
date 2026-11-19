@@ -22,7 +22,7 @@ import {
   type CellQueryRange,
 } from './cellQueryModel'
 
-// Cell Query's image columns (plan 25) as the window's model sees them:
+// Cell Query's image columns (plan 26) as the window's model sees them:
 // which channels are listed, which columns are measured, and what each
 // condition says while its channel is measured.
 
@@ -31,9 +31,9 @@ export interface CellQueryImageChannel {
   readonly id: string
   readonly name: string
   readonly loader: ImagePyramidLoader
-  // RGB channels are not measured (25, Non-Goals).
+  // RGB channels are not measured (26, Non-Goals).
   readonly rgb: boolean
-  // Auto-contrast's, with Otsu's threshold (25-D6).
+  // Auto-contrast's, with Otsu's threshold (26-D6).
   readonly histogram?: ChannelHistogram
 }
 
@@ -55,7 +55,7 @@ export interface CellQueryMeasurementView {
   readonly onCancel: () => void
 }
 
-// An image condition's own settings (25-D4 to D6).
+// An image condition's own settings (26-D4 to D6).
 export interface CellQueryConditionImage {
   readonly spec: CellQueryImageColumnSpec
   readonly channelName: string
@@ -115,7 +115,7 @@ export function imageChannelOptions(
 }
 
 // "0.85 µm/px, 172 MiB (default)": each level with the size of its tiles
-// once the tile index has told it (25-D5).
+// once the tile index has told it (26-D5).
 export function imageLevelOptions(
   channel: CellQueryImageChannelOption,
   sizes: readonly (number | null)[] | undefined,
@@ -130,7 +130,7 @@ export function imageLevelOptions(
 }
 
 // The image columns to measure: those of the first three channels in use
-// (25-D2). Columns of further channels are left out and say why.
+// (26-D2). Columns of further channels are left out and say why.
 export function imageColumnNeeds(
   columns: readonly CellQueryColumn[],
   channels: readonly CellQueryImageChannelOption[],

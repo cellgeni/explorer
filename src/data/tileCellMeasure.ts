@@ -1,5 +1,5 @@
 // Per-cell sums over one image tile, for Cell Query's image channel columns
-// (plan 25-D4). A cell is a disc. A pixel counts for a cell when the pixel's
+// (plan 26-D4). A cell is a disc. A pixel counts for a cell when the pixel's
 // centre is inside its disc; a pixel inside several discs counts for the
 // cell whose centre is nearest relative to its radius, so neighbours do not
 // share pixels. Workers and the main thread share this.

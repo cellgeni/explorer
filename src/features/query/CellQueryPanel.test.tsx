@@ -550,7 +550,7 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
     })
   })
 
-  describe('image channels (plan 25)', () => {
+  describe('image channels (plan 26)', () => {
     // 8 x 8 µm, 1 µm per pixel: the left half 10, the right half 100.
     function imageChannel(
       overrides: Partial<CellQueryImageChannel> = {},

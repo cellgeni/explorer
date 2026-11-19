@@ -15,10 +15,10 @@ import {
   type CellImageTileMeasurer,
 } from './cellImageMeasurer'
 
-// The measurements behind Cell Query's image columns (plan 25), for one
+// The measurements behind Cell Query's image columns (plan 26), for one
 // dataset's cells. A measurement is one channel at one level, z plane, disc
 // radius and threshold; its mean and `% above` columns come from the same
-// pass (25-D3). Finished ones are kept while the dataset is open (25-D2), a
+// pass (26-D3). Finished ones are kept while the dataset is open (26-D2), a
 // few at most once no column uses them.
 
 // One channel's measurement as the columns ask for it.
@@ -42,7 +42,7 @@ export interface CellImageColumnNeed {
 
 export type CellImageMeasurementState =
   | { readonly status: 'planning' }
-  // Over the read budget's question size: waits for Measure (25-D7).
+  // Over the read budget's question size: waits for Measure (26-D7).
   | { readonly status: 'asking'; readonly bytes: number }
   | { readonly status: 'refused'; readonly bytes: number }
   | { readonly status: 'measuring'; readonly bytes: number; readonly tiles: number }
@@ -271,7 +271,7 @@ export class CellImageMeasurements {
     return entry.state.tiles === 0 ? 1 : entry.tilesDone / entry.state.tiles
   }
 
-  // Measure after the question (25-D7), or again after Cancel or a failure.
+  // Measure after the question (26-D7), or again after Cancel or a failure.
   measure(key: string): void {
     const entry = this.entries.get(key)
     if (entry === undefined) return
@@ -332,7 +332,7 @@ export class CellImageMeasurements {
     })()
   }
 
-  // Each level's size for the Resolution list (25-D5), read once per
+  // Each level's size for the Resolution list (26-D5), read once per
   // channel from its tile index.
   findLevelSizes(
     channels: readonly { readonly id: string; readonly loader: CellImageLoader }[],

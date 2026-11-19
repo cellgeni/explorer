@@ -1,4 +1,4 @@
-# Phase 25 — Image Channel Conditions
+# Phase 26 — Image Channel Conditions
 
 Planned 2026-11-19. The spike (task A), the decoder switch (task A2) and
 M1 (tasks B to G, TIFF images) were done the same day

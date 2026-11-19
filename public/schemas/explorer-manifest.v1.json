@@ -170,11 +170,28 @@
               "zchunkstore": {
                 "$ref": "#/$defs/path",
                 "description": "`.zchunkstore` tile-offset sidecar for a TIFF `image` and its channel files. Replaces the default lookup next to the TIFF. Not allowed with an OME-Zarr `image`."
+              },
+              "segmentation": {
+                "$ref": "#/$defs/path",
+                "description": "A segmentation shown as outlines over the image: a label mask (TIFF or OME-Zarr) or polygons (GeoJSON, WKT text or CSV, Parquet). The format comes from the extension unless `options.segmentationFormat` sets it."
               }
             },
             "additionalProperties": false
           },
-          "options": { "type": "object", "maxProperties": 0 }
+          "options": {
+            "type": "object",
+            "properties": {
+              "segmentationFormat": {
+                "enum": ["label-tiff", "label-zarr", "geojson", "wkt", "parquet"],
+                "description": "The format of `files.segmentation` when its extension does not tell it."
+              },
+              "segmentationCoordinates": {
+                "enum": ["pixels", "micrometers"],
+                "description": "What the polygon coordinates of `files.segmentation` are in. Default `pixels` (full-resolution image pixels). Label masks are placed over the image whatever this says."
+              }
+            },
+            "additionalProperties": false
+          }
         }
       }
     }

@@ -138,9 +138,12 @@ describe('platformAdapter', () => {
     })
     expect(adapter.featureLoadEnabled(readyLoadState)).toBe(false)
     expect(adapter.effectiveTranscriptOverlay(true)).toBe(false)
-    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(false)
+    // Outlines come from an imported segmentation, shown by its checkbox.
+    expect(adapter.capabilities.segmentationImport).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(true)).toBe(true)
+    expect(adapter.cellBoundaryLoadingEnabled(false)).toBe(false)
     expect(adapter.geneExpressionOverlayEnabled(0)).toBe(false)
-    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(false)
+    expect(adapter.cellBoundaryHoverEnabled(true)).toBe(true)
     expect(adapter.magicLensAvailability(readyLoadState, 0)).toEqual({
       loadEnabled: false,
       unavailableReason: 'Unavailable for image-only sources',
@@ -172,6 +175,29 @@ describe('platformAdapter', () => {
       ),
     ).resolves.toEqual({ elements: [] })
     expect(loadBoundaryElements).not.toHaveBeenCalled()
+
+    const outlines = vi.fn(async () => ({ elements: [], overLimit: { count: 9 } }))
+    const signal = new AbortController().signal
+    await expect(
+      loadPlatformBoundaryElements(
+        adapter,
+        {
+          getSpatialDataset: getSpatialDataset as unknown as SpatialDatasetLoader,
+          loadBoundaryElements: loadBoundaryElements as BoundaryElementsLoader,
+          importedSegmentation: {
+            source: { url: 'mask.tif', format: 'label-tiff', coordinates: 'pixels' },
+            name: 'mask.tif',
+            estimateCount: () => 1,
+            outlines,
+          },
+        },
+        readyLoadState.url,
+        selection.bbox,
+        { signal },
+      ),
+    ).resolves.toEqual({ elements: [], overLimit: { count: 9 } })
+    expect(outlines).toHaveBeenCalledWith(selection.bbox, { signal })
+    expect(getSpatialDataset).not.toHaveBeenCalled()
 
     await expect(
       loadPlatformGeneExpression(

@@ -7,9 +7,9 @@ import { TileRequestSlots } from '../../tiff/tileRequestScheduler'
 import type { TileMeasure } from '../../workers/tileDecodeMessages'
 import { TileDecodeWorkerPool } from '../../workers/tileDecodePool'
 
-// Measures one image channel under every cell (plan 25): the mean of each
+// Measures one image channel under every cell (plan 26): the mean of each
 // cell's pixels, and the share of them at or above a threshold, at one
-// pyramid level. Cells are discs (25-D4). The main thread buckets the cells
+// pyramid level. Cells are discs (26-D4). The main thread buckets the cells
 // by tile and fetches the tiles; workers decode and sum them per cell; the
 // sums are added up here.
 
@@ -39,20 +39,20 @@ export interface CellImageLevel {
   readonly micrometersPerPixel: number
 }
 
-// The level a measurement reads unless another is chosen (25-D5): two steps
+// The level a measurement reads unless another is chosen (26-D5): two steps
 // coarser than full resolution, or the coarsest of an image with fewer.
 export const DEFAULT_CELL_IMAGE_LEVEL = 2
-// The disc's radius for cells without an area, in micrometres (25-D4).
+// The disc's radius for cells without an area, in micrometres (26-D4).
 export const DEFAULT_CELL_IMAGE_RADIUS = 5
 // Tiles read and measured at once, and requests in flight across every
-// measurement: an HTTP/1.1 host allows 6 connections (25, spike).
+// measurement: an HTTP/1.1 host allows 6 connections (26, spike).
 const TILES_IN_FLIGHT = 12
 export const CELL_IMAGE_REQUEST_SLOTS = 6
 // Tiles named as coming next to each fetch, which a TIFF loader reads in the
 // same request when they are stored beside it.
 const UPCOMING_TILES = 8
 
-// The read budget (25-D7), per channel.
+// The read budget (26-D7), per channel.
 export const CELL_IMAGE_ASK_BYTES = 1024 ** 3
 export const CELL_IMAGE_REFUSE_BYTES = 8 * 1024 ** 3
 
@@ -63,7 +63,7 @@ export function cellImageReadDecision(bytes: number): CellImageReadDecision {
   return bytes > CELL_IMAGE_ASK_BYTES ? 'ask' : 'measure'
 }
 
-// A loader whose tiles can be measured: TIFF in M1 (25), not OME-Zarr.
+// A loader whose tiles can be measured: TIFF in M1 (26), not OME-Zarr.
 export function canMeasureCellImage(loader: ImagePyramidLoader): boolean {
   return loader.fetchTileBytes !== undefined && loader.tileDecodeOptions !== undefined
 }
@@ -143,7 +143,7 @@ export interface CellImagePlan {
   readonly rows: Uint32Array
 }
 
-// `radius` (micrometres) is for cells without an area (25-D4).
+// `radius` (micrometres) is for cells without an area (26-D4).
 export function planCellImageMeasurement(
   loader: CellImageLoader,
   cells: readonly CellImageCell[],
@@ -476,7 +476,7 @@ function abortError(): DOMException {
 }
 
 // Decodes and measures tiles in a pool of workers of its own, so the
-// canvas's keep decoding (25, How A Measurement Runs, 5); on this thread
+// canvas's keep decoding (26, How A Measurement Runs, 5); on this thread
 // where there are no workers.
 export interface CellImageTileMeasurer {
   readonly measure: CellImageTileMeasure

@@ -98,7 +98,7 @@ export interface ImagePyramidTileFetchOptions {
   // so that the caller can stop counting it against its request limit.
   readonly onSharedRead?: () => void
   // False reads the persistent byte-range cache but adds nothing to it, so a
-  // pass over a whole level (Cell Query's image measurements, plan 25-D8)
+  // pass over a whole level (Cell Query's image measurements, plan 26-D8)
   // does not evict what the canvas and the other readers keep there. True
   // by default. TIFF tiles cut from strips or NDPI blocks share their reads
   // with the canvas and are still kept.
@@ -272,6 +272,9 @@ export interface OpenImagePyramidOptions {
   readonly bytes?: Uint8Array<ArrayBuffer>
   // Replaces the name of a single-channel image's channel.
   readonly channelName?: string
+  // Opens a segmentation label image, whose tiles are read as raw label
+  // values: 32-bit samples are allowed. TIFF images only.
+  readonly labels?: boolean
 }
 
 // Opens an image pyramid: the generic opener (`openImagePyramid`), a TIFF-only

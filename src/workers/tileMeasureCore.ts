@@ -11,7 +11,7 @@ export type TileMeasureResponder = (
   transfer: Transferable[],
 ) => void
 
-// Decodes a TIFF tile and sums its pixels per cell (plan 25-D4). A tile the
+// Decodes a TIFF tile and sums its pixels per cell (plan 26-D4). A tile the
 // file leaves out (zero bytes) is zeros.
 export async function measureTileBytes(
   bytes: Uint8Array,

@@ -24,24 +24,24 @@ export type CellQueryColumnSource =
   // saved selections.
   | { readonly kind: 'set'; readonly setKind: PlotSetKind; readonly setId: string }
   | { readonly kind: 'track'; readonly trackId: string }
-  // An image channel measured under each cell (plan 25).
+  // An image channel measured under each cell (plan 26).
   | { readonly kind: 'image'; readonly spec: CellQueryImageColumnSpec }
 
 export type CellQueryColumnGroup = 'Cell' | 'Classes' | 'Metadata' | 'Image'
 
-// What an image column measures (plan 25-D1, D9): the mean of each cell's
+// What an image column measures (plan 26-D1, D9): the mean of each cell's
 // pixels in a channel, or the share of them at or above a threshold.
 export type CellQueryImageStat = 'mean' | 'above'
 
 export interface CellQueryImageColumnSpec {
   readonly stat: CellQueryImageStat
-  // The pyramid level read (25-D5).
+  // The pyramid level read (26-D5).
   readonly level: number
-  // The z plane of a z-stack (25-D10).
+  // The z plane of a z-stack (26-D10).
   readonly z?: number
-  // `% above`'s threshold, in the image's units (25-D6).
+  // `% above`'s threshold, in the image's units (26-D6).
   readonly threshold?: number
-  // The disc's radius in micrometres, where cells have no area (25-D4).
+  // The disc's radius in micrometres, where cells have no area (26-D4).
   readonly radius?: number
   readonly channelId: string
 }
@@ -226,7 +226,7 @@ export function parseImageColumnId(columnId: string): CellQueryImageColumnSpec |
 
 // "DAPI mean (0.85 µm/px)", "DAPI % above 2,176 (z 3, 0.85 µm/px, radius
 // 5 µm)": the level, plane and radius change the values, so the label and
-// the CSV header say them (25-D5).
+// the CSV header say them (26-D5).
 export function imageColumnLabel(
   channelName: string,
   spec: CellQueryImageColumnSpec,
@@ -261,13 +261,13 @@ export interface CellQueryImageChannelOption {
   // Micrometres per pixel of each level, finest first.
   readonly levels: readonly number[]
   readonly defaultLevel: number
-  // Otsu's threshold (25-D6); 'finding' while it is read.
+  // Otsu's threshold (26-D6); 'finding' while it is read.
   readonly threshold: number | 'finding' | undefined
 }
 
 // Each channel's mean and `% above` at its default level, in the Image
 // group. Channels past the three in use are listed but cannot be chosen
-// (25-D2).
+// (26-D2).
 export function cellQueryImageColumns({
   channels,
   z,
@@ -336,7 +336,7 @@ export function imageColumn(
   }
 }
 
-// Channels measured at a time (25-D2).
+// Channels measured at a time (26-D2).
 export const IMAGE_CHANNEL_LIMIT = 3
 
 export function imageChannelLimitCopy(inUse: readonly string[]): string {

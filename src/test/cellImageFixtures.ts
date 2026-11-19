@@ -8,7 +8,7 @@ import {
 import type { ImagePyramidTileFetchOptions } from '../data/imagePyramid'
 import type { CellImageCell, CellImageLoader } from '../features/query/cellImageMeasurer'
 
-// An image in memory for Cell Query's image measurements (plan 25).
+// An image in memory for Cell Query's image measurements (plan 26).
 
 export interface FakeCellImageOptions {
   // Pixels of level 0, row by row; each further level halves it, taking

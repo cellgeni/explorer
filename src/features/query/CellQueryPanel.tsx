@@ -62,7 +62,7 @@ const CLASS_SEARCH_THRESHOLD = 12
 // Classes listed at once; a search finds the others.
 const CLASS_LIST_LIMIT = 200
 
-// The image's note (plan 25-D1) stands in for its channels.
+// The image's note (plan 26-D1) stands in for its channels.
 const IMAGE_NOTE_OPTION = 'image-note'
 
 function columnSelectOptions(
@@ -381,7 +381,7 @@ function NumberBounds({
   )
 }
 
-// An image condition's level, threshold and radius (plan 25-D4 to D6).
+// An image condition's level, threshold and radius (plan 26-D4 to D6).
 // Each is part of the column, so changing one measures again.
 function ImageSettings({
   image,
@@ -479,7 +479,7 @@ function ThresholdHistogram({
   )
 }
 
-// A measurement's progress, question or failure (plan 25-D3, D7).
+// A measurement's progress, question or failure (plan 26-D3, D7).
 function MeasurementStatus({
   measurement,
   progress,

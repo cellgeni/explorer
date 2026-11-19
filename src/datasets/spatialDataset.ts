@@ -89,6 +89,9 @@ export interface GridCellBatch<ElementId extends SpatialElementId = SpatialEleme
 export interface ElementBatch<ElementId extends SpatialElementId = SpatialElementId> {
   readonly elements: readonly SpatialElement<ElementId>[]
   readonly gridCells?: readonly GridCellBatch<ElementId>[]
+  // Set when the box holds more outlines than can be drawn, so none are
+  // returned until the view zooms in; `count` is how many, when known.
+  readonly overLimit?: { readonly count?: number }
 }
 
 export interface ChannelInfo {

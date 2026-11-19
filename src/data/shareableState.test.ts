@@ -8,6 +8,25 @@ import {
 import { micrometers } from './coords'
 
 describe('shareableState', () => {
+  it('round-trips an imported segmentation', () => {
+    const hash = formatShareableState({
+      datasetUrl: 'https://example.test/slide.ndpi',
+      segmentationUrl: 'https://example.test/get?id=3',
+      segmentationFormat: 'wkt',
+      segmentationUnits: 'micrometers',
+    })
+
+    expect(hash).toContain('segmentation=https')
+    expect(parseShareableState(hash)).toMatchObject({
+      segmentationUrl: 'https://example.test/get?id=3',
+      segmentationFormat: 'wkt',
+      segmentationUnits: 'micrometers',
+    })
+    expect(
+      parseShareableState(formatShareableState({ segmentationFormat: 'wkt' })),
+    ).not.toHaveProperty('segmentationFormat')
+  })
+
   it('round-trips dataset, genes, view, ROI, and controls', () => {
     const hash = formatShareableState({
       datasetUrl: 'https://example.test/output',

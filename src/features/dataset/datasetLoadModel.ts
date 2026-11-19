@@ -3,7 +3,14 @@ import type { DatasetDiagnosticsReport } from '../../data/datasetDiagnostics'
 export type DatasetLoadState<ErrorType = unknown> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellCount: number
+      // Set when the view held too many outlines to draw (an imported
+      // segmentation); `count` is how many, when known.
+      readonly overLimit?: { readonly count?: number }
+    }
   | {
       readonly status: 'error'
       readonly url: string
@@ -102,6 +109,19 @@ export function boundaryLoadReady(
   return { status: 'ready', url, cellCount }
 }
 
+// The view held more outlines than can be drawn, so none were read.
+export function boundaryLoadOverLimit(
+  url: string,
+  count: number | undefined,
+): BoundaryLoadState<never> {
+  return {
+    status: 'ready',
+    url,
+    cellCount: 0,
+    overLimit: count === undefined ? {} : { count },
+  }
+}
+
 export function boundaryLoadFailed<ErrorType>(
   url: string,
   error: ErrorType,
@@ -170,7 +190,14 @@ export type MorphologyLoadState<ErrorType = unknown> =
 export type BoundaryLoadState<ErrorType = unknown> =
   | { readonly status: 'idle' }
   | { readonly status: 'loading'; readonly url: string }
-  | { readonly status: 'ready'; readonly url: string; readonly cellCount: number }
+  | {
+      readonly status: 'ready'
+      readonly url: string
+      readonly cellCount: number
+      // Set when the view held too many outlines to draw (an imported
+      // segmentation); `count` is how many, when known.
+      readonly overLimit?: { readonly count?: number }
+    }
   | {
       readonly status: 'error'
       readonly url: string

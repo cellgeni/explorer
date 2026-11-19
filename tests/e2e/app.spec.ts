@@ -1271,7 +1271,7 @@ test('shows a MERSCOPE .vzg stain and switches it off @smoke', async ({ page }) 
   ).toHaveValue('', { timeout: H5AD_LOAD_TIMEOUT_MS })
 })
 
-// Plan 25: Cell Query measures the .vzg stain under each cell, a disc of
+// Plan 26: Cell Query measures the .vzg stain under each cell, a disc of
 // the Radius field's 5 µm as MERSCOPE cells have no area. The fixture's
 // cells' DAPI means at 2 µm/px are about 1,927, 1,987 and 1,430
 // (tifffile and numpy), and 1,810, 1,926 and 1,304 at 0.5 µm/px.
@@ -1363,6 +1363,162 @@ test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', a
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
   await expect(genesPanel.getByRole('button', { name: 'Blank-0' })).toHaveCount(0)
+})
+
+// A little-endian, uncompressed, single-strip grayscale TIFF of `bits`-bit
+// samples, value(x, y) at each pixel.
+function tinyTiff(
+  width: number,
+  height: number,
+  bits: 8 | 32,
+  value: (x: number, y: number) => number,
+): Buffer {
+  const bytesPerSample = bits / 8
+  const pixels = Buffer.alloc(width * height * bytesPerSample)
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * bytesPerSample
+
+      if (bits === 8) pixels.writeUInt8(value(x, y), offset)
+      else pixels.writeUInt32LE(value(x, y), offset)
+    }
+  }
+
+  const SHORT = 3
+  const LONG = 4
+  const pixelOffset = 8
+  const entries: readonly (readonly [number, number, number])[] = [
+    [256, LONG, width],
+    [257, LONG, height],
+    [258, SHORT, bits],
+    [259, SHORT, 1],
+    [262, SHORT, 1],
+    [273, LONG, pixelOffset],
+    [277, SHORT, 1],
+    [278, LONG, height],
+    [279, LONG, pixels.byteLength],
+  ]
+  const ifdOffset = pixelOffset + pixels.byteLength + (pixels.byteLength % 2)
+  const ifd = Buffer.alloc(2 + entries.length * 12 + 4)
+  ifd.writeUInt16LE(entries.length, 0)
+  entries.forEach(([tag, type, entryValue], index) => {
+    const offset = 2 + index * 12
+    ifd.writeUInt16LE(tag, offset)
+    ifd.writeUInt16LE(type, offset + 2)
+    ifd.writeUInt32LE(1, offset + 4)
+    if (type === SHORT) ifd.writeUInt16LE(entryValue, offset + 8)
+    else ifd.writeUInt32LE(entryValue, offset + 8)
+  })
+  const header = Buffer.from([0x49, 0x49, 42, 0, 0, 0, 0, 0])
+  header.writeUInt32LE(ifdOffset, 4)
+
+  return Buffer.concat([
+    header,
+    pixels,
+    Buffer.alloc(ifdOffset - pixelOffset - pixels.byteLength),
+    ifd,
+  ])
+}
+
+// Serves files under `folder` with HEAD and Range requests, as object
+// storage does; other paths answer 404.
+async function routeRangeFiles(
+  page: Page,
+  folder: string,
+  files: Readonly<Record<string, Buffer>>,
+) {
+  await page.route(`**${folder}/**`, async (route) => {
+    const request = route.request()
+    const body = files[new URL(request.url()).pathname.slice(folder.length + 1)]
+
+    if (body === undefined) {
+      await route.fulfill({
+        status: 404,
+        headers: { 'Access-Control-Allow-Origin': '*' },
+      })
+      return
+    }
+
+    const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Length, Content-Range',
+      'Accept-Ranges': 'bytes',
+      'Content-Type': 'application/octet-stream',
+    }
+    const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers()['range'] ?? '')
+
+    if (request.method() === 'HEAD' || range === null) {
+      await route.fulfill({
+        status: 200,
+        headers: { ...headers, 'Content-Length': String(body.byteLength) },
+        ...(request.method() === 'HEAD' ? {} : { body }),
+      })
+      return
+    }
+
+    const start = Number(range[1])
+    const end = Math.min(
+      body.byteLength - 1,
+      range[2] === '' ? body.byteLength - 1 : Number(range[2]),
+    )
+    await route.fulfill({
+      status: 206,
+      headers: {
+        ...headers,
+        'Content-Length': String(end - start + 1),
+        'Content-Range': `bytes ${start}-${end}/${body.byteLength}`,
+      },
+      body: body.subarray(start, end + 1),
+    })
+  })
+}
+
+test('draws an imported label mask and WKT outlines over an image @smoke', async ({
+  page,
+  baseURL,
+}) => {
+  // A 64 x 64 image with four 32-bit labels, one past 65,535 as Cellpose
+  // writes them over that many cells, and two WKT polygons in pixels.
+  await routeRangeFiles(page, '/segmentation-smoke', {
+    'slide.tif': tinyTiff(64, 64, 8, (x, y) => (x + y) % 256),
+    'mask.tif': tinyTiff(64, 64, 32, (x, y) =>
+      x < 16 && y < 16
+        ? 1
+        : x >= 40 && y < 16
+          ? 70_000
+          : x < 16 && y >= 40
+            ? 3
+            : x >= 40 && y >= 40
+              ? 4
+              : 0,
+    ),
+    'cells.csv': Buffer.from(
+      'cell_id,geometry\na,"POLYGON ((2 2, 20 2, 20 20, 2 20, 2 2))"\nb,"POLYGON ((30 30, 60 30, 45 60, 30 30))"\n',
+    ),
+  })
+  const folder = new URL('/segmentation-smoke/', baseURL).toString()
+  await page.goto(
+    `/#dataset=${encodeURIComponent(`${folder}slide.tif`)}&segmentation=${encodeURIComponent(`${folder}mask.tif`)}&panel=segmentation`,
+  )
+
+  const section = page.locator('[data-layer-section="segmentation"]')
+  await expect(section).toContainText('Label TIFF · 64 × 64', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(section).toContainText('4 outlines drawn.', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page).toHaveURL(/segmentation=.*mask\.tif/)
+
+  await section.getByRole('button', { name: 'Remove mask.tif' }).click()
+  await section.getByLabel('Segmentation URL').fill(`${folder}cells.csv`)
+  await section.getByRole('button', { name: 'Load', exact: true }).click()
+  await expect(section).toContainText('WKT · 2', { timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expect(section).toContainText('2 outlines drawn.', {
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page).toHaveURL(/segmentation=.*cells\.csv/)
 })
 
 test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live', async ({
@@ -1784,7 +1940,7 @@ test('finds Xenium cells by transcript count and graph cluster @live', async ({
   await expectLogEntry(page, /Cell query: [0-9,]+ outlines? in [0-9,]+ ms/)
 })
 
-// Plan 25: a link with an image condition measures the demo's DAPI under
+// Plan 26: a link with an image condition measures the demo's DAPI under
 // all 1.4 million cells at the default level, 0.85 µm/px (180 MB), as it
 // opens. The time to the count goes into the report.
 test('finds Xenium cells by DAPI measured under each @live', async ({

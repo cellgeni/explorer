@@ -488,7 +488,7 @@
   width: 136px;
 }
 
-/* An image condition's resolution, threshold and radius (plan 25). */
+/* An image condition's resolution, threshold and radius (plan 26). */
 .cell-query-image {
   display: flex;
   flex-wrap: wrap;

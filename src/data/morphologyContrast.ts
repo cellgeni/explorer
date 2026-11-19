@@ -19,7 +19,7 @@ export interface ChannelHistogram {
   readonly max: number
   readonly sampleCount: number
   // Otsu's threshold on the samples other than 0, the default for Cell
-  // Query's `% above` (plan 25-D6); unset when fewer than two values remain.
+  // Query's `% above` (plan 26-D6); unset when fewer than two values remain.
   readonly threshold?: number
 }
 

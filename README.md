@@ -8,7 +8,8 @@ HD Space Ranger output folders, Vizgen MERSCOPE region folders, AnnData
 OME-TIFF/TIFF/QPTIFF/SVS/NDPI/OME-Zarr URLs from object storage, and dataset
 collections that list several of them to browse together.
 It renders spatial cells, spots, bins, image pyramids, morphology channels, expression
-overlays, transcript density/exact overlays, annotations, ROI queries,
+overlays, transcript density/exact overlays, segmentations imported onto an
+image (label masks, GeoJSON, WKT, Parquet), annotations, ROI queries,
 cell queries by class and value, shareable view state, and dataset
 diagnostics without a server-side data service. `Browse Store` and `Browse
 File` show what a Zarr store or Parquet file holds without opening it as a
@@ -229,7 +230,8 @@ The full index is in [docs/README.md](docs/README.md).
   datasets to browse together, opened with `?collection=`, with previews and
   registered sections side by side.
 - [Image-only and GeoJSON annotations](docs/image-only-and-geojson.md): direct
-  image URL support, platform gating, and GeoJSON shape import/export rules.
+  image URL support, platform gating, GeoJSON shape import/export rules, and
+  segmentations (label masks, GeoJSON, WKT, Parquet) imported onto an image.
 - [TIFF tile-offset sidecars](docs/zchunkstore.md): the optional
   `.zchunkstore` next to a pyramidal OME-TIFF, and how to generate one.
 - [Large H5AD files](docs/h5ad-reference.md): how large H5AD files are read

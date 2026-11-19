@@ -113,7 +113,7 @@ export interface CellQueryConditionView {
   readonly message: string | null
   readonly classes: readonly CellQueryClassOption[]
   readonly complete: boolean
-  // For an image column (plan 25): its settings and measurement.
+  // For an image column (plan 26): its settings and measurement.
   readonly image: CellQueryConditionImage | null
 }
 
@@ -197,7 +197,7 @@ export interface CellQueryModel {
   // A current, successful result with rows, its columns read.
   readonly canExport: boolean
   readonly onExportCsv: () => void
-  // Why the image's channels are not listed, or null (plan 25-D1).
+  // Why the image's channels are not listed, or null (plan 26-D1).
   readonly imageNote: string | null
   // Measurements for table columns no condition shows.
   readonly tableMeasurements: readonly CellQueryMeasurementView[]
@@ -233,7 +233,7 @@ export interface CellQueryModelInput {
   readonly pictureImage: CellQueryPictureImage | null
   // The pictures' outlines (plan 23-H).
   readonly loadCellOutlines: CellOutlinesLoader
-  // The canvas's image channels, measured for image columns (plan 25).
+  // The canvas's image channels, measured for image columns (plan 26).
   readonly imageChannels: readonly CellQueryImageChannel[]
   // The plane the canvas shows of a z-stack, or null.
   readonly imageZPlane: number | null
@@ -244,7 +244,7 @@ export interface CellQueryModelInput {
 
 type ColumnInput =
   | { readonly status: 'loading' }
-  // An image column waiting for Measure (plan 25-D7) or after Cancel.
+  // An image column waiting for Measure (plan 26-D7) or after Cancel.
   | { readonly status: 'waiting' }
   | { readonly status: 'error'; readonly message: string }
   | {
@@ -351,7 +351,7 @@ export function useCellQueryModel({
       }),
     [annotations, datasetSets, savedSelectionList.length],
   )
-  // Image columns (plan 25), measured by a store of the dataset's
+  // Image columns (plan 26), measured by a store of the dataset's
   // measurements whose state changes render the window.
   const [measurements] = useState(createImageMeasurements)
   const imageSnapshot = useSyncExternalStore(
@@ -363,7 +363,7 @@ export function useCellQueryModel({
     () => (active ? imageChannelOptions(imageChannels, imageSnapshot) : []),
     [active, imageChannels, imageSnapshot],
   )
-  // Cells without an area are discs of a radius set in the condition (25-D4).
+  // Cells without an area are discs of a radius set in the condition (26-D4).
   const imageRadius =
     cellColumns.numbers.cellArea === undefined ? DEFAULT_CELL_IMAGE_RADIUS : undefined
   const resolveImageColumn = useCallback(
@@ -1055,7 +1055,7 @@ export function useCellQueryModel({
   const waitingColumns = usedColumnIds.some(
     (id) => columnInputs.get(id)?.status === 'waiting',
   )
-  // The count waits for a measurement (plan 25-D3) rather than showing the
+  // The count waits for a measurement (plan 26-D3) rather than showing the
   // last one.
   const measuringColumns = usedColumnIds.some(
     (id) => isImageColumnId(id) && columnInputs.get(id)?.status === 'loading',
@@ -1470,7 +1470,7 @@ function isImageColumnWaiting(
   return parseImageColumnId(columnId) !== null && imageChannels.length === 0
 }
 
-// Cells outside the image get no value (25-D3); one note per channel.
+// Cells outside the image get no value (26-D3); one note per channel.
 function imageOutsideNotes(
   columnIds: readonly string[],
   columns: ReadonlyMap<string, CellQueryColumn | null>,

@@ -35,17 +35,21 @@ export interface SpatialDataLabelBounds {
   readonly maxY: number
 }
 
-export interface SpatialDataLabelLevel {
-  readonly array: zarr.Array<zarr.DataType, zarr.Readable>
+// A label raster level's size and chunking, whatever stores it.
+export interface LabelLevelGeometry {
   readonly width: number
   readonly height: number
   readonly chunkWidth: number
   readonly chunkHeight: number
-  readonly xAxis: number
-  readonly yAxis: number
   // Level pixel -> element (level-0) coordinates.
   readonly scaleX: number
   readonly scaleY: number
+}
+
+export interface SpatialDataLabelLevel extends LabelLevelGeometry {
+  readonly array: zarr.Array<zarr.DataType, zarr.Readable>
+  readonly xAxis: number
+  readonly yAxis: number
 }
 
 export interface SpatialDataLabelChunkTrace extends PackedLabelTrace {
@@ -62,15 +66,27 @@ export interface SpatialDataLabelOutline {
   readonly ring: Float64Array
 }
 
-// Decodes one chunk window and traces it, on the main thread or in a worker.
-export interface SpatialDataLabelTraceRequest {
-  readonly level: SpatialDataLabelLevel
-  readonly coords: readonly number[]
+// One chunk of a level to read and trace: its column and row, and its
+// window in level pixels (edge chunks are cut to the level).
+export interface LabelChunkTraceRequest<Level extends LabelLevelGeometry> {
+  readonly level: Level
+  readonly col: number
+  readonly row: number
   readonly x0: number
   readonly y0: number
   readonly width: number
   readonly height: number
   readonly signal?: AbortSignal
+}
+
+export type LabelChunkTracer<Level extends LabelLevelGeometry> = (
+  request: LabelChunkTraceRequest<Level>,
+) => Promise<PackedLabelTrace>
+
+// Decodes one chunk window and traces it, on the main thread or in a worker.
+// `coords` is the chunk's index on every axis of the Zarr array.
+export interface SpatialDataLabelTraceRequest extends LabelChunkTraceRequest<SpatialDataLabelLevel> {
+  readonly coords: readonly number[]
 }
 
 export type SpatialDataLabelTracer = (
@@ -165,12 +181,14 @@ export function defaultLabelTracer(): SpatialDataLabelTracer {
   return pool === null ? traceLabelChunkOnMainThread : createWorkerLabelTracer(pool)
 }
 
-export class SpatialDataLabelsReader {
-  readonly levels: readonly SpatialDataLabelLevel[]
+// Traces a label raster's chunks into per-label outlines, whatever reads the
+// chunks: a Zarr array (SpatialDataLabelsReader) or a TIFF.
+export class LabelOutlineReader<Level extends LabelLevelGeometry> {
+  readonly levels: readonly Level[]
   // Element (level-0) coordinates -> target coordinates.
   readonly toTarget: Affine2D
   private readonly fromTarget: Affine2D
-  private readonly tracer: SpatialDataLabelTracer
+  private readonly tracer: LabelChunkTracer<Level>
   private readonly traces = new Map<string, Promise<SpatialDataLabelChunkTrace>>()
   private readonly traceBytes = new Map<string, number>()
   private readonly traceLabelIndexes = new WeakMap<
@@ -182,12 +200,10 @@ export class SpatialDataLabelsReader {
   private cachedBytes = 0
 
   constructor(
-    levels: readonly SpatialDataLabelLevel[],
+    levels: readonly Level[],
     toTarget: Affine2D,
-    options: {
-      readonly maxTraceCacheBytes?: number
-      readonly tracer?: SpatialDataLabelTracer
-    } = {},
+    tracer: LabelChunkTracer<Level>,
+    options: { readonly maxTraceCacheBytes?: number } = {},
   ) {
     if (levels.length === 0) {
       throw new Error('SpatialData labels element has no readable levels.')
@@ -196,76 +212,8 @@ export class SpatialDataLabelsReader {
     this.levels = levels
     this.toTarget = toTarget
     this.fromTarget = invertAffine(toTarget)
-    this.tracer = options.tracer ?? defaultLabelTracer()
+    this.tracer = tracer
     this.maxTraceCacheBytes = options.maxTraceCacheBytes ?? DEFAULT_MAX_TRACE_CACHE_BYTES
-  }
-
-  // `zarrFormat` undefined reads either format.
-  static async open(
-    store: zarr.Readable,
-    zarrFormat: 2 | 3 | undefined,
-    elementPath: string,
-    attrs: Readonly<Record<string, unknown>>,
-    toTarget: Affine2D,
-    options: { readonly tracer?: SpatialDataLabelTracer } = {},
-  ): Promise<SpatialDataLabelsReader> {
-    const multiscale = firstMultiscale(attrs)
-    const axes = axisNames(multiscale?.axes)
-    const datasets = Array.isArray(multiscale?.datasets) ? multiscale.datasets : []
-    const levels: SpatialDataLabelLevel[] = []
-    let baseScale: { readonly x: number; readonly y: number } | null = null
-
-    for (const dataset of datasets) {
-      const record = recordOrNull(dataset)
-      const path = typeof record?.path === 'string' ? record.path : undefined
-
-      if (path === undefined) {
-        continue
-      }
-
-      const location = zarr.root(store).resolve(`${elementPath}/${path}`)
-      const array =
-        zarrFormat === 3
-          ? await zarr.open.v3(location, { kind: 'array' })
-          : zarrFormat === 2
-            ? await zarr.open.v2(location, { kind: 'array' })
-            : await zarr.open(location, { kind: 'array' })
-      const names =
-        axes.length === array.shape.length
-          ? axes
-          : array.shape.length === 2
-            ? ['y', 'x']
-            : array.shape.map((_size, index) =>
-                index === array.shape.length - 1
-                  ? 'x'
-                  : index === array.shape.length - 2
-                    ? 'y'
-                    : `d${index}`,
-              )
-      const xAxis = names.indexOf('x')
-      const yAxis = names.indexOf('y')
-
-      if (xAxis < 0 || yAxis < 0) {
-        continue
-      }
-
-      const scale = datasetScale(record?.coordinateTransformations, names)
-      baseScale ??= scale
-      levels.push({
-        array,
-        width: array.shape[xAxis] ?? 0,
-        height: array.shape[yAxis] ?? 0,
-        chunkWidth: array.chunks[xAxis] ?? 1,
-        chunkHeight: array.chunks[yAxis] ?? 1,
-        xAxis,
-        yAxis,
-        // Level 0 defines the element coordinates.
-        scaleX: scale.x / baseScale.x,
-        scaleY: scale.y / baseScale.y,
-      })
-    }
-
-    return new SpatialDataLabelsReader(levels, toTarget, options)
   }
 
   // Finest level whose pixels covering `bounds` fit the budget.
@@ -279,6 +227,12 @@ export class SpatialDataLabelsReader {
     }
 
     return this.levels.length - 1
+  }
+
+  // Pixels of `level` that cover `bounds`.
+  windowPixels(level: number, bounds: SpatialDataLabelBounds): number {
+    const window = this.pixelWindow(level, bounds)
+    return window.width * window.height
   }
 
   chunksForBounds(
@@ -486,7 +440,7 @@ export class SpatialDataLabelsReader {
     }
   }
 
-  private levelMeta(level: number): SpatialDataLabelLevel {
+  private levelMeta(level: number): Level {
     const meta = this.levels[level]
 
     if (meta === undefined) {
@@ -533,9 +487,8 @@ export class SpatialDataLabelsReader {
     const y0 = row * meta.chunkHeight
     const packed = await this.tracer({
       level: meta,
-      coords: meta.array.shape.map((_size, axis) =>
-        axis === meta.xAxis ? col : axis === meta.yAxis ? row : 0,
-      ),
+      col,
+      row,
       x0,
       y0,
       width: Math.max(0, Math.min(meta.chunkWidth, meta.width - x0)),
@@ -573,6 +526,107 @@ export class SpatialDataLabelsReader {
       this.traceBytes.delete(key)
       this.cachedBytes -= bytes
     }
+  }
+}
+
+// A SpatialData `labels` element, or an OME-Zarr label image: a Zarr array per
+// pyramid level, its chunks traced as they are stored.
+export class SpatialDataLabelsReader extends LabelOutlineReader<SpatialDataLabelLevel> {
+  constructor(
+    levels: readonly SpatialDataLabelLevel[],
+    toTarget: Affine2D,
+    options: {
+      readonly maxTraceCacheBytes?: number
+      readonly tracer?: SpatialDataLabelTracer
+    } = {},
+  ) {
+    const tracer = options.tracer ?? defaultLabelTracer()
+    super(
+      levels,
+      toTarget,
+      (request) =>
+        tracer({
+          ...request,
+          coords: request.level.array.shape.map((_size, axis) =>
+            axis === request.level.xAxis
+              ? request.col
+              : axis === request.level.yAxis
+                ? request.row
+                : 0,
+          ),
+        }),
+      options.maxTraceCacheBytes === undefined
+        ? {}
+        : { maxTraceCacheBytes: options.maxTraceCacheBytes },
+    )
+  }
+
+  // `zarrFormat` undefined reads either format.
+  static async open(
+    store: zarr.Readable,
+    zarrFormat: 2 | 3 | undefined,
+    elementPath: string,
+    attrs: Readonly<Record<string, unknown>>,
+    toTarget: Affine2D,
+    options: { readonly tracer?: SpatialDataLabelTracer } = {},
+  ): Promise<SpatialDataLabelsReader> {
+    const multiscale = firstMultiscale(attrs)
+    const axes = axisNames(multiscale?.axes)
+    const datasets = Array.isArray(multiscale?.datasets) ? multiscale.datasets : []
+    const levels: SpatialDataLabelLevel[] = []
+    let baseScale: { readonly x: number; readonly y: number } | null = null
+
+    for (const dataset of datasets) {
+      const record = recordOrNull(dataset)
+      const path = typeof record?.path === 'string' ? record.path : undefined
+
+      if (path === undefined) {
+        continue
+      }
+
+      const location = zarr.root(store).resolve(`${elementPath}/${path}`)
+      const array =
+        zarrFormat === 3
+          ? await zarr.open.v3(location, { kind: 'array' })
+          : zarrFormat === 2
+            ? await zarr.open.v2(location, { kind: 'array' })
+            : await zarr.open(location, { kind: 'array' })
+      const names =
+        axes.length === array.shape.length
+          ? axes
+          : array.shape.length === 2
+            ? ['y', 'x']
+            : array.shape.map((_size, index) =>
+                index === array.shape.length - 1
+                  ? 'x'
+                  : index === array.shape.length - 2
+                    ? 'y'
+                    : `d${index}`,
+              )
+      const xAxis = names.indexOf('x')
+      const yAxis = names.indexOf('y')
+
+      if (xAxis < 0 || yAxis < 0) {
+        continue
+      }
+
+      const scale = datasetScale(record?.coordinateTransformations, names)
+      baseScale ??= scale
+      levels.push({
+        array,
+        width: array.shape[xAxis] ?? 0,
+        height: array.shape[yAxis] ?? 0,
+        chunkWidth: array.chunks[xAxis] ?? 1,
+        chunkHeight: array.chunks[yAxis] ?? 1,
+        xAxis,
+        yAxis,
+        // Level 0 defines the element coordinates.
+        scaleX: scale.x / baseScale.x,
+        scaleY: scale.y / baseScale.y,
+      })
+    }
+
+    return new SpatialDataLabelsReader(levels, toTarget, options)
   }
 }
 

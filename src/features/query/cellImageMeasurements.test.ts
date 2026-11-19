@@ -92,7 +92,7 @@ describe('CellImageMeasurements', () => {
   })
 
   // Progress renders the panel's conditions alone: App, and with it the
-  // canvas, renders only when a measurement's state changes (plan 25-G).
+  // canvas, renders only when a measurement's state changes (plan 26-G).
   it('publishes progress apart from state changes', async () => {
     const { loader } = fakeCellImage({ width: 64, height: 64, pixel: () => 1 })
     const { store, context, ready } = setup(loader)

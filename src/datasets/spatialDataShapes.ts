@@ -554,6 +554,24 @@ function signedRingArea(ring: ArrayLike<number>): number {
   return area / 2
 }
 
+// The outer ring of a GeoJSON Polygon geometry, or of a MultiPolygon's
+// largest polygon, as interleaved x, y; null for anything else.
+export function geoJsonOuterRing(geometry: unknown): ArrayLike<number> | null {
+  if (!isGeoJsonGeometry(geometry)) {
+    return null
+  }
+
+  const parsed = geoJsonGeometry(geometry)
+  return parsed?.kind === 'polygon' ? parsed.ring : null
+}
+
+// The outer ring of a WKB Polygon, or of a MultiPolygon's largest polygon,
+// as interleaved x, y; null for points and anything unreadable.
+export function wkbOuterRing(bytes: Uint8Array): ArrayLike<number> | null {
+  const geometry = wkbGeometry(bytes)
+  return geometry?.kind === 'polygon' ? geometry.ring : null
+}
+
 // WKB as GeoParquet stores it (ISO or EWKB, 2D to 4D): Point, Polygon, and
 // MultiPolygon, the types SpatialData shapes use. Only outer rings are read.
 function wkbGeometry(bytes: Uint8Array): ParsedGeometry | null {

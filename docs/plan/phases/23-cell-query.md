@@ -479,4 +479,4 @@ Changed from the plan while building:
 - Queries across the sections of a collection.
 - Conditions on image channels: a cell's mean intensity and the share of
   its pixels above a threshold. Planned in
-  [Phase 25](25-image-channel-conditions.md).
+  [Phase 26](26-image-channel-conditions.md).

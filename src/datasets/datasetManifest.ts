@@ -5,6 +5,14 @@
 // docs/dataset-manifest.md and public/schemas/explorer-manifest.v1.json.
 
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
+import {
+  isSegmentationFormat,
+  SEGMENTATION_FORMATS,
+  segmentationFormatFromName,
+  type SegmentationCoordinates,
+  type SegmentationFormat,
+  type SegmentationSource,
+} from './segmentationSource'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import {
@@ -68,7 +76,7 @@ export const XENIUM_MANIFEST_OPTIONAL_FILES = [
   'tsne',
 ] as const
 
-export const IMAGE_MANIFEST_FILES = ['image', 'zchunkstore'] as const
+export const IMAGE_MANIFEST_FILES = ['image', 'zchunkstore', 'segmentation'] as const
 
 export const VISIUM_HD_MANIFEST_FILE_DEFAULTS = {
   featureSlice: 'feature_slice.h5',
@@ -274,6 +282,15 @@ export interface ImageDatasetManifest extends DatasetManifestBase {
   readonly files: {
     readonly image: DatasetManifestFile
     readonly zchunkstore?: DatasetManifestFile
+    // A segmentation to show over the image (plan 25): a label mask or
+    // polygon file.
+    readonly segmentation?: DatasetManifestFile
+  }
+  readonly options?: {
+    // The segmentation's format when its name does not tell it.
+    readonly segmentationFormat?: SegmentationFormat
+    // What its polygon coordinates are in; image pixels by default.
+    readonly segmentationCoordinates?: SegmentationCoordinates
   }
 }
 
@@ -552,10 +569,64 @@ export function parseDatasetManifest(
   }
 
   if (platform === 'image') {
-    rejectOptions(options, platform, fail)
     checkKeys(files, IMAGE_MANIFEST_FILES, 'files.', fail)
     const image = requiredFile('image')
     const zchunkstore = file('zchunkstore')
+    const segmentation = file('segmentation')
+    const imageOptions: {
+      segmentationFormat?: SegmentationFormat
+      segmentationCoordinates?: SegmentationCoordinates
+    } = {}
+
+    if (options !== undefined) {
+      checkKeys(
+        options,
+        ['segmentationFormat', 'segmentationCoordinates'],
+        'options.',
+        fail,
+      )
+      const format = optionalString(options, 'segmentationFormat', 'options.', fail)
+      const coordinates = optionalString(
+        options,
+        'segmentationCoordinates',
+        'options.',
+        fail,
+      )
+
+      if (format !== undefined) {
+        if (isSegmentationFormat(format)) {
+          imageOptions.segmentationFormat = format
+        } else {
+          fail(
+            `"options.segmentationFormat" must be one of ${SEGMENTATION_FORMATS.map((value) => `"${value}"`).join(', ')}.`,
+          )
+        }
+      }
+
+      if (coordinates !== undefined) {
+        if (coordinates === 'pixels' || coordinates === 'micrometers') {
+          imageOptions.segmentationCoordinates = coordinates
+        } else {
+          fail('"options.segmentationCoordinates" must be "pixels" or "micrometers".')
+        }
+      }
+
+      if (segmentation === undefined && Object.keys(imageOptions).length > 0) {
+        fail(
+          '"options.segmentationFormat" and "options.segmentationCoordinates" need "files.segmentation".',
+        )
+      }
+    }
+
+    if (
+      segmentation !== undefined &&
+      imageOptions.segmentationFormat === undefined &&
+      segmentationFormatFromName(segmentation.url) === null
+    ) {
+      fail(
+        '"files.segmentation" has no recognised extension; set "options.segmentationFormat".',
+      )
+    }
 
     if (
       zchunkstore !== undefined &&
@@ -574,7 +645,9 @@ export function parseDatasetManifest(
       files: {
         image,
         ...(zchunkstore === undefined ? {} : { zchunkstore }),
+        ...(segmentation === undefined ? {} : { segmentation }),
       },
+      ...(Object.keys(imageOptions).length === 0 ? {} : { options: imageOptions }),
     }
   }
 
@@ -714,6 +787,28 @@ export function manifestZchunkStoreUrl(
   }
 
   return undefined
+}
+
+// The segmentation an image manifest names, to import over the image.
+export function manifestSegmentationSource(
+  manifest: DatasetManifest | undefined,
+): SegmentationSource | undefined {
+  const url =
+    manifest?.platform === 'image' ? manifest.files.segmentation?.url : undefined
+
+  if (manifest?.platform !== 'image' || url === undefined) {
+    return undefined
+  }
+
+  const format = manifest.options?.segmentationFormat ?? segmentationFormatFromName(url)
+
+  return format === null
+    ? undefined
+    : {
+        url,
+        format,
+        coordinates: manifest.options?.segmentationCoordinates ?? 'pixels',
+      }
 }
 
 // Resolve a manifest path against a base URL. Absolute URLs pass through.

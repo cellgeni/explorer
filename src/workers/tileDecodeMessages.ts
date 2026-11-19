@@ -3,6 +3,8 @@ import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileCellDiscs, TileCellMeasureOptions } from '../data/tileCellMeasure'
 import type { TileSampling } from '../data/tileSamples'
+import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
+import type { TiffLabelTraceOptions } from './tiffLabelTraceCore'
 
 export interface TileDecodeOptions extends RgbaRenderOptions, TiffTileDecodeMetadata {
   readonly displayWindow?: DisplayWindow
@@ -25,7 +27,7 @@ export interface TileMeasure extends TileCellMeasureOptions {
   readonly cells: TileCellDiscs
 }
 
-// Decodes a tile and returns per-cell sums instead of a bitmap (plan 25).
+// Decodes a tile and returns per-cell sums instead of a bitmap (plan 26).
 export interface TileMeasureRequest extends TiffTileDecodeMetadata {
   readonly id: number
   readonly bytes: ArrayBuffer
@@ -38,17 +40,26 @@ export interface TileStripBandRequest extends TiffStripBandDecodeOptions {
   readonly bytes: ArrayBuffer
 }
 
+// Decodes a tile of a label image and traces its labels.
+export interface TileLabelTraceRequest extends TiffLabelTraceOptions {
+  readonly id: number
+  readonly bytes: ArrayBuffer
+  readonly labelTrace: true
+}
+
 export type TileDecodeWorkerRequest =
   | TileDecodeRequest
   | TileSamplesRequest
   | TileMeasureRequest
   | TileStripBandRequest
+  | TileLabelTraceRequest
 
 export type TileDecodeResponse =
   | TileDecodeSuccess
   | TileSamplesSuccess
   | TileMeasureSuccess
   | TileStripBandSuccess
+  | TileLabelTraceSuccess
   | TileDecodeFailure
 
 export interface TileDecodeSuccess {
@@ -80,6 +91,12 @@ export interface TileStripBandSuccess {
   readonly id: number
   readonly ok: true
   readonly band: ArrayBuffer
+}
+
+export interface TileLabelTraceSuccess {
+  readonly id: number
+  readonly ok: true
+  readonly trace: PackedLabelTrace
 }
 
 export interface TileDecodeFailure {

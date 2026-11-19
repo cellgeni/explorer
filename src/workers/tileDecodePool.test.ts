@@ -57,7 +57,8 @@ describe('TileDecodeWorkerPool', () => {
       posted !== undefined &&
       !('sampling' in posted) &&
       !('measure' in posted) &&
-      !('stripRows' in posted)
+      !('stripRows' in posted) &&
+      !('labelTrace' in posted)
         ? posted
         : undefined
 

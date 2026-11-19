@@ -41,6 +41,7 @@ files. Parsing happens in the browser:
 | `src/features/cards/`                   | The cards (15.2-D): Selection, Cell, Transcript and Magic Lens, built by `useCardStackModel`                                                                                             |
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
 | `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
+| `src/features/segmentation/`            | An image's [imported segmentation](./image-only-and-geojson.md#imported-segmentations) (`segmentation=`): reading it against the image and its state                                     |
 | `src/features/store-structure/`         | The Store structure drawer that `Browse Store` and `Browse File` open: a Zarr store's groups and arrays, or a Parquet file's schema, row groups and first rows                           |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
@@ -458,20 +459,21 @@ their own, and their cards stayed on "Loading".
 
 ## Workers
 
-| Worker                                | Created by                              | Purpose                                                                                                                    |
-| ------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums                      |
-| DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                      |
-| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                             |
-| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range            |
-| `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                           |
-| `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read) |
-| `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                           |
-| `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                            |
-| `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                        |
-| `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                     |
-| `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)       |
-| `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                     |
+| Worker                                | Created by                              | Purpose                                                                                                                                  |
+| ------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles |
+| DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                                    |
+| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                                           |
+| `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range                          |
+| `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                                         |
+| `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read)               |
+| `merscopeTable.worker.ts`             | `readMerscopeTableInWorker`             | MERSCOPE `cell_by_gene.csv` and `cell_metadata.csv`: fetch, gunzip and parse them (one per read)                                         |
+| `featureBarcodeMex.worker.ts`         | `readFeatureBarcodeMexInWorker`         | A standard Visium MEX matrix folder: fetch, inflate and parse it into CSR arrays (one per read)                                          |
+| `zipEntry.worker.ts`                  | `readZipEntryInWorker`                  | One zip entry, a MERSCOPE `.vzg` image pyramid: fetch and inflate it (one per read)                                                      |
+| `visiumHdSegmentationIndex.worker.ts` | `readVisiumHdSegmentationIndexInWorker` | Visium HD segmentation GeoJSON, piped from the main thread: parse it into index columns (one per read)                                   |
+| `vectorSegmentation.worker.ts`        | `readVectorSegmentationInWorker`        | An image's imported GeoJSON, WKT or Parquet segmentation, by URL or picked file: parse it into shape columns (one per read)              |
+| `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)                     |
+| `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                                   |
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD up to 64 MiB,
 standard Visium), writes them into its own h5wasm file system, and answers
@@ -565,7 +567,7 @@ collator would take seconds over a million IDs. If the worker fails, or there
 is no `Worker`, the same store runs on the main thread, given the rows and
 columns again. See [plan 23](plan/phases/23-cell-query.md).
 
-Image columns (plan 25) are measured by `CellImageMeasurements`
+Image columns (plan 26) are measured by `CellImageMeasurements`
 (`src/features/query/cellImageMeasurements.ts`), one per Cell Query model.
 A measurement is one channel at one level, z plane, disc radius and
 threshold; a channel's mean and `% above` come from the same pass.

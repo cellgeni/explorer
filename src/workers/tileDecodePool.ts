@@ -2,11 +2,14 @@ import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileCellSums } from '../data/tileCellMeasure'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
+import type { PackedLabelTrace } from '../datasets/spatialDataLabelTrace'
+import type { TiffLabelTraceOptions } from './tiffLabelTraceCore'
 import type {
   TileDecodeOptions,
   TileDecodeResponse,
   TileDecodeSuccess,
   TileDecodeWorkerRequest,
+  TileLabelTraceSuccess,
   TileMeasure,
   TileMeasureSuccess,
   TileSamplesSuccess,
@@ -38,6 +41,7 @@ type TileDecodeWorkerSuccess =
   | TileSamplesSuccess
   | TileMeasureSuccess
   | TileStripBandSuccess
+  | TileLabelTraceSuccess
 
 interface PendingDecode {
   readonly resolve: (response: TileDecodeWorkerSuccess) => void
@@ -101,7 +105,7 @@ export class TileDecodeWorkerPool {
     return { samples: response.samples, pixelCount: response.pixelCount }
   }
 
-  // Decodes a tile and returns per-cell sums (plan 25). The cells' arrays
+  // Decodes a tile and returns per-cell sums (plan 26). The cells' arrays
   // are transferred, so the caller no longer has them.
   async measure(
     bytes: Uint8Array,
@@ -138,6 +142,25 @@ export class TileDecodeWorkerPool {
     }
 
     return new Uint8Array(response.band)
+  }
+
+  // Decodes a label image tile and traces its labels (see traceTiffLabelTile).
+  async traceLabels(
+    bytes: Uint8Array,
+    options: TiffLabelTraceOptions,
+  ): Promise<PackedLabelTrace> {
+    const response = await this.post(bytes, (id, payload) => ({
+      id,
+      bytes: payload,
+      ...options,
+      labelTrace: true,
+    }))
+
+    if (!('trace' in response)) {
+      throw new Error('Tile decode worker did not return a label trace.')
+    }
+
+    return response.trace
   }
 
   terminate(): void {

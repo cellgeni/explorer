@@ -195,7 +195,7 @@ describe('query= (plan 23-D9)', () => {
   })
 })
 
-describe('image columns (plan 25-D1, D9)', () => {
+describe('image columns (plan 26-D1, D9)', () => {
   const DAPI: CellQueryImageChannelOption = {
     id: 'Channel:0',
     name: 'DAPI',

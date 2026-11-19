@@ -257,6 +257,7 @@ stay mounted while closed, so a gene search survives. `Hide layers (\)` (or
 | ------------------- | ------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | Image               | All           | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | The image and custom layers                             |
 | Cells (Spots, Bins) | All but Image | What colours them: "graphclust", "SNAP25", "4 genes" | Cells, boundaries and bins, and their legend            |
+| Segmentation        | Image         | "312,456 outlines", "Label mask", "Reading", "None"  | The imported outlines (disabled until one is imported)  |
 | Transcripts         | Xenium, Atera | "SNAP25 · density", "All features · points", "Off"   | The transcript overlay (the same as `Show transcripts`) |
 | Annotations         | All           | "2 shapes"                                           | GeoJSON shapes                                          |
 
@@ -303,6 +304,36 @@ The filter is not saved in the share link. Each row has:
 | `Auto`                             | Recomputes the contrast window from the coarsest level. Runs on load for every channel, or only the channels that are on when there are more than six |
 | Min / Max                          | Contrast window                                                                                                                                       |
 | Histogram                          | 32 bins from the last auto-contrast                                                                                                                   |
+
+### Segmentation
+
+Image sources only (`src/features/sections/SegmentationSectionBlocks.tsx`):
+a segmentation imported onto the image and drawn as outlines, without a cell
+table. See [Imported Segmentations](./image-only-and-geojson.md#imported-segmentations).
+With none imported, the section is the import form:
+
+| Control                     | Type                                                                     | Default       | Notes                                                                           |
+| --------------------------- | ------------------------------------------------------------------------ | ------------- | ------------------------------------------------------------------------------- |
+| `Segmentation URL` + `Load` | URL form                                                                 |               | An http(s) URL                                                                  |
+| `Format`                    | Select: From the name, Label TIFF, Label OME-Zarr, GeoJSON, WKT, Parquet | From the name | Needed when the name has no recognised extension                                |
+| `Coordinates`               | Select: Image pixels, Micrometres                                        | Image pixels  | Polygon formats; disabled for a label format, which is placed over the image    |
+| `Open File`                 | File picker                                                              |               | A local file, read in place; not kept in the link. An OME-Zarr mask needs a URL |
+
+While a file is read the form shows how many outlines it has so far; a file
+that cannot be read shows why under the form. Once imported, the section
+shows:
+
+| Control           | Type                                     | Default | Notes                                                                                                                                               |
+| ----------------- | ---------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Segmentation row  | File name; format and size or count; `x` |         | `x` removes it, back to the form                                                                                                                    |
+| Placement notice  | Text                                     |         | When polygons reach beyond the image or crowd its top-left corner (wrong units), or a mask is not the image's shape                                 |
+| Outline colour    | Colour picker                            | Green   | Not in the link                                                                                                                                     |
+| `Outline opacity` | Slider 0–100%, step 5                    | 100%    | Not in the link                                                                                                                                     |
+| View line         | Text                                     |         | "2,576 outlines drawn.", "Zoom in to draw outlines: 81,900 in view, over the boundary limit of 50,000.", or "Zoom in to trace the mask's outlines." |
+
+The header checkbox shows and hides the outlines; they are shown each time
+one is imported. Hovering an outline shows its ID (the label value, or the file's ID), its
+vertices and area, with Cell "Segmented".
 
 ### Cells, Spots or Bins
 
@@ -869,7 +900,7 @@ How it matches:
 - A condition on a column the dataset does not list, such as one from another
   dataset's link, says so and is left out.
 
-How image columns work ([plan 25](plan/phases/25-image-channel-conditions.md)):
+How image columns work ([plan 26](plan/phases/26-image-channel-conditions.md)):
 
 - Each cell is a disc centred on its position, as large as the cell's area
   where the platform gives one (Xenium, Atera, standard Visium spots), or of
@@ -1338,7 +1369,7 @@ From the capabilities in `src/features/app-shell/platformAdapter.ts`:
 | Cell card                                      | Cell Info + Z histogram | Observations + Z histogram (selected genes) | Observations  | Bin Info          | Observations     | Observations     | Observations     | —                |
 | Cell-id annotations                            | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓                | —                |
 | GeoJSON shapes                                 | ✓                       | ✓                                           | ✓             | ✓                 | ✓                | ✓                | ✓                | ✓                |
-| Cell boundaries                                | ✓                       | ✓                                           | Spot outlines | Segmented outputs | ✓ (read whole)   | Attached labels  | ✓ (shapes)       | —                |
+| Cell boundaries                                | ✓                       | ✓                                           | Spot outlines | Segmented outputs | ✓ (read whole)   | Attached labels  | ✓ (shapes)       | Imported         |
 | Nucleus boundaries                             | ✓                       | ✓                                           | —             | ✓                 | —                | —                | ✓ (shapes)       | —                |
 | Selection card                                 | Cells                   | Cells                                       | Cells (spots) | Bins              | Cells            | Cells            | Cells            | New shape        |
 | Plots panel                                    | ✓                       | ✓                                           | ✓             | —                 | ✓                | ✓                | ✓ (with a table) | —                |
@@ -1384,11 +1415,12 @@ the page reloads that entry's link, with its view and settings.
 | `annotationUrl`                                                                                           | Annotation import URL (imported automatically; with `groups`, after the set loads, whose labels it adds to)                                                                                                                                                                                                                                                                            |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                                                                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                                                                             |
+| `segmentation`, `segmentationFormat`, `segmentationUnits`                                                 | An image's [imported segmentation](./image-only-and-geojson.md#imported-segmentations), by URL (a picked file is not written). `segmentationFormat` (`label-tiff`, `label-zarr`, `geojson`, `wkt`, `parquet`) only when the name does not tell it; `segmentationUnits=micrometers` for polygons in micrometres. Opened over the link's dataset in place of a manifest's segmentation   |
 | `genes`                                                                                                   | Selected genes (comma-separated). Empty (`genes=`) when the user removed a manifest's default genes                                                                                                                                                                                                                                                                                    |
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names. A dataset opened after it starts fitted to its extent                                                                                                                                                                                                                                                                            |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens`                                                 |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                                              |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                              |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                                                                       |
 | `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                                                                               |
 | `query`                                                                                                   | Cell Query's conditions, `;`-separated: column, operator and values joined by `\|`; class IDs joined by `,`, or the bounds. `%`, `;`, `\|`, `,` in a part are `%25`, `%3B`, `%7C`, `%2C`. Image columns are `image:{mean or above}:{level}:[z{plane}:][t{threshold}:][r{radius}:]{channel}`, such as `image:above:2:t2188:Channel:0\|at-least\|40`, and are measured as the link opens |
