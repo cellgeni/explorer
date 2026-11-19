@@ -460,7 +460,7 @@ their own, and their cards stayed on "Loading".
 
 | Worker                                | Created by                              | Purpose                                                                                                                    |
 | ------------------------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, or into auto-contrast samples                                                       |
+| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums                      |
 | DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                      |
 | `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                             |
 | `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range            |
@@ -564,6 +564,31 @@ compares whole numbers by value and other text by character code, as a
 collator would take seconds over a million IDs. If the worker fails, or there
 is no `Worker`, the same store runs on the main thread, given the rows and
 columns again. See [plan 23](plan/phases/23-cell-query.md).
+
+Image columns (plan 25) are measured by `CellImageMeasurements`
+(`src/features/query/cellImageMeasurements.ts`), one per Cell Query model.
+A measurement is one channel at one level, z plane, disc radius and
+threshold; a channel's mean and `% above` come from the same pass.
+`planCellImageMeasurement` maps each overview cell into the loader's frame
+(the inverse of its placement) and the level's pixels, as a disc, and
+buckets the cells by the tiles their discs touch in two passes over the
+cells (counts, then rows). `cellImageReadBytes` sizes the read from the TIFF
+tile index (`tileReadBytes`); the store asks above 1 GiB and refuses above
+8 GiB. `runCellImageMeasurement` fetches the tiles row by row, 12 in flight
+within a `TileRequestSlots` of 6 shared by every measurement, naming the
+next tiles as `upcoming` so neighbours share requests, and with
+`persist: false`, which reads the IndexedDB byte-range cache but adds
+nothing to it. Each tile goes to a decode worker of the store's own pool
+(`cores − 2`, 1 to 4, closed when nothing is measured) with its cells'
+centres and radii as `Float32Array`s; `measureTileCells`
+(`src/data/tileCellMeasure.ts`) gives each pixel to the disc nearest its
+centre relative to the radius and returns per-cell sums, pixel counts and
+counts above the threshold, transferred. The main thread adds them into
+per-cell arrays and, when every tile is in, hands the means and shares to
+the query worker as `number-column`s. Progress is published apart from
+state changes, so a measurement renders the panel's conditions alone, not
+App. A threshold for a channel auto-contrast did not read is Otsu's on its
+coarsest level, read when the panel opens.
 
 The table's pictures are small `MorphologyCanvas`es on one shared tile store
 (above). Their outlines are read a page at a time by `CellOutlineReader`

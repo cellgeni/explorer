@@ -91,6 +91,28 @@ describe('CellImageMeasurements', () => {
     expect(onMeasured).toHaveBeenCalledTimes(1)
   })
 
+  // Progress renders the panel's conditions alone: App, and with it the
+  // canvas, renders only when a measurement's state changes (plan 25-G).
+  it('publishes progress apart from state changes', async () => {
+    const { loader } = fakeCellImage({ width: 64, height: 64, pixel: () => 1 })
+    const { store, context, ready } = setup(loader)
+    const cells = Array.from({ length: 256 }, (_, index) =>
+      cell((index % 16) * 4 + 2, Math.floor(index / 16) * 4 + 2),
+    )
+    const states = vi.fn()
+    const progress = vi.fn()
+    store.subscribe(states)
+    store.subscribeProgress(progress)
+    const need = mean()
+
+    store.sync([need], { ...context, cells })
+    await ready(need.columnId)
+
+    // Planning, measuring, ready.
+    expect(states).toHaveBeenCalledTimes(3)
+    expect(progress.mock.calls.length).toBeGreaterThan(50)
+  })
+
   it('takes the mean and the share above from one pass', async () => {
     const { loader, fetches } = image()
     const { store, context, ready } = setup(loader)

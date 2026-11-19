@@ -1271,6 +1271,59 @@ test('shows a MERSCOPE .vzg stain and switches it off @smoke', async ({ page }) 
   ).toHaveValue('', { timeout: H5AD_LOAD_TIMEOUT_MS })
 })
 
+// Plan 25: Cell Query measures the .vzg stain under each cell, a disc of
+// the Radius field's 5 µm as MERSCOPE cells have no area. The fixture's
+// cells' DAPI means at 2 µm/px are about 1,927, 1,987 and 1,430
+// (tifffile and numpy), and 1,810, 1,926 and 1,304 at 0.5 µm/px.
+test('finds MERSCOPE cells by a stain measured under each @smoke', async ({ page }) => {
+  test.setTimeout(120_000)
+  await routeMerscopeFixture(page, '/merscope-vzg', { vzg: true })
+  await page.goto('/')
+
+  await openControls(page, 'open-dataset')
+  await page
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/merscope-vzg/', page.url()).toString())
+  await openControls(page, 'open-dataset')
+  await page.getByRole('button', { name: 'Load Dataset' }).click()
+  await expectLogEntry(page, /MERSCOPE ready: 3 cells/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+  await expectLogEntry(page, /Morphology image ready/, { timeout: H5AD_LOAD_TIMEOUT_MS })
+
+  const query = await openControls(page, 'query')
+  const addCondition = query.getByRole('combobox', { name: 'Add condition' })
+  const mean = addCondition.locator('optgroup[label="Image"] option', {
+    hasText: /^DAPI mean \(2 µm\/px, radius 5 µm\)$/,
+  })
+  await addCondition.selectOption((await mean.getAttribute('value')) ?? '')
+  const from = query.getByRole('spinbutton', { name: 'From' })
+  await from.fill('1700')
+  await from.press('Enter')
+
+  await expect(query.getByText('2 of 3 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expect(page).toHaveURL(
+    /[#&]query=image%3Amean%3A2%3Ar5%3A[^&]*%7Cat-least%7C1700/,
+  )
+  await expect(query.getByRole('spinbutton', { name: 'Radius' })).toHaveValue('5')
+  await expectLogEntry(page, /Cell query: measured DAPI at level 2 in /)
+
+  const findings: AxeFindings = new Map()
+  await openControls(page, 'query')
+  await collectAxeFindings(page, 'MERSCOPE fixture, image condition', findings)
+  expectAxeFindingsMatchBaseline(findings)
+
+  // A finer level is another column, measured again.
+  await query.getByRole('combobox', { name: 'Resolution' }).selectOption({ index: 0 })
+  await expect(
+    query.getByTitle('DAPI mean (0.5 µm/px, radius 5 µm)', { exact: true }),
+  ).toBeVisible()
+  await expect(query.getByText('2 of 3 cells match')).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  await expectLogEntry(page, /Cell query: measured DAPI at level 0 in /)
+})
+
 test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', async ({
   page,
 }) => {
@@ -1729,6 +1782,33 @@ test('finds Xenium cells by transcript count and graph cluster @live', async ({
   })
   await expectLogEntry(page, /Cell query: [0-9,]+ of 1,414,155 match in /)
   await expectLogEntry(page, /Cell query: [0-9,]+ outlines? in [0-9,]+ ms/)
+})
+
+// Plan 25: a link with an image condition measures the demo's DAPI under
+// all 1.4 million cells at the default level, 0.85 µm/px (180 MB), as it
+// opens. The time to the count goes into the report.
+test('finds Xenium cells by DAPI measured under each @live', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(400_000)
+  const startedAt = Date.now()
+  const query = 'image:above:2:t2188:Channel:0|at-least|50'
+
+  await page.goto(
+    `/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}&panel=query&query=${encodeURIComponent(query)}`,
+  )
+  const panel = page.getByRole('region', { name: 'Cell Query' })
+  await expect(panel.getByText(/^Measuring DAPI… [0-9]+%$/)).toBeVisible({
+    timeout: XENIUM_LOAD_TIMEOUT_MS,
+  })
+  await expect(panel.getByText(/^[1-9][0-9,]* of 1,414,155 cells match$/)).toBeVisible({
+    timeout: 300_000,
+  })
+  testInfo.annotations.push({
+    type: 'Time to measure DAPI',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from opening the link`,
+  })
+  await expectLogEntry(page, /Cell query: measured DAPI at level 2 in [0-9.]+ s/)
 })
 
 test('draws Xenium nucleus boundaries without reading cell outlines @live', async ({

@@ -1,7 +1,8 @@
 # Phase 25 — Image Channel Conditions
 
-Planned 2026-11-19. The spike (task A) and the decoder switch (task A2)
-were done the same day, and M1 started. Requested: filter cells by the presence or
+Planned 2026-11-19. The spike (task A), the decoder switch (task A2) and
+M1 (tasks B to G, TIFF images) were done the same day
+([M1 Results](#m1-results-2026-11-19)); M2 (OME-Zarr) is not started. Requested: filter cells by the presence or
 intensity of up to three image channels inside each cell, in the Cell Query
 window ([Phase 23](23-cell-query.md)).
 
@@ -199,6 +200,56 @@ bucketing the cells to the last tile.
     and 95th percentiles.
   - At 5,000, cells in the dense block have 0% to 91% of their pixels
     above (median 38%).
+
+## M1 Results (2026-11-19)
+
+M1 as built, in a production build in headless Chromium on the Mac's GPU,
+1280 × 800, with the Xenium demo open at the brain view, as in the spike.
+
+- **The Image group** lists each channel's mean and `% above` at level 2,
+  0.85 µm/px. Otsu's thresholds from auto-contrast's samples, leaving out
+  zeros, are 2,188 for DAPI (2,176 from the whole coarsest level in the
+  spike), 1,017 for ATP1A1/CD45/E-Cadherin, 521 for 18S and 555 for
+  alphaSMA/Vimentin. `Resolution` lists every level with its size from the
+  tile index: 1.6 GiB at 0.21 µm/px, 616 MiB at 0.42, 172 MiB at 0.85.
+- **`DAPI % above 2,188` at least 50** matched 558,053 of 1,414,155 cells
+  23.9 s after the condition was added, in 204 requests for 248 tiles. The
+  page had 2 long tasks (147 ms in all, the longest 86 ms) and 3 frames over
+  50 ms; frames were 8.3 ms at the median and 9.1 ms at the 95th percentile.
+- **`DAPI mean` at least 2,188** from the same pass took 1.7 s, with no
+  new reads; both conditions matched 518,156 cells.
+- **The link** (`image:above:2:t2188:Channel:0|at-least|50;image:mean:2:Channel:0|at-least|2188`)
+  opened on a fresh page and measured without a click: `Measuring` with
+  progress from 6 s, the same 518,156 cells at 36.7 s, the measurement
+  29.5 s (172 MiB) beside the dataset's own load.
+- **The MERSCOPE `.vzg` smoke fixture**, 12-bit JPEG at 5 µm discs: the
+  three cells' means at 2 µm/px are about 1,927, 1,987 and 1,430 in
+  tifffile and numpy, and `DAPI mean` at least 1,700 matches two of them at
+  2 and at 0.5 µm/px in the app.
+- **The main chunk did not grow**: 1,042 kB against 1,049 kB on `main`. The
+  threshold reader and the main-thread fallback load on demand.
+
+Where M1 differs from the plan above:
+
+- Task E's measurer is two modules: `cellImageMeasurer.ts` plans and runs
+  one measurement, and `CellImageMeasurements` keeps the dataset's
+  measurements for the panel's model.
+- One decode pool per dataset's measurements, shared by the channels
+  measured at once and closed when none is, rather than one per
+  measurement.
+- Channels auto-contrast does not read (past the six on by default) get
+  Otsu's threshold from their coarsest level when the panel opens. Their
+  `% above` is listed as finding a threshold until then.
+- The status line says `Measuring`, or `Waiting to measure` at the
+  question or after `Cancel`, rather than the last count. A measured
+  column's range shows under its bounds.
+- A tile that fails is read once more before the measurement fails.
+- Task G's offline App test is a Playwright smoke test on the MERSCOPE
+  `.vzg` fixture instead, beside panel tests on the real hook with an
+  in-memory TIFF; Cell Query's other App-level coverage is in Playwright
+  too. The no-redraw guard is a store test: a measurement changes state
+  three times however many tiles it reads, and progress renders only the
+  conditions.
 
 ## Current State
 
@@ -471,7 +522,7 @@ D5 and D6 after the spike; the others stand as proposed.
       [PR #192](https://github.com/cellgeni/explorer/pull/192)) Load the
       decode-only wasm build of `@cornerstonejs/codec-openjpeg` in
       `jpeg2000.ts` ([Spike Results](#spike-results-2026-11-19)).
-- [ ] **B. Measuring a tile.** (M) A pure
+- [x] **B. Measuring a tile.** (M) A pure
       `measureTileCells(pixels, width, height, cells, threshold)` in
       `src/data/`, beside `tileSamples.ts`.
   - Padded tiles are cropped. Missing (0-byte) tiles count as zeros, as
@@ -480,20 +531,21 @@ D5 and D6 after the spike; the others stand as proposed.
     - a pixel counts for one cell at most;
     - the sums of a disc cut into tiles equal its sums in one piece;
     - the share above stays between 0 and 100.
-- [ ] **C. Worker requests.** (M; the TIFF part in M1, OME-Zarr in M2)
+- [x] **C. Worker requests.** (M; the TIFF part done in M1, OME-Zarr in
+      M2)
   - A `measure` request on `TileDecodeWorkerPool`, routed by key as
     `sampling` is.
   - A `measure-tile` request on `ZarrDecodePool` that reads a tile across
     chunks, generalising `chunkWindowSamples`.
   - Results are transferred. Tests on the worker cores, as
     `tileSamplesCore.test.ts` does.
-- [ ] **D. Fetching without persisting.** (S)
+- [x] **D. Fetching without persisting.** (S)
   - A per-call option on `ImagePyramidTileFetchOptions` that reads the
     byte-range cache but does not write to it. The TIFF loader's
     `fetchByteRangeWithCache` path honours it.
   - Test that a measurement leaves the IndexedDB cache's entries as they
     were.
-- [ ] **E. The measurer.** (M) `CellImageMeasurer` in `src/features/query/`.
+- [x] **E. The measurer.** (M) `CellImageMeasurer` in `src/features/query/`.
   - Cells into the frame, the level (D5), buckets and tile order.
   - The default threshold (D6): Otsu's on the samples
     `computeChannelAutoContrast` reads (`morphologyContrast.ts:75`),
@@ -504,7 +556,7 @@ D5 and D6 after the spike; the others stand as proposed.
   - Unit tests with a fake loader: flipped and swapped placements, an
     origin offset (MERSCOPE), cells outside the image, the budget's three
     answers, cancel part-way, and progress reaching 100%.
-- [ ] **F. Cell Query.** (M)
+- [x] **F. Cell Query.** (M)
   - An `image` source kind and the Image group in `cellQueryModel.ts`. The
     column IDs and the link (D9).
   - A `measuring` state with a fraction, from `columnInput()` through
@@ -515,7 +567,7 @@ D5 and D6 after the spike; the others stand as proposed.
   - Channel names passed beside `pictureImage` (`App.tsx:4469`).
   - Tests: the model, the link's round trip, and a panel component test
     on the real hook.
-- [ ] **G. Docs and end-to-end tests.** (M)
+- [x] **G. Docs and end-to-end tests.** (M)
   - Docs: [Docs To Update](#docs-to-update).
   - `App.test.tsx`, offline: an OME-TIFF fixture with known values
     (tifffile, as in the local TIFF fixtures) under an AnnData manifest.
@@ -533,7 +585,7 @@ D5 and D6 after the spike; the others stand as proposed.
 | Milestone        | Contents                       | Size             |
 | ---------------- | ------------------------------ | ---------------- |
 | M0 — Spike       | A, A2 (both done)              | S                |
-| M1 — TIFF images | B, C (TIFF), D, E, F, G        | About 2–2½ weeks |
+| M1 — TIFF images | B, C (TIFF), D, E, F, G (done) | About 2–2½ weeks |
 | M2 — OME-Zarr    | C (OME-Zarr), SpatialData test | M                |
 
 - M1 covers Xenium, Atera and MERSCOPE, and AnnData with a TIFF, OME-TIFF

@@ -1,4 +1,3 @@
-import { computeChannelAutoContrast } from '../../data/morphologyContrast'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import { TileRequestSlots } from '../../tiff/tileRequestScheduler'
 import {
@@ -91,6 +90,18 @@ interface Entry {
 
 type ThresholdState = number | 'finding' | 'none'
 
+// The measurements as of a state change, for rendering.
+export interface CellImageMeasurementsSnapshot {
+  // The measurement a column reads, as of the last sync.
+  keyFor(columnId: string): string | undefined
+  state(key: string): CellImageMeasurementState | undefined
+  // Otsu's threshold for a channel auto-contrast has not read.
+  threshold(channelId: string): number | 'finding' | undefined
+  // The bytes each level of a channel holds, from its tile index; null for
+  // a level that cannot tell.
+  levelSizes(channelId: string): readonly (number | null)[] | undefined
+}
+
 const KEEP_UNUSED = 4
 
 export function cellImageMeasurementKey(spec: CellImageMeasurementSpec): string {
@@ -111,6 +122,7 @@ export class CellImageMeasurements {
   private readonly entries = new Map<string, Entry>()
   private readonly columnKeys = new Map<string, string>()
   private readonly thresholds = new Map<string, ThresholdState>()
+  private readonly levelSizes = new Map<string, readonly (number | null)[]>()
   private readonly thresholdControllers = new Set<AbortController>()
   private readonly listeners = new Set<() => void>()
   private readonly progressListeners = new Set<() => void>()
@@ -122,7 +134,7 @@ export class CellImageMeasurements {
   private readonly keepUnused: number
   private tileMeasurer: CellImageTileMeasurer | null = null
   private context: CellImageMeasurementContext | null = null
-  private version = 0
+  private snapshot: CellImageMeasurementsSnapshot = this.takeSnapshot()
   private progressVersion = 0
   private clock = 0
 
@@ -130,8 +142,11 @@ export class CellImageMeasurements {
     this.createTileMeasurer = options.createTileMeasurer ?? createCellImageTileMeasurer
     this.findThreshold =
       options.findThreshold ??
-      (async (loader, signal) =>
-        (await computeChannelAutoContrast(loader, { signal })).histogram.threshold)
+      (async (loader, signal) => {
+        const { computeChannelAutoContrast } =
+          await import('../../data/morphologyContrast')
+        return (await computeChannelAutoContrast(loader, { signal })).histogram.threshold
+      })
     this.keepUnused = options.keepUnused ?? KEEP_UNUSED
   }
 
@@ -144,7 +159,7 @@ export class CellImageMeasurements {
     }
   }
 
-  readonly getVersion = (): number => this.version
+  readonly getSnapshot = (): CellImageMeasurementsSnapshot => this.snapshot
 
   readonly subscribeProgress = (listener: () => void): (() => void) => {
     this.progressListeners.add(listener)
@@ -177,6 +192,7 @@ export class CellImageMeasurements {
       thresholdsByGroup.set(group, thresholds)
     }
 
+    const keysBefore = [...this.columnKeys].join('\u0000')
     this.columnKeys.clear()
     const wanted = new Map<string, CellImageMeasurementSpec>()
     for (const need of needs) {
@@ -196,7 +212,7 @@ export class CellImageMeasurements {
       wanted.set(key, spec)
     }
 
-    let changed = false
+    let changed = [...this.columnKeys].join('\u0000') !== keysBefore
     for (const [key, entry] of this.entries) {
       if (wanted.has(key)) {
         entry.lastUsed = this.clock
@@ -240,13 +256,12 @@ export class CellImageMeasurements {
     this.closeIdleMeasurer()
   }
 
-  // The measurement a column reads, as of the last sync.
   keyFor(columnId: string): string | undefined {
-    return this.columnKeys.get(columnId)
+    return this.snapshot.keyFor(columnId)
   }
 
   state(key: string): CellImageMeasurementState | undefined {
-    return this.entries.get(key)?.state
+    return this.snapshot.state(key)
   }
 
   // The share of tiles measured, while measuring.
@@ -285,13 +300,12 @@ export class CellImageMeasurements {
     this.closeIdleMeasurer()
   }
 
-  // Otsu's threshold for each channel that has none from auto-contrast,
-  // read one channel at a time.
   threshold(channelId: string): number | 'finding' | undefined {
-    const state = this.thresholds.get(channelId)
-    return state === 'none' ? undefined : state
+    return this.snapshot.threshold(channelId)
   }
 
+  // Otsu's threshold for each channel that has none from auto-contrast,
+  // read one channel at a time.
   findThresholds(
     channels: readonly { readonly id: string; readonly loader: ImagePyramidLoader }[],
   ): void {
@@ -318,15 +332,51 @@ export class CellImageMeasurements {
     })()
   }
 
+  // Each level's size for the Resolution list (25-D5), read once per
+  // channel from its tile index.
+  findLevelSizes(
+    channels: readonly { readonly id: string; readonly loader: CellImageLoader }[],
+  ): void {
+    for (const channel of channels) {
+      if (this.levelSizes.has(channel.id)) continue
+      const { loader } = channel
+      this.levelSizes.set(channel.id, [])
+      const controller = new AbortController()
+      this.thresholdControllers.add(controller)
+      void Promise.all(
+        Array.from({ length: loader.numLevels }, async (_, level) => {
+          try {
+            return (
+              (await loader.tileReadBytes?.(
+                level,
+                loader.tilesForLevel(level),
+                controller.signal,
+              )) ?? null
+            )
+          } catch {
+            return null
+          }
+        }),
+      ).then((sizes) => {
+        this.thresholdControllers.delete(controller)
+        if (controller.signal.aborted) return
+        this.levelSizes.set(channel.id, sizes)
+        this.notify()
+      })
+    }
+  }
+
   // Stops everything and forgets every measurement: another dataset.
   reset(): void {
     for (const entry of this.entries.values()) entry.controller?.abort()
     for (const controller of this.thresholdControllers) controller.abort()
     this.thresholdControllers.clear()
-    const had = this.entries.size > 0 || this.thresholds.size > 0
+    const had =
+      this.entries.size > 0 || this.thresholds.size > 0 || this.levelSizes.size > 0
     this.entries.clear()
     this.columnKeys.clear()
     this.thresholds.clear()
+    this.levelSizes.clear()
     this.context = null
     this.tileMeasurer?.close()
     this.tileMeasurer = null
@@ -452,8 +502,29 @@ export class CellImageMeasurements {
     this.tileMeasurer = null
   }
 
+  private takeSnapshot(): CellImageMeasurementsSnapshot {
+    const columnKeys = new Map(this.columnKeys)
+    const states = new Map(
+      [...this.entries].map(([key, entry]) => [key, entry.state] as const),
+    )
+    const thresholds = new Map(this.thresholds)
+    const levelSizes = new Map(this.levelSizes)
+    return {
+      levelSizes: (channelId) => {
+        const sizes = levelSizes.get(channelId)
+        return sizes === undefined || sizes.length === 0 ? undefined : sizes
+      },
+      keyFor: (columnId) => columnKeys.get(columnId),
+      state: (key) => states.get(key),
+      threshold: (channelId) => {
+        const state = thresholds.get(channelId)
+        return state === 'none' ? undefined : state
+      },
+    }
+  }
+
   private notify(): void {
-    this.version += 1
+    this.snapshot = this.takeSnapshot()
     this.progressVersion += 1
     for (const listener of [...this.listeners]) listener()
     for (const listener of [...this.progressListeners]) listener()

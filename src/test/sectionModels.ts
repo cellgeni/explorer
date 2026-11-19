@@ -544,6 +544,13 @@ export function testCellQueryModel(
     exporting: false,
     canExport: rowCount > 0,
     onExportCsv: vi.fn(),
+    imageNote: null,
+    tableMeasurements: [],
+    imageProgress: {
+      subscribeProgress: () => () => undefined,
+      getProgressVersion: () => 0,
+      progress: () => null,
+    },
     ...rest,
   }
 }

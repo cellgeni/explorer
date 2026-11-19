@@ -51,6 +51,7 @@ import { parsePlotKind, plotDatasetSets } from './features/plots/plotsPanelModel
 import { usePlotsModel } from './features/plots/usePlotsModel'
 import type { CellQueryCondition } from './features/query/cellQuery'
 import type { CellQueryPictureImage } from './features/query/CellPicture'
+import type { CellQueryImageChannel } from './features/query/cellQueryImage'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import {
@@ -4481,6 +4482,26 @@ export function App({ dependencies }: AppProps = {}) {
       flatImage: flatMorphologyImage,
     }
   }, [flatMorphologyImage, morphologyCanvasChannels, morphologyImage])
+  // The image's channels for its columns (plan 25), named, with
+  // auto-contrast's threshold.
+  const cellQueryImageChannels = useMemo<readonly CellQueryImageChannel[]>(
+    () =>
+      morphologyChannels.map((channel) => {
+        const histogram = morphologyChannelSettings.find(
+          (setting) => setting.id === channel.info.id,
+        )?.histogram
+        return {
+          id: channel.info.id,
+          name: channel.info.name,
+          loader: channel.loader,
+          rgb:
+            (channel.info.samplesPerPixel ?? 1) > 1 ||
+            channel.info.alphaFromIntensity === false,
+          ...(histogram === undefined ? {} : { histogram }),
+        }
+      }),
+    [morphologyChannelSettings, morphologyChannels],
+  )
   const cellQuery = useCellQueryModel({
     open: shellPanels.queryOpen,
     available: queryAvailable,
@@ -4509,6 +4530,8 @@ export function App({ dependencies }: AppProps = {}) {
     onSaveClass: handleSaveQueryAnnotation,
     pictureImage: cellQueryPictureImage,
     loadCellOutlines: loadActiveCellOutlines,
+    imageChannels: cellQueryImageChannels,
+    imageZPlane: morphologyImage?.zStack?.zPlane ?? null,
     appendDebugEvent,
   })
 

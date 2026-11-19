@@ -450,9 +450,26 @@ classes and values and lists them in a table:
    colours the cells by their classes, as `Save ROI` does; Plots can then group
    by it. `Export CSV` saves the table's columns for every matching cell.
 
-The conditions go into the link, so a shared link opens with the same query.
-The panel works on every platform except Visium HD and image-only datasets.
-See the [UI reference](ui-reference.md#cell-query-panel).
+To find cells by an image channel, such as the cells bright in DAPI or the
+cells where a marker covers most of the cell:
+
+1. Under `Add condition` › `Image`, choose a channel's `mean` or `% above`.
+   The panel measures the channel under every cell, each cell a disc of its
+   area (or of the `Radius` you set where cells have no area), and shows
+   `Measuring DAPI… 42%` with `Cancel`. On the Xenium demo that takes about
+   20 s per channel.
+2. `% above` counts the pixels at or above `Threshold`, which starts at a
+   value that splits the channel's pixels into dim and bright (Otsu's
+   method); its line on the histogram shows where. Change it, or
+   `Resolution` for a finer level, and the channel is measured again.
+3. Set the bounds as for any number, such as `At least` 40 for cells with at
+   least 40% of their pixels above the threshold. Up to three channels can
+   be used at once; `Save As Class` and `Export CSV` work as above.
+
+The conditions go into the link, so a shared link opens with the same query,
+measuring its image channels as it opens. The panel works on every platform
+except Visium HD and image-only datasets. See the
+[UI reference](ui-reference.md#cell-query-panel).
 
 ## Standard Visium
 

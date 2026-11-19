@@ -6,7 +6,6 @@ import type { TileCellSums } from '../../data/tileCellMeasure'
 import { TileRequestSlots } from '../../tiff/tileRequestScheduler'
 import type { TileMeasure } from '../../workers/tileDecodeMessages'
 import { TileDecodeWorkerPool } from '../../workers/tileDecodePool'
-import { measureTileBytes } from '../../workers/tileMeasureCore'
 
 // Measures one image channel under every cell (plan 25): the mean of each
 // cell's pixels, and the share of them at or above a threshold, at one
@@ -486,7 +485,13 @@ export interface CellImageTileMeasurer {
 
 export function createCellImageTileMeasurer(): CellImageTileMeasurer {
   if (typeof Worker === 'undefined') {
-    return { measure: measureTileBytes, close: () => undefined }
+    return {
+      measure: async (bytes, metadata, measure) => {
+        const { measureTileBytes } = await import('../../workers/tileMeasureCore')
+        return measureTileBytes(bytes, metadata, measure)
+      },
+      close: () => undefined,
+    }
   }
 
   const cores = navigator.hardwareConcurrency ?? 2
