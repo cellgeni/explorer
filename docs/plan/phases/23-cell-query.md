@@ -168,7 +168,8 @@ What is missing:
   includes it.
 - **D8. Export.** `Export CSV` writes the table's columns for every match.
 - **D9. A window like Plots.** `Show Query` sits with `Show Embedding` and
-  `Show Plots` in Cells › Panels. The window is 520 × 460 by default and at
+  `Show Plots` in Cells › Panels (**Superseded 2026-11-19:** `Query` in the
+  top bar, [Phase 15](15-interface-redesign.md#additions-after-the-close-out)). The window is 520 × 460 by default and at
   least 360 × 300, placed beside the other windows as Plots is (plan 22-D8),
   full width under 860 px. The link keeps it as `panel=query`, and the
   conditions as `query=`.

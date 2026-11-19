@@ -9,6 +9,7 @@ import {
   BoxSelectIcon,
   Button,
   ChevronDownIcon,
+  EmbeddingIcon,
   HelpIcon,
   IconButton,
   InfoIcon,
@@ -16,8 +17,11 @@ import {
   LassoIcon,
   LensIcon,
   LinkIcon,
+  PanelsIcon,
   PanIcon,
+  PlotsIcon,
   Popover,
+  QueryIcon,
   RulerIcon,
   SettingsIcon,
   Slider,
@@ -44,6 +48,7 @@ import { isHelpKey, SHORTCUTS } from './shortcuts'
 import type {
   DatasetSummary,
   MagicLensToolModel,
+  PanelToggle,
   ToolGroupModel,
   TopBarModel,
 } from './topBarModel'
@@ -56,6 +61,42 @@ const TOOL_ICONS: Readonly<Record<ActiveTool, ReactNode>> = {
   'magic-lens': <LensIcon />,
 }
 
+const PANEL_BUTTONS: Readonly<
+  Record<
+    PanelToggle['panel'],
+    {
+      readonly label: string
+      readonly icon: ReactNode
+      readonly showTitle: string
+      readonly hideTitle: string
+    }
+  >
+> = {
+  embedding: {
+    label: 'Embedding',
+    icon: <EmbeddingIcon />,
+    showTitle: 'Show the UMAP or t-SNE panel',
+    hideTitle: 'Hide the embedding panel',
+  },
+  plots: {
+    label: 'Plots',
+    icon: <PlotsIcon />,
+    showTitle: 'Show a dot plot of the selected genes by class',
+    hideTitle: 'Hide the plots panel',
+  },
+  query: {
+    label: 'Query',
+    icon: <QueryIcon />,
+    showTitle: 'Find cells by their classes and values, in a table',
+    hideTitle: 'Hide the cell query panel',
+  },
+}
+
+function panelTitle(toggle: PanelToggle): string {
+  const button = PANEL_BUTTONS[toggle.panel]
+  return toggle.open ? button.hideTitle : button.showTitle
+}
+
 interface TopBarProps {
   readonly model: TopBarModel
   readonly info: DatasetInfoModel
@@ -63,14 +104,16 @@ interface TopBarProps {
   readonly settings: ViewSettingsModel
   readonly infoOpen: boolean
   readonly onInfoOpenChange: (open: boolean) => void
-  // Under 860 px the tools fold into a menu and Share drops its label
-  // (15.2-I).
+  // The windows the dataset has: Embedding, Plots and Cell Query.
+  readonly panels?: readonly PanelToggle[] | undefined
+  // Under 860 px the tools and the window toggles fold into menus and Share
+  // drops its label (15.2-I).
   readonly narrow?: boolean | undefined
 }
 
 // The top bar (plan 15.2-B): the dataset, its
-// summary and ⓘ on the left, the tools in the middle, and Share, Help and
-// Settings on the right.
+// summary and ⓘ on the left, the tools in the middle, and the window
+// toggles, Share, Help and Settings on the right.
 export function TopBar({
   model,
   info,
@@ -78,6 +121,7 @@ export function TopBar({
   settings,
   infoOpen,
   onInfoOpenChange,
+  panels = [],
   narrow = false,
 }: TopBarProps) {
   return (
@@ -119,6 +163,11 @@ export function TopBar({
         )}
       </div>
       <div className="shell-top-bar-end">
+        {panels.length === 0 ? null : narrow ? (
+          <PanelMenu panels={panels} />
+        ) : (
+          <PanelToggles panels={panels} />
+        )}
         <ShareButton info={info} iconOnly={narrow} />
         <HelpMenu />
         <Popover
@@ -399,6 +448,75 @@ export function ToolMenu({ tools }: { readonly tools: ToolGroupModel }) {
               <small className="shell-tool-menu-reason">{option.reason}</small>
             )}
             <Kbd title={`${option.label} shortcut`}>{option.shortcut}</Kbd>
+          </button>
+        ))}
+      </div>
+    </Popover>
+  )
+}
+
+// The Embedding, Plots and Cell Query windows, which open at the top right
+// of the canvas, below these toggles. They are named in full where the bar
+// has room, and show only their icons where it does not (shell.css).
+function PanelToggles({ panels }: { readonly panels: readonly PanelToggle[] }) {
+  return (
+    <div className="shell-panel-toggles" role="group" aria-label="Panels">
+      {panels.map((toggle) => (
+        <Button
+          key={toggle.panel}
+          title={panelTitle(toggle)}
+          variant="ghost"
+          className="shell-panel-toggle"
+          aria-pressed={toggle.open}
+          onClick={() => {
+            toggle.onOpenChange(!toggle.open)
+          }}
+        >
+          {PANEL_BUTTONS[toggle.panel].icon}
+          <span className="shell-panel-toggle-label">
+            {PANEL_BUTTONS[toggle.panel].label}
+          </span>
+        </Button>
+      ))}
+    </div>
+  )
+}
+
+// The window toggles as a menu, for narrow screens, where one window shows
+// at a time; picking one closes the menu.
+function PanelMenu({ panels }: { readonly panels: readonly PanelToggle[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <Popover
+      title="Panels"
+      align="end"
+      open={open}
+      onOpenChange={setOpen}
+      triggerClassName="shell-tool-menu-trigger"
+      className="shell-tool-menu"
+      trigger={
+        <>
+          <PanelsIcon />
+          <ChevronDownIcon />
+        </>
+      }
+    >
+      <div role="group" aria-label="Panels" className="shell-tool-menu-list">
+        {panels.map((toggle) => (
+          <button
+            key={toggle.panel}
+            type="button"
+            className="shell-tool-menu-item"
+            title={panelTitle(toggle)}
+            aria-pressed={toggle.open}
+            onClick={() => {
+              toggle.onOpenChange(!toggle.open)
+              setOpen(false)
+            }}
+          >
+            {PANEL_BUTTONS[toggle.panel].icon}
+            <span>{PANEL_BUTTONS[toggle.panel].label}</span>
           </button>
         ))}
       </div>
