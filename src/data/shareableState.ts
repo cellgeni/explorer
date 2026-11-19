@@ -30,6 +30,12 @@ export interface ShareableState {
   readonly annotationGroupIds?: readonly string[]
   readonly customImageUrls?: readonly string[]
   readonly customImageOpacities?: readonly number[]
+  // A segmentation imported onto an image (plan 25): `segmentation=` its URL,
+  // `segmentationFormat=` when the name does not tell it, and
+  // `segmentationUnits=micrometers` for polygons in micrometres.
+  readonly segmentationUrl?: string
+  readonly segmentationFormat?: string
+  readonly segmentationUnits?: string
   readonly selectedGenes?: readonly string[]
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
@@ -133,6 +139,9 @@ export function parseShareableState(hash: string): ShareableState {
   const annotationGroupIds = readCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
+  const segmentationUrl = readString(params, 'segmentation')
+  const segmentationFormat = readString(params, 'segmentationFormat')
+  const segmentationUnits = readString(params, 'segmentationUnits')
   // An empty genes= clears a dataset manifest's genes.
   const selectedGenes = readCsvAllowEmpty(params, 'genes')
   const viewState = parseViewState(params.get('view'))
@@ -227,6 +236,18 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (customImageOpacities !== undefined) {
     state.customImageOpacities = customImageOpacities
+  }
+
+  if (segmentationUrl !== undefined) {
+    state.segmentationUrl = segmentationUrl
+
+    if (segmentationFormat !== undefined) {
+      state.segmentationFormat = segmentationFormat
+    }
+
+    if (segmentationUnits !== undefined) {
+      state.segmentationUnits = segmentationUnits
+    }
   }
 
   if (selectedGenes !== undefined) {
@@ -489,6 +510,12 @@ export function formatShareableState(state: ShareableState): string {
         params.append('customImageOpacity', roundForHash(customImageOpacity).toString())
       }
     }
+  }
+
+  if (state.segmentationUrl !== undefined && state.segmentationUrl.trim() !== '') {
+    params.set('segmentation', state.segmentationUrl.trim())
+    setOptionalString(params, 'segmentationFormat', state.segmentationFormat)
+    setOptionalString(params, 'segmentationUnits', state.segmentationUnits)
   }
 
   // Written even when empty, which a link does only to clear a manifest's

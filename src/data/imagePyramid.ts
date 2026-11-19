@@ -259,6 +259,9 @@ export interface OpenImagePyramidOptions {
   readonly bytes?: Uint8Array<ArrayBuffer>
   // Replaces the name of a single-channel image's channel.
   readonly channelName?: string
+  // Opens a segmentation label image, whose tiles are read as raw label
+  // values: 32-bit samples are allowed. TIFF images only.
+  readonly labels?: boolean
 }
 
 // Opens an image pyramid: the generic opener (`openImagePyramid`), a TIFF-only

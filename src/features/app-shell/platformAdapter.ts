@@ -17,6 +17,7 @@ import type { VisiumHdControlState } from '../dataset/visiumHdModel'
 import type { RoiState } from '../roi/roiModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from '../roi/visiumHdRoiModel'
 import type { AteraDataset } from '../../datasets/ateraDataset'
+import type { ImportedSegmentation } from '../../datasets/importedSegmentation'
 import { loadPerGeneCellTranscriptDistribution } from '../../data/cellTranscripts'
 import { loadPerGeneRoiTranscripts } from '../../data/roiTranscripts'
 import type {
@@ -74,6 +75,9 @@ export interface AppPlatformCapabilities {
   readonly cellTranscriptDistribution: boolean
   // The Transcripts section's gene-only filter; per-gene outputs only hold genes.
   readonly transcriptGeneOnlyFilter: boolean
+  // The Segmentation section: outlines imported from a label mask or polygon
+  // file onto a plain image.
+  readonly segmentationImport: boolean
 }
 
 export interface PlatformMagicLensAvailability {
@@ -122,6 +126,7 @@ const XENIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: true,
     cellTranscriptDistribution: true,
     transcriptGeneOnlyFilter: true,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: false,
@@ -152,6 +157,7 @@ const ATERA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: true,
     cellTranscriptDistribution: true,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: false,
@@ -179,6 +185,7 @@ const VISIUM_HD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: false,
@@ -215,6 +222,7 @@ const H5AD_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 0.5,
   trueSizePoints: false,
@@ -247,6 +255,7 @@ const VISIUM_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: true,
@@ -277,6 +286,7 @@ const MERSCOPE_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: false,
@@ -308,6 +318,7 @@ const SPATIALDATA_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: false,
   },
   pointSizeFullViewScale: 0.5,
   trueSizePoints: false,
@@ -335,14 +346,17 @@ const IMAGE_PLATFORM_ADAPTER: AppPlatformAdapter = {
     transcripts: false,
     cellTranscriptDistribution: false,
     transcriptGeneOnlyFilter: false,
+    segmentationImport: true,
   },
   pointSizeFullViewScale: 1,
   trueSizePoints: false,
   featureLoadEnabled: () => false,
   effectiveTranscriptOverlay: () => false,
-  cellBoundaryLoadingEnabled: () => false,
+  // Outlines come from an imported segmentation; without one there are none
+  // to count in view, so none are requested.
+  cellBoundaryLoadingEnabled: (showCellBoundaries) => showCellBoundaries,
   geneExpressionOverlayEnabled: () => false,
-  cellBoundaryHoverEnabled: () => false,
+  cellBoundaryHoverEnabled: (showCellBoundaries) => showCellBoundaries,
   magicLensAvailability: () => ({
     loadEnabled: false,
     unavailableReason: 'Unavailable for image-only sources',
@@ -573,13 +587,18 @@ export async function loadPlatformBoundaryElements(
   dependencies: {
     readonly getSpatialDataset: SpatialDatasetLoader
     readonly loadBoundaryElements: BoundaryElementsLoader
+    // An image's imported segmentation, the only outlines an image has.
+    readonly importedSegmentation?: ImportedSegmentation | null
   },
   ...args: Parameters<BoundaryElementsLoader>
 ): ReturnType<BoundaryElementsLoader> {
   const [baseUrl, bbox, options = {}] = args
 
   if (adapter.kind === 'image') {
-    return { elements: [] }
+    return dependencies.importedSegmentation === undefined ||
+      dependencies.importedSegmentation === null
+      ? { elements: [] }
+      : dependencies.importedSegmentation.outlines(bbox, options)
   }
 
   if (

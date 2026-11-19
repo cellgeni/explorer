@@ -18,6 +18,14 @@ interface ShareableDatasetHashOptions {
   readonly hiddenAnnotationSetIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
   readonly customImageUrls: readonly string[]
+  // An image's imported segmentation, when it was opened from a URL.
+  readonly segmentation?:
+    | {
+        readonly url: string
+        readonly format?: string | undefined
+        readonly units?: string | undefined
+      }
+    | undefined
   // The open dataset collection (collection=), if any.
   readonly collectionUrl?: string | undefined
   // How its bar shows the datasets, when not in a row (collectionView=).
@@ -179,6 +187,9 @@ export function useShareableUrlHash({
     hiddenAnnotationSetIds,
     sectionView,
   } = dataset
+  const segmentationUrl = dataset.segmentation?.url
+  const segmentationFormat = dataset.segmentation?.format
+  const segmentationUnits = dataset.segmentation?.units
   // As a string, so a new array with the same URLs writes nothing.
   const compareKey = dataset.compareUrls?.join('\n') ?? ''
   const spatialDataTable = dataset.spatialDataSelection?.spatialDataTable
@@ -281,6 +292,13 @@ export function useShareableUrlHash({
           ...(annotationGroupIds === undefined ? {} : { annotationGroupIds }),
           customImageUrls,
           ...(customImageOpacities === undefined ? {} : { customImageOpacities }),
+          ...(segmentationUrl === undefined
+            ? {}
+            : {
+                segmentationUrl,
+                ...(segmentationFormat === undefined ? {} : { segmentationFormat }),
+                ...(segmentationUnits === undefined ? {} : { segmentationUnits }),
+              }),
           selectedGenes,
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
@@ -386,6 +404,9 @@ export function useShareableUrlHash({
     customImageUrls,
     datasetDefaults,
     datasetUrl,
+    segmentationFormat,
+    segmentationUnits,
+    segmentationUrl,
     geneExpressionColorScale,
     geneExpressionDetailMode,
     geneExpressionScaleRange,

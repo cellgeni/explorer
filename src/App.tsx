@@ -41,6 +41,18 @@ import { useImageSectionModel } from './features/sections/imageSectionModel'
 import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
 import { useViewSettingsModel } from './features/sections/viewSettingsModel'
 import { useLayerPanelModel, type LayerReveal } from './features/shell/layerPanelModel'
+import { useImportedSegmentation } from './features/segmentation/useImportedSegmentation'
+import {
+  DEFAULT_SEGMENTATION_OUTLINE_COLOR,
+  useSegmentationSectionModel,
+} from './features/sections/segmentationSectionModel'
+import type { SegmentationPlacement } from './datasets/importedSegmentation'
+import {
+  segmentationLinkFor,
+  segmentationSourceFromLink,
+} from './datasets/segmentationSource'
+import { manifestSegmentationSource } from './datasets/datasetManifest'
+import { datasetManifestFor } from './data/datasetFiles'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
@@ -275,6 +287,7 @@ import {
   type StructuredLoadError,
 } from './features/errors/loadErrorModel'
 import {
+  IDLE_BOUNDARY_LOAD_STATE,
   IDLE_DATASET_LOAD_STATE,
   morphologyLoadFailed,
   viewerBoundaryLoadState,
@@ -868,6 +881,19 @@ export function App({ dependencies }: AppProps = {}) {
     document.title = documentTitle(loadedDatasetName)
   }, [loadedDatasetName])
   const platformAdapter = appPlatformAdapterFor(loadState, datasetPlatform)
+  // An image's imported segmentation draws in its own colour (plan 25).
+  const [segmentationOutlineColor, setSegmentationOutlineColor] = useState(
+    DEFAULT_SEGMENTATION_OUTLINE_COLOR,
+  )
+  // Its own opacity: the outlines are all there is to see of it.
+  const [segmentationOutlineOpacity, setSegmentationOutlineOpacity] = useState(1)
+  const segmentationLineColor = useMemo(
+    () =>
+      platformAdapter.kind === 'image'
+        ? hexOutlineColor(segmentationOutlineColor)
+        : undefined,
+    [platformAdapter.kind, segmentationOutlineColor],
+  )
   // The sections open until someone opens or closes one.
   const defaultPanelIds = useMemo(
     () => defaultExpandedSections(platformAdapter.capabilities.cells),
@@ -1105,6 +1131,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     boundaries: {
       boundaryElements,
+      boundaryLineColor: segmentationLineColor,
       nucleusBoundaryElements,
     },
     cells: {
@@ -2057,14 +2084,63 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [activeVisiumHdBinSize, getSpatialDataset, loadAnalysisEmbeddings, platformAdapter],
   )
+  const segmentationPlacement = useMemo<SegmentationPlacement | null>(() => {
+    const loader = morphologyImage?.loader
+
+    return platformAdapter.kind !== 'image' || loader === undefined
+      ? null
+      : {
+          micrometersPerPixel: loader.units.micrometersPerPixel,
+          imageWidth: loader.imageWidth,
+          imageHeight: loader.imageHeight,
+        }
+  }, [morphologyImage, platformAdapter.kind])
+  const handleSegmentationReady = useCallback(() => {
+    setShowCellBoundaries(true)
+  }, [setShowCellBoundaries])
+  const importedSegmentation = useImportedSegmentation({
+    datasetUrl: platformAdapter.kind === 'image' ? loadedDatasetUrl : null,
+    placement: segmentationPlacement,
+    appendDebugEvent,
+    onReady: handleSegmentationReady,
+  })
+  // A new or removed segmentation reads its outlines again: the last
+  // request's area no longer stands for what is drawn. Declared before the
+  // viewport workflow, whose replay of the view then asks afresh.
+  const boundarySegmentation = importedSegmentation.segmentation
+  const boundarySegmentationRef = useRef(boundarySegmentation)
+
+  useEffect(() => {
+    if (boundarySegmentationRef.current === boundarySegmentation) {
+      return
+    }
+
+    boundarySegmentationRef.current = boundarySegmentation
+    invalidateLatestRequest({
+      abortRef: boundaryAbortRef,
+      requestIdRef: boundaryRequestId,
+    })
+    boundaryViewportKeyRef.current = null
+    setBoundaryElements((current) => (current.length === 0 ? current : []))
+    setBoundaryState(IDLE_BOUNDARY_LOAD_STATE)
+  }, [boundarySegmentation, setBoundaryElements, setBoundaryState])
   const loadActiveBoundaryElements = useCallback<BoundaryElementsLoader>(
     (...args) =>
       loadPlatformBoundaryElements(
         platformAdapter,
-        { getSpatialDataset, loadBoundaryElements },
+        {
+          getSpatialDataset,
+          loadBoundaryElements,
+          importedSegmentation: importedSegmentation.segmentation,
+        },
         ...args,
       ),
-    [getSpatialDataset, loadBoundaryElements, platformAdapter],
+    [
+      getSpatialDataset,
+      importedSegmentation.segmentation,
+      loadBoundaryElements,
+      platformAdapter,
+    ],
   )
   const loadActiveCellOutlines = useCallback<CellOutlinesLoader>(
     (...args) =>
@@ -2304,6 +2380,10 @@ export function App({ dependencies }: AppProps = {}) {
       ...(activeVisiumHdBinSize === undefined
         ? {}
         : { visiumHdBinSizeMicrometers: activeVisiumHdBinSize }),
+      viewportCellCount:
+        platformAdapter.kind === 'image'
+          ? importedSegmentation.viewportCellCount
+          : undefined,
     },
     data: {
       loadState,
@@ -2430,8 +2510,19 @@ export function App({ dependencies }: AppProps = {}) {
         transcriptCapabilityState,
         transcriptLayerState,
         transcriptLoadProgress,
+        segmentationLoading:
+          importedSegmentation.state.status === 'loading'
+            ? importedSegmentation.state.shapeCount === undefined
+              ? {}
+              : {
+                  detail: `${importedSegmentation.state.shapeCount.toLocaleString()} outlines`,
+                }
+            : undefined,
+        boundariesAreSegmentation: platformAdapter.kind === 'image',
       }),
     [
+      importedSegmentation.state,
+      platformAdapter.kind,
       analysisEmbeddingState,
       annotationGroupState,
       annotationState,
@@ -3335,6 +3426,58 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl,
   ])
 
+  // A segmentation the link names opens over the link's image; otherwise one
+  // the image's manifest names (plan 25). Each image is offered one once.
+  const initialSegmentationLinkRef = useRef(
+    initialShareableState.segmentationUrl === undefined
+      ? null
+      : {
+          url: initialShareableState.segmentationUrl,
+          format: initialShareableState.segmentationFormat,
+          units: initialShareableState.segmentationUnits,
+        },
+  )
+  const segmentationOfferedForRef = useRef<string | null>(null)
+  const loadImportedSegmentation = importedSegmentation.load
+
+  useEffect(() => {
+    if (
+      platformAdapter.kind !== 'image' ||
+      loadedDatasetUrl === null ||
+      segmentationOfferedForRef.current === loadedDatasetUrl
+    ) {
+      return
+    }
+
+    segmentationOfferedForRef.current = loadedDatasetUrl
+    const link = initialSegmentationLinkRef.current
+    initialSegmentationLinkRef.current = null
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+    const linkApplies =
+      link !== null &&
+      (initialDatasetUrl === undefined ||
+        initialDatasetUrl === '' ||
+        initialDatasetUrl === loadedDatasetUrl)
+    const source = linkApplies
+      ? segmentationSourceFromLink(link)
+      : (manifestSegmentationSource(datasetManifestFor(loadedDatasetUrl)) ?? null)
+
+    if (source !== null) {
+      loadImportedSegmentation(source)
+    } else if (linkApplies) {
+      appendDebugEvent(
+        `Segmentation skipped: the format of ${link.url} cannot be told from its name.`,
+        { coalesceKey: 'segmentation' },
+      )
+    }
+  }, [
+    appendDebugEvent,
+    initialShareableState.datasetUrl,
+    loadImportedSegmentation,
+    loadedDatasetUrl,
+    platformAdapter.kind,
+  ])
+
   const { cancelDatasetLoad, handleDatasetSubmit } = useDatasetLifecycle({
     callbacks: {
       appendDebugEvent,
@@ -3740,6 +3883,11 @@ export function App({ dependencies }: AppProps = {}) {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
       customImageUrls,
+      segmentation: segmentationLinkFor(
+        importedSegmentation.state.status === 'idle'
+          ? null
+          : importedSegmentation.state.source,
+      ),
       ...(datasetCollection.state.status === 'idle'
         ? {}
         : {
@@ -4233,6 +4381,19 @@ export function App({ dependencies }: AppProps = {}) {
     toggleGene,
     transcriptViewportKeyRef,
   })
+  const segmentationSection = useSegmentationSectionModel({
+    appendDebugEvent,
+    boundaryCellLimit,
+    boundaryState,
+    controller: importedSegmentation,
+    currentViewport: currentViewportDetail,
+    outlineColor: segmentationOutlineColor,
+    outlineOpacity: segmentationOutlineOpacity,
+    setOutlineColor: setSegmentationOutlineColor,
+    setOutlineOpacity: setSegmentationOutlineOpacity,
+    setShowOutlines: setShowCellBoundaries,
+    showOutlines: showCellBoundaries,
+  })
   const transcriptsSection = useTranscriptsSectionModel({
     appendDebugEvent,
     effectiveTranscriptFeatureFilterMode,
@@ -4388,6 +4549,9 @@ export function App({ dependencies }: AppProps = {}) {
     imageAvailable: morphologyImage !== null || flatMorphologyImage !== null,
     layerVisibility,
     loadingAreas,
+    segmentation: platformAdapter.capabilities.segmentationImport
+      ? segmentationSection
+      : null,
     setLayerVisibility,
     transcripts: transcriptsSection,
   })
@@ -4699,7 +4863,9 @@ export function App({ dependencies }: AppProps = {}) {
               // H5AD points have no outline unless the table has label boundaries.
               platformAdapter.kind === 'h5ad' && !showCellBoundaries
                 ? 0
-                : cellBoundaryOpacity
+                : platformAdapter.kind === 'image'
+                  ? segmentationOutlineOpacity
+                  : cellBoundaryOpacity
             }
             pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
             trueSizePoints={platformAdapter.trueSizePoints}
@@ -4864,6 +5030,9 @@ export function App({ dependencies }: AppProps = {}) {
         cells={cellsSection}
         transcripts={transcriptsSection}
         annotations={annotationsSection}
+        segmentation={
+          platformAdapter.capabilities.segmentationImport ? segmentationSection : null
+        }
         cards={cards}
         embedding={platformAdapter.capabilities.cells ? embedding : null}
         plots={plotsAvailable ? plots : null}
@@ -5131,4 +5300,17 @@ function pendingAnnotationGroupsFor(
     switchColorMode:
       state.linkVersion === undefined && state.observationColorMode === undefined,
   }
+}
+
+// `#rrggbb` as an outline colour, a little translucent like the default
+// outline.
+function hexOutlineColor(hex: string): [number, number, number, number] {
+  const value = /^#[0-9a-f]{6}$/i.test(hex) ? hex : DEFAULT_SEGMENTATION_OUTLINE_COLOR
+
+  return [
+    Number.parseInt(value.slice(1, 3), 16),
+    Number.parseInt(value.slice(3, 5), 16),
+    Number.parseInt(value.slice(5, 7), 16),
+    230,
+  ]
 }

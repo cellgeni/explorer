@@ -418,13 +418,14 @@ describe('App', () => {
       expect(imageDataset.meta).toHaveBeenCalled()
       expect(loadDatasetOverview).not.toHaveBeenCalled()
       expect(screen.queryByText('Please load a dataset')).not.toBeInTheDocument()
-      // An image has no cells, transcripts or Magic Lens.
+      // An image has no cells, transcripts or Magic Lens; a segmentation can
+      // be imported onto it.
       const layers = screen.getByRole('complementary', { name: 'Layers' })
       expect(
         within(layers)
           .getAllByRole('heading', { level: 3 })
           .map((heading) => heading.firstChild?.firstChild?.textContent),
-      ).toEqual(['Image', 'Annotations'])
+      ).toEqual(['Image', 'Segmentation', 'Annotations'])
       expect(screen.queryByRole('button', { name: 'Magic Lens' })).toBeNull()
 
       openControls('image')

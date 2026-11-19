@@ -12,6 +12,7 @@ import { CardStack } from '../cards/CardStack'
 import type { CardStackModel } from '../cards/cardModels'
 import type { AnnotationsSectionModel } from '../sections/annotationsSectionModel'
 import type { CellsSectionModel } from '../sections/cellsSectionModel'
+import type { SegmentationSectionModel } from '../sections/segmentationSectionModel'
 import type { DatasetInfoModel } from '../sections/datasetInfoModel'
 import type { EmbeddingModel } from '../sections/embeddingModel'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
@@ -49,6 +50,8 @@ interface ShellLayoutProps {
   readonly cells: CellsSectionModel
   readonly transcripts: TranscriptsSectionModel
   readonly annotations: AnnotationsSectionModel
+  // An image's imported segmentation (plan 25); null elsewhere.
+  readonly segmentation?: SegmentationSectionModel | null
   readonly cards: CardStackModel
   // Null where the platform has no cells (images).
   readonly embedding: EmbeddingModel | null
@@ -85,6 +88,7 @@ export function ShellLayout({
   cells,
   transcripts,
   annotations,
+  segmentation = null,
   cards,
   embedding,
   plots = null,
@@ -184,6 +188,7 @@ export function ShellLayout({
       cells={cells}
       transcripts={transcripts}
       annotations={annotations}
+      segmentation={segmentation}
       viewOptions={info.viewOptions}
       expanded={panels.expanded}
       onExpandedChange={(expanded) => {

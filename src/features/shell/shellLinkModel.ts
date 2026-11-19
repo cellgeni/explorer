@@ -14,6 +14,7 @@ export type ShellPanelId = LayerSectionId | 'info' | 'embedding' | 'plots' | 'qu
 const LAYER_SECTION_IDS: readonly LayerSectionId[] = [
   'image',
   'cells',
+  'segmentation',
   'transcripts',
   'annotations',
 ]

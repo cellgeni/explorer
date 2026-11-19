@@ -292,14 +292,15 @@ probed as usual.
 
 ### H5AD, SpatialData, And Image
 
-| Platform      | Key           | Value                                                                                                                                                                      |
-| ------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `h5ad`        | `h5ad`        | Required. The `.h5ad` file, checked with `HEAD`; or an AnnData Zarr store or Icechunk repository, whose root metadata must say AnnData                                     |
-| `h5ad`        | `image`       | Optional. An image to show under the cells. See [AnnData With An Image](#anndata-with-an-image)                                                                            |
-| `h5ad`        | `labels`      | Optional. A segmentation label image covering `image`, drawn as cell boundaries. Needs `image`                                                                             |
-| `spatialdata` | `store`       | Required. The Zarr store root                                                                                                                                              |
-| `image`       | `image`       | Required. OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr; the type is taken from the path                                                                                  |
-| `image`       | `zchunkstore` | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image` |
+| Platform      | Key            | Value                                                                                                                                                                                                          |
+| ------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `h5ad`        | `h5ad`         | Required. The `.h5ad` file, checked with `HEAD`; or an AnnData Zarr store or Icechunk repository, whose root metadata must say AnnData                                                                         |
+| `h5ad`        | `image`        | Optional. An image to show under the cells. See [AnnData With An Image](#anndata-with-an-image)                                                                                                                |
+| `h5ad`        | `labels`       | Optional. A segmentation label image covering `image`, drawn as cell boundaries. Needs `image`                                                                                                                 |
+| `spatialdata` | `store`        | Required. The Zarr store root                                                                                                                                                                                  |
+| `image`       | `image`        | Required. OME-TIFF, TIFF, QPTIFF, SVS, NDPI, or OME-Zarr; the type is taken from the path                                                                                                                      |
+| `image`       | `zchunkstore`  | Optional. [`.zchunkstore` sidecar](./zchunkstore.md) for a TIFF `image`, and for its channel files. Replaces the lookup next to the TIFF. Rejected for an OME-Zarr `image`                                     |
+| `image`       | `segmentation` | Optional. A segmentation drawn as outlines over the image: a label mask (TIFF, OME-Zarr) or polygons (GeoJSON, WKT, Parquet). See [Imported Segmentations](./image-only-and-geojson.md#imported-segmentations) |
 
 ### AnnData With An Image
 
@@ -331,17 +332,42 @@ from `labelColumn`, the table's SpatialData instance key or label column, or
 its obs names ([Labels](./dataset-collections.md#labels)). A collection entry
 that names an image replaces the manifest's.
 
+### Image With A Segmentation
+
+An `image` manifest can name a segmentation to draw over the slide, such as
+Cellpose masks next to an NDPI:
+
+```json
+{
+  "version": 1,
+  "platform": "image",
+  "name": "Kidney H&E with Cellpose",
+  "files": {
+    "image": "kidney.ndpi",
+    "segmentation": "kidney_masks.ome.tif"
+  }
+}
+```
+
+The format comes from the name unless `options.segmentationFormat` sets it,
+and polygons are in image pixels unless `options.segmentationCoordinates` is
+`micrometers`. A link's `segmentation=` opens in its place; removing it in the
+Segmentation section keeps it removed until the dataset is opened again. See
+[Imported Segmentations](./image-only-and-geojson.md#imported-segmentations).
+
 ## Options
 
-| Platform      | Key                  | Value                                                                                            |
-| ------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| `visium-hd`   | `binSize`            | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set            |
-| `spatialdata` | `table`              | Table element name, without `tables/`                                                            |
-| `spatialdata` | `coordinateSystem`   | Coordinate system to show                                                                        |
-| `spatialdata` | `image`              | Image element name, without `images/`                                                            |
-| `spatialdata` | `micrometersPerUnit` | Scale for stores that do not declare one; shown as the `µm per unit` value                       |
-| `h5ad`        | `coordinates`        | `micrometers` (default) or `image-pixels`: what the cell coordinates are in. Needs `files.image` |
-| `h5ad`        | `labelColumn`        | The obs column holding each cell's label value. Needs `files.labels`                             |
+| Platform      | Key                       | Value                                                                                                                        |
+| ------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `visium-hd`   | `binSize`                 | `2`, `8`, or `16`: the bin size shown first. Must be one of `bins` when `bins` is set                                        |
+| `spatialdata` | `table`                   | Table element name, without `tables/`                                                                                        |
+| `spatialdata` | `coordinateSystem`        | Coordinate system to show                                                                                                    |
+| `spatialdata` | `image`                   | Image element name, without `images/`                                                                                        |
+| `spatialdata` | `micrometersPerUnit`      | Scale for stores that do not declare one; shown as the `µm per unit` value                                                   |
+| `h5ad`        | `coordinates`             | `micrometers` (default) or `image-pixels`: what the cell coordinates are in. Needs `files.image`                             |
+| `h5ad`        | `labelColumn`             | The obs column holding each cell's label value. Needs `files.labels`                                                         |
+| `image`       | `segmentationFormat`      | `label-tiff`, `label-zarr`, `geojson`, `wkt` or `parquet`: the format of `files.segmentation` when its name does not tell it |
+| `image`       | `segmentationCoordinates` | `pixels` (default) or `micrometers`: what the segmentation's polygon coordinates are in. Needs `files.segmentation`          |
 
 The SpatialData options are the starting view; the View options controls in
 the info drawer start from them. Changing the table clears the coordinate

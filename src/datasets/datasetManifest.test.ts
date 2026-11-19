@@ -4,6 +4,7 @@ import {
   isDatasetManifestUrl,
   looksLikeDatasetManifest,
   manifestImageAttachment,
+  manifestSegmentationSource,
   manifestZchunkStoreUrl,
   parseDatasetManifest,
 } from './datasetManifest'
@@ -177,6 +178,78 @@ describe('parseDatasetManifest', () => {
     expect(
       parseError({ version: 1, platform: 'merscope', options: { zIndex: 3 } }),
     ).toContain('options')
+  })
+
+  it('reads the segmentation an image manifest names', () => {
+    expect(
+      manifestSegmentationSource(
+        parse({
+          version: 1,
+          platform: 'image',
+          files: { image: 'slide.ndpi', segmentation: 'cp_masks.tif' },
+        }),
+      ),
+    ).toEqual({
+      url: 'https://example.test/runs/sample-1/cp_masks.tif',
+      format: 'label-tiff',
+      coordinates: 'pixels',
+    })
+    expect(
+      manifestSegmentationSource(
+        parse({
+          version: 1,
+          platform: 'image',
+          files: { image: 'slide.ndpi', segmentation: 'https://x.test/get?id=3' },
+          options: {
+            segmentationFormat: 'parquet',
+            segmentationCoordinates: 'micrometers',
+          },
+        }),
+      ),
+    ).toEqual({
+      url: 'https://x.test/get?id=3',
+      format: 'parquet',
+      coordinates: 'micrometers',
+    })
+    expect(
+      manifestSegmentationSource(
+        parse({ version: 1, platform: 'image', files: { image: 'slide.ndpi' } }),
+      ),
+    ).toBeUndefined()
+  })
+
+  it('rejects segmentation options it cannot use', () => {
+    expect(
+      parseError({
+        version: 1,
+        platform: 'image',
+        files: { image: 'slide.ndpi', segmentation: 'cells.bin' },
+      }),
+    ).toContain('set "options.segmentationFormat"')
+    expect(
+      parseError({
+        version: 1,
+        platform: 'image',
+        files: { image: 'slide.ndpi', segmentation: 'cells.bin' },
+        options: { segmentationFormat: 'svg' },
+      }),
+    ).toContain('"options.segmentationFormat" must be one of')
+    expect(
+      parseError({
+        version: 1,
+        platform: 'image',
+        files: { image: 'slide.ndpi' },
+        options: { segmentationCoordinates: 'micrometers' },
+      }),
+    ).toContain('need "files.segmentation"')
+    expect(
+      parseError({
+        version: 1,
+        platform: 'image',
+        files: { image: 'slide.ndpi', segmentation: 'cells.wkt' },
+        options: { segmentationCoordinates: 'mm' },
+      }),
+    ).toContain('"pixels" or "micrometers"')
   })
 
   it('resolves a .zchunkstore sidecar for the TIFF image', () => {
