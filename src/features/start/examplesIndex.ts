@@ -24,17 +24,33 @@ export interface ExampleSource {
   readonly license?: string
 }
 
-export interface Example {
+interface ExampleFields {
   readonly id: string
   readonly name: string
-  readonly manifestUrl: string
   readonly platform?: string
   readonly description?: string
   readonly source?: ExampleSource
 }
 
+export interface DatasetExample extends ExampleFields {
+  readonly manifestUrl: string
+}
+
+// A dataset collection, which opens with its first dataset.
+export interface CollectionExample extends ExampleFields {
+  readonly collectionUrl: string
+  // How many datasets it lists.
+  readonly datasets?: number
+}
+
+export type Example = DatasetExample | CollectionExample
+
+export function isCollectionExample(example: Example): example is CollectionExample {
+  return 'collectionUrl' in example
+}
+
 // Offered when the index cannot be read, so the start screen is never empty.
-export const DEMO_EXAMPLE: Example = {
+export const DEMO_EXAMPLE: DatasetExample = {
   id: 'demo',
   name: 'Human brain (Xenium 5K demo)',
   manifestUrl: DEMO_DATASET_URL,
@@ -89,39 +105,50 @@ function parseSource(value: unknown): ExampleSource | undefined {
   return Object.keys(source).length === 0 ? undefined : source
 }
 
+function httpUrl(value: unknown): string | undefined {
+  const url = text(value)
+  return url === undefined || !isHttpUrl(url) ? undefined : url
+}
+
 function parseExample(value: unknown): Example | null {
   if (!isRecord(value)) return null
 
   const id = text(value.id)
   const name = text(value.name)
-  const manifestUrl = text(value.manifestUrl)
+  const manifestUrl = httpUrl(value.manifestUrl)
+  const collectionUrl = httpUrl(value.collectionUrl)
 
-  if (
-    id === undefined ||
-    name === undefined ||
-    manifestUrl === undefined ||
-    !isHttpUrl(manifestUrl)
-  ) {
-    return null
-  }
+  if (id === undefined || name === undefined) return null
 
   const platform = text(value.platform)
   const description = text(value.description)
   const source = parseSource(value.source)
-
-  return {
+  const fields: ExampleFields = {
     id,
     name,
-    manifestUrl,
     ...(platform === undefined ? {} : { platform }),
     ...(description === undefined ? {} : { description }),
     ...(source === undefined ? {} : { source }),
   }
+
+  if (manifestUrl !== undefined) return { ...fields, manifestUrl }
+  if (collectionUrl === undefined) return null
+
+  const datasets = value.datasets
+
+  return {
+    ...fields,
+    collectionUrl,
+    ...(typeof datasets === 'number' && Number.isSafeInteger(datasets) && datasets > 0
+      ? { datasets }
+      : {}),
+  }
 }
 
-// Reads `examples/index.json` version 1. Entries without an id, a name or an
-// http(s) manifest URL are skipped, and unknown fields are ignored. Only text
-// is kept; the gallery renders it as text, never as HTML.
+// Reads `examples/index.json` version 1. An entry is a dataset manifest
+// (`manifestUrl`) or a dataset collection (`collectionUrl`); entries without
+// an id, a name or either http(s) URL are skipped, and unknown fields are
+// ignored. Only text is kept; the gallery renders it as text, never as HTML.
 export function parseExamplesIndex(value: unknown): readonly Example[] {
   if (!isRecord(value) || value.version !== 1) {
     throw new ExamplesIndexError('The examples index is not version 1.')

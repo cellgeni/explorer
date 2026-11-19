@@ -5,12 +5,19 @@ import { OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { OpenDatasetModel } from '../sections/datasetInfoModel'
 import { USER_GUIDE_LOADING_DATA_URL } from '../shell/docLinks'
 import {
+  collectionLinkHref,
   datasetLinkHref,
+  exampleKindLabel,
   examplesUnavailableMessage,
   platformDisplayName,
   type DatasetLibraryModel,
 } from './datasetLibraryModel'
-import { DEMO_EXAMPLE, type Example, type ExampleSource } from './examplesIndex'
+import {
+  DEMO_EXAMPLE,
+  isCollectionExample,
+  type Example,
+  type ExampleSource,
+} from './examplesIndex'
 import type { RecentDataset } from './recentDatasets'
 
 interface StartScreenProps {
@@ -97,7 +104,7 @@ export function DatasetLink({
 }: {
   readonly url: string
   readonly onOpen: (url: string) => void
-  readonly className?: string
+  readonly className?: string | undefined
   readonly children: ReactNode
 }) {
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
@@ -180,6 +187,35 @@ export function ExampleGallery({
   )
 }
 
+// A dataset opens in place. A collection is a plain link, since the viewer
+// opens a collection only from the address.
+function ExampleLink({
+  example,
+  onOpen,
+  className,
+}: {
+  readonly example: Example
+  readonly onOpen: (url: string) => void
+  readonly className?: string
+}) {
+  if (isCollectionExample(example)) {
+    return (
+      <a
+        className={className}
+        href={collectionLinkHref(example.collectionUrl, window.location.pathname)}
+      >
+        {example.name}
+      </a>
+    )
+  }
+
+  return (
+    <DatasetLink className={className} url={example.manifestUrl} onOpen={onOpen}>
+      {example.name}
+    </DatasetLink>
+  )
+}
+
 function ExampleItem({
   example,
   variant,
@@ -189,29 +225,21 @@ function ExampleItem({
   readonly variant: 'gallery' | 'menu'
   readonly onOpen: (url: string) => void
 }) {
-  const platform = platformDisplayName(example.platform)
+  const kind = exampleKindLabel(example)
 
   if (variant === 'menu') {
     return (
       <li>
-        <DatasetLink url={example.manifestUrl} onOpen={onOpen}>
-          {example.name}
-        </DatasetLink>
-        {platform === null ? null : <small>{platform}</small>}
+        <ExampleLink example={example} onOpen={onOpen} />
+        {kind === null ? null : <small>{kind}</small>}
       </li>
     )
   }
 
   return (
     <li className="start-example">
-      <DatasetLink
-        className="start-example-name"
-        url={example.manifestUrl}
-        onOpen={onOpen}
-      >
-        {example.name}
-      </DatasetLink>
-      {platform === null ? null : <p className="start-example-platform">{platform}</p>}
+      <ExampleLink className="start-example-name" example={example} onOpen={onOpen} />
+      {kind === null ? null : <p className="start-example-platform">{kind}</p>}
       {example.description === undefined ? null : <p>{example.description}</p>}
       {example.source === undefined ? null : (
         <ExampleSourceLine source={example.source} />
