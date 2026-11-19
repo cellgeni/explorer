@@ -137,3 +137,11 @@ run on the Sanger bucket. See [Atera](../../modalities/atera.md).
       gene overlays, density, exact points, boundaries, the 3D stack, and
       diagnostics all read from the zip. See
       [Zipped runs](../../modalities/atera.md#zipped-runs).
+- [x] Zooming a zipped run no longer reports "Network request failed:
+      Failed to fetch" (2026-11-18). Chromium fails a body read of a
+      Response built from a stream with that `TypeError` even when the read
+      was cancelled, so every tile a zoom cancelled was reported, and one
+      report left the image in error with a message that could not be
+      closed. Cancelled reads from the zip now reject with the abort, the
+      tile cache treats any failure after a cancel as a cancel, and viewer
+      error messages can be dismissed.

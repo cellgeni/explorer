@@ -379,24 +379,32 @@ describe('TileCache', () => {
     expect(onError.mock.calls[0]?.[0].message).toBe('decode failed')
   })
 
-  it('drops aborted loading tiles without reporting a cache error', async () => {
-    const source = new AbortableTileSource()
-    const onError = vi.fn()
-    const cache = new TileCache({ onError })
-    const abortController = new AbortController()
-    const promise = cache.request(source, 0, 1, 2, abortController.signal)
+  // A fetch can fail with a network error rather than an abort once it is
+  // cancelled (Chromium does for Responses built from a stream).
+  it.each([
+    ['an abort', abortError],
+    ['a network error', () => new TypeError('Failed to fetch')],
+  ])(
+    'drops aborted loading tiles that fail with %s without reporting a cache error',
+    async (_, cancelError) => {
+      const source = new AbortableTileSource(cancelError)
+      const onError = vi.fn()
+      const cache = new TileCache({ onError })
+      const abortController = new AbortController()
+      const promise = cache.request(source, 0, 1, 2, abortController.signal)
 
-    expect(cache.get(0, 1, 2)).toMatchObject({ state: 'loading' })
+      expect(cache.get(0, 1, 2)).toMatchObject({ state: 'loading' })
 
-    abortController.abort()
+      abortController.abort()
 
-    await expect(promise).resolves.toMatchObject({
-      state: 'error',
-      error: expect.objectContaining({ name: 'AbortError' }),
-    })
-    expect(cache.get(0, 1, 2)).toBeUndefined()
-    expect(onError).not.toHaveBeenCalled()
-  })
+      await expect(promise).resolves.toMatchObject({
+        state: 'error',
+        error: expect.objectContaining({ name: 'AbortError' }),
+      })
+      expect(cache.get(0, 1, 2)).toBeUndefined()
+      expect(onError).not.toHaveBeenCalled()
+    },
+  )
 
   it('closes decoded bitmaps when a tile is aborted after decode', async () => {
     const source = new FakeTileSource()
@@ -428,6 +436,10 @@ describe('TileCache', () => {
 })
 
 class AbortableTileSource extends FakeTileSource {
+  constructor(private readonly cancelError: () => Error = abortError) {
+    super()
+  }
+
   override async fetchTileBytes(
     _level: number,
     _col: number,
@@ -446,7 +458,7 @@ class AbortableTileSource extends FakeTileSource {
         'abort',
         () => {
           window.clearTimeout(timeout)
-          reject(abortError())
+          reject(this.cancelError())
         },
         { once: true },
       )

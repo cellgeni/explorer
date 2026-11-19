@@ -266,7 +266,14 @@ export class TileCache {
       this.evict()
       return ready
     } catch (cause) {
-      const error = cause instanceof Error ? cause : new Error(String(cause))
+      // A read that fails after the tile was cancelled is a cancel, whatever
+      // error the fetcher gave for it.
+      const error =
+        signal?.aborted === true
+          ? abortError(signal)
+          : cause instanceof Error
+            ? cause
+            : new Error(String(cause))
 
       if (isAbortError(error)) {
         if (this.isCurrentLoading(key, signal)) {

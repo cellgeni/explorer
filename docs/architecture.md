@@ -364,8 +364,11 @@ All screen↔data conversions go through `coords.ts`.
   the zip: `HEAD` from its directory, and `GET`, with or without one `Range`,
   from a `no-store` range of the zip at the entry's data offset (read once
   from its local header). Readers, probes and diagnostics then open the run as
-  a folder. Other URLs pass through untouched. Workers keep the plain `fetch`,
-  which is why only Atera, read entirely on the main thread, opens from a zip.
+  a folder. Other URLs pass through untouched. A cancelled read rejects with
+  the abort, as a host's would: Chromium otherwise fails body reads of a
+  Response built from a stream with `TypeError: Failed to fetch`. Workers keep
+  the plain `fetch`, which is why only Atera, read entirely on the main
+  thread, opens from a zip.
 - **Range probe.** `assertHttpRangeSupport` (`src/data/rangeSupport.ts`) sends
   `GET` with `Range: bytes=0-0` before large reads and requires `206`.
   `Content-Range` is not required, because hosts that leave it out of

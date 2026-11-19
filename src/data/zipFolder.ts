@@ -259,11 +259,64 @@ async function fetchZipFolderFile(
   headers.set('Content-Length', String(end - start + 1))
 
   if (range === null) {
-    return new Response(body, { status: 200, headers })
+    return streamedResponse(body, { status: 200, headers }, signal)
   }
 
   headers.set('Content-Range', `bytes ${start}-${end}/${entry.size}`)
-  return new Response(body, { status: 206, statusText: 'Partial Content', headers })
+  return streamedResponse(
+    body,
+    { status: 206, statusText: 'Partial Content', headers },
+    signal,
+  )
+}
+
+// Chromium rejects a body read of a Response built from a stream with
+// "TypeError: Failed to fetch" whenever the stream fails, cancels included,
+// where a fetched Response rejects with the abort. Readers tell a cancelled
+// read from a failed one by that error (a cancelled image tile is dropped, a
+// failed one is reported), so a cancelled read of a file in a zip rejects with
+// the abort, as it would from the host.
+class AbortableResponse extends Response {
+  readonly #signal: AbortSignal
+
+  constructor(body: BodyInit, init: ResponseInit, signal: AbortSignal) {
+    super(body, init)
+    this.#signal = signal
+  }
+
+  override arrayBuffer(): Promise<ArrayBuffer> {
+    return this.#read(super.arrayBuffer())
+  }
+
+  override blob(): Promise<Blob> {
+    return this.#read(super.blob())
+  }
+
+  override json(): Promise<unknown> {
+    return this.#read(super.json())
+  }
+
+  override text(): Promise<string> {
+    return this.#read(super.text())
+  }
+
+  async #read<T>(read: Promise<T>): Promise<T> {
+    try {
+      return await read
+    } catch (error) {
+      throw this.#signal.aborted ? this.#signal.reason : error
+    }
+  }
+}
+
+function streamedResponse(
+  body: ReadableStream<Uint8Array<ArrayBuffer>> | Uint8Array<ArrayBuffer>,
+  init: ResponseInit,
+  signal: AbortSignal | undefined,
+): Response {
+  return signal === undefined
+    ? new Response(body, init)
+    : new AbortableResponse(body, init, signal)
 }
 
 async function inflatedEntryResponse(
@@ -293,7 +346,7 @@ async function inflatedEntryResponse(
         ).pipeThrough(new DecompressionStream('deflate-raw'))
 
   headers.set('Content-Length', String(entry.size))
-  return new Response(body, { status: 200, headers })
+  return streamedResponse(body, { status: 200, headers }, signal)
 }
 
 async function inflatedRangeResponse(

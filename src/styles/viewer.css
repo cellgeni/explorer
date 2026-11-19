@@ -782,7 +782,20 @@
 }
 
 .viewport-message-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding-block: 4px;
+  padding-right: 4px;
   border-color: var(--danger-border);
+  pointer-events: auto;
+}
+
+.viewport-message-error p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding-block: 4px;
 }
 
 .viewport-notification-stack {

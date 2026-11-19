@@ -229,6 +229,40 @@ describe('zip folders', () => {
     })
   })
 
+  it('rejects a cancelled read with the abort, not the failure it caused', async () => {
+    const zip = archive(false)
+    const host = byteRangeFetcher(new Map([[ZIP, zip]]))
+    const directory = await readZipDirectory(ZIP, { fetcher: host })
+    // Reads of the file stall until cancelled, then fail as Chromium reports
+    // a failed body read of a Response built from a stream.
+    registerZipFolder({ url: ZIP, root: 'outs/', directory }, async (input, init) => {
+      const signal = init?.signal
+
+      if (signal === undefined || signal === null) {
+        return host(input, init)
+      }
+
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          signal.addEventListener('abort', () => {
+            controller.error(new TypeError('Failed to fetch'))
+          })
+        },
+      })
+      return new Response(body, { status: 206 })
+    })
+    const controller = new AbortController()
+
+    const response = await withZipFolders(vi.fn())(`${ZIP}/morphology 2d/image.tif`, {
+      headers: { Range: 'bytes=0-9' },
+      signal: controller.signal,
+    })
+    const read = response.arrayBuffer()
+    controller.abort()
+
+    await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
   it('reports a host that ignores ranges', async () => {
     const zip = archive(false)
     const directory = await readZipDirectory(ZIP, {
