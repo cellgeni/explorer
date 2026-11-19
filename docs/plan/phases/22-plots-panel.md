@@ -173,10 +173,14 @@ would read 64 chunks, about 195 MiB decoded, for one gene.
   reads nothing. Xenium output with no readable `cell_feature_matrix.zarr.zip`
   is not offered.
 - **D8. A window like Embedding.** `Show Plots` sits beside `Show Embedding`
-  in the Cells section. The window is 480 × 420 by default and at least
+  in the Cells section (**Superseded 2026-11-19:** both are top bar toggles,
+  [Phase 15](15-interface-redesign.md#additions-after-the-close-out)). The window is 480 × 420 by default and at least
   320 × 280. It stays in the link as `panel=plots`, with the plot as
   `plot=dot|violin|heatmap`. It opens at the top right; when Embedding is
-  open, it opens to the left of it. Under 860 px both are full width, so
+  open, it opens to the left of it (**Changed 2026-11-19:** at full size as
+  far left as it fits, over Embedding, when the canvas is too narrow for both;
+  [Phase 15](15-interface-redesign.md#additions-after-the-close-out)). Under
+  860 px both are full width, so
   opening one closes the other. The controls are `Plot` (Dot plot, Violin,
   Heatmap), `Group by`, `Scale`, and for the dot plot and heatmap `Colour`
   (Shared across genes, Per gene, like Scanpy's `standard_scale='var'`).
@@ -363,7 +367,7 @@ Changed from the plan while building:
 - **`downloadBlob` waits for PNG (M3).** SVG and CSV are text.
 - **Cells › Embedding became Cells › Panels.** It holds `Show Embedding` and
   `Show Plots` side by side. Visium HD, whose bins have no sets, has no
-  `Show Plots`.
+  `Show Plots`. **Superseded (2026-11-19):** the toggles are in the top bar.
 
 Left for M2 and M3 as planned: the Xenium, Atera and HTTP AnnData readers, and
 the D7 budget (M2); quartiles, densities, the violin, the heatmap and PNG

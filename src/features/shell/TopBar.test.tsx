@@ -151,6 +151,68 @@ describe('TopBar', () => {
     expect(document.querySelector('.shell-issue-badge')).toBeNull()
   })
 
+  it('opens and closes the Embedding, Plots and Cell Query windows', () => {
+    const onEmbeddingOpenChange = vi.fn()
+    const onPlotsOpenChange = vi.fn()
+    renderTopBar({
+      panels: [
+        { panel: 'embedding', open: true, onOpenChange: onEmbeddingOpenChange },
+        { panel: 'plots', open: false, onOpenChange: onPlotsOpenChange },
+        { panel: 'query', open: false, onOpenChange: vi.fn() },
+      ],
+    })
+
+    const toggles = screen.getByRole('group', { name: 'Panels' })
+    expect(
+      within(toggles)
+        .getAllByRole('button')
+        .map((button) => [button.textContent, button.getAttribute('aria-pressed')]),
+    ).toEqual([
+      ['Embedding', 'true'],
+      ['Plots', 'false'],
+      ['Query', 'false'],
+    ])
+    const embedding = within(toggles).getByRole('button', { name: 'Embedding' })
+    expect(embedding).toHaveAttribute('title', 'Hide the embedding panel')
+
+    fireEvent.click(embedding)
+    fireEvent.click(within(toggles).getByRole('button', { name: 'Plots' }))
+
+    expect(onEmbeddingOpenChange).toHaveBeenCalledWith(false)
+    expect(onPlotsOpenChange).toHaveBeenCalledWith(true)
+  })
+
+  it('leaves the window toggles out where there are no windows', () => {
+    renderTopBar()
+
+    expect(screen.queryByRole('group', { name: 'Panels' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Panels' })).toBeNull()
+  })
+
+  it('folds the window toggles into a menu on narrow screens', () => {
+    const onQueryOpenChange = vi.fn()
+    renderTopBar({
+      narrow: true,
+      panels: [
+        { panel: 'embedding', open: true, onOpenChange: vi.fn() },
+        { panel: 'query', open: false, onOpenChange: onQueryOpenChange },
+      ],
+    })
+
+    expect(screen.queryByRole('group', { name: 'Panels' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Panels' }))
+    const menu = screen.getByRole('dialog', { name: 'Panels' })
+    expect(within(menu).getByRole('button', { name: 'Embedding' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+
+    fireEvent.click(within(menu).getByRole('button', { name: 'Query' }))
+
+    expect(onQueryOpenChange).toHaveBeenCalledWith(true)
+    expect(screen.queryByRole('dialog', { name: 'Panels' })).toBeNull()
+  })
+
   it('counts load issues on ⓘ', () => {
     const error = { title: 'Boundaries failed', message: 'HTTP 403' } as never
     renderTopBar({

@@ -35,23 +35,12 @@ export async function openControls(page: Page, area: ControlArea): Promise<Locat
     case 'popover':
       await openButton(page.getByRole('button', { name: place.title, exact: true }))
       return page.getByRole('dialog', { name: place.title })
-    case 'embedding': {
-      const cells = await openControls(page, 'genes')
-      const show = cells.getByRole('button', { name: 'Show Embedding' })
-      if ((await show.count()) > 0) await show.click()
-      return page.getByRole('region', { name: 'Embedding' })
-    }
-    case 'plots': {
-      const cells = await openControls(page, 'genes')
-      const show = cells.getByRole('button', { name: 'Show Plots' })
-      if ((await show.count()) > 0) await show.click()
-      return page.getByRole('region', { name: 'Plots' })
-    }
-    case 'query': {
-      const cells = await openControls(page, 'genes')
-      const show = cells.getByRole('button', { name: 'Show Query' })
-      if ((await show.count()) > 0) await show.click()
-      return page.getByRole('region', { name: 'Cell Query' })
+    case 'panel': {
+      const toggle = page
+        .getByRole('group', { name: 'Panels' })
+        .getByRole('button', { name: place.name, exact: true })
+      if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+      return page.getByRole('region', { name: place.window })
     }
     case 'none':
       return page.locator('main')

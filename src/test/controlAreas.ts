@@ -13,12 +13,9 @@ export type ControlAreaPlace =
   | { readonly kind: 'section'; readonly section: RegExp }
   // A top bar popover, by its title.
   | { readonly kind: 'popover'; readonly title: string }
-  // Cells › Show Embedding.
-  | { readonly kind: 'embedding' }
-  // Cells › Show Plots.
-  | { readonly kind: 'plots' }
-  // Cells › Show Query.
-  | { readonly kind: 'query' }
+  // A window the top bar's Panels toggles open, by the toggle's name, and
+  // the window's.
+  | { readonly kind: 'panel'; readonly name: string; readonly window: string }
   // Shown on their own, such as cards, which appear with what they show.
   | { readonly kind: 'none' }
 
@@ -67,11 +64,11 @@ export const CONTROL_AREAS = {
   // Cell or Bin card.
   'cell-card': { kind: 'none' },
   // Embedding panel.
-  embedding: { kind: 'embedding' },
+  embedding: { kind: 'panel', name: 'Embedding', window: 'Embedding' },
   // Plots panel (plan 22-D8): Group by, Scale, Colour, numbers and exports.
-  plots: { kind: 'plots' },
+  plots: { kind: 'panel', name: 'Plots', window: 'Plots' },
   // Cell Query window (plan 23-D9): conditions, table, Save As Class, export.
-  query: { kind: 'query' },
+  query: { kind: 'panel', name: 'Query', window: 'Cell Query' },
 } as const satisfies Record<string, ControlAreaPlace>
 
 export type ControlArea = keyof typeof CONTROL_AREAS

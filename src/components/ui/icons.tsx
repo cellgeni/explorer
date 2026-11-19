@@ -95,6 +95,44 @@ export function HelpIcon() {
   )
 }
 
+// The Embedding, Plots and Cell Query windows, and the menu that holds them
+// under 860 px.
+
+export function EmbeddingIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <circle cx="4.5" cy="5" r="1.5" />
+      <circle cx="11" cy="4.5" r="1.5" />
+      <circle cx="6.5" cy="11" r="1.5" />
+      <circle cx="12" cy="10.5" r="1.5" />
+    </svg>
+  )
+}
+
+export function PlotsIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 2.5v11h11M6 10.5V8M9 10.5V5M12 10.5V7" />
+    </svg>
+  )
+}
+
+export function QueryIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 3h11L9.25 8.25v4.5l-2.5 1.25V8.25z" />
+    </svg>
+  )
+}
+
+export function PanelsIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 3.5h11v9h-11zM2.5 6h11M8.5 6v6.5" />
+    </svg>
+  )
+}
+
 export function SettingsIcon() {
   return (
     <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
@@ -204,6 +242,15 @@ export function StackIcon() {
     <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
       <path d="M8 2.5l5.5 2.75L8 8 2.5 5.25z" />
       <path d="M2.5 8L8 10.75 13.5 8M2.5 10.75L8 13.5l5.5-2.75" />
+    </svg>
+  )
+}
+
+// The handle that moves a floating window.
+export function GripIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M6 3.5h0M10 3.5h0M6 8h0M10 8h0M6 12.5h0M10 12.5h0" strokeWidth="2.5" />
     </svg>
   )
 }

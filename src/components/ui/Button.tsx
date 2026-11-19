@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react'
 import { classNames } from './classNames'
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -44,6 +44,7 @@ export interface IconButtonProps extends NativeButtonProps {
   readonly icon: ReactNode
   readonly variant?: ButtonVariant | undefined
   readonly className?: string | undefined
+  readonly ref?: Ref<HTMLButtonElement> | undefined
 }
 
 // A square button that shows only an icon.
