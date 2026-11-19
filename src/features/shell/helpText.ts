@@ -11,6 +11,9 @@ export const TRANSCRIPT_DETAIL_HELP =
 export const MIN_QV_HELP =
   "Quality value: the decoder's confidence in each transcript, on the Phred scale. QV 20 means about 1 in 100 calls is wrong. Points below the minimum are hidden. Atera density follows it too; Xenium density always counts QV 20 and above."
 
+export const DENSITY_COLOR_HELP =
+  "How density squares are coloured. Gene markers draw a circle for each selected gene in each square instead, in the gene's colour, at the centre of its transcripts there; circle area follows the count. Squares counting all transcripts keep the Thermal colours."
+
 export const BOUNDARY_LIMIT_HELP =
   'The most cells in view for which cell and nucleus outlines are drawn. With more cells in view, cells show as points until you zoom in. Higher limits use more memory and time.'
 

@@ -1,5 +1,6 @@
 import type { Color } from '@deck.gl/core'
 import type {
+  TranscriptAggregateBin,
   TranscriptFeatureFilterMode,
   TranscriptPoint,
 } from '../../data/transcriptOverlay'
@@ -95,6 +96,21 @@ export function countTranscriptsByGene(
 
   for (const point of points) {
     counts.set(point.featureName, (counts.get(point.featureName) ?? 0) + 1)
+  }
+
+  return counts
+}
+
+// Each gene's transcripts in the density squares, for gene markers.
+export function countTranscriptsByGeneInBins(
+  bins: readonly Pick<TranscriptAggregateBin, 'featureGroups'>[],
+): ReadonlyMap<string, number> {
+  const counts = new Map<string, number>()
+
+  for (const bin of bins) {
+    for (const group of bin.featureGroups ?? []) {
+      counts.set(group.featureName, (counts.get(group.featureName) ?? 0) + group.count)
+    }
   }
 
   return counts

@@ -4,6 +4,10 @@
 // See docs/modalities/atera.md.
 
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
+import {
+  addTranscriptFeatureTally,
+  type TranscriptFeatureTally,
+} from '../data/transcriptFeatureTally'
 
 export const ATERA_EXPERIMENT_FILE = 'experiment.spatial'
 
@@ -403,7 +407,7 @@ export interface AteraDensityBin {
   readonly binX: number
   readonly binY: number
   count: number
-  readonly featureCounts: Map<string, number>
+  readonly features: Map<string, TranscriptFeatureTally>
 }
 
 // Sums native bins into `binSize` squares covering the box, so edge squares
@@ -476,15 +480,12 @@ export function aggregateAteraBinnedTiles(input: {
           let bin = bins.get(key)
 
           if (bin === undefined) {
-            bin = { binX, binY, count: 0, featureCounts: new Map() }
+            bin = { binX, binY, count: 0, features: new Map() }
             bins.set(key, bin)
           }
 
           bin.count += count
-          bin.featureCounts.set(
-            gene.name,
-            (bin.featureCounts.get(gene.name) ?? 0) + count,
-          )
+          addTranscriptFeatureTally(bin.features, gene.name, count, x, y)
         }
       }
     }

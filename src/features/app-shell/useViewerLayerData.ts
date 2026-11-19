@@ -320,11 +320,25 @@ export function useViewerLayerData({
     return transcriptAggregateBinsToLayerData(
       transcriptAggregateBinsForRendering(transcriptLayerState),
       transcriptDensityColorScale,
-      transcriptDensityScaleMax === undefined
-        ? {}
-        : { scaleMax: transcriptDensityScaleMax },
+      {
+        ...(transcriptDensityScaleMax === undefined
+          ? {}
+          : { scaleMax: transcriptDensityScaleMax }),
+        ...(transcriptGeneColor === undefined
+          ? {}
+          : { featureColor: transcriptGeneColor }),
+        ...(hiddenTranscriptGenes === undefined
+          ? {}
+          : { hiddenFeatures: hiddenTranscriptGenes }),
+      },
     )
-  }, [transcriptDensityColorScale, transcriptDensityScaleMax, transcriptLayerState])
+  }, [
+    hiddenTranscriptGenes,
+    transcriptDensityColorScale,
+    transcriptDensityScaleMax,
+    transcriptGeneColor,
+    transcriptLayerState,
+  ])
   const visibleTranscriptEstimate = useMemo(
     () =>
       currentViewportBbox === null

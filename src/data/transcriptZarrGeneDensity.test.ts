@@ -223,6 +223,11 @@ describe('selected-gene transcript density', () => {
     expect(merged.bins.map((bin) => [bin.binX, bin.binY, bin.count])).toEqual([
       [0, 0, 16],
     ])
+    // The gene marker sits at the count-weighted centre of the 10 µm cells:
+    // 2 at (5, 5), 6 at (15, 25), 1 at (35, 5) and 7 at (35, 35).
+    expect(merged.bins[0]?.featureGroups).toEqual([
+      { featureName: 'GENEA', count: 16, position: { x: 380 / 16, y: 410 / 16 } },
+    ])
   })
 
   it('reads each gene once, then serves any view from memory', async () => {

@@ -14,6 +14,11 @@ import type {
   TranscriptPoint,
   TranscriptViewportResult,
 } from '../data/transcriptOverlay'
+import {
+  addTranscriptFeatureTally,
+  topTranscriptFeatures,
+  transcriptFeatureGroups,
+} from '../data/transcriptFeatureTally'
 import { transcriptGroupsFromPoints } from '../data/transcriptZarr'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import {
@@ -288,15 +293,12 @@ export class AteraTranscripts {
         let bin = bins.get(key)
 
         if (bin === undefined) {
-          bin = { binX, binY, count: 0, featureCounts: new Map() }
+          bin = { binX, binY, count: 0, features: new Map() }
           bins.set(key, bin)
         }
 
         bin.count += 1
-        bin.featureCounts.set(
-          range.gene.name,
-          (bin.featureCounts.get(range.gene.name) ?? 0) + 1,
-        )
+        addTranscriptFeatureTally(bin.features, range.gene.name, 1, x, y)
       }
     })
     throwIfAborted(options.signal)
@@ -853,10 +855,8 @@ function densityBinToAggregateBin(
   level: number,
   binSize: number,
 ): TranscriptAggregateBin {
-  const topFeatures = [...bin.featureCounts.entries()]
-    .sort((left, right) => right[1] - left[1])
-    .slice(0, DENSITY_FEATURE_SUMMARY_LIMIT)
-    .map(([featureName, count]) => ({ featureName, count }))
+  const featureGroups = transcriptFeatureGroups(bin.features)
+  const topFeatures = topTranscriptFeatures(featureGroups, DENSITY_FEATURE_SUMMARY_LIMIT)
 
   return {
     id: `atera-binned:${level}:${bin.binX}:${bin.binY}`,
@@ -874,6 +874,7 @@ function densityBinToAggregateBin(
     count: bin.count,
     selectedGeneCount: bin.count,
     topFeatures,
+    featureGroups,
   }
 }
 

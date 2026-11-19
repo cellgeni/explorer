@@ -1,12 +1,16 @@
 import type { Color } from '@deck.gl/core'
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { TranscriptFeatureFilterMode } from '../../data/transcriptOverlay'
-import type { TranscriptPointColorMode } from '../../rendering/deckLayers'
+import type {
+  TranscriptDensityColorScale,
+  TranscriptPointColorMode,
+} from '../../rendering/deckLayers'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import {
   EMPTY_TRANSCRIPT_GENE_LEGEND,
   assignTranscriptGeneColors,
   countTranscriptsByGene,
+  countTranscriptsByGeneInBins,
   hexToTranscriptColor,
   transcriptGeneColor,
   transcriptGeneLegend,
@@ -14,13 +18,15 @@ import {
   type TranscriptGeneLegendItem,
 } from './transcriptGeneLegendModel'
 import {
+  transcriptAggregateBinsForRendering,
   transcriptPointsForRendering,
   type TranscriptLayerState,
 } from './transcriptLayerModel'
 
 // The Transcripts section's gene list (plan 15.4-C).
 export interface TranscriptGeneLegendModel {
-  // Points coloured by gene are on screen, so the list applies.
+  // Points coloured by gene, or gene markers, are on screen, so the list
+  // applies.
   readonly active: boolean
   // Why there is no list, when transcripts are shown another way.
   readonly note: string | null
@@ -36,6 +42,7 @@ export interface TranscriptGeneLegendInput {
   readonly appendDebugEvent: AppendDebugEvent
   readonly colorMode: TranscriptPointColorMode
   readonly colors: Readonly<Record<string, string>>
+  readonly densityColorScale: TranscriptDensityColorScale
   readonly filterMode: TranscriptFeatureFilterMode
   readonly hiddenGenes: readonly string[]
   readonly layerState: TranscriptLayerState
@@ -49,9 +56,11 @@ export interface TranscriptGeneLegendResult {
   readonly model: TranscriptGeneLegendModel
   // The canvas legend's list, or null when it does not apply.
   readonly legend: TranscriptGeneLegend | null
-  // For the point layer; stable while colours and genes are.
+  // For the point and gene marker layers; stable while colours and genes are.
   readonly featureColor: (featureName: string) => Color
   readonly hiddenGenes: ReadonlySet<string>
+  // Density is drawn as gene markers, so it has no colour scale.
+  readonly markersShown: boolean
 }
 
 const NO_HIDDEN_GENES: ReadonlySet<string> = new Set()
@@ -60,6 +69,7 @@ export function useTranscriptGeneLegend({
   appendDebugEvent,
   colorMode,
   colors,
+  densityColorScale,
   filterMode,
   hiddenGenes,
   layerState,
@@ -87,9 +97,18 @@ export function useTranscriptGeneLegend({
     [assigned, colors],
   )
   const points = transcriptPointsForRendering(layerState)
-  const counts = useMemo(() => countTranscriptsByGene(points), [points])
+  const bins = transcriptAggregateBinsForRendering(layerState)
+  const markersShown =
+    overlayShown &&
+    densityColorScale === 'gene' &&
+    bins.some((bin) => bin.featureGroups !== undefined)
+  const counts = useMemo(
+    () =>
+      markersShown ? countTranscriptsByGeneInBins(bins) : countTranscriptsByGene(points),
+    [bins, markersShown, points],
+  )
   const pointsShown = overlayShown && points.length > 0
-  const active = pointsShown && colorMode === 'feature'
+  const active = (pointsShown && colorMode === 'feature') || markersShown
   const legend = useMemo(
     () =>
       active
@@ -137,13 +156,14 @@ export function useTranscriptGeneLegend({
   return {
     model: {
       active,
-      note: !overlayShown
-        ? null
-        : colorMode === 'quality' && pointsShown
-          ? 'Points are coloured by quality. Set Point color to Feature to list the genes.'
-          : !pointsShown
-            ? 'Gene colours show when transcripts are drawn as points.'
-            : null,
+      note:
+        !overlayShown || markersShown
+          ? null
+          : colorMode === 'quality' && pointsShown
+            ? 'Points are coloured by quality. Set Point color to Feature to list the genes.'
+            : !pointsShown
+              ? 'Gene colours show when transcripts are drawn as points, or as density with Density color set to Gene markers.'
+              : null,
       items: legend.items,
       moreCount: legend.moreCount,
       hiddenCount: hiddenGenes.length,
@@ -153,8 +173,9 @@ export function useTranscriptGeneLegend({
     },
     legend: active && legend.items.length > 0 ? legend : null,
     featureColor,
-    // Genes are hidden only while points are coloured by gene, where the
-    // list and Show All are; QV colours show every point.
-    hiddenGenes: colorMode === 'feature' ? hiddenSet : NO_HIDDEN_GENES,
+    // Genes are hidden only while transcripts are coloured by gene, where
+    // the list and Show All are; QV colours show every point.
+    hiddenGenes: colorMode === 'feature' || markersShown ? hiddenSet : NO_HIDDEN_GENES,
+    markersShown,
   }
 }

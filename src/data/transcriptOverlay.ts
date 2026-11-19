@@ -76,6 +76,9 @@ export interface TranscriptAggregateBin {
   readonly omittedFeatureCount?: number
   readonly omittedTranscriptCount?: number
   readonly topFeatures?: readonly TranscriptAggregateFeatureSummary[]
+  // Every selected gene in the square, most transcripts first, for gene
+  // markers. Squares counting all transcripts have none.
+  readonly featureGroups?: readonly TranscriptAggregateFeatureGroup[]
   readonly featureName?: string
   readonly fovName?: string
   readonly meanQv?: number
@@ -84,6 +87,15 @@ export interface TranscriptAggregateBin {
 export interface TranscriptAggregateFeatureSummary {
   readonly featureName: string
   readonly count: number
+}
+
+// One gene's transcripts in a density square, at their count-weighted centre:
+// the transcripts' own positions when binned from points, the native bins'
+// centres otherwise.
+export interface TranscriptAggregateFeatureGroup {
+  readonly featureName: string
+  readonly count: number
+  readonly position: DataPoint
 }
 
 export interface TranscriptLodLevel {

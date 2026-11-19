@@ -1638,6 +1638,80 @@ describe('deck layer factory', () => {
     expect(globalBin?.fillColor).toEqual([255, 223, 91, 246])
   })
 
+  it('draws gene markers per gene in each square, larger ones first', () => {
+    const allTranscriptsSquare = {
+      id: 'sq-1',
+      glyphType: 'density' as const,
+      level: 1,
+      binX: 0,
+      binY: 0,
+      position: { x: micrometers(10), y: micrometers(10) },
+      radiusMicrometers: 8.4,
+      binSizeMicrometers: 20,
+      count: 104,
+    }
+    const square = {
+      ...allTranscriptsSquare,
+      featureGroups: [
+        {
+          featureName: 'GENEA',
+          count: 100,
+          position: { x: micrometers(4), y: micrometers(6) },
+        },
+        {
+          featureName: 'GENEB',
+          count: 4,
+          position: { x: micrometers(15), y: micrometers(12) },
+        },
+      ],
+    }
+    const genes = { GENEA: [1, 2, 3, 255], GENEB: [4, 5, 6, 255] } as const
+    const markers = transcriptAggregateBinsToLayerData([square], 'gene', {
+      scaleMax: 100,
+      featureColor: (gene) => [...genes[gene as keyof typeof genes]],
+    })
+
+    expect(markers.map((marker) => [marker.featureName, marker.count])).toEqual([
+      ['GENEA', 100],
+      ['GENEB', 4],
+    ])
+    expect(markers[0]).toMatchObject({
+      id: 'sq-1:GENEA',
+      glyphType: 'gene',
+      position: [4, -6, 0],
+      // The square's largest count fills it.
+      radiusMicrometers: 10,
+      fillColor: [1, 2, 3, 255],
+    })
+    // Area follows the count: 4 of 100 is a fifth of the radius.
+    expect(markers[1]?.radiusMicrometers).toBeCloseTo(2)
+
+    const layer = createOverviewLayers(fixtureCells, [], {
+      transcriptAggregateBins: markers,
+    }).find(
+      (candidate) =>
+        candidate instanceof ScatterplotLayer &&
+        candidate.id === 'transcript-gene-markers',
+    )
+
+    expect(layer).toBeInstanceOf(ScatterplotLayer)
+    expect(layer instanceof ScatterplotLayer && layer.props.pickable).toBe(true)
+
+    const hidden = transcriptAggregateBinsToLayerData([square], 'gene', {
+      hiddenFeatures: new Set(['GENEA']),
+    })
+    expect(hidden.map((marker) => marker.featureName)).toEqual(['GENEB'])
+
+    // Without genes in the squares (All features), squares keep a ramp.
+    const [allTranscripts] = transcriptAggregateBinsToLayerData(
+      [allTranscriptsSquare],
+      'gene',
+      { scaleMax: 104 },
+    )
+    expect(allTranscripts?.glyphType).toBe('density')
+    expect(allTranscripts?.fillColor).toEqual([255, 223, 91, 246])
+  })
+
   it('can color exact transcript points by QV instead of feature', () => {
     const transcript = {
       id: 'tx-1',

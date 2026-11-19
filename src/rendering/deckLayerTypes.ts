@@ -137,7 +137,8 @@ export interface TranscriptAggregateDatum {
   readonly id: string
   readonly position: Position
   readonly source?: 'cell-summary' | 'native-zarr'
-  readonly glyphType?: 'density'
+  // `gene` is one gene's transcripts in a square, drawn as a circle.
+  readonly glyphType?: 'density' | 'gene'
   readonly level: number
   readonly binX: number
   readonly binY: number
@@ -218,12 +219,15 @@ export type GeneExpressionColorScale =
   | 'rose'
   | 'glasbey'
 export type GeneExpressionScoreMode = 'sum' | 'mean' | 'z-score'
-export type TranscriptDensityColorScale =
+export type TranscriptDensityRampScale =
   | 'thermal'
   | 'magma'
   | 'viridis'
   | 'cividis'
   | 'teal'
+// `gene` draws a marker per selected gene in each square, in the gene's
+// colour; squares counting all transcripts keep the default ramp.
+export type TranscriptDensityColorScale = TranscriptDensityRampScale | 'gene'
 export type TranscriptPointColorMode = 'feature' | 'quality'
 
 export interface GeneExpressionColorScaleOption {
@@ -266,6 +270,10 @@ export interface GeneExpressionElementStyleIndex {
 
 export interface TranscriptAggregateLayerDataOptions {
   readonly scaleMax?: number
+  // Gene markers only: the gene's colour, as for points (15.4-C), and the
+  // genes not drawn.
+  readonly featureColor?: (featureName: string) => Color
+  readonly hiddenFeatures?: ReadonlySet<string>
 }
 
 export type ColorStop = readonly [number, number, number, number]

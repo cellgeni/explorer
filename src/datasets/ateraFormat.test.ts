@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
+import { transcriptFeatureGroups } from '../data/transcriptFeatureTally'
 import {
   aggregateAteraBinnedTiles,
   ateraDensityBinSize,
@@ -290,10 +291,35 @@ describe('Atera binned transcript density', () => {
       '0,1': 4,
       '2,0': 5,
     })
-    expect(Object.fromEntries(bins.get('0,0')?.featureCounts ?? [])).toEqual({
+    expect(
+      Object.fromEntries(
+        [...(bins.get('0,0')?.features ?? [])].map(([gene, tally]) => [
+          gene,
+          tally.count,
+        ]),
+      ),
+    ).toEqual({
       GENEA: 2,
       GENEB: 3,
     })
+  })
+
+  it("places each gene at its native bins' count-weighted centre", () => {
+    const { bins } = aggregateAteraBinnedTiles({
+      genes: [
+        { name: 'GENEA', tiles: [geneATile] },
+        { name: 'GENEB', tiles: [geneBTile] },
+      ],
+      grid,
+      bbox: bbox(0, 0, 19, 19),
+      binSize: 20,
+    })
+
+    // GENEA: 2 at (2.5, 2.5), 1 at (17.5, 2.5) and 4 at (7.5, 12.5).
+    expect(transcriptFeatureGroups(bins.get('0,0')?.features ?? new Map())).toEqual([
+      { featureName: 'GENEA', count: 7, position: { x: 7.5, y: 57.5 / 7 } },
+      { featureName: 'GENEB', count: 3, position: { x: 2.5, y: 2.5 } },
+    ])
   })
 
   it('keeps edge squares whole but counts only native bins centred in the box', () => {

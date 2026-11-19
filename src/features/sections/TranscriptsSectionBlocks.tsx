@@ -1,6 +1,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Chip, InfoTip } from '../../components/ui'
-import { MIN_QV_HELP, TRANSCRIPT_DETAIL_HELP } from '../shell/helpText'
+import {
+  DENSITY_COLOR_HELP,
+  MIN_QV_HELP,
+  TRANSCRIPT_DETAIL_HELP,
+} from '../shell/helpText'
 import {
   TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS,
   TRANSCRIPT_POINT_COLOR_MODE_OPTIONS,
@@ -17,6 +21,7 @@ import {
   isTranscriptFeatureFilterMode,
   transcriptBudgetEstimate,
   transcriptDensityScaleAriaLabel,
+  transcriptGeneMarkerScaleAriaLabel,
 } from '../transcripts/transcriptLayerModel'
 import type {
   TranscriptFeatureModel,
@@ -204,11 +209,17 @@ export function TranscriptFeatureControls({
 export function TranscriptColourControls({ transcripts }: TranscriptsProps) {
   const densityInputId = useId()
   const pointInputId = useId()
-  const densityScaleLabel = transcriptDensityScaleAriaLabel(transcripts.densityScaleMax)
+  const geneMarkers = transcripts.densityColorScale === 'gene'
+  const densityScaleLabel = geneMarkers
+    ? transcriptGeneMarkerScaleAriaLabel(transcripts.densityScaleMax)
+    : transcriptDensityScaleAriaLabel(transcripts.densityScaleMax)
 
   return (
     <>
-      <label htmlFor={densityInputId}>Density color</label>
+      <div className="ui-label-row">
+        <label htmlFor={densityInputId}>Density color</label>
+        <InfoTip title="Density color">{DENSITY_COLOR_HELP}</InfoTip>
+      </div>
       <div className="transcript-density-scale-control">
         <select
           id={densityInputId}
@@ -234,17 +245,26 @@ export function TranscriptColourControls({ transcripts }: TranscriptsProps) {
           aria-label={densityScaleLabel}
           title={densityScaleLabel}
         >
-          <span
-            className="transcript-density-scale-preview"
-            style={{
-              backgroundImage: transcriptDensityScaleGradient(
-                transcripts.densityColorScale,
-              ),
-            }}
-            aria-hidden="true"
-          />
+          {geneMarkers ? (
+            <span className="transcript-gene-marker-preview" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : (
+            <span
+              className="transcript-density-scale-preview"
+              style={{
+                backgroundImage: transcriptDensityScaleGradient(
+                  transcripts.densityColorScale,
+                ),
+              }}
+              aria-hidden="true"
+            />
+          )}
           <span className="transcript-density-scale-values" aria-hidden="true">
-            <span>{transcripts.densityScaleLabels[0]}</span>
+            {/* No marker stands for no transcripts. */}
+            <span>{geneMarkers ? '1' : transcripts.densityScaleLabels[0]}</span>
             <span>{transcripts.densityScaleLabels[1]}</span>
             <span>{transcripts.densityScaleLabels[2]}</span>
           </span>

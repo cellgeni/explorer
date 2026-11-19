@@ -302,6 +302,37 @@
   border-radius: 6px;
 }
 
+/* Gene markers: circle area follows the count, as on the map. */
+.transcript-gene-marker-preview {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: center;
+  height: 28px;
+  min-width: 0;
+}
+
+.transcript-gene-marker-preview span {
+  width: var(--marker-size);
+  height: var(--marker-size);
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: var(--text-2);
+}
+
+.transcript-gene-marker-preview span:nth-child(1) {
+  --marker-size: 6px;
+}
+
+.transcript-gene-marker-preview span:nth-child(2) {
+  --marker-size: 14px;
+  justify-self: center;
+}
+
+.transcript-gene-marker-preview span:nth-child(3) {
+  --marker-size: 22px;
+  justify-self: end;
+}
+
 .transcript-density-scale-values {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

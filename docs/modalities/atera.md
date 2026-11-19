@@ -198,10 +198,12 @@ numcodecs `delta` filter. For a request:
 2. Tiles of each selected gene that touch the squares covering the view are
    decoded (and cached).
 3. `aggregateAteraBinnedTiles` sums native bins into squares, whole at the
-   view's edges, and keeps per-gene counts for the hover card. It also counts
-   native bins whose centre lies in the view: the selected-gene estimate.
+   view's edges, and keeps each gene's count and count-weighted centre, for
+   the hover card and gene markers. It also counts native bins whose centre
+   lies in the view: the selected-gene estimate.
 
-The squares use the `Density color` scale. On the reference run a
+The squares use the `Density color` scale, or are drawn as gene markers
+([UI reference](../ui-reference.md#transcripts)). On the reference run a
 whole-slide UMOD request is 165 squares of 640 µm that sum to the stored
 1,914,072.
 
