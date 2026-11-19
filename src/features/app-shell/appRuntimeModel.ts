@@ -23,6 +23,7 @@ export type LoadingTaskArea =
   | 'image'
   | 'cells'
   | 'transcripts'
+  | 'segmentation'
   | 'magic-lens'
   | 'selection'
   | 'cell'
@@ -120,6 +121,11 @@ interface LoadingTaskStateInputs {
   readonly magicLensLoadingScopeLabel?: string | undefined
   // Exact transcript tiles read so far, 0 to 1.
   readonly transcriptLoadProgress?: number | undefined
+  // An image's imported segmentation being read, and what it has read.
+  readonly segmentationLoading?: { readonly detail?: string } | undefined
+  // An image's outlines are its imported segmentation's, in the
+  // Segmentation section.
+  readonly boundariesAreSegmentation?: boolean
 }
 
 interface LoadingStatusState {
@@ -178,6 +184,8 @@ export function createLoadingTasks({
   geneExpressionLoadingLabel = 'Loading expression',
   magicLensLoadingScopeLabel = 'Lens',
   transcriptLoadProgress,
+  segmentationLoading,
+  boundariesAreSegmentation = false,
 }: LoadingTaskStateInputs): readonly LoadingTask[] {
   const tasks: LoadingTask[] = []
 
@@ -240,12 +248,23 @@ export function createLoadingTasks({
     })
   }
 
-  if (boundaryState.status === 'loading') {
+  if (segmentationLoading !== undefined) {
     tasks.push({
-      id: 'boundaries',
-      area: 'cells',
-      label: 'Loading cell boundaries',
+      id: 'segmentation',
+      area: 'segmentation',
+      label: 'Reading segmentation',
+      ...(segmentationLoading.detail === undefined
+        ? {}
+        : { detail: segmentationLoading.detail }),
     })
+  }
+
+  if (boundaryState.status === 'loading') {
+    tasks.push(
+      boundariesAreSegmentation
+        ? { id: 'boundaries', area: 'segmentation', label: 'Loading outlines' }
+        : { id: 'boundaries', area: 'cells', label: 'Loading cell boundaries' },
+    )
   }
 
   if (nucleusBoundaryState?.status === 'loading') {

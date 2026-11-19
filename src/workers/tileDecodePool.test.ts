@@ -52,7 +52,10 @@ describe('TileDecodeWorkerPool', () => {
     })
     const posted = workers[0]?.posted[0]
     const request =
-      posted !== undefined && !('sampling' in posted) && !('stripRows' in posted)
+      posted !== undefined &&
+      !('sampling' in posted) &&
+      !('stripRows' in posted) &&
+      !('labelTrace' in posted)
         ? posted
         : undefined
 

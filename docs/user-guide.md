@@ -567,6 +567,17 @@ box or lasso shapes, and the Annotations section for GeoJSON shape
 import/export. Gene expression, transcripts, cell details, cell annotations,
 and Magic Lens remain hidden because there are no cells or molecules to query.
 
+The Segmentation section draws a cell segmentation over the image as
+outlines: a label mask (TIFF, such as Cellpose's `_cp_masks.tif`, or
+OME-Zarr), or polygons (GeoJSON, as QuPath exports them; WKT, one a line or a
+CSV column; or Parquet, GeoParquet or Xenium's vertex rows). Enter its URL or
+open a local file. Polygons are taken to be in image pixels; choose
+Micrometres under Coordinates when they are not. Outlines draw once the view
+holds fewer than the Boundary limit, and hovering one shows its ID and area.
+For whole-slide masks, a tiled pyramidal TIFF reads far faster than Cellpose's
+stripped file. See
+[Imported Segmentations](./image-only-and-geojson.md#imported-segmentations).
+
 ## Diagnostics
 
 In the info drawer's Diagnostics section, `Diagnose Dataset` checks the

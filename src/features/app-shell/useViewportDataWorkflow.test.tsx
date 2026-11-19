@@ -3,7 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
-import { micrometers } from '../../data/coords'
+import { micrometers, type BBox } from '../../data/coords'
 import type { ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
 import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
@@ -99,6 +99,7 @@ function Probe({
   loadNucleusBoundaryElements,
   onReady,
   selectedGenes = ['Actb'],
+  viewportCellCount,
   visiumHdBinSizeMicrometers,
 }: {
   readonly loadBoundaryElements: Parameters<
@@ -118,6 +119,7 @@ function Probe({
     nextSnapshot: Snapshot,
   ) => void
   readonly selectedGenes?: readonly string[]
+  readonly viewportCellCount?: (box: BBox) => number
   readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
 }) {
   const [boundaryElements, setBoundaryElements] = React.useState<
@@ -177,6 +179,7 @@ function Probe({
       geneExpressionScaleKey: 'scale-key',
       geneExpressionScoreMode: 'sum',
       ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
+      viewportCellCount,
     },
     data: {
       loadState: readyLoadState,
@@ -524,6 +527,86 @@ describe('useViewportDataWorkflow', () => {
       cellCount: 1,
     })
     expect(snapshot.boundaryElements).toEqual([element])
+  })
+
+  it('counts an imported segmentation in view when the viewer has no cells', async () => {
+    const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
+    const viewportCellCount = vi.fn(() => 3)
+
+    render(
+      <Probe
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={vi.fn(async () => batch)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        selectedGenes={[]}
+        viewportCellCount={viewportCellCount}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detailWithoutBoundaryLoad)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(viewportCellCount).toHaveBeenCalledWith(bbox)
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+
+    viewportCellCount.mockReturnValue(40)
+    act(() => {
+      api.handleViewportChange({ ...denseOverviewDetail, visibleCellCount: 0 })
+    })
+
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+    expect(snapshot.debugMessages).toContain(
+      'Boundaries deferred: 40 visible cells exceed the 10 boundary limit. Zoom in or raise Boundary limit to load true polygons.',
+    )
+  })
+
+  it('records outlines over the limit and asks again on the next view', async () => {
+    const loadBoundaryElements = vi.fn(async () => ({
+      elements: [],
+      overLimit: { count: 250_000 },
+    }))
+
+    render(
+      <Probe
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={vi.fn(async () => batch)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        selectedGenes={[]}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(snapshot.boundaryState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellCount: 0,
+      overLimit: { count: 250_000 },
+    })
+
+    // The same view would be covered by a drawn request; this one drew
+    // nothing, so it is asked for again.
+    act(() => {
+      api.handleViewportChange(detail)
+    })
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(2)
   })
 
   it('retries retryable gene expression load failures once', async () => {

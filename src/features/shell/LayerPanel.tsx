@@ -34,6 +34,8 @@ import {
   ImageZPlaneControl,
 } from '../sections/ImageSectionBlocks'
 import type { ImageSectionModel } from '../sections/imageSectionModel'
+import { SegmentationPanel } from '../sections/SegmentationSectionBlocks'
+import type { SegmentationSectionModel } from '../sections/segmentationSectionModel'
 import {
   TranscriptBudget,
   TranscriptColourControls,
@@ -62,6 +64,9 @@ interface LayerPanelProps {
   readonly cells: CellsSectionModel
   readonly transcripts: TranscriptsSectionModel
   readonly annotations: AnnotationsSectionModel
+  // An image's imported segmentation; its section shows where the panel
+  // model lists it.
+  readonly segmentation?: SegmentationSectionModel | null | undefined
   // Visium HD bin size, the Visium tissue image and off-tissue spots.
   readonly viewOptions: DatasetViewOptionsModel
   // The open sections, or null for the default (15.2-H keeps them in the
@@ -92,8 +97,8 @@ export interface LayerSheetProps {
   readonly summary?: string | undefined
 }
 
-// The layer panel (plan 15.2-C): Image, Cells (Spots or Bins),
-// Transcripts and Annotations. Sections stay mounted while closed, and so do
+// The layer panel (plan 15.2-C): Image, Cells (Spots or Bins), Segmentation
+// (an image's imported outlines), Transcripts and Annotations. Sections stay mounted while closed, and so do
 // they while the panel is collapsed, so a gene search survives.
 export function LayerPanel({
   panel,
@@ -103,6 +108,7 @@ export function LayerPanel({
   cells,
   transcripts,
   annotations,
+  segmentation = null,
   viewOptions,
   expanded: chosenExpanded,
   onExpandedChange,
@@ -139,6 +145,8 @@ export function LayerPanel({
         onQueryOpenChange={onQueryOpenChange}
       />
     ),
+    segmentation:
+      segmentation === null ? null : <SegmentationPanel segmentation={segmentation} />,
     transcripts: <TranscriptsSection transcripts={transcripts} />,
     annotations: (
       <div className="analysis-section">

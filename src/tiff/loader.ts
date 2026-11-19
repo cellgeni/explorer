@@ -137,6 +137,7 @@ export interface TiffPyramidLoaderOptions {
   readonly predictor?: number
   readonly planarConfiguration?: number
   readonly photometric?: number
+  readonly sampleFormat?: number
   readonly littleEndian?: boolean
   readonly jpegTables?: Uint8Array
   // Per-level decode tags, indexed by level, for files whose levels are
@@ -448,6 +449,7 @@ async function openTiffImage(
             tags: stripTags,
             decodeMetadata,
             tileHeight,
+            ...(options.labels === true ? { labels: true } : {}),
           }),
         )
         levelMeta.set(level, tiffLevelMeta(levelSize))
@@ -1894,6 +1896,10 @@ async function readTileDecodeMetadata(
   )
   const photometric = await readOptionalNumberTag(directory, 'PhotometricInterpretation')
   const jpegTables = await readOptionalByteArrayTag(directory, 'JPEGTables')
+  // Only label images use it, so an odd value never stops an image opening.
+  const [sampleFormat] = await readNumberArrayTag(directory, 'SampleFormat').catch(
+    () => [],
+  )
 
   return {
     ...(compression === undefined ? {} : { compression }),
@@ -1903,6 +1909,7 @@ async function readTileDecodeMetadata(
     ...(planarConfiguration === undefined ? {} : { planarConfiguration }),
     ...(photometric === undefined ? {} : { photometric }),
     ...(jpegTables === undefined ? {} : { jpegTables }),
+    ...(sampleFormat === undefined ? {} : { sampleFormat }),
     littleEndian: tiff.littleEndian,
   }
 }
@@ -1993,6 +2000,9 @@ export class TiffPyramidLoader {
         ? {}
         : { planarConfiguration: options.planarConfiguration }),
       ...(options.photometric === undefined ? {} : { photometric: options.photometric }),
+      ...(options.sampleFormat === undefined
+        ? {}
+        : { sampleFormat: options.sampleFormat }),
       ...(options.littleEndian === undefined
         ? {}
         : { littleEndian: options.littleEndian }),
@@ -2051,6 +2061,12 @@ export class TiffPyramidLoader {
         tileCount: meta.nRows,
       },
     )
+  }
+
+  // A level's size in its own pixels.
+  levelSize(level: number): { readonly width: number; readonly height: number } {
+    const meta = this.levelMetaFor(level)
+    return { width: meta.width, height: meta.height }
   }
 
   tilesForLevel(level: number): readonly TileIndex[] {

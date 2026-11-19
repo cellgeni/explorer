@@ -1,8 +1,9 @@
 # Image-Only Sources And GeoJSON Shapes
 
 The viewer can load a direct image URL without any spatial transcriptomics
-tables. This is useful for inspecting remote image pyramids and drawing or
-importing geometric annotations. For how images are read and rendered, see
+tables. This is useful for inspecting remote image pyramids, drawing or
+importing geometric annotations, and checking a cell segmentation against
+the image ([Imported Segmentations](#imported-segmentations)). For how images are read and rendered, see
 [Image sources](./modalities/image.md).
 
 ## Supported Image URLs
@@ -81,8 +82,8 @@ plane opens as a `#c=N&z=M` loader. Only one time point is shown:
 ## Platform Behavior
 
 Image-only sources expose image channels, image opacity, custom image layers,
-distance measurement, hover coordinates, ROI drawing, and GeoJSON shape
-annotations.
+distance measurement, hover coordinates, ROI drawing, GeoJSON shape
+annotations, and an imported segmentation drawn as outlines.
 
 The app hides transcriptomics workflows because image-only sources have no cell
 IDs, bins, molecules, or expression matrix:
@@ -121,6 +122,102 @@ For image-only sources, coordinates default to pixels and are converted through
 the image micrometers-per-pixel scale. For other platforms, coordinates default
 to micrometers. Set `properties.coordinate_unit = "micrometer"` when the
 coordinates are already in viewer coordinates.
+
+## Imported Segmentations
+
+The layer panel's Segmentation section imports a cell segmentation onto the
+image and draws it as outlines, such as Cellpose masks over an NDPI slide.
+Enter its URL and `Load`, or `Open File` for a local file. It is outlines
+only: there is no cell table, so the outlines do not colour by genes or
+classes, and ROI, the Cell card and Cell Query do not count them. One
+segmentation is open at a time, and opening another dataset drops it.
+
+| Format         | Names                                       | What is read                                                                                                                                                                                                                                                                                                              |
+| -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Label TIFF     | `.tif`, `.tiff`, `.ome.tif`                 | An integer mask, 0 background, one label per cell: 8-, 16- or 32-bit, unsigned (Cellpose's `_cp_masks.tif`, which is 32-bit over 65,535 cells) or signed, or 32-bit float holding whole numbers. Tiled or stripped; uncompressed, LZW or Deflate, with or without a predictor. Pyramid levels as `SubIFDs`, as for images |
+| Label OME-Zarr | `.zarr`, `zarr.json`, `.zattrs`             | An OME-Zarr label image, including a `bioformats2raw` store, read as an [AnnData `labels`](./dataset-collections.md#labels) image is. From a URL only                                                                                                                                                                     |
+| GeoJSON        | `.geojson`, `.json`, gzipped too            | A FeatureCollection, or a bare array of features as QuPath exports them. Polygon and MultiPolygon features; others are skipped                                                                                                                                                                                            |
+| WKT            | `.wkt`, `.csv`, `.tsv`, `.txt`, gzipped too | One WKT `POLYGON` or `MULTIPOLYGON` a line, or a comma, tab or semicolon table: the geometry column is named (`geometry`, `wkt`, `polygon`, `boundary`, `outline`, …) or is the first whose values are WKT. WKT left unquoted in a CSV is read too. 2D to 4D, and EWKT `SRID=n;`                                          |
+| Parquet        | `.parquet`, `.geoparquet`, `.pq`            | GeoParquet WKB (its `primary_column`), a `geometry` or `wkt` column of WKB or WKT, or one row per vertex (`cell_id` with `vertex_x` and `vertex_y`, or `x` and `y`) as Xenium's `cell_boundaries.parquet`, a cell's rows together                                                                                         |
+
+Choose `Format` when the name has no such extension, as for a signed
+download link. Only outer rings are kept: holes are dropped, and a
+MultiPolygon keeps its largest polygon.
+
+Each outline's ID, shown on hover with its vertices and area, is a mask's
+label value, or for polygons the first of these that the file has:
+
+- GeoJSON: the `cell_id`, `cellId`, `label`, `label_id` or `id` property,
+  then the feature's own `id` (QuPath's UUID), then `object_id`, `objectId`
+  or `name`.
+- Tables and Parquet: the pandas index column, or a column named `cell_id`,
+  `cell`, `label_id`, `label`, `id`, `object_id`, `entityid`, `instance_id`,
+  `name` or `barcode` (any case). A CSV's unnamed first column is pandas'
+  index.
+- Otherwise the row or feature number, from 0.
+
+### Placement
+
+- **Label masks** cover the image. A mask on the image's own pixel grid
+  lines up pixel for pixel; a smaller one, such as Cellpose run on a
+  downsampled image, is stretched to fit. The section says so when the mask
+  is not the image's shape.
+- **Polygons** are in full-resolution image pixels by default, as Cellpose,
+  QuPath and StarDist write them, and placed by the image's pixel size.
+  Choose `Coordinates` › `Micrometres` for micrometre files such as
+  Xenium's. The section warns when the outlines reach beyond the image, or
+  cover only its top-left part, which usually means the other units.
+
+### Drawing
+
+Outlines are read for the view, as cell boundaries are, and drawn only while
+the view holds fewer than the Boundary limit (Settings; 50,000 by default).
+Otherwise the section says to zoom in, and how many outlines are in view.
+
+- **Polygons** are read once, in a worker, into columns (a million 12-vertex
+  polygons take about 250 MB of browser memory). Each view selects those whose
+  bounds meet it, so the count in view is exact.
+- **Masks** are traced for the view in the tile decode workers, from the
+  finest pyramid level whose pixels in view fit 16 million, and never from a
+  level more than 4 times coarser than the mask, where cells are a few pixels.
+  Until a level fits, the section says `Zoom in to trace the mask's
+outlines`. How many cells a view holds is known only once it is traced;
+  after the first trace, the density traced estimates it, and a trace with
+  more labels than the limit draws none.
+
+The outline colour and opacity are the section's own. A link keeps the
+segmentation's URL (`segmentation=`), not a picked file. A
+[dataset manifest](./dataset-manifest.md#h5ad-spatialdata-and-image) can
+name one for an image with `files.segmentation`.
+
+On a synthetic 6,000 × 6,000 pixel slide with 81,900 cells, served locally,
+every format opened in 2–3 s and a view of 2,576 cells drew in under a
+second. A million polygons opened in 2.3 s as GeoParquet (142 MB) and 3.3 s as
+WKT CSV (226 MB) (headless Chromium with the GPU).
+
+### Masks For Whole Slides
+
+Cellpose writes `_cp_masks.tif` in compressed strips of whole rows, without a
+pyramid. It opens, but every view decodes whole rows across the slide, and
+only views up to 16 million mask pixels (about 4,000 pixels square) are
+traced. For a whole slide, save the mask tiled with a pyramid, downsampling
+by taking every other pixel so labels stay whole:
+
+```python
+import tifffile
+
+mask = tifffile.imread('slide_cp_masks.tif')
+with tifffile.TiffWriter('slide_masks.ome.tif', bigtiff=True) as tif:
+    options = dict(tile=(512, 512), compression='zlib')
+    tif.write(mask, subifds=4, metadata={'axes': 'YX'}, **options)
+    level = mask
+    for _ in range(4):
+        level = level[::2, ::2]
+        tif.write(level, subfiletype=1, **options)
+```
+
+The host must allow CORS, and Range requests for TIFF, OME-Zarr and Parquet,
+which are read in parts; GeoJSON and WKT are read whole as they arrive.
 
 ## ROI And Export
 

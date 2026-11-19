@@ -235,6 +235,41 @@
   padding-top: 2px;
 }
 
+/* Segmentation section (plan 25): the import form and the imported layer. */
+.segmentation-section {
+  display: grid;
+  gap: 6px;
+}
+
+.segmentation-import-form {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.segmentation-import-options {
+  display: grid;
+  gap: 4px;
+}
+
+.segmentation-hint,
+.segmentation-status {
+  margin: 0;
+  color: var(--text-3);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+
+.segmentation-outline-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.segmentation-outline-row .annotation-color-picker {
+  margin-bottom: 2px;
+}
+
 .custom-layer-remove {
   width: 20px;
   height: 20px;

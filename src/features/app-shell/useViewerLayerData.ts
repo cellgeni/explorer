@@ -115,6 +115,9 @@ interface ViewerLayerMorphologyOptions {
 interface ViewerLayerBoundaryOptions {
   readonly boundaryElements: readonly SpatialElement[]
   readonly nucleusBoundaryElements?: readonly SpatialElement[]
+  // Outline colour of cells the data gives none (an image's imported
+  // segmentation); the default grey otherwise.
+  readonly boundaryLineColor?: Color | undefined
 }
 
 interface UseViewerLayerDataOptions {
@@ -165,8 +168,11 @@ export function useViewerLayerData({
     morphologyChannels,
     morphologyImage,
   } = morphology
-  const { boundaryElements, nucleusBoundaryElements = EMPTY_SPATIAL_ELEMENTS } =
-    boundaries
+  const {
+    boundaryElements,
+    boundaryLineColor,
+    nucleusBoundaryElements = EMPTY_SPATIAL_ELEMENTS,
+  } = boundaries
   const annotationStyleColors = useMemo(
     () =>
       annotationState.status === 'ready'
@@ -377,8 +383,12 @@ export function useViewerLayerData({
   )
   const morphologyMicrometersPerPixel = morphologyImage?.loader.units?.micrometersPerPixel
   const boundaryLayerData = useMemo(
-    () => boundaryElementsToLayerData(boundaryElements),
-    [boundaryElements],
+    () =>
+      boundaryElementsToLayerData(
+        boundaryElements,
+        boundaryLineColor === undefined ? {} : { lineColor: boundaryLineColor },
+      ),
+    [boundaryElements, boundaryLineColor],
   )
   const nucleusBoundaryLayerData = useMemo(
     () =>
