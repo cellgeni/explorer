@@ -20,7 +20,7 @@ The decisions below are the defaults discussed with the user on
 2026-11-19. The user answered the plan's open questions the same day
 ([Answered Questions](#answered-questions)); D4, D5, D6 and D9 carry the
 answers. The spike reopened two of them, the default level and the default
-threshold ([Open Questions](#open-questions)).
+threshold, and the user answered them again the same day.
 
 The plan rests on a code map made on 2026-11-19 at `b438945`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -104,8 +104,8 @@ estimates. The spike measured slower times, since the bucket gave 4–9 MB/s
 | 1     | ~20 s  | 16–65 s  | 20–65 s     |
 | 2     | ~6.5 s | 4.5–18 s | 7–18 s      |
 
-Three channels at level 1, the default (D5), read about 1.9 GB, in 1–3
-minutes. At level 2 they read about 540 MB, in 20 s to a minute. Images
+Three channels at level 2, the default (D5), read about 540 MB, in 20 s
+to a minute. At level 1 they read about 1.9 GB, in 1–3 minutes. Images
 on the BioImage Archive read at roughly 3–10 MB/s and take several times
 longer. The 19-plex tonsil QPTIFF is about 0.5 GB per channel at full
 resolution (0.507 µm/px).
@@ -169,14 +169,20 @@ bucketing the cells to the last tile.
   between neighbouring level-0 pixels. It is not a plain subsample. Cell
   means at level 1 and level 0 differ by 0.47% at the median and 2.3% at
   the 99th percentile (correlation 0.999).
+- **Level 2 drifts further.** Checked after level 2 became the default, in
+  numpy only, on the same block and cells. Cell means at level 2 and
+  level 0 differ by 1.6% at the median, 5.4% at the 95th percentile and
+  7.9% at the 99th (correlation 0.988). The median cell there has 35
+  pixels, and the 5th percentile 17.
 - **Pixels per cell.** Nearest pixels go to neighbours, so at level 1 a
   cell has 91, 233 and 519 pixels at the 5th, 50th and 95th percentiles
   over the slide. The median cell's disc alone covers 258. In the dense
   block above, the median is 138.
 - **The canvas contrast minimum is 0 on the demo**, for all four channels.
   Auto-contrast takes the 0.5th percentile of the coarsest level, and 17%
-  of DAPI's coarsest level is 0, outside the scanned area. With D6's
-  default threshold, `% above` is 100 for every cell. For comparison:
+  of DAPI's coarsest level is 0, outside the scanned area. With the canvas
+  minimum as the threshold, D6's first default, `% above` is 100 for every
+  cell. For comparison:
   - Otsu's threshold on the coarsest DAPI level is 2,065, or 2,176 leaving
     out zeros.
   - Cell means over the slide are 550, 1,786 and 5,185 at the 5th, 50th
@@ -295,8 +301,8 @@ What is missing:
 
 ## Product Decisions
 
-Proposed 2026-11-19. D4, D5, D6 and D9 are settled by the user's answers;
-the others stand as proposed.
+Proposed 2026-11-19. D4, D5, D6 and D9 are settled by the user's answers,
+D5 and D6 after the spike; the others stand as proposed.
 
 - **D1. Two columns per channel.**
   - `{channel} mean`: the mean of the cell's pixels in the image's own
@@ -315,9 +321,10 @@ the others stand as proposed.
   - A channel stops counting when no condition or table column uses it.
   - Measurements stay for the dataset while it is open.
 
-  Three keep a measurement at level 1 on the demo to about 1.9 GB, which
-  took 3½–7 minutes at the spike's rates. They also keep memory near 70 MB while measuring (16 bytes per
-  cell per channel) and 70 MB of kept columns.
+  Three keep a measurement at level 2 on the demo to about 540 MB, which
+  takes 1–2 minutes at the spike's rates. They also keep memory near 70 MB
+  while measuring (16 bytes per cell per channel) and 70 MB of kept
+  columns.
 
 - **D3. Every cell, measured once per channel.**
   - A condition on an image column waits for the whole measurement. The
@@ -340,24 +347,27 @@ the others stand as proposed.
   - Outlines and label masks are [later](#later).
 
 - **D5. One pyramid level per measurement.**
-  - The default is level 1, one step coarser than full resolution, or
-    level 0 on an image with one level. On the Xenium demo that is
-    0.43 µm/px, with 258 pixels in the median cell. Reopened by the spike:
-    see [Open Questions](#open-questions).
+  - The default is level 2, two steps coarser than full resolution, or
+    the coarsest level on an image with fewer. On the Xenium demo that is
+    0.85 µm/px, with 64 pixels in the median cell's disc. One channel took
+    20 s in the spike, against 70–146 s at level 1. Cell means at level 2
+    are within 1.6% of level 0's at the median and 7.9% at the 99th
+    percentile; at level 1, 0.47% and 2.3%.
   - `Resolution` lists every level with µm per pixel and the size of its
-    read.
+    read, so a finer level is a choice away.
   - The level is part of the column: the label and the CSV header say
-    `DAPI mean (0.43 µm/px)`. The same channel at another level is
+    `DAPI mean (0.85 µm/px)`. The same channel at another level is
     another column.
 
 - **D6. One threshold per channel, applied while measuring.**
-  - It is in the image's units. It starts at the channel's contrast minimum
-    on the canvas: what the canvas shows as above background. Reopened by
-    the spike, since that minimum is 0 on the demo: see
-    [Open Questions](#open-questions).
+  - It is in the image's units. It starts at Otsu's threshold on the
+    pixels auto-contrast samples from the coarsest level, leaving out
+    zeros: 2,176 on the demo's DAPI. The canvas contrast minimum was the
+    first choice, but it is 0 on the demo, where 17% of the coarsest level
+    lies outside the scan, so every cell would be 100% above it.
   - It is shown on the channel's histogram.
-  - Changing it measures the channel again (70–146 s on the demo at
-    level 1 in the spike).
+  - Changing it measures the channel again (about 20 s on the demo at
+    level 2).
 
 - **D7. Read budget.**
   - The read is worked out before it starts. On TIFF it is exact, from the
@@ -365,7 +375,8 @@ the others stand as proposed.
     the chunk's decoded size.
   - The budget is per channel. Above 1 GiB the condition asks first:
     "Measuring DAPI reads 1.6 GiB. Measure?" (level 0 on the demo). At
-    level 1 the demo reads 646 MB per channel and does not ask.
+    level 2 the demo reads 180 MB per channel and does not ask; at level 1,
+    646 MB.
   - Above 8 GiB it refuses and suggests a coarser level, as
     `plotReadDecision` does for genes.
 
@@ -378,11 +389,11 @@ the others stand as proposed.
     z-stack, the threshold for `% above`, the radius where cells have no
     area (D4), and the channel ID, in that order. The channel ID goes last
     because it may contain colons (`Channel:0`, `{layer}:Channel:0`). For
-    example, `image:above:1:t1200:Channel:0|at-least|40` on Xenium, or
-    `image:mean:1:r5:Channel:0|at-least|300` on MERSCOPE.
+    example, `image:above:2:t2176:Channel:0|at-least|40` on Xenium, or
+    `image:mean:2:r5:Channel:0|at-least|300` on MERSCOPE.
   - A link with an image condition measures on opening, once the dataset
     is ready, without a click. D7's question and refusal still apply. On
-    the demo, a link with three channels at level 1 reads about 1.9 GB as
+    the demo, a link with three channels at level 2 reads about 540 MB as
     it opens, with progress and `Cancel`.
   - A channel the image does not have is noted and left out, as other
     columns are.
@@ -414,8 +425,9 @@ the others stand as proposed.
    - It returns, transferred, per cell: the sum of values
      (`Float64Array`), the pixel count and the count at or above the
      threshold (`Uint32Array`s).
-   - At level 1 on the demo a tile with tissue holds 1,379 cells at the
-     median and 6,566 at most: 22 KB and 105 KB each way.
+   - At level 2 on the demo a tile with tissue holds 4,793 cells at the
+     median and 25,010 at most: 77 KB and 400 KB each way. At level 1 it
+     is 1,379 and 6,566 cells.
 4. **Adding up.**
    - A `CellImageMeasurer` adds each tile's results into per-channel
      arrays, kept in private fields and never passed as props. React 19's
@@ -473,6 +485,10 @@ the others stand as proposed.
     were.
 - [ ] **E. The measurer.** (M) `CellImageMeasurer` in `src/features/query/`.
   - Cells into the frame, the level (D5), buckets and tile order.
+  - The default threshold (D6): Otsu's on the samples
+    `computeChannelAutoContrast` reads (`morphologyContrast.ts:75`),
+    leaving out zeros, kept beside the percentiles. Tests on a two-peak
+    sample set and on one with a block of zeros.
   - The read estimate and budget (D7), request slots, progress, cancel,
     adding up and the columns.
   - Unit tests with a fake loader: flipped and swapped placements, an
@@ -519,19 +535,19 @@ the others stand as proposed.
 
 ## Risks
 
-| Risk                                        | Effect                                                      | Mitigation                                                                                             |
-| ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| A slow host (BioImage Archive, 3–10 MB/s)   | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                        |
-| The app's slow JPEG 2000 decoder            | Decoding, not the network, sets the pace: 156 s per channel | Task A2 switches to the decode-only wasm build, 4.2 times faster                                       |
-| A threshold of 0 by default                 | `% above` is 100 for every cell on the demo                 | A new default ([Open Questions](#open-questions))                                                      |
-| A disc is not the cell                      | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference |
-| Values depend on the level                  | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                               |
-| A pyramid made by subsampling               | Noisier means at coarse levels                              | The spike compares level 1 with level 0                                                                |
-| The measurement competes with the canvas    | The canvas stutters while measuring                         | A separate pool of `cores − 2` workers; the spike measures the frame rate                              |
-| The pass evicts the byte-range cache        | The canvas and the readers lose their cached bytes          | No writes for measurement reads (D8)                                                                   |
-| Large typed arrays in React props           | React 19's dev build walks them; dev tabs crash             | Sums and columns stay in the measurer's private fields and the query worker                            |
-| Many cells × many channels                  | Tab memory                                                  | Three channels (D2): 16 bytes per cell per channel while measuring; a column is 8 bytes per cell       |
-| A threshold or radius change measures again | 70–146 s per channel on the demo at level 1                 | Per-cell histograms later; the default comes from the canvas contrast; `Resolution` offers level 2     |
+| Risk                                        | Effect                                                      | Mitigation                                                                                              |
+| ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| A slow host (BioImage Archive, 3–10 MB/s)   | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                         |
+| The app's slow JPEG 2000 decoder            | Decoding, not the network, sets the pace: 156 s per channel | Task A2 switches to the decode-only wasm build, 4.2 times faster                                        |
+| A threshold of 0 by default                 | `% above` is 100 for every cell on the demo                 | Otsu's threshold, leaving out zeros (D6)                                                                |
+| A disc is not the cell                      | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference  |
+| Values depend on the level                  | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                                |
+| A pyramid made by subsampling               | Noisier means at coarse levels                              | Level 1 averages; level 2 is within 1.6% of level 0 at the median, 7.9% at p99; level 1 in `Resolution` |
+| The measurement competes with the canvas    | The canvas stutters while measuring                         | A separate pool of `cores − 2` workers; the spike measures the frame rate                               |
+| The pass evicts the byte-range cache        | The canvas and the readers lose their cached bytes          | No writes for measurement reads (D8)                                                                    |
+| Large typed arrays in React props           | React 19's dev build walks them; dev tabs crash             | Sums and columns stay in the measurer's private fields and the query worker                             |
+| Many cells × many channels                  | Tab memory                                                  | Three channels (D2): 16 bytes per cell per channel while measuring; a column is 8 bytes per cell        |
+| A threshold or radius change measures again | About 20 s per channel on the demo at level 2               | Per-cell histograms later; a default from the image's own histogram (D6)                                |
 
 ## Docs To Update
 
@@ -543,32 +559,18 @@ the others stand as proposed.
 - `docs/architecture.md`: the `measure` requests and `CellImageMeasurer`.
 - `PLAN.md`: this phase's row.
 
-## Open Questions
-
-Reopened by the spike, for the user, before M1:
-
-1. **Default level.** One channel at level 1 took 70–146 s on the demo, and
-   three would take 3½–7 minutes. One channel at level 2 took 20 s. Keep
-   level 1, or start at level 2 and offer level 1 in `Resolution`?
-2. **Default threshold.** The canvas contrast minimum is 0 on the demo, so
-   every cell is 100% above it. Some possible defaults:
-   - Otsu's threshold on the samples auto-contrast already reads, leaving
-     out zeros: 2,176 on DAPI.
-   - The canvas minimum only once the user has set it, with no `% above`
-     column until then.
-   - No default: `% above` waits for a threshold to be entered.
-
 ## Answered Questions
 
-Answered by the user on 2026-11-19 and folded into the decisions. The spike
-reopened the first two ([Open Questions](#open-questions)).
+Answered by the user on 2026-11-19 and folded into the decisions. The
+spike reopened the first two, and the user answered them again the same
+day.
 
-1. **Default level: level 1** (D5), not the coarser level 2. The median
-   cell covers about 250 pixels on the demo rather than 64, so fewer of
-   its pixels sit at the disc's edge, where they mix with neighbours.
-   Three channels read about 1.9 GB rather than 540 MB.
-2. **Default threshold: the canvas's contrast minimum** (D6), not an
-   automatic threshold such as Otsu's.
+1. **Default level: level 2** (D5). The first answer was level 1. The spike
+   then took 70–146 s for one channel at level 1, 3½–7 minutes for three,
+   against 20 s for one at level 2. Level 1 stays in `Resolution`.
+2. **Default threshold: Otsu's, leaving out zeros** (D6). The first answer
+   was the canvas's contrast minimum, which the spike found is 0 on the
+   demo.
 3. **Cells without an area: a `Radius` field in the panel** (D4), 5 µm to
    start, not a median taken from a platform column.
 4. **Links: measure on opening** (D9), not on a click.
