@@ -1735,9 +1735,9 @@ Each PR updates the docs it affects. The full list:
 - [x] Outlines with no cell colour are drawn in a dimmer neutral grey, not
       mint over a green fill (#118, 2026-11-15). `docs/architecture.md` lists
       where the default colours are set.
-- [x] The window toggles moved to the top bar (2026-11-19). `Show
-    Embedding`, `Show Plots` and `Show Query` sat in Cells › Panels, below
-      the genes and clusters, about 1,280 px down the panel at 1024 × 768,
+- [x] The window toggles moved to the top bar (2026-11-19).
+      `Show Embedding`, `Show Plots` and `Show Query` sat in Cells › Panels,
+      below the genes and clusters, about 1,280 px down the panel at 1024 × 768,
       and people did not find them. They are now `Embedding`, `Plots` and
       `Query` (`aria-pressed`, one name whether open or not) in a `Panels`
       group between the tools and Share, above where the windows open. From
