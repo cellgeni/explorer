@@ -16,8 +16,9 @@ as they are. The work is in measuring them: reading the image under every
 cell, in workers, without stalling the page or flushing the caches.
 
 The decisions below are the defaults discussed with the user on
-2026-11-19, written down for review. None is final until the user confirms
-it; the [Open Questions](#open-questions) are the ones most worth a look.
+2026-11-19. The user answered the plan's open questions the same day
+([Answered Questions](#answered-questions)); D4, D5, D6 and D9 carry the
+answers.
 
 The plan rests on a code map made on 2026-11-19 at `b438945`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -98,7 +99,8 @@ estimates, not measurements; task A measures them in the browser.
 | 1     | ~20 s  | 16–65 s  | 20–65 s     |
 | 2     | ~6.5 s | 4.5–18 s | 7–18 s      |
 
-Three channels at level 2 read about 540 MB, in 20 s to a minute. Images
+Three channels at level 1, the default (D5), read about 1.9 GB, in 1–3
+minutes. At level 2 they read about 540 MB, in 20 s to a minute. Images
 on the BioImage Archive read at roughly 3–10 MB/s and take several times
 longer. The 19-plex tonsil QPTIFF is about 0.5 GB per channel at full
 resolution (0.507 µm/px).
@@ -214,7 +216,8 @@ What is missing:
 
 ## Product Decisions
 
-Proposed 2026-11-19, for the user to confirm.
+Proposed 2026-11-19. D4, D5, D6 and D9 are settled by the user's answers;
+the others stand as proposed.
 
 - **D1. Two columns per channel.**
   - `{channel} mean`: the mean of the cell's pixels in the image's own
@@ -233,9 +236,9 @@ Proposed 2026-11-19, for the user to confirm.
   - A channel stops counting when no condition or table column uses it.
   - Measurements stay for the dataset while it is open.
 
-  Three keeps a measurement under about a minute on the demo at level 2.
-  It also keeps memory near 70 MB while measuring (16 bytes per cell per
-  channel) and 70 MB of kept columns.
+  Three keeps a measurement to 1–3 minutes on the demo at level 1 (about
+  1.9 GB). It also keeps memory near 70 MB while measuring (16 bytes per
+  cell per channel) and 70 MB of kept columns.
 
 - **D3. Every cell, measured once per channel.**
   - A condition on an image column waits for the whole measurement. The
@@ -250,34 +253,37 @@ Proposed 2026-11-19, for the user to confirm.
   - The disc is centred on the cell's position, with the cell's area where
     the platform gives one (`cellArea`; radius √(area/π)).
   - Where it does not (MERSCOPE, SpatialData, AnnData other than Visium),
-    a `Radius` field in the Image group sets it, 5 µm by default.
+    a `Radius` field in the Image group sets it, 5 µm to start. Changing
+    it measures the channels in use again. The radius is in the link (D9).
   - A pixel counts when its centre is inside the disc. A pixel inside
     several discs counts for the cell whose centre is nearest relative to
     its radius, so neighbours do not share pixels.
   - Outlines and label masks are [later](#later).
 
 - **D5. One pyramid level per measurement.**
-  - The default is the coarsest level at which the median cell covers at
-    least 64 pixels: level 2 on the Xenium demo.
-  - `Resolution` lists the finer levels with µm per pixel and the size of
-    their read.
+  - The default is level 1, one step coarser than full resolution, or
+    level 0 on an image with one level. On the Xenium demo that is
+    0.43 µm/px, with 258 pixels in the median cell.
+  - `Resolution` lists every level with µm per pixel and the size of its
+    read.
   - The level is part of the column: the label and the CSV header say
-    `DAPI mean (0.85 µm/px)`. The same channel at another level is
+    `DAPI mean (0.43 µm/px)`. The same channel at another level is
     another column.
 
 - **D6. One threshold per channel, applied while measuring.**
   - It is in the image's units. It starts at the channel's contrast minimum
     on the canvas: what the canvas shows as above background.
   - It is shown on the channel's histogram.
-  - Changing it measures the channel again (7–18 s per channel on the
-    demo at level 2).
+  - Changing it measures the channel again (20–65 s on the demo at
+    level 1).
 
 - **D7. Read budget.**
   - The read is worked out before it starts. On TIFF it is exact, from the
     chunk index. On OME-Zarr it is an upper bound: the chunk count times
     the chunk's decoded size.
-  - Above 1 GiB the condition asks first: "Measuring DAPI reads 1.7 GiB.
-    Measure?".
+  - The budget is per channel. Above 1 GiB the condition asks first:
+    "Measuring DAPI reads 1.6 GiB. Measure?" (level 0 on the demo). At
+    level 1 the demo reads 646 MB per channel and does not ask.
   - Above 8 GiB it refuses and suggests a coarser level, as
     `plotReadDecision` does for genes.
 
@@ -287,12 +293,15 @@ Proposed 2026-11-19, for the user to confirm.
   the other readers keep there.
 - **D9. In the link.**
   - The column ID carries the statistic, the level, the z plane for a
-    z-stack, the threshold for `% above`, and the channel ID, in that
-    order. The channel ID goes last because it may contain colons
-    (`Channel:0`, `{layer}:Channel:0`). For example,
-    `image:above:2:t1200:Channel:0|at-least|40`.
-  - A link with an image condition starts measuring when the dataset is
-    ready, subject to D7.
+    z-stack, the threshold for `% above`, the radius where cells have no
+    area (D4), and the channel ID, in that order. The channel ID goes last
+    because it may contain colons (`Channel:0`, `{layer}:Channel:0`). For
+    example, `image:above:1:t1200:Channel:0|at-least|40` on Xenium, or
+    `image:mean:1:r5:Channel:0|at-least|300` on MERSCOPE.
+  - A link with an image condition measures on opening, once the dataset
+    is ready, without a click. D7's question and refusal still apply. On
+    the demo, a link with three channels at level 1 reads about 1.9 GB as
+    it opens, with progress and `Cancel`.
   - A channel the image does not have is noted and left out, as other
     columns are.
 - **D10. The plane the canvas shows.** On a z-stack, a measurement reads
@@ -323,8 +332,8 @@ Proposed 2026-11-19, for the user to confirm.
    - It returns, transferred, per cell: the sum of values
      (`Float64Array`), the pixel count and the count at or above the
      threshold (`Uint32Array`s).
-   - At level 2 on the demo that is about 6,000 cells, or 100 KB each
-     way, per tile.
+   - At level 1 on the demo that is about 1,600 cells, or 26 KB each way,
+     per tile with tissue.
 4. **Adding up.**
    - A `CellImageMeasurer` adds each tile's results into per-channel
      arrays, kept in private fields and never passed as props. React 19's
@@ -343,14 +352,14 @@ Proposed 2026-11-19, for the user to confirm.
 ## Tasks
 
 - [ ] **A. Measurement spike.** (S) A throwaway measurement of one channel
-      of the Xenium demo at level 2 in the browser.
+      of the Xenium demo at level 1 in the browser.
   - Record tiles per second, MB/s, the main thread's long tasks and the
     canvas's frame rate while it runs.
   - Compare a few hundred cells' means with a tifffile and numpy reference
-    using the same discs, and level-2 means with level-0 means. The second
+    using the same discs, and level-1 means with level-0 means. The second
     comparison shows whether the pyramid averages or subsamples.
-  - Record the numbers in this file. If one channel takes over a minute on
-    the dev Mac, revisit D3 and D5 before going on.
+  - Record the numbers in this file. If one channel takes over 90 s on the
+    dev Mac, revisit D3 and D5 before going on.
 - [ ] **B. Measuring a tile.** (M) A pure
       `measureTileCells(pixels, width, height, cells, threshold)` in
       `src/data/`, beside `tileSamples.ts`.
@@ -421,17 +430,17 @@ Proposed 2026-11-19, for the user to confirm.
 
 ## Risks
 
-| Risk                                      | Effect                                                      | Mitigation                                                                                             |
-| ----------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| A slow host (BioImage Archive, 3–10 MB/s) | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                        |
-| A disc is not the cell                    | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference |
-| Values depend on the level                | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                               |
-| A pyramid made by subsampling             | Noisier means at coarse levels                              | The spike compares level 2 with level 0                                                                |
-| The measurement competes with the canvas  | The canvas stutters while measuring                         | A separate pool of `cores − 2` workers; the spike measures the frame rate                              |
-| The pass evicts the byte-range cache      | The canvas and the readers lose their cached bytes          | No writes for measurement reads (D8)                                                                   |
-| Large typed arrays in React props         | React 19's dev build walks them; dev tabs crash             | Sums and columns stay in the measurer's private fields and the query worker                            |
-| Many cells × many channels                | Tab memory                                                  | Three channels (D2): 16 bytes per cell per channel while measuring; a column is 8 bytes per cell       |
-| A threshold change measures again         | 7–18 s per change on the demo                               | Per-cell histograms later; the default comes from the canvas contrast                                  |
+| Risk                                        | Effect                                                      | Mitigation                                                                                             |
+| ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| A slow host (BioImage Archive, 3–10 MB/s)   | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                        |
+| A disc is not the cell                      | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference |
+| Values depend on the level                  | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                               |
+| A pyramid made by subsampling               | Noisier means at coarse levels                              | The spike compares level 1 with level 0                                                                |
+| The measurement competes with the canvas    | The canvas stutters while measuring                         | A separate pool of `cores − 2` workers; the spike measures the frame rate                              |
+| The pass evicts the byte-range cache        | The canvas and the readers lose their cached bytes          | No writes for measurement reads (D8)                                                                   |
+| Large typed arrays in React props           | React 19's dev build walks them; dev tabs crash             | Sums and columns stay in the measurer's private fields and the query worker                            |
+| Many cells × many channels                  | Tab memory                                                  | Three channels (D2): 16 bytes per cell per channel while measuring; a column is 8 bytes per cell       |
+| A threshold or radius change measures again | 20–65 s per channel on the demo at level 1                  | Per-cell histograms later; the default comes from the canvas contrast; `Resolution` offers level 2     |
 
 ## Docs To Update
 
@@ -443,21 +452,19 @@ Proposed 2026-11-19, for the user to confirm.
 - `docs/architecture.md`: the `measure` requests and `CellImageMeasurer`.
 - `PLAN.md`: this phase's row.
 
-## Open Questions
+## Answered Questions
 
-For the user, before M1:
+Answered by the user on 2026-11-19 and folded into the decisions:
 
-1. **Default level.** Should the median cell cover 64 pixels (level 2 on
-   the demo, about 540 MB for three channels) or about 250 (level 1, about
-   1.9 GB)? Level 1 halves the share of pixels at the disc's edge, which
-   mix with neighbours, but reads 3.6 times as much.
-2. **Default threshold.** Should it be the canvas's contrast minimum (D6),
-   or an automatic threshold, such as Otsu's on the channel's histogram?
-3. **Cells without an area.** Should they use a fixed 5 µm radius field
-   (D4), or the median area of a platform column where one exists, such as
-   MERSCOPE's cell volume?
-4. **Links.** Should a link with an image condition measure on opening
-   (D9), or wait for a click?
+1. **Default level: level 1** (D5), not the coarser level 2. The median
+   cell covers about 250 pixels on the demo rather than 64, so fewer of
+   its pixels sit at the disc's edge, where they mix with neighbours.
+   Three channels read about 1.9 GB rather than 540 MB.
+2. **Default threshold: the canvas's contrast minimum** (D6), not an
+   automatic threshold such as Otsu's.
+3. **Cells without an area: a `Radius` field in the panel** (D4), 5 µm to
+   start, not a median taken from a platform column.
+4. **Links: measure on opening** (D9), not on a click.
 
 ## Later
 
