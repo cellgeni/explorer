@@ -1746,6 +1746,17 @@ Each PR updates the docs it affects. The full list:
       tools have. The dataset name now shrinks, after the summary chip, so
       ⓘ no longer runs under the tools at 860–1000 px (it did before) or on
       phones.
+- [x] The Embedding, Plots and Cell Query windows move (2026-11-19). They
+      could only be resized, so a window over the tissue stayed there.
+      Dragging the title bar moves one, after 3 px so a click does not; the
+      ⠿ button beside Close moves it by arrow keys and says where it is.
+      A moved window is placed from the canvas's top right, as the resize
+      grip at its bottom left expects, and CSS `min()`/`max()` keep it inside
+      the canvas as the canvas shrinks. It keeps its place while closed and
+      stops following the other windows' widths (22-D8, 23-D9); the others
+      keep their slots, so nothing moves on its own. The window last
+      clicked or focused is drawn over the others. Under 860 px the windows
+      span the canvas and do not move. Opening a window still focuses Close.
 
 Gene scale and annotation class changes are in
 [Phase 4](04-genes-annotations.md#gene-scale-and-annotation-classes-november-2026),

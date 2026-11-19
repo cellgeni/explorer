@@ -142,6 +142,9 @@ export function ShellLayout({
   const handlePlotsSizeChange = useCallback((size: { readonly width: number }) => {
     setPlotsWidth(size.width)
   }, [])
+  // The window last clicked or focused is drawn over the others, which
+  // overlap once moved.
+  const [frontWindow, setFrontWindow] = useState<PanelToggle['panel'] | null>(null)
   const embeddingShown = embedding !== null && embeddingOpen
   const plotsShown = plots !== null && plotsOpen
   // The Cell Query window mounts the first time it opens, so a session that
@@ -268,6 +271,10 @@ export function ShellLayout({
                 onClose={() => {
                   setEmbeddingOpen(false)
                 }}
+                front={frontWindow === 'embedding'}
+                onActivate={() => {
+                  setFrontWindow('embedding')
+                }}
                 onSizeChange={handleEmbeddingSizeChange}
               />
             )}
@@ -283,6 +290,10 @@ export function ShellLayout({
                 open={plotsOpen}
                 onClose={() => {
                   setPlotsOpen(false)
+                }}
+                front={frontWindow === 'plots'}
+                onActivate={() => {
+                  setFrontWindow('plots')
                 }}
                 onSizeChange={handlePlotsSizeChange}
               />
@@ -301,6 +312,10 @@ export function ShellLayout({
                 open={queryOpen}
                 onClose={() => {
                   setQueryOpen(false)
+                }}
+                front={frontWindow === 'query'}
+                onActivate={() => {
+                  setFrontWindow('query')
                 }}
               />
             )}

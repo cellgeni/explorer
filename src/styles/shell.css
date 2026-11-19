@@ -32,8 +32,9 @@
   overflow: hidden;
 }
 
-/* Floating windows (15.2-G, 22-D8): Embedding and Plots, top right of the
-   canvas, resized from the grip at their bottom left. */
+/* Floating windows (15.2-G, 22-D8): Embedding, Plots and Cell Query, top
+   right of the canvas until moved by their title bar, resized from the grip
+   at their bottom left. */
 .shell-floating {
   position: absolute;
   z-index: var(--z-cards);
@@ -114,6 +115,36 @@
 .shell-floating-resize:hover,
 .shell-floating-resize:focus-visible {
   color: var(--text-1);
+}
+
+/* Dragging the title bar moves a window; the grip button beside Close moves
+   it by arrow keys. */
+.shell-floating-title {
+  cursor: move;
+  touch-action: none;
+  user-select: none;
+}
+
+.shell-floating-move.ui-button {
+  cursor: move;
+}
+
+/* A moved window keeps its place from the top right, but stays inside the
+   canvas when the canvas shrinks under it. */
+.shell-floating.is-moved {
+  top: max(
+    var(--space-3),
+    min(var(--floating-top), calc(100% - var(--floating-height) - var(--space-3)))
+  );
+  right: max(
+    var(--space-3),
+    min(var(--floating-right), calc(100% - var(--floating-width) - var(--space-3)))
+  );
+}
+
+/* The window last clicked or focused is drawn over the others. */
+.shell-floating.is-front {
+  z-index: calc(var(--z-cards) + 1);
 }
 
 /* Plots panel (22-D8): the controls, the plot or its table, which scroll

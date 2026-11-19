@@ -720,8 +720,17 @@ canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
 260 px up to the canvas, and the plot redraws at its new size. The grip's
 description is the size ("360 by 400 px"), announced again after each change.
-Opening the panel moves focus into it, and closing it returns focus to
-`Embedding` (or, under 860 px, the `Panels` menu's button).
+Dragging its title bar moves it anywhere over the canvas; a press that moves
+less than 3 px leaves it in place. The ⠿ button beside Close (`Move the
+embedding panel`) moves it 20 px per arrow key, and its description is the
+place ("12 px from the top, 12 px from the right"), announced again after
+each move. A moved panel keeps its distance from the canvas's top right,
+stays inside the canvas when the canvas shrinks, no longer follows the other
+panels' widths, and keeps its place while closed. The panel last clicked or
+focused is drawn over the others. Under 860 px it spans the canvas and does
+not move. Opening the panel moves focus to `Close embedding`, and closing it
+returns focus to `Embedding` (or, under 860 px, the `Panels` menu's
+button).
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -738,7 +747,8 @@ selections: a dot plot, a violin plot or a group-mean heatmap ([plan 22](plan/ph
 `Plots` in the top bar and closes with `Close plots` or Esc. It sits at the top
 right of the canvas, 480 × 420 px at first, or to the left of the Embedding
 panel when that is open. Its grip resizes it from 320 × 280 px up to the
-canvas, as the Embedding panel's does.
+canvas, and its title bar and `Move the plots panel` move it, as the
+Embedding panel's do.
 
 | Control               | Notes                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -869,7 +879,8 @@ in a table ([plan 23](plan/phases/23-cell-query.md); `src/features/query/`,
 and closes with `Close cell query` or Esc. It sits at the top right of the
 canvas, 520 × 460 px at first, to the left of the Embedding and Plots panels
 when they are open. Its grip resizes it from 360 × 300 px up to the canvas,
-as the Embedding panel's does. Its status line says how many cells match
+and its title bar and `Move the cell query panel` move it, as the Embedding
+panel's do. Its status line says how many cells match
 ("1,234 of 56,789 cells match"). It is offered on every platform with cells
 or spots but Visium HD, whose bins are not listed one by one.
 

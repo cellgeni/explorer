@@ -246,6 +246,15 @@ export function StackIcon() {
   )
 }
 
+// The handle that moves a floating window.
+export function GripIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M6 3.5h0M10 3.5h0M6 8h0M10 8h0M6 12.5h0M10 12.5h0" strokeWidth="2.5" />
+    </svg>
+  )
+}
+
 // Annotation sets.
 
 export function EyeIcon() {

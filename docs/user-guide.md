@@ -393,7 +393,10 @@ nothing they cover has changed since.
 
 The Embedding, Plots and Cell Query panels open and close from `Embedding`,
 `Plots` and `Query` at the right of the top bar; on a narrow screen they are
-in its `Panels` menu. A dataset shows only the panels it has.
+in its `Panels` menu. A dataset shows only the panels it has. Drag a
+panel's title bar to move it (or focus the ⠿ button beside its × and use the
+arrow keys), and drag the grip at its bottom left to resize it; the panel
+last clicked comes to the front.
 
 The Embedding panel, opened from `Embedding` in the top bar, loads UMAP/t-SNE or
 H5AD `obsm` embeddings when the dataset provides them. Clicking an embedding
