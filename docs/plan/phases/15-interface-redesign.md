@@ -914,7 +914,9 @@ viewport`; the pinned transcript is in the Transcript card, and the
     - `EmbeddingPanel` redraws when its canvas is resized (a
       `ResizeObserver`).
     - The Cells section has Embedding › `Show Embedding`. With the embeddings
-      gone from the HUD, the new shell renders no HUD.
+      gone from the HUD, the new shell renders no HUD. **Superseded
+      (2026-11-19):** the toggle is `Embedding` in the top bar; see
+      [Additions After The Close-Out](#additions-after-the-close-out).
 - [x] **H. URL panel state.** Add `panel=`, `card=` and `tool=`, and map
       version 1 `tab=` values. (S)
   - dataset → info drawer
@@ -1733,6 +1735,40 @@ Each PR updates the docs it affects. The full list:
 - [x] Outlines with no cell colour are drawn in a dimmer neutral grey, not
       mint over a green fill (#118, 2026-11-15). `docs/architecture.md` lists
       where the default colours are set.
+- [x] The window toggles moved to the top bar (2026-11-19).
+      `Show Embedding`, `Show Plots` and `Show Query` sat in Cells › Panels,
+      below the genes and clusters, about 1,280 px down the panel at 1024 × 768,
+      and people did not find them. They are now `Embedding`, `Plots` and
+      `Query` (`aria-pressed`, one name whether open or not) in a `Panels`
+      group between the tools and Share, above where the windows open. From
+      1100 px they show icon and name; from 860 px the icon only, as the
+      names would run under the tools; under 860 px a `Panels` menu, as the
+      tools have. The dataset name now shrinks, after the summary chip, so
+      ⓘ no longer runs under the tools at 860–1000 px (it did before) or on
+      phones.
+- [x] The Embedding, Plots and Cell Query windows move (2026-11-19). They
+      could only be resized, so a window over the tissue stayed there.
+      Dragging the title bar moves one, after 3 px so a click does not; the
+      ⠿ button beside Close moves it by arrow keys and says where it is.
+      A moved window is placed from the canvas's top right, as the resize
+      grip at its bottom left expects, and CSS `min()`/`max()` keep it inside
+      the canvas as the canvas shrinks. It keeps its place while closed and
+      stops following the other windows' widths (22-D8, 23-D9); the others
+      keep their slots, so nothing moves on its own. The window last
+      clicked or focused is drawn over the others. Under 860 px the windows
+      span the canvas and do not move. Opening a window still focuses Close.
+- [x] A window with no room beside the others opens at full size over them
+      (2026-11-19). Each opened to the left of the open ones with its width
+      cut to the room left: with Embedding and Plots open, Cell Query was
+      about 200 px wide on a 1,080 px canvas (1440 px screen), and Plots was
+      272 px, under its 320 px minimum, at 1024 px. Every window now keeps its
+      size and slides only as far left (or up) as the canvas allows, over the
+      others and in front, since opening focuses it. The same CSS clamp keeps
+      moved windows inside the canvas. Resizing a window the canvas has
+      pushed from its slot first pins it where it is drawn, so its right edge
+      stays put and the grip follows the pointer. The Move button's
+      description is where the window is drawn, from the canvas's size while
+      the window is open.
 
 Gene scale and annotation class changes are in
 [Phase 4](04-genes-annotations.md#gene-scale-and-annotation-classes-november-2026),

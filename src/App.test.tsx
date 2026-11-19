@@ -2696,8 +2696,7 @@ describe('App', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
     await screen.findByText(/^Xenium · 1 cell/)
 
-    const panel = screen.getByRole('complementary', { name: 'Layers' })
-    fireEvent.click(within(panel).getByRole('button', { name: 'Show Embedding' }))
+    openControls('embedding')
     const embedding = screen.getByRole('region', { name: 'Embedding' })
     fireEvent.click(within(embedding).getByRole('button', { name: 'Load Embeddings' }))
 
