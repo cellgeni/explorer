@@ -1,6 +1,7 @@
 # Phase 25 — Image Channel Conditions
 
-Planned 2026-11-19. Not started. Requested: filter cells by the presence or
+Planned 2026-11-19. The spike (task A) ran the same day; nothing else is
+started. Requested: filter cells by the presence or
 intensity of up to three image channels inside each cell, in the Cell Query
 window ([Phase 23](23-cell-query.md)).
 
@@ -18,7 +19,8 @@ cell, in workers, without stalling the page or flushing the caches.
 The decisions below are the defaults discussed with the user on
 2026-11-19. The user answered the plan's open questions the same day
 ([Answered Questions](#answered-questions)); D4, D5, D6 and D9 carry the
-answers.
+answers. The spike reopened two of them, the default level and the default
+threshold ([Open Questions](#open-questions)).
 
 The plan rests on a code map made on 2026-11-19 at `b438945`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -80,8 +82,10 @@ measured; the other three channels' files may differ in size.
   percentile 18.7, 95th 100.5). The median nucleus is 26.3 µm².
 - About three quarters of the tiles hold tissue (over 100 KB). The rest
   are nearly empty background.
-- JPEG 2000 decode, with the app's codec (`@cornerstonejs/codec-openjpeg`)
-  in Node 25 on one thread, including a sum over every pixel:
+- JPEG 2000 decode in Node 25 on one thread, including a sum over every
+  pixel, with the decode-only wasm build of `@cornerstonejs/codec-openjpeg`.
+  The app loads the package's slower default build
+  ([Spike Results](#spike-results-2026-11-19)).
   - level 0: 67 ms for a 615 KB tile (75th percentile size), 89 ms for the
     largest (929 KB);
   - level 2: 99 ms for a 1,028 KB tile (75th percentile), 123 ms for the
@@ -90,8 +94,9 @@ measured; the other three channels' files may differ in size.
   boundaries are not read in this phase (D4).
 
 Estimated time per channel, with 4 decode workers (`min(4, cores)`,
-`tileDecodePool.ts:263-265`) and 10–40 MB/s from Sanger. These are
-estimates, not measurements; task A measures them in the browser.
+`tileDecodePool.ts:263-265`) and 10–40 MB/s from Sanger. These were
+estimates. The spike measured slower times, since the bucket gave 4–9 MB/s
+([Spike Results](#spike-results-2026-11-19)).
 
 | Level | Decode | Read     | Per channel |
 | ----- | ------ | -------- | ----------- |
@@ -104,6 +109,80 @@ minutes. At level 2 they read about 540 MB, in 20 s to a minute. Images
 on the BioImage Archive read at roughly 3–10 MB/s and take several times
 longer. The 19-plex tonsil QPTIFF is about 0.5 GB per channel at full
 resolution (0.507 µm/px).
+
+## Spike Results (2026-11-19)
+
+Task A. A throwaway measurer, not committed, ran in a production build in
+headless Chromium on the Mac's GPU (Apple M3, 4 performance and 4
+efficiency cores), 1280 × 800, with the Xenium demo open at the brain view.
+It measured DAPI (`morphology_focus_0000.ome.tif`) under all 1,414,155 cells
+with D4's discs and pixel ownership. It used 4 workers, 6 fetches at a
+time, 12 tiles in flight, and no byte-range cache (D8). Times run from
+bucketing the cells to the last tile.
+
+| Decoder          | Level | Canvas  | Tiles | MB  | Time  | MB/s | Decode per tile, median and p95 | Limit   |
+| ---------------- | ----- | ------- | ----- | --- | ----- | ---- | ------------------------------- | ------- |
+| The app's        | 1     | Idle    | 910   | 643 | 156 s | 4.1  | 415 ms, 1,512 ms                | Decode  |
+| The app's        | 1     | Panning | 910   | 643 | 283 s | 2.3  | 1,233 ms, 1,750 ms              | Decode  |
+| The app's        | 2     | Idle    | 248   | 180 | 83 s  | 2.2  | 1,296 ms, 1,799 ms              | Decode  |
+| Decode-only wasm | 1     | Idle    | 910   | 643 | 146 s | 4.4  | 99 ms, 138 ms                   | Network |
+| Decode-only wasm | 1     | Panning | 910   | 643 | 70 s  | 9.2  | 98 ms, 135 ms                   | Network |
+| Decode-only wasm | 2     | Idle    | 248   | 180 | 20 s  | 8.9  | 102 ms, 147 ms                  | Network |
+
+- **The app decodes JPEG 2000 with the slow build.** `jpeg2000.ts:149`
+  imports the package's default build, `openjpegjs.js`. Its decode-only
+  wasm build, `openjpegwasm_decode.js`, decodes the same tiles 4.2 times
+  faster in the browser, with identical values. In Node it is 2.4–3 times
+  faster: 74 against 223 ms for a level-0 tile, 112 against 270 ms for a
+  level-2 tile. With the app's build the decode workers are busy for the
+  whole run. Switching builds is its own change, started 2026-11-19. M1
+  needs it, and the canvas gains from it too.
+- **With the fast build, the network is the limit.** The same 643 MB took
+  70–146 s as the bucket moved between 4.4 and 9.2 MB/s. `curl` on the same
+  Mac got 7.0 MB/s on one connection and 7.9 MB/s on six. The bucket serves
+  HTTP/1.1, so Chromium opens at most 6 connections to it, and the canvas's
+  tile reads share them. The 4 workers could decode about 40 tiles, or
+  28 MB, a second.
+- **Over 90 s at level 1.** One channel at level 1 took over 90 s in the
+  slower run, the point task A set for revisiting D3 and D5. Three channels
+  at level 1 (about 1.9 GB) would take 3½–7 minutes at these rates. At
+  level 2 (540 MB) they would take 1–2 minutes.
+- **The main thread stays free.**
+  - Idle runs had 3 long tasks or fewer. The longest was 236 ms, including
+    128 ms of bucketing 1.4 million cells. Frames were 8.3 ms at the median
+    and 9.2 ms at the 95th percentile, with at most 4 over 50 ms.
+  - Adding up the 910 tiles' results took 55 ms in all.
+  - Panning while measuring gave 0.84 long tasks and 95 ms of long tasks a
+    second. Panning alone gave 0.87 and 98 ms. Measuring added nothing
+    visible.
+- **Measuring a tile is cheap.** Giving each pixel to a cell and summing
+  took 7 ms per tile at the median and 16 ms at the 95th percentile. A tile
+  with tissue holds 1,379 cells at the median and 6,566 at most.
+- **The values match the reference exactly.** The reference used tifffile,
+  imagecodecs and numpy, with the same discs and pixel ownership. It covered
+  the 24,368 cells inside a 2 × 2 block of level-1 tiles (x 870–1,741 µm,
+  y 1,741–2,611 µm). Pixel counts, means and the share above 5,000 were the
+  same as the browser's for every cell. Many of the cells cross tile edges,
+  so this checks the bucketing too.
+- **Level 1 averages.** It matches level 0 smoothed over 3 × 3 pixels and
+  taken at even pixels: correlation 0.9997, mean difference 13, against 181
+  between neighbouring level-0 pixels. It is not a plain subsample. Cell
+  means at level 1 and level 0 differ by 0.47% at the median and 2.3% at
+  the 99th percentile (correlation 0.999).
+- **Pixels per cell.** Nearest pixels go to neighbours, so at level 1 a
+  cell has 91, 233 and 519 pixels at the 5th, 50th and 95th percentiles
+  over the slide. The median cell's disc alone covers 258. In the dense
+  block above, the median is 138.
+- **The canvas contrast minimum is 0 on the demo**, for all four channels.
+  Auto-contrast takes the 0.5th percentile of the coarsest level, and 17%
+  of DAPI's coarsest level is 0, outside the scanned area. With D6's
+  default threshold, `% above` is 100 for every cell. For comparison:
+  - Otsu's threshold on the coarsest DAPI level is 2,065, or 2,176 leaving
+    out zeros.
+  - Cell means over the slide are 550, 1,786 and 5,185 at the 5th, 50th
+    and 95th percentiles.
+  - At 5,000, cells in the dense block have 0% to 91% of their pixels
+    above (median 38%).
 
 ## Current State
 
@@ -236,8 +315,8 @@ the others stand as proposed.
   - A channel stops counting when no condition or table column uses it.
   - Measurements stay for the dataset while it is open.
 
-  Three keeps a measurement to 1–3 minutes on the demo at level 1 (about
-  1.9 GB). It also keeps memory near 70 MB while measuring (16 bytes per
+  Three keep a measurement at level 1 on the demo to about 1.9 GB, which
+  took 3½–7 minutes at the spike's rates. They also keep memory near 70 MB while measuring (16 bytes per
   cell per channel) and 70 MB of kept columns.
 
 - **D3. Every cell, measured once per channel.**
@@ -263,7 +342,8 @@ the others stand as proposed.
 - **D5. One pyramid level per measurement.**
   - The default is level 1, one step coarser than full resolution, or
     level 0 on an image with one level. On the Xenium demo that is
-    0.43 µm/px, with 258 pixels in the median cell.
+    0.43 µm/px, with 258 pixels in the median cell. Reopened by the spike:
+    see [Open Questions](#open-questions).
   - `Resolution` lists every level with µm per pixel and the size of its
     read.
   - The level is part of the column: the label and the CSV header say
@@ -272,10 +352,12 @@ the others stand as proposed.
 
 - **D6. One threshold per channel, applied while measuring.**
   - It is in the image's units. It starts at the channel's contrast minimum
-    on the canvas: what the canvas shows as above background.
+    on the canvas: what the canvas shows as above background. Reopened by
+    the spike, since that minimum is 0 on the demo: see
+    [Open Questions](#open-questions).
   - It is shown on the channel's histogram.
-  - Changing it measures the channel again (20–65 s on the demo at
-    level 1).
+  - Changing it measures the channel again (70–146 s on the demo at
+    level 1 in the spike).
 
 - **D7. Read budget.**
   - The read is worked out before it starts. On TIFF it is exact, from the
@@ -332,8 +414,8 @@ the others stand as proposed.
    - It returns, transferred, per cell: the sum of values
      (`Float64Array`), the pixel count and the count at or above the
      threshold (`Uint32Array`s).
-   - At level 1 on the demo that is about 1,600 cells, or 26 KB each way,
-     per tile with tissue.
+   - At level 1 on the demo a tile with tissue holds 1,379 cells at the
+     median and 6,566 at most: 22 KB and 105 KB each way.
 4. **Adding up.**
    - A `CellImageMeasurer` adds each tile's results into per-channel
      arrays, kept in private fields and never passed as props. React 19's
@@ -345,14 +427,17 @@ the others stand as proposed.
      at most 4), so the canvas stays responsive. It is closed when the
      measurement ends.
    - A `TileRequestSlots` of 6 is shared by the channels being measured.
+     An HTTP/1.1 host such as the Sanger bucket allows 6 connections, which
+     the canvas's tile reads share.
    - `Cancel`, a dataset change, or removing the last condition on the
      channel aborts the fetches and the pool's requests, and drops the
      partial sums.
 
 ## Tasks
 
-- [ ] **A. Measurement spike.** (S) A throwaway measurement of one channel
-      of the Xenium demo at level 1 in the browser.
+- [x] **A. Measurement spike.** (S; done 2026-11-19, see
+      [Spike Results](#spike-results-2026-11-19)) A throwaway measurement of
+      one channel of the Xenium demo at level 1 in the browser.
   - Record tiles per second, MB/s, the main thread's long tasks and the
     canvas's frame rate while it runs.
   - Compare a few hundred cells' means with a tifffile and numpy reference
@@ -360,6 +445,10 @@ the others stand as proposed.
     comparison shows whether the pyramid averages or subsamples.
   - Record the numbers in this file. If one channel takes over 90 s on the
     dev Mac, revisit D3 and D5 before going on.
+- [ ] **A2. The fast JPEG 2000 decoder.** (S) Load the decode-only wasm
+      build of `@cornerstonejs/codec-openjpeg` in `jpeg2000.ts`
+      ([Spike Results](#spike-results-2026-11-19)). Started as its own
+      change on 2026-11-19; M1 needs it.
 - [ ] **B. Measuring a tile.** (M) A pure
       `measureTileCells(pixels, width, height, cells, threshold)` in
       `src/data/`, beside `tileSamples.ts`.
@@ -417,7 +506,7 @@ the others stand as proposed.
 
 | Milestone        | Contents                       | Size             |
 | ---------------- | ------------------------------ | ---------------- |
-| M0 — Spike       | A                              | S                |
+| M0 — Spike       | A (done), A2                   | S                |
 | M1 — TIFF images | B, C (TIFF), D, E, F, G        | About 2–2½ weeks |
 | M2 — OME-Zarr    | C (OME-Zarr), SpatialData test | M                |
 
@@ -433,6 +522,8 @@ the others stand as proposed.
 | Risk                                        | Effect                                                      | Mitigation                                                                                             |
 | ------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | A slow host (BioImage Archive, 3–10 MB/s)   | A measurement takes minutes                                 | The estimate and question first (D7), a coarser level, `Cancel`                                        |
+| The app's slow JPEG 2000 decoder            | Decoding, not the network, sets the pace: 156 s per channel | Task A2 switches to the decode-only wasm build, 4.2 times faster                                       |
+| A threshold of 0 by default                 | `% above` is 100 for every cell on the demo                 | A new default ([Open Questions](#open-questions))                                                      |
 | A disc is not the cell                      | Membrane markers are missed, neighbours' signal is included | Docs say so; nearest-centre pixels (D4); outlines and masks later; the spike compares with a reference |
 | Values depend on the level                  | Numbers differ from a pipeline's, and between levels        | The level is in the column's label, the CSV header and the link (D5, D9)                               |
 | A pyramid made by subsampling               | Noisier means at coarse levels                              | The spike compares level 1 with level 0                                                                |
@@ -440,7 +531,7 @@ the others stand as proposed.
 | The pass evicts the byte-range cache        | The canvas and the readers lose their cached bytes          | No writes for measurement reads (D8)                                                                   |
 | Large typed arrays in React props           | React 19's dev build walks them; dev tabs crash             | Sums and columns stay in the measurer's private fields and the query worker                            |
 | Many cells × many channels                  | Tab memory                                                  | Three channels (D2): 16 bytes per cell per channel while measuring; a column is 8 bytes per cell       |
-| A threshold or radius change measures again | 20–65 s per channel on the demo at level 1                  | Per-cell histograms later; the default comes from the canvas contrast; `Resolution` offers level 2     |
+| A threshold or radius change measures again | 70–146 s per channel on the demo at level 1                 | Per-cell histograms later; the default comes from the canvas contrast; `Resolution` offers level 2     |
 
 ## Docs To Update
 
@@ -452,9 +543,25 @@ the others stand as proposed.
 - `docs/architecture.md`: the `measure` requests and `CellImageMeasurer`.
 - `PLAN.md`: this phase's row.
 
+## Open Questions
+
+Reopened by the spike, for the user, before M1:
+
+1. **Default level.** One channel at level 1 took 70–146 s on the demo, and
+   three would take 3½–7 minutes. One channel at level 2 took 20 s. Keep
+   level 1, or start at level 2 and offer level 1 in `Resolution`?
+2. **Default threshold.** The canvas contrast minimum is 0 on the demo, so
+   every cell is 100% above it. Some possible defaults:
+   - Otsu's threshold on the samples auto-contrast already reads, leaving
+     out zeros: 2,176 on DAPI.
+   - The canvas minimum only once the user has set it, with no `% above`
+     column until then.
+   - No default: `% above` waits for a threshold to be entered.
+
 ## Answered Questions
 
-Answered by the user on 2026-11-19 and folded into the decisions:
+Answered by the user on 2026-11-19 and folded into the decisions. The spike
+reopened the first two ([Open Questions](#open-questions)).
 
 1. **Default level: level 1** (D5), not the coarser level 2. The median
    cell covers about 250 pixels on the demo rather than 64, so fewer of
