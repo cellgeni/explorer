@@ -1,5 +1,6 @@
 import type { DisplayWindow, RgbaRenderOptions } from '../codecs/jpeg2000'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
+import type { ZarrChunkSource, ZarrChunkWindow } from '../workers/zarrDecodeMessages'
 import {
   micrometers,
   placeFrameBbox,
@@ -129,6 +130,27 @@ export interface ImagePyramidVolume {
   readonly depth: number
 }
 
+// A level's chunks (OME-Zarr), for passes over a whole level such as Cell
+// Query's image measurements (plan 26): each chunk is fetched and decoded
+// once, however many tiles the canvas cuts it into.
+export interface ImagePyramidChunkGrid {
+  // In the level's pixels; chunks at the right and bottom edges are cut to
+  // the level.
+  readonly chunkWidth: number
+  readonly chunkHeight: number
+  // A chunk decoded, with every channel and plane it holds.
+  readonly chunkBytes: number
+}
+
+// A chunk as stored, with what a decode worker needs to read the loader's
+// channel and plane out of it.
+export interface ImagePyramidChunkRead {
+  readonly source: ZarrChunkSource
+  // Undefined for a chunk the store does not have, which is the fill value.
+  readonly bytes: Uint8Array | undefined
+  readonly window: ZarrChunkWindow
+}
+
 export interface ImagePyramidDecodedTile {
   readonly bitmap: ImageBitmap
   readonly width: number
@@ -186,6 +208,16 @@ export interface ImagePyramidLoader {
     tiles: readonly TileIndex[],
     signal?: AbortSignal,
   ): Promise<number | null>
+  // A level's chunks, for loaders whose chunks a worker can read one by one.
+  chunkGrid?(level: number): ImagePyramidChunkGrid
+  // The chunk at a column and row of chunkGrid's grid. It fails for an image
+  // whose chunks cannot be read one by one, such as a sharded one.
+  readChunk?(
+    level: number,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<ImagePyramidChunkRead>
   loadTile?(
     level: number,
     col: number,

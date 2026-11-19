@@ -457,7 +457,8 @@ cells where a marker covers most of the cell:
    The panel measures the channel under every cell, each cell a disc of its
    area (or of the `Radius` you set where cells have no area), and shows
    `Measuring DAPI… 42%` with `Cancel`. On the Xenium demo that takes about
-   20 s per channel.
+   20 s per channel. TIFF and OME-Zarr images work, SpatialData's included
+   (the one chosen under `Image`); RGB images such as H&E do not.
 2. `% above` counts the pixels at or above `Threshold`, which starts at a
    value that splits the channel's pixels into dim and bright (Otsu's
    method); its line on the histogram shows where. Change it, or

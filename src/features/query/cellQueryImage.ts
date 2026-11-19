@@ -6,6 +6,7 @@ import {
   CELL_IMAGE_REFUSE_BYTES,
   cellImageLevels,
   defaultCellImageLevel,
+  type CellImageReadSize,
 } from './cellImageMeasurer'
 import type {
   CellImageColumnNeed,
@@ -49,7 +50,7 @@ export interface CellQueryMeasurementView {
   readonly label: string
   readonly channelName: string
   readonly status: 'measuring' | 'asking' | 'refused' | 'cancelled' | 'error' | 'ready'
-  readonly bytes: number | null
+  readonly size: CellImageReadSize | null
   readonly message: string | null
   readonly onMeasure: () => void
   readonly onCancel: () => void
@@ -114,17 +115,24 @@ export function imageChannelOptions(
   }))
 }
 
+// "172 MiB" from a TIFF's tile index, or "up to 172 MiB" from the size of
+// OME-Zarr chunks decoded.
+export function formatCellImageReadSize(size: CellImageReadSize): string {
+  const text = formatReadSize(size.bytes)
+  return size.exact || text.startsWith('under') ? text : `up to ${text}`
+}
+
 // "0.85 µm/px, 172 MiB (default)": each level with the size of its tiles
 // once the tile index has told it (26-D5).
 export function imageLevelOptions(
   channel: CellQueryImageChannelOption,
-  sizes: readonly (number | null)[] | undefined,
+  sizes: readonly (CellImageReadSize | null)[] | undefined,
 ): readonly CellQueryImageLevelOption[] {
   return channel.levels.map((micrometersPerPixel, level) => {
     const size = sizes?.[level] ?? null
     return {
       level,
-      label: `${formatMicrometersPerPixel(micrometersPerPixel)} µm/px${size === null ? '' : `, ${formatReadSize(size)}`}${level === channel.defaultLevel ? ' (default)' : ''}`,
+      label: `${formatMicrometersPerPixel(micrometersPerPixel)} µm/px${size === null ? '' : `, ${formatCellImageReadSize(size)}`}${level === channel.defaultLevel ? ' (default)' : ''}`,
     }
   })
 }
@@ -186,7 +194,7 @@ export function measurementView(
     key: key ?? '',
     label: column.label,
     channelName,
-    bytes: null,
+    size: null,
     message: null,
     onMeasure: () => {
       if (key !== undefined) measurements.measure(key)
@@ -210,15 +218,15 @@ export function measurementView(
     case 'planning':
       return { ...base, status: 'measuring' }
     case 'measuring':
-      return { ...base, status: 'measuring', bytes: state.bytes }
+      return { ...base, status: 'measuring', size: state.size }
     case 'asking':
-      return { ...base, status: 'asking', bytes: state.bytes }
+      return { ...base, status: 'asking', size: state.size }
     case 'refused':
       return {
         ...base,
         status: 'refused',
-        bytes: state.bytes,
-        message: `Measuring ${channelName} at this resolution would read ${formatReadSize(state.bytes)}, over the ${formatReadSize(CELL_IMAGE_REFUSE_BYTES)} limit. Choose a coarser resolution.`,
+        size: state.size,
+        message: `Measuring ${channelName} at this resolution would read ${formatCellImageReadSize(state.size)}, over the ${formatReadSize(CELL_IMAGE_REFUSE_BYTES)} limit. Choose a coarser resolution.`,
       }
     case 'cancelled':
       return { ...base, status: 'cancelled' }

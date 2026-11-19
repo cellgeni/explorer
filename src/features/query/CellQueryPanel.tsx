@@ -9,16 +9,16 @@ import {
   type SelectOption,
 } from '../../components/ui'
 import type { ChannelHistogram } from '../../data/morphologyContrast'
-import { formatReadSize } from '../plots/plotsPanelModel'
 import type {
   CellQueryCategoryOperator,
   CellQueryCondition,
   CellQueryNumberOperator,
 } from './cellQuery'
-import type {
-  CellQueryConditionImage,
-  CellQueryImageProgress,
-  CellQueryMeasurementView,
+import {
+  formatCellImageReadSize,
+  type CellQueryConditionImage,
+  type CellQueryImageProgress,
+  type CellQueryMeasurementView,
 } from './cellQueryImage'
 import {
   CATEGORY_OPERATOR_LABELS,
@@ -518,7 +518,7 @@ function MeasurementStatus({
       return (
         <div className="cell-query-measurement">
           <p className="cell-query-condition-note" role="status">
-            {`Measuring ${name} reads ${formatReadSize(measurement.bytes ?? 0)}.`}
+            {`Measuring ${name} reads ${formatCellImageReadSize(measurement.size ?? { bytes: 0, exact: true })}.`}
           </p>
           <Button
             title={`Read ${name} under every cell at this resolution`}

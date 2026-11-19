@@ -1,10 +1,12 @@
 import * as zarr from 'zarrita'
+import { measureTileCells, type TileCellSums } from '../data/tileCellMeasure'
 import {
   sampleDecodedTile,
   type TileSamples,
   type TileSampling,
 } from '../data/tileSamples'
 import { isSupportedPixelArray, newPixelArray } from '../zarr/omeZarrPixels'
+import type { TileMeasure } from './tileDecodeMessages'
 import type { ZarrChunkSource, ZarrChunkWindow } from './zarrDecodeMessages'
 
 // Chunk decoding used by the Zarr decode worker: rebuilds the array from its
@@ -73,4 +75,16 @@ export function chunkWindowSamples(
     window.height,
     sampling,
   )
+}
+
+// Decodes a chunk and sums its window's pixels per cell (plan 26-D4). A chunk
+// the store does not have (null bytes) is the fill value.
+export async function measureChunkCells(
+  source: ZarrChunkSource,
+  bytes: ArrayBuffer | null,
+  window: ZarrChunkWindow,
+  measure: TileMeasure,
+): Promise<TileCellSums> {
+  const pixels = chunkWindow(await decodeChunk(source, bytes), window)
+  return measureTileCells(pixels, window.width, window.height, measure.cells, measure)
 }

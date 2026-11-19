@@ -7,6 +7,7 @@ import {
 } from '../data/coords'
 import type { ImagePyramidTileFetchOptions } from '../data/imagePyramid'
 import type { CellImageCell, CellImageLoader } from '../features/query/cellImageMeasurer'
+import { openOmeZarrImageWithOptions } from '../zarr/omeZarrLoader'
 
 // An image in memory for Cell Query's image measurements (plan 26).
 
@@ -112,6 +113,121 @@ export function fakeCellImage(options: FakeCellImageOptions) {
   }
 
   return { loader, fetches }
+}
+
+export interface FakeOmeZarrCellImageOptions {
+  // Level 0's pixels of each channel; each further level halves it, taking
+  // the top-left pixel of each 2 x 2.
+  readonly width: number
+  readonly height: number
+  readonly pixel: (x: number, y: number, channel: number) => number
+  readonly channels?: number
+  // The channel the loader reads.
+  readonly channel?: number
+  readonly levels?: number
+  readonly chunkSize?: number
+  // Channels per chunk: all of them when unset.
+  readonly chunkChannels?: number
+  readonly micrometersPerPixel?: number
+  // Chunk keys left out, such as `0/0.1.0`: the fill value, 7.
+  readonly missing?: readonly string[]
+}
+
+// A 16-bit uncompressed OME-Zarr v2 image in memory (c, y, x), its edge
+// chunks padded with 9999 past the image.
+export async function fakeOmeZarrCellImage(options: FakeOmeZarrCellImageOptions) {
+  const channels = options.channels ?? 1
+  const levels = options.levels ?? 1
+  const chunkSize = options.chunkSize ?? 4
+  const chunkChannels = options.chunkChannels ?? channels
+  const mpp = options.micrometersPerPixel ?? 1
+  const root = '/image.ome.zarr'
+  const encoder = new TextEncoder()
+  const json = (value: unknown) => encoder.encode(JSON.stringify(value))
+  const files = new Map<string, Uint8Array>([
+    [`${root}/.zgroup`, json({ zarr_format: 2 })],
+    [
+      `${root}/.zattrs`,
+      json({
+        multiscales: [
+          {
+            axes: [
+              { name: 'c', type: 'channel' },
+              { name: 'y', type: 'space', unit: 'micrometer' },
+              { name: 'x', type: 'space', unit: 'micrometer' },
+            ],
+            datasets: Array.from({ length: levels }, (_, level) => ({
+              path: level.toString(),
+              coordinateTransformations: [
+                { type: 'scale', scale: [1, mpp * 2 ** level, mpp * 2 ** level] },
+              ],
+            })),
+          },
+        ],
+      }),
+    ],
+  ])
+
+  for (let level = 0; level < levels; level += 1) {
+    const width = Math.ceil(options.width / 2 ** level)
+    const height = Math.ceil(options.height / 2 ** level)
+    files.set(
+      `${root}/${level.toString()}/.zarray`,
+      json({
+        zarr_format: 2,
+        shape: [channels, height, width],
+        chunks: [chunkChannels, chunkSize, chunkSize],
+        dtype: '<u2',
+        compressor: null,
+        fill_value: 7,
+        order: 'C',
+        filters: null,
+        dimension_separator: '.',
+      }),
+    )
+
+    for (let c = 0; c < Math.ceil(channels / chunkChannels); c += 1) {
+      for (let row = 0; row < Math.ceil(height / chunkSize); row += 1) {
+        for (let col = 0; col < Math.ceil(width / chunkSize); col += 1) {
+          const key = `${level.toString()}/${[c, row, col].join('.')}`
+          if (options.missing?.includes(key) === true) continue
+          const values = new Uint16Array(chunkChannels * chunkSize * chunkSize)
+          values.forEach((_, index) => {
+            const channel = c * chunkChannels + Math.floor(index / chunkSize ** 2)
+            const x = col * chunkSize + (index % chunkSize)
+            const y = row * chunkSize + (Math.floor(index / chunkSize) % chunkSize)
+            values[index] =
+              x < width && y < height && channel < channels
+                ? options.pixel(x * 2 ** level, y * 2 ** level, channel)
+                : 9999
+          })
+          files.set(`${root}/${key}`, new Uint8Array(values.buffer))
+        }
+      }
+    }
+  }
+
+  const requests: string[] = []
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const path = new URL(input instanceof Request ? input.url : String(input)).pathname
+    requests.push(path)
+    const bytes = files.get(path)
+    return bytes === undefined
+      ? new Response(null, { status: 404 })
+      : new Response(bytes.slice().buffer)
+  }) as typeof fetch
+  const channel = options.channel ?? 0
+  const loader = await openOmeZarrImageWithOptions(
+    `https://example.test${root}${channel === 0 ? '' : `#c=${channel.toString()}`}`,
+    { fetcher, decodePool: null },
+  )
+
+  // Chunk reads alone, as `level/c.y.x`.
+  const chunkReads = () =>
+    requests
+      .filter((path) => /\/\d+\/\d+\.\d+\.\d+$/.test(path))
+      .map((path) => path.slice(root.length + 1))
+  return { loader, chunkReads }
 }
 
 // A cell drawn at dataset (x, y): deck.gl's y is negated.

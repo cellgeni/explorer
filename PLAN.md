@@ -58,7 +58,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 23](docs/plan/phases/23-cell-query.md)                                             | Cell query: filter cells, a table with cell pictures     | M1 and M2 done (2026-11-18)                                      |
 | [Phase 24](docs/plan/phases/24-section-stack.md)                                          | 3D section stack: registered serial sections in 3D       | Done (2026-11-18)                                                |
 | [Phase 25](docs/plan/phases/25-imported-segmentations.md)                                 | Segmentations imported onto images (masks, polygons)     | Done (2026-11-19)                                                |
-| [Phase 26](docs/plan/phases/26-image-channel-conditions.md)                               | Cell query on image channels: mean and % above per cell  | M1 done (2026-11-19): TIFF images                                |
+| [Phase 26](docs/plan/phases/26-image-channel-conditions.md)                               | Cell query on image channels: mean and % above per cell  | M1 and M2 done (2026-11-19): TIFF and OME-Zarr images            |
 
 **Done** means a phase's tasks shipped. Most phase files also keep a Known
 Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)

@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
-import { cell, fakeCellImage } from '../../test/cellImageFixtures'
+import { cell, fakeCellImage, fakeOmeZarrCellImage } from '../../test/cellImageFixtures'
 import { measureTileBytes } from '../../workers/tileMeasureCore'
+import { measureChunkCells } from '../../workers/zarrDecodeCore'
 import { CELL_IMAGE_ASK_BYTES, CELL_IMAGE_REFUSE_BYTES } from './cellImageMeasurer'
 import type { CellImageLoader } from './cellImageMeasurer'
 import {
@@ -51,7 +52,17 @@ function setup(loader: CellImageLoader = image().loader) {
   const close = vi.fn()
   const findThreshold = vi.fn(async () => 42)
   const store = new CellImageMeasurements({
-    createTileMeasurer: () => ({ measure: measureTileBytes, close }),
+    createTileMeasurer: () => ({
+      measure: measureTileBytes,
+      measureChunk: (chunk, measure) =>
+        measureChunkCells(
+          chunk.source,
+          chunk.bytes === undefined ? null : chunk.bytes.slice().buffer,
+          chunk.window,
+          measure,
+        ),
+      close,
+    }),
     findThreshold,
   })
   const onMeasured = vi.fn()
@@ -157,7 +168,7 @@ describe('CellImageMeasurements', () => {
     await vi.waitFor(() => {
       expect(stateOf(need.columnId)).toEqual({
         status: 'asking',
-        bytes: CELL_IMAGE_ASK_BYTES + 1,
+        size: { bytes: CELL_IMAGE_ASK_BYTES + 1, exact: true },
       })
     })
 
@@ -295,5 +306,27 @@ describe('CellImageMeasurements', () => {
     store.findThresholds([{ id: 'a', loader }])
 
     expect(findThreshold).toHaveBeenCalledTimes(2)
+  })
+  it('measures an OME-Zarr channel, and sizes its levels from its chunks', async () => {
+    const { loader } = await fakeOmeZarrCellImage({
+      width: 8,
+      height: 8,
+      levels: 2,
+      pixel: (x) => (x >= 4 ? 100 : 10),
+    })
+    const { store, context, ready } = setup(loader)
+    const need = mean()
+
+    store.sync([need], context)
+    const result = await ready(need.columnId)
+    store.findLevelSizes([{ id: 'Channel:0', loader }])
+
+    expect(Array.from(result.mean)).toEqual([55, 10, 100])
+    await vi.waitFor(() => {
+      expect(store.getSnapshot().levelSizes('Channel:0')).toEqual([
+        { bytes: 4 * 4 * 4 * 2, exact: false },
+        { bytes: 4 * 4 * 2, exact: false },
+      ])
+    })
   })
 })

@@ -12,6 +12,8 @@ import {
 import {
   DEFAULT_CHANNEL_COLORS,
   type ImagePyramidChannelInfo,
+  type ImagePyramidChunkGrid,
+  type ImagePyramidChunkRead,
   type ImagePyramidDecodedTile,
   type ImagePyramidLoader,
   type ImagePyramidPixelArray,
@@ -756,6 +758,77 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       }
 
       return null
+    }
+  }
+
+  // A level's chunks, which Cell Query's image measurements read whole
+  // (plan 26).
+  chunkGrid(level: number): ImagePyramidChunkGrid {
+    const meta = this.levelMetaFor(level)
+    const elements = meta.array.chunks.reduce((product, size) => product * size, 1)
+
+    return {
+      chunkWidth: meta.chunkWidth,
+      chunkHeight: meta.chunkHeight,
+      chunkBytes: elements * dataTypeBytes(meta.array.dtype),
+    }
+  }
+
+  // The chunk at a column and row of the level's chunks, holding the loader's
+  // channel and plane, as stored: a decode worker reads the rest.
+  async readChunk(
+    level: number,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<ImagePyramidChunkRead> {
+    const meta = this.levelMetaFor(level)
+    const arrayMetadata = await zarrArrayMetadata(meta.array)
+
+    if (arrayMetadata === null) {
+      throw new Error("This image's chunks cannot be read one at a time (it is sharded).")
+    }
+
+    throwIfAborted(signal)
+    const chunkShape = meta.array.chunks
+    const coords: number[] = []
+    const fixedAxes: { readonly axis: number; readonly index: number }[] = []
+
+    for (let axis = 0; axis < this.axes.length; axis += 1) {
+      if (axis === this.xAxis || axis === this.yAxis) {
+        coords.push(axis === this.xAxis ? col : row)
+        continue
+      }
+
+      const index =
+        axis === this.channelAxis
+          ? (this.selectedChannelIndex ?? 0)
+          : this.planeIndexAt(meta, axis)
+      const size = chunkShape[axis] ?? 1
+      coords.push(Math.floor(index / size))
+      fixedAxes.push({ axis, index: index % size })
+    }
+
+    const chunkKey = zarrChunkKey(arrayMetadata.metadata, coords)
+    const arrayPath = meta.array.path === '/' ? '' : meta.array.path
+    const bytes = await meta.array.store.get(
+      `${arrayPath}/${chunkKey}` as `/${string}`,
+      signal === undefined ? undefined : { signal },
+    )
+    throwIfAborted(signal)
+
+    return {
+      source: { ...arrayMetadata, chunkKey, coords },
+      bytes,
+      window: {
+        xAxis: this.xAxis,
+        yAxis: this.yAxis,
+        x0: 0,
+        y0: 0,
+        width: Math.min(meta.chunkWidth, meta.width - col * meta.chunkWidth),
+        height: Math.min(meta.chunkHeight, meta.height - row * meta.chunkHeight),
+        fixedAxes,
+      },
     }
   }
 
@@ -1601,6 +1674,12 @@ function contrastForDataType(dtype: DataType): {
     default:
       return { min: 0, max: 65_535 }
   }
+}
+
+// Bytes per element of a zarrita data type, such as 2 for uint16.
+function dataTypeBytes(dtype: DataType): number {
+  const bits = /(\d+)$/.exec(dtype)?.[1]
+  return bits === undefined ? 1 : Math.max(1, Number(bits) / 8)
 }
 
 // Splits a chunk dimension into the fewest equal tiles of at most

@@ -1,10 +1,11 @@
 # Phase 26 — Image Channel Conditions
 
-Planned 2026-11-19. The spike (task A), the decoder switch (task A2) and
-M1 (tasks B to G, TIFF images) were done the same day
-([M1 Results](#m1-results-2026-11-19)); M2 (OME-Zarr) is not started. Requested: filter cells by the presence or
-intensity of up to three image channels inside each cell, in the Cell Query
-window ([Phase 23](23-cell-query.md)).
+Planned 2026-11-19. The spike (task A), the decoder switch (task A2), M1
+(tasks B to G, TIFF images) and M2 (OME-Zarr images, SpatialData's
+included) were done the same day ([M1 Results](#m1-results-2026-11-19),
+[M2 Results](#m2-results-2026-11-19)). Requested: filter cells by the
+presence or intensity of up to three image channels inside each cell, in
+the Cell Query window ([Phase 23](23-cell-query.md)).
 
 The scope is an Image group of columns in Cell Query. For each fluorescence
 channel the canvas lists, the group has two columns:
@@ -250,6 +251,53 @@ Where M1 differs from the plan above:
   too. The no-redraw guard is a store test: a measurement changes state
   three times however many tiles it reads, and progress renders only the
   conditions.
+
+## M2 Results (2026-11-19)
+
+M2 as built: OME-Zarr images are measured chunk by chunk, so SpatialData
+images and an AnnData manifest's OME-Zarr image now list their channels.
+
+- **A local SpatialData store** written with spatialdata 0.9.0 (Zarr v3):
+  a 12288² uint16 image in 4096² chunks (18 MB each with zstd) and two
+  coarser levels, and 150,000 circle cells, each a blob of one value over
+  noise. In a production build on the Mac's GPU, served from disk through
+  Playwright:
+  - `Resolution` lists `1 µm/px, up to 288 MiB`, `2 µm/px, up to 128 MiB`
+    and `4 µm/px, up to 18 MiB (default)`.
+  - `DAPI mean` at least 1,000 at the default level matched 135,000 of
+    150,000 cells in 0.7 s, from one chunk.
+  - At 1 µm/px, nine chunks (162 MB) took 2.6 s with no long tasks;
+    frames were 8.3 ms at the median and 9.2 ms at the 95th percentile.
+    With 300 ms added to every request, 3.0 s, with 2 long tasks (148 ms
+    in all, the longest 74 ms).
+- **Live stores were not timed.** On the day, the Sanger buckets took
+  10–40 s per request and EBI was little better, so the AU14 Xenium store
+  and STHELAR's `morpho` image did not finish loading. Both remain the
+  live checks to make.
+- **The smoke test's store** (`src/test/fixtures/spatialdata/`, 316 KB):
+  two channels in 32² chunks, all-zero chunks left out by zarr-python, and
+  a table anndata 0.13 writes sharded. `DAPI mean` at least 3,000 and
+  `CD3 % above` its threshold match as written, at both levels.
+- **The main chunk** grew 1.7 kB, to 1,075.8 kB against M1's 1,074.1 kB.
+
+Where M2 differs from the plan above:
+
+- Task C's `measure-tile` request reading a tile across chunks became
+  `measure-chunk`, which measures a whole chunk. The measurer buckets cells
+  by the image's chunks rather than the canvas's tiles, which cut a 4096²
+  chunk into 64 tiles of 512²: per tile, a chunk would be fetched and
+  decoded up to 64 times, or held in the workers' caches between tiles. So
+  no tile spans chunks, and nothing is cached: each chunk is fetched once,
+  sent to a worker with its bytes, decoded and summed.
+- Chunks can be far larger than TIFF tiles, so fewer are read at once: as
+  many as fit in 256 MiB decoded, at least 2.
+- An OME-Zarr store has no tile index, so a read's size is the chunks
+  decoded, an upper bound: `Resolution` and the question say `up to`. The
+  budget applies to it as it is.
+- Not covered: sharded OME-Zarr images fail with a message, as a shard's
+  chunks cannot be decoded apart from it; a zipped OME-Zarr's chunks still
+  go into the byte-range cache, which its zip reader writes to. Both are
+  under [Later](#later).
 
 ## Current State
 
@@ -532,7 +580,8 @@ D5 and D6 after the spike; the others stand as proposed.
     - the sums of a disc cut into tiles equal its sums in one piece;
     - the share above stays between 0 and 100.
 - [x] **C. Worker requests.** (M; the TIFF part done in M1, OME-Zarr in
-      M2)
+      M2, as a chunk-sized request: see
+      [M2 Results](#m2-results-2026-11-19))
   - A `measure` request on `TileDecodeWorkerPool`, routed by key as
     `sampling` is.
   - A `measure-tile` request on `ZarrDecodePool` that reads a tile across
@@ -582,11 +631,11 @@ D5 and D6 after the spike; the others stand as proposed.
 
 ## Order And Size
 
-| Milestone        | Contents                       | Size             |
-| ---------------- | ------------------------------ | ---------------- |
-| M0 — Spike       | A, A2 (both done)              | S                |
-| M1 — TIFF images | B, C (TIFF), D, E, F, G (done) | About 2–2½ weeks |
-| M2 — OME-Zarr    | C (OME-Zarr), SpatialData test | M                |
+| Milestone        | Contents                              | Size             |
+| ---------------- | ------------------------------------- | ---------------- |
+| M0 — Spike       | A, A2 (both done)                     | S                |
+| M1 — TIFF images | B, C (TIFF), D, E, F, G (done)        | About 2–2½ weeks |
+| M2 — OME-Zarr    | C (OME-Zarr), SpatialData test (done) | M                |
 
 - M1 covers Xenium, Atera and MERSCOPE, and AnnData with a TIFF, OME-TIFF
   or QPTIFF image. M2 adds SpatialData images and OME-Zarr manifest
@@ -653,3 +702,7 @@ day.
 - RGB images through colour deconvolution (haematoxylin, DAB).
 - More channels, measured a few at a time.
 - Image-only datasets whose segmentation mask supplies the cells.
+- Sharded OME-Zarr images (Zarr v3 shards): read each shard's index on the
+  main thread and send the workers each chunk's bytes.
+- Reading a zipped OME-Zarr's chunks without adding them to the byte-range
+  cache (26-D8): its zip reader has no per-read option.

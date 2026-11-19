@@ -11,7 +11,7 @@ import type {
 } from '../../datasets/spatialDataset'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
-import { fakeCellImage } from '../../test/cellImageFixtures'
+import { fakeCellImage, fakeOmeZarrCellImage } from '../../test/cellImageFixtures'
 import type { CellImageLoader } from './cellImageMeasurer'
 import type { CellQueryCondition } from './cellQuery'
 import type { CellQueryImageChannel } from './cellQueryImage'
@@ -704,6 +704,29 @@ describe('Cell Query panel (plan 23-B to 23-E)', () => {
       await waitFor(() => {
         expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
       })
+    })
+
+    // Plan 26, M2: read chunk by chunk, each level sized as its chunks
+    // decoded at most.
+    it('measures an OME-Zarr image', async () => {
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 8,
+        height: 8,
+        pixel: (x) => (x >= 4 ? 100 : 10),
+      })
+      render(
+        <Harness
+          overrides={{ cells: IMAGE_CELLS, imageChannels: [imageChannel({}, loader)] }}
+        />,
+      )
+
+      addCondition('image:mean:0:Channel:0')
+      await waitFor(() => {
+        expect(screen.getByTestId('status')).toHaveTextContent('2 of 4 cells match')
+      })
+      expect(
+        await screen.findByRole('option', { name: '1 µm/px, under 0.1 MiB (default)' }),
+      ).toBeInTheDocument()
     })
 
     it('cancels a measurement, and measures again when asked', async () => {

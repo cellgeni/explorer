@@ -463,7 +463,7 @@ their own, and their cards stayed on "Loading".
 | ------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles |
 | DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                                    |
-| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles; trace SpatialData labels; run zarrita codecs for main-thread Zarr reads                                           |
+| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles, or chunks into Cell Query's per-cell sums; trace SpatialData labels; run zarrita codecs for main-thread reads     |
 | `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range                          |
 | `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                                         |
 | `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read)               |
@@ -575,8 +575,9 @@ threshold; a channel's mean and `% above` come from the same pass.
 (the inverse of its placement) and the level's pixels, as a disc, and
 buckets the cells by the tiles their discs touch in two passes over the
 cells (counts, then rows). `cellImageReadBytes` sizes the read from the TIFF
-tile index (`tileReadBytes`); the store asks above 1 GiB and refuses above
-8 GiB. `runCellImageMeasurement` fetches the tiles row by row, 12 in flight
+tile index (`tileReadBytes`), or as an OME-Zarr level's chunks decoded, an
+upper bound; the store asks above 1 GiB and refuses above 8 GiB.
+`runCellImageMeasurement` fetches the tiles row by row, 12 in flight
 within a `TileRequestSlots` of 6 shared by every measurement, naming the
 next tiles as `upcoming` so neighbours share requests, and with
 `persist: false`, which reads the IndexedDB byte-range cache but adds
@@ -591,6 +592,17 @@ the query worker as `number-column`s. Progress is published apart from
 state changes, so a measurement renders the panel's conditions alone, not
 App. A threshold for a channel auto-contrast did not read is Otsu's on its
 coarsest level, read when the panel opens.
+
+An OME-Zarr loader has `chunkGrid` and `readChunk`, so its levels are
+measured chunk by chunk rather than by the canvas's tiles, which cut a
+4096² SpatialData chunk into 64: the cells are bucketed by chunk, and each
+chunk is fetched once on the main thread (`readChunk` returns its bytes as
+stored, with the window of the loader's channel and plane) and sent to
+`ZarrDecodePool.measureChunk` on a pool of the store's own. The worker
+decodes it for that request alone, without caching it, and sums the window
+with `measureTileCells`. Fewer chunks are in flight when they are large:
+as many as fit in 256 MiB decoded, at least 2. Sharded arrays fail, as their
+chunks cannot be decoded apart from the shard.
 
 The table's pictures are small `MorphologyCanvas`es on one shared tile store
 (above). Their outlines are read a page at a time by `CellOutlineReader`

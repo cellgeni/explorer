@@ -1,10 +1,17 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
-import { cell, fakeCellImage as fakeImage } from '../../test/cellImageFixtures'
+import {
+  cell,
+  fakeCellImage as fakeImage,
+  fakeOmeZarrCellImage,
+} from '../../test/cellImageFixtures'
 import { measureTileBytes } from '../../workers/tileMeasureCore'
+import { measureChunkCells } from '../../workers/zarrDecodeCore'
 import {
   CELL_IMAGE_ASK_BYTES,
   CELL_IMAGE_REFUSE_BYTES,
+  canMeasureCellImage,
+  cellImageLevelReadSize,
   cellImageLevels,
   cellImageReadBytes,
   cellImageReadDecision,
@@ -12,6 +19,7 @@ import {
   planCellImageMeasurement,
   runCellImageMeasurement,
   type CellImageCell,
+  type CellImageChunkMeasure,
   type CellImageLoader,
 } from './cellImageMeasurer'
 
@@ -29,7 +37,36 @@ async function measure(
   return runCellImageMeasurement(loader, plan, {
     threshold: options.threshold ?? 50,
     measureTile: measureTileBytes,
+    measureChunk,
   })
+}
+
+// As the main thread measures a chunk where there are no workers.
+const measureChunk: CellImageChunkMeasure = (chunk, cellMeasure) =>
+  measureChunkCells(
+    chunk.source,
+    chunk.bytes === undefined ? null : chunk.bytes.slice().buffer,
+    chunk.window,
+    cellMeasure,
+  )
+
+// The members a measurement uses, as a plain object that tests can change.
+function measurable(loader: CellImageLoader): CellImageLoader {
+  return {
+    numLevels: loader.numLevels,
+    tileWidth: loader.tileWidth,
+    tileHeight: loader.tileHeight,
+    ...(loader.placement === undefined ? {} : { placement: loader.placement }),
+    tilesForLevel: (level) => loader.tilesForLevel(level),
+    tileBounds: (level, col, row) => loader.tileBounds(level, col, row),
+    tileSourceSize: (level, col, row) => loader.tileSourceSize(level, col, row),
+    ...(loader.chunkGrid === undefined
+      ? {}
+      : { chunkGrid: loader.chunkGrid.bind(loader) }),
+    ...(loader.readChunk === undefined
+      ? {}
+      : { readChunk: loader.readChunk.bind(loader) }),
+  }
 }
 
 const values = (array: Float64Array) =>
@@ -225,10 +262,144 @@ describe('cell image measurements', () => {
     const { loader } = fakeImage({ width: 8, height: 8, pixel: () => 1 })
     const plan = planCellImageMeasurement(loader, [cell(1, 1), cell(6, 6)], 0, 1)
 
-    await expect(cellImageReadBytes(loader, plan)).resolves.toBe(2 * 4 * 4 * 2)
+    await expect(cellImageReadBytes(loader, plan)).resolves.toEqual({
+      bytes: 2 * 4 * 4 * 2,
+      exact: false,
+    })
     await expect(
       cellImageReadBytes({ ...loader, tileReadBytes: async () => 1234 }, plan),
-    ).resolves.toBe(1234)
+    ).resolves.toEqual({ bytes: 1234, exact: true })
+  })
+
+  describe('OME-Zarr images (plan 26, M2)', () => {
+    it('reads each chunk once, whatever the canvas’s tiles', async () => {
+      // 16 x 16 in 8 x 8 chunks holding both channels; channel 1's right
+      // half is 100, its left 10. The canvas cuts no further at this size.
+      const { loader, chunkReads } = await fakeOmeZarrCellImage({
+        width: 16,
+        height: 16,
+        channels: 2,
+        channel: 1,
+        chunkSize: 8,
+        pixel: (x, _y, channel) => (channel === 0 ? 5000 : x >= 8 ? 100 : 10),
+      })
+      expect(canMeasureCellImage(loader)).toBe(true)
+
+      const result = await measure(loader, [cell(8, 8), cell(1, 1), cell(15, 15)])
+
+      expect(values(result.mean)).toEqual([55, 10, 100])
+      expect(values(result.above)).toEqual([50, 0, 100])
+      expect(result).toMatchObject({ tiles: 4, bytes: 4 * 2 * 8 * 8 * 2 })
+      expect(chunkReads().sort()).toEqual(['0/0.0.0', '0/0.0.1', '0/0.1.0', '0/0.1.1'])
+    })
+
+    // The same cells over the same pixels give the same sums, whether read
+    // in TIFF tiles or OME-Zarr chunks of other sizes, at any level.
+    it('measures what the same image in TIFF tiles measures', async () => {
+      const pixel = (x: number, y: number) => (x * 37 + y * 101) % 1000
+      const cells = [
+        cell(0.5, 0.5, Math.PI * 4),
+        cell(6, 3),
+        cell(12.3, 9.7, Math.PI * 9),
+        cell(7.1, 7.9),
+        cell(3, 10, Math.PI * 2.25),
+        cell(12, 1),
+        cell(20, 20),
+      ]
+      const tiff = fakeImage({ width: 13, height: 11, levels: 2, tileSize: 4, pixel })
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 13,
+        height: 11,
+        levels: 2,
+        chunkSize: 5,
+        pixel,
+      })
+
+      for (const level of [0, 1]) {
+        const options = { level, radius: 1.5, threshold: 500 }
+        const fromTiff = await measure(tiff.loader, cells, options)
+        const fromZarr = await measure(loader, cells, options)
+
+        expect(values(fromZarr.mean)).toEqual(values(fromTiff.mean))
+        expect(values(fromZarr.above)).toEqual(values(fromTiff.above))
+        expect(fromZarr.cellsOutside).toBe(1)
+      }
+    })
+
+    it('reads a chunk the store does not have as the fill value', async () => {
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 8,
+        height: 4,
+        missing: ['0/0.0.1'],
+        pixel: () => 20,
+      })
+
+      const result = await measure(loader, [cell(2, 2), cell(6, 2)])
+
+      expect(values(result.mean)).toEqual([20, 7])
+    })
+
+    it('sizes the read as the chunks decoded, at most', async () => {
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 16,
+        height: 12,
+        channels: 3,
+        chunkChannels: 2,
+        chunkSize: 8,
+        levels: 2,
+        pixel: () => 1,
+      })
+      const plan = planCellImageMeasurement(loader, [cell(1, 1)], 0, 1)
+      const chunk = 2 * 8 * 8 * 2
+
+      await expect(cellImageReadBytes(loader, plan)).resolves.toEqual({
+        bytes: chunk,
+        exact: false,
+      })
+      await expect(cellImageLevelReadSize(loader, 0)).resolves.toEqual({
+        bytes: 4 * chunk,
+        exact: false,
+      })
+      await expect(cellImageLevelReadSize(loader, 1)).resolves.toEqual({
+        bytes: chunk,
+        exact: false,
+      })
+    })
+
+    it('reads fewer large chunks at once', async () => {
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 32,
+        height: 32,
+        chunkSize: 8,
+        pixel: () => 1,
+      })
+      let reading = 0
+      let most = 0
+      const readChunk = loader.readChunk.bind(loader)
+      // As if each chunk were 200 MiB decoded.
+      const large: CellImageLoader = {
+        ...measurable(loader),
+        chunkGrid: (level) => ({
+          ...loader.chunkGrid(level),
+          chunkBytes: 200 * 1024 ** 2,
+        }),
+        readChunk: async (...args) => {
+          reading += 1
+          most = Math.max(most, reading)
+          await new Promise((resolve) => setTimeout(resolve, 1))
+          reading -= 1
+          return readChunk(...args)
+        },
+      }
+      const cells = Array.from({ length: 16 }, (_, index) =>
+        cell((index % 4) * 8 + 4, Math.floor(index / 4) * 8 + 4),
+      )
+
+      const result = await measure(large, cells)
+
+      expect(result.tiles).toBe(16)
+      expect(most).toBe(2)
+    })
   })
 
   it('measures, asks first, or refuses by the size of the read', () => {

@@ -2,6 +2,7 @@ import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import { TileRequestSlots } from '../../tiff/tileRequestScheduler'
 import {
   CELL_IMAGE_REQUEST_SLOTS,
+  cellImageLevelReadSize,
   cellImageReadBytes,
   cellImageReadDecision,
   createCellImageTileMeasurer,
@@ -12,6 +13,7 @@ import {
   type CellImageLoader,
   type CellImageMeasurement,
   type CellImagePlan,
+  type CellImageReadSize,
   type CellImageTileMeasurer,
 } from './cellImageMeasurer'
 
@@ -42,10 +44,15 @@ export interface CellImageColumnNeed {
 
 export type CellImageMeasurementState =
   | { readonly status: 'planning' }
-  // Over the read budget's question size: waits for Measure (26-D7).
-  | { readonly status: 'asking'; readonly bytes: number }
-  | { readonly status: 'refused'; readonly bytes: number }
-  | { readonly status: 'measuring'; readonly bytes: number; readonly tiles: number }
+  // Over the read budget's question size: waits for Measure (26-D7). `size`
+  // is what the measurement reads, or at most reads.
+  | { readonly status: 'asking'; readonly size: CellImageReadSize }
+  | { readonly status: 'refused'; readonly size: CellImageReadSize }
+  | {
+      readonly status: 'measuring'
+      readonly size: CellImageReadSize
+      readonly tiles: number
+    }
   | { readonly status: 'cancelled' }
   | { readonly status: 'error'; readonly message: string }
   | { readonly status: 'ready'; readonly result: CellImageMeasurement }
@@ -82,7 +89,7 @@ interface Entry {
   plan: CellImagePlan | null
   loader: CellImageLoader | null
   // What the plan reads.
-  bytes: number
+  size: CellImageReadSize
   approved: boolean
   tilesDone: number
   lastUsed: number
@@ -97,9 +104,9 @@ export interface CellImageMeasurementsSnapshot {
   state(key: string): CellImageMeasurementState | undefined
   // Otsu's threshold for a channel auto-contrast has not read.
   threshold(channelId: string): number | 'finding' | undefined
-  // The bytes each level of a channel holds, from its tile index; null for
-  // a level that cannot tell.
-  levelSizes(channelId: string): readonly (number | null)[] | undefined
+  // What measuring each level of a channel reads, from its tile index or
+  // chunk sizes; null for a level that cannot tell.
+  levelSizes(channelId: string): readonly (CellImageReadSize | null)[] | undefined
 }
 
 const KEEP_UNUSED = 4
@@ -122,7 +129,7 @@ export class CellImageMeasurements {
   private readonly entries = new Map<string, Entry>()
   private readonly columnKeys = new Map<string, string>()
   private readonly thresholds = new Map<string, ThresholdState>()
-  private readonly levelSizes = new Map<string, readonly (number | null)[]>()
+  private readonly levelSizes = new Map<string, readonly (CellImageReadSize | null)[]>()
   private readonly thresholdControllers = new Set<AbortController>()
   private readonly listeners = new Set<() => void>()
   private readonly progressListeners = new Set<() => void>()
@@ -242,7 +249,7 @@ export class CellImageMeasurements {
         controller: null,
         plan: null,
         loader: null,
-        bytes: 0,
+        size: { bytes: 0, exact: true },
         approved: false,
         tilesDone: 0,
         lastUsed: this.clock,
@@ -333,7 +340,7 @@ export class CellImageMeasurements {
   }
 
   // Each level's size for the Resolution list (26-D5), read once per
-  // channel from its tile index.
+  // channel from its tile index or chunk sizes.
   findLevelSizes(
     channels: readonly { readonly id: string; readonly loader: CellImageLoader }[],
   ): void {
@@ -346,13 +353,7 @@ export class CellImageMeasurements {
       void Promise.all(
         Array.from({ length: loader.numLevels }, async (_, level) => {
           try {
-            return (
-              (await loader.tileReadBytes?.(
-                level,
-                loader.tilesForLevel(level),
-                controller.signal,
-              )) ?? null
-            )
+            return await cellImageLevelReadSize(loader, level, controller.signal)
           } catch {
             return null
           }
@@ -414,20 +415,20 @@ export class CellImageMeasurements {
         entry.spec.level,
         entry.spec.radius ?? DEFAULT_CELL_IMAGE_RADIUS,
       )
-      const bytes = await cellImageReadBytes(loader, plan, controller.signal)
+      const size = await cellImageReadBytes(loader, plan, controller.signal)
       controller.signal.throwIfAborted()
       entry.plan = plan
-      entry.bytes = bytes
-      const decision = cellImageReadDecision(bytes)
+      entry.size = size
+      const decision = cellImageReadDecision(size.bytes)
 
       if (decision === 'refuse') {
         entry.plan = null
-        this.settle(entry, { status: 'refused', bytes })
+        this.settle(entry, { status: 'refused', size })
         return
       }
       if (decision === 'ask' && !entry.approved) {
         entry.controller = null
-        this.settle(entry, { status: 'asking', bytes })
+        this.settle(entry, { status: 'asking', size })
         return
       }
     } catch (error) {
@@ -449,7 +450,7 @@ export class CellImageMeasurements {
     entry.tilesDone = 0
     this.settle(entry, {
       status: 'measuring',
-      bytes: entry.bytes,
+      size: entry.size,
       tiles: plan.tiles.length,
     })
 
@@ -461,6 +462,7 @@ export class CellImageMeasurements {
       const result = await runCellImageMeasurement(loader, plan, {
         threshold: entry.spec.threshold ?? Number.POSITIVE_INFINITY,
         measureTile: tileMeasurer.measure,
+        measureChunk: tileMeasurer.measureChunk,
         signal: controller.signal,
         slots: this.slots,
         onProgress: (done) => {

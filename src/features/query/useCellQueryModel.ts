@@ -50,6 +50,7 @@ import {
   type CellQuerySort,
 } from './cellQuery'
 import {
+  formatCellImageReadSize,
   imageChannelOptions,
   imageColumnNeeds,
   imageGroupNote,
@@ -1264,7 +1265,7 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
       case 'refused':
         return {
           status: 'error',
-          message: `The read is over the limit (${formatReadSize(state.bytes)}).`,
+          message: `The read is over the limit (${formatCellImageReadSize(state.size)}).`,
         }
       case 'asking':
       case 'cancelled':
