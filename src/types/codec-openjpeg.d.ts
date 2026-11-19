@@ -1,4 +1,4 @@
-declare module '@cornerstonejs/codec-openjpeg' {
+declare module '@cornerstonejs/codec-openjpeg/decodewasmjs' {
   export interface OpenJpegFrameInfo {
     readonly width: number
     readonly height: number
@@ -18,5 +18,13 @@ declare module '@cornerstonejs/codec-openjpeg' {
     readonly J2KDecoder: new () => J2KDecoder
   }
 
-  export default function createOpenJpegModule(): Promise<OpenJpegModule>
+  export interface OpenJpegModuleOptions {
+    // Emscripten's hook for finding the .wasm; scriptDirectory is the glue's
+    // own directory (a file path under Node).
+    readonly locateFile?: (path: string, scriptDirectory: string) => string
+  }
+
+  export default function createOpenJpegModule(
+    options?: OpenJpegModuleOptions,
+  ): Promise<OpenJpegModule>
 }
