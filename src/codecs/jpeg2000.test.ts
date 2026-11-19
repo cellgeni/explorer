@@ -12,7 +12,7 @@ const openJpegMock = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@cornerstonejs/codec-openjpeg', () => ({
+vi.mock('@cornerstonejs/codec-openjpeg/decodewasmjs', () => ({
   default: vi.fn(async () => ({
     J2KDecoder: class {
       private encoded = new Uint8Array()
@@ -84,6 +84,22 @@ describe('JPEG-2000 decoding', () => {
     })
     expect(decoded.pixels).toBeInstanceOf(Uint16Array)
     expect([...decoded.pixels]).toEqual([0x0102, 0x0304, 0x0506, 0x0708, 0x090a, 0x0b0c])
+  })
+
+  it('loads the decoder again after a failed load', async () => {
+    vi.resetModules()
+    const { default: createOpenJpegModule } =
+      await import('@cornerstonejs/codec-openjpeg/decodewasmjs')
+    const { decodeJpeg2000: freshDecodeJpeg2000 } = await import('./jpeg2000')
+    vi.mocked(createOpenJpegModule).mockRejectedValueOnce(new Error('wasm fetch failed'))
+
+    await expect(freshDecodeJpeg2000(new Uint8Array([1]))).rejects.toThrow(
+      'wasm fetch failed',
+    )
+    await expect(freshDecodeJpeg2000(new Uint8Array([1]))).resolves.toMatchObject({
+      width: 1,
+      height: 1,
+    })
   })
 })
 

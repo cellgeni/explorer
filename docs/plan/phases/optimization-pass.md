@@ -220,6 +220,55 @@ put it in its own lazy chunk and cut the start screen's JavaScript to
 | `deck-vendor`                   | 665 kB   | 189 kB   |
 | `react-vendor`                  | 190 kB   | 59 kB    |
 
+## JPEG 2000 Decode-Only WASM Build (2026-11-19)
+
+`src/codecs/jpeg2000.ts` imported the default export of
+`@cornerstonejs/codec-openjpeg` 1.3.0, `dist/openjpegjs.js`: OpenJPEG compiled
+to JavaScript by wasm2js (the file defines its own `WebAssembly` object, and a
+worker profile shows no WebAssembly frames). It now imports the package's
+decode-only WebAssembly build: `decodewasmjs` (56 kB of Emscripten glue) and
+`decodewasm`, whose `.wasm` Vite emits as an asset that each tile worker fetches
+when it first decodes a JPEG 2000 tile. Under Node the glue reads the `.wasm`
+beside itself, so Vitest decodes the fixtures in `src/test/fixtures/jpeg2000`
+with the real codec.
+
+In Node, saved 1024² Xenium DAPI tiles from the demo's
+`morphology_focus_0000.ome.tif` decoded in 462 ms (615 kB, level 0) and
+2,425 ms (1 MB, level 2) with the JavaScript build, and in 128 and 211 ms with
+the WebAssembly one under the same load (67 and 99 ms on an idle machine). In
+the app: production builds of `487a087` and the branch, Playwright headless
+Chromium with the Mac GPU (Metal), the demo from the live bucket, five runs of
+each build in turn. Each run loads the demo and then zooms and pans (wheel and
+drag steps, waiting for tiles to settle after each). Tile requests are timed
+from the pool's `postMessage` to the worker's reply on the main thread, so
+they include queueing in the worker:
+
+| Measure (ranges over runs)                         | Before       | After                    |
+| -------------------------------------------------- | ------------ | ------------------------ |
+| Load: 1024² focus tiles, median                    | 329–567 ms   | 58–69 ms                 |
+| Load: auto-contrast samples per channel, median    | 290–522 ms   | 41–97 ms                 |
+| Zoom and pan: 1024² tiles (~1 MB), median          | 1.20–1.51 s  | 130–141 ms               |
+| Zoom and pan: 1024² tiles, p95                     | 1.68–2.90 s  | 154–169 ms (666 ms once) |
+| Tile-worker CPU per JPEG 2000 decode (CDP profile) | 866–1,127 ms | 91–112 ms                |
+
+The one 666 ms p95 came from a single 1.7 s reply while cell boundaries loaded
+on the main thread. The first morphology tile is set by the network: its reply
+came 6–28 s after navigation in either build, as the bucket's response times
+varied between runs, and in the two runs of each that timed it, decoding took
+0.26–0.33 s of that before and 0.06–0.07 s after. The main thread spent no
+time in `codec-vendor` in any run of either build, since tiles and
+auto-contrast decode in workers ([Worker Moves](#worker-moves-2026-11-13));
+only the main-thread fallback, where workers are unavailable, still decodes
+there.
+
+Sizes from `vite build` and `gzip -c`, in kB of 1,000 bytes:
+
+| Asset                 | Before (raw, gzip) | After (raw, gzip) |
+| --------------------- | ------------------ | ----------------- |
+| `codec-vendor`        | 693 kB, 196 kB     | 29 kB, 11 kB      |
+| `tileDecode.worker`   | 965 kB, 297 kB     | 301 kB, 111 kB    |
+| `openjpegwasm_decode` | none               | 255 kB, 84 kB     |
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).

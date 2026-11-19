@@ -173,7 +173,8 @@ function summarise(profile) {
   }
 }
 
-// Vite names chunks `<name>-<8-character hash>.js`.
+// Vite names chunks `<name>-<8-character hash>.js`, and WASM assets (whose
+// functions a streamed compile attributes to the asset URL) likewise.
 function chunkName({ functionName, url }) {
   if (functionName === '(idle)' || (functionName.startsWith('(') && url === '')) {
     return functionName
@@ -183,7 +184,7 @@ function chunkName({ functionName, url }) {
     return 'wasm'
   }
 
-  return (url.split('/').pop() ?? '').replace(/-[\w-]{8}\.js$/, '') || '(native)'
+  return (url.split('/').pop() ?? '').replace(/-[\w-]{8}\.(js|wasm)$/, '') || '(native)'
 }
 
 function trackRequests(page, match) {
