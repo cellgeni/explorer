@@ -13,6 +13,8 @@ export function QueryWindow({
   fullWidth = false,
   rightOffset,
   onSizeChange,
+  front = false,
+  onActivate,
 }: {
   readonly query: CellQueryModel
   readonly open: boolean
@@ -20,6 +22,9 @@ export function QueryWindow({
   readonly fullWidth?: boolean | undefined
   readonly rightOffset?: number | undefined
   readonly onSizeChange?: ((size: FloatingWindowSize) => void) | undefined
+  // Drawn over the other windows; pressed or focused, it asks to be.
+  readonly front?: boolean | undefined
+  readonly onActivate?: (() => void) | undefined
 }) {
   return (
     <FloatingWindow
@@ -27,7 +32,7 @@ export function QueryWindow({
       status={query.status}
       loading={query.loading}
       closeTitle="Close cell query"
-      resizeName="cell query panel"
+      controlName="cell query panel"
       className="shell-query"
       bodyClassName="shell-query-body"
       defaultSize={QUERY_WINDOW_SIZE}
@@ -37,6 +42,8 @@ export function QueryWindow({
       fullWidth={fullWidth}
       rightOffset={rightOffset}
       onSizeChange={onSizeChange}
+      front={front}
+      onActivate={onActivate}
     >
       {/* Drawn only while open: App renders often while a dataset loads,
           and the conditions and table are not needed until then. The window

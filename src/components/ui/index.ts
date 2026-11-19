@@ -27,6 +27,7 @@ export {
   EyeIcon,
   EyeOffIcon,
   FitIcon,
+  GripIcon,
   HelpIcon,
   ImageIcon,
   InfoIcon,

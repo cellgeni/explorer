@@ -2,13 +2,15 @@ import { useEffect, type RefObject } from 'react'
 import { focusFirst } from './useDismiss'
 
 // For a panel that opens over the page without being modal, such as the info
-// drawer or the Embedding panel: opening moves focus into it, and closing
-// returns focus to where it was, when focus was inside or went with it
-// (plan 15.5-D). Focus that moved elsewhere stays there.
+// drawer or the Embedding panel: opening moves focus into it (to
+// initialFocusRef when given, else its first control), and closing returns
+// focus to where it was, when focus was inside or went with it (plan 15.5-D).
+// Focus that moved elsewhere stays there.
 export function useFocusReturn(
   open: boolean,
   containerRef: RefObject<HTMLElement | null>,
   returnFocusRef: RefObject<HTMLElement | null>,
+  initialFocusRef?: RefObject<HTMLElement | null>,
 ): void {
   useEffect(() => {
     const container = containerRef.current
@@ -17,12 +19,14 @@ export function useFocusReturn(
     if (open) {
       returnFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null
-      focusFirst(container)
+      const initial = initialFocusRef?.current ?? null
+      if (initial === null) focusFirst(container)
+      else initial.focus()
       return
     }
 
     const active = document.activeElement
     const lost = active === null || active === document.body || container.contains(active)
     if (lost) returnFocusRef.current?.focus()
-  }, [containerRef, open, returnFocusRef])
+  }, [containerRef, initialFocusRef, open, returnFocusRef])
 }

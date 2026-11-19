@@ -13,6 +13,8 @@ export function PlotsWindow({
   fullWidth = false,
   rightOffset,
   onSizeChange,
+  front = false,
+  onActivate,
 }: {
   readonly plots: PlotsModel
   readonly open: boolean
@@ -20,6 +22,9 @@ export function PlotsWindow({
   readonly fullWidth?: boolean | undefined
   readonly rightOffset?: number | undefined
   readonly onSizeChange?: ((size: FloatingWindowSize) => void) | undefined
+  // Drawn over the other windows; pressed or focused, it asks to be.
+  readonly front?: boolean | undefined
+  readonly onActivate?: (() => void) | undefined
 }) {
   return (
     <FloatingWindow
@@ -27,7 +32,7 @@ export function PlotsWindow({
       status={plots.status}
       loading={plots.loading}
       closeTitle="Close plots"
-      resizeName="plots panel"
+      controlName="plots panel"
       className="shell-plots"
       bodyClassName="shell-plots-body"
       defaultSize={PLOTS_WINDOW_SIZE}
@@ -37,6 +42,8 @@ export function PlotsWindow({
       fullWidth={fullWidth}
       rightOffset={rightOffset}
       onSizeChange={onSizeChange}
+      front={front}
+      onActivate={onActivate}
     >
       <PlotsPanel plots={plots} />
     </FloatingWindow>

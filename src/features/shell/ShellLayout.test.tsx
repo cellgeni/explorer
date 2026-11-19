@@ -451,12 +451,49 @@ describe('ShellLayout', () => {
       expect(plotsWindow()).toBeVisible()
       expect(screen.getByRole('region', { name: 'Embedding' })).toBeVisible()
       // To the left of the 360 px Embedding window, with a gap.
-      expect(plotsWindow().style.right).toBe('380px')
+      expect(plotsWindow().style.getPropertyValue('--floating-right')).toBe('380px')
       expect(plotsWindow().style.width).toBe('480px')
       expect(within(toggles).getByRole('button', { name: 'Plots' })).toHaveAttribute(
         'aria-pressed',
         'true',
       )
+    })
+
+    it('keeps a moved window in place and brings the one pressed to the front', () => {
+      stubScreenWidth(false)
+      render(
+        <PanelsHarness
+          initial={{
+            ...DEFAULT_SHELL_PANELS,
+            expanded: ['cells'],
+            embeddingOpen: true,
+            plotsOpen: true,
+          }}
+        />,
+      )
+      const embeddingWindow = screen.getByRole('region', { name: 'Embedding' })
+
+      const moveGrip = screen.getByRole('button', { name: 'Move the plots panel' })
+      moveGrip.focus()
+      fireEvent.keyDown(moveGrip, { key: 'ArrowDown' })
+      expect(plotsWindow()).toHaveClass('is-front')
+      expect(plotsWindow().style.getPropertyValue('--floating-right')).toBe('380px')
+      expect(plotsWindow().style.getPropertyValue('--floating-top')).toBe('32px')
+
+      // Moved, it no longer follows the Embedding window's width.
+      const resizeGrip = screen.getByRole('button', {
+        name: 'Resize the embedding panel',
+      })
+      resizeGrip.focus()
+      fireEvent.keyDown(resizeGrip, { key: 'ArrowLeft' })
+      expect(embeddingWindow.style.width).toBe('380px')
+      expect(plotsWindow().style.getPropertyValue('--floating-right')).toBe('380px')
+      expect(embeddingWindow).toHaveClass('is-front')
+      expect(plotsWindow()).not.toHaveClass('is-front')
+
+      fireEvent.pointerDown(within(plotsWindow()).getByRole('heading', { name: 'Plots' }))
+      expect(plotsWindow()).toHaveClass('is-front')
+      expect(embeddingWindow).not.toHaveClass('is-front')
     })
 
     it('shows one window at a time under 860 px', () => {
@@ -629,7 +666,7 @@ describe('ShellLayout', () => {
 
       expect(queryWindow()).toBeVisible()
       // Past the 360 px Embedding and 480 px Plots windows, with gaps.
-      expect(queryWindow().style.right).toBe('868px')
+      expect(queryWindow().style.getPropertyValue('--floating-right')).toBe('868px')
       expect(queryWindow().style.width).toBe('520px')
       expect(within(toggles).getByRole('button', { name: 'Query' })).toHaveAttribute(
         'aria-pressed',
