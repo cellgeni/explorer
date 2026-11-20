@@ -7,6 +7,7 @@ import type {
   PlacedCellIds,
 } from '../annotations/annotationModel'
 import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
+import type { SectionSplitLink } from '../collection/sectionSplitModel'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { SelectionList } from '../roi/useSelectionList'
 
@@ -47,6 +48,8 @@ export interface AnnotationSetsModel {
   readonly selectedGroupId: string
   readonly groupOptions: readonly AnnotationGroupOption[]
   readonly onGroupChange: (groupId: string) => void
+  // Opens an AnnData table's sections as a collection.
+  readonly sectionSplit: SectionSplitLink | null
   readonly state: AnnotationState
   readonly groupState: AnnotationGroupState
   readonly onLoad: () => void
@@ -153,6 +156,7 @@ export interface AnnotationsSectionModelInput {
   readonly hiddenAnnotationIds: readonly string[]
   readonly hiddenAnnotationSetIds: readonly string[]
   readonly loadEnabled: boolean
+  readonly sectionSplit: SectionSplitLink | null
   readonly selectedAnnotationGroupId: string
   readonly selectionList: SelectionList
   readonly selectionsAvailable: boolean
@@ -194,6 +198,7 @@ export function useAnnotationsSectionModel({
   hiddenAnnotationIds,
   hiddenAnnotationSetIds,
   loadEnabled,
+  sectionSplit,
   selectedAnnotationGroupId,
   selectionList,
   selectionsAvailable,
@@ -216,6 +221,7 @@ export function useAnnotationsSectionModel({
       selectedGroupId: selectedAnnotationGroupId,
       groupOptions: annotationGroupOptions,
       onGroupChange: handleAnnotationGroupChange,
+      sectionSplit,
       state: annotationState,
       groupState: annotationGroupState,
       onLoad: handleLoadAnnotations,

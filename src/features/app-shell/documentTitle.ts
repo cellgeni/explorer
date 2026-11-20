@@ -1,3 +1,5 @@
+import { parseAnnDataSectionUrl } from '../../datasets/annDataSections'
+
 const APP_NAME = 'Spatial Omics Explorer'
 // Last path segments that say nothing about the dataset, so the folder above
 // names it instead.
@@ -38,7 +40,11 @@ export function datasetDisplayName(
     segments.pop()
   }
 
-  return segments.at(-1) ?? null
+  const file = segments.at(-1) ?? null
+  const section = parseAnnDataSectionUrl(url.trim())
+
+  // One section of a table: "table.h5ad · section_01".
+  return file === null || section?.value == null ? file : `${file} · ${section.value}`
 }
 
 // The browser tab title: "{dataset} · Spatial Omics Explorer".

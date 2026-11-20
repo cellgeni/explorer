@@ -11,6 +11,9 @@ function input(overrides: Partial<CellsSectionModelInput> = {}): CellsSectionMod
     cellFillOpacity: 1,
     cellPointScale: 1,
     cellLayerControlsVisible: true,
+    cellViewAvailable: false,
+    cellViewOpen: false,
+    setCellViewOpen: vi.fn(),
     cellMetadataTracks: [],
     geneExpressionBatch: null,
     geneExpressionColorScale: 'plasma',
@@ -91,6 +94,20 @@ describe('useCellsSectionModel', () => {
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Cell point size: 3x', {
       coalesceKey: 'cell-point-scale',
     })
+  })
+
+  it('offers the 3D view only for cells placed in 3D', () => {
+    expect(
+      renderHook(() => useCellsSectionModel(input())).result.current.appearance.view,
+    ).toBeNull()
+
+    const options = input({ cellViewAvailable: true })
+    const { result } = renderHook(() => useCellsSectionModel(options))
+
+    expect(result.current.appearance.view?.open).toBe(false)
+    result.current.appearance.view?.onOpenChange(true)
+    expect(options.setCellViewOpen).toHaveBeenCalledWith(true)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Cell view: 3D')
   })
 
   it('logs boundary visibility changes and ignores unchanged ones', () => {

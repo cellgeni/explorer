@@ -154,6 +154,20 @@ describe('shareableState', () => {
     expect(parseShareableState('#voff=0').visiumOffTissue).toBe(false)
   })
 
+  it('round-trips a section of an AnnData table, and the table split', () => {
+    const table = 'https://example.test/ef6/aligned.h5ad'
+    const hash = formatShareableState({
+      collectionUrl: `${table}#obs.section`,
+      datasetUrl: `${table}#obs.section=section%2001`,
+    })
+
+    expect(hash).not.toMatch(/h5ad#/)
+    expect(parseShareableState(hash)).toMatchObject({
+      collectionUrl: `${table}#obs.section`,
+      datasetUrl: `${table}#obs.section=section%2001`,
+    })
+  })
+
   it('round-trips the collection ahead of the dataset', () => {
     const hash = formatShareableState({
       collectionUrl: 'https://example.test/studies/injury/collection.json',
@@ -234,6 +248,13 @@ describe('shareableState', () => {
 
     expect(hash).toContain('imageView=3d')
     expect(parseShareableState(hash)).toEqual({ linkVersion: 2, imageView: '3d' })
+  })
+
+  it('round-trips the 3D view of cells placed in 3D', () => {
+    const hash = formatShareableState({ cellView: '3d' })
+
+    expect(hash).toContain('cellView=3d')
+    expect(parseShareableState(hash)).toEqual({ linkVersion: 2, cellView: '3d' })
   })
 
   it('round-trips the Atera image choice', () => {

@@ -242,6 +242,7 @@ import {
   type GridCellColumns,
 } from '../../rendering/gridCellColumns'
 import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
+import { parseCellView } from '../sections/cellsSectionModel'
 import { parseImageView } from '../sections/imageSectionModel'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
@@ -408,6 +409,9 @@ interface UseDatasetLifecycleSetters {
   // The dataset the 3D view is open for, which shows it once its image is a
   // z-stack.
   readonly setVolumeViewDatasetUrl?: Setter<string | null>
+  // The dataset the 3D view of cells is open for, which shows it once its
+  // cells are placed in 3D.
+  readonly setCellViewDatasetUrl?: Setter<string | null>
   // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   // The manifest's defaults, which the dataset's links leave out.
@@ -596,6 +600,7 @@ export function useDatasetLifecycle({
     setCellFillOpacity,
     setCellPointScale,
     setVolumeViewDatasetUrl,
+    setCellViewDatasetUrl,
     setImageLayerOpacity,
     setShowTranscriptOverlay,
     setDatasetAbout,
@@ -1297,6 +1302,14 @@ export function useDatasetLifecycle({
         if (restoredImageView !== undefined) {
           whenCommitted(() => {
             setVolumeViewDatasetUrl?.(restoredImageView === '3d' ? requestedUrl : null)
+          })
+        }
+
+        const restoredCellView = parseCellView(restoreState.cellView)
+
+        if (restoredCellView !== undefined) {
+          whenCommitted(() => {
+            setCellViewDatasetUrl?.(restoredCellView === '3d' ? requestedUrl : null)
           })
         }
 

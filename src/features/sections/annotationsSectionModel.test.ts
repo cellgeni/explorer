@@ -43,6 +43,7 @@ function input(
     hiddenAnnotationIds: [],
     hiddenAnnotationSetIds: [],
     loadEnabled: true,
+    sectionSplit: null,
     selectedAnnotationGroupId: '',
     selectionList: {
       selections: [],

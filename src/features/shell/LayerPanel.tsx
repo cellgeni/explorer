@@ -13,6 +13,7 @@ import {
   CellBoundaryToggles,
   CellColorControls,
   CellOpacityControls,
+  CellViewControl,
   ExpressionDetailControl,
   GeneExpressionControls,
   GenePicker,
@@ -376,6 +377,7 @@ function CellsSection({
       </div>
       <div className="layer-opacity-controls">
         <CellOpacityControls appearance={cells.appearance} />
+        <CellViewControl appearance={cells.appearance} />
       </div>
       <VisiumHdBinControls visiumHd={viewOptions.visiumHd} />
 

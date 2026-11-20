@@ -131,6 +131,8 @@ export interface DatasetManifestDefaults {
   readonly transcripts?: boolean
   // `3d` opens an OME-Zarr z-stack in the 3D view.
   readonly imageView?: string
+  // `3d` opens cells placed in 3D in the 3D view.
+  readonly cellView?: string
 }
 
 // Where the data comes from, shown in the info drawer so viewers can find,
@@ -847,6 +849,7 @@ const DEFAULT_STRING_KEYS = [
   'geneColorScale',
   'geneScoreMode',
   'imageView',
+  'cellView',
 ] as const
 const DEFAULT_BOOLEAN_KEYS = [
   'cellBoundaries',

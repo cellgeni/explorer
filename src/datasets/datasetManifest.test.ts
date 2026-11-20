@@ -533,6 +533,7 @@ describe('parseDatasetManifest', () => {
           transcripts: true,
           geneRange: [null, 40],
           imageView: '3d',
+          cellView: '3d',
         },
       }).defaults,
     ).toEqual({
@@ -545,6 +546,7 @@ describe('parseDatasetManifest', () => {
       transcripts: true,
       geneRange: [null, 40],
       imageView: '3d',
+      cellView: '3d',
     })
 
     const defaults = (value: unknown) =>

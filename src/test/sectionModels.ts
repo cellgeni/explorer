@@ -96,6 +96,7 @@ export function testCellsSectionModel(
       onBoundaryOpacityPercentChange: vi.fn(),
       pointScale: 1,
       onPointScaleChange: vi.fn(),
+      view: null,
       ...overrides.appearance,
     },
     genes: {
@@ -339,6 +340,7 @@ export function testAnnotationsSectionModel(
       selectedGroupId: '',
       groupOptions: [],
       onGroupChange: vi.fn(),
+      sectionSplit: null,
       state: { status: 'idle' },
       groupState: { status: 'idle' },
       onLoad: vi.fn(),

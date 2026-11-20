@@ -19,6 +19,7 @@ import {
   spatialDataSelectionFor,
 } from './datasetFactory'
 import { AteraDataset } from './ateraDataset'
+import { dropDatasets } from './datasetCache'
 import { parseDatasetCollection } from './datasetCollection'
 import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
@@ -491,6 +492,72 @@ describe('spatial dataset detection', () => {
     )
 
     expect(dataset).toBeInstanceOf(SpatialDataDataset)
+  })
+
+  it('opens the sections of an AnnData table through one read of the file', async () => {
+    const requests: string[] = []
+    const file = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/sections.zarr`
+    vi.stubGlobal(
+      'fetch',
+      annDataZarrFixtureFetcher({
+        aliases: { '/sections.zarr': '/tiny.zarr' },
+        requests,
+      }),
+    )
+
+    try {
+      await expect(detectSpatialDataset(`${file}#obs.cluster=A`)).resolves.toMatchObject({
+        platform: 'h5ad',
+        baseUrl: `${file}#obs.cluster=A`,
+        h5adUrl: file,
+        source: 'zarr',
+        section: { fileUrl: file, column: 'cluster', value: 'A' },
+      })
+
+      const [first, second] = await Promise.all([
+        cachedSpatialDataset(`${file}#obs.cluster=A`),
+        cachedSpatialDataset(`${file}#obs.cluster=B`),
+      ])
+
+      await expect((first as AnnDataH5adDataset).cellIds()).resolves.toEqual([
+        'cell-a',
+        'cell-c',
+        'cell-e',
+      ])
+      await expect((second as AnnDataH5adDataset).cellIds()).resolves.toEqual([
+        'cell-b',
+        'cell-d',
+        'cell-f',
+      ])
+      // The obs index was read once, for the file's own dataset.
+      expect(
+        requests.filter((request) =>
+          request.startsWith('/sections.zarr/obs/_index/values/'),
+        ),
+      ).toHaveLength(1)
+    } finally {
+      for (const url of [`${file}#obs.cluster=A`, `${file}#obs.cluster=B`, file]) {
+        dropDatasets(url)
+      }
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('refuses a split, or a section of a table that is not AnnData, as one dataset', async () => {
+    const file = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
+
+    await expect(
+      detectSpatialDataset(`${file}#obs.cluster`, {
+        fetcher: annDataZarrFixtureFetcher(),
+      }),
+    ).rejects.toThrow(
+      '#obs.cluster names this file split into sections by obs column "cluster": open it as a collection',
+    )
+    await expect(
+      detectSpatialDataset('https://example.test/images/sample.ome.tif#obs.cluster=A', {
+        fetcher: fetcherForOkPaths(['/images/sample.ome.tif']),
+      }),
+    ).rejects.toThrow('this file opens as image, which has no obs columns')
   })
 
   it('builds a fresh cached SpatialData instance when the selection changes', async () => {

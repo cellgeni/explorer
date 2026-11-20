@@ -49,7 +49,7 @@
       "properties": {
         "dataset": {
           "$ref": "#/$defs/path",
-          "description": "What dataset= opens: a dataset folder, file or store, or a dataset manifest. Each dataset appears once."
+          "description": "What dataset= opens: a dataset folder, file or store, a dataset manifest, or one section of an AnnData table (`table.h5ad#obs.section=s01`). Each dataset appears once."
         },
         "name": {
           "type": "string",
