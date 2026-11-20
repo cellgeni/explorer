@@ -14,6 +14,9 @@ on:
         required: true
         type: string
 
+# Write access is for the upload. The token reaches only the two `gh` steps
+# below: checkout does not keep it, and npm ci, the tests and Playwright run
+# without it.
 permissions:
   contents: write
 
@@ -29,13 +32,15 @@ jobs:
     timeout-minutes: 20
     env:
       TAG: ${{ inputs.tag || github.event.release.tag_name }}
-      GH_TOKEN: ${{ github.token }}
     steps:
       # Fail before building if a manual run names a tag without a release.
       - run: gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
+          persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -62,6 +67,8 @@ jobs:
           zip -qr "$name.zip" "$name"
       - name: Attach to the release
         run: gh release upload "$TAG" "explorer-$TAG.zip" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/upload-artifact@v7
         if: ${{ failure() }}
         with:
