@@ -42,8 +42,11 @@ npm run preview
 
 `npm run test:coverage` runs the unit tests with V8 coverage, writes an HTML
 report to `coverage/`, and fails below the thresholds in `vitest.config.ts`. CI
-runs it on every pull request in a separate job that reports but does not block;
-`npm test` is the required check.
+runs it on every pull request in a separate job that reports a drop without
+failing the run. `main` has no branch protection, so no check blocks a merge;
+by convention a pull request is merged once the format, lint, typecheck, unit
+test and build job and the E2E smoke job pass. GitHub Pages deploys a push to
+`main` only after its CI run succeeds.
 
 End-to-end tests use the built app through Vite preview, in Playwright's
 Chromium. Install it once, and again after Playwright is updated (on Linux,
