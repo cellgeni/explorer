@@ -29,7 +29,8 @@ export default defineConfig({
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test/**', 'src/**/*.d.ts'],
       reporter: ['text-summary', 'html', 'lcov'],
       // About a point under the 2026-11-12 baseline (86.1% statements, 75.3%
-      // branches, 89.4% functions, 86.1% lines), so a drop fails CI.
+      // branches, 89.4% functions, 86.1% lines), so a drop fails the coverage
+      // job, which CI shows without failing the run (`continue-on-error`).
       thresholds: {
         statements: 85,
         branches: 74,
