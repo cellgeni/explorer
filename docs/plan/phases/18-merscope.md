@@ -132,7 +132,7 @@ EBI range requests took 7–10 s each on 2026-11-14.
 - **D4.** Both CSVs are fetched whole (gzip detected from the bytes, not the
   suffix) and parsed in a worker straight into CSR arrays and typed obs
   columns, without a row object per cell. Counts may be written as `0.0`.
-  Limit: 300 MB per file, as for the Visium matrix.
+  Limit: 300 MiB per file, as for the Visium matrix.
 - **D5.** `Blank-*` columns are left out of `X` and summed into an obs
   `blank_count` track. The AnnData gene list does not filter controls.
 - **D6.** `fov` becomes a categorical obs column; `volume`, `transcript_count`,
@@ -144,7 +144,7 @@ EBI range requests took 7–10 s each on 2026-11-14.
 - **D7.** Boundaries come from `cell_boundaries.parquet` through the
   SpatialData shapes reader (worker, WKB, largest ring of each
   MultiPolygon), extended with an ID column (`EntityID`) and a row filter
-  that keeps one `ZIndex` (the middle plane present). Files up to 100 MB load
+  that keeps one `ZIndex` (the middle plane present). Files up to 100 MiB load
   with the dataset with cell boundaries on; larger ones start with boundaries
   off and are read whole when turned on, with the size shown. A size the host
   does not send counts as small; BIA and Zenodo send `Content-Length` on
@@ -168,7 +168,7 @@ EBI range requests took 7–10 s each on 2026-11-14.
   at the transform's origin. One stain and plane at a time, chosen in the
   Image section and kept in the link (`mimg`); a change reloads the dataset,
   as a Visium library change does. As entries reach 317 MB, the default
-  (DAPI at the middle plane) loads with the dataset only up to 100 MB, as for
+  (DAPI at the middle plane) loads with the dataset only up to 100 MiB, as for
   boundaries; a larger one waits to be chosen, with a notice. The `.vzg` is
   found in the folder listing or named by the manifest (`files.vzg`). An
   unzipped `pyrmosaic` file, as in S-BIAD3825, opens by URL as a page
@@ -201,7 +201,7 @@ EBI range requests took 7–10 s each on 2026-11-14.
 - [x] F. Boundaries (D7): `idColumn`, `planeColumn` and `wholeFile` in the
       shapes reader and worker; `elements(bbox)` from the shapes; size rule
       and notice.
-- [x] G. Diagnostics: both CSVs required (`HEAD`, 300 MB limit); boundaries
+- [x] G. Diagnostics: both CSVs required (`HEAD`, 300 MiB limit); boundaries
       optional; `detected_transcripts.csv` and `images/manifest.json` listed
       when present. The `.vzg` name varies per run, so it is not checked.
 - [x] H. Docs: `docs/modalities/merscope.md`, the architecture tables, the user

@@ -387,7 +387,7 @@ What the work can build on:
     `:314`) map between that frame and the dataset. SpatialData scales are
     folded into the levels' µm per pixel (`omeZarrLoader.ts:228-232`).
 - **Caches and limits.**
-  - TIFF tile reads go through the 256 MB IndexedDB LRU
+  - TIFF tile reads go through the 256 MiB IndexedDB LRU
     (`persistentByteRangeCache.ts:3-5`; `loader.ts:2432-2444`). Only a
     whole loader can skip it (`byteRangeCache: null`, `loader.ts:152`).
   - `TileRequestSlots` caps requests in flight across schedulers

@@ -207,7 +207,7 @@ by `spaceranger count`. Host the `outs/` folder with:
 - `spatial/tissue_positions.csv` (Space Ranger 2.0+), or
   `spatial/tissue_positions_list.csv` (1.x, no header row)
 - `spatial/scalefactors_json.json`
-- `filtered_feature_bc_matrix.h5` (up to 300 MB; it is read whole), or the
+- `filtered_feature_bc_matrix.h5` (up to 300 MiB; it is read whole), or the
   MEX folder `filtered_feature_bc_matrix/` with `matrix.mtx.gz`,
   `barcodes.tsv.gz`, and `features.tsv.gz`
 
@@ -242,14 +242,14 @@ See [Standard Visium](./modalities/visium.md) for how each file is read.
 
 Host one MERSCOPE region folder (`region_0/` and so on) with:
 
-- `cell_by_gene.csv` (up to 300 MB; it is read whole)
-- `cell_metadata.csv` (up to 300 MB), with `center_x` and `center_y` in
+- `cell_by_gene.csv` (up to 300 MiB; it is read whole)
+- `cell_metadata.csv` (up to 300 MiB), with `center_x` and `center_y` in
   micrometres
 
 Detection needs both to answer `HEAD`. Recommended:
 
 - `cell_boundaries.parquet` for cell outlines. It is read whole: files up to
-  100 MB load with the dataset, larger ones when `Cell boundaries` is turned
+  100 MiB load with the dataset, larger ones when `Cell boundaries` is turned
   on.
 - The run's `.vzg` for the image. It is read by byte range (central
   directory, then one stain and plane's pyramid, read whole), so the host

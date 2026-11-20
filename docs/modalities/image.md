@@ -224,7 +224,7 @@ TIFF it already holds and place it:
 Akoya PhenoCycler, PhenoImager, and Vectra scanners write QPTIFF, a BigTIFF in
 which every image is a top-level IFD: one full-resolution IFD per channel, a
 thumbnail, each pyramid level as one reduced-resolution IFD per channel, then
-the slide overview and label. `openQptiff` (`src/tiff/loader.ts`) reads it
+the slide overview and label. `readQptiffFile` (`src/tiff/loader.ts`) reads it
 using the layout rules in `src/tiff/qptiff.ts`:
 
 - **IFD walk.** Each loader needs IFDs from the whole chain, so the chain is

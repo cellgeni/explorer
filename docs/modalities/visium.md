@@ -45,7 +45,7 @@ from the folder (see [Space Ranger Files](#space-ranger-files)).
 ### H5AD With `uns/spatial`
 
 A `.h5ad` URL is detected as `h5ad` from its suffix, as before. Whether it is
-Visium is only known once the file is read: `readVisiumPlacement`
+Visium is only known once the file is read: `readVisiumSource`
 (`src/datasets/h5adDataset.ts`) treats it as Visium when
 
 - the coordinates come from `obsm/spatial` or `obsm/X_spatial`, and
@@ -66,7 +66,7 @@ at their Space Ranger names, and a missing tissue image is left out. This is
 how GEO samples load: GEO publishes each sample's Space Ranger files flat and
 gzipped, for example `GSM6592057_M10_tissue_positions_list.csv.gz` and
 `GSM6592057_M10_tissue_hires_image.png.gz`. A gzipped `.h5` matrix is inflated
-in memory before it opens, within the same 300 MB limit.
+in memory before it opens, within the same 300 MiB limit.
 
 Most GEO Visium samples deposit the MEX matrix instead of the `.h5`. A
 `filteredMatrix` ending in `.mtx` or `.mtx.gz` is read as MEX, and its barcode
@@ -85,16 +85,16 @@ scale factors, matrix, and analysis files in parallel, then builds an
 in-memory AnnData table with the same layout scanpy writes
 (`visiumAnnDataTable`). Everything after that is the AnnData reader.
 
-| File                                                                                                              | Required | Library                                                                   | What is read                                                                                                                                                                                              | Used for                        |
-| ----------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| `spatial/tissue_positions.csv` or `spatial/tissue_positions_list.csv`                                             | Yes      | fetch + gunzip when gzipped                                               | `barcode`, `in_tissue`, `array_row`, `array_col`, `pxl_row_in_fullres`, `pxl_col_in_fullres` (header or fixed order)                                                                                      | Spot centres, lattice fit       |
-| `spatial/scalefactors_json.json`                                                                                  | Yes      | fetch + JSON (gzip allowed)                                               | `tissue_hires_scalef`, `tissue_lowres_scalef`, `spot_diameter_fullres`, `fiducial_diameter_fullres`, `microns_per_pixel`                                                                                  | Image placement, units          |
-| `filtered_feature_bc_matrix.h5`                                                                                   | Yes¹     | fetch whole file, `h5wasm` in a worker (up to 300 MB)                     | `/matrix/barcodes`, `features/{name,id,feature_type}`, `data`, `indices`, `indptr`; root `library_ids`, `chemistry_description`, `software_version` attributes. Cell Ranger 2 per-genome groups also work | Spots (rows), genes, expression |
-| `filtered_feature_bc_matrix/matrix.mtx.gz`, `barcodes.tsv.gz`, `features.tsv.gz`                                  | Yes¹     | fetch, gunzip, and parse as it streams, in a worker (matrix up to 300 MB) | Matrix Market coordinate entries (`integer`, `real`, or `pattern`); `software_version` from Space Ranger's `%metadata_json` comment; barcodes; feature `id`, `name`, `type` (`id`, `name` in `genes.tsv`) | Spots (rows), genes, expression |
-| `spatial/tissue_hires_image.png`, `spatial/tissue_lowres_image.png`                                               | No       | `HTMLImageElement`; `.gz` decompressed first                              | Whole image                                                                                                                                                                                               | Tissue underlay                 |
-| `analysis/clustering/gene_expression_graphclust/clusters.csv`, then `analysis/clustering/graphclust/clusters.csv` | No       | fetch + CSV                                                               | `Barcode,Cluster`                                                                                                                                                                                         | `graphclust` annotation set     |
-| `analysis/{umap,tsne}/gene_expression_2_components/projection.csv`, then `…/2_components/…`                       | No       | fetch + CSV                                                               | Barcode and two axes                                                                                                                                                                                      | `X_umap`, `X_tsne` embeddings   |
-| `analysis/pca/gene_expression_10_components/projection.csv`, then `…/10_components/…`                             | No       | fetch + CSV                                                               | Barcode and the first two components                                                                                                                                                                      | `X_pca` embedding               |
+| File                                                                                                              | Required | Library                                                                    | What is read                                                                                                                                                                                              | Used for                        |
+| ----------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| `spatial/tissue_positions.csv` or `spatial/tissue_positions_list.csv`                                             | Yes      | fetch + gunzip when gzipped                                                | `barcode`, `in_tissue`, `array_row`, `array_col`, `pxl_row_in_fullres`, `pxl_col_in_fullres` (header or fixed order)                                                                                      | Spot centres, lattice fit       |
+| `spatial/scalefactors_json.json`                                                                                  | Yes      | fetch + JSON (gzip allowed)                                                | `tissue_hires_scalef`, `tissue_lowres_scalef`, `spot_diameter_fullres`, `fiducial_diameter_fullres`, `microns_per_pixel`                                                                                  | Image placement, units          |
+| `filtered_feature_bc_matrix.h5`                                                                                   | Yes¹     | fetch whole file, `h5wasm` in a worker (up to 300 MiB)                     | `/matrix/barcodes`, `features/{name,id,feature_type}`, `data`, `indices`, `indptr`; root `library_ids`, `chemistry_description`, `software_version` attributes. Cell Ranger 2 per-genome groups also work | Spots (rows), genes, expression |
+| `filtered_feature_bc_matrix/matrix.mtx.gz`, `barcodes.tsv.gz`, `features.tsv.gz`                                  | Yes¹     | fetch, gunzip, and parse as it streams, in a worker (matrix up to 300 MiB) | Matrix Market coordinate entries (`integer`, `real`, or `pattern`); `software_version` from Space Ranger's `%metadata_json` comment; barcodes; feature `id`, `name`, `type` (`id`, `name` in `genes.tsv`) | Spots (rows), genes, expression |
+| `spatial/tissue_hires_image.png`, `spatial/tissue_lowres_image.png`                                               | No       | `HTMLImageElement`; `.gz` decompressed first                               | Whole image                                                                                                                                                                                               | Tissue underlay                 |
+| `analysis/clustering/gene_expression_graphclust/clusters.csv`, then `analysis/clustering/graphclust/clusters.csv` | No       | fetch + CSV                                                                | `Barcode,Cluster`                                                                                                                                                                                         | `graphclust` annotation set     |
+| `analysis/{umap,tsne}/gene_expression_2_components/projection.csv`, then `…/2_components/…`                       | No       | fetch + CSV                                                                | Barcode and two axes                                                                                                                                                                                      | `X_umap`, `X_tsne` embeddings   |
+| `analysis/pca/gene_expression_10_components/projection.csv`, then `…/10_components/…`                             | No       | fetch + CSV                                                                | Barcode and the first two components                                                                                                                                                                      | `X_pca` embedding               |
 
 ¹ One of the two: the `.h5`, else the MEX folder.
 
@@ -259,7 +259,7 @@ outlines from `dataset.elements(bbox)`, true-size points, embeddings labelled
 `runVisiumDiagnostics` (`src/data/datasetDiagnostics.ts`) checks the positions
 and scale factors with `GET`, the filtered matrix (and a MEX matrix's barcode
 and feature lists) and both tissue images with `HEAD` (the matrix fails above
-300 MB), and the graph-based clusters and UMAP CSVs as optional, each at the
+300 MiB), and the graph-based clusters and UMAP CSVs as optional, each at the
 first path the viewer would read. When none can be read, the warning gives the
 first path's error and names the other paths. No Range support is needed:
 every standard Visium file is read whole. A Visium `.h5ad` gets the H5AD
@@ -285,7 +285,7 @@ diagnostics.
   `aggr_tissue_positions.csv`) is not detected; use one sample's `count`
   output, or a manifest per sample.
 - A multi-library `.h5ad` shows one library at a time.
-- The Space Ranger filtered matrix is read whole, up to 300 MB. A Visium
+- The Space Ranger filtered matrix is read whole, up to 300 MiB. A Visium
   `.h5ad` is read like any H5AD: up to 64 MiB downloaded whole, larger files
   by range, and a kerchunk reference or Icechunk repository only for a file
   over 300 MiB that cannot be read by range (see
