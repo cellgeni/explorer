@@ -132,6 +132,15 @@ Checked with a copy of the EF6 file whose obsm `spatial` is its
 3.5 s after the link opened, KRT5 lining the epidermis through the 780 µm,
 niches as layers, hover naming the cell's z.
 
+AnnData Zarr stores, and AnnData in Icechunk, build the dataset with the
+same `readH5adCacheFromGroup`, so they place cells in 3D with no change of
+their own. anndata chunks a large obsm matrix two columns wide, so a store's
+z is in chunks of its own, which zarrita's whole-array read joins. The same
+copy written by `adata.write_zarr` (100 MB) and served locally showed the 3D
+view 1.4 s after the link as Zarr v2 and 1.2 s as Zarr v3, with KRT5
+coloured by 2.7 s and 2.4 s. The `stack.zarr` fixture covers it, from
+consolidated metadata and from a walk.
+
 Known gaps:
 
 - [ ] A depth only from obsm `spatial`: not an obs column such as `z_um`, nor

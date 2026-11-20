@@ -532,10 +532,11 @@ observations from `obs`, and expression from `/X` for supported dense, CSR, and
 CSC layouts.
 
 When `/obsm/spatial` (or `X_spatial`) has a third column, such as registered
-serial sections combined in one file with each section's depth, the 2D view
-shows every cell in one plane and Cells › Appearance › `View` › `3D` shows
-them at their z, coloured by the selected genes or annotation set. Drag to
-rotate; `Depth` stretches z; `2D View` returns to the plane. See
+serial sections combined in one `.h5ad` or AnnData Zarr store with each
+section's depth, the 2D view shows every cell in one plane and Cells ›
+Appearance › `View` › `3D` shows them at their z, coloured by the selected
+genes or annotation set. Drag to rotate; `Depth` stretches z; `2D View`
+returns to the plane. See
 [3D Cell View](./ui-reference.md#3d-cell-view).
 
 Files up to 64 MiB are downloaded whole and opened with the browser HDF5

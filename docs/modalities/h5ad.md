@@ -232,11 +232,14 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 - Columns 0 and 1 are x and y. Any non-finite value fails the load.
 - A third column of `X_spatial` or `spatial` is each cell's z, in the same
   units, and the Cells section offers the
-  [3D cell view](../ui-reference.md#3d-cell-view) (`obsmDepths`). It is
-  ignored when any value is not finite or all are the same (a padding column
-  of zeros), for other keys (a third UMAP or PCA column), and for Visium
-  files and SpatialData tables, which place cells in their plane. Image-pixel
-  coordinates scale it by the pixel size, as they do x and y.
+  [3D cell view](../ui-reference.md#3d-cell-view) (`obsmDepths`), whether
+  the AnnData is an `.h5ad`, an AnnData Zarr store or in Icechunk. anndata
+  chunks a large matrix two columns wide, so a Zarr store's z is in chunks
+  of its own; the whole matrix is read. It is ignored when any value is not
+  finite or all are the same (a padding column of zeros), for other keys (a
+  third UMAP or PCA column), and for Visium files and SpatialData tables,
+  which place cells in their plane. Image-pixel coordinates scale it by the
+  pixel size, as they do x and y.
 - Values are used directly as micrometres (1 µm per unit), except for Visium
   files, whose `obsm/spatial` pixels are scaled to micrometres
   ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
