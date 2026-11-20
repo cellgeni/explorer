@@ -131,3 +131,11 @@ Reviewed version: `6a9a736a26fc1b095ed7c1bbfbace97ab4eddf10` (origin/main, PR 19
 - Ledger closed: 460 pending rows set to `not reviewed` (413 source, 7 docs, 2 plan records, 4 scripts) or to the depth the earlier stages recorded (plan records, `PLAN.md`).
 - `../COVERAGE.md` final, with the remaining checks in order.
 - No worker. 3 of 4 activations unused.
+
+## Addendum (2026-11-20)
+
+- Scope: `6a9a736..5b1cd9f` (PRs 200 to 202), after the user asked for a delta review instead of a full rerun. Main merged into the review branch.
+- Baseline green on the merged head. Earlier repros unchanged (12 fail, as before), and no cited line was edited.
+- New findings EXP-039 (P1, the 2D view's WebGL context lost after 16 openings of the 3D cell view), EXP-040 (P2, split sections stacked at z twice), EXP-041 (P3, a whole-number section column not found) and EXP-042 (P3, `aria-hidden-focus` in the 3D viewers). Tasks T42 to T45.
+- Measured without a finding: the section scan cost (2.2 s for 100 sections of 1M cells, about 21 ms each).
+- No worker. 3 of 4 activations unused.

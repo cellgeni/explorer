@@ -1,0 +1,12 @@
+### 2026-11-20T17:34:41Z git status --porcelain (HEAD de29298)
+ M docs/review/2026-11-19/COVERAGE.md
+ M docs/review/2026-11-19/DOC_CODE_MATRIX.csv
+ M docs/review/2026-11-19/REVIEW_REPORT.md
+ M docs/review/2026-11-19/REVIEW_TASKS.md
+ M docs/review/2026-11-19/evidence/inventory/ledger.tsv
+ M docs/review/2026-11-19/notes/stages.md
+?? docs/review/2026-11-19/ADDENDUM_2026-11-20.md
+?? docs/review/2026-11-19/evidence/addendum/
+?? docs/review/2026-11-19/evidence/fixtures/addendum/
+?? docs/review/2026-11-19/evidence/repro/addendum/
+### git diff --stat 5b1cd9f -- . ':!docs/review' (empty: only docs/review differs from main)

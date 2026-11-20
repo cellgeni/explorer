@@ -1,0 +1,134 @@
+{
+  "gc": true,
+  "toggles": 20,
+  "before": {
+    "created": 1,
+    "lost": 0,
+    "lostOnPage": 0
+  },
+  "after": [
+    {
+      "toggle": 1,
+      "created": 2,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 2,
+      "created": 3,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 3,
+      "created": 4,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 4,
+      "created": 5,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 5,
+      "created": 6,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 6,
+      "created": 7,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 7,
+      "created": 8,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 8,
+      "created": 9,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 9,
+      "created": 10,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 10,
+      "created": 11,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 11,
+      "created": 12,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 12,
+      "created": 13,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 13,
+      "created": 14,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 14,
+      "created": 15,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 15,
+      "created": 16,
+      "lost": 0,
+      "lostOnPage": 0
+    },
+    {
+      "toggle": 16,
+      "created": 17,
+      "lost": 1,
+      "lostOnPage": 1
+    },
+    {
+      "toggle": 17,
+      "created": 18,
+      "lost": 2,
+      "lostOnPage": 1
+    },
+    {
+      "toggle": 18,
+      "created": 19,
+      "lost": 3,
+      "lostOnPage": 1
+    },
+    {
+      "toggle": 19,
+      "created": 20,
+      "lost": 4,
+      "lostOnPage": 1
+    },
+    {
+      "toggle": 20,
+      "created": 21,
+      "lost": 5,
+      "lostOnPage": 1
+    }
+  ],
+  "mainCanvasLost": [null, true, null],
+  "warnings": ["WARNING: Too many active WebGL contexts. Oldest context will be lost."],
+  "errors": []
+}

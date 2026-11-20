@@ -167,3 +167,19 @@ Checks still open, in the order they would most change the report:
 7. The hypotheses in `REVIEW_REPORT.md`.
 
 Any further worker needs effort controlled at medium first; 3 of 4 activations are unused.
+
+## Addendum (2026-11-20, main at `5b1cd9f`)
+
+`ADDENDUM_2026-11-20.md` covers the four commits merged to main after the review (`6a9a736..5b1cd9f`, PRs 200 to 202). Main was merged into the review branch (`de29298`), so `src/` there is identical to main.
+
+- **Baseline on the merged head:** format, lint, types, unit tests (347 files, 3,089 tests), build, the 19 smoke tests and coverage all pass. `npm ci` and the audits were not rerun, since dependencies are unchanged.
+- **Earlier findings:** the review repros give the same 12 failures as at `6a9a736` (`evidence/addendum/repro-rerun.log`), and `evidence/addendum/anchors.tsv` maps the 47 cited lines in changed files to `5b1cd9f`. All 38 findings are still present.
+- **Ledger:** 138 rows with stage `addendum`, one per changed path: source diffs and callers reviewed, docs traced, tests executed but not read, fixtures surveyed.
+- **Matrix:** DOC-ADD-01 to -12 (153 rows in all): 7 match, 4 code defects, 1 ambiguous.
+- **Browser checks:** `evidence/addendum/pw.addendum.config.mjs` serves the build on 4273 and the addendum fixtures on 4274, with no server reuse. Headless Chromium with SwiftShader.
+- **Not executed:**
+  - EXP-039 for the 3D stack, volume view and side by side.
+  - Range-read and Icechunk sections.
+  - Firefox and Safari.
+  - Hosted data.
+- **Delegation:** no worker; 3 of 4 activations unused.

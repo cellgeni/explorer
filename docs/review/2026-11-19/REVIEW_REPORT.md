@@ -2,6 +2,8 @@
 
 Review of commit `6a9a736a26fc1b095ed7c1bbfbace97ab4eddf10`, carried out 2026-11-19 to 2026-11-20 against the plan `REVIEW.md` (R0–R7). Repair tasks: `REVIEW_TASKS.md`. Coverage, baseline and delegation ledger: `COVERAGE.md`. Documentation claims: `DOC_CODE_MATRIX.csv`. Working notes per stage: `notes/`.
 
+**Addendum, 2026-11-20:** main moved to `5b1cd9f` (PRs 200 to 202) after this review. `ADDENDUM_2026-11-20.md` rechecks these findings there, where all 38 are still present. It reviews the new code and adds EXP-039 (P1), EXP-040 (P2), EXP-041 and EXP-042 (P3), with tasks T42 to T45.
+
 Paths in this report are repository-relative. Paths starting `evidence/` or `notes/` are relative to `docs/review/2026-11-19/`. Repros run from the repository root with:
 
 ```sh

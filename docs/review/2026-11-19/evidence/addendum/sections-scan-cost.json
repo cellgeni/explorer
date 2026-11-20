@@ -1,0 +1,33 @@
+{
+  "node": "v25.8.1",
+  "note": "Node timings, one run each, on the review machine; sections opened one at a time as overview().",
+  "results": [
+    {
+      "cells": 1000000,
+      "sections": 10,
+      "fileOpenMs": 495,
+      "sectionsListMs": 23,
+      "allSectionsOpenMs": 489,
+      "medianSectionOpenMs": 46,
+      "cellsOpened": 1000000
+    },
+    {
+      "cells": 1000000,
+      "sections": 50,
+      "fileOpenMs": 374,
+      "sectionsListMs": 22,
+      "allSectionsOpenMs": 1230,
+      "medianSectionOpenMs": 25,
+      "cellsOpened": 1000000
+    },
+    {
+      "cells": 1000000,
+      "sections": 100,
+      "fileOpenMs": 501,
+      "sectionsListMs": 24,
+      "allSectionsOpenMs": 2157,
+      "medianSectionOpenMs": 21,
+      "cellsOpened": 1000000
+    }
+  ]
+}

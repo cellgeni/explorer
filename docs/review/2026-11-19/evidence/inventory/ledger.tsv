@@ -1257,3 +1257,141 @@ config	tsconfig.json		quality-delivery	7	reviewed (stage 7)
 config	tsconfig.node.json		quality-delivery	7	reviewed (stage 7)
 config	vite.config.ts		quality-delivery	7	sampled (stage 6); sampled (stage 7)
 config	vitest.config.ts		quality-delivery	7	reviewed (stage 7)
+documentation	PLAN.md	227	documentation	addendum	surveyed (addendum): diff read as history (Phase 24 follow-ups), not traced
+documentation	docs/architecture.md	695	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+documentation	docs/dataset-collections.md	601	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+documentation	docs/dataset-manifest.md	507	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+documentation	docs/host-your-own-data.md	528	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+documentation	docs/modalities/h5ad.md	446	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+plan-record	docs/plan/open-items.md	325	plan-records	addendum	reviewed (addendum): diff read; plan record, checked against EXP-035
+plan-record	docs/plan/phases/24-section-stack.md	221	plan-records	addendum	surveyed (addendum): diff read as history (Phase 24 follow-ups), not traced
+documentation	docs/ui-reference.md	1532	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+documentation	docs/user-guide.md	635	documentation	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+schema	public/schemas/explorer-collection.v1.json	195	schemas-examples	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+schema	public/schemas/explorer-manifest.v1.json	586	schemas-examples	addendum	reviewed (addendum): new text traced to code (DOC-ADD rows)
+test	src/App.test.tsx	7365	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/App.tsx	5429	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/data/hyparquetCells.ts	604	io-hdf5-archives	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/data/shareableState.test.ts	411	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/data/shareableState.ts	1045	user-state-exports	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/datasets/annDataSectionCollection.test.ts	117	quality-delivery	addendum	reviewed (addendum): read; new file
+source	src/datasets/annDataSectionCollection.ts	157	collections-3d	addendum	reviewed (addendum): whole file read; new file
+test	src/datasets/annDataSections.test.ts	56	quality-delivery	addendum	executed (addendum): passed in npm test and coverage; not read line by line; new file
+source	src/datasets/annDataSections.ts	79	collections-3d	addendum	reviewed (addendum): whole file read; new file
+test	src/datasets/annDataZarrStore.test.ts	250	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+test	src/datasets/datasetFactory.test.ts	2117	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/datasets/datasetFactory.ts	2170	contracts-detection	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/datasets/datasetManifest.test.ts	649	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/datasets/datasetManifest.ts	1243	contracts-detection	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/datasets/h5adDataset.test.ts	2761	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/datasets/h5adDataset.ts	5313	platform-readers	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/app-shell/appDependencies.ts	455	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/app-shell/documentTitle.test.ts	44	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/app-shell/documentTitle.ts	53	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/app-shell/shareableDefaults.test.tsx	157	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/app-shell/shareableDefaults.ts	99	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/app-shell/useAppDomainState.ts	810	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/app-shell/useDatasetLifecycle.test.tsx	1889	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/app-shell/useDatasetLifecycle.ts	2481	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/app-shell/useShareableUrlHash.test.tsx	376	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/app-shell/useShareableUrlHash.ts	467	loading-state	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/collection/SectionStackViewer.tsx	408	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/collection/collectionApp.test.tsx	950	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+test	src/features/collection/collectionPreviewData.test.ts	369	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/collection/collectionPreviewData.ts	448	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/collection/collectionPreviewStore.ts	302	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/collection/sectionSplitModel.test.ts	50	quality-delivery	addendum	executed (addendum): passed in npm test and coverage; not read line by line; new file
+source	src/features/collection/sectionSplitModel.ts	61	collections-3d	addendum	reviewed (addendum): whole file read; new file
+test	src/features/collection/sectionStackLayers.test.ts	225	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/collection/sectionStackLayers.ts	415	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/collection/sectionStackModel.test.ts	180	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/collection/sectionStackModel.ts	210	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/collection/useCollectionPreviews.ts	121	collections-3d	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/dataset/datasetManifestModel.test.ts	158	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/dataset/datasetManifestModel.ts	183	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/genes/geneControlsModel.test.ts	326	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/genes/geneControlsModel.ts	513	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/genes/useGeneSetControls.ts	123	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/query/cellQueryModel.ts	596	plots-query	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/sections/AnnotationsSectionBlocks.tsx	712	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/sections/CellsSectionBlocks.tsx	599	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/sections/annotationsSectionModel.test.ts	166	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/sections/annotationsSectionModel.ts	292	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+test	src/features/sections/cellsSectionModel.test.ts	198	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line
+source	src/features/sections/cellsSectionModel.ts	354	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/features/shell/LayerPanel.tsx	437	ui-shell-other	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/rendering/cellPointRenderer.ts	330	images-rendering	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/rendering/deckLayerTypes.ts	293	images-rendering	addendum	reviewed (addendum): diff 6a9a736..5b1cd9f and its callers read
+source	src/styles/controls.css	465	ui-shell-other	addendum	reviewed (addendum): diff read (link styled as a button)
+fixture	src/test/fixtures/anndata-zarr/make_fixtures.py		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/.zmetadata		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/X/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/X/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/X/0.0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/X/0.1		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/layers/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/layers/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/mask/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/mask/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/values/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/values/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/_index/values/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/categories/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/categories/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/categories/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/codes/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/codes/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/cluster/codes/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/score/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/score/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/score/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /categories/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /categories/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /categories/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /codes/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /codes/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obs/stage  /codes/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_scvi/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_scvi/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_scvi/0.0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_umap/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_umap/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/X_umap/0.0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/0.0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/0.1		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/1.0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsm/spatial/1.1		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsp/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/obsp/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/raw/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/raw/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/uns/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/uns/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/mask/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/mask/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/values/.zarray		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/values/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/var/_index/values/0		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/varm/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/varm/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/varp/.zattrs		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+fixture	src/test/fixtures/anndata-zarr/stack.zarr/varp/.zgroup		quality-delivery	addendum	surveyed (addendum): stack.zarr from 467ecea (tiny.zarr plus a z column, spatial chunked (4, 2)); used by annDataZarrStore.test.ts; not opened; new file
+test	src/test/sectionModels.ts	575	tests	addendum	executed (addendum): passed in npm test and coverage; not read line by line

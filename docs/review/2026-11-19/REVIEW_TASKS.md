@@ -2,6 +2,8 @@
 
 Tasks for the findings in `REVIEW_REPORT.md`, reviewed at commit `6a9a736`. Each task can be reviewed as one pull request. Each behaviour fix carries its regression test and documentation update. Refactors that should not change behaviour are kept separate, in wave 4.
 
+Tasks T42 to T45, for the findings of the 2026-11-20 addendum at `5b1cd9f`, are in `ADDENDUM_2026-11-20.md`. T42 (wave 1) shares its mechanism with T11; do them together.
+
 ## Order
 
 The tasks run in four waves:
