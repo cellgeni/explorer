@@ -269,7 +269,7 @@ describe('StripBandCache', () => {
     const secondWait = cache.get('0:0', load, second.signal)
 
     first.abort()
-    await expect(firstWait).rejects.toThrow()
+    await expect(firstWait).rejects.toMatchObject({ name: 'AbortError' })
     expect(loadSignal?.aborted).toBe(false)
 
     resolve(Uint8Array.from([1]))
@@ -297,7 +297,7 @@ describe('StripBandCache', () => {
     const wait = cache.get('0:1', load, controller.signal)
 
     controller.abort()
-    await expect(wait).rejects.toThrow()
+    await expect(wait).rejects.toMatchObject({ name: 'AbortError' })
     expect(signals[0]?.aborted).toBe(true)
     await expect(cache.get('0:1', load, undefined)).resolves.toEqual(Uint8Array.from([2]))
     expect(load).toHaveBeenCalledTimes(2)

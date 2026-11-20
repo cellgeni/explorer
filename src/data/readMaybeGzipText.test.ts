@@ -58,7 +58,7 @@ describe('readMaybeGzipText', () => {
   it('rejects a body with a gzip header but corrupt data', async () => {
     const corrupt = new Uint8Array([0x1f, 0x8b, 0x08, 0x00, 0xde, 0xad, 0xbe, 0xef])
 
-    await expect(readMaybeGzipText(bytesResponse(corrupt))).rejects.toThrow()
+    await expect(readMaybeGzipText(bytesResponse(corrupt))).rejects.toThrow(TypeError)
   })
 
   it('explains when the browser cannot decompress gzip', async () => {

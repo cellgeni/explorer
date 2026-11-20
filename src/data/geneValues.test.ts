@@ -156,7 +156,7 @@ describe('gene values (plan 22-A)', () => {
 
     await expect(
       geneValuesFromCsr(csr, [0], { signal: controller.signal, yieldEvery: 1 }),
-    ).rejects.toThrow()
+    ).rejects.toMatchObject({ name: 'AbortError' })
   })
 
   it('matches a dense read on any matrix, in every layout', async () => {

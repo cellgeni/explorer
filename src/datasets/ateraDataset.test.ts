@@ -86,11 +86,12 @@ function matrixStore(): Map<string, Uint8Array> {
   return entries
 }
 
-function cscStore(): Map<string, Uint8Array> {
+// One column per matrix feature, unless `indptr` says otherwise.
+function cscStore(indptr = [0, 2, 3, 4, 5]): Map<string, Uint8Array> {
   const entries = new Map<string, Uint8Array>()
   group(entries, '', { 'encoding-type': 'anndata' })
-  group(entries, 'X', { 'encoding-type': 'csc_matrix', shape: [3, 4] })
-  array(entries, 'X/indptr', '<i8', [0, 2, 3, 4, 5])
+  group(entries, 'X', { 'encoding-type': 'csc_matrix', shape: [3, indptr.length - 1] })
+  array(entries, 'X/indptr', '<i8', indptr)
   array(entries, 'X/indices', '<i8', [0, 2, 1, 0, 2])
   array(entries, 'X/data', '<i4', [1, 3, 5, 2, 4])
   return entries
@@ -175,6 +176,8 @@ function createDataset(
   const stores = new Map<string, Map<string, Uint8Array>>([
     [`${BASE_URL}/cell_feature_matrix.zarr.zip`, matrixStore()],
     [`${BASE_URL}/matrices/csc.zarr.zip`, cscStore()],
+    // Three columns for the matrix's four features.
+    [`${BASE_URL}/matrices/csc-short.zarr.zip`, cscStore([0, 2, 3, 4])],
     [`${BASE_URL}/cells.zarr.zip`, cellsStore()],
   ])
   const requestedKeys: string[] = []
@@ -538,11 +541,13 @@ describe('AteraDataset', () => {
   it('rejects a CSC matrix whose feature count differs from the matrix', async () => {
     const { dataset } = createDataset({
       experiment: {
-        explorer_files: { cell_feature_viz_zarr_filepath: 'cells.zarr.zip' },
+        explorer_files: { cell_feature_viz_zarr_filepath: 'matrices/csc-short.zarr.zip' },
       },
     })
 
-    await expect(dataset.geneExpression(WHOLE_SLIDE, ['GENEA'])).rejects.toThrow()
+    await expect(dataset.geneExpression(WHOLE_SLIDE, ['GENEA'])).rejects.toThrow(
+      'has 3 features; the cell-feature matrix has 4.',
+    )
   })
 })
 

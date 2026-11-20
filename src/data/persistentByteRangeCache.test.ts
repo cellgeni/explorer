@@ -558,7 +558,9 @@ describe('IndexedDB byte range cache', () => {
     const newer = await openDatabase(indexedDB, DEFAULT_BYTE_RANGE_CACHE_VERSION + 1)
     newer.close()
 
-    await expect(cache.read(rangeKey(0))).rejects.toThrow()
+    await expect(cache.read(rangeKey(0))).rejects.toMatchObject({
+      name: 'InvalidStateError',
+    })
   })
 })
 

@@ -124,7 +124,7 @@ describe('spatialDataShapesWorkerReader', () => {
         file: asyncBufferFromBytes(new TextEncoder().encode('not parquet')),
         affine: AFFINE,
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow('parquet file invalid')
     expect(worker.terminated).toBe(true)
   })
 
