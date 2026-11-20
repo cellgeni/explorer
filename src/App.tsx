@@ -281,6 +281,8 @@ import {
 } from './features/annotations/useCellMetadataTrackValues'
 import {
   EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
+  geneExpressionBatchScaleKey,
+  geneExpressionScaleDomainWith,
   IDLE_GENE_EXPRESSION_STATE,
   type GeneExpressionState,
   geneExpressionModeLabel,
@@ -1999,23 +2001,10 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
-      setGeneExpressionScaleDomain((current) => {
-        const seen =
-          current.key === key && current.percentile === percentile
-            ? current
-            : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
-
-        if (seen.top >= spread.top && seen.highest >= spread.highest) {
-          return current
-        }
-
-        return {
-          key,
-          percentile,
-          top: Math.max(seen.top, spread.top),
-          highest: Math.max(seen.highest, spread.highest),
-        }
-      })
+      const batchKey = geneExpressionBatchScaleKey(key, batch)
+      setGeneExpressionScaleDomain((current) =>
+        geneExpressionScaleDomainWith(current, batchKey, percentile, spread),
+      )
     },
     [setGeneExpressionScaleDomain],
   )

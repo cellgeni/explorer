@@ -3,7 +3,10 @@ import type {
   GeneExpressionLoadMode,
 } from '../../data/geneExpressionLod'
 import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
-import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
+import type {
+  GeneExpressionBatch,
+  GeneExpressionBatchTiming,
+} from '../../datasets/xeniumDataset'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   isGeneExpressionColorScale,
@@ -76,6 +79,9 @@ export interface GeneExpressionScaleDomain {
   // The highest top (that percentile) of the batches read.
   readonly top: number
   readonly highest: number
+  // Visium HD: the same for the selection's other bin sizes, as a 16 µm bin
+  // sums 64 2 µm ones. Zooming back to a size restores its top.
+  readonly otherBinSizes?: readonly GeneExpressionScaleDomain[]
 }
 
 export const EMPTY_GENE_EXPRESSION_SCALE_DOMAIN: GeneExpressionScaleDomain = {
@@ -262,6 +268,70 @@ export function geneExpressionScaleKeyFor(
   genes: readonly string[],
 ): string {
   return [datasetUrl, scoreMode, genes.join('|')].join('::')
+}
+
+const SCALE_KEY_BIN_SIZE = '::bin='
+
+// The scale key of a batch: Visium HD bins add their size, as zoomed out a
+// 2 µm or 8 µm selection reads 16 µm bins.
+export function geneExpressionBatchScaleKey(
+  key: string,
+  batch: Pick<GeneExpressionBatch, 'elements'>,
+): string {
+  const binSize = batch.elements[0]?.binSizeMicrometers
+
+  return binSize === undefined ? key : `${key}${SCALE_KEY_BIN_SIZE}${binSize.toString()}`
+}
+
+// What the scale has seen for a batch's key at a percentile, or nothing.
+export function rememberedGeneExpressionScale(
+  domain: GeneExpressionScaleDomain,
+  key: string,
+  percentile: number,
+): GeneExpressionScaleDomain {
+  return (
+    [domain, ...(domain.otherBinSizes ?? [])].find(
+      (seen) => seen.key === key && seen.percentile === percentile,
+    ) ?? EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
+  )
+}
+
+// The domain once a batch with this spread has been read under `key`. It keeps
+// what the selection's other bin sizes saw at the same percentile.
+export function geneExpressionScaleDomainWith(
+  domain: GeneExpressionScaleDomain,
+  key: string,
+  percentile: number,
+  spread: { readonly top: number; readonly highest: number },
+): GeneExpressionScaleDomain {
+  const seen = rememberedGeneExpressionScale(domain, key, percentile)
+
+  if (seen === domain && seen.top >= spread.top && seen.highest >= spread.highest) {
+    return domain
+  }
+
+  const selection = key.split(SCALE_KEY_BIN_SIZE)[0]
+  const otherBinSizes = [domain, ...(domain.otherBinSizes ?? [])]
+    .filter(
+      (other) =>
+        other.key !== key &&
+        other.percentile === percentile &&
+        other.key.split(SCALE_KEY_BIN_SIZE)[0] === selection,
+    )
+    .map(({ key: otherKey, percentile: otherPercentile, top, highest }) => ({
+      key: otherKey,
+      percentile: otherPercentile,
+      top,
+      highest,
+    }))
+
+  return {
+    key,
+    percentile,
+    top: Math.max(seen.top, spread.top),
+    highest: Math.max(seen.highest, spread.highest),
+    ...(otherBinSizes.length === 0 ? {} : { otherBinSizes }),
+  }
 }
 
 export function parseGeneExpressionColorScale(
