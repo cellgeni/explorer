@@ -32,3 +32,17 @@ export function queryWindowRightOffset(
   if (narrow || openWidths.length === 0) return undefined
   return openWidths.reduce((offset, width) => offset + width + WINDOW_GAP, RIGHT_INSET)
 }
+
+// Whether a window opening `rightOffset` from the canvas's right edge (the
+// CSS inset when undefined), `width` wide, would start under a drawer
+// reaching `drawerRight` from the canvas's left edge (EXP-029). Windows are
+// placed from the right, so one that would is opened with the drawer closed.
+export function windowOpensUnderDrawer(options: {
+  readonly canvasWidth: number
+  readonly drawerRight: number
+  readonly rightOffset: number | undefined
+  readonly width: number
+}): boolean {
+  const left = options.canvasWidth - (options.rightOffset ?? RIGHT_INSET) - options.width
+  return left < options.drawerRight
+}

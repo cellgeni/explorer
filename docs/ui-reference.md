@@ -1239,7 +1239,11 @@ in the list, since nothing drawn later is lost.
 ⓘ opens the info drawer (`src/features/shell/InfoDrawer.tsx`): 380 px wide, on
 the left over the canvas, and not modal. Esc or `Close Dataset info` closes
 it; Esc in a text field, such as the address, first leaves the field. Its
-sections render only while it is open.
+sections render only while it is open. A window opened from the Panels group
+where the drawer would cover it, as Plots and Cell Query would at about
+1024 px wide, closes the drawer as it opens (`windowOpensUnderDrawer` in
+`src/features/shell/floatingWindowModel.ts`). Windows already open, moved or
+not, stay where they are.
 
 | Section              | Contents                                                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -26,7 +26,9 @@ import {
   EMBEDDING_WINDOW_SIZE,
   PLOTS_WINDOW_SIZE,
   plotsWindowRightOffset,
+  QUERY_WINDOW_SIZE,
   queryWindowRightOffset,
+  windowOpensUnderDrawer,
 } from './floatingWindowModel'
 import { InfoDrawer } from './InfoDrawer'
 import { LayerPanel } from './LayerPanel'
@@ -113,27 +115,6 @@ export function ShellLayout({
     plotsOpen: false,
     queryOpen: false,
   }
-  const setEmbeddingOpen = (open: boolean) => {
-    onPanelsChange({
-      ...panels,
-      ...(open && narrow ? narrowClosed : {}),
-      embeddingOpen: open,
-    })
-  }
-  const setPlotsOpen = (open: boolean) => {
-    onPanelsChange({
-      ...panels,
-      ...(open && narrow ? narrowClosed : {}),
-      plotsOpen: open,
-    })
-  }
-  const setQueryOpen = (open: boolean) => {
-    onPanelsChange({
-      ...panels,
-      ...(open && narrow ? narrowClosed : {}),
-      queryOpen: open,
-    })
-  }
   const [embeddingWidth, setEmbeddingWidth] = useState(EMBEDDING_WINDOW_SIZE.width)
   const handleEmbeddingSizeChange = useCallback((size: { readonly width: number }) => {
     setEmbeddingWidth(size.width)
@@ -142,17 +123,69 @@ export function ShellLayout({
   const handlePlotsSizeChange = useCallback((size: { readonly width: number }) => {
     setPlotsWidth(size.width)
   }, [])
+  const embeddingShown = embedding !== null && embeddingOpen
+  const plotsShown = plots !== null && plotsOpen
+  const plotsRightOffset = plotsWindowRightOffset(embeddingShown, embeddingWidth, narrow)
+  const queryRightOffset = queryWindowRightOffset(
+    [...(embeddingShown ? [embeddingWidth] : []), ...(plotsShown ? [plotsWidth] : [])],
+    narrow,
+  )
+  const canvasRef = useRef<HTMLDivElement>(null)
+  // A window opening where the open Dataset info drawer would cover it
+  // closes the drawer (EXP-029). Windows already open keep their place.
+  const drawerClosedFor = (rightOffset: number | undefined, width: number) => {
+    // Read when a window opens, from the one canvas the shell draws.
+    const canvas = document.querySelector('.shell-canvas')
+    const drawer = canvas?.querySelector('.shell-info-drawer')
+
+    if (!infoOpen || narrow || canvas == null || drawer == null) return {}
+
+    const canvasBox = canvas.getBoundingClientRect()
+    // Not laid out yet: nothing to measure.
+    if (canvasBox.width === 0) return {}
+    return windowOpensUnderDrawer({
+      canvasWidth: canvasBox.width,
+      drawerRight: drawer.getBoundingClientRect().right - canvasBox.left,
+      rightOffset,
+      width,
+    })
+      ? { infoOpen: false }
+      : {}
+  }
+  const setEmbeddingOpen = (open: boolean) => {
+    onPanelsChange({
+      ...panels,
+      ...(open && narrow ? narrowClosed : {}),
+      ...(open && !embeddingOpen ? drawerClosedFor(undefined, embeddingWidth) : {}),
+      embeddingOpen: open,
+    })
+  }
+  const setPlotsOpen = (open: boolean) => {
+    onPanelsChange({
+      ...panels,
+      ...(open && narrow ? narrowClosed : {}),
+      ...(open && !plotsOpen ? drawerClosedFor(plotsRightOffset, plotsWidth) : {}),
+      plotsOpen: open,
+    })
+  }
+  const setQueryOpen = (open: boolean) => {
+    onPanelsChange({
+      ...panels,
+      ...(open && narrow ? narrowClosed : {}),
+      ...(open && !queryOpen
+        ? drawerClosedFor(queryRightOffset, QUERY_WINDOW_SIZE.width)
+        : {}),
+      queryOpen: open,
+    })
+  }
   // The window last clicked or focused is drawn over the others, which
   // overlap once moved.
   const [frontWindow, setFrontWindow] = useState<PanelToggle['panel'] | null>(null)
-  const embeddingShown = embedding !== null && embeddingOpen
-  const plotsShown = plots !== null && plotsOpen
   // The Cell Query window mounts the first time it opens, so a session that
   // never uses it does not render it with every update, then stays mounted
   // to keep its size.
   const [queryMounted, setQueryMounted] = useState(queryOpen)
   if (queryOpen && !queryMounted) setQueryMounted(true)
-  const canvasRef = useRef<HTMLDivElement>(null)
   useCanvasCornerSizes(canvasRef, narrow)
   const [panelCollapsed, setPanelCollapsed] = useState(false)
   // On narrow screens the panel is a bottom sheet that starts as a 56 px
@@ -282,11 +315,7 @@ export function ShellLayout({
               <PlotsWindow
                 plots={plots}
                 fullWidth={narrow}
-                rightOffset={plotsWindowRightOffset(
-                  embeddingShown,
-                  embeddingWidth,
-                  narrow,
-                )}
+                rightOffset={plotsRightOffset}
                 open={plotsOpen}
                 onClose={() => {
                   setPlotsOpen(false)
@@ -302,13 +331,7 @@ export function ShellLayout({
               <QueryWindow
                 query={query}
                 fullWidth={narrow}
-                rightOffset={queryWindowRightOffset(
-                  [
-                    ...(embeddingShown ? [embeddingWidth] : []),
-                    ...(plotsShown ? [plotsWidth] : []),
-                  ],
-                  narrow,
-                )}
+                rightOffset={queryRightOffset}
                 open={queryOpen}
                 onClose={() => {
                   setQueryOpen(false)
