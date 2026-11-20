@@ -284,11 +284,11 @@ describe('TiffPyramidLoader', () => {
 
     // The run goes on while tile 1 still waits for it.
     firstController.abort()
-    await expect(first).rejects.toThrow()
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
     expect(signals[0]?.aborted).toBe(false)
 
     secondController.abort()
-    await expect(second).rejects.toThrow()
+    await expect(second).rejects.toMatchObject({ name: 'AbortError' })
     expect(signals[0]?.aborted).toBe(true)
 
     // A tile the cancelled run was reading ahead is read again.
@@ -318,7 +318,7 @@ describe('TiffPyramidLoader', () => {
     controller.abort()
     respond()
 
-    await expect(first).rejects.toThrow()
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
     await expect(second).resolves.toEqual(tileBytes(1010))
     expect(signals[0]?.aborted).toBe(false)
   })

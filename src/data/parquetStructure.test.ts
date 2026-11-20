@@ -170,7 +170,7 @@ describe('readParquetStructure', () => {
           signal: controller.signal,
         },
       ),
-    ).rejects.toThrow()
+    ).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
 

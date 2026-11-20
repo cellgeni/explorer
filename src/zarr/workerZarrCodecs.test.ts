@@ -159,7 +159,7 @@ describe('installWorkerZarrCodecs', () => {
       kind: 'array',
     })
 
-    await expect(zarr.get(counts, [null])).rejects.toThrow()
+    await expect(zarr.get(counts, [null])).rejects.toThrow('numcodecs.zlib')
   })
 
   it('wraps each codec once and restores zarrita codecs', async () => {

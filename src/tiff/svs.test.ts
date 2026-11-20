@@ -347,7 +347,7 @@ describe('openTiff with an SVS', () => {
 
     const loader = await openTiff(url)
 
-    await expect(loader.associatedImages?.()).rejects.toThrow()
+    await expect(loader.associatedImages?.()).rejects.toThrow('Invalid field type')
   })
 
   it('opens an SVS saved under a .tif name', async () => {

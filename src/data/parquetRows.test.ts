@@ -141,6 +141,6 @@ describe('readParquetRows', () => {
 
     await expect(
       readParquetRows(structure, { fetcher, signal: controller.signal }),
-    ).rejects.toThrow()
+    ).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
