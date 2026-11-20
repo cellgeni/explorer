@@ -82,6 +82,12 @@ export function SectionStackViewer({
   onClose,
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
+  // The canvas host, hidden from assistive technology, whose deck.gl root
+  // leaves the tab order once loaded.
+  const canvasHostRef = useRef<HTMLDivElement>(null)
+  const handleDeckLoad = useCallback(() => {
+    removeDeckFromTabOrder(canvasHostRef.current)
+  }, [])
   const [size, setSize] = useState<{
     readonly width: number
     readonly height: number
@@ -231,7 +237,7 @@ export function SectionStackViewer({
         setHover(null)
       }}
     >
-      <div className="volume-viewer-canvas" aria-hidden="true">
+      <div className="volume-viewer-canvas" aria-hidden="true" ref={canvasHostRef}>
         <MemoDeckGL
           Deck={ReleasingDeck}
           views={SECTION_STACK_VIEW}
@@ -241,7 +247,7 @@ export function SectionStackViewer({
           pickingRadius={PICKING_RADIUS_PIXELS}
           controller
           layers={stack.layers as Layer[]}
-          onLoad={removeDeckFromTabOrder}
+          onLoad={handleDeckLoad}
         />
       </div>
       <div

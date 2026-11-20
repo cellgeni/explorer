@@ -1094,6 +1094,48 @@ test('gives back the WebGL context of each closed 3D view, side-by-side section 
   expect((await webglContexts()).lostOnPage).toBe(0)
 })
 
+test('has no accessibility violations with a 3D view open @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const findings: AxeFindings = new Map()
+  await routeH5adBytes(page, '/sections-3d.h5ad', await createSections3dH5ad())
+  const link = new URLSearchParams({
+    collection: new URL('/sections-3d.h5ad', baseURL).toString(),
+  })
+  await page.goto(`/#${link.toString()}`)
+  const bar = page.getByRole('navigation', { name: 'Collection' })
+  await expect(bar.getByRole('button', { name: 's1', exact: true })).toHaveAttribute(
+    'aria-current',
+    'true',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+
+  // Each 3D view hides its canvas from assistive technology, so deck.gl's
+  // focusable root inside it must leave the tab order.
+  const cells = await openControls(page, 'cell-appearance')
+  const cellView = cells.getByRole('group', { name: 'Cell view' })
+  await cellView.getByRole('button', { name: '3D' }).click()
+  await expect(
+    page.getByRole('region', { name: '3D cells' }).locator('canvas'),
+  ).toHaveCount(1)
+  await page.waitForTimeout(500)
+  await collectAxeFindings(page, '3D cell view', findings)
+  await cellView.getByRole('button', { name: '2D' }).click()
+
+  const stackToggle = bar.getByRole('button', { name: 'Stack in 3D' })
+  await stackToggle.click()
+  await expect(
+    page.getByRole('region', { name: '3D section stack' }).locator('canvas'),
+  ).toHaveCount(1)
+  await page.waitForTimeout(500)
+  await collectAxeFindings(page, '3D section stack', findings)
+  await stackToggle.click()
+
+  expectAxeFindingsMatchBaseline(findings)
+})
+
 // The collection bar's heading is as wide as its title, so no dataset covers
 // its buttons, with previews, names only, expanded and narrow. A wide font,
 // as on Linux, is forced, since macOS fonts hid a heading too narrow for the

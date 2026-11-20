@@ -460,7 +460,9 @@ the button again, returns to them.
   stretch (×1 is the true spacing) and changes it from ×¼ to ×128.
 - **Moving.** Drag to rotate, Shift-drag to pan, scroll to zoom; the
   fit button returns to the first view. Hovering a cell names its section and
-  the cell and its class, or gives its score.
+  the cell and its class, or gives its score. The canvas is hidden from
+  assistive technology and out of the tab order, as the 3D cell view's is;
+  Tab moves through the panel's controls.
 - **What is read.** Every section of the stack is read, whether the bar shows
   it or not, four at a time. The panel lists the sections still being read,
   and names those it cannot show: images, Visium HD and large plain `.h5ad`
