@@ -1039,6 +1039,11 @@ test('gives back the WebGL context of each closed 3D view, side-by-side section 
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
   await expect.poll(async () => (await webglContexts()).live).toBe(1)
+  // Names only: with previews, the bar's heading is too narrow for its three
+  // buttons in wider fonts (Linux), and the first section covers Stack in 3D.
+  const previews = bar.getByRole('button', { name: 'Previews' })
+  await previews.click()
+  await expect(previews).toHaveAttribute('aria-pressed', 'false')
 
   // Twice each, so a context kept by the first closing shows.
   const cells = await openControls(page, 'cell-appearance')
