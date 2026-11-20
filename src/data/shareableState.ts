@@ -87,6 +87,9 @@ export interface ShareableState {
   readonly morphologyZPlane?: number
   // `3d` when an OME-Zarr z-stack is shown in the 3D view: `imageView=`.
   readonly imageView?: string
+  // `3d` when cells placed in 3D (a third spatial coordinate) are shown in
+  // the 3D view: `cellView=`.
+  readonly cellView?: string
   readonly transcriptOverlay?: boolean
   readonly transcriptDetailMode?: string
   readonly transcriptMinQv?: number
@@ -175,6 +178,7 @@ export function parseShareableState(hash: string): ShareableState {
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
   const imageView = readString(params, 'imageView')
+  const cellView = readString(params, 'cellView')
   const transcriptOverlay = parseBoolean(params.get('tx'))
   const transcriptDetailMode = readString(params, 'txDetail')
   const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
@@ -376,6 +380,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (imageView !== undefined) {
     state.imageView = imageView
+  }
+
+  if (cellView !== undefined) {
+    state.cellView = cellView
   }
 
   if (transcriptOverlay !== undefined) {
@@ -609,6 +617,7 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'imageView', state.imageView)
+  setOptionalString(params, 'cellView', state.cellView)
 
   if (state.transcriptOverlay !== undefined) {
     params.set('tx', state.transcriptOverlay ? '1' : '0')

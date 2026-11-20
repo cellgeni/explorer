@@ -261,6 +261,9 @@ interface H5adCache {
   readonly geneNames: readonly string[]
   readonly geneAliases: ReadonlyMap<string, string>
   readonly coordinates: readonly DataPoint[]
+  // Each row's z, in the units of its coordinates, from a third column of
+  // obsm `spatial`; null for cells in a plane.
+  readonly depths: Float32Array | null
   readonly root: H5GroupLike
   readonly embeddingOptions: readonly AnalysisEmbeddingOption[]
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
@@ -273,6 +276,12 @@ interface H5adCache {
   readonly visiumSource: H5adVisiumSource | null
   // Ends the H5 file worker the arrays are read from, for a file read in one.
   readonly close?: () => void
+}
+
+interface H5adCoordinateEmbedding {
+  readonly embedding: AnalysisEmbedding
+  // The third column of a spatial matrix; see obsmDepths.
+  readonly depths: Float32Array | null
 }
 
 interface H5adVisiumSource {
@@ -458,6 +467,10 @@ const H5AD_COORDINATE_KEYS = [
   'tsne',
   'X_pca',
 ] as const
+
+// The coordinate matrices whose third column, when there is one, places
+// cells in 3D. A third UMAP or PCA column is not a depth.
+const H5AD_SPATIAL_KEYS: ReadonlySet<string> = new Set(['X_spatial', 'spatial'])
 
 const H5AD_EMBEDDING_DISPLAY_KEYS = [
   'X_umap',
@@ -787,9 +800,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         return
       }
 
+      const z = cache.depths?.[index]
+
       points.push({
         cellId: cellId as never,
         position,
+        ...(z === undefined ? {} : { z }),
         transcriptCount: 0,
         ...(spotArea === undefined ? {} : { cellArea: spotArea }),
         // Read from the obs columns when shown: an object per cell holding
@@ -1591,8 +1607,9 @@ function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
       ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
       : point,
   )
+  const depths = base.depths?.map((z) => z * scale) ?? null
 
-  return { ...base, coordinates, extent: bboxForPoints(coordinates) }
+  return { ...base, coordinates, depths, extent: bboxForPoints(coordinates) }
 }
 
 function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {
@@ -2429,18 +2446,19 @@ async function readH5adCacheFromGroup(
             .filter((key) => key !== '_index' && !key.startsWith('__')),
           readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
           readObsmPoints: async () => {
-            const embedding = await readOverviewCoordinateEmbedding(
+            const coordinates = await readOverviewCoordinateEmbedding(
               file,
               embeddingOptions,
               cellIds,
             ).catch(() => null)
-            return embedding?.points ?? null
+            return coordinates?.embedding.points ?? null
           },
         })
-  const coordinateEmbedding =
+  const obsmCoordinates =
     resolvedCoordinates === null
       ? await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds)
       : null
+  const coordinateEmbedding = obsmCoordinates?.embedding ?? null
   const observationTracks = await readObservationTracks(
     obs,
     cellIds.length,
@@ -2470,6 +2488,8 @@ async function readH5adCacheFromGroup(
         ? new Map()
         : geneAliasesByName(geneNames, varNames.indexNames),
     coordinates,
+    // Visium spots are placed on their slide, in 2D.
+    depths: visiumPlacement === null ? (obsmCoordinates?.depths ?? null) : null,
     root: file,
     embeddingOptions,
     categoricalTracks: observationTracks.categoricalTracks,
@@ -3003,6 +3023,16 @@ async function readObsmEmbedding(
   dataset: H5DatasetLike,
   cellIds: readonly string[],
 ): Promise<AnalysisEmbedding> {
+  return (await readObsmCoordinates(key, dataset, cellIds)).embedding
+}
+
+// An obsm matrix's first two columns as an embedding and, for a spatial one
+// with a third column, each cell's z: cells placed in 3D.
+async function readObsmCoordinates(
+  key: string,
+  dataset: H5DatasetLike,
+  cellIds: readonly string[],
+): Promise<H5adCoordinateEmbedding> {
   const shape = dataset.shape
 
   if (shape === null || shape.length !== 2) {
@@ -3034,23 +3064,54 @@ async function readObsmEmbedding(
   })
 
   return {
-    kind: key,
-    label: analysisEmbeddingLabel(key),
-    sourcePath: `/obsm/${key}`,
-    points,
+    embedding: {
+      kind: key,
+      label: analysisEmbeddingLabel(key),
+      sourcePath: `/obsm/${key}`,
+      points,
+    },
+    depths:
+      cols >= 3 && H5AD_SPATIAL_KEYS.has(key) ? obsmDepths(values, rows, cols) : null,
   }
+}
+
+// The third column, or null when any value is not finite or all are the
+// same, as when a writer pads 2D coordinates with a column of zeros.
+function obsmDepths(
+  values: NumericArrayLike,
+  rows: number,
+  cols: number,
+): Float32Array | null {
+  const depths = new Float32Array(rows)
+  let min = Infinity
+  let max = -Infinity
+
+  for (let row = 0; row < rows; row += 1) {
+    const z = numericValue(values, row * cols + 2)
+    if (!Number.isFinite(z)) return null
+
+    depths[row] = z
+    min = Math.min(min, z)
+    max = Math.max(max, z)
+  }
+
+  return max > min ? depths : null
 }
 
 async function readOverviewCoordinateEmbedding(
   file: H5GroupLike,
   embeddings: readonly AnalysisEmbeddingOption[],
   cellIds: readonly string[],
-): Promise<AnalysisEmbedding> {
+): Promise<H5adCoordinateEmbedding> {
   for (const key of H5AD_COORDINATE_KEYS) {
     const embedding = embeddings.find((candidate) => candidate.kind === key)
 
     if (embedding !== undefined) {
-      return readObsmEmbeddingFromRoot(file, embedding.kind, cellIds)
+      return readObsmCoordinates(
+        embedding.kind,
+        expectDataset(file.get(`/obsm/${embedding.kind}`), `/obsm/${embedding.kind}`),
+        cellIds,
+      )
     }
   }
 

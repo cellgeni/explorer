@@ -82,3 +82,63 @@ hovering names the section and the Aqp4 score.
 - [ ] Every cell is drawn 10 µm across, so Visium spots are smaller than in
       the main view, as in the side-by-side panels.
 - [ ] Unit and App tests only; no E2E test.
+
+## Follow-Up (2026-11-20): Cells Placed In 3D In One Dataset
+
+Requested with the EF6 skin file (`aligned_sections_vis.h5ad`, 14 registered
+sections, 201,789 cells, in one `.h5ad`): its sections are combined in one
+AnnData, registered into one frame, with each cell's section depth in `obs`.
+The 2D view drew all fourteen on top of each other, and the stack needs a
+collection of separate datasets. Asked: show a dataset whose obsm `spatial`
+has three columns in 3D.
+
+- **DECISION:** A third column of obsm `spatial` (or `X_spatial`) is each
+  cell's z, in the units of x and y. Other keys' third columns (UMAP, PCA)
+  are not depths, and a column that is all one value (zeros padding 2D
+  coordinates) or has a non-finite value is ignored. Visium files and
+  SpatialData tables place cells in their plane and keep no z.
+- **DECISION:** The 2D view is unchanged (every cell in one plane); Cells ›
+  Appearance › `View` › `3D` opens the 3D view over the canvas, as the
+  Image section's `View` does for a z-stack. One 3D view shows at a time.
+- **DECISION:** The 3D view is the stack's viewer with the open dataset as
+  its one section and each cell at its own z, so colouring, `Depth`,
+  `Other cells`, picking and the gene scale are the stack's. It reads the
+  open dataset as a collection preview does (cells, scores, classes), through
+  a preview store of its own that reads a large `.h5ad` too, since the main
+  view already has it open.
+- **DECISION:** `cellView=3d` in the link and `cellView` in manifest
+  defaults, as `imageView`.
+
+Delivered:
+
+- [x] `obsmDepths` and `H5adCache.depths` (`h5adDataset.ts`), scaled with
+      image-pixel coordinates; `CellOverviewPoint.z`, `OverviewCellDatum.z`.
+- [x] `PreviewCells.depths` and `PreviewScores.depths`; the scores read takes
+      the cells, to find each scored cell's z (`collectionPreviewData.ts`);
+      `openPreviewSource(..., { open: true })` and
+      `useOpenDatasetPreviewStore`.
+- [x] `sectionStackLayers` draws (x, −y, z) points for cells with depths,
+      for cells, scores and classes; `sectionModelMatrix` stretches z, so a
+      stack section whose cells have depths is drawn at its z plus theirs;
+      `stackDepths`, `stackPickDepth`, `cellViewStatus`.
+- [x] `SectionStackViewer` `mode="cells"`: region "3D cells", "N cells, z a
+      to b µm", hover "z … µm · cell · class".
+- [x] Cells `View` (2D / 3D), shown while the overview cells have z;
+      `cellView` link and manifest default; the class-split cache keyed by
+      the cells read, not their positions array.
+
+Checked with a copy of the EF6 file whose obsm `spatial` is its
+`spatial_3dot` (x, y, z): headless Chromium with the GPU showed the 3D view
+3.5 s after the link opened, KRT5 lining the epidermis through the 780 µm,
+niches as layers, hover naming the cell's z.
+
+Known gaps:
+
+- [ ] A depth only from obsm `spatial`: not an obs column such as `z_um`, nor
+      `uns` per-section depths, nor other platforms' z (Xenium cells have
+      none; transcripts do).
+- [ ] The cells of one file cannot be opened a section at a time, nor shown
+      side by side: the file is not split into a collection.
+- [ ] Other `Cell color` modes (transcript count, cell area, metadata) draw
+      every cell grey, as in the stack.
+- [ ] Unit and App tests only; no E2E test.

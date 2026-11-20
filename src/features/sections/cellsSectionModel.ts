@@ -44,6 +44,21 @@ export interface CellAppearanceModel {
   // Multiplier on the size cells drawn as points have.
   readonly pointScale: number
   readonly onPointScaleChange: (scale: number) => void
+  // Set when the cells are placed in 3D, so the 3D view can show them.
+  readonly view: CellViewModel | null
+}
+
+export interface CellViewModel {
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+}
+
+// The Cells section's View: every cell in the plane, or the 3D view of
+// cells placed in 3D.
+export type CellView = '2d' | '3d'
+
+export function parseCellView(value: string | undefined): CellView | undefined {
+  return value === '2d' || value === '3d' ? value : undefined
 }
 
 export interface GeneSelectionModel {
@@ -102,6 +117,9 @@ export interface CellsSectionModelInput {
   readonly cellFillOpacity: number
   readonly cellPointScale: number
   readonly cellLayerControlsVisible: boolean
+  readonly cellViewAvailable: boolean
+  readonly cellViewOpen: boolean
+  readonly setCellViewOpen: (open: boolean) => void
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionColorScale: GeneExpressionColorScale
@@ -158,6 +176,9 @@ export function useCellsSectionModel({
   cellFillOpacity,
   cellPointScale,
   cellLayerControlsVisible,
+  cellViewAvailable,
+  cellViewOpen,
+  setCellViewOpen,
   cellMetadataTracks,
   geneExpressionBatch,
   geneExpressionColorScale,
@@ -274,6 +295,15 @@ export function useCellsSectionModel({
           coalesceKey: 'cell-point-scale',
         })
       },
+      view: cellViewAvailable
+        ? {
+            open: cellViewOpen,
+            onOpenChange: (open) => {
+              setCellViewOpen(open)
+              appendDebugEvent(open ? 'Cell view: 3D' : 'Cell view: 2D')
+            },
+          }
+        : null,
     },
     genes: {
       panelState: genePanelState,

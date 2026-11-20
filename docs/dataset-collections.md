@@ -429,6 +429,10 @@ spaced or listed in order. Every section of a coordinate system has a `z`,
 or none does; a collection that mixes them is refused, naming the entries.
 The sections must be registered as for [side by side](#registered-coordinates):
 the viewer places each at its depth but does not move, rotate or warp it.
+A section whose cells have their own z (a third obsm `spatial` column) has
+them drawn at its depth plus their z. Sections already combined in one file
+with such a column need no collection: the Cells section's
+[3D cell view](./ui-reference.md#3d-cell-view) shows them.
 For SpatialData stores, a dataset manifest can open each section in the
 coordinate system that registers it, as the
 [LYNX liver collection](../examples/zenodo/21110855-liver-sections.json)

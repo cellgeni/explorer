@@ -236,6 +236,13 @@ describe('shareableState', () => {
     expect(parseShareableState(hash)).toEqual({ linkVersion: 2, imageView: '3d' })
   })
 
+  it('round-trips the 3D view of cells placed in 3D', () => {
+    const hash = formatShareableState({ cellView: '3d' })
+
+    expect(hash).toContain('cellView=3d')
+    expect(parseShareableState(hash)).toEqual({ linkVersion: 2, cellView: '3d' })
+  })
+
   it('round-trips the Atera image choice', () => {
     const hash = formatShareableState({ ateraImage: '3d' })
 

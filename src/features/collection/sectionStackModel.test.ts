@@ -3,9 +3,11 @@ import { parseDatasetCollection } from '../../datasets/datasetCollection'
 import type { PreviewCells } from './collectionPreviewData'
 import type { PreviewEntry } from './collectionPreviewStore'
 import {
+  cellViewStatus,
   MAX_STACK_DEPTH_SCALE_LOG2,
   openingStackDepthScaleLog2,
   sectionModelMatrix,
+  stackDepths,
   stackFrame,
   stackSections,
   stackStatus,
@@ -105,7 +107,42 @@ describe('section stack', () => {
 
     // Drawn at (x, -y): the frame's centre (100, -20) goes to the origin.
     expect([...matrix.slice(12)]).toEqual([-100, 20, 80, 1])
-    expect([...matrix.slice(0, 12)]).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0])
+    // A cell's own z, for cells placed in 3D, is stretched too.
+    expect([...matrix.slice(0, 12)]).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 4, 0])
+  })
+
+  it('spans the depths of cells placed in 3D above their section', () => {
+    const sections = stackSections(COLLECTION, url('p1-s1.zarr'))
+    const deep: PreviewEntry = {
+      ...READY,
+      cells: {
+        ...READY.cells,
+        depths: { values: Float32Array.of(2, 7), min: 2, max: 7 },
+      } as PreviewCells,
+    }
+
+    expect(stackDepths(sections, [READY, deep, null])).toEqual([0, 12, 17, 20])
+  })
+
+  it('says what the 3D view of one dataset’s cells is reading or cannot show', () => {
+    expect(cellViewStatus(null, false)).toEqual({
+      reading: 'Reading cells',
+      missing: null,
+    })
+    expect(cellViewStatus(READY, false)).toEqual({ reading: null, missing: null })
+    expect(cellViewStatus({ ...READY, loading: true }, true).reading).toBe(
+      'Reading colours',
+    )
+    expect(
+      cellViewStatus(
+        { ...READY, cells: null, unavailable: 'No cells to preview.' },
+        true,
+      ),
+    ).toEqual({ reading: null, missing: 'Not shown: no cells to preview' })
+    expect(cellViewStatus({ ...READY, cells: null, error: 'HTTP 403' }, false)).toEqual({
+      reading: null,
+      missing: 'Not shown: the cells could not be read',
+    })
   })
 
   it('counts the sections read, and names those it cannot show', () => {

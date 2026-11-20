@@ -397,6 +397,7 @@ Display settings applied each time the dataset loads.
 | `cellPointScale`      | `Cell point size`       | Multiplier above 0, snapped to the slider's steps (0.5–32)                    |
 | `transcripts`         | `Show transcripts`      | `true` / `false` (Xenium, Atera)                                              |
 | `imageView`           | Image `View`            | `2d` / `3d`: `3d` opens an OME-Zarr z-stack in the 3D view                    |
+| `cellView`            | Cells `View`            | `2d` / `3d`: `3d` opens cells placed in 3D in the 3D view                     |
 
 How defaults combine with other settings:
 

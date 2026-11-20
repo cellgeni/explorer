@@ -282,6 +282,73 @@ describe('AnnDataH5adDataset', () => {
     ])
   })
 
+  it('places cells in 3D by a third column of obsm spatial', async () => {
+    const open = async (options: TinyH5adOptions) =>
+      (
+        await new AnnDataH5adDataset({
+          url: 'https://example.test/stack.h5ad',
+          fetcher: h5adFetcher(await createTinyH5ad('dense', options)),
+        }).overview()
+      ).map((point) => [point.cellId, point.position.x, point.z])
+
+    expect(
+      await open({
+        coordinateKey: 'spatial',
+        coordinates: [0, 0, 0, 10, 0, 60, 0, 10, 120, 10, 10, 180],
+      }),
+    ).toEqual([
+      ['cell-a', 0, 0],
+      ['cell-b', 10, 60],
+      ['cell-c', 0, 120],
+      ['cell-d', 10, 180],
+    ])
+    // A column of zeros pads 2D coordinates; a third UMAP column is no depth.
+    expect(
+      await open({
+        coordinateKey: 'spatial',
+        coordinates: [0, 0, 0, 10, 0, 0, 0, 10, 0, 10, 10, 0],
+      }),
+    ).toEqual([
+      ['cell-a', 0, undefined],
+      ['cell-b', 10, undefined],
+      ['cell-c', 0, undefined],
+      ['cell-d', 10, undefined],
+    ])
+    expect(
+      (
+        await open({
+          coordinateKey: 'X_umap',
+          coordinates: [0, 0, 0, 10, 0, 60, 0, 10, 120, 10, 10, 180],
+        })
+      ).map(([, , z]) => z),
+    ).toEqual([undefined, undefined, undefined, undefined])
+  })
+
+  it('scales a third spatial column with image-pixel coordinates', async () => {
+    const bytes = await createTinyH5ad('dense', {
+      coordinates: [0, 0, 0, 10, 0, 40, 0, 10, 80, 10, 10, 120],
+    })
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      units: {
+        dataUnit: 'micrometer',
+        imageUnit: 'pixel',
+        micrometersPerPixel: micrometers(0.25),
+        origin: 'top-left',
+        imageYAxis: 'down',
+      },
+      channels: [{ id: 'c0' }],
+    } as unknown as ImagePyramidLoader
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(bytes),
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage: vi.fn().mockResolvedValue(loader),
+    })
+
+    expect((await dataset.overview()).map((point) => point.z)).toEqual([0, 10, 20, 30])
+  })
+
   it('lists only obsm matrices named as embeddings', async () => {
     const twoColumns = [0, 0, 1, 0, 0, 1, 1, 1]
     const bytes = await createTinyH5ad('dense', {
@@ -1852,6 +1919,9 @@ interface TinyH5adOptions {
   readonly spatialDataInstanceKey?: string
   readonly spatialDataInstanceKeyIn?: 'uns' | 'attributes'
   readonly coordinateKey?: string
+  // The coordinate matrix, with as many columns as its values allow; defaults
+  // to the corners of a 10 µm square.
+  readonly coordinates?: readonly number[]
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
   readonly featureNames?: CategoricalFeatureNames
@@ -2030,10 +2100,11 @@ async function createTinyH5ad(
   }
 
   const obsm = file.create_group('obsm')
+  const coordinates = options.coordinates ?? [0, 0, 10, 0, 0, 10, 10, 10]
   obsm.create_dataset({
     name: coordinateKey,
-    data: new Float32Array([0, 0, 10, 0, 0, 10, 10, 10]),
-    shape: [4, 2],
+    data: new Float32Array(coordinates),
+    shape: [4, coordinates.length / 4],
   })
   obsm.create_dataset({
     name: 'X_pca',
