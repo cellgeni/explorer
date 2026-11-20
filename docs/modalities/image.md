@@ -486,6 +486,9 @@ transform.
 - Decoding runs in `TileDecodeWorkerPool` (`src/workers/tileDecodePool.ts`,
   up to `min(4, hardwareConcurrency)` workers). The worker decodes, applies the
   channel window and colour (`normaliseToRgba`), and returns an `ImageBitmap`.
+  A worker that fails, such as one whose script no longer loads after a
+  redeploy, ends the pool: its pending tiles fail with the error, and the next
+  tile starts a new worker, as the OME-Zarr pool does.
 - `TileCache` (`src/tiff/tileCache.ts`) is an LRU of decoded bitmaps keyed by
   `level:col:row`.
 - `TileRequestScheduler` (`src/tiff/tileRequestScheduler.ts`) loads the tiles

@@ -164,14 +164,7 @@ export class TileDecodeWorkerPool {
   }
 
   terminate(): void {
-    this.rejectAll(new Error('Tile decode worker pool terminated.'))
-
-    for (const worker of this.workers) {
-      worker.terminate()
-    }
-
-    this.workers.splice(0)
-    this.inFlightByWorker.splice(0)
+    this.reset(new Error('Tile decode worker pool terminated.'))
   }
 
   private post(
@@ -225,13 +218,22 @@ export class TileDecodeWorkerPool {
     pending.reject(new Error(response.error))
   }
 
-  private rejectAll(error: Error): void {
+  // Rejects every pending request and ends the workers; the next request
+  // starts a new one. A worker that fails never answers again, so keeping it
+  // would leave every request posted to it pending.
+  private reset(error: Error): void {
     for (const pending of this.pending.values()) {
       pending.reject(error)
     }
 
     this.pending.clear()
-    this.inFlightByWorker.fill(0)
+
+    for (const worker of this.workers) {
+      worker.terminate()
+    }
+
+    this.workers.splice(0)
+    this.inFlightByWorker.splice(0)
   }
 
   private workerIndexForNextRequest(): number {
@@ -272,7 +274,11 @@ export class TileDecodeWorkerPool {
       this.handleMessage(event.data)
     }
     worker.onerror = (event) => {
-      this.rejectAll(new Error(event.message || 'Tile decode worker failed.'))
+      // A worker whose script does not load reports an empty message. One
+      // already ended by a reset is ignored.
+      if (this.workers.includes(worker)) {
+        this.reset(new Error(event.message || 'Tile decode worker failed.'))
+      }
     }
 
     this.workers.push(worker)
