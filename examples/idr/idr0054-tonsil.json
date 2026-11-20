@@ -12,7 +12,7 @@
     "citation": "Durand M et al. (2019) Human lymphoid organ cDC2 and macrophages play complementary roles in T follicular helper responses. J Exp Med 216(7):1561-1581. doi:10.1084/jem.20181994"
   },
   "files": {
-    "image": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0054A/5025551.zarr"
+    "image": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0054A/5025551.zarr"
   },
   "defaults": {
     "channels": ["CD3-170Er", "CD19-169Tm", "CD68-171Yb"]
