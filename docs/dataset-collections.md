@@ -8,6 +8,9 @@ viewer's address:
 https://cellgeni.github.io/explorer/?collection=https://host/study/collection.json
 ```
 
+An AnnData table that holds several sections opens as a collection too, one
+dataset per section; see [Sections Of One Table](#sections-of-one-table).
+
 The viewer opens the first dataset and lists the collection's datasets in a
 bar under the canvas. Choosing one opens it in place of the current dataset
 and keeps the selected genes, the annotation set and how cells are coloured,
@@ -109,17 +112,17 @@ Unknown fields are errors, as in a dataset manifest.
 
 ### Datasets
 
-| Key                | Required | Value                                                                                                                       |
-| ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `dataset`          | Yes      | What `dataset=` opens: a dataset folder, file or store, or a [dataset manifest](./dataset-manifest.md). Relative or http(s) |
-| `name`             | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name          |
-| `group`            | No       | Group label, such as a time point or donor                                                                                  |
-| `image`            | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                               |
-| `coordinates`      | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                        |
-| `labels`           | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                 |
-| `labelColumn`      | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                       |
-| `coordinateSystem` | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                   |
-| `z`                | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`           |
+| Key                | Required | Value                                                                                                                                                                         |
+| ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`          | Yes      | What `dataset=` opens: a dataset folder, file or store, a [dataset manifest](./dataset-manifest.md), or [one section of a table](#sections-of-one-table). Relative or http(s) |
+| `name`             | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name                                                            |
+| `group`            | No       | Group label, such as a time point or donor                                                                                                                                    |
+| `image`            | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                                                                                 |
+| `coordinates`      | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                                                                          |
+| `labels`           | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                                                                   |
+| `labelColumn`      | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                                                                         |
+| `coordinateSystem` | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                                                                     |
+| `z`                | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`                                                             |
 
 - Paths resolve like manifest paths: against `root` when set, otherwise
   against the collection's folder. Other schemes such as `s3://` are
@@ -432,7 +435,8 @@ the viewer places each at its depth but does not move, rotate or warp it.
 A section whose cells have their own z (a third obsm `spatial` column) has
 them drawn at its depth plus their z. Sections already combined in one file
 with such a column need no collection: the Cells section's
-[3D cell view](./ui-reference.md#3d-cell-view) shows them.
+[3D cell view](./ui-reference.md#3d-cell-view) shows them, and the file can
+also be [split into its sections](#sections-of-one-table).
 For SpatialData stores, a dataset manifest can open each section in the
 coordinate system that registers it, as the
 [LYNX liver collection](../examples/zenodo/21110855-liver-sections.json)
@@ -460,11 +464,86 @@ the button again, returns to them.
 - **What is read.** Every section of the stack is read, whether the bar shows
   it or not, four at a time. The panel lists the sections still being read,
   and names those it cannot show: images, Visium HD and large plain `.h5ad`
-  files have no preview.
+  files have no preview, though the sections of one large table do.
 - **Opening another section.** The bar stays under the stack. Choosing
   another section of the stack keeps it, and so does a section of another
   stacked coordinate system, which then shows its own stack. Any other dataset
   opens in 2D.
+
+## Sections Of One Table
+
+An AnnData table can hold several sections, its rows tagged by an obs
+column, such as registered serial sections combined in one `.h5ad` with a
+`section` column and each section's depth in `z_um`. Open the table with
+`collection=` and the viewer splits it into one dataset per section:
+
+```text
+https://cellgeni.github.io/explorer/?collection=https://host/study/aligned.h5ad
+https://cellgeni.github.io/explorer/?collection=https://host/study/aligned.h5ad%23obs.sample
+```
+
+The first form splits the table by its first obs column named `section`,
+`section_id`, `section_name`, `slice`, `slice_id`, `sample`, `sample_id`,
+`library_id`, `slide` or `slide_id` (any case). The second names the column:
+`#obs.<column>` after the table's URL, written `%23obs.<column>` inside the
+viewer's address. A table without such a column stops with an error that
+lists the columns it could be split by: label columns with 2 to 500 values.
+`.h5ad` files, AnnData Zarr stores and AnnData in Icechunk split alike; a
+Visium table does not, since its sections are its libraries, which its
+`Library` select chooses.
+
+With the open table's annotation sets listing such a column, the Cells
+section's `Open N Sections` link opens the same collection.
+
+- **Datasets.** One per value of the column, named by the value, in the
+  column's order: a categorical's categories, numbers from lowest, else as
+  first seen. Each is the table's rows with that value, with their cells,
+  genes, obs columns, embeddings and gene values for the Plots panel.
+- **Registered.** The sections share the table's obsm coordinates, so they
+  are one [coordinate system](#registered-coordinates), named after the file,
+  and can be shown [side by side](#side-by-side) with one view.
+- **Depths.** A section's `z` is the value of a numeric obs column named `z`
+  or `z_…` (`z_um`, `z_position`) shared by all its cells, else their third
+  obsm `spatial` column when they share one. With a depth for every section
+  the bar offers the [3D stack](#3d-stack); otherwise the sections are side
+  by side only.
+- **One read.** The table is read once, by its own dataset, and each
+  section is a view of its rows: switching sections, their previews and the
+  stack read nothing more. The 64 MiB limit on [previews](#previews) of plain
+  `.h5ad` files does not apply to them. EF6 skin's 116 MB `.h5ad` (14
+  sections, 201,789 cells, from Sanger's bucket) listed its sections 12 s
+  after the link opened, and switching sections took 0.3 s.
+
+Each section has an address of its own, the table's URL and
+`#obs.<column>=<value>`, percent-encoded:
+
+```text
+https://host/study/aligned.h5ad#obs.section=section_01
+```
+
+`dataset=` opens it on its own, named `aligned.h5ad · section_01` in the
+top bar. A collection file can list sections this way, to give them its own
+names, groups and depths, or to list only some:
+
+```json
+{
+  "version": 1,
+  "datasets": [
+    {
+      "dataset": "aligned.h5ad#obs.section=section_01",
+      "name": "First",
+      "coordinateSystem": "ef6",
+      "z": 0
+    },
+    {
+      "dataset": "aligned.h5ad#obs.section=section_14",
+      "name": "Last",
+      "coordinateSystem": "ef6",
+      "z": 780
+    }
+  ]
+}
+```
 
 ## The Address
 

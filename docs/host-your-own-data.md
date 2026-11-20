@@ -336,6 +336,11 @@ The H5AD reader requires:
   or `spatial` places cells in 3D: write it as each cell's z in micrometres,
   such as its section's depth in a block of registered serial sections
   (`adata.obsm["spatial"] = np.column_stack([xy, z])`).
+- Sections combined in one table open one at a time, side by side or
+  stacked in 3D when an obs column names each row's section (`section`,
+  `sample`, `library_id`, ...) and, for the stack, a numeric `z_um` column
+  holds each section's depth: open the table with `collection=` (see
+  [Sections Of One Table](./dataset-collections.md#sections-of-one-table)).
 - `/X` as either a dense `n_obs x n_vars` dataset or a sparse group with
   `data`, `indices`, `indptr`, and a `shape` attribute. Groups with
   `encoding-type = csc_matrix` are read as CSC; all others as CSR.
