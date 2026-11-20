@@ -1609,6 +1609,7 @@ export function useDatasetLifecycle({
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
+            detection,
           })
           // An .h5ad with `uns/spatial` is standard Visium; the file has to be
           // read to know.
@@ -1665,6 +1666,7 @@ export function useDatasetLifecycle({
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
+            detection,
           })
 
           if (!isVisiumLifecycleDataset(dataset)) {
@@ -1697,6 +1699,7 @@ export function useDatasetLifecycle({
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
+            detection,
           })
 
           // The image needs only the store's metadata and units, not the
@@ -1742,6 +1745,7 @@ export function useDatasetLifecycle({
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
+            detection,
           })
 
           if (!(await loadAnnDataOverview(dataset, 'Atera'))) {
@@ -1825,6 +1829,7 @@ export function useDatasetLifecycle({
           })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
+            detection,
           })
 
           if (!(await loadAnnDataOverview(dataset, 'MERSCOPE'))) {
@@ -1979,7 +1984,7 @@ export function useDatasetLifecycle({
             setShowNucleusBoundaries(false)
             setMorphologyState(morphologyLoadStarted(detection.imageUrl))
           })
-          const dataset = await getSpatialDataset(detection.baseUrl)
+          const dataset = await getSpatialDataset(detection.baseUrl, { detection })
           const [meta, imageSource] = await Promise.all([dataset.meta(), dataset.image()])
 
           if (!isCurrentDatasetLoad()) {
@@ -2062,7 +2067,7 @@ export function useDatasetLifecycle({
             setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
             setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
           })
-          const dataset = await getSpatialDataset(detection.baseUrl)
+          const dataset = await getSpatialDataset(detection.baseUrl, { detection })
 
           if (!isVisiumHdOverviewDataset(dataset)) {
             throw new Error('Detected Visium HD dataset does not expose binned outputs.')

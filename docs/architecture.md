@@ -134,7 +134,11 @@ returns the manifest's location or the standard name. See
 ### 2. Dataset Construction
 
 `createSpatialDataset` lazy-imports one implementation per platform so each
-platform's code is a separate chunk:
+platform's code is a separate chunk. The load detects the dataset once:
+`useDatasetLifecycle` passes its detection through `cachedSpatialDataset`, and
+the factory uses it instead of probing again when it is of the same URL. A
+call without one, or with another URL's, detects afresh, so nothing outlives
+the load.
 
 | Platform      | Class                                                                             | Doc                                        |
 | ------------- | --------------------------------------------------------------------------------- | ------------------------------------------ |

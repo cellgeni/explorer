@@ -1712,7 +1712,9 @@ describe('useDatasetLifecycle', () => {
       datasetUrl,
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
-    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
+      detection: expect.objectContaining({ platform: 'visium-hd', baseUrl: datasetUrl }),
+    })
     expect(loadDatasetOverview).not.toHaveBeenCalled()
     expect(loadGenePanel).not.toHaveBeenCalled()
     expect(loadAnnotationGroups).not.toHaveBeenCalled()
@@ -1875,7 +1877,9 @@ describe('useDatasetLifecycle', () => {
       await startDatasetLoadRef.current?.(datasetUrl, false)
     })
 
-    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl)
+    expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
+      detection: expect.objectContaining({ platform: 'visium-hd', baseUrl: datasetUrl }),
+    })
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({
         options: [
