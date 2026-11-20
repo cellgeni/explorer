@@ -295,6 +295,57 @@ describe('AnnDataH5adDataset', () => {
     },
   )
 
+  it.each(['csr', 'csc', 'dense'] as const)(
+    'gives repeated %s names suffixes that no stored name has',
+    async (matrixKind) => {
+      // Cells c0, c0, c0-2, c3 and genes G, G, G-2: the second of each takes
+      // -3, as -2 is stored.
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/repeated.h5ad',
+        fetcher: h5adFetcher(
+          await createTinyH5ad(matrixKind, {
+            obsNames: ['c0', 'c0', 'c0-2', 'c3'],
+            featureNames: { categories: ['G', 'G-2'], codes: [0, 0, 1] },
+            x: [1, 6, 10, 2, 7, 20, 3, 8, 30, 4, 9, 40],
+          }),
+        ),
+      })
+
+      await expect(dataset.cellIds()).resolves.toEqual(['c0', 'c0-3', 'c0-2', 'c3'])
+      await expect(dataset.genePanel()).resolves.toEqual(['G', 'G-3', 'G-2'])
+
+      // The map, Plots and a cell's profile read one column per name.
+      const expression = await dataset.geneExpression(
+        {
+          minX: micrometers(-1),
+          maxX: micrometers(20),
+          minY: micrometers(-1),
+          maxY: micrometers(20),
+        },
+        ['G-2'],
+      )
+      expect(expression.elements.map(({ id, count }) => [id, count])).toEqual([
+        ['c0', 10],
+        ['c0-3', 20],
+        ['c0-2', 30],
+        ['c3', 40],
+      ])
+      const [g2, g3] = await dataset.geneValues(['G-2', 'G-3'])
+      expect(g2 !== undefined && 'values' in g2 ? [...g2.values] : g2).toEqual([
+        10, 20, 30, 40,
+      ])
+      expect(g3 !== undefined && 'values' in g3 ? [...g3.values] : g3).toEqual([
+        6, 7, 8, 9,
+      ])
+      const profile = (await dataset.matrix(['c0-3'])).cells.get('c0-3')
+      expect(
+        Object.fromEntries(
+          profile?.geneNames.map((gene, index) => [gene, profile.counts[index]]) ?? [],
+        ),
+      ).toEqual({ G: 2, 'G-3': 7, 'G-2': 20 })
+    },
+  )
+
   it('uses embedding coordinates and dataframe category sidecars', async () => {
     const bytes = await createTinyH5ad('dense', {
       categoricalEncoding: 'dataframe-categories',
