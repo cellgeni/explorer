@@ -1,8 +1,8 @@
-import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import {
   annDataSectionUrl,
   isSectionColumnName,
   parseAnnDataSectionUrl,
+  type AnnDataSectionColumn,
 } from '../../datasets/annDataSections'
 import { MAX_COLLECTION_DATASETS } from '../../datasets/datasetCollection'
 import type { Platform } from '../../datasets/spatialDataset'
@@ -10,9 +10,10 @@ import { collectionLinkHref } from '../start/datasetLibraryModel'
 
 // The link that opens an AnnData table's sections as a collection, one
 // dataset per value of an obs column named like a section column (`section`,
-// `sample`, `library_id`; see SECTION_COLUMN_NAMES). Offered for a table
-// opened whole, outside a collection; a Visium table's sections are its
-// libraries.
+// `sample`, `library_id`; see SECTION_COLUMN_NAMES), from the columns the
+// table lists as splitting it (`sectionColumns()`), whether labels or whole
+// numbers. Offered for a table opened whole, outside a collection; a Visium
+// table's sections are its libraries.
 export interface SectionSplitLink {
   readonly href: string
   readonly column: string
@@ -22,13 +23,13 @@ export interface SectionSplitLink {
 export function sectionSplitLink({
   datasetUrl,
   platform,
-  groupOptions,
+  sectionColumns,
   inCollection,
   pathname,
 }: {
   readonly datasetUrl: string | null
   readonly platform: Platform | null
-  readonly groupOptions: readonly AnnotationGroupOption[]
+  readonly sectionColumns: readonly AnnDataSectionColumn[]
   readonly inCollection: boolean
   readonly pathname: string
 }): SectionSplitLink | null {
@@ -41,21 +42,18 @@ export function sectionSplitLink({
     return null
   }
 
-  const group = groupOptions.find(
-    ({ groupingName, groupCount }) =>
-      isSectionColumnName(groupingName) &&
-      groupCount >= 2 &&
-      groupCount <= MAX_COLLECTION_DATASETS,
+  const split = sectionColumns.find(
+    ({ column, sectionCount }) =>
+      isSectionColumnName(column) &&
+      sectionCount >= 2 &&
+      sectionCount <= MAX_COLLECTION_DATASETS,
   )
 
-  return group === undefined
+  return split === undefined
     ? null
     : {
-        href: collectionLinkHref(
-          annDataSectionUrl(datasetUrl, group.groupingName),
-          pathname,
-        ),
-        column: group.groupingName,
-        sectionCount: group.groupCount,
+        href: collectionLinkHref(annDataSectionUrl(datasetUrl, split.column), pathname),
+        column: split.column,
+        sectionCount: split.sectionCount,
       }
 }
