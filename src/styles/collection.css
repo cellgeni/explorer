@@ -14,18 +14,25 @@
   font-size: var(--font-control);
 }
 
+/* Never narrower than its title, so the datasets cannot cover its buttons:
+   a long name shortens instead. */
 .collection-bar-heading {
   display: grid;
-  flex: 0 1 auto;
-  min-width: 0;
+  flex: 0 0 auto;
   max-width: 220px;
   line-height: 1.3;
 }
 
-/* With previews the heading keeps room for the scale. */
-.collection-bar.has-previews .collection-bar-heading {
-  flex: 0 0 auto;
-  width: 136px;
+/* With previews the heading keeps room for the scale, and only the title
+   widens it, as wider fonts need; the name and scale shorten to fit. */
+.collection-bar.has-previews:not(.is-expanded) .collection-bar-heading {
+  min-width: 136px;
+}
+
+.collection-bar.has-previews:not(.is-expanded)
+  .collection-bar-heading
+  > :not(.collection-bar-title) {
+  contain: inline-size;
 }
 
 .collection-bar-title {
@@ -35,17 +42,18 @@
   min-width: 0;
 }
 
-/* Expand and Previews, next to the kicker. */
+/* Expand, Previews and Stack in 3D, next to the kicker. */
 .collection-bar-actions {
   display: flex;
   gap: 2px;
 }
 
+/* 24 px, the smallest target WCAG 2.5.8 allows. */
 .collection-bar-action {
-  width: 22px;
-  min-width: 22px;
-  height: 22px;
-  min-height: 22px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
 }
 
 .collection-bar-action[aria-pressed='true'] {
@@ -160,10 +168,10 @@
 }
 
 .collection-bar-beside {
-  width: 22px;
-  min-width: 22px;
-  height: 22px;
-  min-height: 22px;
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
   margin-left: 2px;
 }
 
@@ -199,7 +207,7 @@
   }
 
   .collection-bar.has-previews:not(.is-expanded) .collection-bar-heading {
-    width: auto;
+    min-width: 0;
   }
 }
 
@@ -333,7 +341,6 @@
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-1) var(--space-3);
-  width: auto;
   max-width: none;
 }
 

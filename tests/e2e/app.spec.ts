@@ -969,14 +969,14 @@ async function trackWebglContexts(
     )
 }
 
-// Two sections of 20 cells in one AnnData file: obs `section` (s1, s2) and
-// `z_um` (0, 10), and an obsm `spatial` whose third column is each cell's z,
-// so a section has a 3D cell view and the collection a 3D stack.
-async function createSections3dH5ad(): Promise<Uint8Array> {
+// Sections of 20 cells in one AnnData file: obs `section` (s1, s2, …) and
+// `z_um` (0, 10, …), and an obsm `spatial` whose third column is each cell's
+// z, so a section has a 3D cell view and the collection a 3D stack.
+async function createSections3dH5ad(sectionCount = 2): Promise<Uint8Array> {
   const h5wasm = (await import('h5wasm')).default
   const { FS } = await h5wasm.ready
   const fileName = `/playwright-${randomUUID()}.h5ad`
-  const cells = Array.from({ length: 40 }, (_cell, index) => ({
+  const cells = Array.from({ length: sectionCount * 20 }, (_cell, index) => ({
     section: Math.floor(index / 20),
     x: (index % 5) * 20,
     y: Math.floor((index % 20) / 5) * 20,
@@ -992,7 +992,10 @@ async function createSections3dH5ad(): Promise<Uint8Array> {
   })
   const section = obs.create_group('section')
   section.create_attribute('encoding-type', 'categorical')
-  section.create_dataset({ name: 'categories', data: ['s1', 's2'] })
+  section.create_dataset({
+    name: 'categories',
+    data: Array.from({ length: sectionCount }, (_section, index) => `s${index + 1}`),
+  })
   section.create_dataset({
     name: 'codes',
     data: new Int8Array(cells.map((cell) => cell.section)),
@@ -1039,11 +1042,10 @@ test('gives back the WebGL context of each closed 3D view, side-by-side section 
     { timeout: H5AD_LOAD_TIMEOUT_MS },
   )
   await expect.poll(async () => (await webglContexts()).live).toBe(1)
-  // Names only: with previews, the bar's heading is too narrow for its three
-  // buttons in wider fonts (Linux), and the first section covers Stack in 3D.
-  const previews = bar.getByRole('button', { name: 'Previews' })
-  await previews.click()
-  await expect(previews).toHaveAttribute('aria-pressed', 'false')
+  await expect(bar.getByRole('button', { name: 'Previews' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
 
   // Twice each, so a context kept by the first closing shows.
   const cells = await openControls(page, 'cell-appearance')
@@ -1090,6 +1092,81 @@ test('gives back the WebGL context of each closed 3D view, side-by-side section 
       .toBe(1)
   }
   expect((await webglContexts()).lostOnPage).toBe(0)
+})
+
+// The collection bar's heading is as wide as its title, so no dataset covers
+// its buttons, with previews, names only, expanded and narrow. A wide font,
+// as on Linux, is forced, since macOS fonts hid a heading too narrow for the
+// buttons; 30 sections fill the bar, so the heading would shrink if it could.
+test('keeps the collection bar buttons clear of its datasets @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const findings: AxeFindings = new Map()
+
+  await routeH5adBytes(page, '/sections-3d.h5ad', await createSections3dH5ad(30))
+  const link = new URLSearchParams({
+    collection: new URL('/sections-3d.h5ad', baseURL).toString(),
+  })
+  await page.goto(`/#${link.toString()}`)
+  await page.addStyleTag({
+    content:
+      "body, body * { font-family: Verdana, 'DejaVu Sans', sans-serif !important }",
+  })
+  const bar = page.getByRole('navigation', { name: 'Collection' })
+  await expect(bar.getByRole('button', { name: 's1', exact: true })).toHaveAttribute(
+    'aria-current',
+    'true',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+  const previews = bar.getByRole('button', { name: 'Previews' })
+  await expect(previews).toHaveAttribute('aria-pressed', 'true')
+  await expect(bar.getByRole('button', { name: 'Stack in 3D' })).toBeVisible()
+
+  async function expectButtonsClear(state: string) {
+    const problems = await bar.evaluate((nav) => {
+      const heading = nav.querySelector('.collection-bar-heading')
+      if (heading === null) return ['no heading']
+      const bounds = heading.getBoundingClientRect()
+      return [...heading.querySelectorAll('button')].flatMap((button) => {
+        const box = button.getBoundingClientRect()
+        const name = button.getAttribute('aria-label') ?? button.title
+        if (box.left < bounds.left - 0.5 || box.right > bounds.right + 0.5) {
+          return [`${name} is outside the heading`]
+        }
+        const hit = document.elementFromPoint(
+          box.left + box.width / 2,
+          box.top + box.height / 2,
+        )
+        return hit !== null && button.contains(hit)
+          ? []
+          : [`${name} is covered by ${hit?.getAttribute('class') ?? 'nothing'}`]
+      })
+    })
+    expect(problems, state).toEqual([])
+    await collectAxeFindings(page, `collection, ${state}`, findings)
+  }
+
+  await expectButtonsClear('previews')
+  await previews.click()
+  await expect(previews).toHaveAttribute('aria-pressed', 'false')
+  await expectButtonsClear('names only')
+  await previews.click()
+  await bar.getByRole('button', { name: 'Expand' }).click()
+  await expect(bar.getByRole('button', { name: 'Collapse' })).toBeVisible()
+  await expectButtonsClear('expanded')
+  await bar.getByRole('button', { name: 'Collapse' }).click()
+
+  // Narrow, the heading keeps only the kicker and its buttons.
+  await page.setViewportSize({ width: 800, height: 720 })
+  await expect(bar.getByText('30 datasets')).toBeHidden()
+  await expectButtonsClear('narrow, previews')
+  await previews.click()
+  await expect(previews).toHaveAttribute('aria-pressed', 'false')
+  await expectButtonsClear('narrow, names only')
+
+  expectAxeFindingsMatchBaseline(findings)
 })
 
 // A one-channel OME-Zarr z-stack (Zarr v2) of 4 planes of 16 × 16 pixels,
