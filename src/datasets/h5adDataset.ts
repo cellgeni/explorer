@@ -4803,7 +4803,8 @@ function cellFromCountsByColumn(
   for (const col of outputCols) {
     const count = countsByColumn.get(col) ?? 0
 
-    if (count <= 0 && !options.includeZeroCounts) {
+    // Scaled or centred matrices store negative values, which count too.
+    if (count === 0 && !options.includeZeroCounts) {
       continue
     }
 

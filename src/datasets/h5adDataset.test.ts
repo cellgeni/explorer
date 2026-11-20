@@ -18,6 +18,8 @@ import {
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
 import { withCellMetadata } from '../test/cellMetadataFixtures'
+import { summarizeRoiGeneExpression } from '../data/roiGeneStats'
+import { geneExpressionScores } from '../rendering/geneExpressionRenderer'
 import { createInProcessH5Worker } from '../data/h5WorkerFile'
 
 describe('AnnDataH5adDataset', () => {
@@ -233,6 +235,54 @@ describe('AnnDataH5adDataset', () => {
       ['cell-c', 4],
     ])
   })
+
+  it.each(['csr', 'csc', 'dense'] as const)(
+    'keeps negative values of a %s matrix in multi-gene and ROI reads',
+    async (matrixKind) => {
+      // Actb, Gad1 and Gapdh per cell, as a scaled matrix stores them.
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/scaled.h5ad',
+        fetcher: h5adFetcher(
+          await createTinyH5ad(matrixKind, { x: [2, -1, 0, 0, 3, 1, 1, 0, 0, 0, 0, 4] }),
+        ),
+      })
+      const cellIds = ['cell-a', 'cell-b']
+
+      const stats = summarizeRoiGeneExpression(await dataset.matrix(cellIds), {
+        cellCount: 2,
+        sampledCellIds: cellIds,
+      })
+      // Gad1 stores -1 and 3; only cell-b detects it.
+      expect(stats.genes.find(({ gene }) => gene === 'Gad1')).toMatchObject({
+        count: 2,
+        meanPerCell: 1,
+        detectedCells: 1,
+      })
+
+      const expression = await dataset.geneExpression(
+        {
+          minX: micrometers(0),
+          maxX: micrometers(20),
+          minY: micrometers(0),
+          maxY: micrometers(5),
+        },
+        ['Actb', 'Gad1'],
+      )
+      expect(expression.elements.map(({ id, count }) => [id, count])).toEqual([
+        ['cell-a', 1],
+        ['cell-b', 3],
+      ])
+      expect(geneExpressionScores(expression.elements, ['Actb', 'Gad1'], 'mean')).toEqual(
+        [0.5, 1.5],
+      )
+
+      // Plots reads the same values.
+      const [gad1] = await dataset.geneValues(['Gad1'])
+      expect(gad1 !== undefined && 'values' in gad1 ? [...gad1.values] : gad1).toEqual(
+        expect.arrayContaining([-1, 3]),
+      )
+    },
+  )
 
   it('uses embedding coordinates and dataframe category sidecars', async () => {
     const bytes = await createTinyH5ad('dense', {
@@ -1936,6 +1986,8 @@ interface TinyH5adOptions {
   // Bytes of a `layers/padding` dataset written before the groups the viewer
   // reads.
   readonly padding?: number
+  // X as 4 rows of 3 values, written in the matrix kind's layout.
+  readonly x?: readonly number[]
 }
 
 interface CategoricalFeatureNames {
@@ -2123,7 +2175,7 @@ async function createTinyH5ad(
   if (matrixKind === 'dense') {
     file.create_dataset({
       name: 'X',
-      data: new Float32Array([1, 0, 5, 2, 3, 0, 0, 4, 6, 7, 0, 8]),
+      data: new Float32Array(options.x ?? [1, 0, 5, 2, 3, 0, 0, 4, 6, 7, 0, 8]),
       shape: [4, 3],
     })
   } else {
@@ -2133,7 +2185,10 @@ async function createTinyH5ad(
       matrixKind === 'csc' ? 'csc_matrix' : 'csr_matrix',
     )
     x.create_attribute('shape', new Int32Array([4, 3]))
-    const sparse = tinySparseMatrixFixture(matrixKind)
+    const sparse =
+      options.x === undefined
+        ? tinySparseMatrixFixture(matrixKind)
+        : sparseMatrixFromRows(options.x, 3, matrixKind)
     x.create_dataset({ name: 'data', data: sparse.data })
     x.create_dataset({ name: 'indices', data: sparse.indices })
     x.create_dataset({ name: 'indptr', data: sparse.indptr })
@@ -2529,6 +2584,44 @@ function tinySparseMatrixFixture(matrixKind: Extract<MatrixKind, 'csr' | 'csc'>)
     data: new Float32Array([1, 5, 2, 3, 4, 6, 7, 8]),
     indices: new Int32Array([0, 2, 0, 1, 1, 2, 0, 2]),
     indptr: new Int32Array([0, 2, 4, 6, 8]),
+  }
+}
+
+// The non-zero values of a row-major matrix in CSR or CSC layout.
+function sparseMatrixFromRows(
+  values: readonly number[],
+  cols: number,
+  matrixKind: Extract<MatrixKind, 'csr' | 'csc'>,
+): {
+  readonly data: Float32Array
+  readonly indices: Int32Array
+  readonly indptr: Int32Array
+} {
+  const rows = values.length / cols
+  const [outer, inner] = matrixKind === 'csr' ? [rows, cols] : [cols, rows]
+  const data: number[] = []
+  const indices: number[] = []
+  const indptr = [0]
+
+  for (let major = 0; major < outer; major += 1) {
+    for (let minor = 0; minor < inner; minor += 1) {
+      const value =
+        matrixKind === 'csr'
+          ? (values[major * cols + minor] ?? 0)
+          : (values[minor * cols + major] ?? 0)
+
+      if (value !== 0) {
+        data.push(value)
+        indices.push(minor)
+      }
+    }
+    indptr.push(data.length)
+  }
+
+  return {
+    data: new Float32Array(data),
+    indices: new Int32Array(indices),
+    indptr: new Int32Array(indptr),
   }
 }
 
