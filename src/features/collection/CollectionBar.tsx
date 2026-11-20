@@ -357,69 +357,70 @@ export function CollectionBar({
                 const canBeside =
                   beside !== undefined && canShowBeside(loadedEntry, entry)
                 const isBeside = canBeside && shownBeside.includes(entry)
-                const card = (
-                  <button
-                    key={entry.url}
-                    type="button"
-                    className="collection-bar-dataset"
-                    title={`${isLoaded ? `${label} is open` : `Open ${label}`}${
-                      stat === null ? '' : `; ${stat.title}`
-                    }`}
-                    aria-label={label}
-                    aria-current={isLoaded ? 'true' : undefined}
-                    aria-busy={isPending || undefined}
-                    data-beside={isBeside || undefined}
-                    data-preview-url={store === null ? undefined : entry.url}
-                    onClick={() => {
-                      if (!isLoaded && !isPending) onSelect(entry)
-                      if (view === 'grid') onViewChange('row')
-                    }}
-                  >
-                    {store === null || previews === undefined ? (
-                      label
-                    ) : (
-                      <>
-                        <CollectionPreview
-                          entry={preview ?? null}
-                          colorScale={previews.colorScale}
-                          url={entry.url}
-                          scaleMin={scaleMin}
-                          scaleMax={sharedScaleMax}
-                          scalePercentile={sharedScale ? null : scalePercentile}
-                          onDrawnTop={reportDrawnTop}
-                          annotations={annotations}
-                        />
-                        <span className="collection-bar-dataset-name">{label}</span>
-                        {stat === null ? null : (
-                          <span className="collection-bar-dataset-max">{stat.text}</span>
-                        )}
-                      </>
-                    )}
-                  </button>
-                )
-
-                return !canBeside ? (
-                  card
-                ) : (
+                // Every dataset keeps its wrapper, so its button is not remounted
+                // when the open dataset changes which can be shown beside it: a
+                // remount lost keyboard focus, and its preview was never read, as
+                // the observer above went on watching the old button.
+                return (
                   <span key={entry.url} className="collection-bar-item">
-                    {card}
-                    <IconButton
-                      className="collection-bar-beside"
-                      title={
-                        isBeside
-                          ? `${label} is shown beside the open dataset, with one view. Click to close it`
-                          : besideFull
-                            ? `Up to ${MAX_LINKED_SECTIONS} sections can be shown beside the open dataset; close one first`
-                            : `Show ${label} beside the open dataset, with one view: it is registered to it`
-                      }
-                      aria-label={`Show ${label} beside`}
-                      aria-pressed={isBeside}
-                      disabled={!isBeside && besideFull}
-                      icon={<SideBySideIcon />}
+                    <button
+                      type="button"
+                      className="collection-bar-dataset"
+                      title={`${isLoaded ? `${label} is open` : `Open ${label}`}${
+                        stat === null ? '' : `; ${stat.title}`
+                      }`}
+                      aria-label={label}
+                      aria-current={isLoaded ? 'true' : undefined}
+                      aria-busy={isPending || undefined}
+                      data-beside={isBeside || undefined}
+                      data-preview-url={store === null ? undefined : entry.url}
                       onClick={() => {
-                        beside.onToggle(entry)
+                        if (!isLoaded && !isPending) onSelect(entry)
+                        if (view === 'grid') onViewChange('row')
                       }}
-                    />
+                    >
+                      {store === null || previews === undefined ? (
+                        label
+                      ) : (
+                        <>
+                          <CollectionPreview
+                            entry={preview ?? null}
+                            colorScale={previews.colorScale}
+                            url={entry.url}
+                            scaleMin={scaleMin}
+                            scaleMax={sharedScaleMax}
+                            scalePercentile={sharedScale ? null : scalePercentile}
+                            onDrawnTop={reportDrawnTop}
+                            annotations={annotations}
+                          />
+                          <span className="collection-bar-dataset-name">{label}</span>
+                          {stat === null ? null : (
+                            <span className="collection-bar-dataset-max">
+                              {stat.text}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </button>
+                    {canBeside ? (
+                      <IconButton
+                        className="collection-bar-beside"
+                        title={
+                          isBeside
+                            ? `${label} is shown beside the open dataset, with one view. Click to close it`
+                            : besideFull
+                              ? `Up to ${MAX_LINKED_SECTIONS} sections can be shown beside the open dataset; close one first`
+                              : `Show ${label} beside the open dataset, with one view: it is registered to it`
+                        }
+                        aria-label={`Show ${label} beside`}
+                        aria-pressed={isBeside}
+                        disabled={!isBeside && besideFull}
+                        icon={<SideBySideIcon />}
+                        onClick={() => {
+                          beside.onToggle(entry)
+                        }}
+                      />
+                    ) : null}
                   </span>
                 )
               })}

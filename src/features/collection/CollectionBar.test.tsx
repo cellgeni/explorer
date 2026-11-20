@@ -197,6 +197,47 @@ describe('CollectionBar', () => {
     expect(s5).toBeDefined()
   })
 
+  // A new button would lose focus, and the bar's observer, which marks the
+  // previews to read, would go on watching the old one.
+  it('keeps each section button, and its focus, as the open section changes', () => {
+    const registered = parseDatasetCollection(
+      {
+        version: 1,
+        datasets: ['s1', 's2', 's3'].map((name) => ({
+          dataset: `${name}.zarr`,
+          name,
+          coordinateSystem: 'cord',
+        })),
+      },
+      COLLECTION_URL,
+    )
+    const [s1, , s3] = registered.datasets
+    const bar = (loadedUrl: string | null) => (
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: registered }}
+        loadedUrl={loadedUrl}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        beside={{ shown: [], onToggle: vi.fn() }}
+      />
+    )
+    const { rerender } = render(bar(null))
+    const button = screen.getByRole('button', { name: 's3' })
+    button.focus()
+
+    // s3 can be shown beside s1 once s1 opens, and not once s3 itself opens.
+    rerender(bar(s1!.url))
+    expect(screen.getByRole('button', { name: 'Show s3 beside' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 's3' })).toBe(button)
+    rerender(bar(s3!.url))
+    expect(
+      screen.queryByRole('button', { name: 'Show s3 beside' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 's3' })).toBe(button)
+    expect(button).toHaveFocus()
+  })
+
   it('says when the collection is being read or cannot be opened', () => {
     const onClose = vi.fn()
     const { rerender } = render(

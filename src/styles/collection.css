@@ -159,7 +159,8 @@
   cursor: progress;
 }
 
-/* A section registered to the open dataset, with its Show beside toggle. */
+/* A dataset, with its Show beside toggle when it is registered to the open
+   dataset. */
 .collection-bar-item {
   position: relative;
   display: flex;
