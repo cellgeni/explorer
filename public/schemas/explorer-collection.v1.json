@@ -14,11 +14,13 @@
     "name": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "Display name, shown in the collection bar."
     },
     "description": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "What the collection holds."
     },
     "source": { "$ref": "#/$defs/source" },
@@ -30,6 +32,7 @@
       "type": "array",
       "minItems": 1,
       "maxItems": 500,
+      "uniqueItems": true,
       "items": { "$ref": "#/$defs/dataset" },
       "description": "The datasets, in the order the collection bar lists them. The first one opens first."
     },
@@ -40,7 +43,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
+      "pattern": "^(?=[\\s\\S]*\\S)(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
       "description": "A path relative to the collection's folder (or `root`), or an http(s) URL."
     },
     "dataset": {
@@ -54,11 +57,13 @@
         "name": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Label in the collection bar, and in the top bar when the dataset has no manifest name. Without it, the bar shows the last part of the path."
         },
         "group": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Group label, such as a time point or donor. The bar lists groups in the order they first appear."
         },
         "image": {
@@ -77,11 +82,13 @@
         "labelColumn": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `labels`."
         },
         "coordinateSystem": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "A name for registered coordinates, such as one patient's serial sections. Datasets with the same name put a point at the same place in each, so they can be shown side by side with one view, and switching between them keeps the view."
         },
         "z": {
@@ -104,11 +111,13 @@
         "repository": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Repository or host, such as BioImage Archive."
         },
         "accession": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Accession or identifier in that repository."
         },
         "url": {
@@ -119,11 +128,13 @@
         "license": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Data licence, such as CC BY 4.0."
         },
         "citation": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "How to cite the data."
         }
       },
@@ -137,7 +148,8 @@
           "type": "array",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           },
           "description": "Genes to select. Names must match the gene panel exactly."
         },
@@ -171,7 +183,10 @@
             {
               "anyOf": [
                 { "type": ["number", "null"] },
-                { "type": "string", "pattern": "^p[0-9]+(\\.[0-9]+)?$" }
+                {
+                  "type": "string",
+                  "pattern": "^p(?:0*100(?:\\.0+)?|0*[1-9][0-9]?(?:\\.[0-9]+)?|0+\\.[0-9]*[1-9][0-9]*)$"
+                }
               ]
             }
           ],

@@ -458,6 +458,17 @@ deployment at `https://viewer.example.org/xenium/`,
 `$schema` to that URL (or a local copy) and editors such as VS Code will
 complete field names and flag errors as you type.
 
+The schema catches blank names and paths, unknown fields and values, a
+`geneRange` percentile of `p0` or over `p100`, options without the file they
+need (such as `options.labelColumn` without `files.labels`), a segmentation
+whose extension the viewer does not read without
+`options.segmentationFormat`, a `zchunkstore` with an OME-Zarr image, an
+`options.binSize` not in `files.bins`, and a bin size listed twice. The
+viewer checks more when it opens the manifest: a `geneRange` maximum at or
+below its minimum, and numbers too large to be finite, such as `1e400`. A
+manifest the schema passes can still stop the load, with a message naming the
+field.
+
 ## How It Works
 
 1. `detectSpatialDataset` (`src/datasets/datasetFactory.ts`) reads the manifest

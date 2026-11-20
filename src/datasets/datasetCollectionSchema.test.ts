@@ -5,6 +5,7 @@ import {
   DATASET_COLLECTION_DEFAULT_KEYS,
   DATASET_COLLECTION_ENTRY_KEYS,
   DATASET_COLLECTION_TOP_LEVEL_KEYS,
+  DatasetCollectionError,
   MAX_COLLECTION_DATASETS,
   parseDatasetCollection,
 } from './datasetCollection'
@@ -21,6 +22,7 @@ interface SchemaNode {
   readonly items?: SchemaNode
   readonly enum?: readonly unknown[]
   readonly maxItems?: number
+  readonly uniqueItems?: boolean
   readonly $defs?: Readonly<Record<string, SchemaNode>>
 }
 
@@ -49,6 +51,35 @@ describe('dataset collection JSON Schema', () => {
     expect(schema.$defs?.dataset?.properties?.coordinates?.enum).toEqual(
       DATASET_IMAGE_COORDINATES,
     )
+  })
+
+  // Editors may pass a collection the viewer refuses, such as one naming a
+  // dataset twice in two spellings, but must not flag one it opens (EXP-031).
+  it('refuses blank strings and repeated entries, as the parser does', () => {
+    const strings: Record<string, unknown>[] = []
+    const walk = (node: unknown): void => {
+      if (typeof node !== 'object' || node === null) return
+      const record = node as Record<string, unknown>
+      if (record.type === 'string' && record.minLength === 1) strings.push(record)
+      Object.values(record).forEach(walk)
+    }
+    walk(schema)
+
+    expect(strings.length).toBeGreaterThan(5)
+    for (const node of strings) {
+      expect(typeof node.pattern).toBe('string')
+      const nonBlank = new RegExp(node.pattern as string)
+      expect(nonBlank.test(' \t ')).toBe(false)
+      expect(nonBlank.test(' a ')).toBe(true)
+    }
+
+    expect(schema.properties?.datasets?.uniqueItems).toBe(true)
+    expect(() =>
+      parseDatasetCollection(
+        { version: 1, datasets: [{ dataset: 'a' }, { dataset: 'a' }] },
+        'https://example.test/collection.json',
+      ),
+    ).toThrow(DatasetCollectionError)
   })
 
   it('offers the same default values as the dataset manifest', () => {
