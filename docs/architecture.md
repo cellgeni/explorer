@@ -268,7 +268,8 @@ lets tests replace them.
   canvas makes its own store unless given one; the Cell Query pictures share
   one, whose schedulers keep each picture's wanted tiles apart, read the
   highest rows first, and stay under one limit of requests in flight
-  (`TileRequestSlots`).
+  (`TileRequestSlots`). Every `TileCache` decodes in one shared pool of up
+  to four workers (`sharedTileDecodePool`), as strip bands do in theirs.
 - `VolumeViewer` (`src/components/VolumeViewer.tsx`) draws an OME-Zarr
   z-stack in 3D over the 2D view, with a deck.gl `OrbitView` and the
   ray-marching `VolumeLayer` (`src/rendering/volumeLayer.ts`).
