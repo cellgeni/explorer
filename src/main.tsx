@@ -4,10 +4,12 @@ import { App } from './App'
 import { AppErrorBoundary } from './components/AppErrorBoundary'
 import './index.css'
 import { installZipFolderFetch } from './data/zipFolder'
+import { installStaleChunkDetection } from './features/errors/staleChunk'
 import { installWorkerZarrCodecs } from './zarr/workerZarrCodecs'
 
 installWorkerZarrCodecs()
 installZipFolderFetch()
+installStaleChunkDetection()
 
 const rootElement = document.getElementById('root')
 

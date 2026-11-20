@@ -678,6 +678,15 @@ Diagnostics in the info drawer shows the active profile with debug info on.
   (`src/features/errors/loadErrorModel.ts`) classifies failures (range
   blocked, CORS, HTTP status, unsupported layout, …) for the info drawer's
   load issues, ⓘ's issue badge and viewport messages.
+- **App updated.** A deploy replaces the hashed assets, so a tab opened before
+  it asks for chunks that are gone. The browsers' messages for a dynamic
+  import that fails (Chromium "Failed to fetch dynamically imported module",
+  Firefox "error loading dynamically imported module", Safari "Importing a
+  module script failed.") and Vite's `vite:preloadError`, named by a listener
+  installed at startup, are classified as `app-updated` before the network
+  advice: "The app was updated. Reload the page.", with a `Reload` button in
+  the Issues card, the load toast, the start screen and the error boundary
+  (`src/features/errors/staleChunk.ts`). Nothing reloads by itself.
 - **Fallback notices.** `notifyFallback` (`src/data/fallbackNotice.ts`) reports
   when a slower or partial path is used (for example the H5 matrix or
   cell-summary transcript density). Shown under "Data access notes" in the

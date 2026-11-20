@@ -1,4 +1,5 @@
 import { Button, Disclosure } from './ui'
+import { ReloadAppButton } from '../features/errors/ReloadAppButton'
 import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
@@ -118,7 +119,9 @@ export function ErrorSummary({
             <p>{error.message}</p>
             <p>{error.action}</p>
             {error.detail === undefined ? null : <p>{error.detail}</p>}
-            {onRunDiagnostics !== undefined && error.source === 'Dataset overview' ? (
+            {error.code === 'app-updated' ? (
+              <ReloadAppButton />
+            ) : onRunDiagnostics !== undefined && error.source === 'Dataset overview' ? (
               <button
                 type="button"
                 className="secondary-action"

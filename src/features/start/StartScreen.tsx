@@ -19,6 +19,7 @@ import {
   type ExampleSource,
 } from './examplesIndex'
 import type { RecentDataset } from './recentDatasets'
+import { ReloadAppButton } from '../errors/ReloadAppButton'
 
 interface StartScreenProps {
   readonly open: OpenDatasetModel
@@ -90,6 +91,7 @@ function StartScreenError({ error }: { readonly error: StructuredLoadError }) {
       <strong>{error.title}</strong>
       <p>{error.message}</p>
       <p>{error.action}</p>
+      {error.code === 'app-updated' ? <ReloadAppButton /> : null}
     </div>
   )
 }
