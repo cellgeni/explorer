@@ -206,6 +206,32 @@ describe('TileDecodeWorkerPool', () => {
     await expect(promise).rejects.toThrow(/terminated/)
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1)
   })
+
+  it('ends a worker that fails and starts a new one for later requests', async () => {
+    const { pool, workers } = makePool({ size: 2 })
+    const first = pool.decode(new Uint8Array([1]))
+    const second = pool.decode(new Uint8Array([2]))
+
+    // A script that does not load reports one error with no message, and the
+    // worker never answers again.
+    workers[0]?.onerror?.(new ErrorEvent('error'))
+
+    await expect(first).rejects.toThrow('Tile decode worker failed.')
+    await expect(second).rejects.toThrow('Tile decode worker failed.')
+    expect(workers.map((worker) => worker.terminate.mock.calls.length)).toEqual([1, 1])
+
+    const third = pool.decode(new Uint8Array([3]))
+    expect(workers).toHaveLength(3)
+    resolveLast(workers[2])
+    await expect(third).resolves.toMatchObject({ width: 2, height: 1 })
+
+    // A late error from an ended worker leaves the new one alone.
+    workers[1]?.onerror?.(new ErrorEvent('error'))
+    const fourth = pool.decode(new Uint8Array([4]))
+    expect(workers).toHaveLength(3)
+    resolveLast(workers[2])
+    await expect(fourth).resolves.toMatchObject({ width: 2, height: 1 })
+  })
 })
 
 function resolveLast(worker: FakeWorker | undefined): void {
