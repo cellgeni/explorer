@@ -739,7 +739,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         this.presetUnits(),
         table.instanceKey === undefined
           ? Promise.resolve(null)
-          : obs.readObsColumn(table.instanceKey),
+          : obs.readObsInstanceIds(table.instanceKey),
         table.regionKey === undefined
           ? Promise.resolve(null)
           : obs.readObsColumn(table.regionKey).catch((error: unknown) => {
@@ -1418,16 +1418,20 @@ function scaleAffine(affine: Affine2D, scale: number): Affine2D {
 // named like `cell_labels`.
 async function readLabelValues(
   obs: AnnDataObsAccess,
-  instances: readonly (string | number | null)[] | null,
+  instances: readonly (string | number | bigint | null)[] | null,
   instanceKey: string | undefined,
 ): Promise<readonly (number | null)[] | null> {
-  const asLabels = (values: readonly (string | number | null)[] | null) => {
+  const asLabels = (values: readonly (string | number | bigint | null)[] | null) => {
     if (values === null) {
       return null
     }
 
     const labels = values.map((value) =>
-      typeof value === 'number' && Number.isInteger(value) ? value : null,
+      typeof value === 'number' && Number.isInteger(value)
+        ? value
+        : typeof value === 'bigint' && Number.isSafeInteger(Number(value))
+          ? Number(value)
+          : null,
     )
     const present = labels.filter((value) => value !== null).length
     return present > values.length / 2 ? labels : null

@@ -15,6 +15,35 @@ const XY = { name: 'xy', axes: [{ name: 'x' }, { name: 'y' }] }
 const CYX = { name: 'cyx', axes: [{ name: 'c' }, { name: 'y' }, { name: 'x' }] }
 
 describe('SpatialDataDataset', () => {
+  it('joins table rows to shapes on instance IDs above 2^53 exactly', async () => {
+    // As spatialdata-io keeps MERSCOPE EntityIDs. As numbers, all three round
+    // to 2305843009213693952.
+    const ids = [
+      2_305_843_009_213_693_964n,
+      2_305_843_009_213_693_965n,
+      2_305_843_009_213_693_966n,
+    ]
+    const open = (cellIds?: readonly bigint[]) =>
+      new SpatialDataDataset({
+        url: STORE_URL,
+        fetcher: inMemoryZarrFetcher(
+          storeFixture(cellIds === undefined ? {} : { cellIds }),
+        ),
+        readShapes: shapesReaderFixture({
+          cells: polygonRows().map((row, index) =>
+            cellIds === undefined ? row : { ...row, id: cellIds[index] },
+          ),
+        }),
+        openImage: imageOpenerFixture(),
+      })
+    const placed = async (dataset: SpatialDataDataset) =>
+      (await dataset.overview()).map((cell) => [cell.cellId, cell.position])
+
+    // The same places as the small IDs give.
+    await expect(placed(open(ids))).resolves.toEqual(await placed(open()))
+    await expect(placed(open(ids))).resolves.toHaveLength(2)
+  })
+
   it('places table rows on annotated shapes and exposes AnnData readers', async () => {
     const progress: string[] = []
     const dataset = new SpatialDataDataset({
@@ -791,6 +820,8 @@ function storeFixture(
     readonly flippedImage?: boolean
     readonly nucleusBoundaries?: boolean
     readonly secondImage?: boolean
+    // The table's int64 cell_id values; defaults to 10, 11 and 99.
+    readonly cellIds?: readonly bigint[]
   } = {},
 ): ReadonlyMap<string, Uint8Array> {
   const shapesTransform = (name: string) => ({
@@ -923,7 +954,10 @@ function storeFixture(
       encoder.encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
     ],
     ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b', 'cell-c'], 6)],
-    ['/tables/table/obs/cell_id/0', bytes(new BigInt64Array([10n, 11n, 99n]))],
+    [
+      '/tables/table/obs/cell_id/0',
+      bytes(BigInt64Array.from(options.cellIds ?? [10n, 11n, 99n])),
+    ],
     ['/tables/table/obs/region/codes/0', bytes(new Int8Array([0, 0, 0]))],
     ['/tables/table/obs/region/categories/0', fixedStrings(['cells'], 5)],
     ['/tables/table/var/_index/0', fixedStrings(['Actb', 'Gad1'], 4)],
