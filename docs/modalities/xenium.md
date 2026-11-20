@@ -17,8 +17,8 @@ reads the folder's index page (`GET <base>/`), which only some hosts serve; then
 [dataset manifest](../dataset-manifest.md) in `explorer.json` decides the
 platform and can relocate every file below. Otherwise a `2xx` for
 `experiment.xenium` means Xenium; its body is not read at detection time. Any
-other status, a network error, or a timeout moves on to the SpatialData,
-OME-Zarr, and Visium HD probes.
+other status, a network error, or a timeout moves on to the other platforms'
+probes, in the order [Architecture](../architecture.md#1-detection) lists.
 
 The file names below are the standard ones. Readers ask for each file by role
 (`datasetFileUrlFor(baseUrl, 'cells')`, `src/data/datasetFiles.ts`), which

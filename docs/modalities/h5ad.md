@@ -270,7 +270,7 @@ Selected genes read only their own chunks either way.
 Sparse groups need a `shape` attribute and `data`, `indices`, `indptr`
 datasets. `indptr` is always read in full. On the reference backend `data` and
 `indices` stay lazy; CSR row reads are merged into batches of up to 4,000,000
-values with gaps up to 262,144 values (`csrZarrRowBatches`).
+values with gaps up to 262,144 values (`csrLazyRowBatches`).
 
 ## Load Sequence
 

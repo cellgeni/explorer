@@ -18,7 +18,7 @@ SpatialData is detected in one of two places in `detectSpatialDataset`
 - **Any other folder URL**, after the `experiment.xenium` probe fails. The
   same `zarr.json` / `.zattrs` probes run against the folder.
 
-For each metadata file that answered, `probeSpatialDataRoot` downloads it and
+For each metadata file that answered, `probeZarrRootContent` downloads it and
 calls `isSpatialDataRootMetadata` (`src/datasets/spatialDataCatalog.ts`). A
 store is SpatialData when:
 
@@ -28,7 +28,8 @@ store is SpatialData when:
   `ome` is present. Those keys mark an element, not the root, so a URL pointing
   at `…/images/he` loads as a plain OME-Zarr image.
 
-A Zarr store without `spatialdata_attrs` falls through to the
+A Zarr store without `spatialdata_attrs` opens as [AnnData](./h5ad.md) when
+its root says `encoding-type: anndata`, and otherwise falls through to the
 [OME-Zarr image](./image.md) path.
 
 A URL whose path ends in `.icechunk` is an [Icechunk](https://icechunk.io/)
@@ -45,8 +46,9 @@ two side by side is an error. The store is SpatialData when its root
 metadata passes `isSpatialDataRootMetadata`, or, since some writers (for
 example the STHELAR exports) leave root attributes out, when the root holds
 `images`, `labels`, `points`, `shapes`, or `tables` groups and its attributes
-do not mark an image or AnnData. A zip holding any other Zarr store is an
-error, since only SpatialData is read from zips.
+do not mark an image or AnnData. A zipped OME-Zarr image (root
+`multiscales` or `bioformats2raw.layout`) opens as an
+[image](./image.md); a zip holding any other Zarr store is an error.
 
 A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
@@ -149,7 +151,7 @@ coordinate system.
 
 | Store path                               | Read by                                                         | Library                                              | Used for                                    |
 | ---------------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------- |
-| `zarr.json` / `.zattrs` (root)           | `probeSpatialDataRoot`                                          | fetch + JSON                                         | Detection                                   |
+| `zarr.json` / `.zattrs` (root)           | `probeZarrRootContent`                                          | fetch + JSON                                         | Detection                                   |
 | `zarr.json` / `zmetadata` / `.zmetadata` | `readConsolidatedZarrMetadata`                                  | fetch + JSON                                         | Element discovery                           |
 | `tables/<table>/obs`, `var`, `X`, `obsm` | `AnnDataH5adDataset` (`readAnnDataZarr`)                        | `zarrita` + decode worker (codecs)                   | Cells, genes, annotations, embeddings       |
 | `shapes/<name>/shapes.parquet`           | `readSpatialDataShapes` (`src/datasets/spatialDataShapes.ts`)   | `hyparquet` in a worker (range reads, or zip slices) | Cell positions, cell and nucleus boundaries |
@@ -335,7 +337,7 @@ nucleus checkbox shown only when `summary().nuclei` names an element
 
 | File                                    | Role                                                                                                               |
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `src/datasets/datasetFactory.ts`        | Root probes, `probeSpatialDataRoot`                                                                                |
+| `src/datasets/datasetFactory.ts`        | Root probes, `probeZarrRootContent`                                                                                |
 | `src/datasets/spatialDataCatalog.ts`    | Root check, store opening, catalog, view and table selection                                                       |
 | `src/datasets/spatialDataTransforms.ts` | Transform parsing and affine maths                                                                                 |
 | `src/datasets/spatialDataShapes.ts`     | GeoParquet / WKB shapes reader and shape columns, run in a worker by `spatialDataShapesWorker.ts` (`src/workers/`) |

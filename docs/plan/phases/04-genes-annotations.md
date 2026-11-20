@@ -143,7 +143,7 @@ Found by the [2026-11-16 review](../open-items.md#found-by-the-2026-11-16-review
 - [x] `annotationUrl=` and Import URL read the whole response with
       `response.text()`, with no byte limit, unlike the H5AD and segmentation
       loaders, and parse it on the main thread, so a link to a large file
-      could stall or crash the tab. Since 2026-11-16 they stop at 100 MB
+      could stall or crash the tab. Since 2026-11-16 they stop at 100 MiB
       (`readAnnotationUrlText` in `annotationUrlText.ts`): before reading
       when Content-Length is over it, or as soon as the bytes read pass it,
       and say "Annotation file too large". Parsing stays on the main thread;

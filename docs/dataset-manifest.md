@@ -175,14 +175,14 @@ are optional; `options` must be empty. Files the manifest names must answer
 are probed at their Space Ranger names; a missing tissue image is skipped.
 Every file is read whole, so no byte-range support is needed, and gzipped
 copies (`.gz`) work. A gzipped `filtered_feature_bc_matrix.h5.gz` is inflated
-before it opens and must inflate to no more than the 300 MB a plain `.h5` may
+before it opens and must inflate to no more than the 300 MiB a plain `.h5` may
 be.
 
 | Key                      | Standard name                                                                                          | Notes                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | `tissuePositions`        | `spatial/tissue_positions.csv`, then `spatial/tissue_positions_list.csv`                               | With or without a header row                                          |
 | `scalefactors`           | `spatial/scalefactors_json.json`                                                                       |                                                                       |
-| `filteredMatrix`         | `filtered_feature_bc_matrix.h5`, then `filtered_feature_bc_matrix/matrix.mtx.gz`                       | Up to 300 MB. A `.mtx` or `.mtx.gz` file is read as MEX               |
+| `filteredMatrix`         | `filtered_feature_bc_matrix.h5`, then `filtered_feature_bc_matrix/matrix.mtx.gz`                       | Up to 300 MiB. A `.mtx` or `.mtx.gz` file is read as MEX              |
 | `filteredMatrixBarcodes` | Named like a MEX matrix: `matrix.mtx` becomes `barcodes.tsv`, and a `.mtx` extension `.tsv`            | Only for a MEX matrix; naming it makes the matrix MEX                 |
 | `filteredMatrixFeatures` | As above, with `features.tsv`, then `genes.tsv`                                                        | As above                                                              |
 | `hiresImage`             | `spatial/tissue_hires_image.png`                                                                       | Any image the browser draws; `.png.gz` and `.jpg.gz` are decompressed |
@@ -244,12 +244,12 @@ missing boundary file is skipped. The tables and boundaries are read whole, so
 they need no byte-range support, and gzipped copies work whatever their names;
 the `.vzg` is read by byte range.
 
-| Key              | Standard name                                | Notes                                                                                 |
-| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `cellByGene`     | `cell_by_gene.csv`                           | Up to 300 MB. vpt writes `<method>_cell_by_gene.csv`                                  |
-| `cellMetadata`   | `cell_metadata.csv`                          | Up to 300 MB, with `center_x` and `center_y`. vpt writes `<method>_cell_metadata.csv` |
-| `cellBoundaries` | `cell_boundaries.parquet`                    | GeoParquet with `EntityID` and `ZIndex`. vpt writes `<method>_micron_space.parquet`   |
-| `vzg`            | The one `.vzg` the folder's index page lists | The run's Vizualizer zip, read by byte range for the image                            |
+| Key              | Standard name                                | Notes                                                                                  |
+| ---------------- | -------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `cellByGene`     | `cell_by_gene.csv`                           | Up to 300 MiB. vpt writes `<method>_cell_by_gene.csv`                                  |
+| `cellMetadata`   | `cell_metadata.csv`                          | Up to 300 MiB, with `center_x` and `center_y`. vpt writes `<method>_cell_metadata.csv` |
+| `cellBoundaries` | `cell_boundaries.parquet`                    | GeoParquet with `EntityID` and `ZIndex`. vpt writes `<method>_micron_space.parquet`    |
+| `vzg`            | The one `.vzg` the folder's index page lists | The run's Vizualizer zip, read by byte range for the image                             |
 
 A vpt re-segmentation sits next to the instrument's files, so a manifest
 picks it:

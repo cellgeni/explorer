@@ -462,7 +462,7 @@ Testing:
     column chunk without merging neighbours, and `prefetchAsyncBuffer` starts
     them all at once: 1,123 row groups × 6 columns = 6,738 requests.
   - The reader's URL buffer (`coalescingAsyncBuffer`) merges slices asked for
-    together into ranges of up to 8 MB and keeps at most 4 in flight. A
+    together into ranges of up to 8 MiB and keeps at most 4 in flight. A
     whole-file read is now 14 data requests (24 s in Node, 3.6 GB of heap).
   - The card and expression projection read only the row groups whose
     `square_0XXum` statistics can hold the bins: about 3 of 1,123 for one

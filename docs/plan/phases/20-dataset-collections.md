@@ -38,7 +38,7 @@ Current behaviour is documented in
       highest score per pixel on the main view's square-root scale.
       `CollectionPreviewStore` reads only the cards in view and just beyond,
       four datasets at a time, and nothing while the main view loads. Images
-      and Visium HD show "No cells to preview"; a plain `.h5ad` over 64 MB is
+      and Visium HD show "No cells to preview"; a plain `.h5ad` over 64 MiB is
       skipped. `Previews` turns them off.
 - [x] Annotations across datasets (#104, 2026-11-15): AnnData classes come in
       category order, so a class gets the same colour in every section.

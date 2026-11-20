@@ -22,7 +22,8 @@ plan was split (2026-11-13) moved there then.
 
 Sequencing:
 
-- [ ] Feature-fix pass: keep recording fixes until correctness is stable.
+- [ ] Feature-fix pass: keep recording fixes until correctness is stable (see
+      [Feature-Fix Pass](phases/feature-fix-pass.md)).
 - [ ] Optimization pass: interaction, memory, fetch/decode concurrency, and
       rendering cost, without behaviour changes.
 
@@ -139,13 +140,20 @@ Features:
 - [ ] 3D section stack: cells only (no section images, boundaries or
       transcripts), placed by depth only (no per-section transform or
       SpatialData transformations), not measured on large stacks, no section
-      range or click to open, camera not in the link, and no registered test
-      dataset or E2E test (see
+      range or click to open, camera not in the link, and no E2E test (see
       [Phase 24](phases/24-section-stack.md#known-gaps)). The 3D view of one
       dataset's cells takes z only from a third obsm `spatial` column (see the
       [follow-up](phases/24-section-stack.md#follow-up-2026-11-20-cells-placed-in-3d-in-one-dataset)).
       A table's sections split by one obs column, and not a Visium table's
       (see [Sections Of One Table](phases/24-section-stack.md#follow-up-2026-11-20-sections-of-one-table)).
+- [ ] Imported segmentations: outlines take no part in ROI selections, the
+      Selection card or Cell Query, so there is no table to count or export;
+      GeoJSON class names and colours (QuPath's `classification`) are not
+      read; Cellpose's stripped masks decode whole rows across the slide for
+      each view; a Zarr label image cannot be picked as a local folder; other
+      platforms cannot import one; and no test has used a real Cellpose run
+      over a hosted NDPI (see
+      [Phase 25](phases/25-imported-segmentations.md#known-gaps)).
 - [ ] Store and file browser: non-Zarr files in consolidated stores read over
       HTTP, and SpatialData points as one table rather than part by part;
       also min and max for binary columns, Rows for writers that store a
@@ -275,7 +283,7 @@ Correctness and robustness:
       dataset's reads. `getSpatialDataset` (`cachedSpatialDataset` in
       `datasetFactory.ts`) takes no signal, and `useDatasetLifecycle.ts`
       calls it, `overview()` and `readBinnedOverview()` without the load's
-      signal. A whole-file H5AD download, up to 300 MB, carries on after
+      signal. A whole-file H5AD download, up to 300 MiB, carries on after
       "Cancelled loading", competes with the next load, and stays cached.
 - [ ] Optional reads treat any failure as "absent", although a zip's central
       directory lists every entry, so S3's 403 for missing keys does not

@@ -52,12 +52,12 @@ and missing boundaries are left out. Three layouts need one:
 
 ## Files Read
 
-| File                                                         | Required | Library                                                             | What is read                                                                                                                                      | Used for                           |
-| ------------------------------------------------------------ | -------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
-| `cell_by_gene.csv`                                           | Yes      | fetch whole, gunzip when gzipped, parsed in a worker (up to 300 MB) | Cell ID (first column), one column per gene, `Blank-*` columns                                                                                    | Cells, genes, expression           |
-| `cell_metadata.csv`                                          | Yes      | fetch whole, gunzip when gzipped, parsed in a worker (up to 300 MB) | Cell ID (first column), `center_x`, `center_y`, `fov`, `volume`, `transcript_count`, shape columns, `<stain>_raw` and `<stain>_high_pass`, others | Positions, metadata tracks, counts |
-| `cell_boundaries.parquet` or `<method>_micron_space.parquet` | No       | fetch whole, gunzip when gzipped, `hyparquet` in the shapes worker  | `Geometry` (WKB MultiPolygon in µm), `EntityID`, `ZIndex`                                                                                         | Cell boundaries                    |
-| `<run>_region_<n>.vzg` (zip)                                 | No       | byte ranges; one entry inflated in a worker; `geotiff` from memory  | Central directory, `pictures/manifest.json`, `pictures/micron_to_mosaic_pixel_transform.csv`, one `pictures/pyrmosaic_<stain>_z<k>.tif`           | Image                              |
+| File                                                         | Required | Library                                                              | What is read                                                                                                                                      | Used for                           |
+| ------------------------------------------------------------ | -------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `cell_by_gene.csv`                                           | Yes      | fetch whole, gunzip when gzipped, parsed in a worker (up to 300 MiB) | Cell ID (first column), one column per gene, `Blank-*` columns                                                                                    | Cells, genes, expression           |
+| `cell_metadata.csv`                                          | Yes      | fetch whole, gunzip when gzipped, parsed in a worker (up to 300 MiB) | Cell ID (first column), `center_x`, `center_y`, `fov`, `volume`, `transcript_count`, shape columns, `<stain>_raw` and `<stain>_high_pass`, others | Positions, metadata tracks, counts |
+| `cell_boundaries.parquet` or `<method>_micron_space.parquet` | No       | fetch whole, gunzip when gzipped, `hyparquet` in the shapes worker   | `Geometry` (WKB MultiPolygon in µm), `EntityID`, `ZIndex`                                                                                         | Cell boundaries                    |
+| `<run>_region_<n>.vzg` (zip)                                 | No       | byte ranges; one entry inflated in a worker; `geotiff` from memory   | Central directory, `pictures/manifest.json`, `pictures/micron_to_mosaic_pixel_transform.csv`, one `pictures/pyrmosaic_<stain>_z<k>.tif`           | Image                              |
 
 Both CSVs are fetched and parsed in one worker (`merscopeTable.worker.ts`):
 the parser scans the text once and writes counts straight into CSR arrays,
@@ -65,10 +65,10 @@ without an object per cell. Fields follow RFC 4180: a quoted field may hold
 commas, line breaks and `""` for a quote, and an unclosed quote fails with
 its row. A byte order mark and `\r\n` line ends are read too. Gzip is
 recognised from the first two bytes, not the file name. A `Content-Length`
-above 300 MB fails the load with the file's size. So does a gzipped file
+above 300 MiB fails the load with the file's size. So does a gzipped file
 whose trailer gives an inflated size above it, before anything is inflated;
 one whose trailer understates its size (more than 4 GiB, or several gzip
-members) stops inflating once past 300 MB.
+members) stops inflating once past 300 MiB.
 
 The table it builds (`merscopeTable` in `src/datasets/merscopeFormat.ts`):
 
@@ -99,14 +99,14 @@ micrometre.
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`):
 
 1. Sets the platform to `merscope`. `Cell boundaries` starts on when the
-   boundary file is at most 100 MB, or its size is unknown.
+   boundary file is at most 100 MiB, or its size is unknown.
 2. Reads the tables and runs the shared AnnData overview (cells, genes,
    annotation sets, embedding options, metadata tracks). Each cell's
    transcript count is `transcript_count`, else `total_counts`.
 3. Logs the table summary: Blank columns, empty columns left out, and the
    boundary file and size.
 4. Raises a notice when cells are in only one table, and when a boundary file
-   over 100 MB starts with boundaries off.
+   over 100 MiB starts with boundaries off.
 5. With a `.vzg` and `Morphology image` on, reads its directory, manifest,
    and transform, fills the Image section's Stain and Plane controls, and
    loads the chosen image in the background (see [Image](#image)).
@@ -149,7 +149,7 @@ even with `Morphology image` off.
 Sizes vary with the region: Ctrl173 (BIA S-BIAD3359, 49,469 × 37,959 px)
 has DAPI at 317 MB per plane and BFP at 63 MB, while small regions are tens
 of MB. The default, DAPI at the middle plane (else the first stain's), loads
-with the dataset only when it is at most 100 MB; otherwise a notice says to
+with the dataset only when it is at most 100 MiB; otherwise a notice says to
 choose a stain. The last image read is kept, so a reload for the same image
 does not download it again; others are downloaded when chosen.
 
@@ -174,7 +174,7 @@ the elements of cells still in view.
 ## Diagnostics
 
 `runMerscopeDiagnostics` (`src/data/datasetDiagnostics.ts`) checks both CSVs
-with `HEAD` (each fails above 300 MB), the boundary file as optional, and the
+with `HEAD` (each fails above 300 MiB), the boundary file as optional, and the
 `.vzg` with a byte-range request (optional; a warning says to name it in the
 manifest when it was not found). The tables and boundaries need no Range
 support: they are read whole. `detected_transcripts.csv` and
@@ -207,7 +207,7 @@ support: they are read whole. `detected_transcripts.csv` and
   pyramid levels (32 px tiles) are left out.
 - No transcripts: `detected_transcripts.csv` has no spatial order and reaches
   35 GB.
-- Each CSV is read whole, up to 300 MB; large regions need splitting or
+- Each CSV is read whole, up to 300 MiB; large regions need splitting or
   conversion to `.h5ad`.
 - The boundary file is read whole, up to several hundred MB for large
   regions; such files start with boundaries off.

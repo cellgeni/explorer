@@ -82,5 +82,5 @@ hyparquet reads each column chunk with its own range request and starts them
 all at once. A whole-file read sent 6,738, and Chromium failed them with
 `net::ERR_INSUFFICIENT_RESOURCES`, taking other reads in flight with them.
 The reader's URL buffer (`coalescingAsyncBuffer`, `src/data/`) merges the
-slices asked for together into ranges of up to 8 MB and keeps at most four
+slices asked for together into ranges of up to 8 MiB and keeps at most four
 requests in flight.

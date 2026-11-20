@@ -145,7 +145,7 @@ Enter a source in the `Dataset or image URL` field:
   `uns/spatial/<library>` layout. A dataset manifest loads GEO samples, whose
   files are renamed and gzipped, in place.
 - MERSCOPE: Vizgen region folder with `cell_by_gene.csv` and
-  `cell_metadata.csv` (each read whole, up to 300 MB), plus
+  `cell_metadata.csv` (each read whole, up to 300 MiB), plus
   `cell_boundaries.parquet` for cell outlines, and the run's `.vzg` for the
   image (one stain and z plane at a time). A dataset manifest loads vpt
   re-segmentations and GEO deposits in place. Transcripts are not read.

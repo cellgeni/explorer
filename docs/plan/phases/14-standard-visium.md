@@ -32,7 +32,7 @@ a manifest) and the CELLxGENE Census `.h5ad` of the same sample. See
 - **DECISION:** Tissue images stay `flat` images. `uns` arrays are written to
   an uncompressed BMP object URL (no canvas needed, testable); GEO's
   `.png.gz` images are decompressed into object URLs.
-- **DECISION:** Read the Space Ranger matrix whole (300 MB limit, as `.h5ad`),
+- **DECISION:** Read the Space Ranger matrix whole (300 MiB limit, as `.h5ad`),
   not through the Visium HD lazy-range worker: selected-gene overlays scan
   every spot, and standard Visium matrices are small (1-50 MB typically).
 
@@ -85,7 +85,7 @@ have no `.h5`, so they could not be opened.
 - **DECISION:** Read the MEX matrix (`matrix.mtx.gz`, `barcodes.tsv.gz`,
   `features.tsv.gz`) when there is no `.h5`, into the same
   `FeatureBarcodeMatrix` the `.h5` reader returns. Parsed as it streams, in a
-  worker of its own, so the inflated text is never held; same 300 MB limit on
+  worker of its own, so the inflated text is never held; same 300 MiB limit on
   the gzipped matrix.
 - **DECISION:** A manifest names only the matrix; its lists are found from its
   name (`matrix.mtx` → `barcodes.tsv`, `features.tsv`, then `genes.tsv`, and a

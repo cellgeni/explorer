@@ -277,7 +277,7 @@ Other gaps found in the review:
 
 - [x] Byte-range cache eviction read every cached range (2026-11-13). After
       each write, `evict` (`src/data/persistentByteRangeCache.ts`) called
-      `getAll()` on the store, so the bytes of every cached range (up to 256 MB)
+      `getAll()` on the store, so the bytes of every cached range (up to 256 MiB)
       were deserialised on the main thread to add up their sizes. Database
       version 2 keeps each range's size and last access in a store of its own,
       indexed by access time, and the totals in one record: a write reads two
