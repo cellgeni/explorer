@@ -67,7 +67,7 @@ import {
   ndpiTileDecodeMetadata,
 } from './ndpi'
 import { decodeTiffStripBand } from '../codecs/tiffStrips'
-import { TIFF_COMPRESSION_JPEG } from '../codecs/tiffTile'
+import { TIFF_COMPRESSION_JPEG, TIFF_COMPRESSION_NONE } from '../codecs/tiffTile'
 import { sharedStripDecodePool } from '../workers/tileDecodePool'
 import { abortable } from '../utils/abortable'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
@@ -194,6 +194,7 @@ const openTiffFiles = new Map<string, Promise<GeoTIFF>>()
 // Bands of stripped levels, shared by every loader so that the planes and
 // channels of one image share one memory limit.
 const stripBands = new StripBandCache()
+const TIFF_SAMPLE_FORMAT_SIGNED = 2
 
 // Bands of NDPI MCU rows as read, kept while the blocks across them decode.
 const NDPI_BAND_CACHE_BYTES = 64 * 1024 * 1024
@@ -342,10 +343,9 @@ async function openTiffImage(
   const [{ firstImage, decodeMetadata }, zchunkStoreOptions] = await Promise.all([
     (async () => {
       const image = await tiff.getImage(selection.ifdIndex ?? 0)
-      return {
-        firstImage: image,
-        decodeMetadata: await readTileDecodeMetadata(tiff, image.getFileDirectory()),
-      }
+      const decodeMetadata = await readTileDecodeMetadata(tiff, image.getFileDirectory())
+      refuseSignedSamples(decodeMetadata, options)
+      return { firstImage: image, decodeMetadata }
     })(),
     // A file in memory has its tile offsets at hand.
     options.bytes !== undefined
@@ -738,6 +738,7 @@ async function openTopLevelPyramid(
     channelDirectories.map((directory) => readTileDecodeMetadata(file.tiff, directory)),
   )
   const decodeMetadata = levelDecodeMetadata[0] ?? {}
+  refuseSignedSamples(decodeMetadata, options)
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
@@ -1939,6 +1940,26 @@ function parseTiffImageSelection(url: string): TiffImageSelection {
   return { sourceUrl: parsedUrl.toString(), ifdIndex }
 }
 
+// Signed samples would be read as unsigned (-500 as 65036), so an image
+// storing them is refused (EXP-015). Label images read them as IDs.
+function refuseSignedSamples(
+  decodeMetadata: TiffTileDecodeMetadata,
+  options: Pick<OpenImagePyramidOptions, 'labels'>,
+): void {
+  if (
+    decodeMetadata.sampleFormat !== TIFF_SAMPLE_FORMAT_SIGNED ||
+    options.labels === true
+  ) {
+    return
+  }
+
+  const bits = decodeMetadata.bitsPerSample?.[0] ?? 8
+
+  throw new Error(
+    `The image stores signed ${bits}-bit samples (TIFF SampleFormat 2), which the viewer cannot show. Save it with unsigned 8- or 16-bit samples.`,
+  )
+}
+
 async function readTileDecodeMetadata(
   tiff: GeoTIFF,
   directory: ImageFileDirectory,
@@ -1959,7 +1980,8 @@ async function readTileDecodeMetadata(
   )
 
   return {
-    ...(compression === undefined ? {} : { compression }),
+    // TIFF's default: a file without the tag is uncompressed.
+    compression: compression ?? TIFF_COMPRESSION_NONE,
     ...(bitsPerSample.length === 0 ? {} : { bitsPerSample }),
     ...(samplesPerPixel === undefined ? {} : { samplesPerPixel }),
     ...(predictor === undefined ? {} : { predictor }),

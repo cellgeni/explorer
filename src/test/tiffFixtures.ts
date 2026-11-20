@@ -18,7 +18,8 @@ export interface TestTiffImage {
   readonly tileBytes?: (tileIndex: number) => readonly number[]
   readonly planarConfiguration?: number
   readonly predictor?: number
-  readonly compression?: number
+  // Null leaves the Compression tag out, which TIFF reads as 1 (none).
+  readonly compression?: number | null
   readonly photometric?: number
   readonly bitsPerSample?: number
   readonly jpegTables?: readonly number[]
@@ -115,7 +116,9 @@ export function buildTiffFile(images: readonly TestTiffImage[]): TestTiffFile {
       [256, LONG, [image.width]],
       [257, LONG, [image.height]],
       [258, SHORT, Array.from({ length: samplesPerPixel }, () => bitsPerSample)],
-      [259, SHORT, [image.compression ?? 1]],
+      ...(image.compression === null
+        ? []
+        : [[259, SHORT, [image.compression ?? 1]] as const]),
       [262, SHORT, [image.photometric ?? (samplesPerPixel >= 3 ? 2 : 1)]],
       [270, ASCII, image.description],
       [277, SHORT, [samplesPerPixel]],

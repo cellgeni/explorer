@@ -173,7 +173,11 @@ tile across them.
   [page pyramids](#page-pyramids); other such files render at full
   resolution only. Stripped levels are read (see
   [Stripped TIFFs](#stripped-tiffs)), but tiled pyramids load faster.
-- **8- or 16-bit samples**, 1, 3, or 4 samples per pixel. Float images fail.
+- **Unsigned 8- or 16-bit samples**, 1, 3, or 4 samples per pixel. An image
+  whose `SampleFormat` is 2 (signed) is refused when it opens, with a message;
+  label images read signed IDs. Float images fail.
+- **Compression.** A tile without a `Compression` tag is read as uncompressed,
+  the TIFF default.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
 
 ### Page Pyramids
