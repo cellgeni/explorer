@@ -77,7 +77,11 @@ import type {
   GeneExpressionElement,
 } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
-import { SECTION_COLUMN_NAMES } from './annDataSections'
+import {
+  isSectionColumnName,
+  SECTION_COLUMN_NAMES,
+  type AnnDataSectionColumn,
+} from './annDataSections'
 import {
   encodeImageArrayAsBmp,
   parseVisiumScalefactors,
@@ -1140,23 +1144,33 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
   }
 
-  // The obs columns that split the table into sections: label columns with
-  // from 2 to MAX_SECTIONS values, the likeliest first (see
-  // SECTION_COLUMN_NAMES). None for a Visium table, whose sections are its
-  // libraries.
-  async sectionColumns(): Promise<readonly string[]> {
+  // The obs columns that split the table into sections, with how many each
+  // gives, the likeliest first (see SECTION_COLUMN_NAMES): label columns with
+  // from 2 to MAX_SECTIONS values, and number columns named like a section
+  // column with as many distinct finite values, as anndata stores whole-number
+  // IDs (EXP-041). None for a Visium table, whose sections are its libraries.
+  async sectionColumns(): Promise<readonly AnnDataSectionColumn[]> {
     const base = await this.baseCache()
     if (base.visiumSource !== null) return []
 
-    const columns = base.categoricalTracks
-      .filter((track) => track.categoryCount >= 2 && track.categoryCount <= MAX_SECTIONS)
-      .map((track) => track.id)
+    const labels = base.categoricalTracks.map((track) => ({
+      column: track.id,
+      sectionCount: track.categoryCount,
+    }))
+    const numbers = base.continuousTracks
+      .filter((track) => isSectionColumnName(track.id))
+      .map((track) => ({
+        column: track.id,
+        sectionCount: distinctFiniteCount(track.values, MAX_SECTIONS),
+      }))
     const rank = (column: string) => {
       const index = SECTION_COLUMN_NAMES.indexOf(column.toLowerCase())
       return index === -1 ? SECTION_COLUMN_NAMES.length : index
     }
 
-    return columns.sort((first, second) => rank(first) - rank(second))
+    return [...labels, ...numbers]
+      .filter(({ sectionCount }) => sectionCount >= 2 && sectionCount <= MAX_SECTIONS)
+      .sort((first, second) => rank(first.column) - rank(second.column))
   }
 
   // The sections an obs column splits the table into, in the column's order:
@@ -1816,6 +1830,19 @@ function withSection(base: H5adCache, column: string, value: string): H5adCache 
 // The rows of each value of an obs label or number column, in the column's
 // order: a categorical's categories, numbers ascending, else as first seen.
 // Null when obs has no such column.
+// Distinct finite values, counted up to one past `limit`.
+function distinctFiniteCount(values: readonly number[], limit: number): number {
+  const seen = new Set<number>()
+
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue
+    seen.add(value)
+    if (seen.size > limit) break
+  }
+
+  return seen.size
+}
+
 function sectionGroups(
   cache: H5adCache,
   column: string,

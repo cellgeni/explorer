@@ -34,6 +34,12 @@ export const SECTION_COLUMN_NAMES: readonly string[] = [
   'slide_id',
 ]
 
+// An obs column that splits a table, and how many sections it gives.
+export interface AnnDataSectionColumn {
+  readonly column: string
+  readonly sectionCount: number
+}
+
 export function parseAnnDataSectionUrl(url: string): AnnDataSectionRef | null {
   const hash = url.indexOf('#')
   if (hash === -1) return null

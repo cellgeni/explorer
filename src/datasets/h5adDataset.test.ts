@@ -7,6 +7,7 @@ import {
   icechunkFixtureFetcher,
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
+import { loadDatasetCollection } from './annDataSectionCollection'
 import {
   AnnDataH5adDataset,
   type AnnDataH5adDatasetOptions,
@@ -2733,7 +2734,10 @@ describe('AnnDataH5adDataset sections', () => {
   it('lists the obs columns and sections that split a table', async () => {
     const file = await openFile()
 
-    await expect(file.sectionColumns()).resolves.toEqual(['section', 'cluster'])
+    await expect(file.sectionColumns()).resolves.toEqual([
+      { column: 'section', sectionCount: 2 },
+      { column: 'cluster', sectionCount: 2 },
+    ])
     // Strings as first seen, with each section's depth from obs z_um.
     await expect(file.sections('section')).resolves.toEqual([
       { value: 's2', cellCount: 2, z: 60 },
@@ -2751,6 +2755,32 @@ describe('AnnDataH5adDataset sections', () => {
     await expect(file.sections('stage')).rejects.toThrow(
       'obs has no column "stage" to split into sections.',
     )
+  })
+
+  it('splits by a whole-number section column, as anndata stores integer IDs (EXP-041)', async () => {
+    const file = await openFile({
+      coordinateKey: 'spatial',
+      extraObs: {
+        section: new Int32Array([2, 1, 2, 3]),
+        z_um: new Int32Array([10, 0, 10, 20]),
+        // A number column not named like a section column is not listed.
+        n_counts: new Int32Array([5, 6, 7, 8]),
+      },
+    })
+
+    await expect(file.sectionColumns()).resolves.toEqual([
+      { column: 'section', sectionCount: 3 },
+      { column: 'cluster', sectionCount: 2 },
+    ])
+
+    const collection = await loadDatasetCollection(file.url, {
+      openDataset: async () => file,
+    })
+    expect(collection.datasets.map(({ name, z }) => ({ name, z }))).toEqual([
+      { name: '1', z: 0 },
+      { name: '2', z: 10 },
+      { name: '3', z: 20 },
+    ])
   })
 
   it('takes a depth from a third obsm spatial column shared by each section', async () => {

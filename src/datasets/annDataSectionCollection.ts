@@ -9,6 +9,7 @@ import {
   annDataSectionUrl,
   isSectionColumnName,
   parseAnnDataSectionUrl,
+  type AnnDataSectionColumn,
 } from './annDataSections'
 import {
   DatasetCollectionError,
@@ -20,7 +21,7 @@ import { cachedSpatialDataset } from './datasetFactory'
 import type { AnnDataSection } from './h5adDataset'
 
 export interface SplittableAnnData {
-  sectionColumns(): Promise<readonly string[]>
+  sectionColumns(): Promise<readonly AnnDataSectionColumn[]>
   sections(column: string): Promise<readonly AnnDataSection[]>
 }
 
@@ -88,21 +89,21 @@ async function splitAnnDataCollection(
   }
   const dataset = await read(() => openDataset(fileUrl))
 
-  if (!isSplittable(dataset)) {
+  if (!isSplittableAnnData(dataset)) {
     throw new DatasetCollectionError(
       url,
       'this is not an AnnData table, so it has no obs columns to split into sections. collection= takes a collection JSON file or an AnnData table.',
     )
   }
 
-  const columns = await read(() => dataset.sectionColumns())
+  const columns = (await read(() => dataset.sectionColumns())).map(({ column }) => column)
   const column = namedColumn ?? columns.find(isSectionColumnName)
 
   if (column === undefined) {
     throw new DatasetCollectionError(
       url,
       columns.length === 0
-        ? 'obs has no label column with 2 to 500 values to split the table into sections.'
+        ? 'obs has no label column, or number column named like a section column, with 2 to 500 values to split the table into sections.'
         : `name the obs column that splits the table into sections, as ${annDataSectionUrl(
             fileUrl,
             columns[0] ?? '',
@@ -132,7 +133,7 @@ async function splitAnnDataCollection(
   }
 }
 
-function isSplittable(dataset: unknown): dataset is SplittableAnnData {
+export function isSplittableAnnData(dataset: unknown): dataset is SplittableAnnData {
   return (
     typeof dataset === 'object' &&
     dataset !== null &&

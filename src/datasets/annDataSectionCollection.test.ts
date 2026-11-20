@@ -10,7 +10,8 @@ function table(
 ): { readonly openDataset: (url: string) => Promise<unknown> } {
   return {
     openDataset: vi.fn(async () => ({
-      sectionColumns: async () => columns,
+      sectionColumns: async () =>
+        columns.map((column) => ({ column, sectionCount: sections.length })),
       sections: async () => sections,
     })),
   }

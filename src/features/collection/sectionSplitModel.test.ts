@@ -2,19 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { sectionSplitLink } from './sectionSplitModel'
 
 const TABLE = 'https://example.test/ef6/aligned.h5ad'
-const GROUPS = [
-  {
-    id: 'analysis:cell-cluster',
-    label: 'cell_cluster',
-    groupingName: 'cell_cluster',
-    groupCount: 15,
-  },
-  { id: 'analysis:section', label: 'section', groupingName: 'section', groupCount: 14 },
+const COLUMNS = [
+  { column: 'cell_cluster', sectionCount: 15 },
+  { column: 'section', sectionCount: 14 },
 ]
 const OPEN = {
   datasetUrl: TABLE,
   platform: 'h5ad' as const,
-  groupOptions: GROUPS,
+  sectionColumns: COLUMNS,
   inCollection: false,
   pathname: '/explorer/',
 }
@@ -28,12 +23,12 @@ describe('sectionSplitLink', () => {
     })
   })
 
-  it('offers nothing without a set named like sections', () => {
-    expect(sectionSplitLink({ ...OPEN, groupOptions: GROUPS.slice(0, 1) })).toBeNull()
+  it('offers nothing without a column named like sections', () => {
+    expect(sectionSplitLink({ ...OPEN, sectionColumns: COLUMNS.slice(0, 1) })).toBeNull()
     expect(
       sectionSplitLink({
         ...OPEN,
-        groupOptions: [{ ...GROUPS[1]!, groupCount: 1 }],
+        sectionColumns: [{ column: 'section', sectionCount: 1 }],
       }),
     ).toBeNull()
   })

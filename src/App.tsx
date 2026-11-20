@@ -113,6 +113,7 @@ import {
 } from './features/collection/LinkedSections'
 import { SectionStackViewer } from './features/collection/SectionStackViewer'
 import { sectionSplitLink } from './features/collection/sectionSplitModel'
+import { useSectionColumns } from './features/collection/useSectionColumns'
 import { stackSections, type StackSection } from './features/collection/sectionStackModel'
 import {
   compareUrlsAfterOpening,
@@ -4518,6 +4519,12 @@ export function App({ dependencies }: AppProps = {}) {
     transcriptViewportKeyRef,
     visibleTranscriptEstimate,
   })
+  // The `Open N Sections` link: an AnnData table's section columns.
+  const sectionColumns = useSectionColumns({
+    datasetUrl: loadState.status === 'ready' ? loadedDatasetUrl : null,
+    enabled: datasetPlatform === 'h5ad' && readyCollection === null,
+    getSpatialDataset,
+  })
   const annotationsSection = useAnnotationsSectionModel({
     annotationColors,
     annotationGroupOptions,
@@ -4557,7 +4564,7 @@ export function App({ dependencies }: AppProps = {}) {
     sectionSplit: sectionSplitLink({
       datasetUrl: loadState.status === 'ready' ? loadedDatasetUrl : null,
       platform: datasetPlatform,
-      groupOptions: annotationGroupOptions,
+      sectionColumns,
       inCollection: readyCollection !== null,
       pathname: window.location.pathname,
     }),

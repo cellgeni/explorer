@@ -484,16 +484,18 @@ https://cellgeni.github.io/explorer/?collection=https://host/study/aligned.h5ad%
 
 The first form splits the table by its first obs column named `section`,
 `section_id`, `section_name`, `slice`, `slice_id`, `sample`, `sample_id`,
-`library_id`, `slide` or `slide_id` (any case). The second names the column:
-`#obs.<column>` after the table's URL, written `%23obs.<column>` inside the
-viewer's address. A table without such a column stops with an error that
-lists the columns it could be split by: label columns with 2 to 500 values.
+`library_id`, `slide` or `slide_id` (any case), whether it holds labels or
+numbers, as anndata stores whole-number IDs, with 2 to 500 values. The second
+names the column: `#obs.<column>` after the table's URL, written
+`%23obs.<column>` inside the viewer's address. A table without such a column
+stops with an error that lists the columns it could be split by: label columns
+with 2 to 500 values.
 `.h5ad` files, AnnData Zarr stores and AnnData in Icechunk split alike; a
 Visium table does not, since its sections are its libraries, which its
 `Library` select chooses.
 
-With the open table's annotation sets listing such a column, the Cells
-section's `Open N Sections` link opens the same collection.
+With such a column in the open table, the Cells section's `Open N Sections`
+link opens the same collection.
 
 - **Datasets.** One per value of the column, named by the value, in the
   column's order: a categorical's categories, numbers from lowest, else as
