@@ -21,13 +21,15 @@ function discs(cells: readonly Disc[], offsetX = 0, offsetY = 0): TileCellDiscs 
 }
 
 // Each pixel's owner found the slow way: the disc whose centre is nearest
-// relative to its radius, the first listed on ties.
+// relative to its radius, the first listed on ties, with distances in pixel
+// widths.
 function bruteForce(
   pixels: ArrayLike<number>,
   width: number,
   height: number,
   cells: readonly Disc[],
   threshold: number,
+  yScale: number,
 ): TileCellSums {
   const sum = new Float64Array(cells.length)
   const count = new Uint32Array(cells.length)
@@ -40,7 +42,7 @@ function bruteForce(
       let bestRelative = Infinity
       cells.forEach((_, cell) => {
         const dx = px + 0.5 - (placed.x[cell] ?? 0)
-        const dy = py + 0.5 - (placed.y[cell] ?? 0)
+        const dy = (py + 0.5 - (placed.y[cell] ?? 0)) * yScale
         const radius = placed.radius[cell] ?? 0
         const distanceSquared = dx * dx + dy * dy
         if (radius <= 0 || distanceSquared > radius * radius) return
@@ -99,6 +101,8 @@ const image = fc
         { maxLength: 12 },
       ),
       threshold: fc.integer({ min: 0, max: 65_535 }),
+      // Pixel aspects for which the disc test stays exact on eighths.
+      yScale: fc.constantFrom(1, 0.25, 0.5, 0.75, 1.5, 2, 4),
     }),
   )
 
@@ -111,6 +115,7 @@ describe('measureTileCells', () => {
       width: 4,
       height: 3,
       threshold: 6,
+      yScale: 1,
     })
 
     // The middle row's centres are 0.5 to 1.5 away, the edge counting. Rows
@@ -118,6 +123,26 @@ describe('measureTileCells', () => {
     expect(plain(sums)).toEqual({
       sum: [1 + 2 + 4 + 5 + 6 + 7 + 9 + 10],
       count: [8],
+      above: [4],
+    })
+  })
+
+  it('measures an ellipse in pixels where pixels are twice as tall as wide', () => {
+    // 5 x 5, values 0 to 24 row by row; pixels 0.5 µm wide and 1 µm tall, so
+    // a disc of 1 µm is 2 pixel widths across and 1 pixel height down.
+    const pixels = Uint16Array.from({ length: 25 }, (_, index) => index)
+    const sums = measureTileCells(pixels, 5, 5, discs([{ x: 2.5, y: 2.5, radius: 2 }]), {
+      width: 5,
+      height: 5,
+      threshold: 12,
+      yScale: 2,
+    })
+
+    // The middle row whole, and the middle pixel of the rows above and
+    // below, which are 1 µm away. As a circle of 2 pixels it would be 13.
+    expect(plain(sums)).toEqual({
+      sum: [10 + 11 + 12 + 13 + 14 + 7 + 17],
+      count: [7],
       above: [4],
     })
   })
@@ -132,7 +157,7 @@ describe('measureTileCells', () => {
         { x: 2, y: 0.5, radius: 3 },
         { x: 4, y: 0.5, radius: 1 },
       ]),
-      { width: 8, height: 1, threshold: 4 },
+      { width: 8, height: 1, threshold: 4, yScale: 1 },
     )
 
     // Pixel 3 (centre 3.5) is 1.5 / 3 = 0.5 radii from the first centre and
@@ -148,6 +173,7 @@ describe('measureTileCells', () => {
       width: 3,
       height: 2,
       threshold: 50,
+      yScale: 1,
     })
 
     expect(plain(sums)).toEqual({ sum: [6], count: [6], above: [0] })
@@ -158,6 +184,7 @@ describe('measureTileCells', () => {
       width: 4,
       height: 4,
       threshold: 0,
+      yScale: 1,
     })
 
     expect(plain(sums)).toEqual({ sum: [0], count: [4], above: [4] })
@@ -172,7 +199,7 @@ describe('measureTileCells', () => {
         { x: 1, y: 1, radius: 0 },
         { x: 1, y: 1, radius: Number.NaN },
       ]),
-      { width: 2, height: 2, threshold: 0 },
+      { width: 2, height: 2, threshold: 0, yScale: 1 },
     )
 
     expect(plain(sums)).toEqual({ sum: [0, 0], count: [0, 0], above: [0, 0] })
@@ -180,15 +207,16 @@ describe('measureTileCells', () => {
 
   it('matches a brute-force reference', () => {
     fc.assert(
-      fc.property(image, ({ width, height, pixels, cells, threshold }) => {
+      fc.property(image, ({ width, height, pixels, cells, threshold, yScale }) => {
         const sums = measureTileCells(pixels, width, height, discs(cells), {
           width,
           height,
           threshold,
+          yScale,
         })
 
         expect(plain(sums)).toEqual(
-          plain(bruteForce(pixels, width, height, cells, threshold)),
+          plain(bruteForce(pixels, width, height, cells, threshold, yScale)),
         )
       }),
     )
@@ -196,11 +224,12 @@ describe('measureTileCells', () => {
 
   it('counts a pixel for one cell at most, and no more above than in all', () => {
     fc.assert(
-      fc.property(image, ({ width, height, pixels, cells, threshold }) => {
+      fc.property(image, ({ width, height, pixels, cells, threshold, yScale }) => {
         const sums = measureTileCells(pixels, width, height, discs(cells), {
           width,
           height,
           threshold,
+          yScale,
         })
         const counted = sums.count.reduce((total, count) => total + count, 0)
 
@@ -218,11 +247,12 @@ describe('measureTileCells', () => {
         image,
         fc.integer({ min: 1, max: 9 }),
         fc.integer({ min: 1, max: 9 }),
-        ({ width, height, pixels, cells, threshold }, tileWidth, tileHeight) => {
+        ({ width, height, pixels, cells, threshold, yScale }, tileWidth, tileHeight) => {
           const whole = measureTileCells(pixels, width, height, discs(cells), {
             width,
             height,
             threshold,
+            yScale,
           })
           const sum = new Float64Array(cells.length)
           const count = new Uint32Array(cells.length)
@@ -246,6 +276,7 @@ describe('measureTileCells', () => {
                   width: Math.min(tileWidth, width - left),
                   height: Math.min(tileHeight, height - top),
                   threshold,
+                  yScale,
                 },
               )
               part.sum.forEach((value, cell) => {

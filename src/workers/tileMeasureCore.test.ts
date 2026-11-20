@@ -30,7 +30,13 @@ describe('tile measure worker core', () => {
         id: 7,
         bytes: TILE_BYTES.slice().buffer,
         ...TILE,
-        measure: { cells: cells(1.5, 1, 5), width: 3, height: 2, threshold: 40 },
+        measure: {
+          cells: cells(1.5, 1, 5),
+          width: 3,
+          height: 2,
+          threshold: 40,
+          yScale: 1,
+        },
       },
       respond,
     )
@@ -52,6 +58,7 @@ describe('tile measure worker core', () => {
       width: 3,
       height: 2,
       threshold: 1,
+      yScale: 1,
     })
 
     expect(Array.from(sums.count)).toEqual([4])
@@ -70,7 +77,7 @@ describe('tile measure worker core', () => {
         ...TILE,
         bitsPerSample: [8, 8, 8],
         samplesPerPixel: 3,
-        measure: { cells: cells(1, 1, 1), width: 3, height: 2, threshold: 1 },
+        measure: { cells: cells(1, 1, 1), width: 3, height: 2, threshold: 1, yScale: 1 },
       },
       respond,
     )

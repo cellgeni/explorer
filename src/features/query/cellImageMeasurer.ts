@@ -177,10 +177,13 @@ export interface CellImagePlan {
   // In read order: row by row, as TIFF tiles are usually stored, so that
   // neighbours share requests. Columns and rows of the pieces read.
   readonly tiles: readonly TileIndex[]
-  // Each cell's disc in the level's pixels.
+  // Each cell's disc in the level's pixels, the radius in pixel widths.
   readonly x: Float64Array
   readonly y: Float64Array
   readonly radius: Float64Array
+  // A pixel's height over its width. Discs are round in micrometres, so on
+  // pixels that are not square they reach radius / yScale pixels down.
+  readonly yScale: number
   // The cells of tiles[i] are rows[starts[i]] up to rows[starts[i + 1]], in
   // the overview's order, so the lower row takes a pixel on a tie.
   readonly starts: Uint32Array
@@ -200,6 +203,7 @@ export function planCellImageMeasurement(
   const x = new Float64Array(cellCount)
   const y = new Float64Array(cellCount)
   const radii = new Float64Array(cellCount)
+  const yScale = geometry.micrometersPerPixelY / geometry.micrometersPerPixel
   const toFrame = frameMapping(loader.placement)
 
   for (let cell = 0; cell < cellCount; cell += 1) {
@@ -221,13 +225,14 @@ export function planCellImageMeasurement(
     const cx = x[cell] ?? 0
     const cy = y[cell] ?? 0
     const r = radii[cell] ?? 0
+    const ry = r / yScale
 
-    if (!(r > 0) || !Number.isFinite(cx + cy + r)) return false
+    if (!(r > 0) || !Number.isFinite(cx + cy + r + ry)) return false
 
     const x0 = Math.max(0, Math.ceil(cx - r - 0.5))
     const x1 = Math.min(width - 1, Math.floor(cx + r - 0.5))
-    const y0 = Math.max(0, Math.ceil(cy - r - 0.5))
-    const y1 = Math.min(height - 1, Math.floor(cy + r - 0.5))
+    const y0 = Math.max(0, Math.ceil(cy - ry - 0.5))
+    const y1 = Math.min(height - 1, Math.floor(cy + ry - 0.5))
 
     if (x0 > x1 || y0 > y1) return false
 
@@ -291,6 +296,7 @@ export function planCellImageMeasurement(
     x,
     y,
     radius: radii,
+    yScale,
     starts,
     rows: bucketRows,
   }
@@ -457,6 +463,7 @@ export async function runCellImageMeasurement(
         width: chunk.window.width,
         height: chunk.window.height,
         threshold: options.threshold,
+        yScale: plan.yScale,
       })
     }
 
@@ -479,6 +486,7 @@ export async function runCellImageMeasurement(
       width: size.width,
       height: size.height,
       threshold: options.threshold,
+      yScale: plan.yScale,
     })
   }
 

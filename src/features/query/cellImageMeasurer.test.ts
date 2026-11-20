@@ -326,6 +326,32 @@ describe('cell image measurements', () => {
       }
     })
 
+    it('measures discs round in micrometres on pixels that are not square', async () => {
+      // 8 x 8 pixels, 0.5 µm wide and 1 µm tall, in 4 x 4 chunks; rows 3 and
+      // 4 are 100, the rest 0.
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 8,
+        height: 8,
+        micrometersPerPixel: 0.5,
+        micrometersPerPixelY: 1,
+        pixel: (_, y) => (y === 3 || y === 4 ? 100 : 0),
+      })
+      // A radius of 1 µm is 2 pixels across and 1 down. At (2, 4) µm the
+      // disc covers rows 3 and 4 alone; at (1, 2.5) µm, row 2 alone. As
+      // circles of 2 pixels both would take rows of the other value.
+      const cells = [cell(2, 4, Math.PI), cell(1, 2.5, Math.PI)]
+      const plan = planCellImageMeasurement(loader, cells.slice(1), 0, 1)
+
+      expect(plan.yScale).toBe(2)
+      // Only the top row of chunks: as a circle it would reach the next.
+      expect(plan.tiles).toEqual([{ col: 0, row: 0 }])
+
+      const result = await measure(loader, cells)
+
+      expect(values(result.mean)).toEqual([100, 0])
+      expect(values(result.above)).toEqual([100, 0])
+    })
+
     it('reads a chunk the store does not have as the fill value', async () => {
       const { loader } = await fakeOmeZarrCellImage({
         width: 8,

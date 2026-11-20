@@ -148,13 +148,13 @@ describe('TileDecodeWorkerPool', () => {
     const promise = pool.measure(
       new Uint8Array([1, 2]),
       { compression: 1, bitsPerSample: [8], tileWidth: 2, tileHeight: 1 },
-      { cells, width: 2, height: 1, threshold: 2 },
+      { cells, width: 2, height: 1, threshold: 2, yScale: 2 },
     )
     const request = workers[0]?.posted[0]
 
     expect(request).toMatchObject({
       compression: 1,
-      measure: { width: 2, height: 1, threshold: 2 },
+      measure: { width: 2, height: 1, threshold: 2, yScale: 2 },
     })
     expect(workers[0]?.transfers[0]).toHaveLength(4)
 

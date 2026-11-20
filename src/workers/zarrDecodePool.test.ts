@@ -329,6 +329,7 @@ describe('ZarrDecodePool', () => {
       width: 2,
       height: 2,
       threshold: 10,
+      yScale: 2,
     })
 
     const sums = await pool.measureChunk({
@@ -351,6 +352,9 @@ describe('ZarrDecodePool', () => {
       'measure-chunk',
       'measure-chunk',
     ])
+    expect(workers[0]?.messages[0]).toMatchObject({
+      measure: { width: 2, height: 2, threshold: 10, yScale: 2 },
+    })
     expect(workers[0]?.transfers[0]).toHaveLength(4)
     expect(workers[1]?.transfers[0]).toHaveLength(3)
   })
