@@ -525,6 +525,11 @@ transcripts per 40 µm bin", "SNAP25 and AQP4 transcripts per …", "Transcripts
 of 8 selected genes per …", "All transcripts per …", or "Transcripts in cells
 per …" for cell-summary squares. The hover card's title says the same, and
 for several genes it lists each gene's count in the square (top 4).
+All-transcript squares coarser than Xenium's level-0 grid count a sample of
+the transcripts, so the hover card and the selected square in the
+Transcripts section say `Sampled count`, with a `Sample` row giving the
+share of the slide's transcripts the level keeps ("0.95% of transcripts" at
+the demo's level 7). Level-0 squares say `Count`.
 
 The section ends with the overlay status
 (`src/features/transcripts/TranscriptStatusPanel.tsx`): source, rendered

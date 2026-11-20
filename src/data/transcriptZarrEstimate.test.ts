@@ -3,6 +3,7 @@ import { group, storedZip, type ZarrEntries } from '../test/ateraFixtures'
 import { micrometers, type BBox } from './coords'
 import {
   estimateTranscriptZarrViewportCount,
+  loadTranscriptZarrAggregates,
   loadTranscriptZarrGridCounts,
   transcriptZarrExactGridLevel,
   type TranscriptGridLevelMetadata,
@@ -94,6 +95,37 @@ describe('loadTranscriptZarrGridCounts', () => {
     )
 
     await expect(loadTranscriptZarrGridCounts(url)).resolves.toBeNull()
+  })
+})
+
+describe('density squares from a coarse grid level', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('marks the counts of a level holding a sample of the transcripts', async () => {
+    // Level 1 keeps 76 of level 0's 100 transcripts.
+    const url = serve(
+      transcriptZarr({
+        grid_keys: [['0,0', '1,0'], ['0,0']],
+        grid_number_objects: [[40, 60], [76]],
+        grid_size: [250],
+      }),
+    )
+    const slide = bbox(0, 0, 500, 250)
+
+    const coarse = await loadTranscriptZarrAggregates(url, slide, { maxBins: 1 })
+    expect(coarse.level.level).toBe(1)
+    expect(coarse.bins).toEqual([
+      expect.objectContaining({ count: 76, sampledShare: 0.76 }),
+    ])
+
+    const exact = await loadTranscriptZarrAggregates(url, slide, { maxBins: 10 })
+    expect(exact.level.level).toBe(0)
+    expect(exact.bins.map((bin) => [bin.count, bin.sampledShare])).toEqual([
+      [40, undefined],
+      [60, undefined],
+    ])
   })
 })
 

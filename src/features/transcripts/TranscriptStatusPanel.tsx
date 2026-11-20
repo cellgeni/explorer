@@ -1,5 +1,8 @@
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
-import { transcriptAggregateTitle } from '../../components/viewerHoverModel'
+import {
+  transcriptAggregateCountRows,
+  transcriptAggregateTitle,
+} from '../../components/viewerHoverModel'
 import type { TranscriptPointDatum } from '../../rendering/deckLayers'
 import {
   transcriptAggregateRenderedLabel,
@@ -248,10 +251,12 @@ export function TranscriptInspectionPanel({
         {transcriptAggregateTitle(aggregate)}
       </strong>
       <dl>
-        <div>
-          <dt>Count</dt>
-          <dd>{aggregate.count.toLocaleString()}</dd>
-        </div>
+        {transcriptAggregateCountRows(aggregate).map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        ))}
         {aggregate.binTotalCount === undefined ? null : (
           <div>
             <dt>Total</dt>

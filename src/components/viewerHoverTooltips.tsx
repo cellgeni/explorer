@@ -13,7 +13,10 @@ import type {
   ViewerOverviewCellHoverDetail,
   ViewerTranscriptHoverDetail,
 } from './viewerCoreTypes'
-import { transcriptAggregateTitle } from './viewerHoverModel'
+import {
+  transcriptAggregateCountRows,
+  transcriptAggregateTitle,
+} from './viewerHoverModel'
 import { formatCoordinateValue } from './viewerMeasurements'
 
 export function GridCellHoverTooltip({
@@ -298,10 +301,12 @@ export function TranscriptHoverTooltip({
       >
         <p>{transcriptAggregateTitle(aggregate)}</p>
         <dl>
-          <div>
-            <dt>Count</dt>
-            <dd>{aggregate.count.toLocaleString()}</dd>
-          </div>
+          {transcriptAggregateCountRows(aggregate).map((row) => (
+            <div key={row.label}>
+              <dt>{row.label}</dt>
+              <dd>{row.value}</dd>
+            </div>
+          ))}
           {selectedGeneRows(aggregate).map((feature) => (
             <div key={feature.featureName}>
               <dt>{feature.featureName}</dt>

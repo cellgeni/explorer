@@ -146,6 +146,8 @@ export interface TranscriptAggregateDatum {
   readonly binX: number
   readonly binY: number
   readonly count: number
+  // As TranscriptAggregateBin's.
+  readonly sampledShare?: number
   readonly radiusMicrometers: number
   readonly binSizeMicrometers?: number
   readonly binTotalCount?: number

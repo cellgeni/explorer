@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { TranscriptAggregateDatum } from '../rendering/deckLayers'
-import { transcriptAggregateTitle } from './viewerHoverModel'
+import {
+  transcriptAggregateCountRows,
+  transcriptAggregateTitle,
+} from './viewerHoverModel'
 import { CellBoundaryHoverTooltip, TranscriptHoverTooltip } from './viewerHoverTooltips'
 import type { ViewerCellBoundaryHoverDetail } from './viewerCoreTypes'
 
@@ -66,6 +69,30 @@ describe('transcript density hover', () => {
     )
     expect(screen.getByText('Selected-gene transcripts')).toBeInTheDocument()
     expect(rows.slice(0, 3)).toEqual(['Count12', 'SNAP259', 'AQP43'])
+  })
+
+  it('marks a coarse grid level count as sampled', () => {
+    // The demo's level 7 keeps 5,292,443 of 554,699,029 transcripts.
+    render(
+      <TranscriptHoverTooltip
+        detail={{
+          aggregate: { ...square, level: 7, sampledShare: 5_292_443 / 554_699_029 },
+          screen: { x: 10, y: 10 },
+        }}
+      />,
+    )
+
+    const rows = [...document.querySelectorAll('.transcript-hover-tooltip dl > div')].map(
+      (row) => row.textContent,
+    )
+    expect(rows.slice(0, 3)).toEqual([
+      'Sampled count12',
+      'Sample0.95% of transcripts',
+      'Level7',
+    ])
+    expect(
+      transcriptAggregateCountRows({ ...square, level: 1, sampledShare: 0.764 }),
+    ).toContainEqual({ label: 'Sample', value: '76% of transcripts' })
   })
 })
 
