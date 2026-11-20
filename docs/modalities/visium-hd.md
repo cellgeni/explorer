@@ -188,8 +188,10 @@ On the reference, listing a tier's sets is ten `HEAD` requests, and
 `graphclust` loads 54,504 bins in 16 clusters at 16 µm (1.3 MB) and 215,196 in
 16 at 8 µm (5.2 MB).
 
-The Plots panel is shown, as for other datasets with annotations, and says
-it is not available: Visium HD has no matrix it can read by gene.
+There is no Plots or Cell Query panel, and the top bar has no `Plots` or
+`Query` toggle: Plots read each gene across every cell, and Visium HD has no
+matrix the viewer can read by gene across every bin. Cell Query reads overview
+cells, which bins are not.
 
 ## Load Sequence
 
