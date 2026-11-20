@@ -142,7 +142,7 @@ describe('persistent byte range cache', () => {
   it('caches parquet footer-like slices while leaving data pages uncached', async () => {
     const cache = new MemoryByteRangeCache()
     const slice = vi.fn(async (start: number, end = 1_000) => {
-      return new Uint8Array([start, end]).buffer
+      return new Uint8Array(end - start).buffer
     })
     const file = cacheFooterByteRanges(
       {
@@ -177,6 +177,99 @@ describe('persistent byte range cache', () => {
         end: 1_000,
       }),
     ])
+  })
+
+  it('refuses a short range body and caches nothing, so a later read succeeds', async () => {
+    const cache = new MemoryByteRangeCache()
+    const key = {
+      cache,
+      namespace: 'tiff-tile',
+      url: 'https://example.test/slide.tif',
+      version: byteRangeFileVersion(1_000, '"x"'),
+      start: 100,
+      end: 200,
+    }
+
+    // 100 bytes asked for, 40 returned, as a truncated 206 body would be.
+    await expect(
+      fetchByteRangeWithCache({ ...key, fetchRange: async () => new Uint8Array(40) }),
+    ).rejects.toThrow(
+      'https://example.test/slide.tif returned 40 bytes for bytes 100-199 (100 expected).',
+    )
+    expect(cache.keys()).toEqual([])
+
+    const honest = vi.fn(async () => new Uint8Array(100))
+    await expect(
+      fetchByteRangeWithCache({ ...key, fetchRange: honest }),
+    ).resolves.toHaveLength(100)
+    expect(honest).toHaveBeenCalledOnce()
+  })
+
+  it('reads again a short range an earlier version cached', async () => {
+    const cache = new MemoryByteRangeCache()
+    const key = {
+      namespace: 'parquet-footer',
+      url: 'https://example.test/cells.parquet',
+      version: byteRangeFileVersion(1_000, '"x"'),
+      start: 900,
+      end: 1_000,
+    }
+    await cache.write(key, new Uint8Array(50))
+    const honest = vi.fn(async () => new Uint8Array(100).fill(7))
+
+    const bytes = await fetchByteRangeWithCache({ ...key, cache, fetchRange: honest })
+
+    expect(honest).toHaveBeenCalledOnce()
+    expect(bytes).toEqual(new Uint8Array(100).fill(7))
+    expect(new Uint8Array((await cache.read(key)) ?? new ArrayBuffer(0))).toHaveLength(
+      100,
+    )
+  })
+
+  it('takes the bytes up to the end of a file of known size', async () => {
+    const bytes = await fetchByteRangeWithCache({
+      namespace: 'parquet-footer',
+      url: 'https://example.test/cells.parquet',
+      version: '',
+      start: 900,
+      end: 1_024,
+      fileByteLength: 1_000,
+      fetchRange: async () => new Uint8Array(100),
+    })
+
+    expect(bytes).toHaveLength(100)
+  })
+
+  it('fetches cached footer ranges itself, past the browser cache', async () => {
+    const fetcher = vi.fn<typeof fetch>(
+      async () => new Response(new Uint8Array(100), { status: 206 }),
+    )
+    const slice = vi.fn(
+      async (start: number, end = 1_000) => new Uint8Array(end - start).buffer,
+    )
+    const file = cacheFooterByteRanges(
+      { byteLength: 1_000, slice },
+      {
+        cache: new MemoryByteRangeCache(),
+        footerByteLength: 100,
+        url: 'https://example.test/cells.parquet',
+        fetcher,
+      },
+    )
+
+    await file.slice(900, 1_000)
+    await file.slice(0, 100)
+
+    // Chromium's HTTP cache can cut short a range two reads ask for at once.
+    expect(fetcher).toHaveBeenCalledExactlyOnceWith(
+      'https://example.test/cells.parquet',
+      {
+        cache: 'no-store',
+        headers: { Range: 'bytes=900-999' },
+      },
+    )
+    // Data pages still go through the file.
+    expect(slice.mock.calls).toEqual([[0, 100]])
   })
 
   it('misses footer ranges cached from a file of another size or validator', async () => {

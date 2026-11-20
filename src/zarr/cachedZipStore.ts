@@ -70,7 +70,7 @@ export class CachedHttpRangeReader {
     }
 
     // unzipit reads the length before any range, so this makes no request.
-    const { version } = await this.readHead()
+    const { byteLength, version } = await this.readHead()
     const bytes = await fetchByteRangeWithCache({
       cache: this.cache,
       namespace: ZARR_ZIP_CACHE_NAMESPACE,
@@ -78,6 +78,7 @@ export class CachedHttpRangeReader {
       version,
       start: offset,
       end: offset + size,
+      fileByteLength: byteLength,
       fetchRange: async () => {
         // Chromium's HTTP cache lets one Range request to a URL through at a
         // time, so without no-store every read of the zip (image tiles, table

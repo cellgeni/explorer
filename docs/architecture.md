@@ -454,6 +454,16 @@ whose host also hides `Content-Range` is cached by URL alone. A file the page
 has already opened, such as a zip store or a TIFF, keeps the version it was
 opened with until the page reloads.
 
+A range is stored only when its body is as long as asked for, or reaches the
+end of a file of known size (`fetchByteRangeWithCache`). A shorter body, from
+a host, proxy or Chromium's cache cutting a response short, fails the read
+with "… returned n bytes for bytes a-b (m expected)", rather than being served
+to every later load of the file. A short range cached before this check
+(2026-11) is read again. Parquet footer ranges are fetched with
+`cache: 'no-store'` (`cacheFooterByteRanges` with a `fetcher`), as zip and
+TIFF ranges already were: the warm-up and the reader ask for the same footer
+at once, and Chromium can cut short one of two identical Range requests.
+
 A load that several callers wait on (range probes, opening an H5 matrix or
 Visium HD's `feature_slice.h5` in its worker, Visium HD barcode mappings) is a
 `sharedLoad` (`src/utils/sharedLoad.ts`). It runs under its own signal,

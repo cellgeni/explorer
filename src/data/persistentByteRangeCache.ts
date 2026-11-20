@@ -73,6 +73,9 @@ export interface FetchByteRangeWithCacheOptions {
   readonly fetchRange: (signal?: AbortSignal) => Promise<Uint8Array>
   // False reads the cache but does not add what it fetches. True by default.
   readonly write?: boolean
+  // The file's size, when known: a range reaching past the end of the file
+  // returns the bytes up to it.
+  readonly fileByteLength?: number
 }
 
 export interface AsyncByteSource {
@@ -89,6 +92,12 @@ export interface CacheFooterByteRangesOptions {
   readonly validator?: string | undefined
   readonly footerByteLength?: number
   readonly maxEntryBytes?: number
+  // Footer ranges are then fetched here with cache: 'no-store' rather than
+  // through `file`. Chromium's HTTP cache lets one Range request to a URL
+  // through at a time and can cut short a range two reads ask for at once, as
+  // the warm-up's footer read and the reader's do.
+  readonly fetcher?: typeof fetch
+  readonly signal?: AbortSignal
 }
 
 let defaultCache: PersistentByteRangeCache | null | undefined
@@ -119,15 +128,30 @@ export async function fetchByteRangeWithCache(
 ): Promise<Uint8Array> {
   throwIfAborted(options.signal)
 
+  const expectedByteLength = Math.max(
+    0,
+    Math.min(options.end, options.fileByteLength ?? options.end) - options.start,
+  )
   const cached = await readCachedBytes(options)
 
-  if (cached !== null) {
+  // A cached range of another length was kept short by a version before
+  // 2026-11; it is read again.
+  if (cached !== null && cached.byteLength === expectedByteLength) {
     throwIfAborted(options.signal)
     return new Uint8Array(cached)
   }
 
   const bytes = await options.fetchRange(options.signal)
   throwIfAborted(options.signal)
+
+  // A host, proxy or browser cache can end a range's body early. Kept, the
+  // short bytes would be served to every later load of the file.
+  if (bytes.byteLength !== expectedByteLength) {
+    throw new Error(
+      `${options.url} returned ${bytes.byteLength} bytes for bytes ${options.start}-${options.end - 1} (${expectedByteLength} expected).`,
+    )
+  }
+
   writeCachedBytes(options, bytes)
 
   return bytes
@@ -170,12 +194,43 @@ export function cacheFooterByteRanges<T extends AsyncByteSource>(
         version,
         start,
         end,
-        fetchRange: async () => new Uint8Array(await file.slice(start, end)),
+        fileByteLength: file.byteLength,
+        fetchRange: async () =>
+          options.fetcher === undefined
+            ? new Uint8Array(await file.slice(start, end))
+            : fetchUncachedRange(
+                options.url,
+                options.fetcher,
+                start,
+                end,
+                options.signal,
+              ),
       })
 
       return copyToArrayBuffer(bytes)
     },
   } as T
+}
+
+async function fetchUncachedRange(
+  url: string,
+  fetcher: typeof fetch,
+  start: number,
+  end: number,
+  signal: AbortSignal | undefined,
+): Promise<Uint8Array> {
+  const response = await fetcher(url, {
+    cache: 'no-store',
+    headers: { Range: `bytes=${start}-${end - 1}` },
+    ...(signal === undefined ? {} : { signal }),
+  })
+
+  if (!response.ok) {
+    await response.body?.cancel().catch(() => undefined)
+    throw new Error(`fetch with range failed ${response.status}`)
+  }
+
+  return new Uint8Array(await response.arrayBuffer())
 }
 
 export function byteRangeCacheRecordId(key: ByteRangeCacheKey): string {

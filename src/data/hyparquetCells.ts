@@ -211,6 +211,8 @@ async function fileFromUrl(
     cache: byteRangeCache,
     url: options.url,
     validator: fetcher.validator(),
+    fetcher: fetcher.fetch,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   }) as AsyncBuffer
 }
 

@@ -136,6 +136,8 @@ async function prefetchParquetFooter(
     cache: defaultPersistentByteRangeCache(),
     url,
     validator: fetcher.validator(),
+    fetcher: fetcher.fetch,
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
   }) as AsyncBuffer
   const start = Math.max(0, cachedFile.byteLength - DEFAULT_PARQUET_FOOTER_CACHE_BYTES)
 
