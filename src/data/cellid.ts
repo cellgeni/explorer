@@ -46,6 +46,17 @@ export function asCellId(value: string): CellId {
   return value as CellId
 }
 
+// transcripts.parquet gives a transcript outside every cell the cell_id
+// "UNASSIGNED" (XOA 1.3 and later) or null (earlier output).
+const XENIUM_UNASSIGNED_CELL_ID = 'UNASSIGNED'
+
+// The cell of a transcripts.parquet row, or null for one outside every cell.
+export function transcriptCellId(value: string | null | undefined): CellId | null {
+  return value === null || value === undefined || value === XENIUM_UNASSIGNED_CELL_ID
+    ? null
+    : asCellId(value)
+}
+
 // A cell ID from any platform: a Xenium ID, an obs name such as a Visium
 // barcode (AAACAAGTATCTCCCA-1), or a SpatialData instance ID read as text.
 // Only Xenium IDs have a format to check, so this trims the ID and rejects

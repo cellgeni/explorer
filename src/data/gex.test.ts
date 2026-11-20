@@ -138,6 +138,8 @@ describe('transcripts parquet GEX', () => {
       { cell_id: cellId, gene: 'Gad1', count: 3n },
       { cell_id: cellId, gene: 'Slc17a7', count: 2 },
       { cell_id: null, gene: 'OutsideCell', count: 5 },
+      // XOA 1.3 and later name no cell UNASSIGNED instead of null.
+      { cell_id: 'UNASSIGNED', gene: 'Gad1', count: 4 },
     ])
 
     const result = await gexFromTranscriptsParquet(

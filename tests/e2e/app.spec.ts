@@ -2236,6 +2236,25 @@ test('exercises the live Xenium dataset, morphology, transcripts, ROI, and cell 
     )
   }
 
+  // About 0.7% of the demo's transcripts are outside every cell (cell_id
+  // UNASSIGNED); they export with an empty cell_id rather than failing.
+  const transcriptsDownloadPromise = page.waitForEvent('download', {
+    timeout: XENIUM_ROI_TIMEOUT_MS,
+  })
+  await selectionCard.getByRole('button', { name: 'Export Transcripts' }).click()
+  const transcriptsDownload = await transcriptsDownloadPromise
+  expect(transcriptsDownload.suggestedFilename()).toBe('roi-1-transcripts.csv')
+  const transcriptsPath = await transcriptsDownload.path()
+  expect(transcriptsPath).not.toBeNull()
+
+  if (transcriptsPath !== null) {
+    const transcriptRows = (await readFile(transcriptsPath, 'utf8')).trim().split('\n')
+    expect(transcriptRows[0]).toBe(
+      'cell_id,feature_name,x_location,y_location,z_location,qv,overlaps_nucleus,is_gene',
+    )
+    expect(transcriptRows.length).toBeGreaterThan(1)
+  }
+
   // The Cell card shows only once a cell is clicked.
   await expect(page.getByRole('region', { name: 'Cell', exact: true })).toHaveCount(0)
 })

@@ -29,7 +29,10 @@ Rules to encode once:
   conversions live in `coords.ts`.
 - **Cell IDs.** Parquet uses a shifted-hex string; the matrix Zarr uses a
   `[prefix, suffix]` uint32 pair. The codec must round-trip, tested against a
-  real pair.
+  real pair. `transcripts.parquet` gives a transcript outside every cell the
+  `cell_id` `UNASSIGNED` (XOA 1.3 and later) or null (earlier). Both read as
+  no cell (`transcriptCellId`), and an ROI transcript CSV leaves its `cell_id`
+  empty.
 - **Scope.** `cells-only` and `spatial` transcript scopes differ by design
   (extracellular transcripts). Keep both and label them clearly.
 - **Features.** Exclude `NegControlProbe`, `NegControlCodeword`, `BLANK`,

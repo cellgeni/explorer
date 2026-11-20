@@ -692,6 +692,40 @@ describe('XeniumDataset', () => {
     ])
   })
 
+  it('exports a transcript outside every cell (UNASSIGNED) with no cell', async () => {
+    const cellId = intToCellId(1, 1)
+    const row = {
+      feature_name: 'Actb',
+      x_location: 2,
+      y_location: 3,
+      z_location: 1,
+      qv: 35,
+      overlaps_nucleus: false,
+      is_gene: true,
+    }
+    const dataset = makeDataset(
+      new FakeConnection([
+        [
+          { ...row, cell_id: cellId },
+          // XOA 1.3 and later write UNASSIGNED; earlier output wrote null.
+          { ...row, cell_id: 'UNASSIGNED' },
+        ],
+      ]),
+    )
+
+    const transcripts = await dataset.transcriptsInBbox(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(1),
+        maxY: micrometers(20),
+      },
+      { limit: 250, minQv: 30 },
+    )
+
+    expect(transcripts.map((transcript) => transcript.cellId)).toEqual([cellId, null])
+  })
+
   it('loads raw transcript rows for a selected cell', async () => {
     const cellId = intToCellId(1, 1)
     const conn = new FakeConnection([
@@ -1000,6 +1034,48 @@ describe('XeniumDataset', () => {
       30,
       'Actb',
       12,
+    ])
+  })
+
+  it('marks an exact transcript point outside every cell (UNASSIGNED) as unassigned', async () => {
+    const cellId = intToCellId(1, 1)
+    const row = {
+      feature_name: 'Actb',
+      x_location: 2,
+      y_location: 3,
+      qv: 35,
+      fov_name: 'FOV-001',
+      is_gene: true,
+    }
+    const dataset = makeDataset(
+      new FakeConnection([
+        [
+          { ...row, transcript_id: 12, cell_id: cellId },
+          { ...row, transcript_id: 13, cell_id: 'UNASSIGNED' },
+        ],
+        [],
+      ]),
+    )
+
+    const result = await dataset.transcriptsForViewport(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(10),
+        minY: micrometers(1),
+        maxY: micrometers(20),
+      },
+      { pointLimit: 250, groupLimit: 12, minQv: 30, geneOnly: true, featureNames: [] },
+    )
+
+    expect(
+      result.points.map((point) => [
+        point.transcriptId,
+        point.cellId,
+        point.cellAssignment,
+      ]),
+    ).toEqual([
+      ['12', cellId, 'known'],
+      ['13', null, 'unassigned'],
     ])
   })
 
