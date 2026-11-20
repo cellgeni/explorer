@@ -10,7 +10,10 @@ import {
   gridCellColumnsFixture,
   squareGridBasis,
 } from '../../test/gridCellColumnsFixture'
-import { geneExpressionScaleKeyFor } from '../genes/geneControlsModel'
+import {
+  geneExpressionBatchScaleKey,
+  geneExpressionScaleKeyFor,
+} from '../genes/geneControlsModel'
 import { useViewerLayerData } from './useViewerLayerData'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
@@ -190,6 +193,25 @@ describe('useViewerLayerData', () => {
         geneExpressionScaleDomain: { key, percentile: 99, top: 120, highest: 130 },
       }),
     ).toMatchObject({ geneExpressionScaleMax: 95, geneExpressionHighestScore: 100 })
+
+    // Visium HD: a top seen for 16 µm bins does not carry over to 2 µm bins,
+    // and comes back with them.
+    const binned = (binSizeMicrometers: number) => ({
+      ...batch,
+      elements: batch.elements.map((element) => ({ ...element, binSizeMicrometers })),
+    })
+    const seen16 = {
+      key: geneExpressionBatchScaleKey(key, binned(16)),
+      percentile: 99,
+      top: 6_400,
+      highest: 6_400,
+    }
+    expect(
+      scale({ geneExpressionBatch: binned(2), geneExpressionScaleDomain: seen16 }),
+    ).toMatchObject({ geneExpressionScaleMax: 99, geneExpressionHighestScore: 100 })
+    expect(
+      scale({ geneExpressionBatch: binned(16), geneExpressionScaleDomain: seen16 }),
+    ).toMatchObject({ geneExpressionScaleMax: 6_400 })
   })
 
   it('estimates visible transcripts from transcripts.zarr.zip grid counts once read', () => {

@@ -32,8 +32,9 @@ import {
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { overviewCellsToBbox } from '../cells/cellDetailModel'
 import {
-  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
+  geneExpressionBatchScaleKey,
   geneExpressionScaleKeyFor,
+  rememberedGeneExpressionScale,
   type GeneExpressionScaleDomain,
 } from '../genes/geneControlsModel'
 import {
@@ -233,11 +234,13 @@ export function useViewerLayerData({
           ),
     [geneExpressionBatch, geneExpressionScoreMode, geneScaleTopPercentile],
   )
-  const storedGeneExpressionScaleDomain =
-    geneExpressionScaleDomain.key === geneExpressionScaleKey &&
-    geneExpressionScaleDomain.percentile === geneScaleTopPercentile
-      ? geneExpressionScaleDomain
-      : EMPTY_GENE_EXPRESSION_SCALE_DOMAIN
+  const storedGeneExpressionScaleDomain = rememberedGeneExpressionScale(
+    geneExpressionScaleDomain,
+    geneExpressionBatch === null
+      ? geneExpressionScaleKey
+      : geneExpressionBatchScaleKey(geneExpressionScaleKey, geneExpressionBatch),
+    geneScaleTopPercentile,
+  )
   // Auto keeps the highest top seen for these genes, so the scale does not
   // shrink as the view moves.
   const geneExpressionAutoScaleMax = Math.max(

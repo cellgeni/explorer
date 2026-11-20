@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { micrometers } from '../../data/coords'
 import {
+  EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
   IDLE_GENE_EXPRESSION_STATE,
   IDLE_GENE_PANEL_STATE,
   defaultGeneSetName,
@@ -15,6 +17,8 @@ import {
   genePanelLoadReady,
   genePanelLoadStarted,
   geneExpressionModeLabel,
+  geneExpressionBatchScaleKey,
+  geneExpressionScaleDomainWith,
   geneExpressionScaleKeyFor,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
@@ -24,6 +28,7 @@ import {
   formatGeneSetsLink,
   parseGeneSetSymbols,
   parseGeneSetsLink,
+  rememberedGeneExpressionScale,
   savedGeneSetId,
   withGeneSetAt,
 } from './geneControlsModel'
@@ -199,6 +204,67 @@ describe('geneControlsModel', () => {
     expect(parseGeneExpressionDetailMode('all-cells')).toBe('all-cells')
     expect(formatGeneScaleValue(0)).toBe('0')
     expect(formatGeneScaleValue(4.123)).toBe('4.12')
+  })
+
+  it('remembers one Gene scale top per Visium HD bin size', () => {
+    const key = geneExpressionScaleKeyFor('https://example.test/hd', 'sum', ['Actb'])
+    const bins = (binSizeMicrometers: number) => ({
+      elements: [
+        {
+          id: 'bin',
+          position: { x: micrometers(0), y: micrometers(0) },
+          count: 1,
+          binSizeMicrometers,
+        },
+      ],
+    })
+    const key16 = geneExpressionBatchScaleKey(key, bins(16))
+    const key2 = geneExpressionBatchScaleKey(key, bins(2))
+    expect(key16).not.toBe(key2)
+    // Other platforms' batches keep the selection's key.
+    expect(geneExpressionBatchScaleKey(key, { elements: [] })).toBe(key)
+
+    // Zoomed out, a 2 µm selection reads 16 µm bins, which sum 64 2 µm bins.
+    const zoomedOut = geneExpressionScaleDomainWith(
+      EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
+      key16,
+      99,
+      { top: 150, highest: 190 },
+    )
+    const zoomedIn = geneExpressionScaleDomainWith(zoomedOut, key2, 99, {
+      top: 3,
+      highest: 6,
+    })
+    expect(rememberedGeneExpressionScale(zoomedIn, key2, 99)).toMatchObject({
+      top: 3,
+      highest: 6,
+    })
+    // Zooming back out restores the 16 µm top.
+    expect(rememberedGeneExpressionScale(zoomedIn, key16, 99)).toMatchObject({
+      top: 150,
+      highest: 190,
+    })
+    // A lower 16 µm batch read later does not lower it.
+    const pannedOut = geneExpressionScaleDomainWith(zoomedIn, key16, 99, {
+      top: 40,
+      highest: 50,
+    })
+    expect(rememberedGeneExpressionScale(pannedOut, key16, 99).top).toBe(150)
+    expect(rememberedGeneExpressionScale(pannedOut, key2, 99).top).toBe(3)
+    // Other genes, or another percentile, start afresh.
+    const otherGenes = geneExpressionScaleKeyFor('https://example.test/hd', 'sum', [
+      'Gad1',
+    ])
+    const switched = geneExpressionScaleDomainWith(
+      pannedOut,
+      geneExpressionBatchScaleKey(otherGenes, bins(16)),
+      99,
+      { top: 9, highest: 9 },
+    )
+    expect(switched.otherBinSizes).toBeUndefined()
+    expect(rememberedGeneExpressionScale(pannedOut, key16, 95)).toBe(
+      EMPTY_GENE_EXPRESSION_SCALE_DOMAIN,
+    )
   })
 
   it('filters gene options and parses saved gene-set symbols', () => {
