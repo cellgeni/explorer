@@ -170,7 +170,8 @@ metadata, and the snapshot serves the same purpose.
   (obs) or `gene_ids` (var). The entry is a string dataset or a
   `nullable-string-array` group (see below). Names are trimmed; empty and
   masked names become `obs-N` or `var-N`; duplicates get `-2`, `-3`, …
-  suffixes.
+  suffixes, skipping any name already in the index, so `c0`, `c0`, `c0-2`
+  read as `c0`, `c0-3`, `c0-2`.
 - **Gene names** (`readGeneNames`): the first column among `gene_symbols`,
   `gene_symbol`, `feature_name`, `name` with one value per gene and at least
   one non-empty value replaces the var index. A column can be a string

@@ -5052,15 +5052,30 @@ function uniqueNames(
   names: readonly string[],
   fallbackPrefix: string,
 ): readonly string[] {
-  const seen = new Map<string, number>()
+  const bases = names.map((name, index) =>
+    name.trim() === '' ? `${fallbackPrefix}-${index}` : name.trim(),
+  )
+  // A suffix skips names stored elsewhere in the list, so c0, c0, c0-2 gives
+  // c0, c0-3, c0-2 rather than two c0-2s.
+  const stored = new Set(bases)
+  const used = new Set<string>()
+  const nextSuffix = new Map<string, number>()
 
-  return names.map((name, index) => {
-    const fallback = `${fallbackPrefix}-${index}`
-    const base = name.trim() === '' ? fallback : name.trim()
-    const count = seen.get(base) ?? 0
-    seen.set(base, count + 1)
+  return bases.map((base) => {
+    if (!used.has(base)) {
+      used.add(base)
+      return base
+    }
 
-    return count === 0 ? base : `${base}-${count + 1}`
+    let suffix = nextSuffix.get(base) ?? 2
+    while (stored.has(`${base}-${suffix}`) || used.has(`${base}-${suffix}`)) {
+      suffix += 1
+    }
+    nextSuffix.set(base, suffix + 1)
+    const name = `${base}-${suffix}`
+    used.add(name)
+
+    return name
   })
 }
 
