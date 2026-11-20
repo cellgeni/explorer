@@ -132,21 +132,48 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
 export function parsePhysicalSizeMicrometersPerPixel(
   description: string | undefined,
 ): number {
-  if (description === undefined) {
-    return DEFAULT_MICROMETERS_PER_PIXEL
+  return physicalSizeMicrometers(description, 'X') ?? DEFAULT_MICROMETERS_PER_PIXEL
+}
+
+// The viewer draws square pixels, so an image whose OME PhysicalSizeY differs
+// from its PhysicalSizeX is refused rather than drawn at the wrong height
+// (EXP-015). Either size missing counts as square.
+export function assertSquareOmePixels(description: string | undefined): void {
+  const x = physicalSizeMicrometers(description, 'X')
+  const y = physicalSizeMicrometers(description, 'Y')
+
+  if (x === undefined || y === undefined || Math.abs(x - y) <= 1e-3 * Math.max(x, y)) {
+    return
   }
 
-  const rawValue = readXmlAttributeFromText(description, 'PhysicalSizeX')
+  throw new Error(
+    `The image's pixels are ${formatMicrometers(x)} µm wide and ${formatMicrometers(y)} µm tall (OME PhysicalSizeX and PhysicalSizeY). The viewer draws square pixels only, so it would show the image at the wrong height. Resample it to square pixels.`,
+  )
+}
+
+function physicalSizeMicrometers(
+  description: string | undefined,
+  axis: 'X' | 'Y',
+): number | undefined {
+  if (description === undefined) {
+    return undefined
+  }
+
+  const rawValue = readXmlAttributeFromText(description, `PhysicalSize${axis}`)
   const value = rawValue === undefined ? Number.NaN : Number.parseFloat(rawValue)
 
   if (!(value > 0)) {
-    return DEFAULT_MICROMETERS_PER_PIXEL
+    return undefined
   }
 
   return micrometersPerPixelFromPhysicalSize(
     value,
-    readXmlAttributeFromText(description, 'PhysicalSizeXUnit'),
+    readXmlAttributeFromText(description, `PhysicalSize${axis}Unit`),
   )
+}
+
+function formatMicrometers(value: number): string {
+  return Number(value.toPrecision(4)).toString()
 }
 
 function parseXml(xml: string): Document | null {
