@@ -5835,6 +5835,54 @@ describe('App', () => {
     expect(screen.getByText('Gad1 is already selected')).toBeInTheDocument()
   })
 
+  it('names the cells a z-score compares with in the legend', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const cellId = intToCellId(1, 1)
+    const position = { x: micrometers(10), y: micrometers(20) }
+    const loadDatasetOverview = vi.fn(async () => [
+      { cellId, position, transcriptCount: 8, cellArea: 22 },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1'])
+    const loadGeneExpression = vi.fn<GeneExpressionLoader>(
+      async (_url, _bbox, genes) => ({
+        elements: [{ id: cellId, position, count: 3 }],
+        genes,
+        cellCount: 1,
+        maxCount: 3,
+      }),
+    )
+
+    try {
+      render(
+        <TestApp
+          loadDatasetOverview={loadDatasetOverview}
+          loadGenePanel={loadGenePanel}
+          loadGeneExpression={loadGeneExpression}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+      openControls('genes')
+      fireEvent.click(await screen.findByRole('button', { name: 'Actb' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Gad1' }))
+      fireEvent.change(screen.getByRole('combobox', { name: 'Combine genes' }), {
+        target: { value: 'z-score' },
+      })
+
+      // A dataset this small is read whole, so every cell is compared with.
+      const legend = screen.getByRole('region', { name: 'Legend' })
+      expect(
+        await within(legend).findByText(
+          'Mean z-score of 2 genes per cell, relative to all cells',
+        ),
+      ).toBeInTheDocument()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('colours cells by one mode at a time, so clusters show while a gene is selected', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

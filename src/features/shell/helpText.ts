@@ -18,4 +18,4 @@ export const BOUNDARY_LIMIT_HELP =
   'The most cells in view for which cell and nucleus outlines are drawn. With more cells in view, cells show as points until you zoom in. Higher limits use more memory and time.'
 
 export const COMBINE_GENES_HELP =
-  "How the selected genes become one score per cell. Sum adds their expression, Mean averages it, and Z-score shows how far each cell's mean is above or below the average cell, in standard deviations."
+  "How the selected genes become one score per cell. Sum adds their expression, Mean averages it, and Z-score shows how far each cell's mean is above or below the average cell, in standard deviations. The average is of all cells when expression is read for the whole slide, otherwise of the cells in view; the legend says which. Cells without expression count as 0."

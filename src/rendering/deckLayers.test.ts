@@ -28,6 +28,7 @@ import {
   transcriptPointsToLayerData,
 } from './deckLayers'
 import { geneExpressionColor } from './deckLayerColors'
+import { geneExpressionScores } from './geneExpressionRenderer'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 import { GridBinLayer } from './gridBinLayer'
 import { gridCellAt, gridCellColumnsFromBatch } from './gridCellColumns'
@@ -1836,6 +1837,46 @@ describe('deck layer factory', () => {
     expect(data[1]?.expressionCount).toBeLessThan(0)
     expect(data[2]?.expressionCount).toBeCloseTo(1.34, 2)
     expect(data[2]?.fillColor).toEqual([255, 221, 99, 245])
+  })
+
+  it('counts the cells a batch left out as 0 in z-scores', () => {
+    // Two genes summed per cell; cells 6 to 9 express neither.
+    const counts = [8, 6, 4, 3, 2, 2, 0, 0, 0, 0]
+    const element = (index: number) => ({
+      id: intToCellId(1, index + 1),
+      position: { x: micrometers(index), y: micrometers(0) },
+      count: counts[index] ?? 0,
+    })
+    // By hand over all ten cells: means 4, 3, 2, 1.5, 1, 1, 0, 0, 0, 0 have
+    // mean 1.25 and SD 1.328, so cell 3 is +0.188.
+    const allCells = geneExpressionScores(
+      counts.map((_count, index) => element(index)),
+      ['A', 'B'],
+      'z-score',
+    )
+    expect(allCells[3]).toBeCloseTo(0.188, 3)
+
+    // As Xenium returns them, expressing cells only.
+    const expressing = [0, 1, 2, 3, 4, 5].map(element)
+    expect(geneExpressionScores(expressing, ['A', 'B'], 'z-score', 10)[3]).toBeCloseTo(
+      allCells[3] ?? Number.NaN,
+      9,
+    )
+    // As a sample with stride 2 returns them: every expressing cell and every
+    // second one without.
+    const sampled = [0, 1, 2, 3, 4, 5, 6, 8].map(element)
+    expect(geneExpressionScores(sampled, ['A', 'B'], 'z-score', 10)[3]).toBeCloseTo(
+      allCells[3] ?? Number.NaN,
+      9,
+    )
+    expect(
+      geneExpressionElementsToLayerData(expressing, ['A', 'B'], 'gold', 'z-score', {
+        cellCount: 10,
+      })[3]?.expressionCount,
+    ).toBeCloseTo(allCells[3] ?? Number.NaN, 9)
+    expect(
+      geneExpressionScoreSpread(expressing, ['A', 'B'], 'z-score', 100, 10).highest,
+    ).toBeCloseTo(Math.max(...allCells), 9)
   })
 
   it('colors expression cells with the selected scale', () => {

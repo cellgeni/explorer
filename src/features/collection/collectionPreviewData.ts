@@ -328,7 +328,12 @@ function previewScores(
 ): PreviewScores {
   throwIfAborted(signal)
 
-  const scores = geneExpressionScores(batch.elements, batch.genes, scoreMode)
+  const scores = geneExpressionScores(
+    batch.elements,
+    batch.genes,
+    scoreMode,
+    batch.cellCount,
+  )
   const positions = new Float32Array(batch.elements.length * 2)
   const values = new Float32Array(batch.elements.length)
   const cellDepths = cells.depths?.values

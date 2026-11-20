@@ -360,7 +360,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       })
     }
 
-    return { elements, genes, maxCount }
+    return { elements, genes, cellCount: cellsInBbox, maxCount }
   }
 
   // The Plots panel's rows are the matrix's, which the CSC matrix shares

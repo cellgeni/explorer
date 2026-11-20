@@ -920,6 +920,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return {
       elements,
       genes,
+      cellCount: selectedCells.length,
       maxCount,
     }
   }

@@ -1335,6 +1335,7 @@ describe('Visium HD dataset readers', () => {
       expect.objectContaining({ binSizeMicrometers: 16 }),
     )
     expect(batch.elements.map((element) => element.binSizeMicrometers)).toEqual([16, 16])
+    expect(batch.cellCount).toBe(2)
     // The 16 µm bin (1, 2) is centred on the 2 µm spots 8–15 and 16–23.
     expect(batch.elements[1]?.position.x).toBeCloseTo(19.5 * 2)
     expect(batch.elements[1]?.position.y).toBeCloseTo(11.5 * 2)

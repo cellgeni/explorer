@@ -337,6 +337,14 @@ describe('AteraDataset', () => {
       ['aaaaaaaa-1', 2],
       ['aaaaaaab-1', 0],
     ])
+    expect(batch.cellCount).toBe(2)
+    // On the whole slide the sample leaves out the third cell, which a z-score
+    // still counts.
+    const slide = await dataset.geneExpression(WHOLE_SLIDE, ['GENEC'], {
+      sampleStride: 2,
+    })
+    expect(slide.elements).toHaveLength(2)
+    expect(slide.cellCount).toBe(3)
     await expect(dataset.geneExpression(box, ['UNKNOWN'])).resolves.toMatchObject({
       maxCount: 0,
     })

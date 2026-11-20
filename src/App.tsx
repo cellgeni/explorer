@@ -248,6 +248,7 @@ import {
   summarizeRoiCells,
 } from './features/roi/roiModel'
 import { summarizeRoiGeneExpression } from './data/roiGeneStats'
+import { geneExpressionZScoreCells } from './data/geneExpressionLod'
 import {
   gridCellDatumDeckCenter,
   summarizeVisiumHdRoiBins,
@@ -1651,6 +1652,10 @@ export function App({ dependencies }: AppProps = {}) {
     () => transcriptDensityContentForRendering(transcriptLayerState),
     [transcriptLayerState],
   )
+  const geneExpressionZScoreCellsShown =
+    geneExpressionState.status === 'ready'
+      ? geneExpressionZScoreCells(geneExpressionState.mode)
+      : undefined
   const legendSections = useMemo(
     () =>
       viewerLegendSections({
@@ -1673,6 +1678,9 @@ export function App({ dependencies }: AppProps = {}) {
                   geneExpressionState.status === 'waiting'
                 ? 'unavailable'
                 : 'loading',
+          ...(geneExpressionZScoreCellsShown === undefined
+            ? {}
+            : { zScoreCells: geneExpressionZScoreCellsShown }),
         },
         annotations: legendAnnotations,
         metadataTrack:
@@ -1714,6 +1722,7 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionScaleMin,
       geneExpressionScoreMode,
       geneExpressionState.status,
+      geneExpressionZScoreCellsShown,
       legendAnnotations,
       legendCellAreaMax,
       observationColorMode,
@@ -1983,6 +1992,7 @@ export function App({ dependencies }: AppProps = {}) {
         batch.genes,
         scoreMode,
         percentile,
+        batch.cellCount,
       )
 
       if (spread.highest <= 0) {

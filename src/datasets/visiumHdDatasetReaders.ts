@@ -1296,9 +1296,12 @@ async function readVisiumHdGeneExpression(options: {
     detail: `${elements.length.toLocaleString()} positive bins`,
   })
 
+  // Every bin in the box, or an even sample by the stride: the bins a z-score
+  // compares with.
   return {
     elements,
     genes: selectedGenes,
+    cellCount: viewportBins.length,
     geneCounts,
     maxCount,
     timing: {

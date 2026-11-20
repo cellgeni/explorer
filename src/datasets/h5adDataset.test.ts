@@ -234,6 +234,17 @@ describe('AnnDataH5adDataset', () => {
       ['cell-b', 3],
       ['cell-c', 4],
     ])
+    // The z-score still counts cell-d: values 0, 3, 4 and 0 have mean 1.75 and
+    // SD 1.79.
+    expect(sampled.cellCount).toBe(4)
+    expect(
+      geneExpressionScores(
+        sampled.elements,
+        sampled.genes,
+        'z-score',
+        sampled.cellCount,
+      )[2],
+    ).toBeCloseTo(1.26, 2)
   })
 
   it.each(['csr', 'csc', 'dense'] as const)(
