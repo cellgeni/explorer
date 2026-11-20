@@ -397,4 +397,15 @@ describe('shareableState', () => {
       plot: 'heatmap',
     })
   })
+
+  it('writes and reads the saved gene sets after the genes', () => {
+    const geneSets = 'Actb%2C Gad1|mean|Actb,Gad1;T cells|sum|CD3E'
+    const hash = formatShareableState({ selectedGenes: ['Actb'], geneSets })
+
+    expect(hash).toBe(
+      '#xv=2&genes=Actb&geneSets=Actb%252C+Gad1%7Cmean%7CActb%2CGad1%3BT+cells%7Csum%7CCD3E',
+    )
+    expect(parseShareableState(hash)).toMatchObject({ selectedGenes: ['Actb'], geneSets })
+    expect(formatShareableState({ geneSets: '' })).toBe('#xv=2')
+  })
 })

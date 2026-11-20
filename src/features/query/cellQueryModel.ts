@@ -1,4 +1,5 @@
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
+import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
 import type { Annotation } from '../../datasets/spatialDataset'
 import { slug } from '../../utils/slug'
 import type { PlotSetKind, PlotSetOption } from '../plots/plotsPanelModel'
@@ -550,20 +551,6 @@ export function parseCellQueryLink(
 // column's lowest value keeps that cell.
 function linkNumber(value: number): string {
   return String(value)
-}
-
-function escapeLinkPart(value: string): string {
-  return value
-    .replaceAll('%', '%25')
-    .replaceAll(';', '%3B')
-    .replaceAll('|', '%7C')
-    .replaceAll(',', '%2C')
-}
-
-function unescapeLinkPart(value: string): string {
-  return value.replace(/%(25|3B|7C|2C)/gi, (_, code: string) =>
-    String.fromCharCode(Number.parseInt(code, 16)),
-  )
 }
 
 // Whole numbers as they are; others to four significant digits, and very

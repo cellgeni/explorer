@@ -101,6 +101,8 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
+  parseGeneSetsLink,
+  type SavedGeneSet,
 } from '../genes/geneControlsModel'
 import {
   channelsToAutoContrastOnLoad,
@@ -469,6 +471,7 @@ interface UseDatasetLifecycleSetters {
   readonly setSelectedCell: Setter<OverviewCellDatum | null>
   readonly setSelectedGridCell: Setter<GridCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
+  readonly setSavedGeneSets: Setter<readonly SavedGeneSet[]>
   readonly setSelectedGenes: Setter<readonly string[]>
   readonly setShowCellBoundaries: Setter<boolean>
   readonly setShowNucleusBoundaries: Setter<boolean>
@@ -651,6 +654,7 @@ export function useDatasetLifecycle({
     setSelectedCell,
     setSelectedGridCell,
     setSelectedEmbeddingKind,
+    setSavedGeneSets,
     setSelectedGenes,
     setShowCellBoundaries,
     setShowNucleusBoundaries,
@@ -1193,6 +1197,9 @@ export function useDatasetLifecycle({
               : current,
           )
           setSelectedGenes(sharedSelectedGenes)
+          setSavedGeneSets(
+            shouldRestoreSharedState ? parseGeneSetsLink(sharedState?.geneSets) : [],
+          )
           // A shared link's box, lasso or measure tool stays on (15.2-H).
           const sharedTool =
             shouldRestoreSharedState && sharedState !== null

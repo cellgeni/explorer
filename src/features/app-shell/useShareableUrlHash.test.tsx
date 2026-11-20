@@ -8,6 +8,7 @@ import { useShareableUrlHash } from './useShareableUrlHash'
 function ShareableUrlHashProbe({
   collectionUrl,
   datasetUrl = 'https://example.test/output',
+  geneSets,
   hiddenAnnotationIds,
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
@@ -15,6 +16,7 @@ function ShareableUrlHashProbe({
 }: {
   readonly collectionUrl?: string
   readonly datasetUrl?: string
+  readonly geneSets?: string
   readonly hiddenAnnotationIds?: readonly string[]
   readonly selectedGenes?: readonly string[]
   readonly onHistoryDatasetChange?: () => void
@@ -35,6 +37,7 @@ function ShareableUrlHashProbe({
       geneExpressionDetailMode: 'auto',
       geneExpressionScaleRange: undefined,
       geneExpressionScoreMode: 'sum',
+      geneSets,
       selectedGenes,
     },
     layers: {
@@ -166,6 +169,29 @@ describe('useShareableUrlHash', () => {
     })
 
     expect(window.location.hash).not.toContain('hiddenClasses=')
+  })
+
+  it('writes the saved gene sets while there are any', () => {
+    const { rerender } = render(
+      <ShareableUrlHashProbe geneSets="Interneuron set|mean|Actb,Gad1" />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).toContain(
+      'geneSets=Interneuron+set%7Cmean%7CActb%2CGad1',
+    )
+    expect(readShareableStateFromLocation().geneSets).toBe(
+      'Interneuron set|mean|Actb,Gad1',
+    )
+
+    rerender(<ShareableUrlHashProbe />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).not.toContain('geneSets=')
   })
 
   it('gives the link for the current state before the address has it', () => {

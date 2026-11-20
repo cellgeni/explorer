@@ -280,6 +280,7 @@ import {
   geneExpressionModeLabel,
   geneExpressionStatusCopy,
   genePanelStatusCopy,
+  formatGeneSetsLink,
 } from './features/genes/geneControlsModel'
 import {
   formatGeneScaleRange,
@@ -541,6 +542,7 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionScoreMode,
       geneExpressionState,
       genePanelState,
+      savedGeneSets,
       selectedGenes,
       setGeneExpressionBatch,
       setGeneExpressionColorScale,
@@ -550,6 +552,7 @@ export function App({ dependencies }: AppProps = {}) {
       setGeneExpressionScoreMode,
       setGeneExpressionState,
       setGenePanelState,
+      setSavedGeneSets,
       setSelectedGenes,
     },
     layers: {
@@ -3651,6 +3654,7 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedCell,
       setSelectedGridCell,
       setSelectedEmbeddingKind,
+      setSavedGeneSets,
       setSelectedGenes,
       setShowCellBoundaries,
       setShowNucleusBoundaries,
@@ -3948,6 +3952,7 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionDetailMode,
       geneExpressionScaleRange: formatGeneScaleRange(geneExpressionScaleRange),
       geneExpressionScoreMode,
+      geneSets: formatGeneSetsLink(savedGeneSets),
       selectedGenes,
     },
     layers: {
@@ -4423,6 +4428,7 @@ export function App({ dependencies }: AppProps = {}) {
     observationColorMode,
     rememberGeneExpressionScaleMax,
     resetGeneExpressionSelectionState,
+    savedGeneSets,
     selectedCellMetadataTrackId: selectedCellMetadataTrack?.id ?? null,
     selectedGenes,
     setCellBoundaryOpacity,
@@ -4435,6 +4441,7 @@ export function App({ dependencies }: AppProps = {}) {
     setGeneExpressionScoreMode,
     setManualTranscriptExactRequestKey,
     setObservationColorMode,
+    setSavedGeneSets,
     setSelectedCellMetadataTrackId,
     setSelectedGenes,
     setShowCellBoundaries,

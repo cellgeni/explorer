@@ -263,6 +263,7 @@ function Probe({
       setSelectedCell: noopSetter,
       setSelectedGridCell,
       setSelectedEmbeddingKind: noopSetter,
+      setSavedGeneSets: noopSetter,
       setSelectedGenes: noopSetter,
       setShowCellBoundaries,
       setShowNucleusBoundaries,
@@ -963,6 +964,7 @@ describe('useDatasetLifecycle', () => {
     const setImageLayerOpacity = vi.fn()
     const setObservationColorMode = vi.fn()
     const setSelectedGenes = vi.fn()
+    const setSavedGeneSets = vi.fn()
     const setGeneExpressionColorScale = vi.fn()
     const setShowCellBoundaries = vi.fn()
     const setShowNucleusBoundaries = vi.fn()
@@ -983,11 +985,13 @@ describe('useDatasetLifecycle', () => {
           setGeneExpressionScaleRange: geneScaleRange.setGeneExpressionScaleRange,
           setImageLayerOpacity,
           setObservationColorMode,
+          setSavedGeneSets,
           setSelectedGenes,
         }}
         initialShareableState={{
           datasetUrl,
           selectedGenes: ['ACTB'],
+          geneSets: 'Epithelial|mean|EPCAM,KRT8',
           showCellBoundaries: true,
           // The Gene scale reset to Auto, which the manifest's range would undo.
           geneExpressionScaleRange: ',',
@@ -1011,6 +1015,9 @@ describe('useDatasetLifecycle', () => {
 
     // The shared link sets genes, cell boundaries and the range, so those win.
     expect(setSelectedGenes).toHaveBeenLastCalledWith(['ACTB'])
+    expect(setSavedGeneSets).toHaveBeenLastCalledWith([
+      expect.objectContaining({ name: 'Epithelial', genes: ['EPCAM', 'KRT8'] }),
+    ])
     expect(setShowCellBoundaries).toHaveBeenLastCalledWith(true)
     expect(geneScaleRange.state.range).toEqual(AUTO_GENE_SCALE_RANGE)
     // The rest come from the manifest.

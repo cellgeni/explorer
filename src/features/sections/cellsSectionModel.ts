@@ -16,6 +16,7 @@ import type {
   GeneExpressionScaleDomain,
   GeneExpressionState,
   GenePanelState,
+  SavedGeneSet,
 } from '../genes/geneControlsModel'
 import type { GeneScaleRange } from '../genes/geneScaleRange'
 import { useGeneControlsWorkflow } from '../genes/useGeneControlsWorkflow'
@@ -73,6 +74,9 @@ export interface GeneSelectionModel {
     genes: readonly string[],
     scoreMode?: GeneExpressionScoreMode | undefined,
   ) => void
+  // Saved gene sets, newest first; kept in the link (geneSets=).
+  readonly savedSets: readonly SavedGeneSet[]
+  readonly onSavedSetsChange: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   // For the picker's own actions, such as saving a gene set.
   readonly log: AppendDebugEvent
   // Removing a saved gene set offers Undo (15.3-C).
@@ -144,6 +148,7 @@ export interface CellsSectionModelInput {
     scoreMode: GeneExpressionScoreMode,
   ) => void
   readonly resetGeneExpressionSelectionState: () => void
+  readonly savedGeneSets: readonly SavedGeneSet[]
   readonly selectedCellMetadataTrackId: string | null
   readonly selectedGenes: readonly string[]
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
@@ -158,6 +163,7 @@ export interface CellsSectionModelInput {
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
+  readonly setSavedGeneSets: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly setShowCellBoundaries: Dispatch<SetStateAction<boolean>>
@@ -199,6 +205,7 @@ export function useCellsSectionModel({
   observationColorMode,
   rememberGeneExpressionScaleMax,
   resetGeneExpressionSelectionState,
+  savedGeneSets,
   selectedCellMetadataTrackId,
   selectedGenes,
   setCellBoundaryOpacity,
@@ -211,6 +218,7 @@ export function useCellsSectionModel({
   setGeneExpressionScoreMode,
   setManualTranscriptExactRequestKey,
   setObservationColorMode,
+  setSavedGeneSets,
   setSelectedCellMetadataTrackId,
   setSelectedGenes,
   setShowCellBoundaries,
@@ -312,6 +320,8 @@ export function useCellsSectionModel({
       scoreMode: geneExpressionScoreMode,
       onToggle: toggleGene,
       onApply: applyGenes,
+      savedSets: savedGeneSets,
+      onSavedSetsChange: setSavedGeneSets,
       log: appendDebugEvent,
       onOfferUndo: offerUndo,
     },

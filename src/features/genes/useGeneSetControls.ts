@@ -4,29 +4,31 @@ import {
   defaultGeneSetName,
   filterGeneOptions,
   parseGeneSetSymbols,
+  savedGeneSetId,
   withGeneSetAt,
   type SavedGeneSet,
 } from './geneControlsModel'
 
-// The gene picker's own state: the search, the typed symbols, the set name
-// and the saved sets. It stays in the picker, so typing does not re-render
-// the app, and it resets when a new gene panel starts loading.
+// The gene picker's own state: the search, the typed symbols and the set
+// name. It stays in the picker, so typing does not re-render the app, and it
+// resets when a new gene panel starts loading. The saved sets are the app's,
+// so the link keeps them.
 export function useGeneSetControls(genes: GeneSelectionModel) {
   const {
     log,
     onApply,
     onOfferUndo,
+    onSavedSetsChange: setSavedGeneSets,
     onToggle,
     options,
     panelState,
+    savedSets: savedGeneSets,
     scoreMode,
     selected,
   } = genes
   const [geneSearch, setGeneSearch] = useState('')
   const [geneSetSymbols, setGeneSetSymbols] = useState('')
   const [geneSetName, setGeneSetName] = useState('')
-  const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>([])
-  const geneSetIdRef = useRef(0)
   const lastGenePanelLoadingUrlRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -38,11 +40,9 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
     }
 
     lastGenePanelLoadingUrlRef.current = panelState.url
-    geneSetIdRef.current = 0
     setGeneSearch('')
     setGeneSetSymbols('')
     setGeneSetName('')
-    setSavedGeneSets([])
   }, [panelState])
 
   const aliases = panelState.status === 'ready' ? panelState.aliases : undefined
@@ -83,19 +83,17 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
       }
 
       const name = geneSetName.trim() || defaultGeneSetName(selected)
-      const normalizedName = name.toLowerCase()
       const savedSet: SavedGeneSet = {
-        id: `gene-set-${geneSetIdRef.current + 1}`,
+        id: savedGeneSetId(name),
         name,
         genes: selected,
         scoreMode,
       }
 
-      geneSetIdRef.current += 1
       log(`Saved gene set ${name}`)
       setSavedGeneSets((current) => [
         savedSet,
-        ...current.filter((geneSet) => geneSet.name.toLowerCase() !== normalizedName),
+        ...current.filter((geneSet) => geneSet.id !== savedSet.id),
       ])
       setGeneSetName('')
     },

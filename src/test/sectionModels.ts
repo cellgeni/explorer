@@ -106,6 +106,8 @@ export function testCellsSectionModel(
       scoreMode: 'sum',
       onToggle: vi.fn(),
       onApply: vi.fn(),
+      savedSets: [],
+      onSavedSetsChange: vi.fn(),
       log: vi.fn(),
       onOfferUndo: vi.fn(),
       ...overrides.genes,

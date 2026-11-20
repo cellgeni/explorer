@@ -2,8 +2,10 @@ import type {
   GeneExpressionDetailMode,
   GeneExpressionLoadMode,
 } from '../../data/geneExpressionLod'
+import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
 import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
 import {
+  DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   isGeneExpressionColorScale,
   isGeneExpressionScoreMode,
   type GeneExpressionColorScale,
@@ -453,4 +455,59 @@ export function withGeneSetAt(
 
   const at = Math.min(Math.max(index, 0), sets.length)
   return [...sets.slice(0, at), geneSet, ...sets.slice(at)]
+}
+
+// A saved set's ID: its name, which no other saved set has in any case,
+// since saving under a saved name replaces that set.
+export function savedGeneSetId(name: string): string {
+  return `gene-set:${name.toLowerCase()}`
+}
+
+// `geneSets=`: the saved gene sets in their listed order, joined by `;`, each
+// `name|score|genes` with the genes joined by `,`. `%`, `;`, `|` and `,`
+// inside a name or gene are written as `%25`, `%3B`, `%7C` and `%2C`.
+export function formatGeneSetsLink(sets: readonly SavedGeneSet[]): string | undefined {
+  if (sets.length === 0) return undefined
+
+  return sets
+    .map((set) =>
+      [
+        escapeLinkPart(set.name),
+        set.scoreMode,
+        set.genes.map(escapeLinkPart).join(','),
+      ].join('|'),
+    )
+    .join(';')
+}
+
+// The sets a link names. A set without a name or genes is dropped, as is a
+// later one under a name already read; an unknown score reads as the default.
+export function parseGeneSetsLink(value: string | undefined): readonly SavedGeneSet[] {
+  if (value === undefined || value === '') return []
+
+  const sets: SavedGeneSet[] = []
+  const ids = new Set<string>()
+
+  for (const part of value.split(';')) {
+    const [rawName = '', rawScoreMode, rawGenes = ''] = part.split('|')
+    const name = unescapeLinkPart(rawName).trim()
+    const genes = rawGenes
+      .split(',')
+      .map((gene) => unescapeLinkPart(gene).trim())
+      .filter((gene) => gene !== '')
+    const id = savedGeneSetId(name)
+
+    if (name === '' || genes.length === 0 || ids.has(id)) continue
+
+    ids.add(id)
+    sets.push({
+      id,
+      name,
+      genes,
+      scoreMode:
+        parseGeneExpressionScoreMode(rawScoreMode) ?? DEFAULT_GENE_EXPRESSION_SCORE_MODE,
+    })
+  }
+
+  return sets
 }
