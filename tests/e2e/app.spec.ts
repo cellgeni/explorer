@@ -1732,12 +1732,14 @@ test('loads a MERSCOPE region folder with its cell outlines and genes @smoke', a
 })
 
 // A little-endian, uncompressed, single-strip grayscale TIFF of `bits`-bit
-// samples, value(x, y) at each pixel.
+// samples, value(x, y) at each pixel, with an optional ImageDescription
+// (OME-XML for an OME-TIFF).
 function tinyTiff(
   width: number,
   height: number,
   bits: 8 | 32,
   value: (x: number, y: number) => number,
+  description?: string,
 ): Buffer {
   const bytesPerSample = bits / 8
   const pixels = Buffer.alloc(width * height * bytesPerSample)
@@ -1751,29 +1753,35 @@ function tinyTiff(
     }
   }
 
+  const ASCII = 2
   const SHORT = 3
   const LONG = 4
   const pixelOffset = 8
-  const entries: readonly (readonly [number, number, number])[] = [
-    [256, LONG, width],
-    [257, LONG, height],
-    [258, SHORT, bits],
-    [259, SHORT, 1],
-    [262, SHORT, 1],
-    [273, LONG, pixelOffset],
-    [277, SHORT, 1],
-    [278, LONG, height],
-    [279, LONG, pixels.byteLength],
+  const text =
+    description === undefined ? null : Buffer.from(`${description}\0`, 'latin1')
+  // [tag, type, value, count]; the description's value is its offset.
+  const entries: readonly (readonly [number, number, number, number])[] = [
+    [256, LONG, width, 1],
+    [257, LONG, height, 1],
+    [258, SHORT, bits, 1],
+    [259, SHORT, 1, 1],
+    [262, SHORT, 1, 1],
+    ...(text === null ? [] : [[270, ASCII, 0, text.byteLength] as const]),
+    [273, LONG, pixelOffset, 1],
+    [277, SHORT, 1, 1],
+    [278, LONG, height, 1],
+    [279, LONG, pixels.byteLength, 1],
   ]
   const ifdOffset = pixelOffset + pixels.byteLength + (pixels.byteLength % 2)
   const ifd = Buffer.alloc(2 + entries.length * 12 + 4)
   ifd.writeUInt16LE(entries.length, 0)
-  entries.forEach(([tag, type, entryValue], index) => {
+  entries.forEach(([tag, type, entryValue, count], index) => {
     const offset = 2 + index * 12
     ifd.writeUInt16LE(tag, offset)
     ifd.writeUInt16LE(type, offset + 2)
-    ifd.writeUInt32LE(1, offset + 4)
-    if (type === SHORT) ifd.writeUInt16LE(entryValue, offset + 8)
+    ifd.writeUInt32LE(count, offset + 4)
+    if (type === ASCII) ifd.writeUInt32LE(ifdOffset + ifd.byteLength, offset + 8)
+    else if (type === SHORT) ifd.writeUInt16LE(entryValue, offset + 8)
     else ifd.writeUInt32LE(entryValue, offset + 8)
   })
   const header = Buffer.from([0x49, 0x49, 42, 0, 0, 0, 0, 0])
@@ -1784,6 +1792,7 @@ function tinyTiff(
     pixels,
     Buffer.alloc(ifdOffset - pixelOffset - pixels.byteLength),
     ifd,
+    ...(text === null ? [] : [text]),
   ])
 }
 
@@ -1839,6 +1848,51 @@ async function routeRangeFiles(
     })
   })
 }
+
+test('decodes image tiles with one set of workers across contrast edits @smoke', async ({
+  page,
+  baseURL,
+}) => {
+  // Each contrast value has its own tile cache; they share the decode workers.
+  const started: string[] = []
+  const alive = new Set<object>()
+  page.on('worker', (worker) => {
+    if (!worker.url().includes('tileDecode')) return
+    started.push(worker.url())
+    alive.add(worker)
+    worker.on('close', () => alive.delete(worker))
+  })
+  // One channel, named in the OME-XML, so the Image section has its contrast.
+  const omeXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">',
+    '<Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint8"',
+    ' SizeX="64" SizeY="64" SizeC="1" SizeZ="1" SizeT="1"',
+    ' PhysicalSizeX="0.5" PhysicalSizeY="0.5">',
+    '<Channel ID="Channel:0:0" Name="rings" SamplesPerPixel="1"/>',
+    '<TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>',
+  ].join('')
+  await routeRangeFiles(page, '/contrast-smoke', {
+    'slide.ome.tif': tinyTiff(64, 64, 8, (x, y) => (x * 4 + y) % 256, omeXml),
+  })
+  const folder = new URL('/contrast-smoke/', baseURL).toString()
+  await page.goto(`/#dataset=${encodeURIComponent(`${folder}slide.ome.tif`)}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Image · 1 channel' }),
+  ).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  const image = await openControls(page, 'image')
+  const maximum = image.getByLabel('rings maximum')
+  await expect.poll(() => started.length).toBeGreaterThan(0)
+
+  for (let edit = 1; edit <= 10; edit += 1) {
+    await maximum.fill(String(250 - edit * 10))
+    await page.waitForTimeout(200)
+  }
+  await page.waitForTimeout(1000)
+  expect(alive.size).toBeLessThanOrEqual(8)
+})
 
 test('draws an imported label mask and WKT outlines over an image @smoke', async ({
   page,

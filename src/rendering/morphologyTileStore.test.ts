@@ -1,6 +1,8 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { imagePixels, micrometers } from '../data/coords'
 import { MorphologyTileStore } from './morphologyTileStore'
 import type { MorphologyTileChannelSpec } from './morphologyTileStore'
+import type { TileSource } from '../tiff/tileCache'
 
 function spec(key: string, maxTiles = 24): MorphologyTileChannelSpec {
   return {
@@ -79,5 +81,82 @@ describe('morphology tile store (plan 23-D11)', () => {
 
     store.flatImage('https://example.test/other.png')
     expect(store.flatImage('https://example.test/hires.png')).not.toBe(first)
+  })
+})
+
+describe('tile decode workers', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  // One 64 x 64 level of 16 x 16 uncompressed 8-bit tiles.
+  const source: TileSource = {
+    tileBounds: (_level, col, row) => ({
+      minX: micrometers(col * 16),
+      maxX: micrometers(col * 16 + 16),
+      minY: micrometers(row * 16),
+      maxY: micrometers(row * 16 + 16),
+    }),
+    tileSourceSize: () => ({ width: imagePixels(16), height: imagePixels(16) }),
+    fetchTileBytes: async () => new Uint8Array(256),
+    tileDecodeOptions: () => ({
+      compression: 1,
+      bitsPerSample: [8],
+      samplesPerPixel: 1,
+      tileWidth: 16,
+      tileHeight: 16,
+    }),
+  }
+
+  it('decodes every channel and contrast with one pool of workers', async () => {
+    let started = 0
+    class CountingWorker {
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: ((event: ErrorEvent) => void) | null = null
+      constructor() {
+        started += 1
+      }
+      postMessage(message: { readonly id: number }) {
+        queueMicrotask(() => {
+          this.onmessage?.({
+            data: {
+              id: message.id,
+              ok: true,
+              bitmap: { close: () => undefined, width: 16, height: 16 },
+              width: 16,
+              height: 16,
+              lo: 0,
+              hi: 1,
+            },
+          } as MessageEvent)
+        })
+      }
+      terminate() {}
+    }
+    vi.stubGlobal('Worker', CountingWorker)
+    vi.spyOn(navigator, 'hardwareConcurrency', 'get').mockReturnValue(8)
+    const store = new MorphologyTileStore()
+    // As MorphologyCanvas keys a channel: its image and contrast.
+    const draw = async (url: string, max: number) => {
+      const [held] = store.use('canvas', [
+        {
+          key: `dapi:${url}:0:${max}`,
+          cacheOptions: () => ({ maxTiles: 24, displayWindow: { lo: 0, hi: max } }),
+        },
+      ])
+      await Promise.all([0, 1, 2, 3].map((col) => held?.cache.request(source, 0, col, 0)))
+    }
+
+    // Four tiles at once decode in parallel, one worker each.
+    await draw('https://example.test/a.ome.tif', 1000)
+    expect(started).toBe(4)
+
+    for (let edit = 1; edit <= 10; edit += 1) {
+      await draw('https://example.test/a.ome.tif', 1000 + edit * 100)
+    }
+    await draw('https://example.test/b.ome.tif', 1000)
+    store.dispose()
+    expect(started).toBe(4)
   })
 })

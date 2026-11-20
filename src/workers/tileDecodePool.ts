@@ -300,8 +300,18 @@ export function sharedStripDecodePool(): TileDecodeWorkerPool | null {
   return sharedStripPool
 }
 
+let sharedTilePool: TileDecodeWorkerPool | undefined
+
+// Shared pool for the tiles of every TileCache. A cache is made per channel
+// and contrast, so a pool per cache started up to four more workers with each
+// contrast value, and nothing ended them.
+export function sharedTileDecodePool(): TileDecodeWorkerPool {
+  sharedTilePool ??= new TileDecodeWorkerPool()
+  return sharedTilePool
+}
+
 export function createWorkerTileDecoder(
-  pool = new TileDecodeWorkerPool(),
+  pool = sharedTileDecodePool(),
 ): TileBitmapDecoder {
   return (bytes, options) => pool.decode(bytes, options)
 }
