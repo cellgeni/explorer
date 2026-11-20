@@ -61,8 +61,10 @@ and missing boundaries are left out. Three layouts need one:
 
 Both CSVs are fetched and parsed in one worker (`merscopeTable.worker.ts`):
 the parser scans the text once and writes counts straight into CSR arrays,
-without an object per cell. Gzip is recognised from the first two bytes, not
-the file name. A `Content-Length` above 300 MB, or a gzipped file that
+without an object per cell. Fields follow RFC 4180: a quoted field may hold
+commas, line breaks and `""` for a quote, and an unclosed quote fails with
+its row. A byte order mark and `\r\n` line ends are read too. Gzip is
+recognised from the first two bytes, not the file name. A `Content-Length` above 300 MB, or a gzipped file that
 inflates past it, fails the load with the file's size.
 
 The table it builds (`merscopeTable` in `src/datasets/merscopeFormat.ts`):

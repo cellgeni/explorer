@@ -107,6 +107,35 @@ describe('MERSCOPE cell_metadata.csv', () => {
   })
 })
 
+describe('MERSCOPE CSV quoting (RFC 4180)', () => {
+  it('reads commas, line breaks and doubled quotes inside quoted fields', () => {
+    const metadata = parseMerscopeCellMetadata(
+      [
+        '﻿EntityID,"type, coarse",note',
+        `${ID_A},"T cell, CD4+","a ""b"""`,
+        `${ID_B},B cell,"two\r\nlines"`,
+        `"${ID_C}",,plain`,
+        '',
+      ].join('\r\n'),
+    )
+
+    expect(metadata.ids).toEqual([ID_A, ID_B, ID_C])
+    expect(metadata.columns).toEqual([
+      { name: 'type, coarse', kind: 'text', values: ['T cell, CD4+', 'B cell', ''] },
+      { name: 'note', kind: 'text', values: ['a "b"', 'two\r\nlines', 'plain'] },
+    ])
+
+    const counts = parseMerscopeCellByGene(csv('cell,"Gad1"', `"${ID_A}","3"`))
+    expect([counts.genes, counts.ids, [...counts.data]]).toEqual([['Gad1'], [ID_A], [3]])
+  })
+
+  it('names the row of a quoted field that never closes', () => {
+    expect(() =>
+      parseMerscopeCellMetadata(csv('EntityID,note', `${ID_A},ok`, `${ID_B},"open`)),
+    ).toThrow('cell_metadata.csv row 2 has a quoted field with no closing quote.')
+  })
+})
+
 describe('MERSCOPE table', () => {
   const counts = parseMerscopeCellByGene(
     csv('cell,CD4,SNAI2,Blank-0', `${ID_A},3,0,1`, `${ID_B},0,5,0`, `${ID_C},1,1,0`),
