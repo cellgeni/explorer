@@ -14,6 +14,7 @@ import {
   createCellBoundaryLayerStyle,
   createGeneExpressionElementStyleIndex,
   createOverviewLayers,
+  expressingElementsByScore,
   geneExpressionElementsToLayerData,
   geneExpressionScoreSpread,
   overviewCellsToLayerData,
@@ -28,7 +29,7 @@ import {
   transcriptPointsToLayerData,
 } from './deckLayers'
 import { geneExpressionColor } from './deckLayerColors'
-import { geneExpressionScores } from './geneExpressionRenderer'
+import { geneExpressionScores, nonFiniteScoreCount } from './geneExpressionRenderer'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
 import { GridBinLayer } from './gridBinLayer'
 import { gridCellAt, gridCellColumnsFromBatch } from './gridCellColumns'
@@ -1837,6 +1838,36 @@ describe('deck layer factory', () => {
     expect(data[1]?.expressionCount).toBeLessThan(0)
     expect(data[2]?.expressionCount).toBeCloseTo(1.34, 2)
     expect(data[2]?.fillColor).toEqual([255, 221, 99, 245])
+  })
+
+  it('leaves a stored NaN or infinity out of z-scores and the scale', () => {
+    const counts = [0, 1, 1, Number.NaN, 0, 2, Number.POSITIVE_INFINITY]
+    const elements = counts.map((count, index) => ({
+      id: intToCellId(1, index + 1),
+      position: { x: micrometers(index), y: micrometers(0) },
+      count,
+    }))
+    // By hand over the five finite cells: 0, 1, 1, 0 and 2 have mean 0.8 and
+    // SD 0.748, so the cell with 2 is +1.604.
+    const zScores = geneExpressionScores(elements, ['Nan'], 'z-score')
+    expect(zScores[5]).toBeCloseTo(1.604, 3)
+    expect(zScores.filter(Number.isFinite)).toHaveLength(5)
+    expect(zScores[3]).toBeNaN()
+    expect(nonFiniteScoreCount(zScores)).toBe(2)
+
+    const layerData = geneExpressionElementsToLayerData(elements, ['Nan'], 'gold', 'sum')
+    // The scale tops out at 2, and the non-finite cells draw as a 0.
+    expect(layerData[5]?.fillColor).toEqual(geneExpressionColor('gold', 1))
+    expect(layerData[3]?.fillColor).toEqual(layerData[0]?.fillColor)
+    expect(layerData[6]?.fillColor).toEqual(layerData[0]?.fillColor)
+    expect(layerData[5]?.radiusPixels).toBe(10)
+    expect(geneExpressionScoreSpread(elements, ['Nan'], 'sum', 100)).toEqual({
+      top: 2,
+      highest: 2,
+    })
+    expect(expressingElementsByScore(layerData).map((cell) => cell.id)).toEqual(
+      [1, 2, 5].map((index) => intToCellId(1, index + 1)),
+    )
   })
 
   it('counts the cells a batch left out as 0 in z-scores', () => {

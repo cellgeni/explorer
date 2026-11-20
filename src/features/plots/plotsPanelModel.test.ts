@@ -13,6 +13,7 @@ import {
   PLOT_READ_PROMPT_BYTES,
   plotGenesPhrase,
   plotGroupsInput,
+  plotNonFiniteNotes,
   plotReadDecision,
   datasetSetOptionId,
   plotDatasetSets,
@@ -397,5 +398,23 @@ describe('Plots read budget (plan 22-D7)', () => {
     expect(plotGenesPhrase(['Gad1'])).toBe('Gad1')
     expect(plotGenesPhrase(['Gad1', 'Sst'])).toBe('Gad1 and Sst')
     expect(plotGenesPhrase(['Gad1', 'Sst', 'Vip'])).toBe('3 genes')
+  })
+})
+
+describe('plotNonFiniteNotes', () => {
+  it('names each gene with stored NaN or infinite values', () => {
+    expect(
+      plotNonFiniteNotes(
+        [
+          { gene: 'Actb', nonFinite: 0 },
+          { gene: 'N', nonFinite: 1 },
+          { gene: 'M', nonFinite: 1200 },
+        ],
+        'cells',
+      ),
+    ).toEqual([
+      "1 non-finite value skipped in N: its cell is left out of N's numbers.",
+      "1,200 non-finite values skipped in M: their cells are left out of M's numbers.",
+    ])
   })
 })

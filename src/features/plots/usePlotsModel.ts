@@ -26,6 +26,7 @@ import {
   plotGroupsInput,
   plotKindInfo,
   datasetSetGroupId,
+  plotNonFiniteNotes,
   plotsPanelGroups,
   resolvePlotSetId,
   SELECTIONS_SET_ID,
@@ -303,6 +304,7 @@ export function usePlotsModel({
   const notes = [
     ...(plot !== null && largeRead !== null ? [largeRead] : []),
     ...plotsNotes(panel, data, elementNoun, log1pAvailable, plotKind),
+    ...plotNonFiniteNotes(loadedStats, elementNoun),
   ]
   const geneErrors = panel.genes.flatMap((gene) => {
     const error = data.geneErrors.get(gene)

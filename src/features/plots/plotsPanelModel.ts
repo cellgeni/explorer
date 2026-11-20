@@ -3,7 +3,11 @@ import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import { annotationSetGrouping } from '../annotations/annotationModel'
 import type { PlotKind } from './plotModel'
-import { PLOT_DENSITY_MAX_GROUPS, type PlotGroupsInput } from './plotStats'
+import {
+  PLOT_DENSITY_MAX_GROUPS,
+  type PlotGeneStats,
+  type PlotGroupsInput,
+} from './plotStats'
 
 // What the Plots panel plots (plan 22-D1 to 22-D3): the selected genes,
 // grouped by the classes of one annotation set, with the active selection
@@ -508,4 +512,21 @@ export function plotGenesPhrase(genes: readonly string[]): string {
   if (genes.length === 1) return genes[0] ?? '1 gene'
   if (genes.length === 2) return `${genes[0] ?? ''} and ${genes[1] ?? ''}`
   return `${genes.length.toLocaleString()} genes`
+}
+
+// A note per gene holding a stored NaN or infinity, which its numbers leave
+// out with its cell.
+export function plotNonFiniteNotes(
+  stats: readonly Pick<PlotGeneStats, 'gene' | 'nonFinite'>[],
+  elementNoun: string,
+): readonly string[] {
+  return stats.flatMap(({ gene, nonFinite }) =>
+    nonFinite === 0
+      ? []
+      : [
+          nonFinite === 1
+            ? `1 non-finite value skipped in ${gene}: its ${elementNoun.replace(/s$/, '')} is left out of ${gene}'s numbers.`
+            : `${nonFinite.toLocaleString()} non-finite values skipped in ${gene}: their ${elementNoun} are left out of ${gene}'s numbers.`,
+        ],
+  )
 }

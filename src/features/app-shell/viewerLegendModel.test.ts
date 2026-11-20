@@ -77,6 +77,24 @@ describe('viewerLegendSections', () => {
     expect(detail()).toBe('Mean z-score of 2 genes per cell')
   })
 
+  it('counts the non-finite values the colour skips', () => {
+    const genes = { ...input().genes, scaleMax: 2, names: ['N'], nonFiniteCount: 1 }
+    const [single] = viewerLegendSections(input({ colorMode: 'gene-expression', genes }))
+    expect(single).toMatchObject({
+      detail: 'Expression per cell; 1 non-finite value skipped',
+    })
+
+    const [combined] = viewerLegendSections(
+      input({
+        colorMode: 'gene-expression',
+        genes: { ...genes, names: ['N', 'M'], scoreMode: 'mean', nonFiniteCount: 3 },
+      }),
+    )
+    expect(combined).toMatchObject({
+      detail: 'Mean of 2 genes per cell; 3 non-finite values skipped',
+    })
+  })
+
   it('says when expression is loading, or cannot be shown', () => {
     const genes = { ...input().genes, names: ['SNAP25'] }
     const sections = (status: ViewerLegendInput['genes']['status']) =>

@@ -182,6 +182,11 @@ export function geneExpressionIntensity(
   scaleMin: number,
   scaleMax: number,
 ): number {
+  // A stored NaN or infinity draws as no expression.
+  if (!Number.isFinite(score)) {
+    return 0
+  }
+
   const span = scaleMax - scaleMin
 
   if (!(span > 0)) {

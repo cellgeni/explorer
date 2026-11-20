@@ -127,6 +127,30 @@ describe('plot statistics (plan 22-B, 22-C)', () => {
     expect(stats?.groups[0]?.expressing).toBe(1)
   })
 
+  it("leaves a non-finite value and its cell out of the gene's numbers", () => {
+    const store = storeWith(
+      gene('N', [
+        [0, Number.NaN],
+        [1, 2],
+        [2, 4],
+        [3, Number.POSITIVE_INFINITY],
+      ]),
+    )
+    store.setGroups({ classes: [['a', 'b', 'c', 'd', 'e']], selection: null })
+    const stats = store.stats(['N']).stats[0]
+    const group = stats?.groups[0] as PlotGroupStats
+    const all = stats?.distributions.stored.all[0]
+
+    // b, c and e: 2, 4 and an unstored 0.
+    expect(stats).toMatchObject({ nonFinite: 2, wholeNumbers: true, negative: false })
+    expect(group).toMatchObject({ cells: 3, expressing: 2, sum: 6 })
+    expect(plotGroupMean(group, 'stored')).toBe(2)
+    expect(plotGroupMean(group, 'log1p')).toBeCloseTo((Math.log(3) + Math.log(5)) / 3)
+    expect(all).toMatchObject({ count: 3, min: 0, median: 2, max: 4 })
+    expect(stats?.distributions.stored).toMatchObject({ low: 0, high: 4 })
+    expect([...(all?.density ?? [])].every(Number.isFinite)).toBe(true)
+  })
+
   it('lists genes it does not hold, and evicts the least recently used', () => {
     // Each gene below is 2 entries, 16 bytes.
     const store = new PlotStatsStore({ maxGeneBytes: 40 })
