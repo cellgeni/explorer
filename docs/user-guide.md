@@ -112,7 +112,10 @@ may read and waits for `Read Rows`.
 
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
-wrong, a message says why and the current dataset stays.
+wrong, a message says why and the current dataset stays. The same goes for a
+change of the open dataset's view (a Visium library, a SpatialData table,
+coordinate system or image, an Atera or MERSCOPE image): if it is cancelled
+or cannot be opened, the view on screen stays, and so do its control and link.
 
 Work in progress is listed at the bottom left of the view. Loading a dataset,
 diagnostics, transcripts, Magic Lens scans, embeddings, cell details and ROI

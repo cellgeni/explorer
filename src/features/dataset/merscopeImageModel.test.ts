@@ -6,6 +6,7 @@ import {
   IDLE_MERSCOPE_IMAGE_STATE,
   merscopeImageControlLoading,
   merscopeImageControlReady,
+  merscopeImageControlRestored,
   merscopeImageForLoad,
   merscopeImageSelectionToShareable,
   parseMerscopeImageChoice,
@@ -78,6 +79,16 @@ describe('MERSCOPE image choice', () => {
       merscopeImageSelectionToShareable(merscopeImageControlLoading(ready, null)),
     ).toEqual({ merscopeImage: 'none' })
     expect(merscopeImageControlLoading(IDLE_MERSCOPE_IMAGE_STATE, null)).toBe(
+      IDLE_MERSCOPE_IMAGE_STATE,
+    )
+  })
+
+  it('shows the image on screen again when the change does not load', () => {
+    const ready = merscopeImageControlReady(options(40 * MB), { stain: 'DAPI', z: 3 })
+    const loading = merscopeImageControlLoading(ready, { stain: 'PolyT', z: 0 })
+
+    expect(merscopeImageControlRestored(loading, { stain: 'DAPI', z: 3 })).toEqual(ready)
+    expect(merscopeImageControlRestored(IDLE_MERSCOPE_IMAGE_STATE, null)).toBe(
       IDLE_MERSCOPE_IMAGE_STATE,
     )
   })

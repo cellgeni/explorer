@@ -4,8 +4,10 @@ import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import {
   formatMerscopeImageChoice,
   merscopeImageControlLoading,
+  merscopeImageControlRestored,
   type MerscopeImageControlState,
 } from '../dataset/merscopeImageModel'
+import type { StartDatasetLoad } from './useDatasetLifecycle'
 
 interface MutableRef<T> {
   current: T
@@ -20,9 +22,7 @@ export interface UseMerscopeImageWorkflowOptions {
   readonly readShareableState?: () => ShareableState
   readonly setMerscopeImageState: Dispatch<SetStateAction<MerscopeImageControlState>>
   readonly shouldLoadMorphology: boolean
-  readonly startDatasetLoadRef: MutableRef<
-    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
-  >
+  readonly startDatasetLoadRef: MutableRef<StartDatasetLoad | null>
 }
 
 // The MERSCOPE stain and plane. A change reloads the dataset with the new
@@ -47,6 +47,8 @@ export function useMerscopeImageWorkflow({
         return
       }
 
+      const shownChoice = merscopeImageState.choice
+      const shownShareableState = initialShareableStateRef.current
       initialShareableStateRef.current = {
         ...readShareableState(),
         datasetUrl,
@@ -59,13 +61,21 @@ export function useMerscopeImageWorkflow({
       void startDatasetLoadRef.current?.(
         datasetUrl,
         choice !== null || shouldLoadMorphology,
+        {
+          undo: () => {
+            initialShareableStateRef.current = shownShareableState
+            setMerscopeImageState((state) =>
+              merscopeImageControlRestored(state, shownChoice),
+            )
+          },
+        },
       )
     },
     [
       appendDebugEvent,
       datasetUrl,
       initialShareableStateRef,
-      merscopeImageState.status,
+      merscopeImageState,
       readShareableState,
       setMerscopeImageState,
       shouldLoadMorphology,

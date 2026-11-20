@@ -29,6 +29,14 @@ export function ateraImageControlLoading(
   return state.status === 'idle' ? state : { status: 'loading', choice }
 }
 
+// The image on screen again, once a change's reload is cancelled or fails.
+export function ateraImageControlRestored(
+  state: AteraImageControlState,
+  choice: AteraImageChoice,
+): AteraImageControlState {
+  return state.status === 'idle' ? state : { status: 'ready', choice }
+}
+
 // The link names the 3D stack only; the 2D image is the default.
 export function ateraImageSelectionToShareable(state: AteraImageControlState): {
   readonly ateraImage?: string

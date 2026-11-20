@@ -65,6 +65,17 @@ export function visiumControlLoading(
       }
 }
 
+// The view on screen again, once a change's reload is cancelled or fails.
+export function visiumControlRestored(state: VisiumControlState): VisiumControlState {
+  if (state.status === 'idle') {
+    return state
+  }
+
+  const { requestedView: _requestedView, ...shown } = state
+  void _requestedView
+  return { ...shown, status: 'ready' }
+}
+
 // Share-link fields: the image always, the library only when there is a
 // choice, and off-tissue spots only when shown.
 export function visiumSelectionToShareable(state: VisiumControlState): {

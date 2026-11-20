@@ -13,6 +13,7 @@ import {
 import {
   visiumControlImage,
   visiumControlLoading,
+  visiumControlRestored,
   type VisiumControlState,
 } from '../dataset/visiumModel'
 import {
@@ -21,7 +22,7 @@ import {
 } from '../errors/loadErrorModel'
 import type { SpatialDatasetLoader } from './appDependencies'
 import { isAbortError } from './appRuntimeModel'
-import { isVisiumLifecycleDataset } from './useDatasetLifecycle'
+import { isVisiumLifecycleDataset, type StartDatasetLoad } from './useDatasetLifecycle'
 import { flatMorphologyImageFromSource } from './useVisiumHdBinWorkflow'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
@@ -41,9 +42,7 @@ export interface UseVisiumControlsWorkflowOptions {
   readonly setMorphologyState: Setter<MorphologyLoadState<StructuredLoadError>>
   readonly setVisiumControlState: Setter<VisiumControlState>
   readonly shouldLoadMorphology: boolean
-  readonly startDatasetLoadRef: MutableRef<
-    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
-  >
+  readonly startDatasetLoadRef: MutableRef<StartDatasetLoad | null>
   readonly visiumControlState: VisiumControlState
 }
 
@@ -158,6 +157,7 @@ export function useVisiumControlsWorkflow({
       const current = libraryChanged ? withoutRoi : shared
 
       requestIdRef.current += 1
+      const shownShareableState = initialShareableStateRef.current
       initialShareableStateRef.current = {
         ...current,
         datasetUrl,
@@ -173,7 +173,16 @@ export function useVisiumControlsWorkflow({
           showOffTissue ? 'shown' : 'hidden'
         }`,
       )
-      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology)
+      void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology, {
+        visiumView: {
+          libraryId: summary.libraryId,
+          showOffTissue: summary.showOffTissue,
+        },
+        undo: () => {
+          initialShareableStateRef.current = shownShareableState
+          setVisiumControlState(visiumControlRestored)
+        },
+      })
     },
     [
       appendDebugEvent,

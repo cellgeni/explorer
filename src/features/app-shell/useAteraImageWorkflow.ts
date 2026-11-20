@@ -2,9 +2,11 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { parseShareableState, type ShareableState } from '../../data/shareableState'
 import {
   ateraImageControlLoading,
+  ateraImageControlRestored,
   type AteraImageChoice,
   type AteraImageControlState,
 } from '../dataset/ateraImageModel'
+import type { StartDatasetLoad } from './useDatasetLifecycle'
 
 interface MutableRef<T> {
   current: T
@@ -18,9 +20,7 @@ export interface UseAteraImageWorkflowOptions {
   // The shareable state the view is in now; defaults to the URL hash.
   readonly readShareableState?: () => ShareableState
   readonly setAteraImageState: Dispatch<SetStateAction<AteraImageControlState>>
-  readonly startDatasetLoadRef: MutableRef<
-    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
-  >
+  readonly startDatasetLoadRef: MutableRef<StartDatasetLoad | null>
 }
 
 // The Atera 2D image or 3D DAPI stack. A change reloads the dataset with the
@@ -44,6 +44,8 @@ export function useAteraImageWorkflow({
         return
       }
 
+      const shownChoice = ateraImageState.choice
+      const shownShareableState = initialShareableStateRef.current
       initialShareableStateRef.current = {
         ...readShareableState(),
         datasetUrl,
@@ -51,11 +53,16 @@ export function useAteraImageWorkflow({
       }
       setAteraImageState((state) => ateraImageControlLoading(state, choice))
       appendDebugEvent(`Atera image change: ${choice === '3d' ? '3D DAPI stack' : '2D'}`)
-      void startDatasetLoadRef.current?.(datasetUrl, true)
+      void startDatasetLoadRef.current?.(datasetUrl, true, {
+        undo: () => {
+          initialShareableStateRef.current = shownShareableState
+          setAteraImageState((state) => ateraImageControlRestored(state, shownChoice))
+        },
+      })
     },
     [
       appendDebugEvent,
-      ateraImageState.status,
+      ateraImageState,
       datasetUrl,
       initialShareableStateRef,
       readShareableState,

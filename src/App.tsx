@@ -12,10 +12,14 @@ import {
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
 import type { LegendCategoryVisibilityChange } from './components/ViewerLegend'
-import { setSpatialDataSelection } from './datasets/datasetFactory'
+import {
+  setSpatialDataSelection,
+  spatialDataSelectionFor,
+} from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
   spatialDataControlLoading,
+  spatialDataControlRestored,
   spatialDataSelectionToShareable,
 } from './features/dataset/spatialDataModel'
 import { visiumSelectionToShareable } from './features/dataset/visiumModel'
@@ -183,6 +187,7 @@ import { useViewerLayerData } from './features/app-shell/useViewerLayerData'
 import {
   useDatasetLifecycle,
   type DatasetOpeningState,
+  type StartDatasetLoad,
 } from './features/app-shell/useDatasetLifecycle'
 import { useAppDomainState } from './features/app-shell/useAppDomainState'
 import { useVisiumControlsWorkflow } from './features/app-shell/useVisiumControlsWorkflow'
@@ -797,9 +802,7 @@ export function App({ dependencies }: AppProps = {}) {
     ),
   )
   const didApplyInitialDatasetUrlRef = useRef(false)
-  const startDatasetLoadRef = useRef<
-    ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null
-  >(null)
+  const startDatasetLoadRef = useRef<StartDatasetLoad | null>(null)
   const initialCustomImageUrlsRef = useRef<readonly string[]>(
     initialShareableState.customImageUrls ?? [],
   )
@@ -3708,6 +3711,7 @@ export function App({ dependencies }: AppProps = {}) {
     (selection: SpatialDataSelection) => {
       // The open dataset, not the address box, which may hold a failed one.
       const viewUrl = loadedDatasetUrl ?? datasetUrl
+      const shownSelection = spatialDataSelectionFor(viewUrl)
       setSpatialDataSelection(viewUrl, selection)
       setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
       appendDebugEvent(
@@ -3724,7 +3728,14 @@ export function App({ dependencies }: AppProps = {}) {
           .filter((part) => part !== null)
           .join(', ')}`,
       )
-      void startDatasetLoadRef.current?.(viewUrl, shouldLoadMorphology)
+      void startDatasetLoadRef.current?.(viewUrl, shouldLoadMorphology, {
+        undo: () => {
+          setSpatialDataSelection(viewUrl, shownSelection)
+          setSpatialDataControlState((state) =>
+            spatialDataControlRestored(state, shownSelection),
+          )
+        },
+      })
     },
     [
       appendDebugEvent,

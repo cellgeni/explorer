@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type { ShareableState } from '../../data/shareableState'
 import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
-import { visiumControlReady, type VisiumControlState } from '../dataset/visiumModel'
+import {
+  visiumControlLoading,
+  visiumControlReady,
+  type VisiumControlState,
+} from '../dataset/visiumModel'
+import type { StartDatasetLoad } from './useDatasetLifecycle'
 import { useVisiumControlsWorkflow } from './useVisiumControlsWorkflow'
 
 const DATASET_URL = 'https://example.test/visium.h5ad'
@@ -36,7 +41,7 @@ const SHARED: ShareableState = {
 
 function renderControls(state: VisiumControlState) {
   const initialShareableStateRef = { current: null as ShareableState | null }
-  const startDatasetLoad = vi.fn(async () => undefined)
+  const startDatasetLoad = vi.fn<StartDatasetLoad>(async () => undefined)
   const setVisiumControlState = vi.fn()
   const { result } = renderHook(() =>
     useVisiumControlsWorkflow({
@@ -72,7 +77,11 @@ describe('useVisiumControlsWorkflow', () => {
       visiumOffTissue: true,
     })
     expect(controls.setVisiumControlState).toHaveBeenCalled()
-    expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true)
+    // The view on screen, for the shared instance, if the reload stops.
+    expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true, {
+      visiumView: { libraryId: 'lib-A', showOffTissue: false },
+      undo: expect.any(Function),
+    })
   })
 
   it('drops the ROI when switching to another library', () => {
@@ -91,7 +100,32 @@ describe('useVisiumControlsWorkflow', () => {
       visiumLibrary: 'lib-B',
       visiumOffTissue: false,
     })
-    expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true)
+    // The view on screen, for the shared instance, if the reload stops.
+    expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true, {
+      visiumView: { libraryId: 'lib-A', showOffTissue: false },
+      undo: expect.any(Function),
+    })
+  })
+
+  it('puts the view on screen back if the reload is cancelled or fails', () => {
+    const ready = visiumControlReady('h5ad', SUMMARY, 'hires')
+    const controls = renderControls(ready)
+
+    act(() => {
+      controls.result.current.handleVisiumViewChange({ libraryId: 'lib-B' })
+    })
+    const [, , viewChange] = controls.startDatasetLoad.mock.calls[0] ?? []
+    act(() => {
+      viewChange?.undo()
+    })
+
+    expect(controls.initialShareableStateRef.current).toBeNull()
+    const restore = controls.setVisiumControlState.mock.calls.at(-1)?.[0] as (
+      state: VisiumControlState,
+    ) => VisiumControlState
+    expect(
+      restore(visiumControlLoading(ready, { libraryId: 'lib-B', showOffTissue: false })),
+    ).toEqual(ready)
   })
 
   it('does nothing before a Visium dataset is ready', () => {
