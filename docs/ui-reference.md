@@ -193,12 +193,12 @@ shown sections first (`setLinked`).
 **Panels** (the `Panels` group, `PanelToggles` in `TopBar.tsx`): the
 windows' toggles sit at the right of the bar, above where the windows open.
 A dataset shows only the ones it has: none on images, no `Plots` or `Query`
-on Visium HD, whose bins have no annotation sets. From 1100 px wide each
-shows its icon and name; between 860 and 1100 px only the icon, with the
-name still read and in the tooltip. Under 860 px they fold into a menu (see
-[Narrow Screens](#narrow-screens)). Until 2026-11-19 they were Cells ›
-Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the genes and
-clusters.
+on Visium HD, whose bins are not cells the panels can read. From 1100 px
+wide each shows its icon and name; between 860 and 1100 px only the icon,
+with the name still read and in the tooltip. Under 860 px they fold into a
+menu (see [Narrow Screens](#narrow-screens)). Until 2026-11-19 they were
+Cells › Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the
+genes and clusters.
 
 The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
 leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in

@@ -4676,8 +4676,13 @@ export function App({ dependencies }: AppProps = {}) {
           },
     [activeSavedSelection, roiCellIds, roiState],
   )
+  // The Plots window (plan 22) reads each gene across every cell. Visium HD
+  // has no matrix it reads by gene across every bin, so the window is hidden
+  // there, as Cell Query is.
   const plotsAvailable =
-    platformAdapter.capabilities.cells && platformAdapter.capabilities.annotations
+    platformAdapter.capabilities.cells &&
+    platformAdapter.capabilities.annotations &&
+    platformAdapter.kind !== 'visium-hd'
   const plotsDatasetSets = useMemo(
     () =>
       plotDatasetSets(

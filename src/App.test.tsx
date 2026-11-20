@@ -277,7 +277,7 @@ describe('App', () => {
     )
   })
 
-  it('hides transcript controls for Visium HD datasets', async () => {
+  it('hides transcript controls, Plots and Query for Visium HD datasets', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(
       null,
@@ -336,6 +336,9 @@ describe('App', () => {
       expect(
         screen.queryByRole('checkbox', { name: 'Show transcripts' }),
       ).not.toBeInTheDocument()
+      // Plots and Cell Query read cells, which bins are not (EXP-030).
+      expect(screen.queryByRole('button', { name: 'Plots' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Query' })).not.toBeInTheDocument()
     } finally {
       viewport.restore()
     }

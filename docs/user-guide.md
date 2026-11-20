@@ -433,11 +433,11 @@ by the classes of one of the dataset's sets, or by your selections:
    figure and `Export CSV` the numbers behind it.
 
 The plot uses every cell of the dataset, not just the view, and compares
-nothing statistically. It works on every platform except Visium HD, whose bins
-have no sets. When a read would be over 32 MiB, as for an AnnData matrix
-stored by cell (CSR) and read over HTTP, the panel says how large it is and
-waits for `Read`; it reads nothing over 256 MiB. See the
-[UI reference](ui-reference.md#plots-panel).
+nothing statistically. It works on every platform except Visium HD, which has
+no matrix the viewer can read by gene across every bin. When a read would be
+over 32 MiB, as for an AnnData matrix stored by cell (CSR) and read over HTTP,
+the panel says how large it is and waits for `Read`; it reads nothing over
+256 MiB. See the [UI reference](ui-reference.md#plots-panel).
 
 The Cell Query panel, opened from `Query` in the top bar, finds cells by their
 classes and values and lists them in a table:
