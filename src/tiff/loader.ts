@@ -15,7 +15,7 @@ import { imagePixels, micrometers, tilesForBboxOnAxes } from '../data/coords'
 import { tiffChunkKey } from './chunkKeys'
 import { loadZchunkStorePyramidOptions } from './zchunkStore'
 import { openRemoteTiff, remoteTiffVersion } from './remoteTiff'
-import { parseOmeTiffMetadata } from './omeMetadata'
+import { assertSquareOmePixels, parseOmeTiffMetadata } from './omeMetadata'
 import {
   isQptiffDescription,
   isQptiffUrl,
@@ -77,6 +77,14 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type { TiffStripLevel, TiffStripTags } from './strips'
+import {
+  retiledTileBytes,
+  retiledTileDecodeOptions,
+  retiledTilesUnder,
+  tiffRetiledLevel,
+  type RetiledStoredTile,
+  type TiffRetiledLevel,
+} from './retiledLevels'
 import type {
   NdpiBlock,
   NdpiIfdSummary,
@@ -147,6 +155,9 @@ export interface TiffPyramidLoaderOptions {
   // Levels stored in strips, whose tiles are cut from bands of rows instead
   // of read from the tile index.
   readonly stripLevels?: ReadonlyMap<number, TiffStripLevel>
+  // Levels stored in tiles of another size than the loader's, whose tiles
+  // are cut from the stored tiles they overlap.
+  readonly retiledLevels?: ReadonlyMap<number, TiffRetiledLevel>
   // NDPI levels, whose tiles are cut from blocks of JPEG restart intervals.
   readonly ndpiLevels?: ReadonlyMap<number, NdpiLevelRead>
   readonly fetcher?: typeof fetch
@@ -320,6 +331,10 @@ async function openTiffImage(
   }
 
   const omeMetadata = parseOmeTiffMetadata(description)
+  // A pixel size given with the image is square by definition.
+  if (options.micrometersPerPixel === undefined) {
+    assertSquareOmePixels(description)
+  }
   const channelIndex =
     selection.ifdIndex ?? channelIndexForUrl(selection.sourceUrl, omeMetadata.channels)
 
@@ -402,6 +417,7 @@ async function openTiffImage(
   const chunkIndex = new Map<string, TiffChunkIndexEntry>()
   const levelMeta = new Map<number, TiffLevelMeta>()
   const stripLevels = new Map<number, TiffStripLevel>()
+  const retiledLevels = new Map<number, TiffRetiledLevel>()
   const subIfds = await readNumberArrayTag(firstDirectory, 'SubIFDs')
   const levelDirectories = [
     firstDirectory,
@@ -456,12 +472,34 @@ async function openTiffImage(
         return
       }
 
+      // A level tiled in another size is indexed by its own tiles.
+      const storedTileSize =
+        level === 0 ? tileSize : await readStoredTileSize(directory, tileSize)
+
+      if (
+        storedTileSize.tileWidth !== tileWidth ||
+        storedTileSize.tileHeight !== tileHeight
+      ) {
+        retiledLevels.set(
+          level,
+          tiffRetiledLevel({
+            level,
+            width,
+            ...storedTileSize,
+            decodeMetadata,
+            ...(options.labels === true ? { labels: true } : {}),
+          }),
+        )
+        levelMeta.set(level, tiffLevelMeta(levelSize))
+      }
+
       await indexLevel({
         ...levelSize,
+        ...storedTileSize,
         chunkIndex,
         directory,
         level,
-        levelMeta,
+        ...(retiledLevels.has(level) ? {} : { levelMeta }),
         ...(indexPlanarConfiguration === undefined
           ? {}
           : { planarConfiguration: indexPlanarConfiguration }),
@@ -481,6 +519,7 @@ async function openTiffImage(
     chunkIndex,
     levelMeta,
     ...(stripLevels.size === 0 ? {} : { stripLevels }),
+    ...(retiledLevels.size === 0 ? {} : { retiledLevels }),
     units,
     tileWidth,
     tileHeight,
@@ -490,6 +529,24 @@ async function openTiffImage(
     channels: omeMetadata.channels,
     ...(omeMetadata.zStack === undefined ? {} : { zStack: omeMetadata.zStack }),
   })
+}
+
+// A tiled level's own tile size, or the given one where its tags are missing.
+async function readStoredTileSize(
+  directory: ImageFileDirectory,
+  fallback: { readonly tileWidth: ImagePixels; readonly tileHeight: ImagePixels },
+): Promise<{ readonly tileWidth: ImagePixels; readonly tileHeight: ImagePixels }> {
+  const [width, height] = await Promise.all([
+    readOptionalNumberTag(directory, 'TileWidth'),
+    readOptionalNumberTag(directory, 'TileLength'),
+  ])
+
+  return {
+    tileWidth:
+      width === undefined || width <= 0 ? fallback.tileWidth : imagePixels(width),
+    tileHeight:
+      height === undefined || height <= 0 ? fallback.tileHeight : imagePixels(height),
+  }
 }
 
 // The strip tags of a stripped IFD; undefined for a tiled one.
@@ -1946,6 +2003,7 @@ export class TiffPyramidLoader {
     | undefined
   private readonly levels: ReadonlyMap<number, TiffLevelMeta>
   private readonly stripLevels: ReadonlyMap<number, TiffStripLevel>
+  private readonly retiledLevels: ReadonlyMap<number, TiffRetiledLevel>
   private readonly ndpiLevels: ReadonlyMap<number, NdpiLevelRead>
   // Each NDPI level's restart-interval layout, read with its first tile.
   private readonly ndpiGeometries = new Map<number, Promise<NdpiLevelGeometry>>()
@@ -2010,6 +2068,7 @@ export class TiffPyramidLoader {
     }
     this.levelDecodeMetadata = options.levelDecodeMetadata ?? []
     this.stripLevels = options.stripLevels ?? new Map()
+    this.retiledLevels = options.retiledLevels ?? new Map()
     this.ndpiLevels = options.ndpiLevels ?? new Map()
     this.tilesFromSharedReads =
       this.ndpiLevels.size > 0 &&
@@ -2113,8 +2172,9 @@ export class TiffPyramidLoader {
   }
 
   tileDecodeOptions(level?: number, col?: number, row?: number): TiffTileDecodeMetadata {
+    const retiledLevel = this.retiledLevels.get(level ?? 0)
     const planarSampleByteLengths =
-      level === undefined || col === undefined || row === undefined
+      level === undefined || col === undefined || row === undefined || retiledLevel
         ? undefined
         : this.planarSampleByteLengths(level, col, row)
 
@@ -2123,6 +2183,7 @@ export class TiffPyramidLoader {
     // Without a level, the full-resolution level's tags.
     return {
       ...(this.stripLevels.get(level ?? 0)?.tileDecode ??
+        retiledLevel?.tileDecode ??
         (ndpiLevel === undefined
           ? undefined
           : ndpiTileDecodeMetadata(ndpiLevel.source.samplesPerPixel)) ??
@@ -2145,6 +2206,12 @@ export class TiffPyramidLoader {
 
     if (stripLevel !== undefined) {
       return this.fetchStripTileBytes(level, stripLevel, col, row, signal)
+    }
+
+    const retiledLevel = this.retiledLevels.get(level)
+
+    if (retiledLevel !== undefined) {
+      return this.fetchRetiledTileBytes(retiledLevel, col, row, signal)
     }
 
     const ndpiLevel = this.ndpiLevels.get(level)
@@ -2200,8 +2267,12 @@ export class TiffPyramidLoader {
     tiles: readonly TileIndex[],
     signal?: AbortSignal,
   ): Promise<number | null> {
-    // Strip and NDPI tiles are cut from reads shared between tiles.
-    if (this.stripLevels.has(level) || this.ndpiLevels.has(level)) {
+    // Strip, re-tiled and NDPI tiles are cut from reads shared between tiles.
+    if (
+      this.stripLevels.has(level) ||
+      this.retiledLevels.has(level) ||
+      this.ndpiLevels.has(level)
+    ) {
       return null
     }
 
@@ -2253,6 +2324,75 @@ export class TiffPyramidLoader {
     )
 
     return stripTileBytes(stripLevel, bands, window, this.tileWidth, this.tileHeight)
+  }
+
+  // A tile of a level stored in tiles of another size, cut from the decoded
+  // stored tiles it overlaps.
+  private async fetchRetiledTileBytes(
+    retiledLevel: TiffRetiledLevel,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<Uint8Array> {
+    const { level } = retiledLevel
+    const size = this.tileSourceSize(level, col, row)
+    const window = {
+      left: col * this.tileWidth,
+      top: row * this.tileHeight,
+      width: size.width,
+      height: size.height,
+    }
+    const stored = await Promise.all(
+      retiledTilesUnder(retiledLevel, window).map(async (tile) => ({
+        ...tile,
+        bytes: await stripBands.get(
+          `${this.url}|${level}:tile:${tile.row}:${tile.col}`,
+          (tileSignal) => this.readRetiledTile(retiledLevel, tile, tileSignal),
+          signal,
+        ),
+      })),
+    )
+
+    return retiledTileBytes(retiledLevel, stored, window, this.tileWidth, this.tileHeight)
+  }
+
+  private async readRetiledTile(
+    retiledLevel: TiffRetiledLevel,
+    tile: RetiledStoredTile,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    const chunks = await this.chunkIndex(retiledLevel.level)
+    const chunk = chunks.get(tiffChunkKey(retiledLevel.level, tile.row, tile.col))
+
+    if (chunk === undefined) {
+      throw new Error(
+        `No TIFF chunk for level=${retiledLevel.level} row=${tile.row} col=${tile.col}.`,
+      )
+    }
+
+    const planes = await Promise.all(
+      (hasSampleChunks(chunk) ? chunk.sampleChunks : [chunk]).map((plane) =>
+        this.fetchChunkBytes(plane, signal),
+      ),
+    )
+    const bytes = new Uint8Array(planes.reduce((sum, plane) => sum + plane.byteLength, 0))
+    let offset = 0
+
+    for (const plane of planes) {
+      bytes.set(plane, offset)
+      offset += plane.byteLength
+    }
+
+    return abortable(
+      decodeStripBandOffMainThread(
+        bytes,
+        retiledTileDecodeOptions(
+          retiledLevel,
+          planes.map((plane) => plane.byteLength),
+        ),
+      ),
+      signal,
+    )
   }
 
   private async readStripBand(

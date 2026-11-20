@@ -99,7 +99,11 @@ lists the label, macro, and thumbnail.
 4. Builds levels: level 0 is the selected IFD; levels 1…n are its `SubIFDs`.
    Tile offsets come from `TileOffsets`/`TileByteCounts`; a stripped level
    (`StripOffsets`, no `TileWidth`) is cut into tiles instead (see
-   [Stripped TIFFs](#stripped-tiffs)).
+   [Stripped TIFFs](#stripped-tiffs)). Every level is shown in level 0's tile
+   size, so a SubIFD level stored in tiles of another size has each tile cut
+   from the stored tiles under it, decoded once and kept as strip bands are
+   (`src/tiff/retiledLevels.ts`). That needs 8- or 16-bit samples and fails
+   for JPEG 2000 tiles, with a message naming the level's tile size.
 
 The parsed file (header and IFD chain) is shared by loaders of the same file,
 for the 4 most recently opened files, so opening another channel IFD or z plane
@@ -199,16 +203,17 @@ TIFF it already holds and place it:
 
 ### OME-XML
 
-| Field                                          | Use                                                                                                                                 |
-| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `Pixels@PhysicalSizeX` (+ unit)                | µm/px; `PhysicalSizeY` is ignored. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
-| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                    |
-| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                        |
-| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette      |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                 |
-| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                              |
-| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                             |
-| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                          |
+| Field                                          | Use                                                                                                                                                  |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Pixels@PhysicalSizeX` (+ unit)                | µm/px. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored.                                              |
+| `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it |
+| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                     |
+| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                         |
+| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                       |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                                  |
+| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                               |
+| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                              |
+| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                           |
 
 ### QPTIFF
 
