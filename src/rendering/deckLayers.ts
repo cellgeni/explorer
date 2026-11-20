@@ -90,6 +90,7 @@ export {
   expressingElementsByScore,
   geneExpressionElementsToLayerData,
   geneExpressionScoreSpread,
+  nonFiniteScoreCount,
   styleCellsByGeneExpression,
   styleGeneExpressionElementsByScale,
   styleGridCellByGeneExpression,

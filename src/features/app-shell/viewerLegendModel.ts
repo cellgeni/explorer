@@ -55,6 +55,9 @@ export interface ViewerLegendInput {
     readonly status: 'loading' | 'ready' | 'unavailable'
     // The cells a z-score compares with (geneExpressionZScoreCells).
     readonly zScoreCells?: 'all' | 'view'
+    // Cells whose stored value is NaN or infinite, drawn as no expression
+    // and left out of the scale and z-scores.
+    readonly nonFiniteCount?: number
   }
   // The loaded annotations with their colours, or null when none are loaded.
   readonly annotations: {
@@ -161,6 +164,11 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
           : input.genes.zScoreCells === 'all'
             ? `, relative to all ${plural}`
             : `, relative to ${plural} in view`
+      const nonFinite = input.genes.nonFiniteCount ?? 0
+      const skipped =
+        nonFinite === 0
+          ? ''
+          : `; ${nonFinite.toLocaleString()} non-finite ${nonFinite === 1 ? 'value' : 'values'} skipped`
 
       return {
         kind: 'continuous',
@@ -172,8 +180,8 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
             : status === 'unavailable'
               ? 'Expression unavailable'
               : names.length === 1
-                ? `Expression per ${singular}`
-                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${singular}${comparedWith}`,
+                ? `Expression per ${singular}${skipped}`
+                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${singular}${comparedWith}${skipped}`,
         gradient: geneExpressionScaleGradient(colorScale),
         min: formatGeneScaleValue(scaleMin),
         max: formatGeneScaleValue(scaleMax),

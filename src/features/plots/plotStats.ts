@@ -73,6 +73,9 @@ export interface PlotGeneStats {
   readonly wholeNumbers: boolean
   // Some stored value is below 0, as in a scaled matrix.
   readonly negative: boolean
+  // Stored values that are NaN or infinite. Their cells are left out of the
+  // gene's numbers, as if not in the group.
+  readonly nonFinite: number
   // log1p is null when a value is below 0, where the panel turns it off.
   readonly distributions: {
     readonly stored: PlotScaleDistributions
@@ -278,18 +281,29 @@ function geneStats(
   const sumLog1p = new Float64Array(groupCount)
   // Stored values per group, to place each group's values together below.
   const stored = new Uint32Array(groupCount)
+  // Non-finite values per group, whose cells the group's numbers leave out.
+  const skipped = new Uint32Array(groupCount)
   // Over every value read, in a group or not (22-D4).
   let wholeNumbers = true
   let negative = false
+  let nonFinite = 0
 
   for (let index = 0; index < values.rows.length; index += 1) {
     if ((values.rows[index] ?? rowCount) >= rowCount) continue
     const value = values.values[index] ?? 0
+    if (!Number.isFinite(value)) {
+      nonFinite += 1
+      continue
+    }
     if (wholeNumbers && !Number.isInteger(value)) wholeNumbers = false
     if (value < 0) negative = true
   }
 
   forEachGroupValue(values, groups, rowCount, (group, value) => {
+    if (!Number.isFinite(value)) {
+      skipped[group] = (skipped[group] ?? 0) + 1
+      return
+    }
     sum[group] = (sum[group] ?? 0) + value
     // log1p is undefined at -1 and below; the panel turns it off for
     // negative values anyway (22-D4).
@@ -299,10 +313,11 @@ function geneStats(
     stored[group] = (stored[group] ?? 0) + 1
   })
 
-  const sizes =
+  const sizes = (
     selection === null
       ? summary.classSizes
       : [summary.selectionSize, ...summary.classSizes]
+  ).map((cells, group) => cells - (skipped[group] ?? 0))
   const sorted = sortedGroupValues(values, groups, rowCount, stored)
   const withDensities = groupCount <= PLOT_DENSITY_MAX_GROUPS
 
@@ -316,6 +331,7 @@ function geneStats(
     })),
     wholeNumbers,
     negative,
+    nonFinite,
     distributions: {
       stored: scaleDistributions(sorted, sizes, (value) => value, withDensities),
       log1p: negative
@@ -370,6 +386,7 @@ function sortedGroupValues(
   const all = new Float32Array(starts[stored.length] ?? 0)
   const next = starts.slice(0, stored.length)
   forEachGroupValue(values, groups, rowCount, (group, value) => {
+    if (!Number.isFinite(value)) return
     const index = next[group] ?? 0
     all[index] = value
     next[group] = index + 1

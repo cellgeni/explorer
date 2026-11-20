@@ -103,7 +103,10 @@ export function expressingElementsByScore(
   elements: readonly OverviewCellDatum[],
 ): readonly OverviewCellDatum[] {
   return elements
-    .filter((element) => (element.expressionCount ?? 0) > 0)
+    .filter(
+      (element) =>
+        Number.isFinite(element.expressionCount) && (element.expressionCount ?? 0) > 0,
+    )
     .sort((first, second) => (first.expressionCount ?? 0) - (second.expressionCount ?? 0))
 }
 
@@ -310,7 +313,9 @@ export function createGeneExpressionElementStyleIndex(
 // Each element's score for the genes, as the map colours it: the sum of their
 // counts, the mean, or the mean's z-score across the cells read. Those cells
 // are `cellCount` (GeneExpressionBatch.cellCount), so the cells left out of
-// `elements` count as 0, whichever platform left them out.
+// `elements` count as 0, whichever platform left them out. A non-finite count
+// (a stored NaN or infinity) keeps its value and is left out of the z-score's
+// mean and SD, so the other cells still get a score.
 export function geneExpressionScores(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
@@ -329,28 +334,44 @@ export function geneExpressionScores(
     return meanScores
   }
 
-  const populationSize = Math.max(cellCount, meanScores.length)
-  const zeroCellsLeftOut = populationSize - meanScores.length
+  const zeroCellsLeftOut = Math.max(0, cellCount - meanScores.length)
+  let counted = zeroCellsLeftOut
   let total = 0
 
   for (const score of meanScores) {
+    if (!Number.isFinite(score)) continue
+    counted += 1
     total += score
   }
 
-  const mean = total / populationSize
+  const mean = counted > 0 ? total / counted : 0
   let squaredDistanceTotal = zeroCellsLeftOut * mean ** 2
 
   for (const score of meanScores) {
-    squaredDistanceTotal += (score - mean) ** 2
+    if (Number.isFinite(score)) squaredDistanceTotal += (score - mean) ** 2
   }
 
-  const standardDeviation = Math.sqrt(squaredDistanceTotal / populationSize)
+  const standardDeviation = counted > 0 ? Math.sqrt(squaredDistanceTotal / counted) : 0
 
-  if (standardDeviation === 0) {
-    return meanScores.map(() => 0)
+  return meanScores.map((score) =>
+    !Number.isFinite(score)
+      ? score
+      : standardDeviation === 0
+        ? 0
+        : (score - mean) / standardDeviation,
+  )
+}
+
+// How many of these scores are a stored NaN or infinity, which the map draws
+// as no expression and leaves out of the scale.
+export function nonFiniteScoreCount(scores: Iterable<number | undefined>): number {
+  let count = 0
+
+  for (const score of scores) {
+    if (score !== undefined && !Number.isFinite(score)) count += 1
   }
 
-  return meanScores.map((score) => (score - mean) / standardDeviation)
+  return count
 }
 
 // The score at the top of the scale: the given one, or the highest score.
@@ -368,7 +389,7 @@ function maxExpressionScore(scores: readonly number[]): number {
   let maxScore = 0
 
   for (const score of scores) {
-    maxScore = Math.max(maxScore, score)
+    if (Number.isFinite(score)) maxScore = Math.max(maxScore, score)
   }
 
   return maxScore

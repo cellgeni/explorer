@@ -322,6 +322,7 @@ import {
   createGeneExpressionElementStyleIndex,
   geometricAnnotationsToLayerData,
   geneExpressionScoreSpread,
+  nonFiniteScoreCount,
   styleCellBoundariesByGeneExpression,
   styleGridCellByGeneExpression,
   unscoredGridCell,
@@ -1658,6 +1659,13 @@ export function App({ dependencies }: AppProps = {}) {
     geneExpressionState.status === 'ready'
       ? geneExpressionZScoreCells(geneExpressionState.mode)
       : undefined
+  const geneExpressionNonFiniteCount = useMemo(
+    () =>
+      nonFiniteScoreCount(
+        styledGeneExpressionElements.map((element) => element.expressionCount),
+      ),
+    [styledGeneExpressionElements],
+  )
   const legendSections = useMemo(
     () =>
       viewerLegendSections({
@@ -1683,6 +1691,7 @@ export function App({ dependencies }: AppProps = {}) {
           ...(geneExpressionZScoreCellsShown === undefined
             ? {}
             : { zScoreCells: geneExpressionZScoreCellsShown }),
+          nonFiniteCount: geneExpressionNonFiniteCount,
         },
         annotations: legendAnnotations,
         metadataTrack:
@@ -1725,6 +1734,7 @@ export function App({ dependencies }: AppProps = {}) {
       geneExpressionScoreMode,
       geneExpressionState.status,
       geneExpressionZScoreCellsShown,
+      geneExpressionNonFiniteCount,
       legendAnnotations,
       legendCellAreaMax,
       observationColorMode,

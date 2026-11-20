@@ -69,9 +69,9 @@ export interface GeneScoreSpread {
 export const EMPTY_GENE_SCORE_SPREAD: GeneScoreSpread = { top: 0, highest: 0 }
 
 // A percentile and the highest of `scores`. The percentile is by nearest rank
-// over the scores above 0: zeros would put it at 0 for a gene that few cells
-// express. It is a score some cell has; the 99th is the highest with 100 or
-// fewer.
+// over the finite scores above 0: zeros would put it at 0 for a gene that few
+// cells express. It is a score some cell has; the 99th is the highest with 100
+// or fewer.
 export function geneScoreSpread(
   scores: ArrayLike<number>,
   percentile: number = AUTO_GENE_SCALE_PERCENTILE,
@@ -82,7 +82,7 @@ export function geneScoreSpread(
   for (let index = 0; index < scores.length; index += 1) {
     const score = scores[index] ?? 0
 
-    if (score > 0) {
+    if (score > 0 && score < Number.POSITIVE_INFINITY) {
       count += 1
       highest = Math.max(highest, score)
     }
@@ -96,7 +96,7 @@ export function geneScoreSpread(
   for (let index = 0; index < scores.length; index += 1) {
     const score = scores[index] ?? 0
 
-    if (score > 0) {
+    if (score > 0 && score < Number.POSITIVE_INFINITY) {
       positive[filled] = score
       filled += 1
     }

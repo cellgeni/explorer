@@ -442,6 +442,11 @@ z-score of n genes per cell, relative to all cells" or "… relative to cells in
 view". A cell's z-score can therefore change as the view moves on a large
 dataset, but not between platforms.
 
+A stored NaN or infinite value colours its cell as no expression. It is left
+out of the z-score's mean and standard deviation and of the Gene scale's top,
+so the other cells keep their colours, and the legend adds "; n non-finite
+values skipped".
+
 For Visium HD, gene overlays colour bins (see
 [Visium HD](./modalities/visium-hd.md#feature-read-paths)).
 
@@ -853,6 +858,9 @@ Method:
   value as 0.
 - A cell that two classes of an imported set both list counts in both, and
   IDs that match no matrix row are left out; a note says how many of each.
+- A stored NaN or infinite value is left out with its cell: that gene's
+  cells, means, quartiles and violin count only the other cells, and a note
+  says how many values were skipped in which gene.
 - The plot compares nothing statistically: there are no tests, p-values or
   rankings between groups ([Phase 15](plan/phases/15-interface-redesign.md)'s
   non-goal).
@@ -1050,7 +1058,8 @@ category lists last:
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
   the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin. A
   z-score adds the cells it compares with: ", relative to all cells" or ",
-  relative to cells in view" (see `Expression detail`).
+  relative to cells in view" (see `Expression detail`). Cells whose value is
+  NaN or infinite add "; n non-finite values skipped".
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
   Clusters", a link that opens the layer panel and Cells and scrolls to the
