@@ -254,7 +254,13 @@ or exact points.
 - **Exact.** `loadTranscriptZarrViewport` reads the level-0 tiles that
   intersect the viewport and filters by `valid`, `Min QV`, bbox,
   `Gene-only calls`, and the feature filter, stopping at the budget. Cell IDs
-  are then added from `transcripts.parquet` (1.5 s deadline). Without the
+  are then added from `transcripts.parquet` (1.5 s deadline), matching each
+  point to the row in the same field of view whose `transcript_id` has the
+  same low 32 bits. The Zarr's `id` holds those bits and the index of the
+  field of view in `fov_names`; the high 32 bits are 0x10000 plus that index
+  (checked on XOA 1.7.1 and the demo's newer output), and the point then shows
+  the full `transcript_id`. Before 2026-11 the join compared the low bits
+  with the full ID, so no Zarr point got its cell. Without the
   Zarr, DuckDB queries `transcripts.parquet` directly. If the estimate is ≥ 80%
   of `Exact budget`, the user must press `Load exact viewport`.
 

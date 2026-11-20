@@ -391,9 +391,10 @@ export function mergeTranscriptPointMetadata(
       return point
     }
 
+    // The Zarr holds only the low 32 bits of the file's transcript_id.
     return {
       ...point,
-      transcriptId: point.transcriptId ?? parquetPoint.transcriptId ?? parquetPoint.id,
+      transcriptId: parquetPoint.transcriptId ?? point.transcriptId ?? parquetPoint.id,
       cellId: parquetPoint.cellId,
       cellAssignment:
         parquetPoint.cellAssignment ??
@@ -640,8 +641,16 @@ export function transcriptAggregateRequestKey(
   ].join('|')
 }
 
+// Pairs a Zarr point with its transcripts.parquet row. The Zarr's `id` holds
+// the low 32 bits of `transcript_id` and the index of the field of view, and
+// the high 32 bits are 0x10000 plus that index (XOA 1.7 and 3.x), so the field
+// of view and the low 32 bits name one transcript.
 function transcriptPointMetadataKey(point: TranscriptPoint): string {
-  return `${point.fovName ?? ''}\u0000${point.transcriptId ?? point.id}`
+  return `${point.fovName ?? ''}\u0000${transcriptIdLow32(point.transcriptId ?? point.id)}`
+}
+
+function transcriptIdLow32(id: string): string {
+  return /^\d+$/.test(id) ? (BigInt(id) & 0xffff_ffffn).toString() : id
 }
 
 function transcriptResultWithMetadataDeadline(
