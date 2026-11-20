@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 import type { UserConfig } from 'vite'
 import viteConfig, {
+  buildCommitMeta,
   crossOriginIsolationHeaders,
   dependencyChunkGroups,
 } from '../../vite.config'
@@ -70,5 +71,26 @@ describe('vite config', () => {
       'spatial-io-vendor',
     )
     expect(groupOf('/app/node_modules/hyparquet/src/index.js')).toBe('spatial-io-vendor')
+  })
+})
+
+describe('buildCommitMeta', () => {
+  const sha = '0123456789abcdef0123456789abcdef01234567'
+  const tags = (plugin: ReturnType<typeof buildCommitMeta>) =>
+    (plugin.transformIndexHtml as () => unknown)()
+
+  it("records a build's commit, and a release build's tag", () => {
+    expect(tags(buildCommitMeta(sha, 'v0.1.0'))).toEqual([
+      { tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' },
+      {
+        tag: 'meta',
+        attrs: { name: 'build-release', content: 'v0.1.0' },
+        injectTo: 'head',
+      },
+    ])
+    expect(tags(buildCommitMeta(sha, undefined))).toEqual([
+      { tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' },
+    ])
+    expect(tags(buildCommitMeta(undefined, 'v0.1.0'))).toEqual([])
   })
 })

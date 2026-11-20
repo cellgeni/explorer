@@ -43,7 +43,10 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
-      - run: npx vite build --base ./
+      # Help shows the tag and commit, and index.html carries both as metas.
+      - run: |
+          VITE_COMMIT_SHA="$(git rev-parse HEAD)" VITE_RELEASE_TAG="$TAG" \
+            npx vite build --base ./
       - run: npx playwright install --with-deps chromium
       # Smoke-tests the same dist/ that gets zipped.
       - run: npx playwright test --grep @smoke
@@ -54,6 +57,8 @@ jobs:
           cp LICENSE "$name/"
           jq -n --arg tag "$TAG" --arg commit "$(git rev-parse HEAD)" \
             '{tag: $tag, commit: $commit}' > "$name/version.json"
+          grep -q "<meta name=\"build-commit\" content=\"$(git rev-parse HEAD)\"" "$name/index.html"
+          grep -q "<meta name=\"build-release\" content=\"$TAG\"" "$name/index.html"
           zip -qr "$name.zip" "$name"
       - name: Attach to the release
         run: gh release upload "$TAG" "explorer-$TAG.zip" --clobber

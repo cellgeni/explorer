@@ -50,9 +50,16 @@ curl -LO "https://github.com/cellgeni/explorer/releases/download/$TAG/explorer-$
 unzip "explorer-$TAG.zip"
 ```
 
-`explorer-$TAG/version.json` records the tag and commit. Use the
-`explorer-$TAG/` folder wherever the steps below use `dist/`, and skip
-[Build Locally](#build-locally).
+`explorer-$TAG/version.json` records the tag and commit, and so do the
+app's `index.html` (`build-release` and `build-commit` meta tags) and the foot
+of `Help` ("Release v0.1.0, build 0123456"). Use the `explorer-$TAG/` folder
+wherever the steps below use `dist/`, and skip [Build Locally](#build-locally).
+
+A release build's `Help` links and its start screen's example gallery are not
+pinned to its tag: they read the documentation and `examples/index.json` on
+`main`, as the hosted app does, so fixes to the docs and examples reach copies
+already deployed. To serve your own gallery instead, build locally with
+`VITE_EXAMPLES_INDEX_URL` set.
 
 ## Build Locally
 

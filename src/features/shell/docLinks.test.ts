@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import {
   buildCommit,
+  buildRelease,
   DOCS_BASE_URL,
   HELP_LINKS,
   HOST_YOUR_OWN_DATA_URL,
@@ -87,5 +88,17 @@ describe('buildCommit', () => {
     expect(buildCommit(undefined)).toBeNull()
     expect(buildCommit('')).toBeNull()
     expect(buildCommit('main')).toBeNull()
+  })
+})
+
+describe('buildRelease', () => {
+  it('links a release tag, and shows nothing without one or with an odd one', () => {
+    expect(buildRelease('v0.1.0')).toEqual({
+      tag: 'v0.1.0',
+      href: 'https://github.com/cellgeni/explorer/releases/tag/v0.1.0',
+    })
+    expect(buildRelease(undefined)).toBeNull()
+    expect(buildRelease('')).toBeNull()
+    expect(buildRelease('v1 <script>')).toBeNull()
   })
 })

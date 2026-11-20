@@ -37,19 +37,35 @@ export const dependencyChunkGroups = [
   },
 ]
 
-// Records the deployed commit in index.html, so `curl` on the site shows it
-// without running the app. The Pages workflow sets VITE_COMMIT_SHA.
-export function buildCommitMeta(sha = process.env.VITE_COMMIT_SHA): Plugin {
+// Records the deployed commit, and a release build's tag, in index.html, so
+// `curl` on the site shows them without running the app. The Pages and
+// Release workflows set VITE_COMMIT_SHA; Release sets VITE_RELEASE_TAG.
+export function buildCommitMeta(
+  sha = process.env.VITE_COMMIT_SHA,
+  tag = process.env.VITE_RELEASE_TAG,
+): Plugin {
   return {
     name: 'build-commit-meta',
     transformIndexHtml() {
       if (sha === undefined || !/^[0-9a-f]{40}$/i.test(sha)) return []
       return [
         { tag: 'meta', attrs: { name: 'build-commit', content: sha }, injectTo: 'head' },
+        ...(tag === undefined || !RELEASE_TAG.test(tag)
+          ? []
+          : [
+              {
+                tag: 'meta',
+                attrs: { name: 'build-release', content: tag },
+                injectTo: 'head' as const,
+              },
+            ]),
       ]
     },
   }
 }
+
+// A release tag as Git allows it here: v0.1.0, 2026.11, …
+const RELEASE_TAG = /^[\w.+-]{1,64}$/
 
 export default defineConfig({
   assetsInclude: ['**/*.wasm'],
