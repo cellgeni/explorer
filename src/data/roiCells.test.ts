@@ -1,8 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from './coords'
-import { ROI_CELL_EXPORT_LIMIT, loadDatasetRoiCells } from './roiCells'
+import {
+  ROI_CELL_EXPORT_LIMIT,
+  loadDatasetRoiCells,
+  roiCellsStoppedAtLimit,
+} from './roiCells'
 import type { RoiSelection } from './roiSelection'
-import type { XeniumDataset } from '../datasets/xeniumDataset'
+import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
 
 const bbox = {
   minX: micrometers(1),
@@ -29,7 +33,8 @@ describe('dataset ROI cell loader', () => {
       { label: 'cells.parquet' },
     )
     expect(getDataset).toHaveBeenCalledWith('https://example.test/xenium/')
-    expect(cells).toHaveBeenCalledWith(bbox, { limit: ROI_CELL_EXPORT_LIMIT })
+    // One over the limit, to tell a full ROI from one with more inside.
+    expect(cells).toHaveBeenCalledWith(bbox, { limit: ROI_CELL_EXPORT_LIMIT + 1 })
   })
 
   it('passes a custom ROI cell limit', async () => {
@@ -42,7 +47,33 @@ describe('dataset ROI cell loader', () => {
       validateRangeSupport: async () => undefined,
     })
 
-    expect(cells).toHaveBeenCalledWith(bbox, { limit: 250 })
+    expect(cells).toHaveBeenCalledWith(bbox, { limit: 251 })
+  })
+
+  it('marks the cells cut short only when more lie inside than the limit', async () => {
+    const cell = (index: number) =>
+      ({
+        id: `cell-${index}`,
+        position: { x: micrometers(index), y: micrometers(0) },
+      }) as unknown as DatasetCell
+    const load = (count: number) =>
+      loadDatasetRoiCells('https://example.test/xenium/', bbox, {
+        getDataset: async () =>
+          ({
+            cells: async (_selection: unknown, { limit }: { limit: number }) =>
+              Array.from({ length: Math.min(count, limit) }, (_, index) => cell(index)),
+          }) as unknown as XeniumDataset,
+        limit: 3,
+        validateRangeSupport: async () => undefined,
+      })
+
+    const full = await load(3)
+    expect(full.map(({ id }) => id)).toEqual(['cell-0', 'cell-1', 'cell-2'])
+    expect(roiCellsStoppedAtLimit(full)).toBe(false)
+
+    const more = await load(10)
+    expect(more.map(({ id }) => id)).toEqual(['cell-0', 'cell-1', 'cell-2'])
+    expect(roiCellsStoppedAtLimit(more)).toBe(true)
   })
 
   it('delegates lasso ROI selections to the dataset cell query', async () => {
@@ -63,6 +94,6 @@ describe('dataset ROI cell loader', () => {
       validateRangeSupport: async () => undefined,
     })
 
-    expect(cells).toHaveBeenCalledWith(selection, { limit: ROI_CELL_EXPORT_LIMIT })
+    expect(cells).toHaveBeenCalledWith(selection, { limit: ROI_CELL_EXPORT_LIMIT + 1 })
   })
 })

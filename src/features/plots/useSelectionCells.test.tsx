@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
+import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type { RoiCellsLoader } from '../app-shell/appDependencies'
@@ -85,6 +86,35 @@ describe('useSelectionCells', () => {
     expect(result.current[0]?.name).toBe('Tumour edge')
     expect(result.current[0]?.cells.status).toBe('ready')
     expect(loadCells).toHaveBeenCalledTimes(2)
+  })
+
+  it('says a selection stopped at its limit only when the reader did', async () => {
+    const complete = box(0)
+    const cut = box(20)
+    const many = cells(...Array.from({ length: ROI_CELL_EXPORT_LIMIT + 1 }, String))
+    const loadCells = vi.fn<RoiCellsLoader>(async (_url, selection) =>
+      selection === complete ? many : roiCellsWithin(many, ROI_CELL_EXPORT_LIMIT),
+    )
+    const { result } = renderHook(() =>
+      useSelectionCells({
+        enabled: true,
+        datasetUrl: URL,
+        selections: [savedSelection('1', complete), savedSelection('2', cut)],
+        loadCells,
+        appendDebugEvent: vi.fn(),
+      }),
+    )
+
+    await waitFor(() => {
+      expect(
+        result.current.map(({ cells }) =>
+          cells.status === 'ready' ? [cells.cellIds.length, cells.hitCellLimit] : null,
+        ),
+      ).toEqual([
+        [ROI_CELL_EXPORT_LIMIT + 1, false],
+        [ROI_CELL_EXPORT_LIMIT, true],
+      ])
+    })
   })
 
   it('reports a failed lookup for that selection only', async () => {

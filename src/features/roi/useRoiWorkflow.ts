@@ -4,7 +4,7 @@ import type {
   ViewerMagicLensDetail,
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
-import { ROI_CELL_EXPORT_LIMIT } from '../../data/roiCells'
+import { roiCellsStoppedAtLimit } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
@@ -467,18 +467,11 @@ export function useRoiWorkflow({
             return
           }
 
-          setRoiState(
-            roiReady(
-              loadState.url,
-              bbox,
-              selection,
-              cells,
-              cells.length >= ROI_CELL_EXPORT_LIMIT,
-            ),
-          )
+          const stoppedAtLimit = roiCellsStoppedAtLimit(cells)
+          setRoiState(roiReady(loadState.url, bbox, selection, cells, stoppedAtLimit))
           appendDebugEvent(
             `ROI cells ready: ${cells.length.toLocaleString()}${
-              cells.length >= ROI_CELL_EXPORT_LIMIT ? '+' : ''
+              stoppedAtLimit ? '+' : ''
             } in ${formatElapsed(roiCellsStartedAt)}`,
           )
 

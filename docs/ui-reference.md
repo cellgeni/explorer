@@ -617,8 +617,10 @@ Selection card's tabs, the arrow keys, `Home` and `End` move between tabs.
 
 The card shows one selection from Annotations › Selections: the one drawn
 last, or the one chosen there. Under the name, "6,229 cells · 943,210 µm²"
-(count and area), or what is running ("Querying genes"). Then `ROI name`,
-which renames the selection, and, for cells, `Save ROI`, which adds the
+(count and area), or what is running ("Querying genes"). Xenium reads at most
+50,000 cells of a selection and Visium HD 50,000 bins; one with more inside
+shows "50,000+". Other platforms read every cell inside. Then `ROI name`, which
+renames the selection, and, for cells, `Save ROI`, which adds the
 selection as an annotation and colours by annotations. `Delete` (after the
 exports) removes the selection, with [Undo](#undo); closing the card keeps it
 in the list.
@@ -677,8 +679,10 @@ Method:
   not independent. Use exported cells for a proper differential expression
   analysis.
 
-Exports: `Export GeoJSON` (`{name}-roi.geojson`), `Export Cells`
-(`{name}-cells.csv`, up to 50,000 cells), `Export Transcripts`
+Exports: `Export GeoJSON` (`{name}-roi.geojson`, whose `hit_cell_limit` is
+true when Xenium stopped at 50,000 cells), `Export Cells` (`{name}-cells.csv`:
+the cells read, so up to 50,000 on Xenium and every cell elsewhere),
+`Export Transcripts`
 (`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, the selected
 genes on Atera, also shown for H5AD and SpatialData), or for Visium HD `Export Barcodes`
 (`{name}-barcodes.csv`, up to 50,000 bins).
