@@ -91,7 +91,9 @@ To cut a release, open Releases > Draft a new release, create a new `vX.Y.Z`
 tag on `main`, generate the release notes, and publish. The
 [Release workflow](.github/workflows/release.yml) then type-checks the tag,
 runs the unit and E2E smoke tests, builds the app, and attaches it to the
-release as `explorer-<tag>.zip`. Pre-releases get a zip too. To retry, or to
+release as `explorer-<tag>.zip`. Only its two `gh` steps receive the
+repository token, which can write releases; installing dependencies, the
+tests and the build run without it. Pre-releases get a zip too. To retry, or to
 attach a zip to an older release, run the workflow manually with the tag.
 
 The zip holds one `explorer-<tag>/` folder with `index.html`, `assets/`,
