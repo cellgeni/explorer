@@ -176,6 +176,10 @@ table annotates regions in the chosen coordinate system:
   single region) select a shape. The row is placed at the shape's centroid.
   Tables usually list rows in shape order, so the shape after the last match
   is tried first; an id `Map` is built only when that misses (`ShapeLookup`).
+  A 64-bit integer `instance_key` is compared as an exact integer
+  (`readObsInstanceIds`), so IDs above 2^53, such as spatialdata-io's MERSCOPE
+  `EntityID`s, are not rounded together. Before 2026-11 they were, and such a
+  table placed no row.
 - Rows annotating a labels region use their `obsm` spatial point mapped through
   the labels element's affine.
 - Rows that match nothing get `NaN` coordinates and are hidden. If no row is

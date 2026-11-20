@@ -275,6 +275,11 @@ export interface AnnDataObsAccess {
   readonly cellIds: readonly string[]
   readonly columnNames: readonly string[]
   readObsColumn(key: string): Promise<readonly (string | number | null)[] | null>
+  // As readObsColumn, but a 64-bit integer column keeps exact bigints, which
+  // numbers would round above 2^53: for joining on an instance key.
+  readObsInstanceIds(
+    key: string,
+  ): Promise<readonly (string | number | bigint | null)[] | null>
   readObsmPoints(): Promise<readonly { readonly x: number; readonly y: number }[] | null>
 }
 
@@ -2809,6 +2814,8 @@ async function readH5adCacheFromGroup(
             .keys()
             .filter((key) => key !== '_index' && !key.startsWith('__')),
           readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
+          readObsInstanceIds: (key) =>
+            readObsColumnValues(obs, key, cellIds.length, { exactIntegers: true }),
           readObsmPoints: async () => {
             const coordinates = await readOverviewCoordinateEmbedding(
               file,
@@ -3924,7 +3931,19 @@ async function readObsColumnValues(
   obs: H5GroupLike,
   key: string,
   rowCount: number,
-): Promise<readonly (string | number | null)[] | null> {
+): Promise<readonly (string | number | null)[] | null>
+async function readObsColumnValues(
+  obs: H5GroupLike,
+  key: string,
+  rowCount: number,
+  options: { readonly exactIntegers: true },
+): Promise<readonly (string | number | bigint | null)[] | null>
+async function readObsColumnValues(
+  obs: H5GroupLike,
+  key: string,
+  rowCount: number,
+  options: { readonly exactIntegers?: boolean } = {},
+): Promise<readonly (string | number | bigint | null)[] | null> {
   const entity = obs.get(key)
 
   if (isCategoricalGroup(entity)) {
@@ -3942,6 +3961,13 @@ async function readObsColumnValues(
     : isDataset(entity)
       ? await readDatasetValue(entity)
       : null
+
+  if (
+    options.exactIntegers === true &&
+    (value instanceof BigInt64Array || value instanceof BigUint64Array)
+  ) {
+    return value.length === rowCount ? Array.from(value) : null
+  }
 
   if (isNumericArray(value)) {
     return value.length === rowCount ? numericArrayToNumbers(value) : null
