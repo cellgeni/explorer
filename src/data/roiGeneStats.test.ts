@@ -54,6 +54,30 @@ describe('ROI gene stats', () => {
     })
   })
 
+  it('sums stored negative values but detects only positive ones', () => {
+    const cellA = intToCellId(1, 1)
+    const cellB = intToCellId(1, 2)
+    const matrix: GexResult = {
+      geneNames: ['Actb', 'Gad1'],
+      cells: new Map([
+        [cellA, { geneNames: ['Actb', 'Gad1'], counts: [2, -1] }],
+        [cellB, { geneNames: ['Gad1'], counts: [3] }],
+      ]),
+    }
+
+    const stats = summarizeRoiGeneExpression(matrix, {
+      cellCount: 2,
+      sampledCellIds: [cellA, cellB],
+    })
+
+    expect(stats.genes.find(({ gene }) => gene === 'Gad1')).toMatchObject({
+      count: 2,
+      detectedCells: 1,
+      percentCells: 50,
+      meanPerCell: 1,
+    })
+  })
+
   it('loads ROI gene stats from the cell-feature matrix for sampled cells', async () => {
     const cells = Array.from(
       { length: ROI_GENE_STATS_CELL_LIMIT + 1 },

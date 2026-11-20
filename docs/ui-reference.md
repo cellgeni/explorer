@@ -633,7 +633,8 @@ Method:
   32-cell preview first, then up to 10,000 cells (an even sample when there
   are more); Visium HD reads every selected bin. Values are as the matrix
   stores them: counts for Xenium, Atera and Visium HD, and `X` for H5AD,
-  Visium and SpatialData, which may already be normalised or log-transformed.
+  Visium and SpatialData, which may already be normalised, log-transformed or
+  scaled. A scaled matrix's negative values count in sums and means.
 - **Outside.** One reference sample per dataset: 8 runs of 64 consecutive
   cells (or loaded bins) spread evenly through the dataset's list, which is
   in matrix row order, so each run reads about one chunk. Those inside the
