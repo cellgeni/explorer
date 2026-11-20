@@ -201,6 +201,34 @@ describe('spatial dataset detection', () => {
     ).toBe(false)
   })
 
+  it("creates a dataset from the load's detection without probing again (EXP-024)", async () => {
+    const fetcher = fetcherForOkPaths([
+      '/visium/spatial/tissue_positions.csv',
+      '/visium/spatial/scalefactors_json.json',
+      '/visium/filtered_feature_bc_matrix.h5',
+    ])
+    const requests = () => vi.mocked(fetcher).mock.calls.map(([url]) => String(url))
+    const detection = await detectSpatialDataset('https://example.test/visium/', {
+      fetcher,
+    })
+    const probes = requests()
+
+    expect(probes.length).toBeGreaterThan(5)
+    await expect(
+      createSpatialDataset('https://example.test/visium', { fetcher, detection }),
+    ).resolves.toBeDefined()
+    expect(requests()).toEqual(probes)
+
+    // Without it, or with another URL's, the folder is probed again.
+    await createSpatialDataset('https://example.test/visium', { fetcher })
+    expect(requests()).toEqual([...probes, ...probes])
+    await createSpatialDataset('https://example.test/visium-copy', {
+      fetcher,
+      detection,
+    }).catch(() => undefined)
+    expect(requests().length).toBeGreaterThan(2 * probes.length)
+  })
+
   it('detects Space Ranger 1.x output from tissue_positions_list.csv', async () => {
     const detection = await detectSpatialDataset('https://example.test/sr1', {
       fetcher: fetcherForOkPaths([

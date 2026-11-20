@@ -1451,6 +1451,10 @@ describe('App', () => {
 
       openControls('diagnostics')
       await screen.findAllByText(/Visium HD ready/)
+      // The dataset is made from the load's detection, not probed again.
+      expect(getSpatialDataset).toHaveBeenCalledWith(visiumUrl, {
+        detection: await detectSpatialDataset.mock.results[0]?.value,
+      })
       expect(visiumDataset.elements).not.toHaveBeenCalled()
       expect(visiumDataset.segmentationElements).not.toHaveBeenCalled()
       await waitFor(() => {

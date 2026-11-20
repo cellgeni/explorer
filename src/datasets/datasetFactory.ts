@@ -188,11 +188,16 @@ export interface DetectSpatialDatasetOptions {
 export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions {
   readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
   readonly onH5adLoadProgress?: H5adLoadProgressReporter
+  // The detection the load already made, used instead of probing the
+  // dataset again when it is of this URL (EXP-024). It is passed with each
+  // load, so it never outlives one.
+  readonly detection?: SpatialDatasetDetection
 }
 
 export interface CachedSpatialDatasetOptions {
   readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
   readonly onH5adLoadProgress?: H5adLoadProgressReporter
+  readonly detection?: SpatialDatasetDetection
 }
 
 const VISIUM_HD_BINS: readonly {
@@ -1585,7 +1590,9 @@ export async function createSpatialDataset(
   baseUrl: string,
   options: CreateSpatialDatasetOptions = {},
 ): Promise<AnySpatialDataset> {
-  const detection = await detectSpatialDataset(baseUrl, options)
+  const detection =
+    detectionOf(baseUrl, options.detection) ??
+    (await detectSpatialDataset(baseUrl, options))
 
   if (detection.platform === 'xenium') {
     const { XeniumDataset } = await import('./xeniumDataset')
@@ -1807,6 +1814,7 @@ export function cachedSpatialDataset(
       ...(options.onH5adLoadProgress === undefined
         ? {}
         : { onH5adLoadProgress: options.onH5adLoadProgress }),
+      ...(options.detection === undefined ? {} : { detection: options.detection }),
     }),
   )
 }
@@ -2064,6 +2072,28 @@ async function registerFolderListing(
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
   setFolderListing(folderUrl, listing)
+}
+
+// A detection made for `baseUrl`, registered as detectSpatialDataset would
+// register it; undefined for one of another URL.
+function detectionOf(
+  baseUrl: string,
+  detection: SpatialDatasetDetection | undefined,
+): SpatialDatasetDetection | undefined {
+  const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
+
+  if (
+    detection === undefined ||
+    normalizeBaseUrl(detection.baseUrl) !== normalizedBaseUrl
+  ) {
+    return undefined
+  }
+
+  setDatasetManifest(
+    normalizedBaseUrl,
+    detection.platform === 'unknown' ? undefined : detection.manifest,
+  )
+  return detection
 }
 
 function normalizeBaseUrl(baseUrl: string): string {
