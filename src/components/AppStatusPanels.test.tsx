@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
+import {
+  ErrorSummary,
+  LoadingIndicator,
+  type LoadingTaskSummary,
+} from './AppStatusPanels'
 
 const TASKS: readonly LoadingTaskSummary[] = [
   { id: 'dataset', label: 'Loading dataset', detail: 'output', cancellable: true },
@@ -62,5 +66,49 @@ describe('LoadingIndicator', () => {
 
     expect(screen.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.getByText('+3 more')).toBeInTheDocument()
+  })
+})
+
+describe('ErrorSummary', () => {
+  it('offers Reload for an app updated under the tab, and diagnostics otherwise', () => {
+    const reload = vi.fn()
+    vi.stubGlobal('location', { ...window.location, reload })
+    const onRunDiagnostics = vi.fn()
+    const { rerender } = render(
+      <ErrorSummary
+        errors={[
+          {
+            source: 'Dataset overview',
+            code: 'app-updated',
+            title: 'The app was updated',
+            message: 'Importing a module script failed.',
+            action: 'The app was updated. Reload the page.',
+          },
+        ]}
+        onRunDiagnostics={onRunDiagnostics}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: 'Run Diagnostics' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Reload' }))
+    expect(reload).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <ErrorSummary
+        errors={[
+          {
+            source: 'Dataset overview',
+            code: 'network',
+            title: 'Network request failed',
+            message: 'Failed to fetch',
+            action: 'Check dataset URL, CORS, and network access.',
+          },
+        ]}
+        onRunDiagnostics={onRunDiagnostics}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: 'Reload' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Run Diagnostics' })).toBeVisible()
+    vi.unstubAllGlobals()
   })
 })

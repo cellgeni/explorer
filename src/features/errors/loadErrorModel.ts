@@ -1,4 +1,5 @@
 import { firstUrlIn, insecureRequestAction } from './insecureRequest'
+import { APP_UPDATED_ACTION, isStaleChunkError } from './staleChunk'
 
 export type LoadErrorCode =
   | 'network'
@@ -14,6 +15,8 @@ export type LoadErrorCode =
   | 'parquet-decode'
   | 'manifest'
   | 'decode'
+  // A lazily loaded part of the app is gone after a deploy (staleChunk.ts).
+  | 'app-updated'
   | 'unknown'
 
 export type LoadErrorSource =
@@ -97,6 +100,21 @@ export function createStructuredLoadError(
 
   if (detection !== null) {
     return datasetDetectionLoadError(source, message, detection, insecureAction)
+  }
+
+  // Before the network advice: the browser reports a missing chunk as a
+  // failed fetch, but the dataset is not at fault.
+  if (isStaleChunkError(error)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'app-updated',
+        title: 'The app was updated',
+        message,
+        action: APP_UPDATED_ACTION,
+      },
+      detail,
+    )
   }
 
   if (rangeReadStatus === 403 || rangeReadStatus === 404) {

@@ -1,6 +1,7 @@
 import { CloseIcon, IconButton } from '../../components/ui'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { datasetDisplayName } from './documentTitle'
+import { ReloadAppButton } from '../errors/ReloadAppButton'
 
 interface DatasetLoadToastProps {
   readonly failedUrl: string
@@ -29,6 +30,7 @@ export function DatasetLoadToast({
           {openDatasetName === null ? '.' : `; ${openDatasetName} is still open.`}
         </p>
         <p className="dataset-load-toast-action">{error.action}</p>
+        {error.code === 'app-updated' ? <ReloadAppButton /> : null}
       </div>
       <IconButton title="Dismiss" icon={<CloseIcon />} onClick={onDismiss} />
     </div>

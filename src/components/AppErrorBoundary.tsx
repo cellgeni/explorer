@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { ReloadAppButton } from '../features/errors/ReloadAppButton'
+import { APP_UPDATED_ACTION, isStaleChunkError } from '../features/errors/staleChunk'
 
 interface AppErrorBoundaryProps {
   readonly children: ReactNode
@@ -29,6 +31,8 @@ export class AppErrorBoundary extends Component<
       return this.props.children
     }
 
+    const updated = isStaleChunkError(this.state.error)
+
     return (
       <main className="app-shell app-error-shell">
         <section
@@ -36,8 +40,14 @@ export class AppErrorBoundary extends Component<
           role="alert"
           aria-label="Application error"
         >
-          <h1>Application error</h1>
+          <h1>{updated ? 'The app was updated' : 'Application error'}</h1>
           <p>{this.state.error.message}</p>
+          {updated ? (
+            <>
+              <p>{APP_UPDATED_ACTION}</p>
+              <ReloadAppButton />
+            </>
+          ) : null}
           <button
             type="button"
             title="Retry application"
