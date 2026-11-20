@@ -42,6 +42,9 @@ const OPTIONAL_CELL_OVERVIEW_COLUMNS = new Set(['nucleus_count', 'segmentation_m
 export interface CellOverviewPoint {
   readonly cellId?: CellId
   readonly position: DataPoint
+  // Depth for cells placed in 3D, in micrometres like position: a third
+  // column of AnnData obsm `spatial`.
+  readonly z?: number
   readonly transcriptCount: number
   readonly cellArea?: number
   readonly nucleusCount?: number

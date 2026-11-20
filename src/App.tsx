@@ -108,14 +108,17 @@ import {
   type LinkedSectionsColoring,
 } from './features/collection/LinkedSections'
 import { SectionStackViewer } from './features/collection/SectionStackViewer'
-import { stackSections } from './features/collection/sectionStackModel'
+import { stackSections, type StackSection } from './features/collection/sectionStackModel'
 import {
   compareUrlsAfterOpening,
   keepsViewOnOpening,
   linkedSectionEntries,
   toggledCompareUrls,
 } from './features/collection/linkedSectionsModel'
-import { useCollectionPreviewStore } from './features/collection/useCollectionPreviews'
+import {
+  useCollectionPreviewStore,
+  useOpenDatasetPreviewStore,
+} from './features/collection/useCollectionPreviews'
 import { LinkedViewChannel } from './components/linkedView'
 import type { InitialViewStateOverride } from './components/viewerCoreTypes'
 import {
@@ -3316,12 +3319,39 @@ export function App({ dependencies }: AppProps = {}) {
     volumeViewAvailable &&
     volumeViewDatasetUrl !== null &&
     volumeViewDatasetUrl === loadedDatasetUrl
+  // The 3D view of cells placed in 3D (a third spatial coordinate), over the
+  // 2D view like the image's, and kept open the same way. One 3D view shows
+  // at a time.
+  const [cellViewDatasetUrl, setCellViewDatasetUrl] = useState<string | null>(null)
+  const cellViewAvailable = useMemo(
+    () => overviewCells.some((cell) => cell.z !== undefined),
+    [overviewCells],
+  )
+  const cellViewShown =
+    cellViewAvailable &&
+    cellViewDatasetUrl !== null &&
+    cellViewDatasetUrl === loadedDatasetUrl &&
+    !volumeViewShown &&
+    !sectionStackShown
   const setVolumeViewOpen = useCallback(
     (open: boolean) => {
       setVolumeViewDatasetUrl(open ? loadedDatasetUrl : null)
+      if (open) setCellViewDatasetUrl(null)
     },
-    [loadedDatasetUrl],
+    [loadedDatasetUrl, setCellViewDatasetUrl],
   )
+  const setCellViewOpen = useCallback(
+    (open: boolean) => {
+      setCellViewDatasetUrl(open ? loadedDatasetUrl : null)
+
+      if (open) {
+        setVolumeViewDatasetUrl(null)
+        setSectionStackCollectionUrl(null)
+      }
+    },
+    [loadedDatasetUrl, setCellViewDatasetUrl],
+  )
+  const shareableCellView = cellViewAvailable ? (cellViewShown ? '3d' : '2d') : undefined
   // In the link while the image can be shown in 3D; while the image opens, a
   // 3D view the link or manifest asked for stays in it.
   const shareableImageView = volumeViewAvailable
@@ -3568,6 +3598,7 @@ export function App({ dependencies }: AppProps = {}) {
       setCellFillOpacity,
       setCellPointScale,
       setVolumeViewDatasetUrl,
+      setCellViewDatasetUrl,
       setImageLayerOpacity,
       setShowTranscriptOverlay,
       setDatasetAbout,
@@ -3933,6 +3964,7 @@ export function App({ dependencies }: AppProps = {}) {
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
       morphologyZPlane: shareableMorphologyZPlane,
       imageView: shareableImageView,
+      cellView: shareableCellView,
       observationColorMode,
       shouldLoadMorphology,
       showCellBoundaries,
@@ -4244,6 +4276,32 @@ export function App({ dependencies }: AppProps = {}) {
       linkedSectionsKey === '' ? [] : linkedSectionsKey.split('\n'),
     )
   }, [collectionPreviewStore, linkedSectionsKey])
+  // The open dataset's cells in the 3D view, read as a section's are, from
+  // the dataset the main view has open.
+  const cellViewStore = useOpenDatasetPreviewStore({
+    url: cellViewShown ? loadedDatasetUrl : null,
+    loaders: collectionPreviewLoaders,
+    genes: collectionPreviewGenes,
+    scoreMode: geneExpressionScoreMode,
+    annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
+    paused: isLoading,
+  })
+  const cellViewSections = useMemo(
+    (): readonly StackSection[] =>
+      cellViewDatasetUrl === null
+        ? []
+        : [
+            {
+              entry: {
+                path: cellViewDatasetUrl,
+                url: cellViewDatasetUrl,
+                ...(loadedDatasetName === null ? {} : { name: loadedDatasetName }),
+              },
+              z: 0,
+            },
+          ],
+    [cellViewDatasetUrl, loadedDatasetName],
+  )
   // Opens a dataset of the collection, keeping the genes and colouring. A
   // section registered to the open one keeps the view and the sections shown
   // beside it; opening one of those swaps it with the open dataset.
@@ -4335,6 +4393,9 @@ export function App({ dependencies }: AppProps = {}) {
     cellFillOpacity,
     cellPointScale,
     cellLayerControlsVisible: platformAdapter.capabilities.cells,
+    cellViewAvailable,
+    cellViewOpen: cellViewShown,
+    setCellViewOpen,
     cellMetadataTracks,
     geneExpressionBatch,
     geneExpressionColorScale,
@@ -4977,6 +5038,19 @@ export function App({ dependencies }: AppProps = {}) {
               }}
             />
           ) : null}
+          {cellViewShown ? (
+            <SectionStackViewer
+              key={cellViewDatasetUrl}
+              mode="cells"
+              sections={cellViewSections}
+              store={cellViewStore}
+              coloring={sectionColoring}
+              cellPointScale={cellPointScale}
+              onClose={() => {
+                setCellViewOpen(false)
+              }}
+            />
+          ) : null}
           {linkedSections.length === 0 ? null : (
             <div className="viewer-tile-header">
               <span className="viewer-tile-name" title={loadedDatasetName ?? undefined}>
@@ -5097,6 +5171,7 @@ export function App({ dependencies }: AppProps = {}) {
                         setSectionStackCollectionUrl(
                           sectionStackShown ? null : openCollectionUrl,
                         )
+                        if (!sectionStackShown) setCellViewDatasetUrl(null)
                       },
                     },
                   })}

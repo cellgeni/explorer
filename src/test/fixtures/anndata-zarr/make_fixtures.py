@@ -6,8 +6,12 @@
   consolidated metadata are read.
 - tiny.v3.zarr: the same AnnData with a CSR X, written as Zarr v3 without
   consolidated metadata.
+- stack.zarr: tiny.zarr with a third obsm `spatial` column, each cell's z, as
+  registered serial sections combined in one AnnData. The matrix is chunked
+  two columns wide, as anndata chunks a large one, so z is in chunks of its
+  own.
 
-Both hold obsm `spatial`, `X_umap`, and `X_scvi`; only a listing of obsm finds
+All hold obsm `spatial`, `X_umap`, and `X_scvi`; only a listing of obsm finds
 `X_scvi`, as the viewer does not probe for it by name. The obs column
 "stage  " ends in spaces, as some exported sample sheets do.
 
@@ -28,7 +32,7 @@ import zarr
 HERE = Path(__file__).resolve().parent
 
 
-def tiny_anndata(x):
+def tiny_anndata(x, depths=None):
     obs = pd.DataFrame(
         {
             "cluster": pd.Categorical(["A", "B", "A", "B", "A", "B"]),
@@ -39,6 +43,8 @@ def tiny_anndata(x):
     )
     var = pd.DataFrame(index=["Actb", "Gad1", "Gapdh", "Sst"])
     spatial = np.array([[0, 0], [10, 0], [0, 10], [10, 10], [5, 5], [20, 20]], dtype="float64")
+    if depths is not None:
+        spatial = np.column_stack([spatial, depths])
     umap = np.array([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12]], dtype="float32")
     scvi = np.arange(18, dtype="float32").reshape(6, 3)
     return ad.AnnData(
@@ -78,6 +84,14 @@ def write(path, adata, zarr_format, consolidated):
             zarr.open_group(path, mode="a", zarr_format=3).attrs.update(attrs)
 
 
+def rechunk_obsm(path, key, chunks):
+    obsm = zarr.open_group(path / "obsm", mode="a", zarr_format=2)
+    values = obsm[key][...]
+    attrs = dict(obsm[key].attrs)
+    obsm.create_array(key, data=values, chunks=chunks, overwrite=True).attrs.update(attrs)
+    zarr.consolidate_metadata(path, zarr_format=2)
+
+
 def main():
     write(HERE / "tiny.zarr", tiny_anndata(matrix()), 2, consolidated=True)
     write(
@@ -86,6 +100,13 @@ def main():
         3,
         consolidated=False,
     )
+    write(
+        HERE / "stack.zarr",
+        tiny_anndata(matrix(), depths=[0, 0, 60, 60, 120, 120]),
+        2,
+        consolidated=True,
+    )
+    rechunk_obsm(HERE / "stack.zarr", "spatial", (4, 2))
 
 
 if __name__ == "__main__":

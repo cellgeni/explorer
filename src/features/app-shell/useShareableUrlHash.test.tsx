@@ -49,6 +49,7 @@ function ShareableUrlHashProbe({
       morphologyEnabledChannelIds: ['Channel:1'],
       morphologyZPlane: 6,
       imageView: undefined,
+      cellView: undefined,
       observationColorMode: 'transcript-count',
       shouldLoadMorphology: true,
       showCellBoundaries: false,

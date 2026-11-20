@@ -103,8 +103,23 @@ export function openingStackDepthScaleLog2(frame: StackFrame | null): number {
   return Math.min(MAX_STACK_DEPTH_SCALE_LOG2, Math.round(Math.log2(wanted)))
 }
 
-// Places a section's cells, drawn at (x, -y, 0), in the stack: centred on
-// the frame, at its stretched depth. Column-major, as deck.gl takes it.
+// The depths a stack spans: each section's, and for a section whose cells
+// have their own depths, its cells' range above it.
+export function stackDepths(
+  sections: readonly StackSection[],
+  previews: readonly (PreviewEntry | null)[],
+): readonly number[] {
+  return sections.flatMap((section, index) => {
+    const depths = previews[index]?.cells?.depths
+    return depths === undefined
+      ? [section.z]
+      : [section.z + depths.min, section.z + depths.max]
+  })
+}
+
+// Places a section's cells, drawn at (x, -y, 0), or at (x, -y, z) for cells
+// with their own depths, in the stack: centred on the frame, at its
+// stretched depth. Column-major, as deck.gl takes it.
 export function sectionModelMatrix(
   frame: StackFrame,
   z: number,
@@ -114,7 +129,7 @@ export function sectionModelMatrix(
   return Float32Array.of(
     1, 0, 0, 0,
     0, 1, 0, 0,
-    0, 0, 1, 0,
+    0, 0, depthScale, 0,
     -frame.centerX, frame.centerY, (z - frame.centerZ) * depthScale, 1,
   )
 }
@@ -159,6 +174,32 @@ export function stackStatus(
         ? `Reading sections: ${done.toLocaleString()} of ${sections.length.toLocaleString()}`
         : null,
     missing: missing.length === 0 ? null : `Not shown: ${missing.join(', ')}`,
+  }
+}
+
+// What the 3D view of one dataset's cells says under it: while its cells,
+// or what colours them, are read, and why it cannot show them.
+export function cellViewStatus(
+  preview: PreviewEntry | null,
+  colored: boolean,
+): StackStatus {
+  const missing =
+    preview?.unavailable != null
+      ? preview.unavailable.replace(/\.$/, '')
+      : preview?.error != null
+        ? 'The cells could not be read'
+        : null
+
+  return {
+    reading:
+      missing !== null
+        ? null
+        : preview?.cells == null
+          ? 'Reading cells'
+          : colored && preview.loading
+            ? 'Reading colours'
+            : null,
+    missing: missing === null ? null : `Not shown: ${lowerFirst(missing)}`,
   }
 }
 

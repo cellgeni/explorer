@@ -51,6 +51,8 @@ export class CollectionPreviewStore {
   private readonly urls: readonly string[]
   private readonly loaders: CollectionPreviewLoaders
   private readonly concurrency: number
+  // The datasets are open in the main view: see openPreviewSource.
+  private readonly open: boolean
   private readonly sources = new Map<string, Promise<PreviewSource>>()
   private readonly cells = new Map<string, PreviewCells>()
   private readonly unavailable = new Map<string, string>()
@@ -78,11 +80,12 @@ export class CollectionPreviewStore {
   constructor(
     urls: readonly string[],
     loaders: CollectionPreviewLoaders,
-    options: { readonly concurrency?: number } = {},
+    options: { readonly concurrency?: number; readonly open?: boolean } = {},
   ) {
     this.urls = urls
     this.loaders = loaders
     this.concurrency = options.concurrency ?? PREVIEW_CONCURRENCY
+    this.open = options.open ?? false
   }
 
   readonly subscribe = (listener: () => void): (() => void) => {
@@ -216,7 +219,7 @@ export class CollectionPreviewStore {
         }
       } else if (request.genes.length > 0 && !this.scores.has(url)) {
         const scores = await source.scores(
-          cells.bounds,
+          cells,
           request.genes,
           request.scoreMode,
           signal,
@@ -248,7 +251,9 @@ export class CollectionPreviewStore {
     const existing = this.sources.get(url)
     if (existing !== undefined) return existing
 
-    const opening = openPreviewSource(url, this.loaders).catch((error: unknown) => {
+    const opening = openPreviewSource(url, this.loaders, undefined, {
+      open: this.open,
+    }).catch((error: unknown) => {
       if (!(error instanceof PreviewUnavailableError)) this.sources.delete(url)
       throw error
     })

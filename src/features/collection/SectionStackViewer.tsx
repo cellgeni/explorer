@@ -29,14 +29,17 @@ import {
   SECTION_STACK_VIEW,
   sectionStackLayers,
   stackPick,
+  stackPickDepth,
   stackPickText,
   type StackSectionInput,
 } from './sectionStackLayers'
 import {
+  cellViewStatus,
   MAX_STACK_DEPTH_SCALE_LOG2,
   MIN_STACK_DEPTH_SCALE_LOG2,
   openingStackDepthScaleLog2,
   sectionModelMatrix,
+  stackDepths,
   stackFrame,
   stackStatus,
   type StackSection,
@@ -45,10 +48,13 @@ import {
 // Serial sections stacked in 3D, over the views: each section's cells from
 // its collection preview, at its depth, coloured as the main view colours
 // cells. Closing it returns to the views underneath, which stay mounted.
+// With mode 'cells', the one section is the open dataset, whose cells have
+// their own depths (a third spatial coordinate).
 
 interface SectionStackViewerProps {
   // Shallowest first.
   readonly sections: readonly StackSection[]
+  readonly mode?: 'sections' | 'cells'
   readonly store: CollectionPreviewStore | null
   readonly coloring: LinkedSectionsColoring
   readonly cellPointScale: number
@@ -68,6 +74,7 @@ const PICKING_RADIUS_PIXELS = 6
 
 export function SectionStackViewer({
   sections,
+  mode = 'sections',
   store,
   coloring,
   cellPointScale,
@@ -90,10 +97,11 @@ export function SectionStackViewer({
   const colored = annotations !== null || genes.length > 0
   const percentile = geneScalePercentile(scaleRange)
   const sharedScale = typeof scaleRange.max === 'number'
+  const cellsMode = mode === 'cells'
   const frame = useMemo(
     () =>
       stackFrame(
-        sections.map((section) => section.z),
+        stackDepths(sections, previews),
         previews.map((preview) => preview?.cells?.bounds ?? null),
       ),
     [previews, sections],
@@ -158,6 +166,15 @@ export function SectionStackViewer({
       const pick = stackPick(info, stack.targets)
       const section = pick === null ? undefined : sections[pick.section]
       const input = pick === null ? null : (inputs[pick.section] ?? null)
+      const depth = pick === null || input === null ? null : stackPickDepth(pick, input)
+      // The section, then the cell's own depth when it has one.
+      const label =
+        section === undefined
+          ? ''
+          : [
+              ...(cellsMode ? [] : [collectionEntryLabel(section.entry)]),
+              ...(depth === null ? [] : [`z ${formatDepth(section.z + depth)} µm`]),
+            ].join(' · ')
 
       setHover(
         pick === null || section === undefined || input === null
@@ -165,16 +182,11 @@ export function SectionStackViewer({
           : {
               x: info.x,
               y: info.y,
-              text: stackPickText(
-                pick,
-                collectionEntryLabel(section.entry),
-                input,
-                genes,
-              ),
+              text: stackPickText(pick, label, input, genes),
             },
       )
     },
-    [genes, inputs, sections, stack.targets],
+    [cellsMode, genes, inputs, sections, stack.targets],
   )
   const handleViewStateChange = useCallback(
     ({ viewState: next }: { readonly viewState: unknown }) => {
@@ -202,14 +214,17 @@ export function SectionStackViewer({
     }
   }, [])
 
-  const status = stackStatus(sections, previews, colored)
+  const status = cellsMode
+    ? cellViewStatus(previews[0] ?? null, colored)
+    : stackStatus(sections, previews, colored)
   const first = sections[0]?.z ?? 0
   const last = sections.at(-1)?.z ?? 0
+  const cells = previews[0]?.cells ?? null
 
   return (
     <section
       className="volume-viewer section-stack"
-      aria-label="3D section stack"
+      aria-label={cellsMode ? '3D cells' : '3D section stack'}
       ref={containerRef}
       onPointerLeave={() => {
         setHover(null)
@@ -227,13 +242,30 @@ export function SectionStackViewer({
           onLoad={removeDeckFromTabOrder}
         />
       </div>
-      <div className="volume-viewer-toolbar" role="group" aria-label="3D stack settings">
-        <p className="section-stack-summary">
-          {sections.length.toLocaleString()} sections, z {formatDepth(first)} to{' '}
-          {formatDepth(last)} µm
-        </p>
+      <div
+        className="volume-viewer-toolbar"
+        role="group"
+        aria-label={cellsMode ? '3D cell settings' : '3D stack settings'}
+      >
+        {cellsMode ? (
+          cells?.depths === undefined ? null : (
+            <p className="section-stack-summary">
+              {cells.cellIds.length.toLocaleString()} cells, z{' '}
+              {formatDepth(cells.depths.min)} to {formatDepth(cells.depths.max)} µm
+            </p>
+          )
+        ) : (
+          <p className="section-stack-summary">
+            {sections.length.toLocaleString()} sections, z {formatDepth(first)} to{' '}
+            {formatDepth(last)} µm
+          </p>
+        )}
         <Slider
-          title="Stretch or flatten the stack along z; ×1 is the sections' true spacing"
+          title={
+            cellsMode
+              ? 'Stretch or flatten the cells along z; ×1 is their true depth'
+              : "Stretch or flatten the stack along z; ×1 is the sections' true spacing"
+          }
           label="Depth"
           min={MIN_STACK_DEPTH_SCALE_LOG2}
           max={MAX_STACK_DEPTH_SCALE_LOG2}
@@ -258,9 +290,13 @@ export function SectionStackViewer({
           <div
             className="section-stack-scale"
             title={
-              sharedScale
-                ? 'Every section uses this scale, the range set in Gene scale'
-                : `Each section runs up to its own ${formatPercentile(percentile)} percentile of the scores above 0; cells above it get the top colour. Type a top score in Gene scale to put every section on one scale`
+              cellsMode
+                ? sharedScale
+                  ? 'The range set in Gene scale'
+                  : `Runs up to the ${formatPercentile(percentile)} percentile of the scores above 0; cells above it get the top colour`
+                : sharedScale
+                  ? 'Every section uses this scale, the range set in Gene scale'
+                  : `Each section runs up to its own ${formatPercentile(percentile)} percentile of the scores above 0; cells above it get the top colour. Type a top score in Gene scale to put every section on one scale`
             }
           >
             <span className="section-stack-scale-genes">

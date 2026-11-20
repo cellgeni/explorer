@@ -96,6 +96,7 @@ export function testCellsSectionModel(
       onBoundaryOpacityPercentChange: vi.fn(),
       pointScale: 1,
       onPointScaleChange: vi.fn(),
+      view: null,
       ...overrides.appearance,
     },
     genes: {

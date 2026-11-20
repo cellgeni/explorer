@@ -332,7 +332,10 @@ The H5AD reader requires:
   the gene name, and the index stays searchable as an alias.
 - `/obsm` with an `n_obs x 2+` coordinate matrix. The first of `X_spatial`,
   `spatial`, `X_umap`, `umap`, `X_tsne`, `X_tSNE`, `tsne`, `X_pca` is used for
-  positions, and every value must be finite.
+  positions, and every value must be finite. A third column of `X_spatial`
+  or `spatial` places cells in 3D: write it as each cell's z in micrometres,
+  such as its section's depth in a block of registered serial sections
+  (`adata.obsm["spatial"] = np.column_stack([xy, z])`).
 - `/X` as either a dense `n_obs x n_vars` dataset or a sparse group with
   `data`, `indices`, `indptr`, and a `shape` attribute. Groups with
   `encoding-type = csc_matrix` are read as CSC; all others as CSR.

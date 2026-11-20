@@ -141,7 +141,10 @@ Features:
       SpatialData transformations), not measured on large stacks, no section
       range or click to open, camera not in the link, and no registered test
       dataset or E2E test (see
-      [Phase 24](phases/24-section-stack.md#known-gaps)).
+      [Phase 24](phases/24-section-stack.md#known-gaps)). The 3D view of one
+      dataset's cells takes z only from a third obsm `spatial` column, and
+      cannot open one section of such a file at a time (see the
+      [follow-up](phases/24-section-stack.md#follow-up-2026-11-20-cells-placed-in-3d-in-one-dataset)).
 - [ ] Store and file browser: non-Zarr files in consolidated stores read over
       HTTP, and SpatialData points as one table rather than part by part;
       also min and max for binary columns, Rows for writers that store a

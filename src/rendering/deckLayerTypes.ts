@@ -11,6 +11,9 @@ import type {
 export interface OverviewCellDatum {
   readonly id: string
   readonly position: Position
+  // The cell's depth when cells are placed in 3D (CellOverviewPoint.z). The
+  // 2D view draws every cell at z 0.
+  readonly z?: number
   readonly radiusPixels: number
   readonly radiusMicrometers?: number
   readonly fillColor: Color
