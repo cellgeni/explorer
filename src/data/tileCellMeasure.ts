@@ -1,11 +1,13 @@
 // Per-cell sums over one image tile, for Cell Query's image channel columns
-// (plan 26-D4). A cell is a disc. A pixel counts for a cell when the pixel's
-// centre is inside its disc; a pixel inside several discs counts for the
-// cell whose centre is nearest relative to its radius, so neighbours do not
-// share pixels. Workers and the main thread share this.
+// (plan 26-D4). A cell is a disc, round in micrometres, so an ellipse in the
+// pixels of an image whose pixels are not square. A pixel counts for a cell
+// when the pixel's centre is inside its disc; a pixel inside several discs
+// counts for the cell whose centre is nearest relative to its radius, so
+// neighbours do not share pixels. Workers and the main thread share this.
 
 // The cells whose discs touch a tile, in the tile's pixels: pixel i's centre
-// is at i + 0.5. On ties the cell listed first takes the pixel.
+// is at i + 0.5. The radius is in pixel widths. On ties the cell listed
+// first takes the pixel.
 export interface TileCellDiscs {
   readonly x: Float32Array
   readonly y: Float32Array
@@ -18,6 +20,9 @@ export interface TileCellMeasureOptions {
   readonly height: number
   // Pixels at or above it count as above.
   readonly threshold: number
+  // A pixel's height over its width (1 for square pixels): a disc of radius
+  // r reaches r pixels across and r / yScale pixels down.
+  readonly yScale: number
 }
 
 // Per cell, in the order of the discs.
@@ -67,24 +72,27 @@ export function measureTileCells(
   owner.fill(-1, 0, size)
 
   // Each pixel goes to the disc it is nearest the centre of, relative to the
-  // disc's radius.
+  // disc's radius, with distances in pixel widths.
+  const yScale = options.yScale
+
   for (let cell = 0; cell < cellCount; cell += 1) {
     const cx = cells.x[cell] ?? 0
     const cy = cells.y[cell] ?? 0
     const radius = cells.radius[cell] ?? 0
+    const radiusY = radius / yScale
 
-    if (!(radius > 0) || !Number.isFinite(radius + cx + cy)) {
+    if (!(radius > 0) || !Number.isFinite(radius + radiusY + cx + cy)) {
       continue
     }
 
     const radiusSquared = radius * radius
     const x0 = Math.max(0, Math.ceil(cx - radius - 0.5))
     const x1 = Math.min(width - 1, Math.floor(cx + radius - 0.5))
-    const y0 = Math.max(0, Math.ceil(cy - radius - 0.5))
-    const y1 = Math.min(height - 1, Math.floor(cy + radius - 0.5))
+    const y0 = Math.max(0, Math.ceil(cy - radiusY - 0.5))
+    const y1 = Math.min(height - 1, Math.floor(cy + radiusY - 0.5))
 
     for (let py = y0; py <= y1; py += 1) {
-      const dy = py + 0.5 - cy
+      const dy = (py + 0.5 - cy) * yScale
       const dySquared = dy * dy
       const rowStart = py * width
 

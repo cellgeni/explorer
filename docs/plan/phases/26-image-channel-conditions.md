@@ -453,6 +453,8 @@ D5 and D6 after the spike; the others stand as proposed.
   - A pixel counts when its centre is inside the disc. A pixel inside
     several discs counts for the cell whose centre is nearest relative to
     its radius, so neighbours do not share pixels.
+  - The disc is round in micrometres. On an image whose pixels are not
+    square (OME-Zarr scales each axis) it is an ellipse in pixels.
   - Outlines and label masks are [later](#later).
 
 - **D5. One pyramid level per measurement.**
@@ -516,8 +518,8 @@ D5 and D6 after the spike; the others stand as proposed.
    - Take each overview cell's position in µm, with y back to positive.
      Map it into the loader's frame with the inverse of its placement
      (`unplaceFrameBbox`'s maths, for a point).
-   - Turn it into pixels at the chosen level, with the disc's radius
-     (D4).
+   - Turn it into pixels at the chosen level, with the disc's radius in
+     pixel widths and the pixels' height over width (D4).
 2. **Tiles.**
    - Bucket the cells by the tiles their discs touch. A disc across a tile
      edge goes in each tile.
@@ -526,9 +528,9 @@ D5 and D6 after the spike; the others stand as proposed.
      tiles into one request.
 3. **Per tile.**
    - The main thread fetches the bytes (D8) and posts them to a decode
-     worker with the decode metadata, the tile's cells and the threshold.
-     The cells go as `Float32Array` x, y and radius in tile pixels, and a
-     `Uint32Array` of rows.
+     worker with the decode metadata, the tile's cells, the threshold and
+     the pixels' height over width. The cells go as `Float32Array` x, y and
+     radius in tile pixels, and a `Uint32Array` of rows.
    - The worker decodes and crops to the tile's visible size, then gives
      each pixel to a cell (D4).
    - It returns, transferred, per cell: the sum of values

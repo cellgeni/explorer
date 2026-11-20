@@ -592,9 +592,11 @@ Image columns (plan 26) are measured by `CellImageMeasurements`
 A measurement is one channel at one level, z plane, disc radius and
 threshold; a channel's mean and `% above` come from the same pass.
 `planCellImageMeasurement` maps each overview cell into the loader's frame
-(the inverse of its placement) and the level's pixels, as a disc, and
-buckets the cells by the tiles their discs touch in two passes over the
-cells (counts, then rows). `cellImageReadBytes` sizes the read from the TIFF
+(the inverse of its placement) and the level's pixels, as a disc round in
+micrometres: its radius is in pixel widths, and the plan's `yScale` (a
+pixel's height over its width) makes it an ellipse in pixels where pixels
+are not square, as OME-Zarr scales allow. It buckets the cells by the tiles
+their discs touch in two passes over the cells (counts, then rows). `cellImageReadBytes` sizes the read from the TIFF
 tile index (`tileReadBytes`), or as an OME-Zarr level's chunks decoded, an
 upper bound; the store asks above 1 GiB and refuses above 8 GiB.
 `runCellImageMeasurement` fetches the tiles row by row, 12 in flight
@@ -603,7 +605,7 @@ next tiles as `upcoming` so neighbours share requests, and with
 `persist: false`, which reads the IndexedDB byte-range cache but adds
 nothing to it. Each tile goes to a decode worker of the store's own pool
 (`cores − 2`, 1 to 4, closed when nothing is measured) with its cells'
-centres and radii as `Float32Array`s; `measureTileCells`
+centres and radii as `Float32Array`s and the `yScale`; `measureTileCells`
 (`src/data/tileCellMeasure.ts`) gives each pixel to the disc nearest its
 centre relative to the radius and returns per-cell sums, pixel counts and
 counts above the threshold, transferred. The main thread adds them into

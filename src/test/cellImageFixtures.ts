@@ -129,6 +129,8 @@ export interface FakeOmeZarrCellImageOptions {
   // Channels per chunk: all of them when unset.
   readonly chunkChannels?: number
   readonly micrometersPerPixel?: number
+  // A pixel's height, when it is not as tall as it is wide.
+  readonly micrometersPerPixelY?: number
   // Chunk keys left out, such as `0/0.1.0`: the fill value, 7.
   readonly missing?: readonly string[]
 }
@@ -141,6 +143,7 @@ export async function fakeOmeZarrCellImage(options: FakeOmeZarrCellImageOptions)
   const chunkSize = options.chunkSize ?? 4
   const chunkChannels = options.chunkChannels ?? channels
   const mpp = options.micrometersPerPixel ?? 1
+  const mppY = options.micrometersPerPixelY ?? mpp
   const root = '/image.ome.zarr'
   const encoder = new TextEncoder()
   const json = (value: unknown) => encoder.encode(JSON.stringify(value))
@@ -159,7 +162,7 @@ export async function fakeOmeZarrCellImage(options: FakeOmeZarrCellImageOptions)
             datasets: Array.from({ length: levels }, (_, level) => ({
               path: level.toString(),
               coordinateTransformations: [
-                { type: 'scale', scale: [1, mpp * 2 ** level, mpp * 2 ** level] },
+                { type: 'scale', scale: [1, mppY * 2 ** level, mpp * 2 ** level] },
               ],
             })),
           },

@@ -126,6 +126,7 @@ describe('Zarr decode worker core', () => {
       width: 3,
       height: 4,
       threshold: 102,
+      yScale: 1,
     })
 
     const sums = await measureChunkCells(source, values.buffer, window, measure())

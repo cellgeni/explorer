@@ -962,7 +962,9 @@ How image columns work ([plan 26](plan/phases/26-image-channel-conditions.md)):
 
 - Each cell is a disc centred on its position, as large as the cell's area
   where the platform gives one (Xenium, Atera, standard Visium spots), or of
-  the condition's `Radius`. A pixel counts when its centre is inside the
+  the condition's `Radius`. The disc is round in micrometres, so on an image
+  whose pixels are not square (an OME-Zarr with a different y scale) it
+  covers an ellipse of pixels. A pixel counts when its centre is inside the
   disc; a pixel inside several discs counts for the cell whose centre is
   nearest relative to its radius, so neighbours do not share pixels. Cell
   outlines and label masks are not used.
