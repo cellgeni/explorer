@@ -674,6 +674,47 @@ describe('ShellLayout', () => {
       )
     })
 
+    it('closes the Dataset info drawer when it would cover the window (EXP-029)', () => {
+      // 1024 px wide: a 664 px canvas beside the layer panel, so the 520 px
+      // window would start at x = 132, under the 380 px drawer.
+      stubLayout({
+        'shell-canvas': { left: 0, right: 664, width: 664, height: 700 },
+        'shell-info-drawer': { left: 0, right: 380, width: 380, height: 700 },
+      })
+      stubScreenWidth(false)
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], infoOpen: true }}
+        />,
+      )
+      expect(screen.getByRole('dialog', { name: 'Dataset info' })).toBeVisible()
+
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Query' }))
+
+      expect(queryWindow()).toBeVisible()
+      expect(screen.queryByRole('dialog', { name: 'Dataset info' })).toBeNull()
+    })
+
+    it('keeps the Dataset info drawer open beside a window clear of it', () => {
+      stubLayout({
+        'shell-canvas': { left: 0, right: 1400, width: 1400, height: 700 },
+        'shell-info-drawer': { left: 0, right: 380, width: 380, height: 700 },
+      })
+      stubScreenWidth(false)
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], infoOpen: true }}
+        />,
+      )
+
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Query' }))
+
+      expect(queryWindow()).toBeVisible()
+      expect(screen.getByRole('dialog', { name: 'Dataset info' })).toBeVisible()
+    })
+
     it('shows one window at a time under 860 px', () => {
       stubScreenWidth(true)
       render(
