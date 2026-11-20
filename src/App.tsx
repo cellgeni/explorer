@@ -108,6 +108,7 @@ import {
   type LinkedSectionsColoring,
 } from './features/collection/LinkedSections'
 import { SectionStackViewer } from './features/collection/SectionStackViewer'
+import { sectionSplitLink } from './features/collection/sectionSplitModel'
 import { stackSections, type StackSection } from './features/collection/sectionStackModel'
 import {
   compareUrlsAfterOpening,
@@ -4536,6 +4537,13 @@ export function App({ dependencies }: AppProps = {}) {
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
     loadEnabled: platformAdapter.capabilities.annotations && loadState.status === 'ready',
+    sectionSplit: sectionSplitLink({
+      datasetUrl: loadState.status === 'ready' ? loadedDatasetUrl : null,
+      platform: datasetPlatform,
+      groupOptions: annotationGroupOptions,
+      inCollection: readyCollection !== null,
+      pathname: window.location.pathname,
+    }),
     selectedAnnotationGroupId,
     selectionList,
     selectionsAvailable: platformAdapter.kind !== 'image',

@@ -76,7 +76,7 @@ import type {
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
-import { fetchDatasetCollection } from '../../datasets/datasetCollection'
+import { loadDatasetCollection } from '../../datasets/annDataSectionCollection'
 import type { CollectionLoader } from '../collection/useDatasetCollection'
 
 // The start screen's example gallery (plan 15.3-A).
@@ -363,7 +363,7 @@ export const defaultAppDependencies = {
     retainDataset,
     warmDatasetForRoi,
     loadExamplesIndex: fetchExamplesIndex,
-    loadCollection: fetchDatasetCollection,
+    loadCollection: loadDatasetCollection,
   },
   morphology: {
     loadMorphologyImage,

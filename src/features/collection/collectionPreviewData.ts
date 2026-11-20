@@ -404,7 +404,14 @@ async function rejectLargeWholeFile(
   fetchImpl: typeof fetch,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  if (detection.platform !== 'h5ad' || detection.source !== undefined) return
+  // A section is read with its file's other sections, in one read.
+  if (
+    detection.platform !== 'h5ad' ||
+    detection.source !== undefined ||
+    detection.section !== undefined
+  ) {
+    return
+  }
 
   const response = await fetchImpl(detection.h5adUrl, {
     method: 'HEAD',

@@ -151,3 +151,71 @@ Known gaps:
 - [ ] Other `Cell color` modes (transcript count, cell area, metadata) draw
       every cell grey, as in the stack.
 - [ ] Unit and App tests only; no E2E test.
+
+## Follow-Up (2026-11-20): Sections Of One Table
+
+Asked with the same EF6 file: open the sections combined in one AnnData as
+datasets of their own, the file treated as a collection of sorts, so they
+can be stepped through, shown side by side and stacked like a collection's.
+
+- **DECISION:** A section is the rows whose obs column holds one value,
+  named by the table's URL and a fragment, `#obs.<column>=<value>`; the
+  split is `#obs.<column>`. A fetch drops the fragment and no real dataset
+  URL needs one, so a section is a URL like any other: `dataset=` opens it,
+  a collection file lists it, the link and the dataset cache key it, with
+  no new collection key or link parameter.
+- **DECISION:** `collection=` with a table's URL splits it. Without a
+  column, by the first obs column named like a section column (`section`,
+  `sample`, `library_id`, ...); a table without one stops, listing the
+  columns it could be split by. One dataset per value, named by it, in the
+  column's order, all in one coordinate system named after the file, since
+  they share obsm coordinates; each with a `z` from an obs `z`/`z_…` column,
+  else its cells' third obsm `spatial` column, when the section's cells share
+  one, and only when every section has one.
+- **DECISION:** One read. A section's dataset holds the table's cached
+  dataset, retained while held, and is a view of its rows: cell IDs,
+  coordinates, depths and obs columns are its rows'; the matrix and obsm are
+  the table's, read by the table's rows. Previews of a large `.h5ad`'s
+  sections are not refused, since they read the table once in all.
+- **DECISION:** Discoverable from the table: the Cells section's
+  `Open N Sections` link, shown for an AnnData table opened whole whose
+  annotation sets include a column named like a section column.
+- **DECISION:** Visium tables are not split: their sections are libraries,
+  which the `Library` select already chooses.
+
+Delivered:
+
+- [x] `annDataSections.ts`: section and split URLs, `SECTION_COLUMN_NAMES`.
+- [x] `AnnDataH5adDataset` `section` option, `withSection` and the row
+      mapping in `matrix()`, `geneExpression()`, `geneValues()` and
+      `embeddings()`; `sectionColumns()` and `sections(column)`.
+- [x] `detectAnnDataSection` and `sectionSource` in `datasetFactory.ts`;
+      `loadDatasetCollection` (`annDataSectionCollection.ts`) as the app's
+      collection loader; sections exempt from the preview size refusal.
+- [x] A lone section named `table.h5ad · value`; `Open N Sections` in the
+      Cells section (`sectionSplitModel.ts`).
+- [x] Tests: a tiny `.h5ad` split by strings, codes and numbers, a
+      section's reads, release and errors; two sections of the AnnData Zarr
+      fixture sharing one read of its obs index; URLs, the loader, the link
+      and the name.
+
+Checked on EF6's 116 MB `.h5ad` from Sanger's bucket (14 sections, 201,789
+cells), production build, headless Chromium on the Mac's GPU: `collection=`
+with the file listed its 14 sections 12 s after the link opened, with
+`section_01` (11,832 cells) open; switching to `section_05` took 0.3 s and
+the stack of all 14 (z 0 to 780 µm from `z_um`) was ready 0.2 s after
+`Stack in 3D`, KRT5 colouring every section and its preview. The
+`Open 14 Sections` link on the whole file opened the same collection. A
+collection file listing three sections by URL, with its own names and
+depths, opened as written.
+
+Known gaps:
+
+- [ ] One column per split, and a value matched as text (a number as
+      JavaScript prints it); no section from two columns together.
+- [ ] Visium tables are not split, and a split collection's sections cannot
+      be shown beside another file's.
+- [ ] Each section copies its rows' coordinates and obs columns, about one
+      table's worth across all its sections; `embeddings()` reads the
+      table's whole obsm matrix for each section.
+- [ ] Unit tests only; no App or E2E test of a split collection.

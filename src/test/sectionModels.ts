@@ -338,6 +338,7 @@ export function testAnnotationsSectionModel(
       selectedGroupId: '',
       groupOptions: [],
       onGroupChange: vi.fn(),
+      sectionSplit: null,
       state: { status: 'idle' },
       groupState: { status: 'idle' },
       onLoad: vi.fn(),

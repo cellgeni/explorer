@@ -14,7 +14,8 @@ import {
 import { fetchHead, noteReadableResponse } from '../data/hostResponses'
 import { readZipDirectory, ZIP_METHOD_STORED } from '../data/zipArchive'
 import { registerZipFolder, zipFolderFor, zipFolderRoot } from '../data/zipFolder'
-import { datasetDetectionError } from './datasetDetectionError'
+import { DatasetDetectionError, datasetDetectionError } from './datasetDetectionError'
+import { parseAnnDataSectionUrl, type AnnDataSectionRef } from './annDataSections'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
 import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
@@ -53,7 +54,7 @@ import { MERSCOPE_FILE_DEFAULTS } from './merscopeFormat'
 import { isSpatialDataRootMetadata } from './spatialDataCatalog'
 import { ATERA_EXPERIMENT_FILE, ATERA_FILE_DEFAULTS } from './ateraFormat'
 import { visiumHdRequiredBinPaths } from './visiumHdStrategy'
-import { DatasetCache } from './datasetCache'
+import { DatasetCache, retainDataset } from './datasetCache'
 import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
@@ -83,6 +84,13 @@ export type SpatialDatasetDetection =
       // an Icechunk repository, with `source: 'zarr'` a Zarr store.
       readonly h5adUrl: string
       readonly source?: 'icechunk' | 'zarr'
+      // One section of the file (see annDataSections.ts): `baseUrl` is the
+      // section's URL, and the file's dataset, opened from `fileUrl`, reads it.
+      readonly section?: {
+        readonly fileUrl: string
+        readonly column: string
+        readonly value: string
+      }
       readonly manifest?: DatasetManifest
       readonly checked: readonly DatasetProbeResult[]
     }
@@ -305,6 +313,11 @@ async function detectSpatialDatasetLayout(
   options: DetectSpatialDatasetOptions,
 ): Promise<SpatialDatasetDetection> {
   const checked: DatasetProbeResult[] = []
+  const section = parseAnnDataSectionUrl(normalizedBaseUrl)
+
+  if (section !== null) {
+    return detectAnnDataSection(normalizedBaseUrl, section, options)
+  }
 
   if (isDatasetManifestUrl(normalizedBaseUrl)) {
     const manifest = await readDatasetManifest(
@@ -1533,6 +1546,41 @@ function probeFailure(probe: DatasetProbeResult): string {
     : `HTTP ${probe.status}`
 }
 
+// A section is detected as its file is, then read through the file's dataset.
+async function detectAnnDataSection(
+  url: string,
+  { fileUrl, column, value }: AnnDataSectionRef,
+  options: DetectSpatialDatasetOptions,
+): Promise<SpatialDatasetDetection> {
+  if (value === null) {
+    throw new DatasetDetectionError(
+      'unsupported',
+      `#obs.${column} names this file split into sections by obs column "${column}": open it as a collection (collection= in the address), or name one section with #obs.${column}=<value>.`,
+      [],
+    )
+  }
+
+  const file = await detectSpatialDatasetLayout(normalizeBaseUrl(fileUrl), options)
+
+  if (file.platform === 'unknown') {
+    return { ...file, baseUrl: url }
+  }
+
+  if (file.platform !== 'h5ad') {
+    throw new DatasetDetectionError(
+      'unsupported',
+      `#obs.${column}=${value} names a section of an AnnData table, but this file opens as ${file.platform}, which has no obs columns.`,
+      file.checked,
+    )
+  }
+
+  return {
+    ...file,
+    baseUrl: url,
+    section: { fileUrl: file.baseUrl, column, value },
+  }
+}
+
 export async function createSpatialDataset(
   baseUrl: string,
   options: CreateSpatialDatasetOptions = {},
@@ -1584,6 +1632,9 @@ export async function createSpatialDataset(
           }),
       ...(detection.source === 'icechunk' ? { icechunk: true } : {}),
       ...(detection.source === 'zarr' ? { zarr: true } : {}),
+      ...(detection.section === undefined
+        ? {}
+        : { section: sectionSource(detection.section, options) }),
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
         ? {}
@@ -1707,6 +1758,30 @@ export async function createSpatialDataset(
   }
 
   throw datasetDetectionError(detection.checked)
+}
+
+// A section reads its file through the file's cached dataset, so the file's
+// sections, and the file opened on its own, share one read. The file is
+// retained while a section holds it.
+function sectionSource(
+  { fileUrl, column, value }: { fileUrl: string; column: string; value: string },
+  options: CreateSpatialDatasetOptions,
+) {
+  return {
+    column,
+    value,
+    holdFile: () => {
+      const release = retainDataset(fileUrl)
+      return {
+        dataset: cachedSpatialDataset(fileUrl, {
+          ...(options.onH5adLoadProgress === undefined
+            ? {}
+            : { onH5adLoadProgress: options.onH5adLoadProgress }),
+        }),
+        release,
+      }
+    },
+  }
 }
 
 export function cachedSpatialDataset(
