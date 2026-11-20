@@ -9,7 +9,7 @@
 import { parseAnalysisEmbeddingCsv } from '../data/analysisEmbeddings'
 import { isListedAsMissing } from '../data/folderListing'
 import { h5TreeNodeAt, openH5WorkerFile } from '../data/h5WorkerFile'
-import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import { inflateMaybeGzipBytes, readMaybeGzipText } from '../data/readMaybeGzipText'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { FeatureBarcodeMexReader, FeatureBarcodeMexUrls } from './featureBarcodeMex'
 import { readFeatureBarcodeMexInWorker } from './featureBarcodeMexWorker'
@@ -449,7 +449,14 @@ async function fetchMatrixBytes(url: string, fetcher: typeof fetch): Promise<Uin
     throw new VisiumMatrixTooLargeError(url, bytes.byteLength)
   }
 
-  return bytes
+  // The .h5 is read whole anyway, so a gzipped copy (GEO publishes them) is
+  // inflated first, within the same limit.
+  return inflateMaybeGzipBytes(
+    bytes,
+    VISIUM_MATRIX_MAX_BYTES,
+    ({ byteLength, exact }) =>
+      new VisiumMatrixTooLargeError(url, byteLength, { atLeast: !exact }),
+  )
 }
 
 // 10x feature-barcode HDF5: `/matrix` (Cell Ranger 3+ and every Space Ranger

@@ -1,6 +1,10 @@
 import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { forEachMaybeGzipLine, readMaybeGzipText } from './readMaybeGzipText'
+import {
+  forEachMaybeGzipLine,
+  inflateMaybeGzipBytes,
+  readMaybeGzipText,
+} from './readMaybeGzipText'
 
 const CSV = 'barcode,in_tissue,array_row,array_col\nAAAC-1,1,0,0\nAAAG-1,0,0,2\n'
 
@@ -106,5 +110,42 @@ describe('forEachMaybeGzipLine', () => {
     })
 
     await expect(linesOf(new Response(body))).resolves.toEqual(['0:µm'])
+  })
+})
+
+describe('inflateMaybeGzipBytes', () => {
+  const tooLarge = ({ byteLength, exact }: { byteLength: number; exact: boolean }) =>
+    new Error(`${exact ? 'is' : 'over'} ${byteLength}`)
+
+  it('inflates gzipped bytes and returns others as they are', async () => {
+    const plain = new TextEncoder().encode(CSV)
+
+    await expect(inflateMaybeGzipBytes(plain, 1024, tooLarge)).resolves.toBe(plain)
+    const inflated = await inflateMaybeGzipBytes(
+      new Uint8Array(gzipSync(plain)),
+      1024,
+      tooLarge,
+    )
+    expect(new TextDecoder().decode(inflated)).toBe(CSV)
+  })
+
+  it('refuses a file whose trailer gives a size over the limit, unread', async () => {
+    const big = new Uint8Array(gzipSync(new Uint8Array(4 * 1024 * 1024)))
+
+    await expect(inflateMaybeGzipBytes(big, 1024 * 1024, tooLarge)).rejects.toThrow(
+      `is ${4 * 1024 * 1024}`,
+    )
+  })
+
+  it('stops inflating past the limit when the trailer understates the size', async () => {
+    // Two members: the trailer gives only the second one's 16 bytes.
+    const twoMembers = new Uint8Array([
+      ...gzipSync(new Uint8Array(4 * 1024 * 1024)),
+      ...gzipSync(new Uint8Array(16)),
+    ])
+
+    await expect(
+      inflateMaybeGzipBytes(twoMembers, 1024 * 1024, tooLarge),
+    ).rejects.toThrow(/^over \d+$/)
   })
 })
