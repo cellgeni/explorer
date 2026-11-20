@@ -4,6 +4,7 @@ import {
   IDLE_VISIUM_CONTROL_STATE,
   visiumControlLoading,
   visiumControlReady,
+  visiumControlRestored,
   visiumImageForLoad,
   visiumSelectionToShareable,
   visiumViewFromShareable,
@@ -80,5 +81,18 @@ describe('Visium view changes', () => {
     expect(
       visiumControlReady('h5ad', { ...SUMMARY, showOffTissue: true }, 'hires'),
     ).not.toHaveProperty('requestedView')
+  })
+
+  it('shows the view on screen again when the change does not load', () => {
+    const ready = visiumControlReady('h5ad', SUMMARY, 'hires')
+    const loading = visiumControlLoading(ready, {
+      libraryId: 'lib-B',
+      showOffTissue: true,
+    })
+
+    expect(visiumControlRestored(loading)).toEqual(ready)
+    expect(visiumControlRestored(IDLE_VISIUM_CONTROL_STATE)).toBe(
+      IDLE_VISIUM_CONTROL_STATE,
+    )
   })
 })

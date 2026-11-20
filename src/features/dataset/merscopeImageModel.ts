@@ -90,6 +90,14 @@ export function merscopeImageControlLoading(
   return state.status === 'idle' ? state : { ...state, status: 'loading', choice }
 }
 
+// The image on screen again, once a change's reload is cancelled or fails.
+export function merscopeImageControlRestored(
+  state: MerscopeImageControlState,
+  choice: MerscopeImageChoice | null,
+): MerscopeImageControlState {
+  return state.status === 'idle' ? state : { ...state, status: 'ready', choice }
+}
+
 export function merscopeImageSelectionToShareable(state: MerscopeImageControlState): {
   readonly merscopeImage?: string
 } {

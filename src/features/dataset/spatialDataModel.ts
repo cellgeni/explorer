@@ -47,6 +47,15 @@ export function spatialDataControlLoading(
   return state.status === 'idle' ? state : { ...state, status: 'loading', selection }
 }
 
+// The view on screen again, shown with `selection`, once a change's reload
+// is cancelled or fails.
+export function spatialDataControlRestored(
+  state: SpatialDataControlState,
+  selection: SpatialDataSelection,
+): SpatialDataControlState {
+  return state.status === 'idle' ? state : { ...state, status: 'ready', selection }
+}
+
 // Selection fields restored from or written to the shareable URL hash.
 export function spatialDataSelectionFromShareable(state: {
   readonly spatialDataTable?: string
