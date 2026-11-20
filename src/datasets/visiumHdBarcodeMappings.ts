@@ -424,6 +424,8 @@ async function barcodeMappingsFileFromUrl(
       cache: byteRangeCache,
       url,
       validator,
+      fetcher: fetcher.fetch,
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
     }),
     validator,
   }

@@ -1175,13 +1175,17 @@ function stubZchunkStoreFetch(
 ): void {
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input) === sidecarUrl) {
         return Response.json(manifest)
       }
 
       if (!String(input).endsWith('.zchunkstore')) {
-        return new Response(new Uint8Array(8), { status: 206 })
+        const range = /bytes=(\d+)-(\d+)/.exec(
+          new Headers(init?.headers).get('Range') ?? '',
+        )
+        const length = range === null ? 8 : Number(range[2]) - Number(range[1]) + 1
+        return new Response(new Uint8Array(length), { status: 206 })
       }
 
       return new Response(null, { status: 404 })
