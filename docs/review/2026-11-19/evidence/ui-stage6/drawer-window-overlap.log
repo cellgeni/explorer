@@ -1,0 +1,12 @@
+
+Running 1 test using 1 worker
+
+{"width":1024,"window":"Cell Query","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":132,"y":60,"width":520,"height":460},"overlapPx":248,"topAtOverlap":"ui-drawer ui-drawer--left shell-info-drawer"}
+{"width":1024,"window":"Plots","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":172,"y":60,"width":480,"height":420},"overlapPx":208,"topAtOverlap":"ui-drawer ui-drawer--left shell-info-drawer"}
+{"width":1280,"window":"Cell Query","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":388,"y":60,"width":520,"height":460},"overlapPx":0,"topAtOverlap":null}
+{"width":1280,"window":"Plots","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":428,"y":60,"width":480,"height":420},"overlapPx":0,"topAtOverlap":null}
+{"width":1440,"window":"Cell Query","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":548,"y":60,"width":520,"height":460},"overlapPx":0,"topAtOverlap":null}
+{"width":1440,"window":"Plots","drawer":{"x":0,"y":48,"width":380,"height":720},"windowBox":{"x":588,"y":60,"width":480,"height":420},"overlapPx":0,"topAtOverlap":null}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/drawer-window-overlap.s6.mjs:6:1 › drawer and window overlap (5.3s)
+
+  1 passed (6.6s)

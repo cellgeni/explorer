@@ -1,0 +1,14 @@
+Docs checked: 24
+File references: 609; not found with a folder: 0; bare names not found anywhere: 0
+
+Symbol-like spans: 571; not found in code: 10
+SYMBOL	SharedArrayBuffer	4	README.md:83 docs/architecture.md:691 docs/deploy-to-s3.md:32
+SYMBOL	CORSRules	1	docs/deploy-to-s3.md:239
+SYMBOL	HTTPStore	1	docs/h5ad-reference.md:359
+SYMBOL	square_NNNum	3	docs/host-your-own-data.md:462 docs/modalities/spatialdata.md:101 docs/modalities/spatialdata.md:288
+SYMBOL	csrZarrRowBatches	1	docs/modalities/h5ad.md:262
+SYMBOL	openQptiff	1	docs/modalities/image.md:218
+SYMBOL	probeSpatialDataRoot	3	docs/modalities/spatialdata.md:21 docs/modalities/spatialdata.md:152 docs/modalities/spatialdata.md:334
+SYMBOL	RangeIndex	1	docs/modalities/spatialdata.md:211
+SYMBOL	readVisiumPlacement	1	docs/modalities/visium.md:48
+SYMBOL	AllowedOrigin	1	docs/s3-cors-playbook.md:20

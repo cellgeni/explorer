@@ -1,0 +1,13 @@
+01-npm-ci	0	5s	npm ci
+02-format-check	0	8s	npm run format:check
+03-lint	0	20s	npm run lint
+04-typecheck	0	8s	npm run typecheck
+05-test	0	100s	npm test
+06-build	0	9s	npm run build
+07-playwright-dry	0	1s	npx playwright install --dry-run chromium
+08-e2e-smoke	0	29s	npx playwright test --config <scratch>/pw.review.config.mjs --grep @smoke
+09-coverage	0	141s	npm run test:coverage
+10-audit-prod	0	1s	npm audit --omit=dev
+11-audit-critical	0	1s	npm audit --audit-level=critical
+12-git-status	0	0s	git status --porcelain --ignored=no
+DONE

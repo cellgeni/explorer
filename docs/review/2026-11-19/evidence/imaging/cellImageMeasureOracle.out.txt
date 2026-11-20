@@ -1,0 +1,120 @@
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2
+TIFF mismatches: 0
+
+OME-Zarr mismatches: 0
+
+L2 cellsOutside=8 cell4 mean=NaN
+aniso tile(0,0) um/px x=0.5 y=1
+aniso mismatches: 64 of 67
+aniso cell 0: mean 2024.6875 vs 2022.4, above 54.166666666666664 vs 52 (oracle pixels 25)
+aniso cell 1: mean 2002.75 vs 2028, above 50 vs 66.66666666666667 (oracle pixels 3)
+aniso cell 2: mean 1832.5 vs 1742.1666666666667, above 20 vs 0 (oracle pixels 6)
+aniso cell 4: mean 2490 vs null, above 100 vs null (oracle pixels 0)
+aniso cell 5: mean 3187.5535714285716 vs 3220.0227272727275, above 100 vs 100 (oracle pixels 44)
+aniso cell 6: mean 3542.029411764706 vs 3531, above 100 vs 100 (oracle pixels 44)
+aniso cell 8: mean 632.0444444444445 vs 638.7692307692307, above 0 vs 0 (oracle pixels 26)
+aniso cell 9: mean 2306.6 vs 2310.1923076923076, above 96.66666666666667 vs 100 (oracle pixels 26)
+aniso cell 10: mean 1852 vs 1902.5, above 0 vs 0 (oracle pixels 2)
+aniso cell 11: mean null vs 487.5, above null vs 0 (oracle pixels 2)
+aniso cell 12: mean 2392.0526315789475 vs 2384.235294117647, above 94.73684210526316 vs 100 (oracle pixels 34)
+aniso cell 13: mean 3701.5 vs 3676.25, above 100 vs 100 (oracle pixels 4)
+oracle pixel counts (first 8): 25, 3, 6, 0, 0, 44, 44, 2

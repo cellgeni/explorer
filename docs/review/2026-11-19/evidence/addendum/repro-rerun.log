@@ -1,0 +1,28 @@
+### 2026-11-20T17:33:59Z HEAD de29298 (main 5b1cd9f merged into the review branch; src/ identical to main)
+### npx vitest run --config docs/review/2026-11-19/evidence/repro/vitest.repro.config.ts --exclude '**/xenium-zarr-ids-live.repro.ts' --exclude '**/sections-scan-cost.repro.ts'
+### (sections-scan-cost.repro.ts runs on its own; see sections-scan-cost.json)
+      Tests  12 failed | 189 passed (201)
+ FAIL  docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts > Plots toggle on Visium HD > matches the documented availability
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Cancel: reads, controls and link no longer match the view on screen
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Failure: same state after the new view fails to load
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel after setVisiumView: the shared instance stays on the other library
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel during detection: control stays disabled on the library not shown
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > ROI transcript export returns both transcripts, the unassigned one with no cell
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > exact transcripts from transcripts.parquet mark the unassigned one as unassigned
+ Test Files  8 failed | 21 passed (29)
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+### addendum repros:
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-collection-file.repro.ts > sections of one table: listed in a collection file > keeps the fragment of a relative section path
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-numeric-column.repro.ts > sections of one table: obs section stored as numbers > fixtures: anndata stores whole numbers as an array, strings as a categorical
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-numeric-column.repro.ts > sections of one table: obs section stored as numbers > control: a string section column splits without naming it, with depths
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-numeric-column.repro.ts > sections of one table: obs section stored as numbers > control: naming the numeric column splits it, numbers ascending
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-numeric-column.repro.ts > sections of one table: obs section stored as numbers > collection= without a column does not find the numeric section column
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-numeric-column.repro.ts > sections of one table: obs section stored as numbers > no Open N Sections link for the numeric section column
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-depth-twice.repro.ts > sections of one table: obs z_um and a per-cell third obsm column > the whole table in the 3D cell view: cells at their own z (control)
+ ✓ docs/review/2026-11-19/evidence/repro/addendum/sections-depth-twice.repro.ts > sections of one table: obs z_um and a per-cell third obsm column > the split stack draws section s2 at z_um + cell z
+      Tests  8 passed (8)

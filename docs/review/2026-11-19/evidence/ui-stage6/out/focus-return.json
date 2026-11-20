@@ -1,0 +1,144 @@
+[
+  {
+    "width": 1440,
+    "toggle": "Embedding",
+    "openState": "true",
+    "focusAfterOpen": "BUTTON Close embedding",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Show the UMAP or t-SNE panel"
+  },
+  {
+    "width": 1440,
+    "toggle": "Plots",
+    "openState": "true",
+    "focusAfterOpen": "BUTTON Close plots",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Show a dot plot of the selected genes by"
+  },
+  {
+    "width": 1440,
+    "toggle": "Query",
+    "openState": "true",
+    "focusAfterOpen": "BUTTON Close cell query",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Find cells by their classes and values, "
+  },
+  {
+    "width": 1440,
+    "toggle": "Share",
+    "openState": null,
+    "focusAfterOpen": "BUTTON Copy a link that opens this dataset with",
+    "stateAfterEscape": null,
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Copy a link that opens this dataset with"
+  },
+  {
+    "width": 1440,
+    "toggle": "Help",
+    "openState": "true",
+    "focusAfterOpen": "A User guide",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Help"
+  },
+  {
+    "width": 1440,
+    "toggle": "Settings",
+    "openState": "true",
+    "focusAfterOpen": "INPUT Toggle bin and cell hover tooltips",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Settings"
+  },
+  {
+    "width": 1440,
+    "toggle": "Open dataset",
+    "openState": "true",
+    "focusAfterOpen": "INPUT Dataset or image URL",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Open dataset"
+  },
+  {
+    "width": 1440,
+    "toggle": "Dataset info",
+    "openState": "true",
+    "focusAfterOpen": "BUTTON Close Dataset info",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Dataset info"
+  },
+  {
+    "width": 1440,
+    "toggle": "Measure options",
+    "result": "toggle not visible"
+  },
+  {
+    "width": 390,
+    "toggle": "Embedding",
+    "result": "toggle not visible"
+  },
+  {
+    "width": 390,
+    "toggle": "Plots",
+    "result": "toggle not visible"
+  },
+  {
+    "width": 390,
+    "toggle": "Query",
+    "result": "toggle not visible"
+  },
+  {
+    "width": 390,
+    "toggle": "Share",
+    "openState": null,
+    "focusAfterOpen": "BUTTON Share",
+    "stateAfterEscape": null,
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Share"
+  },
+  {
+    "width": 390,
+    "toggle": "Help",
+    "openState": "true",
+    "focusAfterOpen": "A User guide",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Help"
+  },
+  {
+    "width": 390,
+    "toggle": "Settings",
+    "openState": "true",
+    "focusAfterOpen": "INPUT Toggle bin and cell hover tooltips",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Settings"
+  },
+  {
+    "width": 390,
+    "toggle": "Open dataset",
+    "openState": "true",
+    "focusAfterOpen": "INPUT Dataset or image URL",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Open dataset"
+  },
+  {
+    "width": 390,
+    "toggle": "Dataset info",
+    "openState": "true",
+    "focusAfterOpen": "BUTTON Close Dataset info",
+    "stateAfterEscape": "false",
+    "focusReturned": true,
+    "focusAfterEscape": "BUTTON Dataset info"
+  },
+  {
+    "width": 390,
+    "toggle": "Measure options",
+    "result": "toggle not visible"
+  }
+]

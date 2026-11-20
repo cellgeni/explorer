@@ -1,0 +1,426 @@
+
+Running 19 tests using 4 workers
+
+  ✓   2 [chromium] › tests/e2e/app.spec.ts:463:1 › offers the demo when the examples cannot be loaded @smoke (522ms)
+  ✓   1 [chromium] › tests/e2e/app.spec.ts:477:1 › skips the start screen for a link that names a dataset @smoke (656ms)
+  ✓   3 [chromium] › tests/e2e/app.spec.ts:401:1 › lists the examples on the start screen, and opens one in place @smoke (1.8s)
+  ✘   4 [chromium] › tests/e2e/app.spec.ts:390:1 › shows the scaffolded viewer shell @smoke (5.5s)
+  ✘   5 [chromium] › tests/e2e/app.spec.ts:486:1 › has no accessibility violations beyond the axe baseline @smoke (2.0m)
+  ✘   6 [chromium] › tests/e2e/app.spec.ts:584:1 › finds cells by cluster, exports them and saves them as a class @smoke (2.0m)
+  ✘   7 [chromium] › tests/e2e/app.spec.ts:635:1 › plots the selected genes by cluster and exports the numbers @smoke (2.0m)
+  ✘   8 [chromium] › tests/e2e/app.spec.ts:721:1 › runs the first five review tasks with the keyboard alone @smoke (2.0m)
+  ✘   9 [chromium] › tests/e2e/app.spec.ts:793:1 › shows transcript overlay controls in the browser shell @smoke (30.0s)
+  ✘  13 [chromium] › tests/e2e/app.spec.ts:1088:1 › switches Visium libraries and off-tissue spots and keeps them in the link @smoke (30.0s)
+  ✘  14 [chromium] › tests/e2e/app.spec.ts:1150:1 › loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke (30.0s)
+  ✘  10 [chromium] › tests/e2e/app.spec.ts:813:1 › loads a local H5AD fixture with obs tracks and gene expression @smoke (2.0m)
+  ✘  11 [chromium] › tests/e2e/app.spec.ts:890:1 › opens a shared H5AD link coloured by a metadata track @smoke (2.0m)
+  ✘  15 [chromium] › tests/e2e/app.spec.ts:1269:1 › shows a MERSCOPE .vzg stain and switches it off @smoke (30.0s)
+  ✘  12 [chromium] › tests/e2e/app.spec.ts:976:1 › loads AnnData from an Icechunk repository with gene expression @smoke (2.0m)
+  ✘  18 [chromium] › tests/e2e/app.spec.ts:1422:1 › loads a MERSCOPE region folder with its cell outlines and genes @smoke (30.0s)
+  ✘  19 [chromium] › tests/e2e/app.spec.ts:1572:1 › draws an imported label mask and WKT outlines over an image @smoke (30.0s)
+  ✘  16 [chromium] › tests/e2e/app.spec.ts:1298:1 › finds MERSCOPE cells by a stain measured under each @smoke (2.0m)
+  ✘  17 [chromium] › tests/e2e/app.spec.ts:1352:1 › finds SpatialData cells by image channels measured under each @smoke (2.0m)
+
+
+  1) [chromium] › tests/e2e/app.spec.ts:390:1 › shows the scaffolded viewer shell @smoke ───────────
+
+    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
+
+    Locator: getByRole('toolbar', { name: 'Tools' })
+    Expected: visible
+    Timeout: 5000ms
+    Error: element(s) not found
+
+    Call log:
+    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
+    [2m  - waiting for getByRole('toolbar', { name: 'Tools' })[22m
+
+
+      391 |   await page.goto('/')
+      392 |
+    > 393 |   await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible()
+          |                                                              ^
+      394 |   await expect(page.getByRole('complementary', { name: 'Layers' })).toBeVisible()
+      395 |   const start = await openControls(page, 'open-dataset')
+      396 |   await expect(start).toHaveAccessibleName('Open a dataset')
+        at tests/e2e/app.spec.ts:393:62
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-shows-the-scaffolded-viewer-shell-smoke-chromium/error-context.md
+
+  2) [chromium] › tests/e2e/app.spec.ts:486:1 › has no accessibility violations beyond the axe baseline @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('group', { name: 'Panels' }).getByRole('button', { name: 'Embedding', exact: true })[22m
+
+
+       at controls.ts:42
+
+      40 |         .getByRole('group', { name: 'Panels' })
+      41 |         .getByRole('button', { name: place.name, exact: true })
+    > 42 |       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+         |                         ^
+      43 |       return page.getByRole('region', { name: place.window })
+      44 |     }
+      45 |     case 'none':
+        at openControls (tests/e2e/controls.ts:42:25)
+        at checkEachPlace (tests/e2e/app.spec.ts:514:11)
+        at tests/e2e/app.spec.ts:529:3
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-has-no-accessibility-v-a1310-yond-the-axe-baseline-smoke-chromium/error-context.md
+
+  3) [chromium] › tests/e2e/app.spec.ts:584:1 › finds cells by cluster, exports them and saves them as a class @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('group', { name: 'Panels' }).getByRole('button', { name: 'Query', exact: true })[22m
+
+
+       at controls.ts:42
+
+      40 |         .getByRole('group', { name: 'Panels' })
+      41 |         .getByRole('button', { name: place.name, exact: true })
+    > 42 |       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+         |                         ^
+      43 |       return page.getByRole('region', { name: place.window })
+      44 |     }
+      45 |     case 'none':
+        at openControls (tests/e2e/controls.ts:42:25)
+        at tests/e2e/app.spec.ts:601:23
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-finds-cells-by-cluster-7dda5-saves-them-as-a-class-smoke-chromium/error-context.md
+
+  4) [chromium] › tests/e2e/app.spec.ts:635:1 › plots the selected genes by cluster and exports the numbers @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:652:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-plots-the-selected-gen-4ecbc-d-exports-the-numbers-smoke-chromium/error-context.md
+
+  5) [chromium] › tests/e2e/app.spec.ts:721:1 › runs the first five review tasks with the keyboard alone @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.evaluate: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('region', { name: /^Cells/ }).getByLabel('Gene selection')[22m
+
+
+      710 | async function tabTo(page: Page, target: Locator, limit = 150): Promise<void> {
+      711 |   for (let presses = 0; presses < limit; presses += 1) {
+    > 712 |     if (await target.evaluate((element) => element === document.activeElement)) return
+          |                      ^
+      713 |     await page.keyboard.press('Tab')
+      714 |   }
+      715 |   throw new Error(`Tab never reached ${target.toString()}`)
+        at tabTo (tests/e2e/app.spec.ts:712:22)
+        at tests/e2e/app.spec.ts:741:9
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-runs-the-first-five-re-3e6db-th-the-keyboard-alone-smoke-chromium/error-context.md
+
+  6) [chromium] › tests/e2e/app.spec.ts:793:1 › shows transcript overlay controls in the browser shell @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^Transcripts/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:798:9
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-shows-transcript-overl-ae4e0--in-the-browser-shell-smoke-chromium/error-context.md
+
+  7) [chromium] › tests/e2e/app.spec.ts:813:1 › loads a local H5AD fixture with obs tracks and gene expression @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:842:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-loads-a-local-H5AD-fix-ac4be-s-and-gene-expression-smoke-chromium/error-context.md
+
+  8) [chromium] › tests/e2e/app.spec.ts:890:1 › opens a shared H5AD link coloured by a metadata track @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:912:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-opens-a-shared-H5AD-li-fdb2b-d-by-a-metadata-track-smoke-chromium/error-context.md
+
+  9) [chromium] › tests/e2e/app.spec.ts:976:1 › loads AnnData from an Icechunk repository with gene expression @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:994:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-loads-AnnData-from-an--b957a--with-gene-expression-smoke-chromium/error-context.md
+
+  10) [chromium] › tests/e2e/app.spec.ts:1088:1 › switches Visium libraries and off-tissue spots and keeps them in the link @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:1112:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-switches-Visium-librar-7451a-eeps-them-in-the-link-smoke-chromium/error-context.md
+
+  11) [chromium] › tests/e2e/app.spec.ts:1150:1 › loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^Image/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:1169:23
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-loads-a-Space-Ranger-V-f22ea-with-its-tissue-image-smoke-chromium/error-context.md
+
+  12) [chromium] › tests/e2e/app.spec.ts:1269:1 › shows a MERSCOPE .vzg stain and switches it off @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^Image/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:1281:23
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-shows-a-MERSCOPE-vzg-stain-and-switches-it-off-smoke-chromium/error-context.md
+
+  13) [chromium] › tests/e2e/app.spec.ts:1298:1 › finds MERSCOPE cells by a stain measured under each @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('group', { name: 'Panels' }).getByRole('button', { name: 'Query', exact: true })[22m
+
+
+       at controls.ts:42
+
+      40 |         .getByRole('group', { name: 'Panels' })
+      41 |         .getByRole('button', { name: place.name, exact: true })
+    > 42 |       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+         |                         ^
+      43 |       return page.getByRole('region', { name: place.window })
+      44 |     }
+      45 |     case 'none':
+        at openControls (tests/e2e/controls.ts:42:25)
+        at tests/e2e/app.spec.ts:1312:23
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-finds-MERSCOPE-cells-b-772f6-n-measured-under-each-smoke-chromium/error-context.md
+
+  14) [chromium] › tests/e2e/app.spec.ts:1352:1 › finds SpatialData cells by image channels measured under each @smoke 
+
+    [31mTest timeout of 120000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 120000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('group', { name: 'Panels' }).getByRole('button', { name: 'Query', exact: true })[22m
+
+
+       at controls.ts:42
+
+      40 |         .getByRole('group', { name: 'Panels' })
+      41 |         .getByRole('button', { name: place.name, exact: true })
+    > 42 |       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+         |                         ^
+      43 |       return page.getByRole('region', { name: place.window })
+      44 |     }
+      45 |     case 'none':
+        at openControls (tests/e2e/controls.ts:42:25)
+        at tests/e2e/app.spec.ts:1370:23
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-finds-SpatialData-cell-fecd4-s-measured-under-each-smoke-chromium/error-context.md
+
+  15) [chromium] › tests/e2e/app.spec.ts:1422:1 › loads a MERSCOPE region folder with its cell outlines and genes @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.getAttribute: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('complementary', { name: 'Layers' }).getByRole('button', { name: /^(Cells|Spots|Bins)/ })[22m
+
+
+       at controls.ts:55
+
+      53 |
+      54 | async function isExpanded(button: Locator): Promise<boolean> {
+    > 55 |   return (await button.getAttribute('aria-expanded')) === 'true'
+         |                        ^
+      56 | }
+      57 |
+      58 | async function openButton(button: Locator): Promise<void> {
+        at isExpanded (tests/e2e/controls.ts:55:24)
+        at openButton (tests/e2e/controls.ts:59:15)
+        at openControls (tests/e2e/controls.ts:32:13)
+        at tests/e2e/app.spec.ts:1447:28
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-loads-a-MERSCOPE-regio-a7e49-ll-outlines-and-genes-smoke-chromium/error-context.md
+
+  16) [chromium] › tests/e2e/app.spec.ts:1572:1 › draws an imported label mask and WKT outlines over an image @smoke 
+
+    [31mTest timeout of 30000ms exceeded.[39m
+
+    Error: locator.click: Test timeout of 30000ms exceeded.
+    Call log:
+    [2m  - waiting for locator('[data-layer-section="segmentation"]').getByRole('button', { name: 'Remove mask.tif' })[22m
+
+
+      1607 |   await expect(page).toHaveURL(/segmentation=.*mask\.tif/)
+      1608 |
+    > 1609 |   await section.getByRole('button', { name: 'Remove mask.tif' }).click()
+           |                                                                  ^
+      1610 |   await section.getByLabel('Segmentation URL').fill(`${folder}cells.csv`)
+      1611 |   await section.getByRole('button', { name: 'Load', exact: true }).click()
+      1612 |   await expect(section).toContainText('WKT · 2', { timeout: H5AD_LOAD_TIMEOUT_MS })
+        at tests/e2e/app.spec.ts:1609:66
+
+    Error Context: ../../../../../../..<scratch>/pw-smoke-390/app-draws-an-imported-labe-166ac-utlines-over-an-image-smoke-chromium/error-context.md
+
+  16 failed
+    [chromium] › tests/e2e/app.spec.ts:390:1 › shows the scaffolded viewer shell @smoke ────────────
+    [chromium] › tests/e2e/app.spec.ts:486:1 › has no accessibility violations beyond the axe baseline @smoke 
+    [chromium] › tests/e2e/app.spec.ts:584:1 › finds cells by cluster, exports them and saves them as a class @smoke 
+    [chromium] › tests/e2e/app.spec.ts:635:1 › plots the selected genes by cluster and exports the numbers @smoke 
+    [chromium] › tests/e2e/app.spec.ts:721:1 › runs the first five review tasks with the keyboard alone @smoke 
+    [chromium] › tests/e2e/app.spec.ts:793:1 › shows transcript overlay controls in the browser shell @smoke 
+    [chromium] › tests/e2e/app.spec.ts:813:1 › loads a local H5AD fixture with obs tracks and gene expression @smoke 
+    [chromium] › tests/e2e/app.spec.ts:890:1 › opens a shared H5AD link coloured by a metadata track @smoke 
+    [chromium] › tests/e2e/app.spec.ts:976:1 › loads AnnData from an Icechunk repository with gene expression @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1088:1 › switches Visium libraries and off-tissue spots and keeps them in the link @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1150:1 › loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1269:1 › shows a MERSCOPE .vzg stain and switches it off @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1298:1 › finds MERSCOPE cells by a stain measured under each @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1352:1 › finds SpatialData cells by image channels measured under each @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1422:1 › loads a MERSCOPE region folder with its cell outlines and genes @smoke 
+    [chromium] › tests/e2e/app.spec.ts:1572:1 › draws an imported label mask and WKT outlines over an image @smoke 
+  3 passed (6.1m)

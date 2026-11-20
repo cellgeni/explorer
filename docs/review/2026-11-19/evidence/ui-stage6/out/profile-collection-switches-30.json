@@ -1,0 +1,123 @@
+[
+  {
+    "step": "S1 loaded",
+    "alive": 3,
+    "rssKiB": {
+      "renderer": 317808,
+      "GPU": 193344,
+      "network.mojom.NetworkService": 50656
+    },
+    "js": {
+      "mainHeapUsedMiB": 16,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 5 to S3",
+    "readyMs": 1205,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 366880,
+      "GPU": 453856,
+      "network.mojom.NetworkService": 50784
+    },
+    "js": {
+      "mainHeapUsedMiB": 21,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 10 to S2",
+    "readyMs": 1213,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 422624,
+      "GPU": 706416,
+      "network.mojom.NetworkService": 50784
+    },
+    "js": {
+      "mainHeapUsedMiB": 27,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 15 to S1",
+    "readyMs": 1216,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 450416,
+      "GPU": 850400,
+      "network.mojom.NetworkService": 47680
+    },
+    "js": {
+      "mainHeapUsedMiB": 33,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 20 to S3",
+    "readyMs": 1397,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 368720,
+      "GPU": 557840,
+      "network.mojom.NetworkService": 44544
+    },
+    "js": {
+      "mainHeapUsedMiB": 51,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 25 to S2",
+    "readyMs": 1202,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 430144,
+      "GPU": 707168,
+      "network.mojom.NetworkService": 46464
+    },
+    "js": {
+      "mainHeapUsedMiB": 60,
+      "crossOriginIsolated": true
+    }
+  },
+  {
+    "step": "switch 30 to S1",
+    "readyMs": 784,
+    "newRequests": 4,
+    "alive": 2,
+    "created": {
+      "h5File.worker": 32
+    },
+    "rssKiB": {
+      "renderer": 464592,
+      "GPU": 802336,
+      "network.mojom.NetworkService": 46720
+    },
+    "js": {
+      "mainHeapUsedMiB": 60,
+      "crossOriginIsolated": true
+    }
+  }
+]

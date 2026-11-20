@@ -1,0 +1,848 @@
+{
+  "probes": [
+    {
+      "id": "M01-minimal",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M02-version-string",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "version",
+          "message": "1 was expected"
+        }
+      ]
+    },
+    {
+      "id": "M03-version-2",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "version",
+          "message": "1 was expected"
+        }
+      ]
+    },
+    {
+      "id": "M04-unknown-top-field",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "",
+          "message": "Additional properties are not allowed ('cells' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "M05-name-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "name",
+          "message": "None is not of type 'string'"
+        }
+      ]
+    },
+    {
+      "id": "M06-name-whitespace",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M07-generange-p0",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M08-generange-p150",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M09-generange-p0.5",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M10-generange-max-below-min",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M11-colorCellsBy-unknown",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/colorCellsBy",
+          "message": "'cluster' is not one of ['gene-expression', 'transcript-count', 'cell-area', 'annotations', 'metadata']"
+        }
+      ]
+    },
+    {
+      "id": "M12-h5ad-coordinates-without-image",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M13-h5ad-labelColumn-without-labels",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M14-h5ad-labels-without-image",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "files",
+          "message": "'image' is a dependency of 'labels'"
+        }
+      ]
+    },
+    {
+      "id": "M15-image-zchunkstore-with-omezarr",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M16-image-segformat-without-segmentation",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M17-image-segmentation-unknown-extension",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M18-visiumhd-binsize-not-listed",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M19-visiumhd-duplicate-bin",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M20a-xenium-empty-options",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M20b-xenium-options-set",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options",
+          "message": "{'binSize': 8} is expected to be empty"
+        }
+      ]
+    },
+    {
+      "id": "M21-s3-path",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "files/cells",
+          "message": "'s3://bucket/cells.parquet' does not match '^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://'"
+        }
+      ]
+    },
+    {
+      "id": "M22-protocol-relative-path",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M23-mpu-zero",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options/micrometersPerUnit",
+          "message": "0 is less than or equal to the minimum of 0"
+        }
+      ]
+    },
+    {
+      "id": "M24-pointscale-zero",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/cellPointScale",
+          "message": "0 is less than or equal to the minimum of 0"
+        }
+      ]
+    },
+    {
+      "id": "M25-pointscale-100",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M26-opacity-1.5",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/imageOpacity",
+          "message": "1.5 is greater than the maximum of 1"
+        }
+      ]
+    },
+    {
+      "id": "M27a-genes-empty-string",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/genes/0",
+          "message": "'' should be non-empty"
+        }
+      ]
+    },
+    {
+      "id": "M27b-genes-whitespace",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M28-collection-as-manifest",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "",
+          "message": "'platform' is a required property"
+        },
+        {
+          "path": "",
+          "message": "Additional properties are not allowed ('datasets' was unexpected)"
+        },
+        {
+          "path": "",
+          "message": "'files' is a required property"
+        }
+      ]
+    },
+    {
+      "id": "M29a-source-url-ftp",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "source/url",
+          "message": "'ftp://host/x' does not match '^[Hh][Tt][Tt][Pp][Ss]?://[^/]'"
+        }
+      ]
+    },
+    {
+      "id": "M29b-source-url-empty-host",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "source/url",
+          "message": "'https://' does not match '^[Hh][Tt][Tt][Pp][Ss]?://[^/]'"
+        }
+      ]
+    },
+    {
+      "id": "M30-xenium-zip-root",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M31-h5ad-coordinates-padded",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options/coordinates",
+          "message": "' image-pixels' is not one of ['micrometers', 'image-pixels']"
+        }
+      ]
+    },
+    {
+      "id": "M32-imageView-uppercase",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/imageView",
+          "message": "'3D' is not one of ['2d', '3d']"
+        }
+      ]
+    },
+    {
+      "id": "M33-schema-number",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "$schema",
+          "message": "1 is not of type 'string'"
+        }
+      ]
+    },
+    {
+      "id": "M34-nonfinite-pointscale",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M35-nonfinite-generange",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "M36-spatialdata-no-files",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "",
+          "message": "'files' is a required property"
+        }
+      ]
+    },
+    {
+      "id": "M37-visium-unknown-file",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "files",
+          "message": "Additional properties are not allowed ('rawMatrix' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "M38-h5ad-options-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options",
+          "message": "None is not of type 'object'"
+        },
+        {
+          "path": "options",
+          "message": "None is not of type 'object'"
+        }
+      ]
+    },
+    {
+      "id": "M39-defaults-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults",
+          "message": "None is not of type 'object'"
+        }
+      ]
+    },
+    {
+      "id": "M40-files-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "files",
+          "message": "None is not of type 'object'"
+        },
+        {
+          "path": "files",
+          "message": "None is not of type 'object'"
+        }
+      ]
+    },
+    {
+      "id": "M41-coordinates-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options/coordinates",
+          "message": "None is not one of ['micrometers', 'image-pixels']"
+        }
+      ]
+    },
+    {
+      "id": "M42-visium-hd-segmented-unknown",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "files/segmentedOutputs",
+          "message": "Additional properties are not allowed ('cells' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "M43-merscope-options-set",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "options",
+          "message": "{'z': 3} is expected to be empty"
+        }
+      ]
+    },
+    {
+      "id": "C01-minimal",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C02-501-datasets",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets",
+          "message": "[{'dataset': 'd0'}, {'dataset': 'd1'}, {'dataset': 'd2'}, {'dataset': 'd3'}, {'dataset': 'd4'}, {'dataset': 'd5'}, {'dataset': 'd6'}, {'dataset': 'd7'}, {'dataset': 'd8'}, {'dataset': 'd9'}, {'dataset"
+        }
+      ]
+    },
+    {
+      "id": "C03-duplicate-dataset",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C04-duplicate-dataset-spelled-differently",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C05-z-without-coordinateSystem",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0",
+          "message": "'coordinateSystem' is a dependency of 'z'"
+        }
+      ]
+    },
+    {
+      "id": "C06-mixed-z",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C07-z-string",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0/z",
+          "message": "'5' is not of type 'number'"
+        }
+      ]
+    },
+    {
+      "id": "C08-z-nonfinite",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C09-coordinates-without-image",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0",
+          "message": "'image' is a dependency of 'coordinates'"
+        }
+      ]
+    },
+    {
+      "id": "C10-labelColumn-without-labels",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0",
+          "message": "'labels' is a dependency of 'labelColumn'"
+        }
+      ]
+    },
+    {
+      "id": "C11-defaults-imageOpacity",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults",
+          "message": "Additional properties are not allowed ('imageOpacity' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "C12-entry-platform",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0",
+          "message": "Additional properties are not allowed ('platform' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "C13-manifest-as-collection",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "",
+          "message": "Additional properties are not allowed ('platform' was unexpected)"
+        }
+      ]
+    },
+    {
+      "id": "C14-s3-root",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "root",
+          "message": "'s3://bucket/x' does not match '^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://'"
+        }
+      ]
+    },
+    {
+      "id": "C15-entry-name-whitespace",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C16-negative-z",
+      "schemaValid": true,
+      "expectSchema": true,
+      "errors": []
+    },
+    {
+      "id": "C17-empty-datasets",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets",
+          "message": "[] should be non-empty"
+        }
+      ]
+    },
+    {
+      "id": "C18-defaults-colorCellsBy-unknown",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults/colorCellsBy",
+          "message": "'cluster' is not one of ['gene-expression', 'transcript-count', 'cell-area', 'annotations', 'metadata']"
+        }
+      ]
+    },
+    {
+      "id": "C19-defaults-null",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "defaults",
+          "message": "None is not of type 'object'"
+        }
+      ]
+    },
+    {
+      "id": "C20-coordinates-padded",
+      "schemaValid": false,
+      "expectSchema": false,
+      "errors": [
+        {
+          "path": "datasets/0/coordinates",
+          "message": "'image-pixels ' is not one of ['micrometers', 'image-pixels']"
+        }
+      ]
+    }
+  ],
+  "files": [
+    {
+      "file": "docs/collections/gbm-space.json",
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/collections/spcox.json",
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/bia/S-BIAD2214.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/bia/S-BIAD2376.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/bia/S-BIAD2491.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/geo/GSM9080376.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/idr/idr0054-tonsil.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/idr/idr0062-blastocyst.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections.json",
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-01.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-02.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-04.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-05.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-06.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-07.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "examples/zenodo/21110855-liver-sections/section-08.json",
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    }
+  ],
+  "docBlocks": [
+    {
+      "file": "docs/dataset-collections.md",
+      "line": 40,
+      "parsed": true,
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-collections.md",
+      "line": 342,
+      "parsed": true,
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-collections.md",
+      "line": 416,
+      "parsed": true,
+      "kind": "collection",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 59,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 197,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 217,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 256,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 313,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/dataset-manifest.md",
+      "line": 341,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": true,
+      "errors": []
+    },
+    {
+      "file": "docs/deploy-to-s3.md",
+      "line": 226,
+      "parsed": true,
+      "kind": null
+    },
+    {
+      "file": "docs/h5ad-reference.md",
+      "line": 74,
+      "parsed": true,
+      "kind": "manifest",
+      "schemaValid": false,
+      "errors": [
+        {
+          "path": "",
+          "message": "'platform' is a required property"
+        },
+        {
+          "path": "",
+          "message": "Additional properties are not allowed ('refs' was unexpected)"
+        },
+        {
+          "path": "",
+          "message": "'files' is a required property"
+        },
+        {
+          "path": "",
+          "message": "'files' is a required property"
+        },
+        {
+          "path": "",
+          "message": "'files' is a required property"
+        }
+      ]
+    },
+    {
+      "file": "docs/zchunkstore.md",
+      "line": 33,
+      "parsed": true,
+      "kind": null
+    }
+  ]
+}

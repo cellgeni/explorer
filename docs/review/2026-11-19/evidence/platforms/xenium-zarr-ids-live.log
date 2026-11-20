@@ -1,0 +1,75 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts > Xenium demo: Zarr transcript IDs versus transcripts.parquet > the Zarr point at the parquet transcript has the same fov and transcript ID
+[{"id":"F1:67995","transcriptId":"67995","fovName":"F1","featureName":"ZNF683","x":220.703125,"y":1464.421875,"qv":40}]
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts > Xenium demo: density square counts by grid level > whole-slide totals agree across the levels the density view picks
+{
+ "maxBins 1000000: level 0, 2801 squares of 250 um": 554699029,
+ "maxBins 1500: level 1, 721 squares of 500 um": 423752521,
+ "maxBins 400: level 2, 193 squares of 1000 um": 328526061,
+ "maxBins 100: level 3, 54 squares of 2000 um": 212431707,
+ "maxBins 25: level 4, 15 squares of 4000 um": 109349991,
+ "maxBins 6: level 5, 6 squares of 8000 um": 45734064,
+ "maxBins 1: level 7, 1 squares of 32000 um": 5292443
+}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts > Xenium demo: density square counts by grid level > whole-slide totals agree across the levels the density view picks
+level 1 / level 0 per square (619 squares with >= 10k transcripts): min 0.664 p05 0.725 median 0.775 p95 0.831 max 0.884
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts (2 tests | 2 failed) 5049ms
+     × the Zarr point at the parquet transcript has the same fov and transcript ID 5036ms
+     × whole-slide totals agree across the levels the density view picks 12ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts > Xenium demo: Zarr transcript IDs versus transcripts.parquet > the Zarr point at the parquet transcript has the same fov and transcript ID
+AssertionError: expected [ [ 'F1', '67995' ] ] to deep equally contain [ 'F1', '281668250306971' ]
+
+- Expected
++ Received
+
+  [
++   [
+      "F1",
+-   "281668250306971",
++     "67995",
++   ],
+  ]
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts:45:79
+     43|       ),
+     44|     )
+     45|     expect(result.points.map((point) => [point.fovName, point.transcri…
+       |                                                                               ^
+     46|       'F1',
+     47|       '281668250306971',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts > Xenium demo: density square counts by grid level > whole-slide totals agree across the levels the density view picks
+AssertionError: expected 7 to be 1 // Object.is equality
+
+- Expected
++ Received
+
+- 1
++ 7
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-zarr-ids-live.repro.ts:99:49
+     97|       `level 1 / level 0 per square (${ratios.length} squares with >= …
+     98|     )
+     99|     expect(new Set(Object.values(totals)).size).toBe(1)
+       |                                                 ^
+    100|   }, 180_000)
+    101| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:42:56
+   Duration  5.30s (transform 41ms, setup 96ms, import 55ms, tests 5.05s, environment 0ms)
+

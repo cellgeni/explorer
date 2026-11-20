@@ -1,0 +1,351 @@
+[
+  {
+    "width": 1440,
+    "state": "start screen",
+    "violations": [],
+    "incomplete": ["color-contrast:3"],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 1,
+      "offscreen": [""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "h5ad medium",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:2",
+      "label-content-name-mismatch:1"
+    ],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "ome-tiff image controls",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 2,
+        "targets": [
+          "div[aria-label=\"rings histogram\"]",
+          "div[aria-label=\"diagonals histogram\"]"
+        ],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": ["aria-prohibited-attr:2"],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "visium folder",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:2",
+      "label-content-name-mismatch:5"
+    ],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "merscope vzg",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 1,
+        "targets": [".channel-histogram"],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": [
+      "aria-prohibited-attr:2",
+      "color-contrast:2",
+      "label-content-name-mismatch:9"
+    ],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "segmentation mask",
+    "violations": [],
+    "incomplete": ["aria-prohibited-attr:1", "label-content-name-mismatch:1"],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 1,
+      "offscreen": [""]
+    }
+  },
+  {
+    "width": 1440,
+    "state": "collection",
+    "violations": [],
+    "incomplete": ["color-contrast:5"],
+    "layout": {
+      "innerWidth": 1440,
+      "scrollWidth": 1440,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "start screen",
+    "violations": [],
+    "incomplete": ["color-contrast:3"],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 1,
+      "offscreen": [""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "h5ad medium",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:2",
+      "label-content-name-mismatch:1"
+    ],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "ome-tiff image controls",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 2,
+        "targets": [
+          "div[aria-label=\"rings histogram\"]",
+          "div[aria-label=\"diagonals histogram\"]"
+        ],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": ["aria-prohibited-attr:2"],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "visium folder",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:2",
+      "label-content-name-mismatch:5"
+    ],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "merscope vzg",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 1,
+        "targets": [".channel-histogram"],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": [
+      "aria-prohibited-attr:2",
+      "color-contrast:2",
+      "label-content-name-mismatch:9"
+    ],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "segmentation mask",
+    "violations": [],
+    "incomplete": ["aria-prohibited-attr:1", "label-content-name-mismatch:1"],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 1,
+      "offscreen": [""]
+    }
+  },
+  {
+    "width": 1024,
+    "state": "collection",
+    "violations": [],
+    "incomplete": ["color-contrast:5"],
+    "layout": {
+      "innerWidth": 1024,
+      "scrollWidth": 1024,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "start screen",
+    "violations": [],
+    "incomplete": ["color-contrast:1"],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 0,
+      "offscreen": []
+    }
+  },
+  {
+    "width": 390,
+    "state": "h5ad medium",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:4",
+      "label-content-name-mismatch:1"
+    ],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "ome-tiff image controls",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 2,
+        "targets": [
+          "div[aria-label=\"rings histogram\"]",
+          "div[aria-label=\"diagonals histogram\"]"
+        ],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": ["aria-prohibited-attr:2", "color-contrast:3"],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "visium folder",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:6",
+      "label-content-name-mismatch:5"
+    ],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "merscope vzg",
+    "violations": [
+      {
+        "id": "aria-prohibited-attr",
+        "impact": "serious",
+        "nodes": 1,
+        "targets": [".channel-histogram"],
+        "summary": "Fix all of the following:   aria-label attribute cannot be used on \"div\" elements with no valid role attribute."
+      }
+    ],
+    "incomplete": [
+      "aria-prohibited-attr:2",
+      "color-contrast:10",
+      "label-content-name-mismatch:9"
+    ],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "segmentation mask",
+    "violations": [],
+    "incomplete": [
+      "aria-prohibited-attr:1",
+      "color-contrast:1",
+      "label-content-name-mismatch:1"
+    ],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 1,
+      "offscreen": [""]
+    }
+  },
+  {
+    "width": 390,
+    "state": "collection",
+    "violations": [],
+    "incomplete": ["color-contrast:33"],
+    "layout": {
+      "innerWidth": 390,
+      "scrollWidth": 390,
+      "offscreenCount": 2,
+      "offscreen": ["", ""]
+    }
+  }
+]

@@ -1,0 +1,17 @@
+{
+  "splitHref": "/?collection=http%3A%2F%2F127.0.0.1%3A4274%2Fcells3d.h5ad%23obs.section",
+  "summary3d": "3,000 cells, z 0 to 101 µm",
+  "sectionButtons": ["s0", "s0", "s1", "s2"],
+  "collectionBarFound": true,
+  "title": "s0 · Spatial Omics Explorer",
+  "axe": {
+    "twoD": [],
+    "threeD": [
+      {
+        "id": "aria-hidden-focus",
+        "impact": "serious",
+        "targets": [".volume-viewer-canvas"]
+      }
+    ]
+  }
+}

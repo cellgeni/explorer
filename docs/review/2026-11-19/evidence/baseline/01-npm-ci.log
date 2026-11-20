@@ -1,0 +1,15 @@
+### 2026-11-19T20:30:42Z npm ci
+
+> spatial-omics-explorer@0.0.0 postinstall
+> patch-package
+
+patch-package 8.0.1
+Applying patches...
+hyparquet@1.26.0 ✔
+
+added 405 packages, and audited 406 packages in 5s
+
+92 packages are looking for funding
+  run `npm fund` for details
+
+found 0 vulnerabilities

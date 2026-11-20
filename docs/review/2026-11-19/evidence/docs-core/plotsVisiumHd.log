@@ -1,0 +1,25 @@
+ FAIL  docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts > Plots toggle on Visium HD > matches the documented availability
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts:19:28
+     17|     // The same expression App.tsx uses for plotsAvailable.
+     18|     const plotsAvailable = adapter.capabilities.cells && adapter.capab…
+     19|     expect(plotsAvailable).toBe(DOCUMENTED_PLOTS_ON_VISIUM_HD)
+       |                            ^
+     20|   })
+     21| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed (1)
+   Start at  20:40:01
+   Duration  874ms (transform 161ms, setup 120ms, import 192ms, tests 4ms, environment 461ms)
+

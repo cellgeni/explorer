@@ -1,0 +1,19 @@
+
+Running 2 tests using 1 worker
+
+{"label":"cold (new context)","readyMs":7098,"requests":22,"MB":95.1}
+{"label":"warm (reload, same context)","readyMs":6771,"requests":22,"MB":95.1}
+{"label":"cold again (new context)","readyMs":6953,"requests":22,"MB":95.1}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/profile.s6.mjs:42:1 › (b) cold and warm loads of profile.h5ad (28.3s)
+{"step":"switch 1 to S2","readyMs":653,"newRequests":1,"alive":2,"created":{"h5File.worker":3},"rssKiB":{"renderer":312512,"GPU":256928,"network.mojom.NetworkService":50800},"js":{"mainHeapUsedMiB":18,"crossOriginIsolated":true}}
+{"step":"switch 2 to S3","readyMs":1241,"newRequests":4,"alive":2,"created":{"h5File.worker":4},"rssKiB":{"renderer":328752,"GPU":306832,"network.mojom.NetworkService":50832},"js":{"mainHeapUsedMiB":20,"crossOriginIsolated":true}}
+{"step":"switch 3 to S1","readyMs":1239,"newRequests":4,"alive":2,"created":{"h5File.worker":5},"rssKiB":{"renderer":340688,"GPU":356368,"network.mojom.NetworkService":50832},"js":{"mainHeapUsedMiB":21,"crossOriginIsolated":true}}
+{"step":"switch 4 to S2","readyMs":1255,"newRequests":4,"alive":2,"created":{"h5File.worker":6},"rssKiB":{"renderer":354944,"GPU":406480,"network.mojom.NetworkService":50832},"js":{"mainHeapUsedMiB":20,"crossOriginIsolated":true}}
+{"step":"switch 5 to S3","readyMs":1253,"newRequests":4,"alive":2,"created":{"h5File.worker":7},"rssKiB":{"renderer":367216,"GPU":454064,"network.mojom.NetworkService":50832},"js":{"mainHeapUsedMiB":21,"crossOriginIsolated":true}}
+{"step":"switch 6 to S1","readyMs":1271,"newRequests":4,"alive":2,"created":{"h5File.worker":8},"rssKiB":{"renderer":322624,"GPU":411984,"network.mojom.NetworkService":49472},"js":{"mainHeapUsedMiB":22,"crossOriginIsolated":true}}
+{"step":"switch 7 to S2","readyMs":1279,"newRequests":4,"alive":2,"created":{"h5File.worker":9},"rssKiB":{"renderer":304704,"GPU":369408,"network.mojom.NetworkService":48992},"js":{"mainHeapUsedMiB":23,"crossOriginIsolated":true}}
+{"step":"switch 8 to S3","readyMs":1246,"newRequests":4,"alive":2,"created":{"h5File.worker":10},"rssKiB":{"renderer":328928,"GPU":423056,"network.mojom.NetworkService":48112},"js":{"mainHeapUsedMiB":25,"crossOriginIsolated":true}}
+{"step":"switch 9 to S1","readyMs":1259,"newRequests":4,"alive":2,"created":{"h5File.worker":11},"rssKiB":{"renderer":350704,"GPU":472832,"network.mojom.NetworkService":47648},"js":{"mainHeapUsedMiB":26,"crossOriginIsolated":true}}
+  ✓  2 docs/review/2026-11-19/evidence/ui-stage6/profile.s6.mjs:77:1 › (c) repeated collection switches (28.5s)
+
+  2 passed (58.2s)

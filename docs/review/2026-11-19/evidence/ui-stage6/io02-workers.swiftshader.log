@@ -1,0 +1,21 @@
+
+Running 1 test using 1 worker
+
+{"step":"loaded","settledMs":1025,"created":12,"alive":10,"aliveByName":{"tileDecode.worker":10},"requests":19,"rssKiB":{"renderer":324816,"GPU":154128,"network.mojom.NetworkService":44944},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"fill edit 1","settledMs":1040,"created":17,"alive":15,"aliveByName":{"tileDecode.worker":15},"requests":19,"rssKiB":{"renderer":344672,"GPU":153328,"network.mojom.NetworkService":45168},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"fill edit 2","settledMs":1040,"created":22,"alive":20,"aliveByName":{"tileDecode.worker":20},"requests":19,"rssKiB":{"renderer":382736,"GPU":153312,"network.mojom.NetworkService":46256},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"fill edit 5","settledMs":1033,"created":37,"alive":35,"aliveByName":{"tileDecode.worker":35},"requests":19,"rssKiB":{"renderer":500544,"GPU":144992,"network.mojom.NetworkService":48944},"js":{"mainHeapUsedMiB":13,"crossOriginIsolated":true}}
+{"step":"fill edit 10","settledMs":1034,"created":62,"alive":60,"aliveByName":{"tileDecode.worker":60},"requests":19,"rssKiB":{"renderer":694736,"GPU":144176,"network.mojom.NetworkService":51856},"js":{"mainHeapUsedMiB":14,"crossOriginIsolated":true}}
+{"step":"fill edit 15","settledMs":1074,"created":87,"alive":85,"aliveByName":{"tileDecode.worker":85},"requests":19,"rssKiB":{"renderer":803888,"GPU":144176,"network.mojom.NetworkService":54512},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"fill edit 20","settledMs":1063,"created":112,"alive":110,"aliveByName":{"tileDecode.worker":110},"requests":19,"rssKiB":{"renderer":884336,"GPU":144640,"network.mojom.NetworkService":57456},"js":{"mainHeapUsedMiB":11,"crossOriginIsolated":true}}
+{"step":"fill edit 25","settledMs":1037,"created":137,"alive":135,"aliveByName":{"tileDecode.worker":135},"requests":19,"rssKiB":{"renderer":779632,"GPU":144640,"network.mojom.NetworkService":60176},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"fill edit 30","settledMs":1058,"created":162,"alive":160,"aliveByName":{"tileDecode.worker":160},"requests":19,"rssKiB":{"renderer":924144,"GPU":144640,"network.mojom.NetworkService":63104},"js":{"mainHeapUsedMiB":11,"crossOriginIsolated":true}}
+{"step":"typed edit 1","settledMs":1034,"created":182,"alive":180,"aliveByName":{"tileDecode.worker":180},"requests":19,"rssKiB":{"renderer":897440,"GPU":90672,"network.mojom.NetworkService":63152},"js":{"mainHeapUsedMiB":15,"crossOriginIsolated":true}}
+{"step":"typed edit 2","settledMs":1031,"created":202,"alive":200,"aliveByName":{"tileDecode.worker":200},"requests":19,"rssKiB":{"renderer":993040,"GPU":90192,"network.mojom.NetworkService":64672},"js":{"mainHeapUsedMiB":12,"crossOriginIsolated":true}}
+{"step":"typed edit 3","settledMs":1029,"created":222,"alive":220,"aliveByName":{"tileDecode.worker":220},"requests":19,"rssKiB":{"renderer":889888,"GPU":90224,"network.mojom.NetworkService":62672},"js":{"mainHeapUsedMiB":15,"crossOriginIsolated":true}}
+{"step":"typed edit 4","settledMs":1028,"created":242,"alive":240,"aliveByName":{"tileDecode.worker":240},"requests":19,"rssKiB":{"renderer":805088,"GPU":90256,"network.mojom.NetworkService":60688},"js":{"mainHeapUsedMiB":11,"crossOriginIsolated":true}}
+{"step":"typed edit 5","settledMs":1031,"created":262,"alive":260,"aliveByName":{"tileDecode.worker":260},"requests":19,"rssKiB":{"renderer":775504,"GPU":90272,"network.mojom.NetworkService":60992},"js":{"mainHeapUsedMiB":14,"crossOriginIsolated":true}}
+{"step":"after switch to h5ad-smoke","settledMs":1037,"created":263,"alive":261,"aliveByName":{"tileDecode.worker":260,"h5File.worker":1},"requests":23,"rssKiB":{"renderer":635664,"GPU":207824,"network.mojom.NetworkService":59648},"js":{"mainHeapUsedMiB":13,"crossOriginIsolated":true}}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/io02-workers.s6.mjs:18:1 › decode workers and memory over contrast edits (28.5s)
+
+  1 passed (29.9s)

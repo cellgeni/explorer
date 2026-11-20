@@ -1,0 +1,53 @@
+total self size: 37.2 MiB -> 62.6 MiB
+largest size increases:
+     6792 KiB  +93766  (151154)  array:(object elements)
+     5449 KiB  +164218  (264487)  object:Object
+     5370 KiB  +522  (849)  native:system / JSArrayBufferData
+     2087 KiB  +817  (2339)  array:
+     1472 KiB  +94201  (152432)  object:Array
+     1304 KiB  +111262  (174126)  number:heap number
+     1230 KiB  +45000  (70000)  closure:readMetadata
+      965 KiB  +46420  (73241)  object:system / Context
+      422 KiB  +247  (2962)  code:system / InstructionStream
+      138 KiB  +828  (1513)  array:(object properties)
+      107 KiB  +545  (6678)  code:system / TrustedByteArray
+      104 KiB  +2844  (6229)  hidden:system / PropertyArray
+       42 KiB  +167  (446)  code:system / ProtectedFixedArray
+       35 KiB  +7065  (458700)  string:
+       26 KiB  +934  (2664)  closure:
+       25 KiB  +487  (1081)  hidden:system / WeakArrayList
+       25 KiB  +486  (1100)  object:ArrayBuffer
+       23 KiB  +18  (28)  native:WebGL2RenderingContext
+       23 KiB  +990  (2210)  closure:native_bind
+       22 KiB  +1137  (3712)  concatenated string:
+       22 KiB  +324  (589)  object:Stat
+       20 KiB  +630  (1032)  closure:set
+       19 KiB  +216  (336)  object:WEBGLBuffer
+       17 KiB  +720  (1120)  native:ExtensionTracker
+       16 KiB  +300  (486)  native:DOMRectReadOnly
+largest count increases of named objects:
+  +164218  (264487)  5449 KiB  object:Object
+  +94201  (152432)  1472 KiB  object:Array
+  +46420  (73241)  965 KiB  object:system / Context
+  +486  (1100)  25 KiB  object:ArrayBuffer
+  +486  (857)  8 KiB  object:Set
+  +324  (589)  22 KiB  object:Stat
+  +288  (598)  5 KiB  object:Map
+  +216  (336)  19 KiB  object:WEBGLBuffer
+  +162  (252)  6 KiB  object:UniformBlock
+  +162  (252)  3 KiB  object:ShaderBlockWriter
+  +126  (196)  6 KiB  object:Attribute
+  +108  (189)  6 KiB  object:Float32Array
+  +108  (168)  2 KiB  object:HydratedH5adGroup
+  +54  (367)  3 KiB  object:Uint8Array
+  +54  (93)  3 KiB  object:Float64Array
+  +54  (98)  1 KiB  object:Promise
+  +54  (85)  1 KiB  object:Matrix4
+  +36  (56)  4 KiB  object:WEBGLRenderPipeline
+  +36  (56)  2 KiB  object:WEBGLShader
+  +36  (65)  2 KiB  object:Int32Array
+  +36  (56)  2 KiB  object:BigInt64Array
+  +36  (72)  2 KiB  object:Uint32Array
+  +36  (56)  2 KiB  object:PackedCellPointLayer
+  +36  (60)  1 KiB  object:Stats
+  +28  (128)  0 KiB  object:HTMLDivElement

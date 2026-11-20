@@ -1,0 +1,68 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5
+{"matrixName":"GSM1_filtered_feature_bc_matrix.h5","detected":{"tissuePositions":"GSM1_tissue_positions_list.csv.gz","scalefactors":"GSM1_scalefactors_json.json.gz","filteredMatrix":"GSM1_filtered_feature_bc_matrix.h5"},"outcome":{"ok":true,"cells":36}}
+
+stderr | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+HDF5-DIAG: Error detected in HDF5 (2.0.0):
+  #000: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 821 in H5Fopen(): unable to synchronously open file
+    major: File accessibility
+    minor: Unable to open file
+  #001: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 782 in H5F__open_api_common(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #002: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3869 in H5VL_file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #003: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3718 in H5VL__file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #004: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLnative_file.c line 128 in H5VL__native_file_open(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #005: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fint.c line 2117 in H5F_open(): unable to read superblock
+    major: File accessibility
+    minor: Read failed
+  #006: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fsuper.c line 388 in H5F__super_read(): file signature not found
+    major: File accessibility
+    minor: Not an HDF5 file
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+{"matrixName":"GSM1_filtered_feature_bc_matrix.h5.gz","detected":{"tissuePositions":"GSM1_tissue_positions_list.csv.gz","scalefactors":"GSM1_scalefactors_json.json.gz","filteredMatrix":"GSM1_filtered_feature_bc_matrix.h5.gz"},"outcome":{"ok":false,"error":"Error: The file is not a readable HDF5 file."}}
+
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5 454ms
+ × docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz 11ms
+   → expected { ok: false, …(1) } to deeply equal { ok: true, cells: 36 }
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+AssertionError: expected { ok: false, …(1) } to deeply equal { ok: true, cells: 36 }
+
+- Expected
++ Received
+
+  {
+-   "cells": 36,
+-   "ok": true,
++   "error": "Error: The file is not a readable HDF5 file.",
++   "ok": false,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts:116:23
+    114|       )
+    115|       // Documented contract: both load the same 36 spots.
+    116|       expect(outcome).toEqual({ ok: true, cells: 36 })
+       |                       ^
+    117|     })
+    118|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  20:43:23
+   Duration  2.57s (transform 582ms, setup 154ms, import 425ms, tests 466ms, environment 1.37s)
+

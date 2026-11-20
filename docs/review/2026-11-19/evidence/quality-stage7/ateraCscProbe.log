@@ -1,0 +1,34 @@
+
+ RUN  v4.1.12 .
+
+stdout | src/datasets/ateraDataset.test.ts > AteraDataset > rejects a CSC matrix whose feature count differs from the matrix
+readCsc rejected: NotFoundError: Not found: v2 array
+
+stdout | src/datasets/ateraDataset.test.ts > AteraDataset > rejects a CSC matrix whose feature count differs from the matrix
+geneExpression rejected: NotFoundError: Not found: v2 array
+
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > builds the overview from matrix obs and cells.zarr.zip details
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > opens only the matrix metadata the viewer reads
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > offers gene features only and reads annotations, tracks, and embeddings
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > sums selected genes from the CSC matrix located by experiment.spatial
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > reads each gene in every cell for the Plots panel (plan 22-A)
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > limits expression to the box and samples cells without expression
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > reads cell rows from the CSR matrix for cell details and ROI stats
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > decodes cell and nucleus polygons with matrix barcodes as ids
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > adds counts and areas to ROI cells
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > reports Atera metadata with the experiment pixel size
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > locates the 3D DAPI stack from experiment.spatial
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > prefers manifest file locations over experiment.spatial
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > opens every morphology channel file with the manifest sidecar
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > opens the morphology image without a sidecar when the manifest names none
+ ↓ src/datasets/ateraDataset.test.ts > AteraDataset > uses standard names without refetching a missing experiment.spatial
+ ✓ src/datasets/ateraDataset.test.ts > AteraDataset > rejects a CSC matrix whose feature count differs from the matrix 29ms
+ ↓ src/datasets/ateraDataset.test.ts > Atera run zipped whole > opens the run from the zip, reading its files in place
+ ↓ src/datasets/ateraDataset.test.ts > Atera matrix metadata selection > keeps X, obs, obsm, and the var columns the viewer reads
+ ↓ src/datasets/ateraDataset.test.ts > Atera matrix metadata selection > lists arrays and groups from their metadata keys
+
+ Test Files  1 passed (1)
+      Tests  1 passed | 18 skipped (19)
+   Start at  12:06:18
+   Duration  814ms (transform 291ms, setup 387ms, import 45ms, tests 31ms, environment 273ms)
+

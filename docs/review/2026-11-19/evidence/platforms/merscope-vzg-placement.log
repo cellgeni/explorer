@@ -1,0 +1,40 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+[placement] docs/review/2026-11-19/evidence/fixtures/platforms/merscope-anisotropic.vzg: {"placement":{"originX":1000,"originY":3000,"micronsPerPixel":0.3333333333333333},"first":{"minX":1000,"maxX":1010.6666666666666,"minY":3000,"maxY":3010.6666666666665},"last":{"minX":1064,"maxX":1066.6666666666667,"minY":3042.6666666666665,"maxY":3053.3333333333335}}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts (2 tests | 1 failed) 18ms
+     × anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+AssertionError: expected { maxX: 1066.6666666666667, …(1) } to deeply equal { maxX: 1100, maxY: 3040 }
+
+- Expected
++ Received
+
+  {
+-   "maxX": 1100,
+-   "maxY": 3040,
++   "maxX": 1066.6666666666667,
++   "maxY": 3053.3333333333335,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts:100:50
+     98|     expect(first.minX).toBe(1000)
+     99|     expect(first.minY).toBe(3000)
+    100|     expect({ maxX: last.maxX, maxY: last.maxY }).toEqual({ maxX: 1100,…
+       |                                                  ^
+    101|   })
+    102| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  20:41:48
+   Duration  1.02s (transform 362ms, setup 98ms, import 481ms, tests 18ms, environment 343ms)
+

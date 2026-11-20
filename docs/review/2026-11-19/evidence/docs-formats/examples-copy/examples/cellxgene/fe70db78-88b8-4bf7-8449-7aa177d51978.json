@@ -1,0 +1,20 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "h5ad",
+  "name": "Mouse embryo E9.0 (Slide-seqV2)",
+  "description": "Slide-seqV2 puck of a whole E9.0 mouse embryo, 3,374 beads with cell-type annotations, from spatial maps of neural tube patterning.",
+  "source": {
+    "repository": "CELLxGENE",
+    "accession": "fe70db78-88b8-4bf7-8449-7aa177d51978",
+    "url": "https://cellxgene.cziscience.com/collections/d74b6979-efba-47cd-990a-9d80ccf29055",
+    "license": "CC BY 4.0",
+    "citation": "Sampath Kumar A et al. (2023) Spatial transcriptomic maps of whole mouse embryos reveal principles of neural tube patterning. Nature Genetics. doi:10.1038/s41588-023-01435-6"
+  },
+  "files": {
+    "h5ad": "https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/fe70db78-88b8-4bf7-8449-7aa177d51978.h5ad"
+  },
+  "defaults": {
+    "genes": ["Sox2"]
+  }
+}

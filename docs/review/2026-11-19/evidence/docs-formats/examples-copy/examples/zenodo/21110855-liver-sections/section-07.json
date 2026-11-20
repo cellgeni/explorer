@@ -1,0 +1,24 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "spatialdata",
+  "name": "Human liver NIH_F5, section 07 (registered)",
+  "description": "Serial section 07 of human liver sample NIH_F5 in the store's aligned coordinate system, which registers its cells to section 04; the morphology image is rotated in that frame, so it is not shown.",
+  "source": {
+    "repository": "Zenodo",
+    "accession": "21110855",
+    "url": "https://zenodo.org/records/21110855",
+    "license": "CC BY-NC-ND 4.0",
+    "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
+  },
+  "files": {
+    "store": "https://mp33.cog.sanger.ac.uk/public/LYNX_liver_dataset/NIH_F5_3D/xenium/section_07_sdata.zarr.zip"
+  },
+  "options": {
+    "coordinateSystem": "aligned",
+    "micrometersPerUnit": 0.2125
+  },
+  "defaults": {
+    "genes": ["CYP3A4"]
+  }
+}

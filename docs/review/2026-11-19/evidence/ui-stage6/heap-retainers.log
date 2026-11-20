@@ -1,0 +1,48 @@
+new PackedCellPointLayer objects: found
+retainer path (root first):
+  synthetic: --[1]-->
+  synthetic:(GC roots) --[29]-->
+  synthetic:C++ Persistent roots --blink::ThreadState::ThreadState(v8::Platform *, std::optional<cppgc::StackStartMarker>)@../../third_party/blink/renderer/platform/heap/thread_state.cc:185-->
+  native:Pending activities --[1]-->
+  native:InternalNode --[30]-->
+  native:MediaQueryList --[5]-->
+  native:InternalNode --[1]-->
+  native:InternalNode --[1]-->
+  native:InternalNode --[1]-->
+  native:EventListener --[1]-->
+  native:V8EventListener --[1]-->
+  closure:_handleDevicePixelRatioChange --context-->
+  object:system / Context --this-->
+  object:CanvasObserver --props-->
+  object:Object --onResize-->
+  closure:onResize --context-->
+  object:system / Context --this-->
+  object:WebGLCanvasContext --device-->
+  object:WebGLDevice --props-->
+  object:Object --onResize-->
+  closure:onResize --context-->
+  object:system / Context --this-->
+  object:Deck --props-->
+  object:Object --_customRender-->
+  closure: --context-->
+  object:system / Context --thisRef-->
+  object:Object --forceUpdate-->
+  closure:forceUpdate --context-->
+  object:system / Context --props-->
+  object:Object --layers-->
+  object:Array --[0]-->
+  object:PackedCellPointLayer
+new AnnDataH5adDataset objects: found
+retainer path (root first):
+  synthetic: --2-->
+  hidden:system / NativeContext / http://127.0.0.1:4276 --global_object-->
+  object:Window [JSGlobalObject] / http://127.0.0.1:4276 --fetch-->
+  closure: --context-->
+  object:system / Context --previous-->
+  object:system / Context --spatialDatasetCache-->
+  object:DatasetCache --entries-->
+  object:Map --table-->
+  array: --9-->
+  object:Object --promise-->
+  object:Promise --reactions_or_result-->
+  object:AnnDataH5adDataset

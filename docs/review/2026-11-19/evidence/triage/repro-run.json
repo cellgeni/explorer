@@ -1,0 +1,2218 @@
+{
+  "numTotalTestSuites": 72,
+  "numPassedTestSuites": 56,
+  "numFailedTestSuites": 16,
+  "numPendingTestSuites": 0,
+  "numTotalTests": 192,
+  "numPassedTests": 180,
+  "numFailedTests": 12,
+  "numPendingTests": 0,
+  "numTodoTests": 0,
+  "snapshot": {
+    "added": 0,
+    "failure": false,
+    "filesAdded": 0,
+    "filesRemoved": 0,
+    "filesRemovedList": [],
+    "filesUnmatched": 0,
+    "filesUpdated": 0,
+    "matched": 0,
+    "total": 0,
+    "unchecked": 0,
+    "uncheckedKeysByFile": [],
+    "unmatched": 0,
+    "updated": 0,
+    "didUpdate": false
+  },
+  "startTime": 1795165307624,
+  "success": false,
+  "testResults": [
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["repro harness"],
+          "fullName": "repro harness imports reviewed source",
+          "status": "passed",
+          "title": "imports reviewed source",
+          "duration": 0.5229170000000067,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165314631,
+      "endTime": 1795165314631.523,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/smoke.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["AnnData csr read whole"],
+          "fullName": "AnnData csr read whole observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 156.31441700000005,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csc read whole"],
+          "fullName": "AnnData csc read whole observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 17.434124999999995,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData dense read whole"],
+          "fullName": "AnnData dense read whole observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 10.147915999999896,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csr read range"],
+          "fullName": "AnnData csr read range observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 18.041625000000067,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csr read range-lazy"],
+          "fullName": "AnnData csr read range-lazy observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 8.55424999999991,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csc read range-lazy"],
+          "fullName": "AnnData csc read range-lazy observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 34.06312500000013,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData dense read range-lazy"],
+          "fullName": "AnnData dense read range-lazy observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 5.693540999999868,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csr read zarr"],
+          "fullName": "AnnData csr read zarr observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 47.635957999999846,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData csc read zarr"],
+          "fullName": "AnnData csc read zarr observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 18.66991699999994,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["AnnData dense read zarr"],
+          "fullName": "AnnData dense read zarr observes the axes, IDs and values",
+          "status": "passed",
+          "title": "observes the axes, IDs and values",
+          "duration": 42.25370799999996,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "selected-cell profile with colliding gene names, by backend"
+          ],
+          "fullName": "selected-cell profile with colliding gene names, by backend reports what each backend returned",
+          "status": "passed",
+          "title": "reports what each backend returned",
+          "duration": 1.0967920000000504,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165310848,
+      "endTime": 1795165311209.0967,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/AD/axes.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["SpatialData int64 instance ids above 2**53 (AD-04)"],
+          "fullName": "SpatialData int64 instance ids above 2**53 (AD-04) places no row: the table side rounds the ids, the shapes side keeps them",
+          "status": "passed",
+          "title": "places no row: the table side rounds the ids, the shapes side keeps them",
+          "duration": 46.44779200000016,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["SpatialData int64 instance ids above 2**53 (AD-04)"],
+          "fullName": "SpatialData int64 instance ids above 2**53 (AD-04) control: the same store with ids below 2**53 places every row",
+          "status": "passed",
+          "title": "control: the same store with ids below 2**53 places every row",
+          "duration": 4.797416000000112,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165312269,
+      "endTime": 1795165312320.7974,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/AD/spatialdata-int64.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "ROI gene statistics over an X with negative values (AD-02)"
+          ],
+          "fullName": "ROI gene statistics over an X with negative values (AD-02) csr: Neg mean per cell",
+          "status": "passed",
+          "title": "csr: Neg mean per cell",
+          "duration": 125.79250000000002,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "ROI gene statistics over an X with negative values (AD-02)"
+          ],
+          "fullName": "ROI gene statistics over an X with negative values (AD-02) dense: Neg mean per cell",
+          "status": "passed",
+          "title": "dense: Neg mean per cell",
+          "duration": 64.08762500000012,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["a NaN stored value in z-score colouring (AD-03)"],
+          "fullName": "a NaN stored value in z-score colouring (AD-03) turns every cell of the batch NaN",
+          "status": "passed",
+          "title": "turns every cell of the batch NaN",
+          "duration": 31.50675000000001,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165310960,
+      "endTime": 1795165311181.5068,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/AD/values.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["ANA: Plots numbers against an independent oracle"],
+          "fullName": "ANA: Plots numbers against an independent oracle counts groups, unmatched IDs and repeated cells as the oracle does",
+          "status": "passed",
+          "title": "counts groups, unmatched IDs and repeated cells as the oracle does",
+          "duration": 13.991792000000032,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["ANA: Plots numbers against an independent oracle"],
+          "fullName": "ANA: Plots numbers against an independent oracle matches the oracle for every group on both scales, and the CSV says the same",
+          "status": "passed",
+          "title": "matches the oracle for every group on both scales, and the CSV says the same",
+          "duration": 8.523874999999975,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["ANA: Plots numbers against an independent oracle"],
+          "fullName": "ANA: Plots numbers against an independent oracle shows the same means and medians in Show numbers as in the CSV",
+          "status": "passed",
+          "title": "shows the same means and medians in Show numbers as in the CSV",
+          "duration": 4.003874999999994,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["ANA: Plots numbers against an independent oracle"],
+          "fullName": "ANA: Plots numbers against an independent oracle records what a stored NaN does (dense X with missing values)",
+          "status": "passed",
+          "title": "records what a stored NaN does (dense X with missing values)",
+          "duration": 1.8645419999999149,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165312898,
+      "endTime": 1795165312926.8645,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/analysis/plotOracle.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["ANA: ROI cell limits on AnnData platforms"],
+          "fullName": "ANA: ROI cell limits on AnnData platforms returns every cell of a box when no limit is passed (the app passes none), yet the app rule flags the ROI as cut short",
+          "status": "passed",
+          "title": "returns every cell of a box when no limit is passed (the app passes none), yet the app rule flags the ROI as cut short",
+          "duration": 289.92933300000004,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["ANA: ROI cell limits on AnnData platforms"],
+          "fullName": "ANA: ROI cell limits on AnnData platforms applies a limit before the lasso test, so a lasso can come back short without reaching the limit (latent)",
+          "status": "passed",
+          "title": "applies a limit before the lasso test, so a lasso can come back short without reaching the limit (latent)",
+          "duration": 9.81683299999986,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165313584,
+      "endTime": 1795165313883.817,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/analysis/roiLimit.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Plots toggle on Visium HD"],
+          "fullName": "Plots toggle on Visium HD matches the documented availability",
+          "status": "failed",
+          "title": "matches the documented availability",
+          "duration": 4.212167000000136,
+          "failureMessages": [
+            "AssertionError: expected true to be false // Object.is equality\n    at docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts:19:28\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309491,
+      "endTime": 1795165309495.2122,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["IO-01 persistent byte-range cache keeps short bodies"],
+          "fullName": "IO-01 persistent byte-range cache keeps short bodies poisons the Parquet footer for later loads of the same file",
+          "status": "passed",
+          "title": "poisons the Parquet footer for later loads of the same file",
+          "duration": 10.206834000000072,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IO-01 persistent byte-range cache keeps short bodies"],
+          "fullName": "IO-01 persistent byte-range cache keeps short bodies fetchByteRangeWithCache stores whatever fetchRange returns (TIFF tile namespace)",
+          "status": "passed",
+          "title": "fetchByteRangeWithCache stores whatever fetchRange returns (TIFF tile namespace)",
+          "duration": 10.70837500000016,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IO-01 persistent byte-range cache keeps short bodies"],
+          "fullName": "IO-01 persistent byte-range cache keeps short bodies control: the zip store reader refuses a short body and caches nothing",
+          "status": "passed",
+          "title": "control: the zip store reader refuses a short body and caches nothing",
+          "duration": 54.03312499999993,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165310905,
+      "endTime": 1795165310980.0332,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M01-minimal'",
+          "status": "passed",
+          "title": "'M01-minimal'",
+          "duration": 1.8034999999999854,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M02-version-string'",
+          "status": "passed",
+          "title": "'M02-version-string'",
+          "duration": 0.2073329999999487,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M03-version-2'",
+          "status": "passed",
+          "title": "'M03-version-2'",
+          "duration": 0.09533399999997982,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M04-unknown-top-field'",
+          "status": "passed",
+          "title": "'M04-unknown-top-field'",
+          "duration": 0.19399999999995998,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M05-name-null'",
+          "status": "passed",
+          "title": "'M05-name-null'",
+          "duration": 0.38487499999996544,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M06-name-whitespace'",
+          "status": "passed",
+          "title": "'M06-name-whitespace'",
+          "duration": 0.17316700000003493,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M07-generange-p0'",
+          "status": "passed",
+          "title": "'M07-generange-p0'",
+          "duration": 0.29304100000001654,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M08-generange-p150'",
+          "status": "passed",
+          "title": "'M08-generange-p150'",
+          "duration": 0.19745799999998326,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M09-generange-p0.5'",
+          "status": "passed",
+          "title": "'M09-generange-p0.5'",
+          "duration": 0.16941699999995308,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M10-generange-max-below-min'",
+          "status": "passed",
+          "title": "'M10-generange-max-below-min'",
+          "duration": 0.17979200000002038,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M11-colorCellsBy-unknown'",
+          "status": "passed",
+          "title": "'M11-colorCellsBy-unknown'",
+          "duration": 0.14737500000001091,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M12-h5ad-coordinates-without-image'",
+          "status": "passed",
+          "title": "'M12-h5ad-coordinates-without-image'",
+          "duration": 0.42650000000003274,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M13-h5ad-labelColumn-without-labels'",
+          "status": "passed",
+          "title": "'M13-h5ad-labelColumn-without-labels'",
+          "duration": 0.11087499999996453,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M14-h5ad-labels-without-image'",
+          "status": "passed",
+          "title": "'M14-h5ad-labels-without-image'",
+          "duration": 0.06045900000003712,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M15-image-zchunkstore-with-omezarr'",
+          "status": "passed",
+          "title": "'M15-image-zchunkstore-with-omezarr'",
+          "duration": 0.09887500000002092,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M16-image-segformat-without-segmentat…'",
+          "status": "passed",
+          "title": "'M16-image-segformat-without-segmentat…'",
+          "duration": 0.06966699999998127,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M17-image-segmentation-unknown-extens…'",
+          "status": "passed",
+          "title": "'M17-image-segmentation-unknown-extens…'",
+          "duration": 0.14224999999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M18-visiumhd-binsize-not-listed'",
+          "status": "passed",
+          "title": "'M18-visiumhd-binsize-not-listed'",
+          "duration": 0.14187500000002728,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M19-visiumhd-duplicate-bin'",
+          "status": "passed",
+          "title": "'M19-visiumhd-duplicate-bin'",
+          "duration": 0.049167000000011285,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M20a-xenium-empty-options'",
+          "status": "passed",
+          "title": "'M20a-xenium-empty-options'",
+          "duration": 0.03916700000002038,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M20b-xenium-options-set'",
+          "status": "passed",
+          "title": "'M20b-xenium-options-set'",
+          "duration": 0.04508399999997437,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M21-s3-path'",
+          "status": "passed",
+          "title": "'M21-s3-path'",
+          "duration": 0.04841699999997218,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M22-protocol-relative-path'",
+          "status": "passed",
+          "title": "'M22-protocol-relative-path'",
+          "duration": 0.040582999999969616,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M23-mpu-zero'",
+          "status": "passed",
+          "title": "'M23-mpu-zero'",
+          "duration": 0.0512500000000955,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M24-pointscale-zero'",
+          "status": "passed",
+          "title": "'M24-pointscale-zero'",
+          "duration": 0.0515419999999267,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M25-pointscale-100'",
+          "status": "passed",
+          "title": "'M25-pointscale-100'",
+          "duration": 0.040249999999900865,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M26-opacity-1.5'",
+          "status": "passed",
+          "title": "'M26-opacity-1.5'",
+          "duration": 0.04170899999996891,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M27a-genes-empty-string'",
+          "status": "passed",
+          "title": "'M27a-genes-empty-string'",
+          "duration": 0.048958999999968,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M27b-genes-whitespace'",
+          "status": "passed",
+          "title": "'M27b-genes-whitespace'",
+          "duration": 0.038041000000021086,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M28-collection-as-manifest'",
+          "status": "passed",
+          "title": "'M28-collection-as-manifest'",
+          "duration": 0.03116699999998218,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M29a-source-url-ftp'",
+          "status": "passed",
+          "title": "'M29a-source-url-ftp'",
+          "duration": 0.04995799999994688,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M29b-source-url-empty-host'",
+          "status": "passed",
+          "title": "'M29b-source-url-empty-host'",
+          "duration": 0.05483399999991434,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M30-xenium-zip-root'",
+          "status": "passed",
+          "title": "'M30-xenium-zip-root'",
+          "duration": 0.04520800000000236,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M31-h5ad-coordinates-padded'",
+          "status": "passed",
+          "title": "'M31-h5ad-coordinates-padded'",
+          "duration": 0.047584000000028936,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M32-imageView-uppercase'",
+          "status": "passed",
+          "title": "'M32-imageView-uppercase'",
+          "duration": 0.24525000000005548,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M33-schema-number'",
+          "status": "passed",
+          "title": "'M33-schema-number'",
+          "duration": 0.11591700000008132,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M34-nonfinite-pointscale'",
+          "status": "passed",
+          "title": "'M34-nonfinite-pointscale'",
+          "duration": 0.14279199999998582,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M35-nonfinite-generange'",
+          "status": "passed",
+          "title": "'M35-nonfinite-generange'",
+          "duration": 0.06291699999997036,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M36-spatialdata-no-files'",
+          "status": "passed",
+          "title": "'M36-spatialdata-no-files'",
+          "duration": 0.04616699999996854,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M37-visium-unknown-file'",
+          "status": "passed",
+          "title": "'M37-visium-unknown-file'",
+          "duration": 0.06470899999999347,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M38-h5ad-options-null'",
+          "status": "passed",
+          "title": "'M38-h5ad-options-null'",
+          "duration": 0.03858300000001691,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M39-defaults-null'",
+          "status": "passed",
+          "title": "'M39-defaults-null'",
+          "duration": 0.0342080000000351,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M40-files-null'",
+          "status": "passed",
+          "title": "'M40-files-null'",
+          "duration": 0.033999999999991815,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M41-coordinates-null'",
+          "status": "passed",
+          "title": "'M41-coordinates-null'",
+          "duration": 0.04429199999992761,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M42-visium-hd-segmented-unknown'",
+          "status": "passed",
+          "title": "'M42-visium-hd-segmented-unknown'",
+          "duration": 0.04174999999997908,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'M43-merscope-options-set'",
+          "status": "passed",
+          "title": "'M43-merscope-options-set'",
+          "duration": 0.036999999999920874,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C01-minimal'",
+          "status": "passed",
+          "title": "'C01-minimal'",
+          "duration": 0.2583750000000009,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C02-501-datasets'",
+          "status": "passed",
+          "title": "'C02-501-datasets'",
+          "duration": 11.127541000000065,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C03-duplicate-dataset'",
+          "status": "passed",
+          "title": "'C03-duplicate-dataset'",
+          "duration": 0.15487499999994725,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C04-duplicate-dataset-spelled-differe…'",
+          "status": "passed",
+          "title": "'C04-duplicate-dataset-spelled-differe…'",
+          "duration": 0.06266700000003311,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C05-z-without-coordinateSystem'",
+          "status": "passed",
+          "title": "'C05-z-without-coordinateSystem'",
+          "duration": 0.0493340000000444,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C06-mixed-z'",
+          "status": "passed",
+          "title": "'C06-mixed-z'",
+          "duration": 0.08137499999997999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C07-z-string'",
+          "status": "passed",
+          "title": "'C07-z-string'",
+          "duration": 0.041999999999916326,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C08-z-nonfinite'",
+          "status": "passed",
+          "title": "'C08-z-nonfinite'",
+          "duration": 0.05595899999991616,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C09-coordinates-without-image'",
+          "status": "passed",
+          "title": "'C09-coordinates-without-image'",
+          "duration": 0.04108399999995527,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C10-labelColumn-without-labels'",
+          "status": "passed",
+          "title": "'C10-labelColumn-without-labels'",
+          "duration": 0.04399999999998272,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C11-defaults-imageOpacity'",
+          "status": "passed",
+          "title": "'C11-defaults-imageOpacity'",
+          "duration": 0.05441700000005767,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C12-entry-platform'",
+          "status": "passed",
+          "title": "'C12-entry-platform'",
+          "duration": 0.03758299999992687,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C13-manifest-as-collection'",
+          "status": "passed",
+          "title": "'C13-manifest-as-collection'",
+          "duration": 0.09900000000004638,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C14-s3-root'",
+          "status": "passed",
+          "title": "'C14-s3-root'",
+          "duration": 0.08079200000008768,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C15-entry-name-whitespace'",
+          "status": "passed",
+          "title": "'C15-entry-name-whitespace'",
+          "duration": 0.04341599999997925,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C16-negative-z'",
+          "status": "passed",
+          "title": "'C16-negative-z'",
+          "duration": 0.07662500000003547,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C17-empty-datasets'",
+          "status": "passed",
+          "title": "'C17-empty-datasets'",
+          "duration": 0.4054999999999609,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C18-defaults-colorCellsBy-unknown'",
+          "status": "passed",
+          "title": "'C18-defaults-colorCellsBy-unknown'",
+          "duration": 0.24945900000000165,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C19-defaults-null'",
+          "status": "passed",
+          "title": "'C19-defaults-null'",
+          "duration": 0.10387500000001637,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes 'C20-coordinates-padded'",
+          "status": "passed",
+          "title": "'C20-coordinates-padded'",
+          "duration": 0.06608299999993505,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["schema vs parser probes"],
+          "fullName": "schema vs parser probes prints the table",
+          "status": "passed",
+          "title": "prints the table",
+          "duration": 0.3384169999999358,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema docs/collections/gbm-space.json",
+          "status": "passed",
+          "title": "docs/collections/gbm-space.json",
+          "duration": 0.6517079999999851,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema docs/collections/spcox.json",
+          "status": "passed",
+          "title": "docs/collections/spcox.json",
+          "duration": 0.9457079999999678,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/bia/S-BIAD2214.json",
+          "status": "passed",
+          "title": "examples/bia/S-BIAD2214.json",
+          "duration": 0.3710829999999987,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/bia/S-BIAD2376.json",
+          "status": "passed",
+          "title": "examples/bia/S-BIAD2376.json",
+          "duration": 0.4312910000001011,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/bia/S-BIAD2491.json",
+          "status": "passed",
+          "title": "examples/bia/S-BIAD2491.json",
+          "duration": 1.006666999999993,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+          "status": "passed",
+          "title": "examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+          "duration": 0.9508339999999862,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+          "status": "passed",
+          "title": "examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+          "duration": 0.3678749999999127,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+          "status": "passed",
+          "title": "examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+          "duration": 0.16999999999995907,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/geo/GSM9080376.json",
+          "status": "passed",
+          "title": "examples/geo/GSM9080376.json",
+          "duration": 0.6706669999999804,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/idr/idr0054-tonsil.json",
+          "status": "passed",
+          "title": "examples/idr/idr0054-tonsil.json",
+          "duration": 0.3121249999999236,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/idr/idr0062-blastocyst.json",
+          "status": "passed",
+          "title": "examples/idr/idr0062-blastocyst.json",
+          "duration": 0.36066700000003493,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+          "status": "passed",
+          "title": "examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+          "duration": 0.23175000000003365,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections.json",
+          "duration": 0.3412919999999531,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-01.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-01.json",
+          "duration": 0.5422079999999596,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-02.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-02.json",
+          "duration": 0.26795800000002146,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-04.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-04.json",
+          "duration": 0.4802919999999631,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-05.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-05.json",
+          "duration": 0.1581669999999349,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-06.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-06.json",
+          "duration": 0.16029099999991558,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-07.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-07.json",
+          "duration": 0.19624999999996362,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["examples and docs/collections parse and match the schema"],
+          "fullName": "examples and docs/collections parse and match the schema examples/zenodo/21110855-liver-sections/section-08.json",
+          "status": "passed",
+          "title": "examples/zenodo/21110855-liver-sections/section-08.json",
+          "duration": 0.15075000000001637,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-collections.md:40",
+          "status": "passed",
+          "title": "docs/dataset-collections.md:40",
+          "duration": 0.10445800000002237,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-collections.md:342",
+          "status": "passed",
+          "title": "docs/dataset-collections.md:342",
+          "duration": 0.053332999999952335,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-collections.md:416",
+          "status": "passed",
+          "title": "docs/dataset-collections.md:416",
+          "duration": 0.040124999999989086,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:59",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:59",
+          "duration": 0.059375000000045475,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:197",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:197",
+          "duration": 0.047667000000046755,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:217",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:217",
+          "duration": 0.03329099999996288,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:256",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:256",
+          "duration": 0.04445799999996325,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:313",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:313",
+          "duration": 0.04208399999993162,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["docs JSON blocks that are manifests or collections"],
+          "fullName": "docs JSON blocks that are manifests or collections docs/dataset-manifest.md:341",
+          "status": "passed",
+          "title": "docs/dataset-manifest.md:341",
+          "duration": 0.08829100000002654,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) resolves files against the manifest folder, dropping ./ and trailing /",
+          "status": "passed",
+          "title": "resolves files against the manifest folder, dropping ./ and trailing /",
+          "duration": 0.5416659999999638,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) resolves root relative to the manifest, then files against root",
+          "status": "passed",
+          "title": "resolves root relative to the manifest, then files against root",
+          "duration": 0.39983299999994415,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) drops the manifest URL query and fragment from the base",
+          "status": "passed",
+          "title": "drops the manifest URL query and fragment from the base",
+          "duration": 0.18050000000005184,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) protocol-relative path goes to another host",
+          "status": "passed",
+          "title": "protocol-relative path goes to another host",
+          "duration": 0.15229200000010223,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) h5ad image and labels resolve against root",
+          "status": "passed",
+          "title": "h5ad image and labels resolve against root",
+          "duration": 0.21649999999999636,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) collection entries resolve against root or the collection folder",
+          "status": "passed",
+          "title": "collection entries resolve against root or the collection folder",
+          "duration": 0.24091699999996763,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["relative path resolution (expected URLs written by hand)"],
+          "fullName": "relative path resolution (expected URLs written by hand) collection image default coordinates is micrometers",
+          "status": "passed",
+          "title": "collection image default coordinates is micrometers",
+          "duration": 0.10000000000002274,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165312507,
+      "endTime": 1795165312539.241,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["LIF: SpatialData view change that does not commit"],
+          "fullName": "LIF: SpatialData view change that does not commit Cancel: reads, controls and link no longer match the view on screen",
+          "status": "failed",
+          "title": "Cancel: reads, controls and link no longer match the view on screen",
+          "duration": 1779.5526250000003,
+          "failureMessages": [
+            "AssertionError: expected { …(4) } to deeply equal { …(4) }\n    at docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:242:22\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["LIF: SpatialData view change that does not commit"],
+          "fullName": "LIF: SpatialData view change that does not commit Failure: same state after the new view fails to load",
+          "status": "failed",
+          "title": "Failure: same state after the new view fails to load",
+          "duration": 882.5558329999994,
+          "failureMessages": [
+            "AssertionError: expected { cellsOnScreen: '4', …(4) } to deeply equal { cellsOnScreen: '4', …(4) }\n    at docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:284:22\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165313310,
+      "endTime": 1795165315972.556,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["LIF: Visium library switch that is cancelled"],
+          "fullName": "LIF: Visium library switch that is cancelled cancel during detection: control stays disabled on the library not shown",
+          "status": "failed",
+          "title": "cancel during detection: control stays disabled on the library not shown",
+          "duration": 1400.1679999999997,
+          "failureMessages": [
+            "AssertionError: expected { spotsOnScreen: '3', …(2) } to deeply equal { spotsOnScreen: '3', …(2) }\n    at docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:184:22\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["LIF: Visium library switch that is cancelled"],
+          "fullName": "LIF: Visium library switch that is cancelled cancel after setVisiumView: the shared instance stays on the other library",
+          "status": "failed",
+          "title": "cancel after setVisiumView: the shared instance stays on the other library",
+          "duration": 395.35762499999964,
+          "failureMessages": [
+            "AssertionError: expected 'lib-B' to be 'lib-A' // Object.is equality\n    at docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:203:29\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165313307,
+      "endTime": 1795165315102.3577,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["IMG Phase 26 measurement oracle"],
+          "fullName": "IMG Phase 26 measurement oracle OME-TIFF (32 x 16 deflate tiles, edge tiles, SubIFD levels) matches the oracle",
+          "status": "passed",
+          "title": "OME-TIFF (32 x 16 deflate tiles, edge tiles, SubIFD levels) matches the oracle",
+          "duration": 23.739874999999984,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG Phase 26 measurement oracle"],
+          "fullName": "IMG Phase 26 measurement oracle OME-Zarr (24 x 24 chunks) matches the oracle",
+          "status": "passed",
+          "title": "OME-Zarr (24 x 24 chunks) matches the oracle",
+          "duration": 30.39945899999998,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG Phase 26 measurement oracle"],
+          "fullName": "IMG Phase 26 measurement oracle cellsOutside counts a small in-image cell with no pixel centre as outside",
+          "status": "passed",
+          "title": "cellsOutside counts a small in-image cell with no pixel centre as outside",
+          "duration": 6.061749999999847,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG Phase 26 measurement oracle"],
+          "fullName": "IMG Phase 26 measurement oracle anisotropic OME-Zarr pixels (x 0.5 um, y 1.0 um): disc in micrometres",
+          "status": "passed",
+          "title": "anisotropic OME-Zarr pixels (x 0.5 um, y 1.0 um): disc in micrometres",
+          "duration": 3.979791999999861,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165312258,
+      "endTime": 1795165312321.9797,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/imaging/cellImageMeasureOracle.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats SubIFD level whose tile size differs from level 0",
+          "status": "passed",
+          "title": "SubIFD level whose tile size differs from level 0",
+          "duration": 9.648500000000013,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats OME-TIFF with PhysicalSizeY != PhysicalSizeX",
+          "status": "passed",
+          "title": "OME-TIFF with PhysicalSizeY != PhysicalSizeX",
+          "duration": 2.830624999999941,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats planar RGB, LZW + predictor",
+          "status": "passed",
+          "title": "planar RGB, LZW + predictor",
+          "duration": 7.864125000000058,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats zstd tiles",
+          "status": "passed",
+          "title": "zstd tiles",
+          "duration": 13.705500000000029,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats float32 tiles (docs: float images fail)",
+          "status": "passed",
+          "title": "float32 tiles (docs: float images fail)",
+          "duration": 1.6427500000000919,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats int16 tiles (SampleFormat 2)",
+          "status": "passed",
+          "title": "int16 tiles (SampleFormat 2)",
+          "duration": 2.4698339999999916,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["IMG TIFF formats"],
+          "fullName": "IMG TIFF formats uncompressed tiles without a Compression tag (TIFF default 1)",
+          "status": "passed",
+          "title": "uncompressed tiles without a Compression tag (TIFF default 1)",
+          "duration": 29.291917000000012,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165311944,
+      "endTime": 1795165312011.292,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/imaging/tiffFormats.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["IMG tile decode pool lifetime"],
+          "fullName": "IMG tile decode pool lifetime counts workers started and ended across contrast edits and a dataset switch",
+          "status": "passed",
+          "title": "counts workers started and ended across contrast edits and a dataset switch",
+          "duration": 4.369042000000036,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165313681,
+      "endTime": 1795165313685.3691,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/imaging/tilePoolLifetime.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["MERSCOPE cell IDs above 2^53"],
+          "fullName": "MERSCOPE cell IDs above 2^53 precondition: ID_1 and ID_2 are the same double",
+          "status": "passed",
+          "title": "precondition: ID_1 and ID_2 are the same double",
+          "duration": 1.6164590000000771,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE cell IDs above 2^53"],
+          "fullName": "MERSCOPE cell IDs above 2^53 joins by exact ID string across reordering, missing rows, BOM, CRLF, quotes",
+          "status": "passed",
+          "title": "joins by exact ID string across reordering, missing rows, BOM, CRLF, quotes",
+          "duration": 13.524458999999979,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE cell IDs above 2^53"],
+          "fullName": "MERSCOPE cell IDs above 2^53 keeps the two IDs distinct through MerscopeDataset reads",
+          "status": "passed",
+          "title": "keeps the two IDs distinct through MerscopeDataset reads",
+          "duration": 9.167584000000033,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE cell IDs above 2^53"],
+          "fullName": "MERSCOPE cell IDs above 2^53 boundary EntityID (Parquet INT64) arrives as bigint and stays exact",
+          "status": "passed",
+          "title": "boundary EntityID (Parquet INT64) arrives as bigint and stays exact",
+          "duration": 20.725582999999915,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE CSV quoting (RFC 4180)"],
+          "fullName": "MERSCOPE CSV quoting (RFC 4180) a quoted metadata value containing a comma",
+          "status": "failed",
+          "title": "a quoted metadata value containing a comma",
+          "duration": 5.73637500000018,
+          "failureMessages": [
+            "AssertionError: expected 'threw: cell_metadata.csv row 1 has 5 …' to be 'parsed: {\"name\":\"cell_type\",\"kind\":\"t…' // Object.is equality\n    at docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:183:21\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE CSV quoting (RFC 4180)"],
+          "fullName": "MERSCOPE CSV quoting (RFC 4180) a quoted value with an escaped double quote",
+          "status": "failed",
+          "title": "a quoted value with an escaped double quote",
+          "duration": 4.352999999999838,
+          "failureMessages": [
+            "AssertionError: expected { name: 'label', kind: 'text', …(1) } to deeply equal { name: 'label', kind: 'text', …(1) }\n    at docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:193:37\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2305:20\n    at new Promise (<anonymous>)\n    at runWithTimeout (node_modules/@vitest/runner/dist/chunk-artifact.js:2272:10)\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2956:64"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE CSV quoting (RFC 4180)"],
+          "fullName": "MERSCOPE CSV quoting (RFC 4180) a duplicated cell ID in cell_by_gene.csv",
+          "status": "passed",
+          "title": "a duplicated cell ID in cell_by_gene.csv",
+          "duration": 0.5187909999999647,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309633,
+      "endTime": 1795165309688.5188,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["MERSCOPE gzipped CSV above the 300 MB limit"],
+          "fullName": "MERSCOPE gzipped CSV above the 300 MB limit 310 MB inflated: the documented limit message",
+          "status": "passed",
+          "title": "310 MB inflated: the documented limit message",
+          "duration": 1468.9472920000003,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE gzipped CSV above the 300 MB limit"],
+          "fullName": "MERSCOPE gzipped CSV above the 300 MB limit 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected",
+          "status": "failed",
+          "title": "520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected",
+          "duration": 2794.89075,
+          "failureMessages": [
+            "AssertionError: expected 'Error: Cannot create a string longer …' to be 'MerscopeCsvTooLargeError: cell_by_gen…' // Object.is equality\n    at docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts:73:37\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309171,
+      "endTime": 1795165313435.8909,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["MERSCOPE .vzg placement"],
+          "fullName": "MERSCOPE .vzg placement isotropic transform: image spans the manifest bbox exactly",
+          "status": "passed",
+          "title": "isotropic transform: image spans the manifest bbox exactly",
+          "duration": 11.460459000000128,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["MERSCOPE .vzg placement"],
+          "fullName": "MERSCOPE .vzg placement anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size",
+          "status": "failed",
+          "title": "anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size",
+          "duration": 5.49020900000005,
+          "failureMessages": [
+            "AssertionError: expected { maxX: 1066.6666666666667, …(1) } to deeply equal { maxX: 1100, maxY: 3040 }\n    at docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts:100:50\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309636,
+      "endTime": 1795165309652.4902,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["VIS gzipped .h5 matrix named in a manifest"],
+          "fullName": "VIS gzipped .h5 matrix named in a manifest loads filtered_feature_bc_matrix.h5",
+          "status": "passed",
+          "title": "loads filtered_feature_bc_matrix.h5",
+          "duration": 294.2455419999999,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS gzipped .h5 matrix named in a manifest"],
+          "fullName": "VIS gzipped .h5 matrix named in a manifest loads filtered_feature_bc_matrix.h5.gz",
+          "status": "failed",
+          "title": "loads filtered_feature_bc_matrix.h5.gz",
+          "duration": 9.55554200000006,
+          "failureMessages": [
+            "AssertionError: expected { ok: false, …(1) } to deeply equal { ok: true, cells: 36 }\n    at docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts:116:23\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async node_modules/@vitest/runner/dist/chunk-artifact.js:1903:20"
+          ],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165311264,
+      "endTime": 1795165311567.5557,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["VIS axis order, scale, and image alignment"],
+          "fullName": "VIS axis order, scale, and image alignment places pxl_col as x and pxl_row as y (standard header), scale applied once",
+          "status": "passed",
+          "title": "places pxl_col as x and pxl_row as y (standard header), scale applied once",
+          "duration": 45.822625000000016,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS axis order, scale, and image alignment"],
+          "fullName": "VIS axis order, scale, and image alignment places pxl_col as x and pxl_row as y (none header), scale applied once",
+          "status": "passed",
+          "title": "places pxl_col as x and pxl_row as y (none header), scale applied once",
+          "duration": 3.2206659999999374,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS axis order, scale, and image alignment"],
+          "fullName": "VIS axis order, scale, and image alignment places pxl_col as x and pxl_row as y (reordered header), scale applied once",
+          "status": "passed",
+          "title": "places pxl_col as x and pxl_row as y (reordered header), scale applied once",
+          "duration": 2.3884170000001177,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS axis order, scale, and image alignment"],
+          "fullName": "VIS axis order, scale, and image alignment draws hires pixel p at the same screen point as a spot at full-res p / scalef",
+          "status": "passed",
+          "title": "draws hires pixel p at the same screen point as a spot at full-res p / scalef",
+          "duration": 3.2259169999999813,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "VIS H5 matrix (CSC: indptr per barcode, indices = feature)"
+          ],
+          "fullName": "VIS H5 matrix (CSC: indptr per barcode, indices = feature) reads counts by barcode and feature, keeping feature ids",
+          "status": "passed",
+          "title": "reads counts by barcode and feature, keeping feature ids",
+          "duration": 253.46500000000015,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS MEX 1-based coordinates and joins"],
+          "fullName": "VIS MEX 1-based coordinates and joins maps \"row col value\" to feature row-1, barcode col-1",
+          "status": "passed",
+          "title": "maps \"row col value\" to feature row-1, barcode col-1",
+          "duration": 1.4693749999996726,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS MEX 1-based coordinates and joins"],
+          "fullName": "VIS MEX 1-based coordinates and joins drops matrix barcodes without positions and does not show positions without counts",
+          "status": "passed",
+          "title": "drops matrix barcodes without positions and does not show positions without counts",
+          "duration": 3.1301659999999174,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS MEX 1-based coordinates and joins"],
+          "fullName": "VIS MEX 1-based coordinates and joins fails with a clear error when matrix barcodes lack the -1 suffix of the positions file",
+          "status": "passed",
+          "title": "fails with a clear error when matrix barcodes lack the -1 suffix of the positions file",
+          "duration": 2.495292000000063,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS MEX 1-based coordinates and joins"],
+          "fullName": "VIS MEX 1-based coordinates and joins duplicate barcode rows in the positions file: the last row wins, silently",
+          "status": "passed",
+          "title": "duplicate barcode rows in the positions file: the last row wins, silently",
+          "duration": 1.8079999999999927,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS in_tissue handling"],
+          "fullName": "VIS in_tissue handling raw matrix with off-tissue spots: hidden by default, shown on request, scale unchanged",
+          "status": "passed",
+          "title": "raw matrix with off-tissue spots: hidden by default, shown on request, scale unchanged",
+          "duration": 1.2162920000000668,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS feature types and names"],
+          "fullName": "VIS feature types and names Antibody Capture counts go into total_counts and n_genes_by_counts",
+          "status": "passed",
+          "title": "Antibody Capture counts go into total_counts and n_genes_by_counts",
+          "duration": 1.0064589999997224,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["VIS feature types and names"],
+          "fullName": "VIS feature types and names duplicate symbols get -2; Ensembl ids are not kept as aliases",
+          "status": "passed",
+          "title": "duplicate symbols get -2; Ensembl ids are not kept as aliases",
+          "duration": 1.5340000000001055,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309579,
+      "endTime": 1795165309900.534,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": [
+            "Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3)"
+          ],
+          "fullName": "Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) ROI transcript export returns both transcripts, the unassigned one with no cell",
+          "status": "failed",
+          "title": "ROI transcript export returns both transcripts, the unassigned one with no cell",
+          "duration": 37.96804199999997,
+          "failureMessages": [
+            "Error: promise rejected \"Error: Invalid Xenium cell ID: UNASSIGNED.\" instead of resolving\n    at _Assertion.__VITEST_RESOLVES__ (node_modules/@vitest/expect/dist/index.js:1710:17)\n    at _Assertion.propertyGetter (node_modules/chai/index.js:1607:27)\n    at Reflect.get (<anonymous>)\n    at Object.proxyGetter [as get] (node_modules/chai/index.js:1696:22)\n    at docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:71:6\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3)"
+          ],
+          "fullName": "Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) exact transcripts from transcripts.parquet mark the unassigned one as unassigned",
+          "status": "failed",
+          "title": "exact transcripts from transcripts.parquet mark the unassigned one as unassigned",
+          "duration": 20.612750000000005,
+          "failureMessages": [
+            "Error: promise rejected \"Error: Invalid Xenium cell ID: UNASSIGNED.\" instead of resolving\n    at _Assertion.__VITEST_RESOLVES__ (node_modules/@vitest/expect/dist/index.js:1710:17)\n    at _Assertion.propertyGetter (node_modules/chai/index.js:1607:27)\n    at Reflect.get (<anonymous>)\n    at Object.proxyGetter [as get] (node_modules/chai/index.js:1696:22)\n    at docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:86:6\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:302:11\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:1903:26\n    at node_modules/@vitest/runner/dist/chunk-artifact.js:2326:20\n    at new Promise (<anonymous>)\n    at runWithCancel (node_modules/@vitest/runner/dist/chunk-artifact.js:2323:10)"
+          ],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Xenium nucleus_boundaries.parquet label_id (real DuckDB errors)"
+          ],
+          "fullName": "Xenium nucleus_boundaries.parquet label_id (real DuckDB errors) XOA 2.x: a cell with two nuclei gives <cell> and <cell>#nucleus-2",
+          "status": "passed",
+          "title": "XOA 2.x: a cell with two nuclei gives <cell> and <cell>#nucleus-2",
+          "duration": 23.461000000000013,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Xenium nucleus_boundaries.parquet label_id (real DuckDB errors)"
+          ],
+          "fullName": "Xenium nucleus_boundaries.parquet label_id (real DuckDB errors) XOA 1.x: no label_id column falls back to one nucleus per cell",
+          "status": "passed",
+          "title": "XOA 1.x: no label_id column falls back to one nucleus per cell",
+          "duration": 18.929791999999907,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": [
+            "Xenium cells.parquet with int32 cell_id (XOA 1.0.x, documented unsupported)"
+          ],
+          "fullName": "Xenium cells.parquet with int32 cell_id (XOA 1.0.x, documented unsupported) ROI cells reject with a message",
+          "status": "passed",
+          "title": "ROI cells reject with a message",
+          "duration": 7.804041999999981,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["Xenium selected-gene expression joined by matrix row"],
+          "fullName": "Xenium selected-gene expression joined by matrix row cells.parquet in a different order: counts still follow cell IDs",
+          "status": "passed",
+          "title": "cells.parquet in a different order: counts still follow cell IDs",
+          "duration": 15.763291999999865,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165309388,
+      "endTime": 1795165309518.7632,
+      "status": "failed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["cell shape metrics vs slide position"],
+          "fullName": "cell shape metrics vs slide position 8 x 5 µm ellipse (12 vertices) at (0, 0)",
+          "status": "passed",
+          "title": "8 x 5 µm ellipse (12 vertices) at (0, 0)",
+          "duration": 1.151625000000081,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["cell shape metrics vs slide position"],
+          "fullName": "cell shape metrics vs slide position 8 x 5 µm ellipse (12 vertices) at (2000, 2000)",
+          "status": "passed",
+          "title": "8 x 5 µm ellipse (12 vertices) at (2000, 2000)",
+          "duration": 0.20308299999999235,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["cell shape metrics vs slide position"],
+          "fullName": "cell shape metrics vs slide position 8 x 5 µm ellipse (12 vertices) at (10000, 8000)",
+          "status": "passed",
+          "title": "8 x 5 µm ellipse (12 vertices) at (10000, 8000)",
+          "duration": 0.15379200000006676,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["cell shape metrics vs slide position"],
+          "fullName": "cell shape metrics vs slide position 8 x 5 µm ellipse (12 vertices) at (25000, 25000)",
+          "status": "passed",
+          "title": "8 x 5 µm ellipse (12 vertices) at (25000, 25000)",
+          "duration": 0.15350000000000819,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165314488,
+      "endTime": 1795165314489.2031,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["z-score population"],
+          "fullName": "z-score population all cells in the batch (H5AD-style reader) matches the population oracle",
+          "status": "passed",
+          "title": "all cells in the batch (H5AD-style reader) matches the population oracle",
+          "duration": 0.9765830000000051,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["z-score population"],
+          "fullName": "z-score population expressing cells only (Xenium reader) gives another z for the same cell",
+          "status": "passed",
+          "title": "expressing cells only (Xenium reader) gives another z for the same cell",
+          "duration": 1.0318750000000136,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["z-score population"],
+          "fullName": "z-score population a viewport holding cells 2-7 gives yet another z",
+          "status": "passed",
+          "title": "a viewport holding cells 2-7 gives yet another z",
+          "duration": 0.30854199999998855,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165314432,
+      "endTime": 1795165314434.3086,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["Visium HD gene scale key across LOD tiers"],
+          "fullName": "Visium HD gene scale key across LOD tiers 2 µm selection: zoomed out reads 16 µm, zoomed in reads 2 µm, same scale key",
+          "status": "passed",
+          "title": "2 µm selection: zoomed out reads 16 µm, zoomed in reads 2 µm, same scale key",
+          "duration": 4.166791999999987,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165314434,
+      "endTime": 1795165314438.1667,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/shell-shared/visiumHdScaleKeyAcrossLod.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["hyparquet 1.26.0 patch"],
+          "fullName": "hyparquet 1.26.0 patch is applied in node_modules",
+          "status": "passed",
+          "title": "is applied in node_modules",
+          "duration": 1.141083999999978,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["hyparquet 1.26.0 patch"],
+          "fullName": "hyparquet 1.26.0 patch upstream 1.26.0 throws on a truncated last bit-packed group",
+          "status": "passed",
+          "title": "upstream 1.26.0 throws on a truncated last bit-packed group",
+          "duration": 71.46112500000015,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["hyparquet 1.26.0 patch"],
+          "fullName": "hyparquet 1.26.0 patch patched 1.26.0 decodes it, and resets the offset from the length",
+          "status": "passed",
+          "title": "patched 1.26.0 decodes it, and resets the offset from the length",
+          "duration": 3.1383749999999964,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["hyparquet 1.26.0 patch"],
+          "fullName": "hyparquet 1.26.0 patch upstream and patched agree on a padded last group",
+          "status": "passed",
+          "title": "upstream and patched agree on a padded last group",
+          "duration": 55.54325000000017,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165313376,
+      "endTime": 1795165313507.5432,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/quality/hyparquetPatch.repro.ts"
+    },
+    {
+      "assertionResults": [
+        {
+          "ancestorTitles": ["stale lazy chunk after a redeploy"],
+          "fullName": "stale lazy chunk after a redeploy Chromium: classified as",
+          "status": "passed",
+          "title": "Chromium: classified as",
+          "duration": 1.2485420000000431,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["stale lazy chunk after a redeploy"],
+          "fullName": "stale lazy chunk after a redeploy Firefox: classified as",
+          "status": "passed",
+          "title": "Firefox: classified as",
+          "duration": 0.2969580000000178,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        },
+        {
+          "ancestorTitles": ["stale lazy chunk after a redeploy"],
+          "fullName": "stale lazy chunk after a redeploy Safari: classified as",
+          "status": "passed",
+          "title": "Safari: classified as",
+          "duration": 0.12858400000004622,
+          "failureMessages": [],
+          "meta": {},
+          "tags": []
+        }
+      ],
+      "startTime": 1795165314554,
+      "endTime": 1795165314556.2969,
+      "status": "passed",
+      "message": "",
+      "name": "docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts"
+    }
+  ]
+}

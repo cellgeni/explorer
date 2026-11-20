@@ -1,0 +1,604 @@
+{
+  "note": "Inert manifest/collection probes for docs-formats (FMT) review. expectSchema / expectParser are hand-written expectations (true = accepted). jsonText probes carry raw JSON text so non-finite numbers survive.",
+  "probes": [
+    {
+      "id": "M01-minimal",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium" },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M02-version-string",
+      "kind": "manifest",
+      "json": { "version": "1", "platform": "xenium" },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M03-version-2",
+      "kind": "manifest",
+      "json": { "version": 2, "platform": "xenium" },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M04-unknown-top-field",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "cells": "x.parquet" },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M05-name-null",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "name": null },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M06-name-whitespace",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "name": "   " },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M07-generange-p0",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "geneRange": [null, "p0"] }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M08-generange-p150",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "geneRange": [null, "p150"] }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M09-generange-p0.5",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "geneRange": [null, "p0.5"] }
+      },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M10-generange-max-below-min",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "geneRange": [10, 5] }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M11-colorCellsBy-unknown",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "colorCellsBy": "cluster" }
+      },
+      "expectSchema": false,
+      "expectParser": true
+    },
+    {
+      "id": "M12-h5ad-coordinates-without-image",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad" },
+        "options": { "coordinates": "image-pixels" }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M13-h5ad-labelColumn-without-labels",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad", "image": "i.zarr" },
+        "options": { "labelColumn": "cell_labels" }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M14-h5ad-labels-without-image",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad", "labels": "l.zarr" }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M15-image-zchunkstore-with-omezarr",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "image",
+        "files": { "image": "img.ome.zarr", "zchunkstore": "img.zchunkstore" }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M16-image-segformat-without-segmentation",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "image",
+        "files": { "image": "img.ome.tif" },
+        "options": { "segmentationFormat": "geojson" }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M17-image-segmentation-unknown-extension",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "image",
+        "files": { "image": "img.ome.tif", "segmentation": "masks.dat" }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M18-visiumhd-binsize-not-listed",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "visium-hd",
+        "files": { "bins": [{ "size": 16, "path": "binned_outputs/square_016um" }] },
+        "options": { "binSize": 8 }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M19-visiumhd-duplicate-bin",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "visium-hd",
+        "files": {
+          "bins": [
+            { "size": 16, "path": "a" },
+            { "size": 16, "path": "b" }
+          ]
+        }
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M20a-xenium-empty-options",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "options": {} },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M20b-xenium-options-set",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "options": { "binSize": 8 } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M21-s3-path",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "files": { "cells": "s3://bucket/cells.parquet" }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M22-protocol-relative-path",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "files": { "cells": "//other.example.org/cells.parquet" }
+      },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M23-mpu-zero",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "spatialdata",
+        "files": { "store": "s.zarr" },
+        "options": { "micrometersPerUnit": 0 }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M24-pointscale-zero",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "defaults": { "cellPointScale": 0 } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M25-pointscale-100",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "xenium",
+        "defaults": { "cellPointScale": 100 }
+      },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M26-opacity-1.5",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "defaults": { "imageOpacity": 1.5 } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M27a-genes-empty-string",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "defaults": { "genes": [""] } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M27b-genes-whitespace",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "defaults": { "genes": ["  "] } },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M28-collection-as-manifest",
+      "kind": "manifest",
+      "json": { "version": 1, "datasets": [{ "dataset": "a" }] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M29a-source-url-ftp",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "source": { "url": "ftp://host/x" } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M29b-source-url-empty-host",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "source": { "url": "https://" } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M30-xenium-zip-root",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "root": "https://host/run.zip" },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "M31-h5ad-coordinates-padded",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad", "image": "i.zarr" },
+        "options": { "coordinates": " image-pixels" }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M32-imageView-uppercase",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "image",
+        "files": { "image": "v.ome.zarr" },
+        "defaults": { "imageView": "3D" }
+      },
+      "expectSchema": false,
+      "expectParser": true
+    },
+    {
+      "id": "M33-schema-number",
+      "kind": "manifest",
+      "json": { "$schema": 1, "version": 1, "platform": "xenium" },
+      "expectSchema": false,
+      "expectParser": true
+    },
+    {
+      "id": "M34-nonfinite-pointscale",
+      "kind": "manifest",
+      "jsonText": "{\"version\":1,\"platform\":\"xenium\",\"defaults\":{\"cellPointScale\":1e400}}",
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M35-nonfinite-generange",
+      "kind": "manifest",
+      "jsonText": "{\"version\":1,\"platform\":\"xenium\",\"defaults\":{\"geneRange\":[0,1e400]}}",
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "M36-spatialdata-no-files",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "spatialdata" },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M37-visium-unknown-file",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "visium", "files": { "rawMatrix": "raw.h5" } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M38-h5ad-options-null",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad" },
+        "options": null
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M39-defaults-null",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "defaults": null },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M40-files-null",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "xenium", "files": null },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M41-coordinates-null",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "h5ad",
+        "files": { "h5ad": "a.h5ad", "image": "i.zarr" },
+        "options": { "coordinates": null }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M42-visium-hd-segmented-unknown",
+      "kind": "manifest",
+      "json": {
+        "version": 1,
+        "platform": "visium-hd",
+        "files": { "segmentedOutputs": { "cells": "x.geojson" } }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "M43-merscope-options-set",
+      "kind": "manifest",
+      "json": { "version": 1, "platform": "merscope", "options": { "z": 3 } },
+      "expectSchema": false,
+      "expectParser": false
+    },
+
+    {
+      "id": "C01-minimal",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a" }] },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "C02-501-datasets",
+      "kind": "collection",
+      "generate": "501",
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C03-duplicate-dataset",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a" }, { "dataset": "a" }] },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "C04-duplicate-dataset-spelled-differently",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a" }, { "dataset": "./a/" }] },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "C05-z-without-coordinateSystem",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a", "z": 5 }] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C06-mixed-z",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [
+          { "dataset": "a", "coordinateSystem": "p1", "z": 0 },
+          { "dataset": "b", "coordinateSystem": "p1" }
+        ]
+      },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "C07-z-string",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [{ "dataset": "a", "coordinateSystem": "p1", "z": "5" }]
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C08-z-nonfinite",
+      "kind": "collection",
+      "jsonText": "{\"version\":1,\"datasets\":[{\"dataset\":\"a\",\"coordinateSystem\":\"p1\",\"z\":1e400}]}",
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "C09-coordinates-without-image",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [{ "dataset": "a", "coordinates": "image-pixels" }]
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C10-labelColumn-without-labels",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [{ "dataset": "a", "image": "i.zarr", "labelColumn": "x" }]
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C11-defaults-imageOpacity",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [{ "dataset": "a" }],
+        "defaults": { "imageOpacity": 0.5 }
+      },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C12-entry-platform",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a", "platform": "xenium" }] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C13-manifest-as-collection",
+      "kind": "collection",
+      "json": { "version": 1, "platform": "xenium", "datasets": [{ "dataset": "a" }] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C14-s3-root",
+      "kind": "collection",
+      "json": { "version": 1, "root": "s3://bucket/x", "datasets": [{ "dataset": "a" }] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C15-entry-name-whitespace",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a", "name": "  " }] },
+      "expectSchema": true,
+      "expectParser": false
+    },
+    {
+      "id": "C16-negative-z",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [
+          { "dataset": "a", "coordinateSystem": "p1", "z": -5 },
+          { "dataset": "b", "coordinateSystem": "p1", "z": 0 }
+        ]
+      },
+      "expectSchema": true,
+      "expectParser": true
+    },
+    {
+      "id": "C17-empty-datasets",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [] },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C18-defaults-colorCellsBy-unknown",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [{ "dataset": "a" }],
+        "defaults": { "colorCellsBy": "cluster" }
+      },
+      "expectSchema": false,
+      "expectParser": true
+    },
+    {
+      "id": "C19-defaults-null",
+      "kind": "collection",
+      "json": { "version": 1, "datasets": [{ "dataset": "a" }], "defaults": null },
+      "expectSchema": false,
+      "expectParser": false
+    },
+    {
+      "id": "C20-coordinates-padded",
+      "kind": "collection",
+      "json": {
+        "version": 1,
+        "datasets": [
+          { "dataset": "a", "image": "i.zarr", "coordinates": "image-pixels " }
+        ]
+      },
+      "expectSchema": false,
+      "expectParser": false
+    }
+  ]
+}

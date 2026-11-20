@@ -1,0 +1,35 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > poisons the Parquet footer for later loads of the same file
+{
+  "fixtureBytes": 6337,
+  "load1": {
+    "error": "Error: parquet file invalid (footer != PAR1)",
+    "rangeRequests": [
+      "bytes=0-6336"
+    ]
+  },
+  "storedFooterBytes": 3168,
+  "load2": {
+    "error": "Error: parquet file invalid (footer != PAR1)",
+    "rangeRequests": []
+  },
+  "controlRows": 10
+}
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > fetchByteRangeWithCache stores whatever fetchRange returns (TIFF tile namespace)
+{"asked":100,"servedLater":40,"honestCalls":0}
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > control: the zip store reader refuses a short body and caches nothing
+{"error":"Error: failed http request https://bucket.test/run/cells.parquet, 50 bytes returned for bytes 0-99 (100 expected)","secondLength":100,"honest":["bytes=0-99"]}
+
+ ✓ docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > poisons the Parquet footer for later loads of the same file 8ms
+ ✓ docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > fetchByteRangeWithCache stores whatever fetchRange returns (TIFF tile namespace) 13ms
+ ✓ docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > control: the zip store reader refuses a short body and caches nothing 53ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:41:35
+   Duration  576ms (transform 34ms, setup 61ms, import 42ms, tests 75ms, environment 322ms)
+

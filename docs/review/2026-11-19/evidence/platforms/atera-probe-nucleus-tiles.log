@@ -1,0 +1,27 @@
+{"set":0,"level":0,"tiles":167,"polygons":91749,"distinctCells":90604,"cellsInSeveralTiles":0,"cellsWithSeveralPolygonsInOneTile":1079,"examples":[]}
+{"set":0,"level":4,"tiles":2,"polygons":91749,"distinctCells":90604,"cellsInSeveralTiles":0,"cellsWithSeveralPolygonsInOneTile":1079,"examples":[]}
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+[TypeError: fetch failed] {
+  [cause]: SocketError: other side closed
+      at TLSSocket.onHttpSocketEnd (node:internal/deps/undici/undici:7635:26)
+      at TLSSocket.emit (node:events:520:22)
+      at endReadableNT (node:internal/streams/readable:1729:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'UND_ERR_SOCKET',
+    socket: {
+      localAddress: '192.168.1.105',
+      localPort: 57155,
+      remoteAddress: '193.62.207.4',
+      remotePort: 443,
+      remoteFamily: 'IPv4',
+      timeout: undefined,
+      bytesWritten: 568,
+      bytesRead: 436
+    }
+  }
+}
+
+Node.js v25.8.1

@@ -1,0 +1,12 @@
+{
+  "csr": {
+    "fileBytes": 6338406
+  },
+  "csc": {
+    "fileBytes": 5915401
+  },
+  "nnz": 2000000,
+  "gene0Nonzero": 1029,
+  "gene0Sum": 5040.0,
+  "decodedDataPlusIndicesBytes": 16000000
+}

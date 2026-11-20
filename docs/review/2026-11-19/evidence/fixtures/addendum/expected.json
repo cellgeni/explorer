@@ -1,0 +1,14 @@
+{
+  "sections-int": {
+    "section": "array",
+    "z_um": "array",
+    "cell_type": "categorical",
+    "anndata": "0.13.4"
+  },
+  "sections-str": {
+    "section": "categorical",
+    "z_um": "array",
+    "cell_type": "categorical",
+    "anndata": "0.13.4"
+  }
+}

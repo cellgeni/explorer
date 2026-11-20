@@ -1,0 +1,7 @@
+
+Running 1 test using 1 worker
+
+{"sheetExpanded":"false","before":{"x":522.078125,"y":692,"width":22,"height":22},"after":{"x":314.078125,"y":692,"width":22,"height":22},"container":{"className":"collection-bar-groups","overflowX":"auto","scrollWidth":374,"clientWidth":166},"clicked":"clicked","pressedAfterClick":"true"}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/collection-narrow.s6.mjs:5:1 › collection section buttons at 390 px (4.4s)
+
+  1 passed (5.6s)

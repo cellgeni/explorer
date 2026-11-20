@@ -1,0 +1,7 @@
+
+Running 1 test using 1 worker
+
+{"before":{"x":522.078125,"y":692,"width":22,"height":22},"after":{"x":314.078125,"y":692,"width":22,"height":22},"container":{"className":"collection-bar-groups","overflowX":"auto","scrollWidth":374,"clientWidth":166},"clicked":"TimeoutError: locator.click: Timeout 5000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Show S3 beside' })\u001b[22m\n\u001b[2m    - locator resolved to <button type=\"button\" aria-presse"}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/collection-narrow.s6.mjs:5:1 › collection section buttons at 390 px (9.0s)
+
+  1 passed (10.1s)

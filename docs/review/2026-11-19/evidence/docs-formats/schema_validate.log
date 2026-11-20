@@ -1,0 +1,4 @@
+probes: 66, schema verdict differs from expectation: 0
+example/collection files: 20, schema-invalid: 0
+doc json blocks: 12, manifest/collection blocks: 10, schema-invalid: 1, not JSON: 0
+   docs/h5ad-reference.md 74 manifest [{'path': '', 'message': "'platform' is a required property"}, {'path': '', 'message': "Additional properties are not allowed ('refs' was unexpected)"}, {'path': '', 'message': "'files' is a required property"}]

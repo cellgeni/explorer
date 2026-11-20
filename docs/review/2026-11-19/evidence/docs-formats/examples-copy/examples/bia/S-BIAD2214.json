@@ -1,0 +1,22 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "xenium",
+  "name": "Human skin, inflamed eczema (Xenium 5K)",
+  "description": "Fresh-frozen adult skin from an inflamed eczema lesion on the Xenium Human 5K panel: 22,242 cells with transcripts and cell boundaries, from an atlas of skin fibroblasts.",
+  "source": {
+    "repository": "BioImage Archive",
+    "accession": "S-BIAD2214",
+    "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214",
+    "license": "CC0 1.0",
+    "citation": "Steele L et al. (2025) A single-cell and spatial genomics atlas of human skin fibroblasts reveals shared disease-related fibroblast subtypes across tissues. Nature Immunology 26:1807-1820. doi:10.1038/s41590-025-02267-8"
+  },
+  "root": "https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/214/S-BIAD2214/Files/xenium/output-XETG00155__0043604__BK25-SKI-27-FO-2-4-S3__20241010__133127",
+  "files": {
+    "morphology": "morphology.ome.tif"
+  },
+  "defaults": {
+    "genes": ["PDGFRA"],
+    "channels": []
+  }
+}

@@ -1,0 +1,32 @@
+== 1. barcode_mappings window
+2 um rows fully loaded 1433 .. 1551
+cell cellid_000083158-1 in_cell 2 um bins 14 (56 um^2) | mapped 16 um bins 1 ['s_016um_00183_00124-1']
+2 um bins inside those 16 um bins 64 | assigned to this cell 14 | assigned to other cells 50 | other cell ids 8
+== 2. Space Ranger cell matrix vs 16 um bin sum vs 2 um sum
+SR cell matrix total UMI 2027 | 16 um mapped-bin total UMI 7810
+  gene EGR1 cell matrix 15 | 16 um mapped bins 43
+  gene IGFBP5 cell matrix 14 | 16 um mapped bins 39
+  gene VIM cell matrix 14 | 16 um mapped bins 57
+  gene COL1A2 cell matrix 13 | 16 um mapped bins 44
+  gene TMSB10 cell matrix 11 | 16 um mapped bins 44
+gene EGR1 sum over in_cell 2 um bins (feature slice) 15 | cell matrix 15
+== 3. graphclust labels across tiers
+8 um bins sampled 62337 with a clustered 16 um parent 62337
+fraction of 8 um bins whose label equals their 16 um parent label: 0.020
+16 um cluster -> most common 8 um label among its children (share):
+  16um 1 -> 8um 5 (0.60) | same-number share 0.00
+  16um 2 -> 8um 4 (0.79) | same-number share 0.00
+  16um 3 -> 8um 2 (0.91) | same-number share 0.00
+  16um 4 -> 8um 6 (0.45) | same-number share 0.04
+  16um 5 -> 8um 1 (0.82) | same-number share 0.00
+  16um 6 -> 8um 3 (0.56) | same-number share 0.00
+  16um 7 -> 8um 3 (0.82) | same-number share 0.00
+  16um 8 -> 8um 1 (0.85) | same-number share 0.00
+  16um 9 -> 8um 9 (0.67) | same-number share 0.67
+  16um 10 -> 8um 11 (0.48) | same-number share 0.00
+  16um 11 -> 8um 12 (0.52) | same-number share 0.00
+  16um 12 -> 8um 14 (0.51) | same-number share 0.00
+  16um 13 -> 8um 15 (0.54) | same-number share 0.00
+  16um 14 -> 8um 16 (0.35) | same-number share 0.00
+  16um 15 -> 8um 13 (0.96) | same-number share 0.00
+  16um 16 -> 8um 20 (0.60) | same-number share 0.00

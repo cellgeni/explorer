@@ -1,0 +1,20 @@
+[
+  {
+    "label": "cold (new context)",
+    "readyMs": 1025,
+    "requests": 22,
+    "MB": 95.1
+  },
+  {
+    "label": "warm (reload, same context)",
+    "readyMs": 997,
+    "requests": 22,
+    "MB": 95.1
+  },
+  {
+    "label": "cold again (new context)",
+    "readyMs": 1123,
+    "requests": 22,
+    "MB": 95.1
+  }
+]

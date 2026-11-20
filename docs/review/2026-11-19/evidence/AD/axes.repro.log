@@ -1,0 +1,10 @@
+
+ RUN  v4.1.12 .
+
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  20:42:00
+   Duration  1.40s (transform 199ms, setup 105ms, import 193ms, tests 239ms, environment 656ms)
+
+exit=0

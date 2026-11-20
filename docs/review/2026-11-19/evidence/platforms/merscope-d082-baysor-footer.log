@@ -1,0 +1,6 @@
+size 797415 rows 21021n rowGroups 2
+schema schema:: Geometry:BYTE_ARRAY: EntityID:INT64: ParentType:INT32: ParentID:INT32: Type:BYTE_ARRAY:UTF8 ID:INT64: ZIndex:INT64: ZLevel:DOUBLE: Name:INT32: __index_level_0__:INT64:
+EntityID INT64 min 1577590100000000000n max 1577590100000002504n nvals 17500n
+ZIndex INT64 min 0n max 6n nvals 17500n
+EntityID INT64 min 1577590100000002505n max 1577590100000003008n nvals 3521n
+ZIndex INT64 min 0n max 6n nvals 3521n

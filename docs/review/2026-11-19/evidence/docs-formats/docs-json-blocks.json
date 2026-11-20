@@ -1,0 +1,127 @@
+[
+  {
+    "file": "docs/dataset-collections.md",
+    "line": 40,
+    "text": "{\n  \"$schema\": \"https://cellgeni.github.io/explorer/schemas/explorer-collection.v1.json\",\n  \"version\": 1,\n  \"name\": \"Spinal cord Xenium time course (SPCOX)\",\n  \"root\": \"https://spco.cog.sanger.ac.uk/SPCOX/\",\n  \"datasets\": [\n    {\n      \"dataset\": \"SPCOX-Sham-A-anndata.zarr\",\n      \"image\": \"SPCOX-Sham-A-raw.zarr\",\n      \"labels\": \"SPCOX-Sham-A-label.zarr\",\n      \"coordinates\": \"image-pixels\",\n      \"name\": \"Sham-A\",\n      \"group\": \"Sham\"\n    },\n    {\n      \"dataset\": \"SPCOX-1dpi-A-anndata.zarr\",\n      \"image\": \"SPCOX-1dpi-A-raw.zarr\",\n      \"labels\": \"SPCOX-1dpi-A-label.zarr\",\n      \"coordinates\": \"image-pixels\",\n      \"name\": \"1dpi-A\",\n      \"group\": \"1 dpi\"\n    },\n    {\n      \"dataset\": \"SPCO-snRNAseq-anndata.zarr\",\n      \"name\": \"snRNA-seq atlas\",\n      \"group\": \"snRNA-seq\"\n    }\n  ],\n  \"defaults\": { \"genes\": [\"Aqp4\"], \"geneRange\": [null, \"p95\"] }\n}",
+    "parsed": true,
+    "kind": "collection",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-collections.md",
+    "line": 342,
+    "text": "{\n  \"version\": 1,\n  \"datasets\": [\n    {\n      \"dataset\": \"p1-s1.zarr\",\n      \"name\": \"S1\",\n      \"group\": \"Patient 1\",\n      \"coordinateSystem\": \"patient-1\"\n    },\n    {\n      \"dataset\": \"p1-s2.zarr\",\n      \"name\": \"S2\",\n      \"group\": \"Patient 1\",\n      \"coordinateSystem\": \"patient-1\"\n    },\n    {\n      \"dataset\": \"p2-s1.zarr\",\n      \"name\": \"S1\",\n      \"group\": \"Patient 2\",\n      \"coordinateSystem\": \"patient-2\"\n    },\n    { \"dataset\": \"atlas.zarr\", \"name\": \"snRNA-seq atlas\" }\n  ]\n}",
+    "parsed": true,
+    "kind": "collection",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-collections.md",
+    "line": 416,
+    "text": "{\n  \"version\": 1,\n  \"datasets\": [\n    { \"dataset\": \"p1-s01.zarr\", \"name\": \"S01\", \"coordinateSystem\": \"patient-1\", \"z\": 0 },\n    { \"dataset\": \"p1-s02.zarr\", \"name\": \"S02\", \"coordinateSystem\": \"patient-1\", \"z\": 10 },\n    { \"dataset\": \"p1-s05.zarr\", \"name\": \"S05\", \"coordinateSystem\": \"patient-1\", \"z\": 40 }\n  ]\n}",
+    "parsed": true,
+    "kind": "collection",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 59,
+    "text": "{\n  \"$schema\": \"https://viewer.example.org/schemas/explorer-manifest.v1.json\",\n  \"version\": 1,\n  \"platform\": \"xenium\",\n  \"name\": \"Ovary AU14 S14\",\n  \"files\": {\n    \"cells\": \"tables/cells_resegmented.parquet\",\n    \"cellBoundaries\": \"tables/cell_boundaries_resegmented.parquet\",\n    \"cellFeatureMatrix\": \"https://cdn.example.org/au14/cell_feature_matrix.zarr.zip\",\n    \"morphology\": \"images/morphology_focus_0000.ome.tif\"\n  },\n  \"defaults\": {\n    \"genes\": [\"EPCAM\", \"PTPRC\"],\n    \"colorCellsBy\": \"cell-area\",\n    \"cellBoundaries\": false,\n    \"channels\": [\"DAPI\"],\n    \"imageOpacity\": 0.8\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 197,
+    "text": "{\n  \"version\": 1,\n  \"platform\": \"visium\",\n  \"name\": \"GSM6592057 (M10)\",\n  \"root\": \"https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM6592nnn/GSM6592057/suppl/\",\n  \"files\": {\n    \"tissuePositions\": \"GSM6592057_M10_tissue_positions_list.csv.gz\",\n    \"scalefactors\": \"GSM6592057_M10_scalefactors_json.json.gz\",\n    \"filteredMatrix\": \"GSM6592057_M10_filtered_feature_bc_matrix.h5\",\n    \"hiresImage\": \"GSM6592057_M10_tissue_hires_image.png.gz\"\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 217,
+    "text": "{\n  \"version\": 1,\n  \"platform\": \"visium\",\n  \"name\": \"GSM10040779 (MI_CTL)\",\n  \"root\": \"https://ftp.ncbi.nlm.nih.gov/geo/samples/GSM10040nnn/GSM10040779/suppl/\",\n  \"files\": {\n    \"tissuePositions\": \"GSM10040779_tissue_positions_list_MI_ctl.csv.gz\",\n    \"scalefactors\": \"GSM10040779_scalefactors_json_MI_ctl.json.gz\",\n    \"filteredMatrix\": \"GSM10040779_matrix.mtx_MI_ctl.mtx.gz\",\n    \"lowresImage\": \"GSM10040779_tissue_lowres_image_MI_ctl.png.gz\"\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 256,
+    "text": "{\n  \"version\": 1,\n  \"platform\": \"merscope\",\n  \"name\": \"D082 region 0 (Baysor)\",\n  \"root\": \"https://ftp.ebi.ac.uk/biostudies/fire/S-BIAD/376/S-BIAD2376/Files/nsatlas/merfish/202311011251_D082--5-8--11012023_VMSC02301/region_0\",\n  \"files\": {\n    \"cellByGene\": \"baysor_cell_by_gene.csv\",\n    \"cellMetadata\": \"baysor_cell_metadata.csv\",\n    \"cellBoundaries\": \"baysor_micron_space.parquet\"\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 313,
+    "text": "{\n  \"version\": 1,\n  \"platform\": \"h5ad\",\n  \"name\": \"SPCOX Sham-A\",\n  \"root\": \"https://spco.cog.sanger.ac.uk/SPCOX/\",\n  \"files\": {\n    \"h5ad\": \"SPCOX-Sham-A-anndata.zarr\",\n    \"image\": \"SPCOX-Sham-A-raw.zarr\",\n    \"labels\": \"SPCOX-Sham-A-label.zarr\"\n  },\n  \"options\": { \"coordinates\": \"image-pixels\" }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/dataset-manifest.md",
+    "line": 341,
+    "text": "{\n  \"version\": 1,\n  \"platform\": \"image\",\n  \"name\": \"Kidney H&E with Cellpose\",\n  \"files\": {\n    \"image\": \"kidney.ndpi\",\n    \"segmentation\": \"kidney_masks.ome.tif\"\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": true,
+    "errors": []
+  },
+  {
+    "file": "docs/deploy-to-s3.md",
+    "line": 226,
+    "text": "{\n  \"CORSRules\": [\n    {\n      \"AllowedOrigins\": [\"https://viewer.example.org\"],\n      \"AllowedMethods\": [\"GET\", \"HEAD\"],\n      \"AllowedHeaders\": [\"Range\"],\n      \"ExposeHeaders\": [\"Content-Length\", \"Content-Range\", \"Accept-Ranges\", \"ETag\"],\n      \"MaxAgeSeconds\": 3000\n    }\n  ]\n}",
+    "parsed": true,
+    "kind": null
+  },
+  {
+    "file": "docs/h5ad-reference.md",
+    "line": 74,
+    "text": "{\n  \"version\": 1,\n  \"refs\": {\n    \".zgroup\": \"{\\\"zarr_format\\\": 2}\",\n    \"X/.zattrs\": \"{\\\"encoding-type\\\":\\\"csr_matrix\\\",\\\"encoding-version\\\":\\\"0.1.0\\\",\\\"shape\\\":[4992,32397]}\",\n    \"X/data/.zarray\": \"{\\\"shape\\\":[1966115],\\\"chunks\\\":[7681],\\\"dtype\\\":\\\"<f4\\\",\\\"filters\\\":[{\\\"id\\\":\\\"zlib\\\",\\\"level\\\":4}],...}\",\n    \"X/data/0\": [\"heart.h5ad\", 8944, 3863],\n    \"X/data/1\": [\"heart.h5ad\", 12807, 4021],\n    \"obs/_index/.zarray\": \"{\\\"shape\\\":[4992],\\\"chunks\\\":[1248],\\\"dtype\\\":\\\"|O\\\",\\\"filters\\\":[{\\\"id\\\":\\\"vlen-utf8\\\"}],\\\"compressor\\\":{\\\"id\\\":\\\"zlib\\\",\\\"level\\\":9},...}\",\n    \"obs/_index/0\": \"base64:eNpdnUuSLseKhM+gV9D76MFdAsaADbB/66XcP3En86NMkknyihMZTx4ORP3...\"\n  }\n}",
+    "parsed": true,
+    "kind": "manifest",
+    "schemaValid": false,
+    "errors": [
+      {
+        "path": "",
+        "message": "'platform' is a required property"
+      },
+      {
+        "path": "",
+        "message": "Additional properties are not allowed ('refs' was unexpected)"
+      },
+      {
+        "path": "",
+        "message": "'files' is a required property"
+      },
+      {
+        "path": "",
+        "message": "'files' is a required property"
+      },
+      {
+        "path": "",
+        "message": "'files' is a required property"
+      }
+    ]
+  },
+  {
+    "file": "docs/zchunkstore.md",
+    "line": 33,
+    "text": "{\n  \"zarr.json\": {\n    \"zarr_format\": 3,\n    \"node_type\": \"group\",\n    \"attributes\": {\n      \"multiscales\": [\n        { \"datasets\": [{ \"path\": \"0\" }, { \"path\": \"1\" }], \"version\": \"0.1\" }\n      ]\n    }\n  },\n  \"0/zarr.json\": {\n    \"zarr_format\": 3,\n    \"node_type\": \"array\",\n    \"shape\": [4, 88404, 51294],\n    \"data_type\": \"uint16\",\n    \"chunk_grid\": {\n      \"name\": \"regular\",\n      \"configuration\": { \"chunk_shape\": [1, 1024, 1024] }\n    },\n    \"chunk_key_encoding\": { \"name\": \"default\", \"configuration\": { \"separator\": \"/\" } },\n    \"codecs\": [{ \"name\": \"imagecodecs_jpeg2k\", \"configuration\": {} }],\n    \"fill_value\": 0,\n    \"attributes\": {}\n  },\n  \"0/c/0/0/0\": { \"offset\": 53680, \"size\": 322 },\n  \"0/c/2/0/1\": { \"offset\": 53917, \"size\": 237 },\n  \"8/c/3/0/0\": { \"offset\": 2782289216, \"size\": 52170 }\n}",
+    "parsed": true,
+    "kind": null
+  }
+]

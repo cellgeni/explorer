@@ -1,0 +1,6 @@
+{"cell3_population":0.18831089428867737,"cell3_expressingOnly":-0.532200144888794}
+{"cell3_viewport":0.7977240352174657}
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts > z-score population > all cells in the batch (H5AD-style reader) matches the population oracle 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts > z-score population > expressing cells only (Xenium reader) gives another z for the same cell 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts > z-score population > a viewport holding cells 2-7 gives yet another z 0ms
+      Tests  3 passed (3)

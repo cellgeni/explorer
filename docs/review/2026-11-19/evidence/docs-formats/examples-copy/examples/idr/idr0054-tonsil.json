@@ -1,0 +1,20 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "image",
+  "name": "Human tonsil, imaging mass cytometry",
+  "description": "Hyperion imaging mass cytometry of a human tonsil section with 27 metal-tagged antibodies, as OME-Zarr; opens on CD3 (T cells), CD19 (B cells), and CD68 (macrophages).",
+  "source": {
+    "repository": "Image Data Resource",
+    "accession": "idr0054",
+    "url": "https://idr.openmicroscopy.org/webclient/?show=project-701",
+    "license": "CC BY 4.0",
+    "citation": "Durand M et al. (2019) Human lymphoid organ cDC2 and macrophages play complementary roles in T follicular helper responses. J Exp Med 216(7):1561-1581. doi:10.1084/jem.20181994"
+  },
+  "files": {
+    "image": "https://uk1s3.embassy.ebi.ac.uk/idr/zarr/v0.4/idr0054A/5025551.zarr"
+  },
+  "defaults": {
+    "channels": ["CD3-170Er", "CD19-169Tm", "CD68-171Yb"]
+  }
+}

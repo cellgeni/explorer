@@ -1,0 +1,10 @@
+# Upward edges (lower layer importing a higher one)
+data -> datasets	13
+rendering -> features/genes	1
+workers -> datasets	10
+workers -> features/plots	1
+workers -> features/query	1
+
+# Import cycles: 0
+
+files 468

@@ -1,0 +1,42 @@
+== A. 16 um tissue_positions.parquet: barcode digits vs array_row/array_col
+columns ['barcode', 'in_tissue', 'array_row', 'array_col', 'pxl_row_in_fullres', 'pxl_col_in_fullres'] rows 175561 in_tissue 54504
+first-number == array_row for all: True | second-number == array_col for all: True
+array_row range 0 418 array_col range 0 418
+asymmetric example s_016um_00000_00064-1 row 0 col 64 pxl_row 6627.547674245514 pxl_col 27700.994134733905
+== B. feature_slice.h5 spot transform reproduces 16 um centres (nesting = floor(2um/8))
+nrows 3350 ncols 3350 spot_pitch 2.0
+max |pred - pxl_col| 0.00067891795970354 max |pred - pxl_row| 0.0007104251490090974
+row/col swapped: max error px 23338.96665421901
+== D. feature slice summed to 16 um vs 16 um filtered matrix
+A2M feature index 22416 nnz 2um 52421 row max 3349 col max 3349
+16 um bins with A2M counts in feature slice: 25921 ; of those not in tissue: 885 ; counts there: 963.0
+filtered 16 um barcodes 54504 shape attr [18085 54504]
+compared 60 bins; mismatches 0
+example s_016um_00154_00108-1 feature slice 58.0
+== E. barcode_mappings.parquet: nesting and id formats (one row group)
+schema square_002um: string
+square_008um: string
+square_016um: string
+cell_id: string
+in_nucleus: bool
+in_cell: bool
+row groups 1123 rows 11222500
+8um == floor(2um/4): True | 16um == floor(2um/8): True
+cell_id sample <ArrowStringArray>
+['cellid_000079432-1', 'cellid_000079621-1', 'cellid_000079901-1']
+Length: 3, dtype: str in_cell dtype bool in_nucleus dtype bool
+rows in_nucleus but not in_cell: 0 | rows with cell_id but neither flag: 0
+square_008um stats has min/max True s_008um_00373_00000-1 s_008um_00373_00837-1
+== F. segmentation GeoJSON head
+{"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[12080.5, 6888.1], [12080.6, 6897.1], [12098.6, 6897.1], [12098.7, 6906.1], [12107.7, 6906.1], [12107.7, 6924.2], [12116.8, 6924.1], [12116.8, 6942.2], [12107.8, 6942.2], [12107.8, 6960.3], [12098.8, 6960.3], [12098.8, 6969.4], [12080.8, 6969.4], [12080.8, 6978.4], [12071.8, 6978.5], [12071.7, 6969.4], [12053.7, 6969.5], [12053.6, 6960.5], [12044.6, 6960.5], [12044.6, 6942.4], [12035.5, 6942.4], [12035.5, 6924.4], [12044.5, 6924.3], [12044.5, 6906.3], [12053.5, 6906.2], [12053.5, 689
+{"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[12080.6, 6924.2], [12080.7, 6942.3], [12071.7, 6942.3], [12071.6, 6924.3], [12080.6, 6924.2]]]}, "properties": {"cell_id": 2}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[16607.0, 6893.5], [16607.0, 6902.5], [16616.0, 6902.5], [16616.1, 6911.5], [16589.0, 6911.6], [16588.9, 6902.6], [16598.0, 6902.6], [16597.9, 6893.5], [16607.0, 6893.5]]]}, "properties": {"cell_id": 3}}, {"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [[[24451.5, 7720.8
+== G. clusters.csv head and scalefactors
+Barcode,Cluster
+s_016um_00107_00066-1,4
+s_016um_00353_00094-1,5
+s_016um_00014_00106-1,9
+s_016um_00030_00114-1,9
+s_016um_
+002 {'spot_diameter_fullres': 9.035923288925538, 'bin_size_um': 2.0, 'microns_per_pixel': 0.22133875377751464, 'tissue_lowres_scalef': 0.011957908, 'fiducial_diameter_fullres': 1490.9273426727138, 'tissue_hires_scalef': 0.119579084, 'regist_target_img_scalef': 0.119579084}
+008 {'spot_diameter_fullres': 36.14369315570215, 'bin_size_um': 8.0, 'microns_per_pixel': 0.22133875377751464, 'tissue_lowres_scalef': 0.011957908, 'fiducial_diameter_fullres': 1490.9273426727138, 'tissue_hires_scalef': 0.119579084, 'regist_target_img_scalef': 0.119579084}
+016 {'spot_diameter_fullres': 72.2873863114043, 'bin_size_um': 16.0, 'microns_per_pixel': 0.22133875377751464, 'tissue_lowres_scalef': 0.011957908, 'fiducial_diameter_fullres': 1490.9273426727138, 'tissue_hires_scalef': 0.119579084, 'regist_target_img_scalef': 0.119579084}
