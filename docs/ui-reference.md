@@ -318,7 +318,7 @@ The filter is not saved in the share link. Each row has:
 | Colour picker                      | Hidden for native RGB images                                                                                                                          |
 | `Auto`                             | Recomputes the contrast window from the coarsest level. Runs on load for every channel, or only the channels that are on when there are more than six |
 | Min / Max                          | Contrast window                                                                                                                                       |
-| Histogram                          | 32 bins from the last auto-contrast                                                                                                                   |
+| Histogram                          | 32 bins from the last auto-contrast, an image named `{channel} histogram` for screen readers                                                          |
 
 ### Segmentation
 

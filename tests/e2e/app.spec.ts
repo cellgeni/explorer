@@ -2013,6 +2013,51 @@ test('decodes image tiles with one set of workers across contrast edits @smoke',
   expect(alive.size).toBeLessThanOrEqual(8)
 })
 
+test("has no accessibility violations in an image's channel controls @smoke", async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+  const findings: AxeFindings = new Map()
+  const omeXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">',
+    '<Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint8"',
+    ' SizeX="64" SizeY="64" SizeC="1" SizeZ="1" SizeT="1"',
+    ' PhysicalSizeX="0.5" PhysicalSizeY="0.5">',
+    '<Channel ID="Channel:0:0" Name="rings" SamplesPerPixel="1"/>',
+    '<TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>',
+  ].join('')
+  await routeRangeFiles(page, '/channels-axe', {
+    'slide.ome.tif': tinyTiff(64, 64, 8, (x, y) => (x * 4 + y) % 256, omeXml),
+  })
+  const slide = new URL('/channels-axe/slide.ome.tif', baseURL).toString()
+
+  // Wide, as the review measured, and at phone width, where the layers are a
+  // sheet that opens from its handle.
+  for (const [width, height] of [
+    [1440, 900],
+    [1024, 768],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height })
+    await page.goto(`/#dataset=${encodeURIComponent(slide)}`)
+    await expect(
+      page.getByRole('status').filter({ hasText: 'Image · 1 channel' }),
+    ).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
+    // Under 860 px the layers are a sheet, opened from its handle, whose
+    // name also holds "Image".
+    const layers = page.getByRole('complementary', { name: 'Layers' })
+    if (width < 860) await page.getByTitle('Expand Layers').click()
+    const section = layers.getByRole('heading', { level: 3 }).getByTitle(/ Image$/)
+    if ((await section.getAttribute('aria-expanded')) !== 'true') await section.click()
+    await expect(layers.getByRole('img', { name: 'rings histogram' })).toBeVisible()
+    await collectAxeFindings(page, `image channel controls, ${width} px`, findings)
+  }
+
+  expectAxeFindingsMatchBaseline(findings)
+})
+
 test('draws an imported label mask and WKT outlines over an image @smoke', async ({
   page,
   baseURL,
