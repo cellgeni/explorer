@@ -1,0 +1,556 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 310 MB inflated: the documented limit message
+[size] inflated 310.0 MB, gzip 2.55 MB
+
+ ❯ docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts (1 test | 1 failed) 5ms
+     × matches the documented availability 4ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts (6 tests | 2 failed) 974ms
+     × ROI transcript export returns both transcripts, the unassigned one with no cell 38ms
+     × exact transcripts from transcripts.parquet mark the unassigned one as unassigned 21ms
+     ✓ XOA 2.x: a cell with two nuclei gives <cell> and <cell>#nucleus-2 23ms
+     ✓ XOA 1.x: no label_id column falls back to one nucleus per cell 19ms
+     ✓ ROI cells reject with a message 8ms
+     ✓ cells.parquet in a different order: counts still follow cell IDs 16ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (standard header), scale applied once
+{"header":"standard","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (none header), scale applied once
+{"header":"none","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (reordered header), scale applied once
+{"header":"reordered","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > draws hires pixel p at the same screen point as a spot at full-res p / scalef
+{"drawImage":[0,0,1000,600,150,450,1618.0000000000045,970.8000000000027],"imageScreen":{"x":635.4000000000013,"y":611.8000000000004},"spotScreen":{"x":635.4,"y":611.8}}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > isotropic transform: image spans the manifest bbox exactly
+[placement] src/test/fixtures/merscope/region_0.vzg: {"placement":{"originX":1000,"originY":2000,"micronsPerPixel":0.5},"first":{"minX":1000,"maxX":1016,"minY":2000,"maxY":2016},"last":{"minX":1096,"maxX":1100,"minY":2064,"maxY":2080}}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+[placement] docs/review/2026-11-19/evidence/fixtures/platforms/merscope-anisotropic.vzg: {"placement":{"originX":1000,"originY":3000,"micronsPerPixel":0.3333333333333333},"first":{"minX":1000,"maxX":1010.6666666666666,"minY":3000,"maxY":3010.6666666666665},"last":{"minX":1064,"maxX":1066.6666666666667,"minY":3042.6666666666665,"maxY":3053.3333333333335}}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts (2 tests | 1 failed) 19ms
+     ✓ isotropic transform: image spans the manifest bbox exactly 11ms
+     × anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size 5ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+[quoted comma] threw: cell_metadata.csv row 1 has 5 fields; the header has 4.
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+[escaped quote] {"name":"label","kind":"text","values":["a \"\"b\"\""]}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a duplicated cell ID in cell_by_gene.csv
+[duplicate id] ["1234567890123456789","1234567890123456789"]
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts (7 tests | 2 failed) 57ms
+     ✓ precondition: ID_1 and ID_2 are the same double 2ms
+     ✓ joins by exact ID string across reordering, missing rows, BOM, CRLF, quotes 14ms
+     ✓ keeps the two IDs distinct through MerscopeDataset reads 9ms
+     ✓ boundary EntityID (Parquet INT64) arrives as bigint and stays exact 21ms
+     × a quoted metadata value containing a comma 6ms
+     × a quoted value with an escaped double quote 4ms
+     ✓ a duplicated cell ID in cell_by_gene.csv 1ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS H5 matrix (CSC: indptr per barcode, indices = feature) > reads counts by barcode and feature, keeping feature ids
+{"b0":{"geneNames":["GENEB"],"counts":[4]},"b1":{"geneNames":["GENEA","GENEC"],"counts":[1,9]},"libraryId":"lib-1"}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > maps "row col value" to feature row-1, barcode col-1
+[["AAAC00AAAA-1",{"geneNames":["GENEA","GENEB"],"counts":[7,2]}],["AAAC01AAAA-1",{"geneNames":["GENEA"],"counts":[7]}]]
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > drops matrix barcodes without positions and does not show positions without counts
+{"shown":30,"progress":["Visium: 1 matrix barcodes are not in the tissue positions file and are not shown"]}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > fails with a clear error when matrix barcodes lack the -1 suffix of the positions file
+{"error":"None of the filtered matrix barcodes are in the Visium tissue positions file."}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > duplicate barcode rows in the positions file: the last row wins, silently
+{"first":{"x":3235.6764000000035,"y":2876.156800000003},"warned":false}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS in_tissue handling > raw matrix with off-tissue spots: hidden by default, shown on request, scale unchanged
+{"hidden":{"spotCount":30,"off":6,"cells":30,"umpp":0.3236000000000009},"shown":{"spotCount":36,"cells":36,"umpp":0.3236000000000009}}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > Antibody Capture counts go into total_counts and n_genes_by_counts
+{"total_counts":509,"n_genes_by_counts":3,"genePanel":["GENEA","GENEB","CD3"]}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > duplicate symbols get -2; Ensembl ids are not kept as aliases
+{"genePanel":["TBCE","TBCE-2","GENEC"],"aliases":[]}
+
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts (12 tests) 322ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 310 MB inflated: the documented limit message
+[size] MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 310.0 MB, above the 300.0 MB browser load limit. (after 1.2 s)
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > poisons the Parquet footer for later loads of the same file
+{
+  "fixtureBytes": 6337,
+  "load1": {
+    "error": "Error: parquet file invalid (footer != PAR1)",
+    "rangeRequests": [
+      "bytes=0-6336"
+    ]
+  },
+  "storedFooterBytes": 3168,
+  "load2": {
+    "error": "Error: parquet file invalid (footer != PAR1)",
+    "rangeRequests": []
+  },
+  "controlRows": 10
+}
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > fetchByteRangeWithCache stores whatever fetchRange returns (TIFF tile namespace)
+{"asked":100,"servedLater":40,"honestCalls":0}
+
+stdout | docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts > IO-01 persistent byte-range cache keeps short bodies > control: the zip store reader refuses a short body and caches nothing
+{"error":"Error: failed http request https://bucket.test/run/cells.parquet, 50 bytes returned for bytes 0-99 (100 expected)","secondLength":100,"honest":["bytes=0-99"]}
+
+ ✓ docs/review/2026-11-19/evidence/repro/io/byteRangeCacheShortBody.repro.ts (3 tests) 77ms
+ ✓ docs/review/2026-11-19/evidence/repro/AD/values.repro.ts (3 tests) 224ms
+ ✓ docs/review/2026-11-19/evidence/repro/AD/axes.repro.ts (11 tests) 365ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] inflated 520.0 MB, gzip 4.28 MB
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5
+{"matrixName":"GSM1_filtered_feature_bc_matrix.h5","detected":{"tissuePositions":"GSM1_tissue_positions_list.csv.gz","scalefactors":"GSM1_scalefactors_json.json.gz","filteredMatrix":"GSM1_filtered_feature_bc_matrix.h5"},"outcome":{"ok":true,"cells":36}}
+
+stderr | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+HDF5-DIAG: Error detected in HDF5 (2.0.0):
+  #000: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 821 in H5Fopen(): unable to synchronously open file
+    major: File accessibility
+    minor: Unable to open file
+  #001: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 782 in H5F__open_api_common(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #002: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3869 in H5VL_file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #003: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3718 in H5VL__file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #004: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLnative_file.c line 128 in H5VL__native_file_open(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #005: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fint.c line 2117 in H5F_open(): unable to read superblock
+    major: File accessibility
+    minor: Read failed
+  #006: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fsuper.c line 388 in H5F__super_read(): file signature not found
+    major: File accessibility
+    minor: Not an HDF5 file
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+{"matrixName":"GSM1_filtered_feature_bc_matrix.h5.gz","detected":{"tissuePositions":"GSM1_tissue_positions_list.csv.gz","scalefactors":"GSM1_scalefactors_json.json.gz","filteredMatrix":"GSM1_filtered_feature_bc_matrix.h5.gz"},"outcome":{"ok":false,"error":"Error: The file is not a readable HDF5 file."}}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts (2 tests | 1 failed) 305ms
+     ✓ loads filtered_feature_bc_matrix.h5 294ms
+     × loads filtered_feature_bc_matrix.h5.gz 10ms
+stdout | docs/review/2026-11-19/evidence/repro/imaging/tiffFormats.repro.ts > IMG TIFF formats > uncompressed tiles without a Compression tag (TIFF default 1)
+[ERROR] Malformed JP2 file format: first box must be JPEG 2000 signature box
+[ERROR] opj_decompress: failed to read the header
+
+ ✓ docs/review/2026-11-19/evidence/repro/imaging/tiffFormats.repro.ts (7 tests) 69ms
+ ✓ docs/review/2026-11-19/evidence/repro/AD/spatialdata-int64.repro.ts (2 tests) 53ms
+ ✓ docs/review/2026-11-19/evidence/repro/imaging/cellImageMeasureOracle.repro.ts (4 tests) 66ms
+probe	schema	parser	verdict	parser message
+M01-minimal	schema=true	parser=true	agree	
+M02-version-string	schema=false	parser=false	agree	explorer.json: "version" "1" is not supported; this viewer reads version 1.
+M03-version-2	schema=false	parser=false	agree	explorer.json: "version" 2 is not supported; this viewer reads version 1.
+M04-unknown-top-field	schema=false	parser=false	agree	explorer.json: unknown field "cells". Expected one of: version, platform, name, description, source, root, files, options, defaults.
+M05-name-null	schema=false	parser=false	agree	explorer.json: "name" must be a non-empty string.
+M06-name-whitespace	schema=true	parser=false	DISAGREE	explorer.json: "name" must be a non-empty string.
+M07-generange-p0	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M08-generange-p150	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M09-generange-p0.5	schema=true	parser=true	agree	
+M10-generange-max-below-min	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M11-colorCellsBy-unknown	schema=false	parser=true	DISAGREE	
+M12-h5ad-coordinates-without-image	schema=true	parser=false	DISAGREE	explorer.json: "options.coordinates" needs "files.image".
+M13-h5ad-labelColumn-without-labels	schema=true	parser=false	DISAGREE	explorer.json: "options.labelColumn" needs "files.labels".
+M14-h5ad-labels-without-image	schema=false	parser=false	agree	explorer.json: "files.labels" needs "files.image".
+M15-image-zchunkstore-with-omezarr	schema=true	parser=false	DISAGREE	explorer.json: "files.zchunkstore" is only for TIFF images; remove it for an OME-Zarr image.
+M16-image-segformat-without-segmentation	schema=true	parser=false	DISAGREE	explorer.json: "options.segmentationFormat" and "options.segmentationCoordinates" need "files.segmentation".
+M17-image-segmentation-unknown-extension	schema=true	parser=false	DISAGREE	explorer.json: "files.segmentation" has no recognised extension; set "options.segmentationFormat".
+M18-visiumhd-binsize-not-listed	schema=true	parser=false	DISAGREE	explorer.json: "options.binSize" 8 is not one of the listed bins.
+M19-visiumhd-duplicate-bin	schema=true	parser=false	DISAGREE	explorer.json: "files.bins" lists the 16 µm bin more than once.
+M20a-xenium-empty-options	schema=true	parser=true	agree	
+M20b-xenium-options-set	schema=false	parser=false	agree	explorer.json: "options" is not used for platform "xenium".
+M21-s3-path	schema=false	parser=false	agree	explorer.json: "files.cells" must be a relative path or an http(s) URL.
+M22-protocol-relative-path	schema=true	parser=true	agree	
+M23-mpu-zero	schema=false	parser=false	agree	explorer.json: "options.micrometersPerUnit" must be a positive number.
+M24-pointscale-zero	schema=false	parser=false	agree	explorer.json: "defaults.cellPointScale" must be a number above 0.
+M25-pointscale-100	schema=true	parser=true	agree	
+M26-opacity-1.5	schema=false	parser=false	agree	explorer.json: "defaults.imageOpacity" must be a number from 0 to 1.
+M27a-genes-empty-string	schema=false	parser=false	agree	explorer.json: "defaults.genes" must be an array of non-empty strings.
+M27b-genes-whitespace	schema=true	parser=false	DISAGREE	explorer.json: "defaults.genes" must be an array of non-empty strings.
+M28-collection-as-manifest	schema=false	parser=false	agree	explorer.json: this is a dataset collection; open it with collection= in the address instead of dataset=.
+M29a-source-url-ftp	schema=false	parser=false	agree	explorer.json: "source.url" must be an http(s) URL.
+M29b-source-url-empty-host	schema=false	parser=false	agree	explorer.json: "source.url" must be an http(s) URL.
+M30-xenium-zip-root	schema=true	parser=true	agree	
+M31-h5ad-coordinates-padded	schema=false	parser=false	agree	explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".
+M32-imageView-uppercase	schema=false	parser=true	DISAGREE	
+M33-schema-number	schema=false	parser=true	DISAGREE	
+M34-nonfinite-pointscale	schema=true	parser=false	DISAGREE	explorer.json: "defaults.cellPointScale" must be a number above 0.
+M35-nonfinite-generange	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M36-spatialdata-no-files	schema=false	parser=false	agree	explorer.json: "files.store" is required for platform "spatialdata".
+M37-visium-unknown-file	schema=false	parser=false	agree	explorer.json: unknown field "files.rawMatrix". Expected one of: tissuePositions, scalefactors, filteredMatrix, hiresImage, lowresImage, filteredMatrixBarcodes, filteredMatrixFeatures, clusters, umap, tsne, pca.
+M38-h5ad-options-null	schema=false	parser=false	agree	explorer.json: "options" must be an object.
+M39-defaults-null	schema=false	parser=false	agree	explorer.json: "defaults" must be an object.
+M40-files-null	schema=false	parser=false	agree	explorer.json: "files" must be an object.
+M41-coordinates-null	schema=false	parser=false	agree	explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".
+M42-visium-hd-segmented-unknown	schema=false	parser=false	agree	explorer.json: unknown field "files.segmentedOutputs.cells". Expected one of: scalefactors, filteredMatrix, rawMatrix, cellSegmentations, nucleusSegmentations, nucleusInstanceMask, graphclustCellSegmentations, graphclustNucleusSegmentations.
+M43-merscope-options-set	schema=false	parser=false	agree	explorer.json: "options" is not used for platform "merscope".
+C01-minimal	schema=true	parser=true	agree	
+C02-501-datasets	schema=false	parser=false	agree	collection.json: "datasets" lists 501 datasets; a collection holds up to 500.
+C03-duplicate-dataset	schema=true	parser=false	DISAGREE	collection.json: "datasets[1].dataset" is the same dataset as "datasets[0].dataset".
+C04-duplicate-dataset-spelled-differently	schema=true	parser=false	DISAGREE	collection.json: "datasets[1].dataset" is the same dataset as "datasets[0].dataset".
+C05-z-without-coordinateSystem	schema=false	parser=false	agree	collection.json: "datasets[0].z" needs "datasets[0].coordinateSystem": a depth places a section among the others registered to it.
+C06-mixed-z	schema=true	parser=false	DISAGREE	collection.json: "datasets[1]" has no "z", but "datasets[0]" in coordinate system "p1" has one; give every section of a coordinate system a "z", or none.
+C07-z-string	schema=false	parser=false	agree	collection.json: "datasets[0].z" must be a number.
+C08-z-nonfinite	schema=true	parser=false	DISAGREE	collection.json: "datasets[0].z" must be a number.
+C09-coordinates-without-image	schema=false	parser=false	agree	collection.json: "datasets[0].coordinates" needs "datasets[0].image".
+C10-labelColumn-without-labels	schema=false	parser=false	agree	collection.json: "datasets[0].labelColumn" needs "datasets[0].labels".
+C11-defaults-imageOpacity	schema=false	parser=false	agree	collection.json: unknown field "defaults.imageOpacity". Expected one of: genes, colorCellsBy, geneColorScale, geneRange, geneScoreMode, cellPointScale.
+C12-entry-platform	schema=false	parser=false	agree	collection.json: unknown field "datasets[0].platform". Expected one of: dataset, name, group, image, coordinates, labels, labelColumn, coordinateSystem, z.
+C13-manifest-as-collection	schema=false	parser=false	agree	collection.json: this is a dataset manifest, not a collection; open it with dataset= in the address instead of collection=.
+C14-s3-root	schema=false	parser=false	agree	collection.json: "root" must be a relative path or an http(s) URL.
+C15-entry-name-whitespace	schema=true	parser=false	DISAGREE	collection.json: "datasets[0].name" must be a non-empty string.
+C16-negative-z	schema=true	parser=true	agree	
+C17-empty-datasets	schema=false	parser=false	agree	collection.json: "datasets" must be a non-empty array.
+C18-defaults-colorCellsBy-unknown	schema=false	parser=true	DISAGREE	
+C19-defaults-null	schema=false	parser=false	agree	collection.json: "defaults" must be an object.
+C20-coordinates-padded	schema=false	parser=false	agree	collection.json: "datasets[0].coordinates" must be one of "micrometers", "image-pixels".
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts (103 tests) 33ms
+stdout | docs/review/2026-11-19/evidence/repro/analysis/plotOracle.repro.ts > ANA: Plots numbers against an independent oracle > records what a stored NaN does (dense X with missing values)
+NaN case {"sum":null,"expressing":2,"median":3,"max":null,"high":null,"densityFinite":true}
+
+ ✓ docs/review/2026-11-19/evidence/repro/analysis/plotOracle.repro.ts (4 tests) 33ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] Error: Cannot create a string longer than 0x1fffffe8 characters (after 2.1 s)
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts (2 tests | 1 failed) 4265ms
+     ✓ 310 MB inflated: the documented limit message  1469ms
+     × 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected 2795ms
+ ✓ docs/review/2026-11-19/evidence/repro/quality/hyparquetPatch.repro.ts (4 tests) 134ms
+ ✓ docs/review/2026-11-19/evidence/repro/imaging/tilePoolLifetime.repro.ts (1 test) 5ms
+ ✓ docs/review/2026-11-19/evidence/repro/analysis/roiLimit.repro.ts (2 tests) 301ms
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts > z-score population > expressing cells only (Xenium reader) gives another z for the same cell
+{"cell3_population":0.18831089428867737,"cell3_expressingOnly":-0.532200144888794}
+
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts > z-score population > a viewport holding cells 2-7 gives yet another z
+{"cell3_viewport":0.7977240352174657}
+
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/geneZScorePopulation.repro.ts (3 tests) 4ms
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/visiumHdScaleKeyAcrossLod.repro.ts > Visium HD gene scale key across LOD tiers > 2 µm selection: zoomed out reads 16 µm, zoomed in reads 2 µm, same scale key
+{"top16":48,"top2":3,"autoTopAfterZoomIn":48}
+
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/visiumHdScaleKeyAcrossLod.repro.ts (1 test) 7ms
+(node:28831) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts > cell shape metrics vs slide position > 8 x 5 µm ellipse (12 vertices) at (0, 0)
+{"at":[0,0],"major":[7.8193269648574075,7.819326964857407],"minor":[4.887079521213761,4.887079521213761],"eccentricity":[0.7806247325796384,0.7806247325796384]}
+
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts > cell shape metrics vs slide position > 8 x 5 µm ellipse (12 vertices) at (2000, 2000)
+{"at":[2000,2000],"major":[7.819338017550712,7.81933799731309],"minor":[4.887051733367803,4.887051805570945],"eccentricity":[0.7806282851432031,0.7806282764551483]}
+
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts > cell shape metrics vs slide position > 8 x 5 µm ellipse (12 vertices) at (10000, 8000)
+{"at":[10000,8000],"major":[7.81906422838276,7.8190624601051635],"minor":[4.887040979141629,4.8870518059101995],"eccentricity":[0.7806118643854181,0.7806106425452121]}
+
+stdout | docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts > cell shape metrics vs slide position > 8 x 5 µm ellipse (12 vertices) at (25000, 25000)
+{"at":[25000,25000],"major":[7.820121284792981,7.820164738533143],"minor":[4.888140839272667,4.888154145363246],"eccentricity":[0.7805668946875279,0.7805683135152651]}
+
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/cellShapeTranslation.repro.ts (4 tests) 3ms
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+(node:28847) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Chromium: classified as
+Chromium {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Firefox: classified as
+Firefox {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Safari: classified as
+Safari {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+ ✓ docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts (3 tests) 3ms
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+ ✓ docs/review/2026-11-19/evidence/repro/smoke.repro.ts (1 test) 2ms
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel during detection: control stays disabled on the library not shown
+LIF-VISIUM-CANCEL-DETECT observed {"spotsOnScreen":"3","selectValue":"lib-B","selectDisabled":true}
+
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Cancel: reads, controls and link no longer match the view on screen
+LIF-SD-CANCEL observed {"registeredCoordinateSystem":"pixels","coordinateSystemSelectDisabled":true,"hashHasSdCsPixels":true,"annotationsReadFrom":"pixels"}
+
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel after setVisiumView: the shared instance stays on the other library
+LIF-VISIUM-CANCEL-MUTATED observed {"spotsOnScreen":"3","setVisiumViewCalls":[{},{"libraryId":"lib-B"}],"libraryReadsUse":"lib-B"}
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts (2 tests | 2 failed) 1797ms
+     × cancel during detection: control stays disabled on the library not shown 1400ms
+     × cancel after setVisiumView: the shared instance stays on the other library 395ms
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Failure: same state after the new view fails to load
+LIF-SD-FAIL observed {"cellsOnScreen":"4","registeredCoordinateSystem":"pixels","coordinateSystemSelectDisabled":true,"hashHasSdCsPixels":true,"annotationsReadFrom":"pixels"}
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts (2 tests | 2 failed) 2666ms
+     × Cancel: reads, controls and link no longer match the view on screen 1780ms
+     × Failure: same state after the new view fails to load 883ms
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts > Plots toggle on Visium HD > matches the documented availability
+AssertionError: expected true to be false // Object.is equality
+
+- Expected
++ Received
+
+- false
++ true
+
+ ❯ docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts:19:28
+     17|     // The same expression App.tsx uses for plotsAvailable.
+     18|     const plotsAvailable = adapter.capabilities.cells && adapter.capab…
+     19|     expect(plotsAvailable).toBe(DOCUMENTED_PLOTS_ON_VISIUM_HD)
+       |                            ^
+     20|   })
+     21| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Cancel: reads, controls and link no longer match the view on screen
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+
+- Expected
++ Received
+
+  {
+-   "annotationsReadFrom": "global",
+-   "coordinateSystemSelectDisabled": false,
+-   "hashHasSdCsPixels": false,
+-   "registeredCoordinateSystem": "global",
++   "annotationsReadFrom": "pixels",
++   "coordinateSystemSelectDisabled": true,
++   "hashHasSdCsPixels": true,
++   "registeredCoordinateSystem": "pixels",
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:242:22
+    240|     console.info('LIF-SD-CANCEL observed', JSON.stringify(observed))
+    241|
+    242|     expect(observed).toEqual({
+       |                      ^
+    243|       registeredCoordinateSystem: 'global',
+    244|       coordinateSystemSelectDisabled: false,
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Failure: same state after the new view fails to load
+AssertionError: expected { cellsOnScreen: '4', …(4) } to deeply equal { cellsOnScreen: '4', …(4) }
+
+- Expected
++ Received
+
+  {
+-   "annotationsReadFrom": "global",
++   "annotationsReadFrom": "pixels",
+    "cellsOnScreen": "4",
+-   "coordinateSystemSelectDisabled": false,
+-   "hashHasSdCsPixels": false,
+-   "registeredCoordinateSystem": "global",
++   "coordinateSystemSelectDisabled": true,
++   "hashHasSdCsPixels": true,
++   "registeredCoordinateSystem": "pixels",
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:284:22
+    282|     console.info('LIF-SD-FAIL observed', JSON.stringify(observed))
+    283|
+    284|     expect(observed).toEqual({
+       |                      ^
+    285|       cellsOnScreen: '4',
+    286|       registeredCoordinateSystem: 'global',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel during detection: control stays disabled on the library not shown
+AssertionError: expected { spotsOnScreen: '3', …(2) } to deeply equal { spotsOnScreen: '3', …(2) }
+
+- Expected
++ Received
+
+  {
+-   "selectDisabled": false,
+-   "selectValue": "lib-A",
++   "selectDisabled": true,
++   "selectValue": "lib-B",
+    "spotsOnScreen": "3",
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:184:22
+    182|     }
+    183|     console.info('LIF-VISIUM-CANCEL-DETECT observed', JSON.stringify(o…
+    184|     expect(observed).toEqual({ spotsOnScreen: '3', selectValue: 'lib-A…
+       |                      ^
+    185|   })
+    186|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel after setVisiumView: the shared instance stays on the other library
+AssertionError: expected 'lib-B' to be 'lib-A' // Object.is equality
+
+Expected: "lib-A"
+Received: "lib-B"
+
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:203:29
+    201|     console.info('LIF-VISIUM-CANCEL-MUTATED observed', JSON.stringify(…
+    202|     expect(observed.spotsOnScreen).toBe('3')
+    203|     expect(libraryReadsUse).toBe('lib-A')
+       |                             ^
+    204|   })
+    205| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+AssertionError: expected 'threw: cell_metadata.csv row 1 has 5 …' to be 'parsed: {"name":"cell_type","kind":"t…' // Object.is equality
+
+Expected: "parsed: {"name":"cell_type","kind":"text","values":["T cell, CD4+"]}"
+Received: "threw: cell_metadata.csv row 1 has 5 fields; the header has 4."
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:183:21
+    181|     console.log('[quoted comma]', outcome)
+    182|     // RFC 4180 reading: one cell, cell_type = 'T cell, CD4+'.
+    183|     expect(outcome).toBe(
+       |                     ^
+    184|       'parsed: {"name":"cell_type","kind":"text","values":["T cell, CD…
+    185|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+AssertionError: expected { name: 'label', kind: 'text', …(1) } to deeply equal { name: 'label', kind: 'text', …(1) }
+
+- Expected
++ Received
+
+  {
+    "kind": "text",
+    "name": "label",
+    "values": [
+-     "a \"b\"",
++     "a \"\"b\"\"",
+    ],
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:193:37
+    191|     )
+    192|     console.log('[escaped quote]', JSON.stringify(metadata.columns.at(…
+    193|     expect(metadata.columns.at(-1)).toEqual({
+       |                                     ^
+    194|       name: 'label',
+    195|       kind: 'text',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+AssertionError: expected 'Error: Cannot create a string longer …' to be 'MerscopeCsvTooLargeError: cell_by_gen…' // Object.is equality
+
+Expected: "MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, above the 300.0 MB browser load limit."
+Received: "Error: Cannot create a string longer than 0x1fffffe8 characters"
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts:73:37
+     71|
+     72|   it('520 MiB inflated (past the engine string limit 0x1fffffe8): the …
+     73|     expect(await outcome(520 * MB)).toBe(
+       |                                     ^
+     74|       'MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, abov…
+     75|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[8/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+AssertionError: expected { maxX: 1066.6666666666667, …(1) } to deeply equal { maxX: 1100, maxY: 3040 }
+
+- Expected
++ Received
+
+  {
+-   "maxX": 1100,
+-   "maxY": 3040,
++   "maxX": 1066.6666666666667,
++   "maxY": 3053.3333333333335,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts:100:50
+     98|     expect(first.minX).toBe(1000)
+     99|     expect(first.minY).toBe(3000)
+    100|     expect({ maxX: last.maxX, maxY: last.maxY }).toEqual({ maxX: 1100,…
+       |                                                  ^
+    101|   })
+    102| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+AssertionError: expected { ok: false, …(1) } to deeply equal { ok: true, cells: 36 }
+
+- Expected
++ Received
+
+  {
+-   "cells": 36,
+-   "ok": true,
++   "error": "Error: The file is not a readable HDF5 file.",
++   "ok": false,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts:116:23
+    114|       )
+    115|       // Documented contract: both load the same 36 spots.
+    116|       expect(outcome).toEqual({ ok: true, cells: 36 })
+       |                       ^
+    117|     })
+    118|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[10/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > ROI transcript export returns both transcripts, the unassigned one with no cell
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:71:6
+     69|     await expect(
+     70|       read.then((rows) => rows.map((row) => row.cellId)),
+     71|     ).resolves.toEqual(['aaaaaaab-1', null])
+       |      ^
+     72|   })
+     73|
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptExportRow src/datasets/xeniumDatasetRows.ts:139:62
+ ❯ readXeniumTranscriptsInBbox src/datasets/xeniumDatasetReaders.ts:508:27
+ ❯ loadDatasetRoiTranscripts src/data/roiTranscripts.ts:48:9
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[11/12]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > exact transcripts from transcripts.parquet mark the unassigned one as unassigned
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:86:6
+     84|     await expect(
+     85|       read.then((result) => result.points.map((point) => point.cellAss…
+     86|     ).resolves.toEqual(['known', 'unassigned'])
+       |      ^
+     87|   })
+     88| })
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptPointRow src/datasets/xeniumDatasetRows.ts:293:62
+ ❯ readXeniumTranscriptsForViewport src/datasets/xeniumDatasetReaders.ts:594:44
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[12/12]⎯
+
+
+ Test Files  8 failed | 17 passed (25)
+      Tests  12 failed | 180 passed (192)
+   Start at  09:01:47
+   Duration  8.35s (transform 6.89s, setup 4.19s, import 11.69s, tests 11.79s, environment 18.92s)
+
+JSON report written to docs/review/2026-11-19/evidence/triage/repro-run.json

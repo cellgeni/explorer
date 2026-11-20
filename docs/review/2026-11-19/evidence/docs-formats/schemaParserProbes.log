@@ -1,0 +1,179 @@
+
+ RUN  v4.1.12 .
+
+probe	schema	parser	verdict	parser message
+M01-minimal	schema=true	parser=true	agree	
+M02-version-string	schema=false	parser=false	agree	explorer.json: "version" "1" is not supported; this viewer reads version 1.
+M03-version-2	schema=false	parser=false	agree	explorer.json: "version" 2 is not supported; this viewer reads version 1.
+M04-unknown-top-field	schema=false	parser=false	agree	explorer.json: unknown field "cells". Expected one of: version, platform, name, description, source, root, files, options, defaults.
+M05-name-null	schema=false	parser=false	agree	explorer.json: "name" must be a non-empty string.
+M06-name-whitespace	schema=true	parser=false	DISAGREE	explorer.json: "name" must be a non-empty string.
+M07-generange-p0	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M08-generange-p150	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M09-generange-p0.5	schema=true	parser=true	agree	
+M10-generange-max-below-min	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M11-colorCellsBy-unknown	schema=false	parser=true	DISAGREE	
+M12-h5ad-coordinates-without-image	schema=true	parser=false	DISAGREE	explorer.json: "options.coordinates" needs "files.image".
+M13-h5ad-labelColumn-without-labels	schema=true	parser=false	DISAGREE	explorer.json: "options.labelColumn" needs "files.labels".
+M14-h5ad-labels-without-image	schema=false	parser=false	agree	explorer.json: "files.labels" needs "files.image".
+M15-image-zchunkstore-with-omezarr	schema=true	parser=false	DISAGREE	explorer.json: "files.zchunkstore" is only for TIFF images; remove it for an OME-Zarr image.
+M16-image-segformat-without-segmentation	schema=true	parser=false	DISAGREE	explorer.json: "options.segmentationFormat" and "options.segmentationCoordinates" need "files.segmentation".
+M17-image-segmentation-unknown-extension	schema=true	parser=false	DISAGREE	explorer.json: "files.segmentation" has no recognised extension; set "options.segmentationFormat".
+M18-visiumhd-binsize-not-listed	schema=true	parser=false	DISAGREE	explorer.json: "options.binSize" 8 is not one of the listed bins.
+M19-visiumhd-duplicate-bin	schema=true	parser=false	DISAGREE	explorer.json: "files.bins" lists the 16 µm bin more than once.
+M20a-xenium-empty-options	schema=true	parser=true	agree	
+M20b-xenium-options-set	schema=false	parser=false	agree	explorer.json: "options" is not used for platform "xenium".
+M21-s3-path	schema=false	parser=false	agree	explorer.json: "files.cells" must be a relative path or an http(s) URL.
+M22-protocol-relative-path	schema=true	parser=true	agree	
+M23-mpu-zero	schema=false	parser=false	agree	explorer.json: "options.micrometersPerUnit" must be a positive number.
+M24-pointscale-zero	schema=false	parser=false	agree	explorer.json: "defaults.cellPointScale" must be a number above 0.
+M25-pointscale-100	schema=true	parser=true	agree	
+M26-opacity-1.5	schema=false	parser=false	agree	explorer.json: "defaults.imageOpacity" must be a number from 0 to 1.
+M27a-genes-empty-string	schema=false	parser=false	agree	explorer.json: "defaults.genes" must be an array of non-empty strings.
+M27b-genes-whitespace	schema=true	parser=false	DISAGREE	explorer.json: "defaults.genes" must be an array of non-empty strings.
+M28-collection-as-manifest	schema=false	parser=false	agree	explorer.json: this is a dataset collection; open it with collection= in the address instead of dataset=.
+M29a-source-url-ftp	schema=false	parser=false	agree	explorer.json: "source.url" must be an http(s) URL.
+M29b-source-url-empty-host	schema=false	parser=false	agree	explorer.json: "source.url" must be an http(s) URL.
+M30-xenium-zip-root	schema=true	parser=true	agree	
+M31-h5ad-coordinates-padded	schema=false	parser=false	agree	explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".
+M32-imageView-uppercase	schema=false	parser=true	DISAGREE	
+M33-schema-number	schema=false	parser=true	DISAGREE	
+M34-nonfinite-pointscale	schema=true	parser=false	DISAGREE	explorer.json: "defaults.cellPointScale" must be a number above 0.
+M35-nonfinite-generange	schema=true	parser=false	DISAGREE	explorer.json: "defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".
+M36-spatialdata-no-files	schema=false	parser=false	agree	explorer.json: "files.store" is required for platform "spatialdata".
+M37-visium-unknown-file	schema=false	parser=false	agree	explorer.json: unknown field "files.rawMatrix". Expected one of: tissuePositions, scalefactors, filteredMatrix, hiresImage, lowresImage, filteredMatrixBarcodes, filteredMatrixFeatures, clusters, umap, tsne, pca.
+M38-h5ad-options-null	schema=false	parser=false	agree	explorer.json: "options" must be an object.
+M39-defaults-null	schema=false	parser=false	agree	explorer.json: "defaults" must be an object.
+M40-files-null	schema=false	parser=false	agree	explorer.json: "files" must be an object.
+M41-coordinates-null	schema=false	parser=false	agree	explorer.json: "options.coordinates" must be one of "micrometers", "image-pixels".
+M42-visium-hd-segmented-unknown	schema=false	parser=false	agree	explorer.json: unknown field "files.segmentedOutputs.cells". Expected one of: scalefactors, filteredMatrix, rawMatrix, cellSegmentations, nucleusSegmentations, nucleusInstanceMask, graphclustCellSegmentations, graphclustNucleusSegmentations.
+M43-merscope-options-set	schema=false	parser=false	agree	explorer.json: "options" is not used for platform "merscope".
+C01-minimal	schema=true	parser=true	agree	
+C02-501-datasets	schema=false	parser=false	agree	collection.json: "datasets" lists 501 datasets; a collection holds up to 500.
+C03-duplicate-dataset	schema=true	parser=false	DISAGREE	collection.json: "datasets[1].dataset" is the same dataset as "datasets[0].dataset".
+C04-duplicate-dataset-spelled-differently	schema=true	parser=false	DISAGREE	collection.json: "datasets[1].dataset" is the same dataset as "datasets[0].dataset".
+C05-z-without-coordinateSystem	schema=false	parser=false	agree	collection.json: "datasets[0].z" needs "datasets[0].coordinateSystem": a depth places a section among the others registered to it.
+C06-mixed-z	schema=true	parser=false	DISAGREE	collection.json: "datasets[1]" has no "z", but "datasets[0]" in coordinate system "p1" has one; give every section of a coordinate system a "z", or none.
+C07-z-string	schema=false	parser=false	agree	collection.json: "datasets[0].z" must be a number.
+C08-z-nonfinite	schema=true	parser=false	DISAGREE	collection.json: "datasets[0].z" must be a number.
+C09-coordinates-without-image	schema=false	parser=false	agree	collection.json: "datasets[0].coordinates" needs "datasets[0].image".
+C10-labelColumn-without-labels	schema=false	parser=false	agree	collection.json: "datasets[0].labelColumn" needs "datasets[0].labels".
+C11-defaults-imageOpacity	schema=false	parser=false	agree	collection.json: unknown field "defaults.imageOpacity". Expected one of: genes, colorCellsBy, geneColorScale, geneRange, geneScoreMode, cellPointScale.
+C12-entry-platform	schema=false	parser=false	agree	collection.json: unknown field "datasets[0].platform". Expected one of: dataset, name, group, image, coordinates, labels, labelColumn, coordinateSystem, z.
+C13-manifest-as-collection	schema=false	parser=false	agree	collection.json: this is a dataset manifest, not a collection; open it with dataset= in the address instead of collection=.
+C14-s3-root	schema=false	parser=false	agree	collection.json: "root" must be a relative path or an http(s) URL.
+C15-entry-name-whitespace	schema=true	parser=false	DISAGREE	collection.json: "datasets[0].name" must be a non-empty string.
+C16-negative-z	schema=true	parser=true	agree	
+C17-empty-datasets	schema=false	parser=false	agree	collection.json: "datasets" must be a non-empty array.
+C18-defaults-colorCellsBy-unknown	schema=false	parser=true	DISAGREE	
+C19-defaults-null	schema=false	parser=false	agree	collection.json: "defaults" must be an object.
+C20-coordinates-padded	schema=false	parser=false	agree	collection.json: "datasets[0].coordinates" must be one of "micrometers", "image-pixels".
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M01-minimal' 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M02-version-string' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M03-version-2' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M04-unknown-top-field' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M05-name-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M06-name-whitespace' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M07-generange-p0' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M08-generange-p150' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M09-generange-p0.5' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M10-generange-max-below-min' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M11-colorCellsBy-unknown' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M12-h5ad-coordinates-without-image' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M13-h5ad-labelColumn-without-labels' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M14-h5ad-labels-without-image' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M15-image-zchunkstore-with-omezarr' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M16-image-segformat-without-segmentat…' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M17-image-segmentation-unknown-extens…' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M18-visiumhd-binsize-not-listed' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M19-visiumhd-duplicate-bin' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M20a-xenium-empty-options' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M20b-xenium-options-set' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M21-s3-path' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M22-protocol-relative-path' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M23-mpu-zero' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M24-pointscale-zero' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M25-pointscale-100' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M26-opacity-1.5' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M27a-genes-empty-string' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M27b-genes-whitespace' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M28-collection-as-manifest' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M29a-source-url-ftp' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M29b-source-url-empty-host' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M30-xenium-zip-root' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M31-h5ad-coordinates-padded' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M32-imageView-uppercase' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M33-schema-number' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M34-nonfinite-pointscale' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M35-nonfinite-generange' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M36-spatialdata-no-files' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M37-visium-unknown-file' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M38-h5ad-options-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M39-defaults-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M40-files-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M41-coordinates-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M42-visium-hd-segmented-unknown' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'M43-merscope-options-set' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C01-minimal' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C02-501-datasets' 9ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C03-duplicate-dataset' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C04-duplicate-dataset-spelled-differe…' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C05-z-without-coordinateSystem' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C06-mixed-z' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C07-z-string' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C08-z-nonfinite' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C09-coordinates-without-image' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C10-labelColumn-without-labels' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C11-defaults-imageOpacity' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C12-entry-platform' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C13-manifest-as-collection' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C14-s3-root' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C15-entry-name-whitespace' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C16-negative-z' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C17-empty-datasets' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C18-defaults-colorCellsBy-unknown' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C19-defaults-null' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > 'C20-coordinates-padded' 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > schema vs parser probes > prints the table 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > docs/collections/gbm-space.json 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > docs/collections/spcox.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/bia/S-BIAD2214.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/bia/S-BIAD2376.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/bia/S-BIAD2491.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/geo/GSM9080376.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/idr/idr0054-tonsil.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/idr/idr0062-blastocyst.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/spatialdata-sandbox/visium_associated_xenium_io.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-01.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-02.json 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-04.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-05.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-06.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-07.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > examples and docs/collections parse and match the schema > examples/zenodo/21110855-liver-sections/section-08.json 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-collections.md:40 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-collections.md:342 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-collections.md:416 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:59 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:197 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:217 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:256 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:313 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > docs JSON blocks that are manifests or collections > docs/dataset-manifest.md:341 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > resolves files against the manifest folder, dropping ./ and trailing / 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > resolves root relative to the manifest, then files against root 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > drops the manifest URL query and fragment from the base 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > protocol-relative path goes to another host 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > h5ad image and labels resolve against root 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > collection entries resolve against root or the collection folder 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/docs-formats/schemaParserProbes.repro.ts > relative path resolution (expected URLs written by hand) > collection image default coordinates is micrometers 0ms
+
+ Test Files  1 passed (1)
+      Tests  103 passed (103)
+   Start at  20:39:24
+   Duration  770ms (transform 68ms, setup 101ms, import 69ms, tests 22ms, environment 486ms)
+

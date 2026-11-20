@@ -1,0 +1,62 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+[quoted comma] threw: cell_metadata.csv row 1 has 5 fields; the header has 4.
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+[escaped quote] {"name":"label","kind":"text","values":["a \"\"b\"\""]}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts (7 tests | 2 failed) 35ms
+     × a quoted metadata value containing a comma 4ms
+     × a quoted value with an escaped double quote 1ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+AssertionError: expected 'threw: cell_metadata.csv row 1 has 5 …' to be 'parsed: {"name":"cell_type","kind":"t…' // Object.is equality
+
+Expected: "parsed: {"name":"cell_type","kind":"text","values":["T cell, CD4+"]}"
+Received: "threw: cell_metadata.csv row 1 has 5 fields; the header has 4."
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:183:21
+    181|     console.log('[quoted comma]', outcome)
+    182|     // RFC 4180 reading: one cell, cell_type = 'T cell, CD4+'.
+    183|     expect(outcome).toBe(
+       |                     ^
+    184|       'parsed: {"name":"cell_type","kind":"text","values":["T cell, CD…
+    185|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+AssertionError: expected { name: 'label', kind: 'text', …(1) } to deeply equal { name: 'label', kind: 'text', …(1) }
+
+- Expected
++ Received
+
+  {
+    "kind": "text",
+    "name": "label",
+    "values": [
+-     "a \"b\"",
++     "a \"\"b\"\"",
+    ],
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:193:37
+    191|     )
+    192|     console.log('[escaped quote]', JSON.stringify(metadata.columns.at(…
+    193|     expect(metadata.columns.at(-1)).toEqual({
+       |                                     ^
+    194|       name: 'label',
+    195|       kind: 'text',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 5 passed (7)
+   Start at  20:41:00
+   Duration  1.38s (transform 306ms, setup 144ms, import 390ms, tests 35ms, environment 720ms)
+

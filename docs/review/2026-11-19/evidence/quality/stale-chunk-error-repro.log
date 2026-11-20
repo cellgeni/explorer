@@ -1,0 +1,21 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Chromium: classified as
+Chromium {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Firefox: classified as
+Firefox {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+stdout | docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Safari: classified as
+Safari {"code":"network","title":"Network request failed","action":"Check dataset URL, CORS, and network access."}
+
+ ✓ docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Chromium: classified as 1ms
+ ✓ docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Firefox: classified as 0ms
+ ✓ docs/review/2026-11-19/evidence/repro/quality/staleChunkError.repro.ts > stale lazy chunk after a redeploy > Safari: classified as 0ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  20:43:41
+   Duration  542ms (transform 26ms, setup 68ms, import 17ms, tests 3ms, environment 377ms)
+

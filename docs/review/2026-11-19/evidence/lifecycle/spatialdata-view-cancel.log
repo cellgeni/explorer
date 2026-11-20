@@ -1,0 +1,62 @@
+ RUN  v4.1.12 .
+(node:85199) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Cancel: reads, controls and link no longer match the view on screen
+LIF-SD-CANCEL observed {"registeredCoordinateSystem":"pixels","coordinateSystemSelectDisabled":true,"hashHasSdCsPixels":true,"annotationsReadFrom":"pixels"}
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Failure: same state after the new view fails to load
+LIF-SD-FAIL observed {"cellsOnScreen":"4","registeredCoordinateSystem":"pixels","coordinateSystemSelectDisabled":true,"hashHasSdCsPixels":true,"annotationsReadFrom":"pixels"}
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts (2 tests | 2 failed) 1957ms
+     × Cancel: reads, controls and link no longer match the view on screen 1057ms
+     × Failure: same state after the new view fails to load 898ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Cancel: reads, controls and link no longer match the view on screen
+AssertionError: expected { …(4) } to deeply equal { …(4) }
+- Expected
++ Received
+  {
+-   "annotationsReadFrom": "global",
+-   "coordinateSystemSelectDisabled": false,
+-   "hashHasSdCsPixels": false,
+-   "registeredCoordinateSystem": "global",
++   "annotationsReadFrom": "pixels",
++   "coordinateSystemSelectDisabled": true,
++   "hashHasSdCsPixels": true,
++   "registeredCoordinateSystem": "pixels",
+  }
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:242:22
+    240|     console.info('LIF-SD-CANCEL observed', JSON.stringify(observed))
+    241|
+    242|     expect(observed).toEqual({
+       |                      ^
+    243|       registeredCoordinateSystem: 'global',
+    244|       coordinateSystemSelectDisabled: false,
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts > LIF: SpatialData view change that does not commit > Failure: same state after the new view fails to load
+AssertionError: expected { cellsOnScreen: '4', …(4) } to deeply equal { cellsOnScreen: '4', …(4) }
+- Expected
++ Received
+  {
+-   "annotationsReadFrom": "global",
++   "annotationsReadFrom": "pixels",
+    "cellsOnScreen": "4",
+-   "coordinateSystemSelectDisabled": false,
+-   "hashHasSdCsPixels": false,
+-   "registeredCoordinateSystem": "global",
++   "coordinateSystemSelectDisabled": true,
++   "hashHasSdCsPixels": true,
++   "registeredCoordinateSystem": "pixels",
+  }
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:284:22
+    282|     console.info('LIF-SD-FAIL observed', JSON.stringify(observed))
+    283|
+    284|     expect(observed).toEqual({
+       |                      ^
+    285|       cellsOnScreen: '4',
+    286|       registeredCoordinateSystem: 'global',
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:42:31
+   Duration  4.06s (transform 1.18s, setup 69ms, import 1.68s, tests 1.96s, environment 275ms)

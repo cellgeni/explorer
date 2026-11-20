@@ -1,0 +1,8 @@
+subifd: opened, numLevels=2 tile=32x32 level1={"width":48,"height":32} level1Tiles=2
+subifd: level 1 decoded; 1520 of 1536 pixels differ from the file
+aniso: units.micrometersPerPixel=0.5; tile (0,1) y 8-16 um (file: 16-32 um at 1.0 um/px)
+planar_rgb: 0 sample differences over 3 x 40 x 24
+zstd: 0 pixel differences over 48 x 40
+float32: failed: Unsupported TIFF tile bit depth 32. Only 8-bit and 16-bit tiles are supported.
+int16: first row from loader 65036,65073,65110,65147; file -500,-463,-426,-389; 516 of 1024 differ; channel contrast {"min":-32768,"max":32767}
+no_compression_tag: failed: JPEG-2000 decode returned invalid dimensions 0x0.

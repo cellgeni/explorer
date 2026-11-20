@@ -1,0 +1,45 @@
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts (2 tests | 1 failed) 21ms
+     × anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size 6ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts (7 tests | 2 failed) 95ms
+     × a quoted metadata value containing a comma 16ms
+     × a quoted value with an escaped double quote 8ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts (2 tests | 1 failed) 481ms
+     × loads filtered_feature_bc_matrix.h5.gz 10ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts (6 tests | 2 failed) 1325ms
+     × ROI transcript export returns both transcripts, the unassigned one with no cell 60ms
+     × exact transcripts from transcripts.parquet mark the unassigned one as unassigned 25ms
+ ❯ docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts (1 test | 1 failed) 4ms
+     × matches the documented availability 3ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts (2 tests | 1 failed) 4800ms
+     × 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected 2832ms
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts (2 tests | 2 failed) 2366ms
+     × cancel during detection: control stays disabled on the library not shown 1854ms
+     × cancel after setVisiumView: the shared instance stays on the other library 510ms
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts (2 tests | 2 failed) 3231ms
+     × Cancel: reads, controls and link no longer match the view on screen 2290ms
+     × Failure: same state after the new view fails to load 939ms
+⎯⎯⎯⎯⎯⎯ Failed Tests 12 ⎯⎯⎯⎯⎯⎯⎯
+ ❯ docs/review/2026-11-19/evidence/repro/docs-core/plotsVisiumHd.repro.ts:19:28
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:242:22
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/spatialdata-view-cancel.repro.ts:284:22
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:184:22
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:203:29
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:183:21
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:193:37
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts:73:37
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts:100:50
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts:116:23
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:71:6
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptExportRow src/datasets/xeniumDatasetRows.ts:139:62
+ ❯ readXeniumTranscriptsInBbox src/datasets/xeniumDatasetReaders.ts:508:27
+ ❯ loadDatasetRoiTranscripts src/data/roiTranscripts.ts:48:9
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:69:5
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:86:6
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptPointRow src/datasets/xeniumDatasetRows.ts:293:62
+ ❯ readXeniumTranscriptsForViewport src/datasets/xeniumDatasetReaders.ts:594:44
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:84:5
+ Test Files  8 failed | 18 passed (26)
+      Tests  12 failed | 181 passed (193)
+   Duration  9.77s (transform 9.60s, setup 4.77s, import 15.66s, tests 14.85s, environment 21.11s)

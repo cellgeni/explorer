@@ -1,0 +1,19 @@
+# Upward edges (lower layer importing a higher one)
+data -> datasets	31
+rendering -> features/annotations	1
+rendering -> features/genes	1
+workers -> datasets	24
+workers -> features/plots	2
+workers -> features/query	2
+
+# Import cycles: 8
+4 files: tiff/loader.ts, tiff/ndpi.ts, tiff/strips.ts, tiff/zchunkStore.ts
+28 files: data/analysisAnnotations.ts, data/analysisEmbeddings.ts, data/cellTranscripts.ts, data/customAnnotations.ts, data/datasetAnnotations.ts, data/datasetFiles.ts, data/datasetOverview.ts, data/duckdbCells.ts, data/geneValues.ts, data/gex.ts, data/morphologyImage.ts, data/roiSelection.ts, data/roiTranscripts.ts, data/transcriptFeatureTally.ts, data/transcriptOverlay.ts, data/transcriptZarr.ts, data/xeniumDatasetCache.ts, datasets/ateraFormat.ts, datasets/datasetCollection.ts, datasets/datasetManifest.ts, datasets/h5adDataset.ts, datasets/merscopeFormat.ts, datasets/spatialDataset.ts, datasets/spatialGrid.ts, datasets/visiumFormat.ts, datasets/xeniumDataset.ts, datasets/xeniumDatasetReaders.ts, datasets/xeniumDatasetRows.ts
+6 files: rendering/cellPointStyle.ts, rendering/deckLayerColors.ts, rendering/deckLayerTypes.ts, rendering/geneExpressionRenderer.ts, rendering/gridCellColumns.ts, rendering/gridCellRenderer.ts
+7 files: datasets/visiumHdBarcodeMappingDuckDb.ts, datasets/visiumHdBarcodeMappings.ts, datasets/visiumHdBarcodes.ts, datasets/visiumHdClusters.ts, datasets/visiumHdDataset.ts, datasets/visiumHdDatasetReaders.ts, datasets/visiumHdOverview.ts
+4 files: datasets/featureBarcodeMex.ts, datasets/featureBarcodeMexWorker.ts, datasets/visiumDataset.ts, workers/featureBarcodeMexMessages.ts
+2 files: datasets/datasetDetectionError.ts, datasets/datasetFactory.ts
+3 files: features/app-shell/useAppDomainState.ts, features/shell/layerPanelModel.ts, features/shell/shellLinkModel.ts
+2 files: features/plots/plotModel.ts, features/plots/plotsPanelModel.ts
+
+files 468

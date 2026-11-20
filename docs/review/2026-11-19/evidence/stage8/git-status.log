@@ -1,0 +1,17 @@
+# git status --porcelain --untracked-files=all (outside docs/review/)
+# count of untracked files under docs/review/
+466
+# git diff --stat (tracked files)
+# git diff --cached --stat
+# HEAD
+6a9a736a26fc1b095ed7c1bbfbace97ab4eddf10
+# ignored outputs present
+!! .claude/
+!! coverage/
+!! dist/
+!! test-results/
+# notes on the ignored outputs (all gitignored, none tracked)
+# coverage/      2026-11-19 20:36  baseline coverage run (npm run test:coverage)
+# dist/          2026-11-20 11:16  review builds (baseline and stage 6)
+# test-results/  2026-11-19 19:27  Playwright output from before the reviewed commit was checked out
+# .claude/       2026-11-19 20:25  four local helper files, dated before the reviewed commit; not written by stages 1 to 8

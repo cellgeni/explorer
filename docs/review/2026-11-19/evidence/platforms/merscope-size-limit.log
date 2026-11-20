@@ -1,0 +1,36 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] inflated 520.0 MB, gzip 4.28 MB
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] Error: Cannot create a string longer than 0x1fffffe8 characters (after 2.3 s)
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts (2 tests | 1 failed) 3649ms
+     × 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected 2677ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+AssertionError: expected 'Error: Cannot create a string longer …' to be 'MerscopeCsvTooLargeError: cell_by_gen…' // Object.is equality
+
+Expected: "MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, above the 300.0 MB browser load limit."
+Received: "Error: Cannot create a string longer than 0x1fffffe8 characters"
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts:73:37
+     71|
+     72|   it('520 MiB inflated (past the engine string limit 0x1fffffe8): the …
+     73|     expect(await outcome(520 * MB)).toBe(
+       |                                     ^
+     74|       'MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, abov…
+     75|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  20:41:21
+   Duration  4.22s (transform 33ms, setup 66ms, import 28ms, tests 3.65s, environment 308ms)
+

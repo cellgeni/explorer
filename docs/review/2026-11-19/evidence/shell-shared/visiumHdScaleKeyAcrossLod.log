@@ -1,0 +1,3 @@
+{"top16":48,"top2":3,"autoTopAfterZoomIn":48}
+ ✓ docs/review/2026-11-19/evidence/repro/shell-shared/visiumHdScaleKeyAcrossLod.repro.ts > Visium HD gene scale key across LOD tiers > 2 µm selection: zoomed out reads 16 µm, zoomed in reads 2 µm, same scale key 2ms
+      Tests  1 passed (1)

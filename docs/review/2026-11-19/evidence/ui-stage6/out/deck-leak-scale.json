@@ -1,0 +1,39 @@
+{
+  "rows": [
+    {
+      "step": "smoke first",
+      "heapMiB": 10.1
+    },
+    {
+      "step": "smoke after medium visit 1",
+      "heapMiB": 19.5
+    },
+    {
+      "step": "smoke after medium visit 2",
+      "heapMiB": 25.4
+    },
+    {
+      "step": "smoke after medium visit 3",
+      "heapMiB": 30.7
+    },
+    {
+      "step": "smoke after medium visit 4",
+      "heapMiB": 36.4
+    },
+    {
+      "step": "smoke after medium visit 5",
+      "heapMiB": 41.8
+    },
+    {
+      "step": "smoke after medium visit 6",
+      "heapMiB": 47.1
+    }
+  ],
+  "webglWarnings": [
+    "warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "warningCount": 4
+}

@@ -1,0 +1,52 @@
+
+ RUN  v4.1.12 .
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts (6 tests | 2 failed) 644ms
+     × ROI transcript export returns both transcripts, the unassigned one with no cell 34ms
+     × exact transcripts from transcripts.parquet mark the unassigned one as unassigned 16ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > ROI transcript export returns both transcripts, the unassigned one with no cell
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:71:6
+     69|     await expect(
+     70|       read.then((rows) => rows.map((row) => row.cellId)),
+     71|     ).resolves.toEqual(['aaaaaaab-1', null])
+       |      ^
+     72|   })
+     73|
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptExportRow src/datasets/xeniumDatasetRows.ts:139:62
+ ❯ readXeniumTranscriptsInBbox src/datasets/xeniumDatasetReaders.ts:508:27
+ ❯ loadDatasetRoiTranscripts src/data/roiTranscripts.ts:48:9
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > exact transcripts from transcripts.parquet mark the unassigned one as unassigned
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:86:6
+     84|     await expect(
+     85|       read.then((result) => result.points.map((point) => point.cellAss…
+     86|     ).resolves.toEqual(['known', 'unassigned'])
+       |      ^
+     87|   })
+     88| })
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptPointRow src/datasets/xeniumDatasetRows.ts:293:62
+ ❯ readXeniumTranscriptsForViewport src/datasets/xeniumDatasetReaders.ts:594:44
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 4 passed (6)
+   Start at  20:40:17
+   Duration  977ms (transform 103ms, setup 57ms, import 201ms, tests 644ms, environment 0ms)
+

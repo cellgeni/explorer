@@ -1,0 +1,13 @@
+
+Running 1 test using 1 worker
+
+{"name":"h5ad-medium (whole file)","settledMs":3056,"elapsedMs":4687,"requests":4,"distinct":2,"status404":0,"bytes":4154152,"repeats":["3x HEAD medium.h5ad"]}
+{"name":"h5ad-profile (range reads, 95 MB)","settledMs":3052,"elapsedMs":4690,"requests":22,"distinct":20,"status404":0,"bytes":95064056,"repeats":["3x HEAD profile.h5ad"]}
+{"name":"icechunk anndata","settledMs":3087,"elapsedMs":4711,"requests":9,"distinct":9,"status404":0,"bytes":4065,"repeats":[]}
+{"name":"visium space ranger folder","settledMs":3023,"elapsedMs":4653,"requests":42,"distinct":27,"status404":0,"bytes":10268,"repeats":["2x GET visium-smoke/","2x GET visium-smoke/explorer.json","2x HEAD visium-smoke/experiment.xenium","2x HEAD visium-smoke/experiment.spatial","2x HEAD visium-smoke/zarr.json","2x HEAD visium-smoke/.zattrs","2x HEAD visium-smoke/spatial/tissue_positions.csv","2x HEAD visium-smoke/spatial/tissue_positions_list.csv","2x HEAD visium-smoke/spatial/scalefactors_json.json","2x HEAD visium-smoke/filtered_feature_bc_matrix.h5","2x HEAD visium-smoke/spatial/tissue_hires_image.png","2x HEAD visium-smoke/spatial/tissue_lowres_image.png"]}
+{"name":"merscope folder","settledMs":3008,"elapsedMs":4645,"requests":33,"distinct":18,"status404":0,"bytes":5132,"repeats":["2x GET merscope-smoke/","2x GET merscope-smoke/explorer.json","2x HEAD merscope-smoke/experiment.xenium","2x HEAD merscope-smoke/experiment.spatial","2x HEAD merscope-smoke/zarr.json","2x HEAD merscope-smoke/.zattrs","2x HEAD merscope-smoke/spatial/tissue_positions.csv","2x HEAD merscope-smoke/spatial/tissue_positions_list.csv","2x HEAD merscope-smoke/spatial/scalefactors_json.json","2x HEAD merscope-smoke/filtered_feature_bc_matrix.h5","2x HEAD merscope-smoke/spatial/tissue_hires_image.png","2x HEAD merscope-smoke/spatial/tissue_lowres_image.png"]}
+{"name":"spatialdata image store","settledMs":3091,"elapsedMs":4714,"requests":62,"distinct":56,"status404":0,"bytes":93569,"repeats":["2x HEAD image_cells.zarr/zarr.json","2x HEAD image_cells.zarr/.zattrs","3x GET image_cells.zarr/zarr.json","2x GET image_cells.zarr/tables/table/obs/instance_id/c/0 bytes=0-33","2x GET image_cells.zarr/tables/table/obs/region/categories/c/0 bytes=0-21"]}
+{"name":"ome-tiff two channels","settledMs":3016,"elapsedMs":4638,"requests":19,"distinct":16,"status404":0,"bytes":3591422,"repeats":["2x HEAD two-channel.ome.tif","3x GET two-channel.ome.tif bytes=85552800-86064736"]}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/detection-requests.s6.mjs:17:1 › cold load request counts (33.3s)
+
+  1 passed (34.5s)

@@ -1,0 +1,206 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+[placement] docs/review/2026-11-19/evidence/fixtures/platforms/merscope-anisotropic.vzg: {"placement":{"originX":1000,"originY":3000,"micronsPerPixel":0.3333333333333333},"first":{"minX":1000,"maxX":1010.6666666666666,"minY":3000,"maxY":3010.6666666666665},"last":{"minX":1064,"maxX":1066.6666666666667,"minY":3042.6666666666665,"maxY":3053.3333333333335}}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts (2 tests | 1 failed) 60ms
+     × anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size 33ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+[quoted comma] threw: cell_metadata.csv row 1 has 5 fields; the header has 4.
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+[escaped quote] {"name":"label","kind":"text","values":["a \"\"b\"\""]}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts (7 tests | 2 failed) 148ms
+     × a quoted metadata value containing a comma 7ms
+     × a quoted value with an escaped double quote 2ms
+stderr | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+HDF5-DIAG: Error detected in HDF5 (2.0.0):
+  #000: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 821 in H5Fopen(): unable to synchronously open file
+    major: File accessibility
+    minor: Unable to open file
+  #001: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5F.c line 782 in H5F__open_api_common(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #002: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3869 in H5VL_file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #003: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLcallback.c line 3718 in H5VL__file_open(): open failed
+    major: Virtual Object Layer
+    minor: Can't open object
+  #004: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5VLnative_file.c line 128 in H5VL__native_file_open(): unable to open file
+    major: File accessibility
+    minor: Unable to open file
+  #005: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fint.c line 2117 in H5F_open(): unable to read superblock
+    major: File accessibility
+    minor: Read failed
+  #006: /__w/libhdf5-wasm/libhdf5-wasm/build/2.0.0/_deps/hdf5-src/src/H5Fsuper.c line 388 in H5F__super_read(): file signature not found
+    major: File accessibility
+    minor: Not an HDF5 file
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+{"matrixName":"GSM1_filtered_feature_bc_matrix.h5.gz","detected":{"tissuePositions":"GSM1_tissue_positions_list.csv.gz","scalefactors":"GSM1_scalefactors_json.json.gz","filteredMatrix":"GSM1_filtered_feature_bc_matrix.h5.gz"},"outcome":{"ok":false,"error":"Error: The file is not a readable HDF5 file."}}
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts (2 tests | 1 failed) 456ms
+     × loads filtered_feature_bc_matrix.h5.gz 8ms
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts (6 tests | 2 failed) 1492ms
+     × ROI transcript export returns both transcripts, the unassigned one with no cell 171ms
+     × exact transcripts from transcripts.parquet mark the unassigned one as unassigned 29ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] inflated 520.0 MB, gzip 4.28 MB
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+[size] Error: Cannot create a string longer than 0x1fffffe8 characters (after 0.8 s)
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts (2 tests | 1 failed) 3033ms
+     × 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected 1239ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 7 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted metadata value containing a comma
+AssertionError: expected 'threw: cell_metadata.csv row 1 has 5 …' to be 'parsed: {"name":"cell_type","kind":"t…' // Object.is equality
+
+Expected: "parsed: {"name":"cell_type","kind":"text","values":["T cell, CD4+"]}"
+Received: "threw: cell_metadata.csv row 1 has 5 fields; the header has 4."
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:183:21
+    181|     console.log('[quoted comma]', outcome)
+    182|     // RFC 4180 reading: one cell, cell_type = 'T cell, CD4+'.
+    183|     expect(outcome).toBe(
+       |                     ^
+    184|       'parsed: {"name":"cell_type","kind":"text","values":["T cell, CD…
+    185|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts > MERSCOPE CSV quoting (RFC 4180) > a quoted value with an escaped double quote
+AssertionError: expected { name: 'label', kind: 'text', …(1) } to deeply equal { name: 'label', kind: 'text', …(1) }
+
+- Expected
++ Received
+
+  {
+    "kind": "text",
+    "name": "label",
+    "values": [
+-     "a \"b\"",
++     "a \"\"b\"\"",
+    ],
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-csv-join.repro.ts:193:37
+    191|     )
+    192|     console.log('[escaped quote]', JSON.stringify(metadata.columns.at(…
+    193|     expect(metadata.columns.at(-1)).toEqual({
+       |                                     ^
+    194|       name: 'label',
+    195|       kind: 'text',
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts > MERSCOPE gzipped CSV above the 300 MB limit > 520 MiB inflated (past the engine string limit 0x1fffffe8): the same message expected
+AssertionError: expected 'Error: Cannot create a string longer …' to be 'MerscopeCsvTooLargeError: cell_by_gen…' // Object.is equality
+
+Expected: "MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, above the 300.0 MB browser load limit."
+Received: "Error: Cannot create a string longer than 0x1fffffe8 characters"
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-size-limit.repro.ts:73:37
+     71|
+     72|   it('520 MiB inflated (past the engine string limit 0x1fffffe8): the …
+     73|     expect(await outcome(520 * MB)).toBe(
+       |                                     ^
+     74|       'MerscopeCsvTooLargeError: cell_by_gene.csv.gz is 520.0 MB, abov…
+     75|     )
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts > MERSCOPE .vzg placement > anisotropic transform (sx 2, sy 4, tx -2000, ty -12000): per-axis pixel size
+AssertionError: expected { maxX: 1066.6666666666667, …(1) } to deeply equal { maxX: 1100, maxY: 3040 }
+
+- Expected
++ Received
+
+  {
+-   "maxX": 1100,
+-   "maxY": 3040,
++   "maxX": 1066.6666666666667,
++   "maxY": 3053.3333333333335,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/merscope-vzg-placement.repro.ts:100:50
+     98|     expect(first.minX).toBe(1000)
+     99|     expect(first.minY).toBe(3000)
+    100|     expect({ maxX: last.maxX, maxY: last.maxY }).toEqual({ maxX: 1100,…
+       |                                                  ^
+    101|   })
+    102| })
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts > VIS gzipped .h5 matrix named in a manifest > loads filtered_feature_bc_matrix.h5.gz
+AssertionError: expected { ok: false, …(1) } to deeply equal { ok: true, cells: 36 }
+
+- Expected
++ Received
+
+  {
+-   "cells": 36,
+-   "ok": true,
++   "error": "Error: The file is not a readable HDF5 file.",
++   "ok": false,
+  }
+
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/visium-h5-gzip.repro.ts:116:23
+    114|       )
+    115|       // Documented contract: both load the same 36 spots.
+    116|       expect(outcome).toEqual({ ok: true, cells: 36 })
+       |                       ^
+    117|     })
+    118|   }
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[5/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > ROI transcript export returns both transcripts, the unassigned one with no cell
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:71:6
+     69|     await expect(
+     70|       read.then((rows) => rows.map((row) => row.cellId)),
+     71|     ).resolves.toEqual(['aaaaaaab-1', null])
+       |      ^
+     72|   })
+     73|
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptExportRow src/datasets/xeniumDatasetRows.ts:139:62
+ ❯ readXeniumTranscriptsInBbox src/datasets/xeniumDatasetReaders.ts:508:27
+ ❯ loadDatasetRoiTranscripts src/data/roiTranscripts.ts:48:9
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:69:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[6/7]⎯
+
+ FAIL  docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts > Xenium transcripts.parquet with UNASSIGNED cell_id (XOA >= 1.3) > exact transcripts from transcripts.parquet mark the unassigned one as unassigned
+AssertionError: promise rejected "Error: Invalid Xenium cell ID: UNASSIGNED." instead of resolving
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:86:6
+     84|     await expect(
+     85|       read.then((result) => result.points.map((point) => point.cellAss…
+     86|     ).resolves.toEqual(['known', 'unassigned'])
+       |      ^
+     87|   })
+     88| })
+
+Caused by: Error: Invalid Xenium cell ID: UNASSIGNED.
+ ❯ asCellId src/data/cellid.ts:43:11
+ ❯ parseTranscriptPointRow src/datasets/xeniumDatasetRows.ts:293:62
+ ❯ readXeniumTranscriptsForViewport src/datasets/xeniumDatasetReaders.ts:594:44
+ ❯ docs/review/2026-11-19/evidence/repro/platforms/xenium-duckdb.repro.ts:84:5
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[7/7]⎯
+
+
+ Test Files  5 failed | 6 passed (11)
+      Tests  7 failed | 51 passed (58)
+   Start at  09:44:32
+   Duration  4.58s (transform 2.51s, setup 1.77s, import 4.50s, tests 6.74s, environment 8.79s)
+

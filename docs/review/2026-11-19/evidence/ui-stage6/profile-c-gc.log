@@ -1,0 +1,12 @@
+
+Running 1 test using 1 worker
+
+{"step":"switch 5 to S3","readyMs":763,"newRequests":4,"alive":2,"created":{"h5File.worker":7},"rssKiB":{"renderer":359664,"GPU":454320,"network.mojom.NetworkService":50592},"js":{"mainHeapUsedMiB":19,"crossOriginIsolated":true}}
+{"step":"switch 10 to S2","readyMs":763,"newRequests":4,"alive":2,"created":{"h5File.worker":12},"rssKiB":{"renderer":402016,"GPU":706448,"network.mojom.NetworkService":50592},"js":{"mainHeapUsedMiB":25,"crossOriginIsolated":true}}
+{"step":"switch 15 to S1","readyMs":765,"newRequests":4,"alive":2,"created":{"h5File.worker":17},"rssKiB":{"renderer":453008,"GPU":957808,"network.mojom.NetworkService":50656},"js":{"mainHeapUsedMiB":30,"crossOriginIsolated":true}}
+{"step":"switch 20 to S3","readyMs":790,"newRequests":4,"alive":2,"created":{"h5File.worker":22},"rssKiB":{"renderer":463984,"GPU":960320,"network.mojom.NetworkService":50784},"js":{"mainHeapUsedMiB":36,"crossOriginIsolated":true}}
+{"step":"switch 25 to S2","readyMs":1206,"newRequests":4,"alive":2,"created":{"h5File.worker":27},"rssKiB":{"renderer":476864,"GPU":960720,"network.mojom.NetworkService":51024},"js":{"mainHeapUsedMiB":42,"crossOriginIsolated":true}}
+{"step":"switch 30 to S1","readyMs":771,"newRequests":4,"alive":2,"created":{"h5File.worker":32},"rssKiB":{"renderer":453296,"GPU":950256,"network.mojom.NetworkService":47264},"js":{"mainHeapUsedMiB":47,"crossOriginIsolated":true}}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/profile.s6.mjs:78:1 › (c) repeated collection switches (1.2m)
+
+  1 passed (1.3m)

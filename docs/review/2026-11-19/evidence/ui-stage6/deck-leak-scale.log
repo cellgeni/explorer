@@ -1,0 +1,13 @@
+
+Running 1 test using 1 worker
+
+{"step":"smoke after medium visit 1","heapMiB":19.5}
+{"step":"smoke after medium visit 2","heapMiB":25.4}
+{"step":"smoke after medium visit 3","heapMiB":30.7}
+{"step":"smoke after medium visit 4","heapMiB":36.4}
+{"step":"smoke after medium visit 5","heapMiB":41.8}
+{"step":"smoke after medium visit 6","heapMiB":47.1}
+{"warningCount":4,"first":["warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels","warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels","warning: [.WebGL-0x12c0058de00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"]}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/deck-leak-scale.s6.mjs:18:1 › heap retained per dataset switch (30.3s)
+
+  1 passed (31.6s)

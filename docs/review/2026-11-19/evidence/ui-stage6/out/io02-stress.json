@@ -1,0 +1,116 @@
+{
+  "crashed": null,
+  "rows": [
+    {
+      "edit": 10,
+      "elapsedS": 5,
+      "settledMs": 1036,
+      "frameMs": 14,
+      "responsive": true,
+      "created": 212,
+      "alive": 210,
+      "rssKiB": {
+        "renderer": 1059648,
+        "GPU": 152144,
+        "network.mojom.NetworkService": 66832
+      },
+      "js": {
+        "mainHeapUsedMiB": 12,
+        "crossOriginIsolated": true
+      }
+    },
+    {
+      "edit": 20,
+      "elapsedS": 10,
+      "settledMs": 1011,
+      "frameMs": 101,
+      "responsive": true,
+      "created": 412,
+      "alive": 410,
+      "rssKiB": {
+        "renderer": 1171648,
+        "GPU": 89392,
+        "network.mojom.NetworkService": 71568
+      },
+      "js": {
+        "mainHeapUsedMiB": 12,
+        "crossOriginIsolated": true
+      }
+    },
+    {
+      "edit": 30,
+      "elapsedS": 19,
+      "settledMs": 1090,
+      "frameMs": 195,
+      "responsive": true,
+      "created": 577,
+      "alive": 575,
+      "rssKiB": {
+        "renderer": 994784,
+        "GPU": 65456,
+        "network.mojom.NetworkService": 67520
+      },
+      "js": {
+        "mainHeapUsedMiB": 17,
+        "crossOriginIsolated": true
+      }
+    },
+    {
+      "edit": 40,
+      "elapsedS": 29,
+      "settledMs": 1099,
+      "frameMs": 17,
+      "responsive": true,
+      "created": 758,
+      "alive": 756,
+      "rssKiB": {
+        "renderer": 757296,
+        "GPU": 69632,
+        "network.mojom.NetworkService": 76096
+      },
+      "js": {
+        "mainHeapUsedMiB": 15,
+        "crossOriginIsolated": true
+      }
+    },
+    {
+      "edit": 50,
+      "elapsedS": 40,
+      "settledMs": 1086,
+      "frameMs": 188,
+      "responsive": true,
+      "created": 962,
+      "alive": 960,
+      "rssKiB": {
+        "renderer": 1500992,
+        "GPU": 69696,
+        "network.mojom.NetworkService": 96432
+      },
+      "js": {
+        "mainHeapUsedMiB": 17,
+        "crossOriginIsolated": true
+      }
+    },
+    {
+      "edit": 60,
+      "elapsedS": 51,
+      "settledMs": 1107,
+      "frameMs": 23,
+      "responsive": true,
+      "created": 1142,
+      "alive": 1140,
+      "rssKiB": {
+        "renderer": 858448,
+        "GPU": 69520,
+        "network.mojom.NetworkService": 89536
+      },
+      "js": {
+        "mainHeapUsedMiB": 15,
+        "crossOriginIsolated": true
+      }
+    }
+  ],
+  "closed": {
+    "tileDecode.worker": 2
+  }
+}

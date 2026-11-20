@@ -1,0 +1,1259 @@
+workflow	.github/workflows/audit.yml		quality-delivery	7	reviewed (stage 7)
+workflow	.github/workflows/ci.yml		quality-delivery	7	reviewed (stage 7)
+workflow	.github/workflows/e2e-live.yml		quality-delivery	7	reviewed (stage 7)
+workflow	.github/workflows/pages.yml		quality-delivery	7	reviewed (stage 7)
+workflow	.github/workflows/release.yml		quality-delivery	7	reviewed (stage 7)
+config	.gitignore		quality-delivery	7	excluded (stage 7): formatting or packaging metadata; format:check passed in the baseline
+config	.prettierignore		quality-delivery	7	excluded (stage 7): formatting or packaging metadata; format:check passed in the baseline
+config	LICENSE		quality-delivery	7	excluded (stage 7): formatting or packaging metadata; format:check passed in the baseline
+documentation	PLAN.md		documentation	2	sampled (stage 2): status table compared with phase files
+documentation	README.md		documentation	2	sampled (stage 2)
+documentation	docs/README.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+documentation	docs/architecture.md		documentation	2	sampled (stage 2)
+documentation	docs/cell-feature-matrix-compatibility.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+collection	docs/collections/gbm-space.json		schemas-examples	2	reviewed (stage 2)
+collection	docs/collections/spcox.json		schemas-examples	2	reviewed (stage 2)
+documentation	docs/dataset-collections.md		documentation	2	sampled (stage 2)
+documentation	docs/dataset-manifest.md		documentation	2	sampled (stage 2)
+documentation	docs/deploy-to-s3.md		documentation	2	reviewed (stage 2); reviewed (stage 6)
+documentation	docs/h5ad-reference.md		documentation	2	sampled (stage 2)
+documentation	docs/host-your-own-data.md		documentation	2	sampled (stage 2)
+documentation	docs/image-only-and-geojson.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+documentation	docs/modalities/atera.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/h5ad.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/image.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/merscope.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/spatialdata.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/visium-hd.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/visium.md		documentation	2	sampled (stage 2)
+documentation	docs/modalities/xenium.md		documentation	2	sampled (stage 2)
+plan-record	docs/plan/data-contracts.md		plan-records	1,2	not reviewed (stage 8): plan history
+plan-record	docs/plan/decisions.md		plan-records	1,2	reviewed (stage 1): read for open items
+plan-record	docs/plan/engineering.md		plan-records	1,2	reviewed (stage 1): read for open items; sampled (stage 7): CI sections
+plan-record	docs/plan/history.md		plan-records	1,2	not reviewed (stage 8): plan history
+plan-record	docs/plan/open-items.md		plan-records	1,2	reviewed (stage 2)
+plan-record	docs/plan/phases/01-foundation.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/02-robust-io-caching.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/03-multi-channel-imaging.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/04-genes-annotations.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/05-production-polish.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/05.1-transcripts.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/06-visium-hd.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/07-h5ad.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/08-image-only-geojson.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/09-ome-zarr.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/10-spatialdata.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/11-dataset-manifest.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/12-atera.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/13-qptiff.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/14-standard-visium.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/15-interface-redesign.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/16-svs.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/17-xenium-nucleus-boundaries.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/18-merscope.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/19-ndpi.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/20-dataset-collections.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/21-structure-browser.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/22-plots-panel.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/23-cell-query.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/24-section-stack.md		plan-records	1,2	sampled (stage 2): known gaps read
+plan-record	docs/plan/phases/25-imported-segmentations.md		plan-records	1,2	sampled (stage 2): known gaps read
+plan-record	docs/plan/phases/26-image-channel-conditions.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/analysis-slice.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/feature-fix-pass.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/phases/optimization-pass.md		plan-records	1,2	surveyed (stage 2): open boxes compared with open-items.md and PLAN.md
+plan-record	docs/plan/plan-vs-docs.md		plan-records	1,2	reviewed (stage 1): read for open items
+documentation	docs/profiling.md		documentation	2	reviewed (stage 6)
+documentation	docs/s3-cors-playbook.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+documentation	docs/ui-reference.md		documentation	2	sampled (stage 2)
+documentation	docs/user-guide.md		documentation	2	sampled (stage 2)
+documentation	docs/visium-hd-2um-strategy.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+documentation	docs/zchunkstore.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+config	eslint.config.js		quality-delivery	7	reviewed (stage 7)
+documentation	examples/README.md		documentation	2	not reviewed (stage 8): claims not traced; links and code references checked in stage 2
+example	examples/bia/S-BIAD2214.json		schemas-examples	2	reviewed (stage 2)
+example	examples/bia/S-BIAD2376.json		schemas-examples	2	reviewed (stage 2)
+example	examples/bia/S-BIAD2491.json		schemas-examples	2	reviewed (stage 2)
+example	examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json		schemas-examples	2	reviewed (stage 2)
+example	examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json		schemas-examples	2	reviewed (stage 2)
+example	examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json		schemas-examples	2	reviewed (stage 2)
+example	examples/geo/GSM9080376.json		schemas-examples	2	reviewed (stage 2)
+example	examples/idr/idr0054-tonsil.json		schemas-examples	2	reviewed (stage 2)
+example	examples/idr/idr0062-blastocyst.json		schemas-examples	2	reviewed (stage 2)
+example	examples/index.json		schemas-examples	2	reviewed (stage 2)
+example	examples/spatialdata-sandbox/visium_associated_xenium_io.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-01.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-02.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-04.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-05.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-06.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-07.json		schemas-examples	2	reviewed (stage 2)
+example	examples/zenodo/21110855-liver-sections/section-08.json		schemas-examples	2	reviewed (stage 2)
+config	index.html		quality-delivery	7	sampled (stage 7)
+config	package-lock.json		quality-delivery	7	sampled (stage 7)
+config	package.json		quality-delivery	7	reviewed (stage 7)
+patch	patches/hyparquet+1.26.0.patch		quality-delivery	7	reviewed (stage 7)
+config	playwright.config.ts		quality-delivery	7	reviewed (stage 7)
+config	prettier.config.js		quality-delivery	7	excluded (stage 7): formatting or packaging metadata; format:check passed in the baseline
+config	public/favicon.svg		quality-delivery	7	excluded (stage 7): formatting or packaging metadata; format:check passed in the baseline
+schema	public/schemas/explorer-collection.v1.json		schemas-examples	2	reviewed (stage 2)
+schema	public/schemas/explorer-manifest.v1.json		schemas-examples	2	reviewed (stage 2)
+script	scripts/examples-index.ts		scripts	2,6	reviewed (stage 2)
+script	scripts/make_h5ad_reference.py		scripts	2,6	not reviewed (stage 8)
+script	scripts/make_zchunkstore.py		scripts	2,6	not reviewed (stage 8)
+script	scripts/profile-load.mjs		scripts	2,6	reviewed (stage 6)
+script	scripts/range-server.mjs		scripts	2,6	not reviewed (stage 8): used as the Range server in stages 5 and 6
+script	scripts/review-tasks.mjs		scripts	2,6	not reviewed (stage 8)
+test	src/App.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/App.tsx	5339	loading-state	5,7	sampled (stage 5); sampled (stage 7)
+test	src/codecs/jpeg.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/codecs/jpeg.ts	258	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/codecs/jpeg2000.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/codecs/jpeg2000.ts	206	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/codecs/jpeg2000.wasm.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/codecs/jpegSequential.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/codecs/jpegSequential.ts	726	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/codecs/tiffStrips.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/codecs/tiffStrips.ts	51	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/codecs/tiffTile.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/codecs/tiffTile.ts	775	images-rendering	4,6	sampled (stage 4)
+source	src/components/AppErrorBoundary.tsx	54	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/AppStatusPanels.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/AppStatusPanels.tsx	408	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/MorphologyCanvas.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/MorphologyCanvas.tsx	558	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ViewerAxes.tsx	40	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/ViewerCore.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/ViewerCore.tsx	2442	images-rendering	4,6	sampled (stage 6); sampled (stage 7)
+test	src/components/ViewerLegend.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/ViewerLegend.tsx	163	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ViewerMinimap.tsx	155	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ViewerSelectionOverlay.tsx	24	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/VolumeViewer.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/VolumeViewer.tsx	193	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/deckTabOrder.ts	10	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/linkedView.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/linkedView.ts	54	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/nativeTitleAudit.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/ui/Button.tsx	75	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Card.tsx	50	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Checkbox.tsx	45	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Chip.tsx	62	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Disclosure.tsx	48	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Drawer.tsx	75	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/InfoTip.tsx	22	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Kbd.tsx	15	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/NumberField.tsx	74	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Popover.tsx	100	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Segmented.tsx	55	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Select.tsx	99	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Slider.tsx	57	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Switch.tsx	40	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/Tooltip.tsx	94	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/ui/classNames.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/ui/classNames.ts	6	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/icons.tsx	276	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/index.ts	49	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/ui/primitives.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/ui/useDismiss.ts	48	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/ui/useFocusReturn.ts	32	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerAxesModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerAxesModel.ts	124	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerCoreModel.ts	13	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerCoreTypes.ts	224	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerGridCellIndex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerGridCellIndex.ts	182	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerHoverModel.ts	21	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerHoverTooltips.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerHoverTooltips.tsx	494	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerKeyboardPick.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerKeyboardPick.ts	67	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerLegendTypes.ts	42	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerMagicLensModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerMagicLensModel.ts	48	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerMagicLensOverlay.tsx	65	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerMeasurementOverlay.tsx	50	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerMeasurements.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerMeasurements.ts	198	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerMinimapModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerMinimapModel.ts	189	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerNavigation.ts	231	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerPicking.ts	203	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/viewerRoiInteraction.ts	194	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerSelectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerSelectionModel.ts	83	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/components/viewerStatus.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/components/viewerStatus.ts	55	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/components/volumeViewerModel.ts	59	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/analysisAnnotations.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/analysisAnnotations.ts	358	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/analysisEmbeddings.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/analysisEmbeddings.ts	440	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/cellMetadata.ts	12	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/cellTranscripts.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/cellTranscripts.ts	437	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/cellid.property.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/cellid.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/cellid.ts	128	shared-science	3	reviewed (stage 3)
+test	src/data/cellsOverviewWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/cellsOverviewWorker.ts	136	data-other	3,5	reviewed (stage 7)
+test	src/data/coalescingAsyncBuffer.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/coalescingAsyncBuffer.ts	115	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/coords.property.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/coords.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/coords.ts	351	shared-science	3	reviewed (stage 3)
+test	src/data/customAnnotations.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/customAnnotations.ts	526	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/datasetAnnotations.ts	67	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/datasetBoundaries.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/datasetBoundaries.ts	56	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/datasetDiagnostics.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/datasetDiagnostics.ts	2070	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/datasetFiles.ts	135	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/datasetOverview.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/datasetOverview.ts	103	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/datasetWarmup.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/datasetWarmup.ts	162	data-other	3,5	sampled (stage 5)
+test	src/data/duckdb.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/duckdb.ts	180	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/duckdbCells.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/duckdbCells.ts	153	io-hdf5-archives	5	sampled (stage 5)
+test	src/data/fallbackNotice.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/fallbackNotice.ts	16	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/featureBarcodeMatrixH5.ts	321	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/folderListing.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/folderListing.ts	230	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/geneExpression.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/geneExpression.ts	104	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/geneExpressionLod.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/geneExpressionLod.ts	317	shared-science	3	sampled (stage 7)
+source	src/data/geneExpressionTiming.ts	40	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/geneFeatures.ts	39	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/genePanel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/genePanel.ts	216	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/geneValues.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/geneValues.ts	550	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/geojsonFeatureStream.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/geojsonFeatureStream.ts	267	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/gex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/gex.ts	1640	shared-science	3	sampled (stage 3)
+source	src/data/gexSelection.ts	84	shared-science	3	sampled (stage 5)
+source	src/data/gexTypes.ts	18	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/gexZarrCache.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/h5WorkerFile.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/h5WorkerFile.ts	462	io-hdf5-archives	5	sampled (stage 7)
+test	src/data/hostResponses.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/hostResponses.ts	159	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/hyparquetBitPacked.test.ts		tests	7	sampled (stage 7)
+test	src/data/hyparquetCells.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/hyparquetCells.ts	601	io-hdf5-archives	5	sampled (stage 5)
+source	src/data/imagePyramid.ts	319	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/imageVolume.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/imageVolume.ts	170	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/morphologyContrast.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/morphologyContrast.ts	417	images-rendering	4,6	sampled (stage 7)
+test	src/data/morphologyImage.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/morphologyImage.ts	705	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/openImagePyramid.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/parquetRows.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/parquetRows.ts	276	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/parquetStructure.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/parquetStructure.ts	517	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/performanceBudget.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/performanceBudget.ts	86	data-other	3,5	reviewed (stage 6)
+test	src/data/persistentByteRangeCache.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/persistentByteRangeCache.ts	521	io-hdf5-archives	5	reviewed (stage 5)
+test	src/data/rangeSupport.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/rangeSupport.ts	150	io-hdf5-archives	5	sampled (stage 5)
+test	src/data/readMaybeGzipText.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/readMaybeGzipText.ts	180	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/roiCells.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/roiCells.ts	58	shared-science	3	reviewed (stage 3)
+test	src/data/roiGeneStats.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/roiGeneStats.ts	368	shared-science	3	reviewed (stage 3)
+source	src/data/roiSelection.ts	82	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/roiTranscripts.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/roiTranscripts.ts	132	shared-science	3	reviewed (stage 4)
+test	src/data/runtimeMemory.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/runtimeMemory.ts	90	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/shareableState.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/shareableState.ts	1011	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/telemetry.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/telemetry.ts	40	data-other	3,5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/tileCellMeasure.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/tileCellMeasure.ts	134	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/tileSamples.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/tileSamples.ts	40	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/transcriptFeatureTally.ts	64	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/transcriptOverlay.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/transcriptOverlay.ts	789	images-rendering	4,6	reviewed (stage 4)
+test	src/data/transcriptZarr.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/transcriptZarr.ts	1693	shared-science	3	sampled (stage 4)
+test	src/data/transcriptZarrEstimate.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/transcriptZarrGeneDensity.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/transcriptZarrViewport.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/data/units.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/units.ts	24	shared-science	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/urlFileName.ts	16	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/visiumFeatureSlice.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/visiumFeatureSlice.ts	302	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/visiumFeatureSliceH5.ts	477	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/visiumHdGridLod.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/visiumHdGridLod.ts	28	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/wktPolygons.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/wktPolygons.ts	324	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/data/xeniumDatasetCache.ts	32	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/data/zipArchive.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/zipArchive.ts	440	io-hdf5-archives	5	sampled (stage 5)
+test	src/data/zipEntryWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/zipEntryWorker.ts	116	io-hdf5-archives	5	reviewed (stage 7)
+test	src/data/zipFolder.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/data/zipFolder.ts	583	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/annDataZarrStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/annDataZarrStore.ts	367	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/ateraDataset.test.ts		tests	7	sampled (stage 7)
+source	src/datasets/ateraDataset.ts	1203	platform-readers	4	sampled (stage 7)
+test	src/datasets/ateraFormat.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/ateraFormat.ts	563	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/ateraTranscripts.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/ateraTranscripts.ts	999	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/datasetCache.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/datasetCache.ts	147	contracts-detection	2,4	sampled (stage 5)
+test	src/datasets/datasetCollection.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/datasetCollection.ts	428	contracts-detection	2,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/datasetCollectionSchema.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/datasetDetectionError.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/datasetDetectionError.ts	113	contracts-detection	2,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/datasetFactory.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/datasetFactory.ts	2095	contracts-detection	2,4	sampled (stage 4); sampled (stage 7)
+test	src/datasets/datasetManifest.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/datasetManifest.ts	1240	contracts-detection	2,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/datasetManifestSchema.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/exampleManifests.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/featureBarcodeMex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/featureBarcodeMex.ts	636	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/featureBarcodeMexWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/featureBarcodeMexWorker.ts	113	platform-readers	4	reviewed (stage 7)
+test	src/datasets/h5adDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/h5adDataset.ts	4889	platform-readers	4	sampled (stage 4)
+test	src/datasets/h5adVisium.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/imageOnlyDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/imageOnlyDataset.ts	109	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/importedSegmentation.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/importedSegmentation.ts	411	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/merscopeDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/merscopeDataset.ts	720	platform-readers	4	sampled (stage 4)
+test	src/datasets/merscopeFormat.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/merscopeFormat.ts	772	platform-readers	4	reviewed (stage 4)
+source	src/datasets/merscopeTableReader.ts	112	platform-readers	4	reviewed (stage 4)
+test	src/datasets/merscopeTableWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/merscopeTableWorker.ts	113	platform-readers	4	reviewed (stage 7)
+test	src/datasets/segmentationSource.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/segmentationSource.ts	139	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialDataCatalog.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataCatalog.ts	475	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialDataDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataDataset.ts	1689	platform-readers	4	sampled (stage 4)
+test	src/datasets/spatialDataLabelTrace.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataLabelTrace.ts	430	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialDataLabels.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataLabels.ts	741	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialDataShapes.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataShapes.ts	692	platform-readers	4	sampled (stage 4)
+test	src/datasets/spatialDataShapesWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataShapesWorker.ts	186	platform-readers	4	reviewed (stage 7)
+test	src/datasets/spatialDataTransforms.property.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/spatialDataTransforms.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataTransforms.ts	324	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialDataUnits.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialDataUnits.ts	310	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/spatialDataset.ts	201	contracts-detection	2,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/spatialGrid.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/spatialGrid.ts	297	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/tiffLabels.ts	83	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/vectorSegmentation.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/vectorSegmentation.ts	663	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/vectorSegmentationWorker.ts	124	platform-readers	4	reviewed (stage 7)
+test	src/datasets/visiumDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumDataset.ts	600	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumFormat.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumFormat.ts	589	platform-readers	4	sampled (stage 4)
+test	src/datasets/visiumHdBarcodeMappingDuckDb.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdBarcodeMappingDuckDb.ts	91	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdBarcodeMappings.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdBarcodeMappings.ts	525	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdBarcodes.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdBarcodes.ts	213	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdClusters.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdClusters.ts	168	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdDataset.ts	245	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/visiumHdDatasetReaders.ts	1439	platform-readers	4	sampled (stage 4); sampled (stage 7)
+source	src/datasets/visiumHdOverview.ts	916	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdSegmentationIndex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdSegmentationIndex.ts	267	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdSegmentationIndexWorker.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdSegmentationIndexWorker.ts	262	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/visiumHdSegmentationModel.ts	137	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/visiumHdSegmentations.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/visiumHdSegmentations.ts	1351	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/datasets/visiumHdStrategy.ts	68	platform-readers	4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/datasets/xeniumDataset.lazy.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/datasets/xeniumDataset.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/datasets/xeniumDataset.ts	764	platform-readers	4	sampled (stage 7)
+source	src/datasets/xeniumDatasetReaders.ts	1141	platform-readers	4	sampled (stage 4); sampled (stage 7)
+source	src/datasets/xeniumDatasetRows.ts	571	platform-readers	4	reviewed (stage 4)
+test	src/features/analysis/EmbeddingPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/analysis/EmbeddingPanel.tsx	448	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/analysis/analysisEmbeddingModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/analysis/analysisEmbeddingModel.ts	141	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/analysis/useAnalysisEmbeddingWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/analysis/useAnalysisEmbeddingWorkflow.ts	193	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/annotations/annotationModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/annotations/annotationModel.ts	429	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/annotations/annotationUrlText.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/annotations/annotationUrlText.ts	77	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/annotations/geometricAnnotationModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/annotations/geometricAnnotationModel.ts	441	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/annotations/useAnnotationWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/annotations/useAnnotationWorkflow.ts	888	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/annotations/useCellMetadataTrackValues.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/annotations/useCellMetadataTrackValues.ts	116	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/app-shell/DatasetLoadToast.tsx	36	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/app-shell/UndoToast.tsx	34	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/activeToolModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/activeToolModel.ts	43	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/appDependencies.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/appDependencies.ts	455	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/appRuntimeModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/appRuntimeModel.ts	588	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/appShellModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/appShellModel.ts	92	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/documentTitle.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/documentTitle.ts	47	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/platformAdapter.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/platformAdapter.ts	935	loading-state	5,7	reviewed (stage 4)
+test	src/features/app-shell/shareableDefaults.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/shareableDefaults.ts	98	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/app-shell/useAppDomainState.ts	803	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useAteraImageWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useAteraImageWorkflow.ts	72	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useDatasetLifecycle.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useDatasetLifecycle.ts	2461	loading-state	5,7	sampled (stage 5); sampled (stage 7)
+source	src/features/app-shell/useMerscopeImageWorkflow.ts	81	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useShareableUrlHash.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useShareableUrlHash.ts	458	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useUndoToast.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useUndoToast.ts	100	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useUndoableRemovals.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useUndoableRemovals.ts	208	loading-state	5,7	sampled (stage 7)
+test	src/features/app-shell/useViewerLayerData.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useViewerLayerData.ts	446	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useViewportDataWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useViewportDataWorkflow.ts	775	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useVisiumControlsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useVisiumControlsWorkflow.ts	195	loading-state	5,7	sampled (stage 5)
+test	src/features/app-shell/useVisiumHdAnnotationSetsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useVisiumHdAnnotationSetsWorkflow.ts	190	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useVisiumHdBinWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useVisiumHdBinWorkflow.ts	461	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useVisiumHdExpressionProfileWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useVisiumHdExpressionProfileWorkflow.ts	273	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/useVisiumHdGridLodWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/useVisiumHdGridLodWorkflow.ts	185	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/viewerLegendModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/viewerLegendModel.ts	259	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/viewerSelectionHighlight.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/viewerSelectionHighlight.ts	55	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/app-shell/visiumHdAppController.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/app-shell/visiumHdAppController.ts	161	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/app-shell/visiumHdGridLayerData.ts	37	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cards/CardStack.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cards/CardStack.tsx	443	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cards/cardModels.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cards/cardModels.ts	715	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/BoundaryCellInfoPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/BoundaryCellInfoPanel.tsx	129	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/CellExpressionProfilePanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/CellExpressionProfilePanel.tsx	125	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/CellGeneExpressionList.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/CellGeneExpressionList.tsx	111	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/CellInfoPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/CellInfoPanel.tsx	410	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/cells/CellNucleusRows.tsx	41	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/GridCellInfoPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/GridCellInfoPanel.tsx	206	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/cellDetailModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/cellDetailModel.ts	443	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/cellExpressionProfileModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/cellExpressionProfileModel.ts	161	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/cellGeneExpressionStatus.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/cellGeneExpressionStatus.ts	18	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/gridCellAssignmentModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/gridCellAssignmentModel.ts	101	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/useCellDetailWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/useCellDetailWorkflow.ts	449	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/cells/useGridCellAssignmentWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/cells/useGridCellAssignmentWorkflow.ts	252	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/CollectionBar.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/CollectionBar.tsx	603	collections-3d	3,4	sampled (stage 6)
+source	src/features/collection/LinkedSections.tsx	319	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/collection/SectionStackViewer.tsx	372	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/collectionApp.test.tsx		tests	7	surveyed (stage 7): pattern scan
+test	src/features/collection/collectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/collectionModel.ts	110	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/collectionPreviewData.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/collectionPreviewData.ts	380	collections-3d	3,4	sampled (stage 3)
+test	src/features/collection/collectionPreviewRaster.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/collectionPreviewRaster.ts	174	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/collectionPreviewStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/collectionPreviewStore.ts	297	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/linkedSectionLayers.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/linkedSectionLayers.ts	243	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/linkedSectionsModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/linkedSectionsModel.ts	101	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/sectionStackLayers.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/sectionStackLayers.ts	339	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/collection/sectionStackModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/collection/sectionStackModel.ts	169	collections-3d	3,4	reviewed (stage 3)
+source	src/features/collection/useCollectionPreviews.ts	80	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/collection/useDatasetCollection.ts	108	collections-3d	3,4	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/ateraImageModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/ateraImageModel.ts	37	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/datasetLoadModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/datasetLoadModel.ts	205	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/datasetManifestModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/datasetManifestModel.ts	180	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/merscopeImageModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/merscopeImageModel.ts	109	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/spatialDataModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/spatialDataModel.ts	91	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/visiumHdModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/visiumHdModel.ts	154	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/dataset/visiumModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/dataset/visiumModel.ts	109	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/diagnostics/diagnosticsDump.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/diagnostics/diagnosticsDump.ts	353	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/diagnostics/useDatasetDiagnosticsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/diagnostics/useDatasetDiagnosticsWorkflow.ts	308	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/errors/insecureRequest.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/errors/insecureRequest.ts	94	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/errors/loadErrorModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/errors/loadErrorModel.ts	773	ui-shell-other	6,7	sampled (stage 7)
+test	src/features/genes/GeneOptionList.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/GeneOptionList.tsx	115	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/geneColorModeModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/geneColorModeModel.ts	17	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/geneControlsModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/geneControlsModel.ts	456	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/geneScaleRange.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/geneScaleRange.ts	194	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/useGeneControlsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/useGeneControlsWorkflow.ts	182	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/useGeneExpressionLayerTelemetry.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/useGeneExpressionLayerTelemetry.ts	94	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/genes/useGeneSetControls.ts	125	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/useVisiumHdExpressionProjectionWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/useVisiumHdExpressionProjectionWorkflow.ts	323	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/genes/visiumHdExpressionProjection.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/genes/visiumHdExpressionProjection.ts	288	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/MorphologyChannelControls.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/MorphologyChannelControls.tsx	240	images-rendering	4,6	sampled (stage 6)
+source	src/features/morphology/MorphologyVolumeView.tsx	30	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/morphology/MorphologyZPlaneControl.tsx	66	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/customMorphologyLayers.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/customMorphologyLayers.ts	196	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/morphologyChannels.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/morphologyChannels.ts	113	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/useCustomMorphologyLayerWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/useCustomMorphologyLayerWorkflow.ts	225	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/useMorphologyVolumeWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/useMorphologyVolumeWorkflow.ts	287	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/useMorphologyWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/useMorphologyWorkflow.ts	197	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/useMorphologyZPlaneWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/morphology/useMorphologyZPlaneWorkflow.ts	135	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/morphology/volumeViewApp.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/HeatmapFigure.tsx	180	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/PlotsPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/PlotsPanel.tsx	239	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/SvgTree.tsx	29	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/dotPlot.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/dotPlot.ts	328	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/heatmap.ts	40	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/plotExport.ts	191	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/plotModel.ts	227	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/plotStats.test.ts		tests	7	sampled (stage 3)
+source	src/features/plots/plotStats.ts	580	plots-query	3	sampled (stage 3)
+test	src/features/plots/plotStatsSession.test.ts		tests	7	sampled (stage 3)
+source	src/features/plots/plotStatsSession.ts	192	plots-query	3	sampled (stage 3)
+source	src/features/plots/plotViews.ts	39	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/plotsPanelModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/plotsPanelModel.ts	511	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/svgMarkup.ts	54	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/useDatasetSetAnnotations.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/useDatasetSetAnnotations.ts	75	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/plots/usePlotsModel.ts	559	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/usePlotsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/usePlotsWorkflow.ts	409	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/plots/useSelectionCells.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/useSelectionCells.ts	110	plots-query	3	sampled (stage 3)
+test	src/features/plots/violinPlot.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/plots/violinPlot.ts	430	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/query/CellPicture.tsx	99	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/CellQueryPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/CellQueryPanel.tsx	652	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/CellQueryTable.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/CellQueryTable.tsx	454	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellImageMeasurements.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellImageMeasurements.ts	543	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellImageMeasurer.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellImageMeasurer.ts	648	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellOutlineReader.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellOutlineReader.ts	50	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellPictureModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellPictureModel.ts	162	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellQuery.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellQuery.ts	403	plots-query	3	reviewed (stage 3)
+test	src/features/query/cellQueryImage.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellQueryImage.ts	256	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellQueryModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellQueryModel.ts	609	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/query/cellQuerySession.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/query/cellQuerySession.ts	241	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/query/useCellQueryModel.ts	1521	plots-query	3	sampled (stage 5)
+source	src/features/query/useOnDemandLoads.ts	93	plots-query	3	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/RoiPanels.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/RoiPanels.tsx	334	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/magicLensModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/magicLensModel.ts	383	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/roiEnrichmentModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/roiEnrichmentModel.ts	194	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/roiModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/roiModel.ts	375	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/selectionListModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/selectionListModel.ts	279	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/useMagicLensWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/useMagicLensWorkflow.ts	562	user-state-exports	3,6	sampled (stage 3)
+test	src/features/roi/useRoiWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/useRoiWorkflow.ts	872	user-state-exports	3,6	sampled (stage 3)
+test	src/features/roi/useSelectionList.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/useSelectionList.ts	256	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/useVisiumHdMagicLensSummary.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/useVisiumHdMagicLensSummary.ts	241	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/useVisiumHdRoiWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/useVisiumHdRoiWorkflow.ts	396	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/roi/visiumHdRoiModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/roi/visiumHdRoiModel.ts	344	user-state-exports	3,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/AnnotationsSectionBlocks.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/AnnotationsSectionBlocks.tsx	703	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/CellsSectionBlocks.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/CellsSectionBlocks.tsx	568	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/DatasetInfoBlocks.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/DatasetInfoBlocks.tsx	793	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/sections/EmbeddingBlocks.tsx	59	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/ImageSectionBlocks.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/ImageSectionBlocks.tsx	210	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/sections/SegmentationSectionBlocks.tsx	315	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/SelectionListBlock.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/SelectionListBlock.tsx	213	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/SlideImages.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/SlideImages.tsx	179	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/TranscriptGeneListBlock.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/TranscriptGeneListBlock.tsx	84	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/sections/TranscriptsSectionBlocks.tsx	408	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/sections/ViewSettingsBlocks.tsx	148	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/annotationsSectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/annotationsSectionModel.ts	286	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/cellsSectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/cellsSectionModel.ts	314	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/datasetInfoModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/datasetInfoModel.ts	405	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/embeddingModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/embeddingModel.ts	86	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/imageSectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/imageSectionModel.ts	147	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/segmentationSectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/segmentationSectionModel.ts	245	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/slideImagesModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/slideImagesModel.ts	107	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/transcriptsSectionModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/transcriptsSectionModel.ts	257	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/sections/useCopyLinkStatus.ts	37	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/sections/viewSettingsModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/sections/viewSettingsModel.ts	146	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/segmentation/useImportedSegmentation.ts	175	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/EmbeddingWindow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/EmbeddingWindow.tsx	51	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/FloatingWindow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/FloatingWindow.tsx	421	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/InfoDrawer.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/InfoDrawer.tsx	100	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/LayerPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/LayerPanel.tsx	435	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/shell/PlotsWindow.tsx	51	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/shell/QueryWindow.tsx	54	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/ShellLayout.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/ShellLayout.tsx	444	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/TopBar.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/TopBar.tsx	658	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/docLinks.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/docLinks.ts	36	ui-shell-other	6,7	reviewed (stage 7)
+source	src/features/shell/floatingWindowModel.ts	34	ui-shell-other	6,7	reviewed (stage 6)
+test	src/features/shell/helpText.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/helpText.ts	21	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/layerPanelModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/layerPanelModel.ts	290	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/shellLinkModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/shellLinkModel.ts	198	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/shortcuts.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/shortcuts.ts	110	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/topBarModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/topBarModel.ts	271	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/shell/useNarrowScreen.ts	28	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/shell/useToolShortcuts.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/shell/useToolShortcuts.ts	45	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/start/StartScreen.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/start/StartScreen.tsx	305	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/start/datasetLibraryModel.ts	65	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/start/examplesIndex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/start/examplesIndex.ts	272	ui-shell-other	6,7	sampled (stage 5); sampled (stage 7)
+test	src/features/start/recentDatasets.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/start/recentDatasets.ts	142	ui-shell-other	6,7	sampled (stage 5)
+source	src/features/start/useExamplesIndex.ts	90	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/ParquetRowsPanel.tsx	147	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/ParquetStructureView.tsx	443	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/store-structure/StoreStructureDrawer.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/store-structure/StoreStructureDrawer.tsx	352	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/StructureBrowser.tsx	375	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/store-structure/parquetStructureModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/store-structure/parquetStructureModel.ts	497	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/store-structure/storeStructureModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/store-structure/storeStructureModel.ts	275	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/structureTree.ts	89	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/useParquetRows.ts	56	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/features/store-structure/useStoreStructure.ts	272	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/TranscriptPointBudget.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/TranscriptPointBudget.tsx	69	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/TranscriptStatusPanel.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/TranscriptStatusPanel.tsx	387	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/transcriptGeneLegendModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/transcriptGeneLegendModel.ts	179	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/transcriptLabels.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/transcriptLabels.ts	51	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/transcriptLayerModel.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/transcriptLayerModel.ts	756	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/useTranscriptControlsWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/useTranscriptControlsWorkflow.ts	290	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/useTranscriptGeneLegend.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/useTranscriptGeneLegend.ts	181	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/features/transcripts/useTranscriptWorkflow.test.tsx		tests	7	surveyed (stage 7): pattern scan
+source	src/features/transcripts/useTranscriptWorkflow.ts	1081	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/index.css	18	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/main.tsx	24	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/annotationPalette.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/annotationPalette.ts	121	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/boundaryViewport.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/boundaryViewport.ts	115	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/cellAggregation.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/cellAggregation.ts	362	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/cellBoundaryExpressionStyling.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/cellBoundaryRenderer.ts	759	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/cellPointRenderer.ts	329	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/cellPointStyle.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/cellPointStyle.ts	262	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/cellStyling.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/cellStyling.ts	240	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/deckLayerColors.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/deckLayerColors.ts	351	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/deckLayerTypes.ts	290	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/deckLayers.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/deckLayers.ts	330	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/geneExpressionRenderer.ts	500	images-rendering	4,6	sampled (stage 3)
+source	src/rendering/geometricAnnotationRenderer.ts	78	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/gridBinLayer.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/gridBinLayer.ts	261	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/gridCellColumns.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/gridCellColumns.ts	537	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/gridCellRenderer.ts	287	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/layerOpacity.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/layerOpacity.ts	23	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/morphologyCanvas.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/morphologyCanvas.ts	357	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/morphologyTileScheduling.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/morphologyTileScheduling.ts	71	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/morphologyTileStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/morphologyTileStore.ts	167	images-rendering	4,6	sampled (stage 6)
+test	src/rendering/overviewCellIndex.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/overviewCellIndex.ts	208	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/overviewViewState.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/overviewViewState.ts	144	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/packedLayerData.ts	43	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/transcriptColors.ts	70	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/transcriptRenderer.ts	310	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/rendering/viewportClip.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/rendering/viewportClip.ts	29	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/rendering/volumeLayer.ts	409	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/store/viewerStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/store/viewerStore.ts	40	loading-state	5,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/annotation-controls.css	429	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/app-shell.css	47	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/base.css	78	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/cell-detail.css	249	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/collection.css	420	ui-shell-other	6,7	sampled (stage 6)
+source	src/styles/controls.css	458	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/gene-controls.css	151	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/responsive.css	36	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/roi-magic-lens.css	314	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/shell.css	1696	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/start-screen.css	236	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/status-panels.css	415	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/store-structure.css	492	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/tokens.css	93	ui-shell-other	6,7	sampled (stage 6)
+test	src/styles/tokens.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/styles/tool-controls.css	398	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/transcript-controls.css	426	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/ui.css	675	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/styles/viewer.css	1170	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/test/annDataZarrFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/appTestHarness.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/ateraFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/cellImageFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/cellMetadataFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/controlAreas.ts		tests	7	surveyed (stage 7): pattern scan
+fixture	src/test/fixtures/anndata-zarr/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/data/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/data/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/indices/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/indices/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/indptr/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/indptr/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/X/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/layers/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/_index/mask/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/_index/values/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/_index/values/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/_index/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/cluster/categories/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/cluster/categories/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/cluster/codes/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/cluster/codes/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/cluster/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/score/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/score/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/stage  /categories/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/stage  /categories/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/stage  /codes/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/stage  /codes/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/stage  /zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obs/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/X_scvi/c/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/X_scvi/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/X_umap/c/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/X_umap/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/spatial/c/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/spatial/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsm/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/obsp/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/raw/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/uns/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/var/_index/mask/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/var/_index/values/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/var/_index/values/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/var/_index/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/var/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/varm/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/varp/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.v3.zarr/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/.zmetadata		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/X/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/X/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/X/0.0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/X/0.1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/layers/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/layers/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/mask/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/mask/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/values/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/values/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/_index/values/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/categories/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/categories/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/categories/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/codes/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/codes/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/cluster/codes/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/score/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/score/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/score/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /categories/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /categories/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /categories/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /codes/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /codes/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obs/stage  /codes/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_scvi/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_scvi/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_scvi/0.0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_umap/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_umap/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/X_umap/0.0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/spatial/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/spatial/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsm/spatial/0.0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsp/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/obsp/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/raw/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/raw/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/uns/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/uns/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/mask/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/mask/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/values/.zarray		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/values/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/var/_index/values/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/varm/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/varm/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/varp/.zattrs		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/anndata-zarr/tiny.zarr/varp/.zgroup		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/29A8HEXGK42T7130N3MG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/APE8V36DGGQG3PM1Y8CG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/FK9J34RCG1HEMD9MFG2G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/MZXBMJK4Y7NC7MQ9NAD0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/P34CQWHTS4Y4MVEBZ4TG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/PGH8XQMXJRG4BD4HQ9VG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/Q3428AK08NAGRK0PAVE0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/TX8VAPWT52EHXW2MKCV0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/manifests/VXB5RXRSH9PJ205A191G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/overwritten/repo.30709336803437.V2GCFMMQ1SJKB7KF0MTG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/repo		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/snapshots/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/snapshots/ZETEKWFJMN8TGFHKHHJG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/transactions/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/anndata.icechunk/transactions/ZETEKWFJMN8TGFHKHHJG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/manifests/T37M5CKFW451P7QJHVPG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/overwritten/repo.30709336803431.32RKMBAF641K030YKV20		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/repo		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/snapshots/11W8SVWGA7CYHATZC370		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/snapshots/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/transactions/11W8SVWGA7CYHATZC370		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/image.icechunk/transactions/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/78BGBW3642TTQ37M9MVG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/8QPDH5F6W2RT35ESTX5G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/E9Y9FDTGGGZ3NQX1GJPG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/HBD6XF5EC85PVPYNEXWG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/NS8FXDMN1VH8MZQFM2V0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/PGN9REM3TCRYQ7WMT8M0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/QN7R721ZMSGRXWF33P60		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/RDKK3EHR5J6RNEMAWKV0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/RGW9SJNWY9EFYSF06XPG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/SZHTC9SDQNA09YZQD62G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/TZ0XS11ZZ148ZK11RKK0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/ZNRGCBQ7W7ANQSXZZXAG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/manifests/ZY2C43V5KJFZBCVRQ1TG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/overwritten/repo.30709336803357.NKR5KFW56GQ49JWQJ5KG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/repo		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/snapshots/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/snapshots/4N5999MY25ESHRQZEGGG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/transactions/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/spatialdata.icechunk/transactions/4N5999MY25ESHRQZEGGG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/0ZQ2DDKBK0ARFSC6H3KG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/9Z55G5AKHVGA0HWCRS1G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/B77N286901AV9SSBF230		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/D8AW8ZT6JP1KA2Z6QR2G		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/M3V7EYEFD0QQVDD66D00		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/NZ74YRS9T2JTRH1N3CYG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/P2N2WW0HVCNYD1FH6VDG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/PY11250S0130YKWV8MT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/TMNJYR5A8N60WBJCJKP0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/TQKZX08E9NHAHGVSNT60		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/manifests/YQ6HAQR9ETSAAHTTEHA0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/overwritten/repo.30709336803580.RQ5PCZWRN4BYWEY496XG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/repo		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/snapshots/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/snapshots/Z87DH9Q82EQMM7JXK3CG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/transactions/1CECHNKREP0F1RSTCMT0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/icechunk/tiny.h5ad.icechunk/transactions/Z87DH9Q82EQMM7JXK3CG		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/gradient_12bit.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/gradient_12bit.u16		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/gradient_12bit_image.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/gradient_12bit_tables.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/merscope_tile.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/merscope_tile.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/restart_8bit.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg12/restart_8bit.u8		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg2000/gradient_16bit.j2k		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg2000/gradient_16bit.u16		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg2000/gradient_rgb.j2k		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg2000/gradient_rgb.u8		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/jpeg2000/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/cell_boundaries.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/cell_boundaries.parquet.gz		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/cell_by_gene.csv		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/cell_metadata.csv		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/pyrmosaic_reference.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/merscope/region_0.vzg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/ndpi/level0.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/ndpi/level1.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/ndpi/level2.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/ndpi/macro.jpg		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/ndpi/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/parquet/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/parquet/nested.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/parquet/pages.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/segmentation/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/segmentation/vertices.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/segmentation/wkt.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/cell_boundaries.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/cell_circles.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/0/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/0/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/0/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/1/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/1/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/1/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/1/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/2/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/2/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/2/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/0/2/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/0/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/0/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/0/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/1/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/1/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/1/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/1/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/2/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/2/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/2/2		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/c/1/2/3		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s0/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/0/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/0/0/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/0/1/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/0/1/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/1/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/1/0/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/1/1/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/c/1/1/1		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/s1/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/stain/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/images/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/shapes/cells/shapes.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/shapes/cells/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/shapes/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/X/c/0/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/X/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/layers/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/_index/mask/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/_index/values/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/_index/values/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/_index/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/instance_id/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/instance_id/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/region/categories/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/region/categories/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/region/codes/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/region/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obs/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obsm/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/obsp/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/raw/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/instance_key/c		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/instance_key/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/region/c		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/region/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/region_key/c		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/region_key/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/spatialdata_attrs/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/uns/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/var/_index/mask/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/var/_index/values/c/0		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/var/_index/values/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/var/_index/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/var/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/varm/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/varp/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/table/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/tables/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/image_cells.zarr/zarr.json		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/spatialdata/make_image_store.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/visium-hd/barcode_mappings.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/visium-hd/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/xenium/cells.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/xenium/cells_v1.parquet		fixtures	7	surveyed (stage 7): generator present, not regenerated
+fixture	src/test/fixtures/xenium/make_fixtures.py		fixtures	7	surveyed (stage 7): generator present, not regenerated
+test	src/test/gridCellColumnsFixture.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/h5Fixtures.ts		tests	7	sampled (stage 7)
+test	src/test/icechunkFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/jpegFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/memoryStorage.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/merscopeFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/ndpiFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/plotFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/sectionModels.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/setup.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/spatialDataShapesFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/tiffFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/xeniumCellsFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/zarrCodecFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/test/zipFixtures.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/tiff/chunkKeys.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/chunkKeys.ts	3	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/loader.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/loader.ts	3189	images-rendering	4,6	sampled (stage 4)
+test	src/tiff/ndpi.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/ndpi.ts	647	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/ndpiDcLevel.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/tiff/omeMetadata.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/omeMetadata.ts	589	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/pagePyramid.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	src/tiff/qptiff.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/qptiff.ts	300	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/remoteTiff.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/remoteTiff.ts	82	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/strips.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/strips.ts	494	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/svs.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/svs.ts	217	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/tileCache.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/tileCache.ts	458	images-rendering	4,6	sampled (stage 5); sampled (stage 6); sampled (stage 7)
+test	src/tiff/tileRequestScheduler.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/tileRequestScheduler.ts	272	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/tiff/zchunkStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/tiff/zchunkStore.ts	442	images-rendering	4,6	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/types/codec-openjpeg.d.ts	30	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/types/hyparquet-encoding.d.ts	8	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/utils/abortable.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/abortable.ts	31	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/utils/altClick.ts	5	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/utils/asyncLimiter.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/asyncLimiter.ts	31	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/utils/csv.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/csv.ts	30	ui-shell-other	6,7	reviewed (stage 5)
+test	src/utils/mapWithConcurrency.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/mapWithConcurrency.ts	25	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/utils/sharedLoad.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/sharedLoad.ts	82	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/utils/slug.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/utils/slug.ts	9	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/vite-env.d.ts	14	ui-shell-other	6,7	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/cellQuery.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/cellQueryCore.ts	72	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/cellQueryMessages.ts	67	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/cellsOverview.worker.ts	12	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/cellsOverviewCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/cellsOverviewCore.ts	54	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/cellsOverviewMessages.ts	15	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/featureBarcodeMex.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/featureBarcodeMexCore.ts	43	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/featureBarcodeMexMessages.ts	17	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/h5File.worker.ts	17	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/h5FileCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/h5FileCore.ts	564	io-hdf5-archives	5	reviewed (stage 5)
+source	src/workers/h5FileMessages.ts	188	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/h5FileTransfer.ts	15	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/h5MatrixCellsPayload.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/h5MatrixCellsPayload.ts	68	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/h5RangeFile.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/h5RangeFile.ts	160	io-hdf5-archives	5	reviewed (stage 5)
+source	src/workers/merscopeTable.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/merscopeTableCore.ts	41	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/merscopeTableMessages.ts	16	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/plotStats.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/plotStatsCore.ts	38	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/plotStatsMessages.ts	21	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/rangeBlockCache.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/rangeBlockCache.ts	218	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/spatialDataShapes.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/spatialDataShapesCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/spatialDataShapesCore.ts	79	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/spatialDataShapesMessages.ts	36	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/tiffLabelTraceCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/tiffLabelTraceCore.ts	127	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/tileDecode.worker.ts	190	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/tileDecodeMessages.ts	114	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/tileDecodePool.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/tileDecodePool.ts	323	io-hdf5-archives	5	sampled (stage 5); sampled (stage 6); reviewed (stage 7)
+test	src/workers/tileMeasureCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/tileMeasureCore.ts	65	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/tileSamplesCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/tileSamplesCore.ts	53	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/vectorSegmentation.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/vectorSegmentationCore.ts	54	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/vectorSegmentationMessages.ts	21	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/visiumHdSegmentationIndex.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/visiumHdSegmentationIndexCore.ts	60	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/visiumHdSegmentationIndexMessages.ts	18	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/zarrCodecCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/zarrCodecCore.ts	80	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/zarrDecode.worker.ts	255	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/zarrDecodeCore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/zarrDecodeCore.ts	90	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/zarrDecodeMessages.ts	144	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/workers/zarrDecodePool.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/workers/zarrDecodePool.ts	414	io-hdf5-archives	5	sampled (stage 7)
+source	src/workers/zipEntry.worker.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/zipEntryCore.ts	45	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/workers/zipEntryMessages.ts	15	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/cachedZipStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/cachedZipStore.ts	204	io-hdf5-archives	5	sampled (stage 5)
+test	src/zarr/icechunkStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/icechunkStore.ts	367	io-hdf5-archives	5	sampled (stage 5)
+source	src/zarr/icechunkUrl.ts	28	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/omeZarrLoader.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/omeZarrLoader.ts	1936	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/zarr/omeZarrPixels.ts	97	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/omeZarrUrl.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/omeZarrUrl.ts	13	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/workerZarrCodecs.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/workerZarrCodecs.ts	132	io-hdf5-archives	5	sampled (stage 7)
+test	src/zarr/zarrCodecWorkerStatus.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/zarrCodecWorkerStatus.ts	46	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/zarr/zarrFolderLister.ts	228	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/zarrStores.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/zarrStores.ts	484	io-hdf5-archives	5	sampled (stage 5)
+test	src/zarr/zarrStructure.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/zarrStructure.ts	1218	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/zarrWholeArray.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/zarrWholeArray.ts	119	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	src/zarr/zarrZipStore.test.ts		tests	7	surveyed (stage 7): pattern scan
+source	src/zarr/zarrZipStore.ts	257	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+source	src/zarr/zarrZipUrl.ts	12	io-hdf5-archives	5	not reviewed (stage 8): not read; only in repository-wide checks (types, lint, unit tests, import graph, promise lint)
+test	tests/config/viteConfig.test.ts		tests	7	surveyed (stage 7): pattern scan
+test	tests/e2e/app.spec.ts		tests	7	sampled (stage 7)
+test	tests/e2e/axe-baseline.json		tests	7	reviewed (stage 6)
+test	tests/e2e/axe.ts		tests	7	reviewed (stage 6)
+test	tests/e2e/controls.ts		tests	7	sampled (stage 7)
+test	tests/e2e/examples.spec.ts		tests	7	sampled (stage 7)
+test	tests/e2e/examples.ts		tests	7	surveyed (stage 7): pattern scan
+config	tsconfig.app.json		quality-delivery	7	reviewed (stage 7)
+config	tsconfig.json		quality-delivery	7	reviewed (stage 7)
+config	tsconfig.node.json		quality-delivery	7	reviewed (stage 7)
+config	vite.config.ts		quality-delivery	7	sampled (stage 6); sampled (stage 7)
+config	vitest.config.ts		quality-delivery	7	reviewed (stage 7)

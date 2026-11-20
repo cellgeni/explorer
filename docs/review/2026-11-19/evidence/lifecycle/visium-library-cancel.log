@@ -1,0 +1,48 @@
+ RUN  v4.1.12 .
+(node:86793) Warning: `--localstorage-file` was provided without a valid path
+(Use `node --trace-warnings ...` to show where the warning was created)
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel during detection: control stays disabled on the library not shown
+LIF-VISIUM-CANCEL-DETECT observed {"spotsOnScreen":"3","selectValue":"lib-B","selectDisabled":true}
+Not implemented: HTMLCanvasElement's getContext() method: without installing the canvas npm package
+stdout | docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel after setVisiumView: the shared instance stays on the other library
+LIF-VISIUM-CANCEL-MUTATED observed {"spotsOnScreen":"3","setVisiumViewCalls":[{},{"libraryId":"lib-B"}],"libraryReadsUse":"lib-B"}
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts (2 tests | 2 failed) 3244ms
+     × cancel during detection: control stays disabled on the library not shown 2219ms
+     × cancel after setVisiumView: the shared instance stays on the other library 1024ms
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel during detection: control stays disabled on the library not shown
+AssertionError: expected { spotsOnScreen: '3', …(2) } to deeply equal { spotsOnScreen: '3', …(2) }
+- Expected
++ Received
+  {
+-   "selectDisabled": false,
+-   "selectValue": "lib-A",
++   "selectDisabled": true,
++   "selectValue": "lib-B",
+    "spotsOnScreen": "3",
+  }
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:184:22
+    182|     }
+    183|     console.info('LIF-VISIUM-CANCEL-DETECT observed', JSON.stringify(o…
+    184|     expect(observed).toEqual({ spotsOnScreen: '3', selectValue: 'lib-A…
+       |                      ^
+    185|   })
+    186|
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+ FAIL  docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts > LIF: Visium library switch that is cancelled > cancel after setVisiumView: the shared instance stays on the other library
+AssertionError: expected 'lib-B' to be 'lib-A' // Object.is equality
+Expected: "lib-A"
+Received: "lib-B"
+ ❯ docs/review/2026-11-19/evidence/repro/lifecycle/visium-library-cancel.repro.ts:203:29
+    201|     console.info('LIF-VISIUM-CANCEL-MUTATED observed', JSON.stringify(…
+    202|     expect(observed.spotsOnScreen).toBe('3')
+    203|     expect(libraryReadsUse).toBe('lib-A')
+       |                             ^
+    204|   })
+    205| })
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  20:43:24
+   Duration  7.21s (transform 1.87s, setup 106ms, import 2.59s, tests 3.24s, environment 1.05s)

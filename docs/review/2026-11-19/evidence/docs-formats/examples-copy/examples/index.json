@@ -1,0 +1,182 @@
+{
+  "version": 1,
+  "examples": [
+    {
+      "id": "bia/S-BIAD2214",
+      "path": "bia/S-BIAD2214.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2214.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2214.json",
+      "platform": "xenium",
+      "name": "Human skin, inflamed eczema (Xenium 5K)",
+      "description": "Fresh-frozen adult skin from an inflamed eczema lesion on the Xenium Human 5K panel: 22,242 cells with transcripts and cell boundaries, from an atlas of skin fibroblasts.",
+      "source": {
+        "repository": "BioImage Archive",
+        "accession": "S-BIAD2214",
+        "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2214",
+        "license": "CC0 1.0",
+        "citation": "Steele L et al. (2025) A single-cell and spatial genomics atlas of human skin fibroblasts reveals shared disease-related fibroblast subtypes across tissues. Nature Immunology 26:1807-1820. doi:10.1038/s41590-025-02267-8"
+      }
+    },
+    {
+      "id": "bia/S-BIAD2376",
+      "path": "bia/S-BIAD2376.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2376.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2376.json",
+      "platform": "merscope",
+      "name": "Human skin (MERSCOPE)",
+      "description": "MERFISH of normal adult human skin on a 499-gene panel: 3,003 cells segmented with Baysor, with their outlines, from a spatial census of skin across 15 anatomic sites; opens on COL1A1 (dermal fibroblasts).",
+      "source": {
+        "repository": "BioImage Archive",
+        "accession": "S-BIAD2376",
+        "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2376",
+        "license": "CC BY 4.0",
+        "citation": "Restrepo P et al. (2026) A single-cell spatial census of human skin anatomy. Nature Genetics. doi:10.1038/s41588-026-02552-8"
+      }
+    },
+    {
+      "id": "bia/S-BIAD2491",
+      "path": "bia/S-BIAD2491.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2491.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/bia/S-BIAD2491.json",
+      "platform": "image",
+      "name": "Human tonsil, PhenoCycler 19-plex",
+      "description": "Akoya PhenoCycler-Fusion scan of two FFPE human tonsil sections, stained with fresh (top) and lyophilized (bottom) antibodies, with 18 markers and DAPI, read directly from a 13 GB QPTIFF; opens on CD3 (T cells), CD20 (B cells), and Ki-67 (dividing cells).",
+      "source": {
+        "repository": "BioImage Archive",
+        "accession": "S-BIAD2491",
+        "url": "https://www.ebi.ac.uk/biostudies/BioImages/studies/S-BIAD2491",
+        "license": "CC BY 4.0",
+        "citation": "Lee JL et al. (2025) Large-scale quantitative assessment of tissue preparation and staining conditions for robust multiplexed imaging of FFPE tissue samples. BioImage Archive. doi:10.6019/S-BIAD2491"
+      }
+    },
+    {
+      "id": "cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f",
+      "path": "cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/62315937-e268-4fa5-a032-8f7d776f3a3f.json",
+      "platform": "h5ad",
+      "name": "Fetal lung T, NK and ILC cells (UMAP)",
+      "description": "Single-cell RNA-seq of 4,778 T, NK and innate lymphoid cells from human fetal lung, shown on their UMAP with 14 annotated cell types.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "62315937-e268-4fa5-a032-8f7d776f3a3f",
+        "url": "https://cellxgene.cziscience.com/collections/2d2e2acd-dade-489f-a2da-6c11aa654028",
+        "license": "CC BY 4.0",
+        "citation": "He P et al. (2022) A human fetal lung cell atlas uncovers proximal-distal gradients of differentiation and key regulators of epithelial fates. Cell. doi:10.1016/j.cell.2022.11.005"
+      }
+    },
+    {
+      "id": "cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500",
+      "path": "cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe5b3268-ddd8-415a-9432-f1f95bfdb500.json",
+      "platform": "h5ad",
+      "name": "Adult human heart (Visium)",
+      "description": "Visium section of adult human heart over its H&E: 2,913 spots under tissue (4,992 on the array) with per-spot cell-type abundances (colour spots by Metadata), from a spatial atlas of cardiac niches.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "fe5b3268-ddd8-415a-9432-f1f95bfdb500",
+        "url": "https://cellxgene.cziscience.com/collections/3116d060-0a8e-4767-99bb-e866badea1ed",
+        "license": "CC BY 4.0",
+        "citation": "Kanemaru K et al. (2023) Spatially resolved multiomics of human cardiac niches. Nature. doi:10.1038/s41586-023-06311-1"
+      }
+    },
+    {
+      "id": "cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978",
+      "path": "cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/cellxgene/fe70db78-88b8-4bf7-8449-7aa177d51978.json",
+      "platform": "h5ad",
+      "name": "Mouse embryo E9.0 (Slide-seqV2)",
+      "description": "Slide-seqV2 puck of a whole E9.0 mouse embryo, 3,374 beads with cell-type annotations, from spatial maps of neural tube patterning.",
+      "source": {
+        "repository": "CELLxGENE",
+        "accession": "fe70db78-88b8-4bf7-8449-7aa177d51978",
+        "url": "https://cellxgene.cziscience.com/collections/d74b6979-efba-47cd-990a-9d80ccf29055",
+        "license": "CC BY 4.0",
+        "citation": "Sampath Kumar A et al. (2023) Spatial transcriptomic maps of whole mouse embryos reveal principles of neural tube patterning. Nature Genetics. doi:10.1038/s41588-023-01435-6"
+      }
+    },
+    {
+      "id": "geo/GSM9080376",
+      "path": "geo/GSM9080376.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/geo/GSM9080376.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/geo/GSM9080376.json",
+      "platform": "visium",
+      "name": "Human first-trimester decidua, invaded (Visium)",
+      "description": "Visium section of human first-trimester decidua basalis invaded by extravillous trophoblasts, over its H&E: 871 spots with whole-transcriptome expression (36,601 genes) read from GEO's Matrix Market files; opens on HLA-G (extravillous trophoblasts), from a study of how trophoblast invasion remodels the decidua.",
+      "source": {
+        "repository": "GEO",
+        "accession": "GSM9080376",
+        "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSM9080376",
+        "license": "No restrictions (NCBI GEO)",
+        "citation": "Moser G et al. (2026) Remodeling lesions locate at sites of strong extravillous trophoblast invasion and are associated with neutrophil presence in the human first-trimester decidua. Human Reproduction. doi:10.1093/humrep/deag078"
+      }
+    },
+    {
+      "id": "idr/idr0054-tonsil",
+      "path": "idr/idr0054-tonsil.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",
+      "platform": "image",
+      "name": "Human tonsil, imaging mass cytometry",
+      "description": "Hyperion imaging mass cytometry of a human tonsil section with 27 metal-tagged antibodies, as OME-Zarr; opens on CD3 (T cells), CD19 (B cells), and CD68 (macrophages).",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0054",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-701",
+        "license": "CC BY 4.0",
+        "citation": "Durand M et al. (2019) Human lymphoid organ cDC2 and macrophages play complementary roles in T follicular helper responses. J Exp Med 216(7):1561-1581. doi:10.1084/jem.20181994"
+      }
+    },
+    {
+      "id": "idr/idr0062-blastocyst",
+      "path": "idr/idr0062-blastocyst.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0062-blastocyst.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0062-blastocyst.json",
+      "platform": "image",
+      "name": "Mouse blastocyst, confocal z-stack (3D)",
+      "description": "Confocal z-stack of a whole E3.5 mouse blastocyst, 236 planes stained for the nuclear lamina (Lamin B1) and DNA (DAPI), as OME-Zarr; opens in the 3D view, which you can rotate, and View › 2D steps through the planes.",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0062",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-801",
+        "license": "CC BY 4.0",
+        "citation": "Blin G et al. (2019) Nessys: A new set of tools for the automated detection of nuclei within intact tissues and dense 3D cultures. PLoS Biol 17(8):e3000388. doi:10.1371/journal.pbio.3000388"
+      }
+    },
+    {
+      "id": "spatialdata-sandbox/visium_associated_xenium_io",
+      "path": "spatialdata-sandbox/visium_associated_xenium_io.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/spatialdata-sandbox/visium_associated_xenium_io.json",
+      "platform": "spatialdata",
+      "name": "Human breast cancer (Visium CytAssist, SpatialData)",
+      "description": "Visium CytAssist section of FFPE human breast cancer over its H&E, read from a SpatialData Zarr store: 4,992 spots with whole-transcriptome expression (18,085 genes), from the study that pairs Visium with Xenium and single-cell data on serial sections.",
+      "source": {
+        "repository": "SpatialData sandbox",
+        "accession": "visium_associated_xenium_io",
+        "url": "https://spatialdata.scverse.org/en/stable/tutorials/notebooks/datasets/README.html",
+        "license": "CC BY 4.0",
+        "citation": "Janesick A et al. (2023) High resolution mapping of the tumor microenvironment using integrated single-cell, spatial and in situ analysis. Nature Communications. doi:10.1038/s41467-023-43458-x"
+      }
+    },
+    {
+      "id": "zenodo/21110855-liver-sections",
+      "path": "zenodo/21110855-liver-sections.json",
+      "collectionUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?collection=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/zenodo/21110855-liver-sections.json",
+      "platform": "collection",
+      "datasets": 7,
+      "name": "Human liver serial sections, 3D (LYNX NIH_F5)",
+      "description": "Seven serial Xenium sections of human liver sample NIH_F5, 5 µm apart (01 to 08; the deposit has no section 03), on the 377-gene Multi-Tissue panel. Each section opens in its store's aligned coordinate system, which registers its cells to section 04, so the sections line up side by side and stack in 3D. Only section 04 shows its morphology image: the others' are rotated in that frame.",
+      "source": {
+        "repository": "Zenodo",
+        "accession": "21110855",
+        "url": "https://zenodo.org/records/21110855",
+        "license": "CC BY-NC-ND 4.0",
+        "citation": "Jin Y et al. (2026) LYNX: a deep generative model for linking spatial dynamics and cell interactions in multimodal spatial data. bioRxiv. doi:10.64898/2026.07.09.737574"
+      }
+    }
+  ]
+}

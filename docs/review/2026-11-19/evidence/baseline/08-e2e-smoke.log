@@ -1,0 +1,25 @@
+### 2026-11-19T20:33:13Z npx playwright test --config <scratch>/pw.review.config.mjs --grep @smoke
+
+Running 19 tests using 4 workers
+
+  ✓   3 [chromium] › tests/e2e/app.spec.ts:463:1 › offers the demo when the examples cannot be loaded @smoke (852ms)
+  ✓   1 [chromium] › tests/e2e/app.spec.ts:390:1 › shows the scaffolded viewer shell @smoke (867ms)
+  ✓   4 [chromium] › tests/e2e/app.spec.ts:477:1 › skips the start screen for a link that names a dataset @smoke (1.0s)
+  ✓   2 [chromium] › tests/e2e/app.spec.ts:401:1 › lists the examples on the start screen, and opens one in place @smoke (3.0s)
+  ✓   6 [chromium] › tests/e2e/app.spec.ts:584:1 › finds cells by cluster, exports them and saves them as a class @smoke (3.5s)
+  ✓   9 [chromium] › tests/e2e/app.spec.ts:793:1 › shows transcript overlay controls in the browser shell @smoke (452ms)
+  ✓   7 [chromium] › tests/e2e/app.spec.ts:635:1 › plots the selected genes by cluster and exports the numbers @smoke (4.1s)
+  ✓  11 [chromium] › tests/e2e/app.spec.ts:890:1 › opens a shared H5AD link coloured by a metadata track @smoke (1.8s)
+  ✓   8 [chromium] › tests/e2e/app.spec.ts:721:1 › runs the first five review tasks with the keyboard alone @smoke (6.0s)
+  ✓  10 [chromium] › tests/e2e/app.spec.ts:813:1 › loads a local H5AD fixture with obs tracks and gene expression @smoke (4.2s)
+  ✓  12 [chromium] › tests/e2e/app.spec.ts:976:1 › loads AnnData from an Icechunk repository with gene expression @smoke (3.3s)
+  ✓  14 [chromium] › tests/e2e/app.spec.ts:1150:1 › loads a Space Ranger Visium folder as 55 um spots with its tissue image @smoke (2.7s)
+  ✓  13 [chromium] › tests/e2e/app.spec.ts:1088:1 › switches Visium libraries and off-tissue spots and keeps them in the link @smoke (8.9s)
+  ✓  16 [chromium] › tests/e2e/app.spec.ts:1298:1 › finds MERSCOPE cells by a stain measured under each @smoke (7.0s)
+  ✓  15 [chromium] › tests/e2e/app.spec.ts:1269:1 › shows a MERSCOPE .vzg stain and switches it off @smoke (10.0s)
+  ✓   5 [chromium] › tests/e2e/app.spec.ts:486:1 › has no accessibility violations beyond the axe baseline @smoke (21.4s)
+  ✓  19 [chromium] › tests/e2e/app.spec.ts:1572:1 › draws an imported label mask and WKT outlines over an image @smoke (3.0s)
+  ✓  18 [chromium] › tests/e2e/app.spec.ts:1422:1 › loads a MERSCOPE region folder with its cell outlines and genes @smoke (5.2s)
+  ✓  17 [chromium] › tests/e2e/app.spec.ts:1352:1 › finds SpatialData cells by image channels measured under each @smoke (8.4s)
+
+  19 passed (27.8s)

@@ -1,0 +1,9 @@
+
+Running 1 test using 1 worker
+
+{"width":1440,"state":"collection","violations":[{"id":"target-size","impact":"serious","nodes":4,"targets":["button[aria-label=\"Previews\"]","button[aria-label=\"Stack in 3D\"]","button[aria-label=\"Show S2 beside\"]","button[aria-label=\"Show S3 beside\"]"],"summary":"Fix any of the following:   Target has insufficient size (22px by 22px, should be at least 24px by 24px)"}],"incomplete":["aria-prohibited-attr:1","color-contrast:2","label-content-name-mismatch:1"],"layout":{"innerWidth":1440,"scrollWidth":1440,"offscreenCount":2,"offscreen":["",""]}}
+{"width":1024,"state":"collection","violations":[{"id":"target-size","impact":"serious","nodes":4,"targets":["button[aria-label=\"Previews\"]","button[aria-label=\"Stack in 3D\"]","button[aria-label=\"Show S2 beside\"]","button[aria-label=\"Show S3 beside\"]"],"summary":"Fix any of the following:   Target has insufficient size (22px by 22px, should be at least 24px by 24px)"}],"incomplete":["aria-prohibited-attr:1","color-contrast:2","label-content-name-mismatch:1"],"layout":{"innerWidth":1024,"scrollWidth":1024,"offscreenCount":2,"offscreen":["",""]}}
+{"width":390,"state":"collection","violations":[],"incomplete":["aria-prohibited-attr:1","color-contrast:7","label-content-name-mismatch:1"],"layout":{"innerWidth":390,"scrollWidth":390,"offscreenCount":6,"offscreen":["S2","Show S2 beside","S3","Show S3 beside","",""]}}
+  ✓  1 docs/review/2026-11-19/evidence/ui-stage6/a11y-widths.s6.mjs:65:1 › axe, overflow and screenshots at three widths (15.2s)
+
+  1 passed (16.4s)

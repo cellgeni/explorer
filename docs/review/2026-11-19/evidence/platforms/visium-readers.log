@@ -1,0 +1,57 @@
+
+ RUN  v4.1.12 .
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (standard header), scale applied once
+{"header":"standard","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (none header), scale applied once
+{"header":"none","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (reordered header), scale applied once
+{"header":"reordered","units":{"micrometersPerPixel":0.3236000000000009,"source":"spot-grid","detail":"array row/column fit (100 µm spot pitch)"},"first":{"x":970.8000000000027,"y":323.6000000000009},"spotCount":36}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > draws hires pixel p at the same screen point as a spot at full-res p / scalef
+{"drawImage":[0,0,1000,600,150,450,1618.0000000000045,970.8000000000027],"imageScreen":{"x":635.4000000000013,"y":611.8000000000004},"spotScreen":{"x":635.4,"y":611.8}}
+
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (standard header), scale applied once 29ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (none header), scale applied once 3ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > places pxl_col as x and pxl_row as y (reordered header), scale applied once 4ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS axis order, scale, and image alignment > draws hires pixel p at the same screen point as a spot at full-res p / scalef 3ms
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS H5 matrix (CSC: indptr per barcode, indices = feature) > reads counts by barcode and feature, keeping feature ids
+{"b0":{"geneNames":["GENEB"],"counts":[4]},"b1":{"geneNames":["GENEA","GENEC"],"counts":[1,9]},"libraryId":"lib-1"}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > maps "row col value" to feature row-1, barcode col-1
+[["AAAC00AAAA-1",{"geneNames":["GENEA","GENEB"],"counts":[7,2]}],["AAAC01AAAA-1",{"geneNames":["GENEA"],"counts":[7]}]]
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > drops matrix barcodes without positions and does not show positions without counts
+{"shown":30,"progress":["Visium: 1 matrix barcodes are not in the tissue positions file and are not shown"]}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > fails with a clear error when matrix barcodes lack the -1 suffix of the positions file
+{"error":"None of the filtered matrix barcodes are in the Visium tissue positions file."}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > duplicate barcode rows in the positions file: the last row wins, silently
+{"first":{"x":3235.6764000000035,"y":2876.156800000003},"warned":false}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS in_tissue handling > raw matrix with off-tissue spots: hidden by default, shown on request, scale unchanged
+{"hidden":{"spotCount":30,"off":6,"cells":30,"umpp":0.3236000000000009},"shown":{"spotCount":36,"cells":36,"umpp":0.3236000000000009}}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > Antibody Capture counts go into total_counts and n_genes_by_counts
+{"total_counts":509,"n_genes_by_counts":3,"genePanel":["GENEA","GENEB","CD3"]}
+
+stdout | docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > duplicate symbols get -2; Ensembl ids are not kept as aliases
+{"genePanel":["TBCE","TBCE-2","GENEC"],"aliases":[]}
+
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS H5 matrix (CSC: indptr per barcode, indices = feature) > reads counts by barcode and feature, keeping feature ids 261ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > maps "row col value" to feature row-1, barcode col-1 2ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > drops matrix barcodes without positions and does not show positions without counts 4ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > fails with a clear error when matrix barcodes lack the -1 suffix of the positions file 2ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS MEX 1-based coordinates and joins > duplicate barcode rows in the positions file: the last row wins, silently 2ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS in_tissue handling > raw matrix with off-tissue spots: hidden by default, shown on request, scale unchanged 3ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > Antibody Capture counts go into total_counts and n_genes_by_counts 13ms
+ ✓ docs/review/2026-11-19/evidence/repro/platforms/visium-readers.repro.ts > VIS feature types and names > duplicate symbols get -2; Ensembl ids are not kept as aliases 7ms
+
+ Test Files  1 passed (1)
+      Tests  12 passed (12)
+   Start at  20:41:58
+   Duration  2.10s (transform 623ms, setup 158ms, import 755ms, tests 336ms, environment 753ms)
+

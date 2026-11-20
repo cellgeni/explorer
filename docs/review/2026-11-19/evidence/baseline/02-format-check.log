@@ -1,0 +1,7 @@
+### 2026-11-19T20:30:47Z npm run format:check
+
+> spatial-omics-explorer@0.0.0 format:check
+> prettier . --check
+
+Checking formatting...
+All matched files use Prettier code style!

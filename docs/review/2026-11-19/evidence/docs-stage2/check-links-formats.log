@@ -1,0 +1,26 @@
+Checked 60 Markdown files, 612 internal links.
+Problems: 0
+
+External link targets: 22
+EXT	https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/4a9f7ec6-5de7-4e8a-acaa-d6d100a5ea58.h5ad	1	docs/h5ad-reference.md:140
+EXT	https://cellxgene-census-public-us-west-2.s3.us-west-2.amazonaws.com/cell-census/2025-11-08/h5ads/60d5175f-f477-48b2-8396-ad76be2c3310.h5ad	1	docs/h5ad-reference.md:139
+EXT	https://docs.astral.sh/uv/	1	docs/h5ad-reference.md:246
+EXT	https://fsspec.github.io/kerchunk/spec.html	1	docs/h5ad-reference.md:11
+EXT	https://github.com/EarthyScience/icechunk-js	1	docs/h5ad-reference.md:163
+EXT	https://github.com/advisories/GHSA-fc5q-39xc-vjpf	1	docs/plan/open-items.md:217
+EXT	https://github.com/cellgeni/explorer/pull/192	2	docs/plan/phases/26-image-channel-conditions.md:143
+EXT	https://github.com/cellgeni/explorer/releases	1	docs/deploy-to-s3.md:42
+EXT	https://github.com/fsspec/kerchunk/pull/589	1	docs/h5ad-reference.md:306
+EXT	https://icechunk.io/	4	docs/h5ad-reference.md:12
+EXT	https://mp33.cog.sanger.ac.uk/public/h5ad/pbmc3k.h5ad	1	docs/h5ad-reference.md:138
+EXT	https://spatialdata.scverse.org/	2	docs/host-your-own-data.md:403
+EXT	https://virtualizarr.readthedocs.io/	1	docs/h5ad-reference.md:18
+EXT	https://www.10xgenomics.com/support/software/atera-onboard-analysis/latest/analysis/output-at-a-glance	1	docs/modalities/atera.md:14
+EXT	https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/output-overview	1	docs/plan/data-contracts.md:61
+EXT	https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/segmented-outputs	1	docs/plan/data-contracts.md:62
+EXT	https://www.10xgenomics.com/support/software/space-ranger/latest/analysis/outputs/space-ranger-feature-slice-h5	1	docs/plan/data-contracts.md:63
+EXT	https://www.gbmspace.org/webatlas2/GBM	1	docs/dataset-collections.md:74
+EXT	https://www.sciatlas.org/SPCOX/	2	docs/dataset-collections.md:32
+EXT	https://zenodo.org/records/21110855	1	docs/dataset-collections.md:83
+EXT	https://zenodo.org/records/8234093	1	docs/plan/phases/19-ndpi.md:94
+EXT	https://zenodo.org/records/841835	2	docs/modalities/image.md:325
