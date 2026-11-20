@@ -166,11 +166,23 @@ export function parseMerscopeTransform(text: string): MerscopeImagePlacement {
     )
   }
 
+  // The image is drawn with square pixels, so x and y must scale alike;
+  // instruments write them equal to about 1 part in 100,000.
+  if (Math.abs(scaleX - scaleY) > 1e-3 * Math.max(scaleX, scaleY)) {
+    throw new MerscopeFormatError(
+      `The micron-to-mosaic transform scales x by ${formatScale(scaleX)} and y by ${formatScale(scaleY)} pixels per µm. The viewer draws square pixels only, so it cannot place this image.`,
+    )
+  }
+
   return {
     originX: -translateX / scaleX,
     originY: -translateY / scaleY,
     micronsPerPixel: 2 / (scaleX + scaleY),
   }
+}
+
+function formatScale(value: number): string {
+  return Number(value.toPrecision(5)).toString()
 }
 
 // The plane shown first: the middle of the planes present, the lower one of

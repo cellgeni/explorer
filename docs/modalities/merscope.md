@@ -129,7 +129,9 @@ deflate stream cannot be read from the middle, so an image is read whole:
    pyramid](./image.md#page-pyramids) at the transform's origin
    (−translation ÷ scale, the mosaic's `bbox_microns` corner, in stage µm)
    and pixel size. Its tiles decode as 12-bit JPEG
-   ([Codecs](./image.md#codecs)).
+   ([Codecs](./image.md#codecs)). The image is drawn with square pixels, so
+   a transform whose x and y scales differ by more than 0.1%, or that shears,
+   is refused with a message naming the scales.
 
 The image is one channel, named after the stain. The Image section's
 `Stain` (or None) and `Plane` controls choose it; each plane option shows its
