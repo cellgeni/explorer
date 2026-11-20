@@ -4,6 +4,7 @@ import { memo, useCallback, useId, useMemo, useState, useSyncExternalStore } fro
 import type { LinkedViewChannel } from '../../components/linkedView'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
+import { ReleasingDeck } from '../../components/releasingDeck'
 import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
 import { overviewCellRadiusMaxPixels } from '../../rendering/cellPointRenderer'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
@@ -223,6 +224,7 @@ function LinkedSectionPanel({
       {cells === null || viewState === null ? null : (
         <div className="deckgl-host" aria-hidden="true">
           <MemoDeckGL
+            Deck={ReleasingDeck}
             views={LINKED_SECTION_VIEW}
             viewState={viewState}
             onViewStateChange={handleViewStateChange}

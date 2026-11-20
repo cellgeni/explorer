@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
+import { ReleasingDeck } from '../../components/releasingDeck'
 import { Button, FitIcon, IconButton, Slider, Switch } from '../../components/ui'
 import { fittedVolumeViewState } from '../../components/volumeViewerModel'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
@@ -232,6 +233,7 @@ export function SectionStackViewer({
     >
       <div className="volume-viewer-canvas" aria-hidden="true">
         <MemoDeckGL
+          Deck={ReleasingDeck}
           views={SECTION_STACK_VIEW}
           viewState={shownViewState}
           onViewStateChange={handleViewStateChange}

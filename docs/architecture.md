@@ -272,6 +272,11 @@ lets tests replace them.
 - `VolumeViewer` (`src/components/VolumeViewer.tsx`) draws an OME-Zarr
   z-stack in 3D over the 2D view, with a deck.gl `OrbitView` and the
   ray-marching `VolumeLayer` (`src/rendering/volumeLayer.ts`).
+- Every `<DeckGL>` is given `Deck={ReleasingDeck}`
+  (`src/components/releasingDeck.ts`). deck.gl's `finalize()` leaves the
+  WebGL context live, and Chromium keeps 16 per page and drops the oldest,
+  which is the 2D view's. `ReleasingDeck` loses the context and stops
+  luma.gl's canvas observers once its canvas has left the page.
 
 ## Default Colours
 

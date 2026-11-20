@@ -8,6 +8,7 @@ import {
   type VolumeLayerChannel,
   type VolumeRenderMode,
 } from '../rendering/volumeLayer'
+import { ReleasingDeck } from './releasingDeck'
 import { Button, FitIcon, IconButton, Segmented, Slider } from './ui'
 import { fittedVolumeViewState, volumeStatus } from './volumeViewerModel'
 
@@ -116,6 +117,7 @@ export function VolumeViewer({
     <section className="volume-viewer" aria-label="3D view" ref={containerRef}>
       <div className="volume-viewer-canvas">
         <DeckGL
+          Deck={ReleasingDeck}
           views={VOLUME_VIEW}
           viewState={shownViewState}
           onViewStateChange={({ viewState: next }) => {
