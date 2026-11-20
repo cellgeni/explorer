@@ -64,8 +64,11 @@ the parser scans the text once and writes counts straight into CSR arrays,
 without an object per cell. Fields follow RFC 4180: a quoted field may hold
 commas, line breaks and `""` for a quote, and an unclosed quote fails with
 its row. A byte order mark and `\r\n` line ends are read too. Gzip is
-recognised from the first two bytes, not the file name. A `Content-Length` above 300 MB, or a gzipped file that
-inflates past it, fails the load with the file's size.
+recognised from the first two bytes, not the file name. A `Content-Length`
+above 300 MB fails the load with the file's size. So does a gzipped file
+whose trailer gives an inflated size above it, before anything is inflated;
+one whose trailer understates its size (more than 4 GiB, or several gzip
+members) stops inflating once past 300 MB.
 
 The table it builds (`merscopeTable` in `src/datasets/merscopeFormat.ts`):
 
