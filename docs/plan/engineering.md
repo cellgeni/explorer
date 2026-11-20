@@ -272,9 +272,10 @@ From a run of `npm test` and the repository:
       Browse Store and Browse File, SVS, NDPI and plain TIFF, GeoJSON import
       and export, and load errors (404, CORS, `http://` data). Xenium, Atera,
       Visium HD, SpatialData, QPTIFF and OME-Zarr have live tests only. Every
-      test runs in desktop Chromium; none at a narrow width. The axe walk does
-      not reach the collection bar, side-by-side panels or the structure
-      drawer.
+      test runs in desktop Chromium, and one smoke test at 390 × 844 (the
+      layer sheet and the Panels menu, through `openControls`); the rest
+      assume the desktop layout. The axe walk does not reach the collection
+      bar, side-by-side panels or the structure drawer.
 - [ ] Unit coverage is thin where it is hardest to see by eye (V8 report of
       2026-11-12): `gridBinLayer.ts` (0% of branches), `viewerPicking.ts`
       (28% of lines; the polygon hit test never runs), the chunk cache in
