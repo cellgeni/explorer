@@ -88,6 +88,9 @@ export interface TranscriptGridLevelMetadata {
   readonly tileSizeMicrometers: number
   readonly gridKeys: readonly string[]
   readonly transcriptCounts: readonly number[]
+  // The level's share of the transcripts level 0 counts, when it is below 1:
+  // the coarser levels count a sample.
+  readonly sampledShare?: number
 }
 
 interface TranscriptDensityGeneMetadata {
@@ -523,6 +526,7 @@ export function transcriptZarrGridLevelBins(
       radiusMicrometers: level.tileSizeMicrometers * 0.42,
       binSizeMicrometers: level.tileSizeMicrometers,
       count,
+      ...(level.sampledShare === undefined ? {} : { sampledShare: level.sampledShare }),
     })
   }
 
@@ -1346,6 +1350,7 @@ function readGridLevels(
   const countsByLevel = readNestedNumberArrayAttribute(attrs, 'grid_number_objects')
   const baseGridSize = readGridSize(attrs)
   const levels: TranscriptGridLevelMetadata[] = []
+  const levelZeroTotal = sumNumbers(countsByLevel[0] ?? [])
 
   for (let level = 0; level < gridKeysByLevel.length; level += 1) {
     const gridKeys = gridKeysByLevel[level] ?? []
@@ -1355,15 +1360,29 @@ function readGridLevels(
       continue
     }
 
+    const sampledShare =
+      levelZeroTotal > 0 ? sumNumbers(transcriptCounts) / levelZeroTotal : 1
+
     levels.push({
       level,
       tileSizeMicrometers: baseGridSize * 2 ** level,
       gridKeys,
       transcriptCounts,
+      ...(sampledShare < 1 ? { sampledShare } : {}),
     })
   }
 
   return levels
+}
+
+function sumNumbers(values: readonly number[]): number {
+  let total = 0
+
+  for (const value of values) {
+    total += value
+  }
+
+  return total
 }
 
 async function loadTranscriptTileArrays(

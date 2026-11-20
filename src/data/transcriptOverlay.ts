@@ -71,6 +71,9 @@ export interface TranscriptAggregateBin {
   readonly radiusMicrometers: number
   readonly binSizeMicrometers?: number
   readonly count: number
+  // Below 1 when `count` is of a sample: a coarse Xenium grid level keeps
+  // this share of the transcripts.
+  readonly sampledShare?: number
   readonly binTotalCount?: number
   readonly selectedGeneCount?: number
   readonly omittedFeatureCount?: number

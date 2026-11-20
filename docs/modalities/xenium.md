@@ -221,7 +221,11 @@ or exact points.
 - **Density, all transcripts.** With the All features filter, or no genes
   selected, `loadTranscriptZarrAggregates` picks the finest Zarr grid level
   with at most 1,500 visible tiles and draws one square per tile, using
-  `grid_number_objects` from metadata (no chunk reads). Without
+  `grid_number_objects` from metadata (no chunk reads). Only level 0 counts
+  every transcript: each coarser level keeps a sample (on the demo, level 1
+  76% and level 7 0.95% of the 554.7 million), so its squares are labelled
+  `Sampled count` with the level's share (`sampledShare`). Colours are scaled
+  to the level's largest square, so they are unaffected. Without
   `transcripts.zarr.zip`, density falls back to cell-summary bins built from
   overview counts.
 - **Density, selected genes.** With the Selected genes filter and genes

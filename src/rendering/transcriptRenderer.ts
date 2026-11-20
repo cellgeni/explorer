@@ -220,6 +220,7 @@ export function transcriptAggregateBinsToLayerData(
       binX: bin.binX,
       binY: bin.binY,
       count: bin.count,
+      ...(bin.sampledShare === undefined ? {} : { sampledShare: bin.sampledShare }),
       radiusMicrometers: Math.max(4, bin.radiusMicrometers * (0.35 + intensity * 0.65)),
       ...(bin.binSizeMicrometers === undefined
         ? {}
