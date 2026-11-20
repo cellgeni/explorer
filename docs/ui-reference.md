@@ -67,7 +67,11 @@ Until a dataset opens, the canvas shows the start screen
 - **Recent**: the last eight datasets opened in this browser, newest first,
   each with its name, platform and address, and a × button (`Remove {name}
 from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
-  without storage the list lasts until the page closes.
+  without storage the list lasts until the page closes. An address that
+  carries a signature or token (S3 or Google Cloud presigned, CloudFront or
+  Azure SAS signatures, `token=`) is kept without its query string and listed
+  without a link, marked "signed address not kept": open it again from its
+  full address.
 - **Examples**: a card per entry of `examples/index.json` with name,
   platform, description, and source and licence (the source links to the
   repository). A collection's card says `Collection of {n} datasets` in place
@@ -1467,7 +1471,9 @@ back. `cellBounds` and `nucleusBounds` are always written, because a load
 picks their default by platform when a link is silent. Version 1 links, which
 wrote every value, still open as before. `Share` in the top bar and
 `Copy Link` copy the link for the current state, which the address shows up
-to 160 ms later, and say "Link copied".
+to 160 ms later, and say "Link copied". A link names the dataset's full
+address, so the link to a presigned dataset carries its signature or token:
+anyone with the link can read the dataset until the signature expires.
 
 The query string is read on startup too, except under a version 2 hash,
 which is the whole link; under any other hash, the hash's values win. Once the

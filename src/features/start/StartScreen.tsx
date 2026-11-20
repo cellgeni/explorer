@@ -284,11 +284,25 @@ export function RecentDatasetList({
 
         return (
           <li key={dataset.url}>
-            <DatasetLink url={dataset.url} onOpen={onOpen}>
-              {dataset.name}
-            </DatasetLink>
+            {dataset.signed === true ? (
+              // Its signature was not kept, so the address alone would be
+              // refused.
+              <span title="Signed address not kept: open it from its full address">
+                {dataset.name}
+              </span>
+            ) : (
+              <DatasetLink url={dataset.url} onOpen={onOpen}>
+                {dataset.name}
+              </DatasetLink>
+            )}
             <small title={dataset.url}>
-              {platform === null ? dataset.url : `${platform} · ${dataset.url}`}
+              {[
+                platform,
+                dataset.url,
+                dataset.signed === true ? 'signed address not kept' : null,
+              ]
+                .filter((part) => part !== null)
+                .join(' · ')}
             </small>
             <IconButton
               title={`Remove ${dataset.name} from recent datasets`}

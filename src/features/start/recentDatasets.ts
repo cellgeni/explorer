@@ -12,6 +12,9 @@ export interface RecentDataset {
   readonly name: string
   // A key of PLATFORM_NAMES, such as 'xenium'.
   readonly platform?: string
+  // The address carried a signature or token, left out of `url`, so the
+  // dataset reopens only from its full address (EXP-026).
+  readonly signed?: boolean
 }
 
 function isRecentDataset(value: unknown): value is RecentDataset {
@@ -21,8 +24,34 @@ function isRecentDataset(value: unknown): value is RecentDataset {
     typeof entry.url === 'string' &&
     entry.url.trim() !== '' &&
     typeof entry.name === 'string' &&
-    (entry.platform === undefined || typeof entry.platform === 'string')
+    (entry.platform === undefined || typeof entry.platform === 'string') &&
+    (entry.signed === undefined || typeof entry.signed === 'boolean')
   )
+}
+
+// Query parameters that sign or authorise a request: S3 and Google Cloud
+// presigned URLs, CloudFront and Azure SAS signatures, and bearer tokens.
+const CREDENTIAL_PARAMETER =
+  /^(?:x-amz-|x-goog-)|^(?:signature|sig|token|access_token|awsaccessid|awsaccesskeyid|googleaccessid|key-pair-id)$/i
+
+// The entry as kept in storage: an address that carries a credential keeps
+// no query string, since a presigned URL's other parameters are part of its
+// signature, and is marked as signed.
+export function recentDatasetEntry(dataset: RecentDataset): RecentDataset {
+  let url: URL
+
+  try {
+    url = new URL(dataset.url)
+  } catch {
+    return dataset
+  }
+
+  if (![...url.searchParams.keys()].some((key) => CREDENTIAL_PARAMETER.test(key))) {
+    return dataset
+  }
+
+  url.search = ''
+  return { ...dataset, url: url.toString(), signed: true }
 }
 
 export function readRecentDatasets(
@@ -114,13 +143,15 @@ export function useRecentDatasets(
     [store],
   )
   const add = useCallback(
-    (dataset: RecentDataset) => {
+    (added: RecentDataset) => {
+      const dataset = recentDatasetEntry(added)
       update((current) => {
         const first = current[0]
         return first !== undefined &&
           first.url === dataset.url &&
           first.name === dataset.name &&
-          first.platform === dataset.platform
+          first.platform === dataset.platform &&
+          first.signed === dataset.signed
           ? null
           : withRecentDataset(current, dataset)
       })

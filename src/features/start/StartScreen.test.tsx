@@ -227,6 +227,28 @@ describe('StartScreen', () => {
     ).toBeInTheDocument()
   })
 
+  it('lists a signed dataset without a link, as its signature was not kept', () => {
+    const library = testDatasetLibraryModel({
+      examples: { status: 'ready', examples: [] },
+      recent: [
+        {
+          url: 'https://bucket.s3.amazonaws.com/run.h5ad',
+          name: 'run',
+          platform: 'h5ad',
+          signed: true,
+        },
+      ],
+    })
+    const recent = within(renderStartScreen(library)).getByRole('list', {
+      name: 'Recent datasets',
+    })
+
+    expect(within(recent).queryByRole('link')).toBeNull()
+    expect(within(recent).getByRole('listitem')).toHaveTextContent(
+      'runH5AD · https://bucket.s3.amazonaws.com/run.h5ad · signed address not kept',
+    )
+  })
+
   it('says why the last load failed', () => {
     const start = renderStartScreen(testDatasetLibraryModel(), {
       source: 'Dataset overview',
