@@ -199,6 +199,7 @@ function ChannelHistogramView({
   return (
     <div
       className="channel-histogram"
+      role="img"
       aria-label={`${label} histogram`}
       title={
         histogram === undefined
