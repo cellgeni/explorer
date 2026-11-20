@@ -1,4 +1,4 @@
-import { asCellId } from '../data/cellid'
+import { asCellId, transcriptCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import { betweenSql } from '../data/gexSelection'
 import type { CellId } from '../data/cellid'
@@ -136,7 +136,7 @@ export function parseTranscriptExportRow(
   }
 
   return {
-    cellId: cellId === null || cellId === undefined ? null : asCellId(cellId),
+    cellId: transcriptCellId(cellId),
     featureName,
     position: {
       x: micrometers(readNumericRowValue(row, 'x_location')),
@@ -287,11 +287,13 @@ export function parseTranscriptPointRow(row: Record<string, unknown>): Transcrip
     throw new Error('Expected transcript point row fov_name to be a string or null.')
   }
 
+  const assignedCellId = transcriptCellId(cellId)
+
   return {
     id: String(transcriptId),
     transcriptId: String(transcriptId),
-    cellId: cellId === null || cellId === undefined ? null : asCellId(cellId),
-    cellAssignment: cellId === null || cellId === undefined ? 'unassigned' : 'known',
+    cellId: assignedCellId,
+    cellAssignment: assignedCellId === null ? 'unassigned' : 'known',
     featureName,
     fovName: fovName ?? null,
     position: {

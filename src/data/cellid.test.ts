@@ -7,6 +7,7 @@ import {
   cellIdFromIntPair,
   cellIdToInt,
   intToCellId,
+  transcriptCellId,
 } from './cellid'
 
 describe('Xenium cell ID codec', () => {
@@ -29,6 +30,15 @@ describe('Xenium cell ID codec', () => {
     expect(() => asCellId('1234abcd-1')).toThrow(/Invalid Xenium cell ID/)
     expect(() => intToCellId(-1, 1)).toThrow(/prefix must be a uint32/)
     expect(() => intToCellId(1, 0x1_0000_0000)).toThrow(/suffix must be a uint32/)
+  })
+
+  it('reads a transcript outside every cell as no cell', () => {
+    expect(transcriptCellId('aaaaaaab-1')).toBe('aaaaaaab-1')
+    // XOA 1.3 and later write UNASSIGNED; earlier output wrote null.
+    expect(transcriptCellId('UNASSIGNED')).toBeNull()
+    expect(transcriptCellId(null)).toBeNull()
+    expect(transcriptCellId(undefined)).toBeNull()
+    expect(() => transcriptCellId('unassigned')).toThrow(/Invalid Xenium cell ID/)
   })
 })
 

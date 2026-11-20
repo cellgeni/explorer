@@ -1,6 +1,6 @@
 import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
-import { asCellId, cellIdToInt, intToCellId } from './cellid'
+import { cellIdToInt, intToCellId, transcriptCellId } from './cellid'
 import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
 import { getWholeArray } from '../zarr/zarrWholeArray'
 import { geneExpressionStageTiming } from './geneExpressionTiming'
@@ -836,7 +836,7 @@ function parseTranscriptRow(row: Record<string, unknown>): TranscriptRow {
   }
 
   return {
-    cellId: cellId === null ? null : asCellId(cellId),
+    cellId: transcriptCellId(cellId),
     gene,
     count: Number(count),
   }
