@@ -458,7 +458,9 @@ extra CORS headers).
   chunks fail to decode or values are wrong.
 - **Presigned URLs.** The JSON and repository URLs keep the H5AD URL's query
   string. A token valid for all the objects works; an S3 presigned URL is
-  signed for one object, so the other requests are refused.
+  signed for one object, so the other requests are refused. A share link
+  carries the full presigned URL, token included; the recent list keeps the
+  address without it.
 - **One JSON or one repository.** kerchunk's Parquet references and version 0
   references (no `refs` key) are not read. Only an Icechunk repository's `main`
   branch is read.
