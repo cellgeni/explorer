@@ -197,9 +197,10 @@ Testing:
 - [ ] E2E for features that shipped without it: dataset collections
       (including side by side and `compare=`), Browse Store and Browse File,
       SVS, NDPI and plain TIFF, GeoJSON import and export, and load errors.
-      Every test runs in desktop Chromium, none at a narrow width, and the
-      axe walk does not reach the collection bar, side-by-side panels or the
-      structure drawer. The Xenium and Visium HD live tests fail rather than
+      Every test runs in desktop Chromium; one smoke test runs at 390 × 844
+      and the rest at the desktop size. The axe walk does not reach the
+      collection bar, side-by-side panels or the structure drawer. The
+      Xenium and Visium HD live tests fail rather than
       skip when Sanger storage is down. Details in
       [Testing And CI](engineering.md#open). Found 2026-11-16.
 - [ ] Unit coverage gaps in rendering, picking and workers: `gridBinLayer.ts`,

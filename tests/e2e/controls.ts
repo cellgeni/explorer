@@ -4,7 +4,8 @@ import { CONTROL_AREAS, type ControlArea } from '../../src/test/controlAreas'
 // Shows the controls for an area (see src/test/controlAreas.ts) and returns
 // the element that holds them: the start screen or the dataset menu, the info
 // drawer, a layer section, a popover, or the Embedding, Plots or Cell Query
-// window, opened unless it already is.
+// window, opened unless it already is. Under 860 px it expands the layer
+// sheet for a section and picks a window from the Panels menu.
 export async function openControls(page: Page, area: ControlArea): Promise<Locator> {
   const place = CONTROL_AREAS[area]
 
@@ -29,6 +30,10 @@ export async function openControls(page: Page, area: ControlArea): Promise<Locat
       return page.getByRole('dialog', { name: 'Dataset info' })
     case 'section': {
       const layers = page.getByRole('complementary', { name: 'Layers' })
+      // The sheet's handle is named "Layers" and what the sheet shows.
+      if (isNarrow(page)) {
+        await openButton(layers.getByRole('button', { name: /^Layers/ }))
+      }
       await openButton(layers.getByRole('button', { name: place.section }))
       return layers.getByRole('region', { name: place.section })
     }
@@ -36,15 +41,38 @@ export async function openControls(page: Page, area: ControlArea): Promise<Locat
       await openButton(page.getByRole('button', { name: place.title, exact: true }))
       return page.getByRole('dialog', { name: place.title })
     case 'panel': {
+      const window = page.getByRole('region', { name: place.window })
+      if (isNarrow(page)) {
+        // A menu, closed by picking a toggle; one window shows at a time.
+        const menu = panelMenuButton(page)
+        await openButton(menu)
+        const toggle = page
+          .getByRole('dialog', { name: 'Panels' })
+          .getByRole('button', { name: place.name, exact: true })
+        if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
+        else await closeButton(menu)
+        return window
+      }
       const toggle = page
         .getByRole('group', { name: 'Panels' })
         .getByRole('button', { name: place.name, exact: true })
       if ((await toggle.getAttribute('aria-pressed')) !== 'true') await toggle.click()
-      return page.getByRole('region', { name: place.window })
+      return window
     }
     case 'none':
       return page.locator('main')
   }
+}
+
+// The layout under 860 px (NARROW_SCREEN_QUERY in
+// src/features/shell/useNarrowScreen.ts), from the page's viewport.
+export function isNarrow(page: Page): boolean {
+  return (page.viewportSize()?.width ?? Infinity) < 860
+}
+
+// Under 860 px, the top bar's menu of window toggles.
+export function panelMenuButton(page: Page): Locator {
+  return page.getByRole('button', { name: 'Panels', exact: true })
 }
 
 function infoButton(page: Page): Locator {

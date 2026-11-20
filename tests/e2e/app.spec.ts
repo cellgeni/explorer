@@ -7,7 +7,7 @@ import {
   expectAxeFindingsMatchBaseline,
   type AxeFindings,
 } from './axe'
-import { expectLogEntry, openControls } from './controls'
+import { expectLogEntry, openControls, panelMenuButton } from './controls'
 import { failExamplesIndex, routeLocalExamplesIndex } from './examples'
 
 const XENIUM_DEMO_URL =
@@ -885,6 +885,54 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await expect(
     cellPanel.getByRole('img', { name: 'UMAP embedding, 4 cells' }),
   ).toBeVisible()
+})
+
+test.describe('at 390 × 844 px', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  // The layer panel is a bottom sheet and the window toggles a menu
+  // (EXP-038); the other smoke tests run at the desktop size.
+  test('picks a gene and opens a window from the Panels menu @smoke', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000)
+    await routeTinyH5adFixture(page)
+    await page.goto('/')
+
+    await openControls(page, 'open-dataset')
+    await page
+      .getByLabel('Dataset or image URL')
+      .fill(new URL('/h5ad-smoke.h5ad', page.url()).toString())
+    await openControls(page, 'open-dataset')
+    await page.getByRole('button', { name: 'Load Dataset' }).click()
+    await expectLogEntry(page, /H5AD ready: 4 cells, 3 genes/, {
+      timeout: H5AD_LOAD_TIMEOUT_MS,
+    })
+    await page.getByRole('button', { name: 'Close Dataset info' }).click()
+
+    const genesPanel = await openControls(page, 'genes')
+    await genesPanel.getByRole('button', { name: 'Actb', exact: true }).click()
+    await expect(genesPanel.locator('.analysis-status')).toContainText(
+      'Expression all cells: 3 positive cells across 4 slide cells',
+      { timeout: H5AD_LOAD_TIMEOUT_MS },
+    )
+
+    // The menu holds all three window toggles an H5AD with embeddings has.
+    const menu = panelMenuButton(page)
+    await menu.click()
+    await expect(
+      page.getByRole('dialog', { name: 'Panels' }).getByRole('button'),
+    ).toHaveText(['Embedding', 'Plots', 'Query'])
+    await menu.click()
+
+    // Focus moves into the window and, when it closes, back to the menu.
+    const queryWindow = await openControls(page, 'query')
+    const close = queryWindow.getByRole('button', { name: 'Close cell query' })
+    await expect(close).toBeFocused()
+    await close.click()
+    await expect(queryWindow).toBeHidden()
+    await expect(menu).toBeFocused()
+  })
 })
 
 test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
