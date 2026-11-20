@@ -917,6 +917,277 @@ test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   await expect(page).toHaveURL(/cellTrack=h5ad%3Ascore/)
 })
 
+interface WebglContextCounts {
+  // Contexts neither lost nor garbage collected.
+  readonly live: number
+  // Contexts the browser took while their canvas was still on the page.
+  readonly lostOnPage: number
+}
+
+// Counts the page's WebGL contexts. Chromium keeps 16 live contexts per page
+// and takes the oldest past that, which is the 2D view's, so every deck.gl
+// canvas must give its context back when it closes.
+async function trackWebglContexts(
+  page: Page,
+): Promise<() => Promise<WebglContextCounts>> {
+  await page.addInitScript(() => {
+    const prototype = HTMLCanvasElement.prototype as unknown as {
+      getContext: (type: string, ...rest: unknown[]) => RenderingContext | null
+    }
+    const getContext = prototype.getContext
+    const seen = new WeakSet<RenderingContext>()
+    const contexts: WeakRef<WebGLRenderingContext>[] = []
+    let lostOnPage = 0
+    prototype.getContext = function (this: HTMLCanvasElement, type, ...rest) {
+      const context = getContext.call(this, type, ...rest)
+      if (
+        context instanceof WebGLRenderingContext ||
+        context instanceof WebGL2RenderingContext
+      ) {
+        if (!seen.has(context)) {
+          seen.add(context)
+          contexts.push(new WeakRef(context))
+          this.addEventListener('webglcontextlost', () => {
+            if (this.isConnected) lostOnPage += 1
+          })
+        }
+      }
+      return context
+    }
+    Object.assign(window, {
+      webglContextCounts: (): WebglContextCounts => ({
+        live: contexts.filter((ref) => ref.deref()?.isContextLost() === false).length,
+        lostOnPage,
+      }),
+    })
+  })
+  return () =>
+    page.evaluate(() =>
+      (
+        window as unknown as { webglContextCounts: () => WebglContextCounts }
+      ).webglContextCounts(),
+    )
+}
+
+// Two sections of 20 cells in one AnnData file: obs `section` (s1, s2) and
+// `z_um` (0, 10), and an obsm `spatial` whose third column is each cell's z,
+// so a section has a 3D cell view and the collection a 3D stack.
+async function createSections3dH5ad(): Promise<Uint8Array> {
+  const h5wasm = (await import('h5wasm')).default
+  const { FS } = await h5wasm.ready
+  const fileName = `/playwright-${randomUUID()}.h5ad`
+  const cells = Array.from({ length: 40 }, (_cell, index) => ({
+    section: Math.floor(index / 20),
+    x: (index % 5) * 20,
+    y: Math.floor((index % 20) / 5) * 20,
+    z: Math.floor(index / 20) * 10 + (index % 3),
+  }))
+  const file = new h5wasm.File(fileName, 'w')
+  const obs = file.create_group('obs')
+  obs.create_attribute('_index', '_index')
+  obs.create_attribute('column-order', ['section', 'z_um'])
+  obs.create_dataset({
+    name: '_index',
+    data: cells.map((_cell, index) => `cell-${index}`),
+  })
+  const section = obs.create_group('section')
+  section.create_attribute('encoding-type', 'categorical')
+  section.create_dataset({ name: 'categories', data: ['s1', 's2'] })
+  section.create_dataset({
+    name: 'codes',
+    data: new Int8Array(cells.map((cell) => cell.section)),
+  })
+  obs.create_dataset({
+    name: 'z_um',
+    data: new Float64Array(cells.map((cell) => cell.section * 10)),
+  })
+  const varGroup = file.create_group('var')
+  varGroup.create_attribute('_index', '_index')
+  varGroup.create_dataset({ name: '_index', data: ['GeneA', 'GeneB'] })
+  file.create_dataset({
+    name: 'X',
+    data: new Float32Array(cells.flatMap((cell) => [1, cell.section])),
+    shape: [cells.length, 2],
+  })
+  file.create_group('obsm').create_dataset({
+    name: 'spatial',
+    data: new Float64Array(cells.flatMap((cell) => [cell.x, cell.y, cell.z])),
+    shape: [cells.length, 3],
+  })
+  file.close()
+  const bytes = FS.readFile(fileName)
+  FS.unlink(fileName)
+  return bytes
+}
+
+test('gives back the WebGL context of each closed 3D view, side-by-side section and section @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+
+  const webglContexts = await trackWebglContexts(page)
+  await routeH5adBytes(page, '/sections-3d.h5ad', await createSections3dH5ad())
+  const link = new URLSearchParams({
+    collection: new URL('/sections-3d.h5ad', baseURL).toString(),
+  })
+  await page.goto(`/#${link.toString()}`)
+  const bar = page.getByRole('navigation', { name: 'Collection' })
+  await expect(bar.getByRole('button', { name: 's1', exact: true })).toHaveAttribute(
+    'aria-current',
+    'true',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+  await expect.poll(async () => (await webglContexts()).live).toBe(1)
+  // Names only: with previews, the bar's heading is too narrow for its three
+  // buttons in wider fonts (Linux), and the first section covers Stack in 3D.
+  const previews = bar.getByRole('button', { name: 'Previews' })
+  await previews.click()
+  await expect(previews).toHaveAttribute('aria-pressed', 'false')
+
+  // Twice each, so a context kept by the first closing shows.
+  const cells = await openControls(page, 'cell-appearance')
+  const cellView = cells.getByRole('group', { name: 'Cell view' })
+  const cells3d = page.getByRole('region', { name: '3D cells' })
+  const stackToggle = bar.getByRole('button', { name: 'Stack in 3D' })
+  const stack = page.getByRole('region', { name: '3D section stack' })
+  const beside = page.locator('.linked-section canvas')
+  for (const other of ['s2', 's1']) {
+    await cellView.getByRole('button', { name: '3D' }).click()
+    await expect(cells3d.locator('canvas')).toHaveCount(1)
+    await cellView.getByRole('button', { name: '2D' }).click()
+    await expect(cells3d).toHaveCount(0)
+    await expect
+      .poll(async () => (await webglContexts()).live, { message: '3D cell view' })
+      .toBe(1)
+
+    await stackToggle.click()
+    await expect(stack.locator('canvas')).toHaveCount(1)
+    await stackToggle.click()
+    await expect(stack).toHaveCount(0)
+    await expect
+      .poll(async () => (await webglContexts()).live, { message: '3D section stack' })
+      .toBe(1)
+
+    const besideToggle = bar.getByRole('button', { name: `Show ${other} beside` })
+    await besideToggle.click()
+    await expect(beside).toHaveCount(1)
+    await besideToggle.click()
+    await expect(beside).toHaveCount(0)
+    await expect
+      .poll(async () => (await webglContexts()).live, { message: 'side by side' })
+      .toBe(1)
+
+    // Opening the other section replaces the 2D view's canvas.
+    await bar.getByRole('button', { name: other, exact: true }).click()
+    await expect(bar.getByRole('button', { name: other, exact: true })).toHaveAttribute(
+      'aria-current',
+      'true',
+      { timeout: H5AD_LOAD_TIMEOUT_MS },
+    )
+    await expect
+      .poll(async () => (await webglContexts()).live, { message: 'section switch' })
+      .toBe(1)
+  }
+  expect((await webglContexts()).lostOnPage).toBe(0)
+})
+
+// A one-channel OME-Zarr z-stack (Zarr v2) of 4 planes of 16 × 16 pixels,
+// whose Image section offers the 3D view. Other paths answer 404.
+async function routeZStackOmeZarr(page: Page, path = '/z-stack.ome.zarr') {
+  const json = (value: unknown) => Buffer.from(JSON.stringify(value))
+  const files = new Map([
+    ['.zgroup', json({ zarr_format: 2 })],
+    [
+      '.zattrs',
+      json({
+        multiscales: [
+          {
+            version: '0.4',
+            axes: [
+              { name: 'c', type: 'channel' },
+              { name: 'z', type: 'space', unit: 'micrometer' },
+              { name: 'y', type: 'space', unit: 'micrometer' },
+              { name: 'x', type: 'space', unit: 'micrometer' },
+            ],
+            datasets: [
+              {
+                path: '0',
+                coordinateTransformations: [{ type: 'scale', scale: [1, 2, 0.5, 0.5] }],
+              },
+            ],
+          },
+        ],
+      }),
+    ],
+    [
+      '0/.zarray',
+      json({
+        zarr_format: 2,
+        shape: [1, 4, 16, 16],
+        chunks: [1, 4, 16, 16],
+        dtype: '|u1',
+        compressor: null,
+        fill_value: 0,
+        order: 'C',
+        filters: null,
+        dimension_separator: '/',
+      }),
+    ],
+    [
+      '0/0/0/0/0',
+      Buffer.from(Uint8Array.from({ length: 4 * 16 * 16 }, (_v, i) => i % 251)),
+    ],
+  ])
+  await page.route(
+    (url) => url.pathname === path || url.pathname.startsWith(`${path}/`),
+    async (route) => {
+      const name = new URL(route.request().url()).pathname.slice(path.length + 1)
+      const body = files.get(name)
+      const headers = { 'Access-Control-Allow-Origin': '*' }
+      await route.fulfill(
+        body === undefined
+          ? { status: 404, headers }
+          : {
+              status: 200,
+              headers: { ...headers, 'Content-Length': String(body.byteLength) },
+              ...(route.request().method() === 'HEAD' ? {} : { body }),
+            },
+      )
+    },
+  )
+}
+
+test('gives back the WebGL context of each closed 3D volume view @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  test.setTimeout(120_000)
+
+  const webglContexts = await trackWebglContexts(page)
+  await routeZStackOmeZarr(page)
+  const link = new URLSearchParams({
+    dataset: new URL('/z-stack.ome.zarr', baseURL).toString(),
+  })
+  await page.goto(`/#${link.toString()}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Image · 1 channel' }),
+  ).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+  const image = await openControls(page, 'image')
+  const imageView = image.getByRole('group', { name: 'Image view' })
+  const volume = page.getByRole('region', { name: '3D view' })
+  for (let round = 1; round <= 2; round += 1) {
+    await imageView.getByRole('button', { name: '3D' }).click()
+    await expect(volume.locator('canvas')).toHaveCount(1)
+    await imageView.getByRole('button', { name: '2D' }).click()
+    await expect(volume).toHaveCount(0)
+    await expect.poll(async () => (await webglContexts()).live).toBe(1)
+  }
+  expect((await webglContexts()).lostOnPage).toBe(0)
+})
+
 // Serves src/test/fixtures/<folder>/<name> (see make_fixtures.py and the
 // other scripts there) at /<name>, with byte ranges, suffix ranges and HEAD
 // as a bucket answers them: sharded Zarr v3 arrays read their index from the

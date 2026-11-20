@@ -11,6 +11,7 @@ import {
   useState,
 } from 'react'
 import { removeDeckFromTabOrder } from './deckTabOrder'
+import { ReleasingDeck } from './releasingDeck'
 import type { LinkedViewChannel } from './linkedView'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
@@ -2193,6 +2194,7 @@ function ViewerSurface({
         {hasSpatialData ? (
           <div className="deckgl-host" aria-hidden="true">
             <MemoDeckGL
+              Deck={ReleasingDeck}
               views={spatialOverviewView}
               viewState={viewState}
               onViewStateChange={handleViewStateChange}
