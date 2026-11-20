@@ -27,11 +27,13 @@
     "name": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "Display name, shown in the log and diagnostics."
     },
     "description": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "What the dataset shows, shown in the info drawer's About section."
     },
     "source": { "$ref": "#/$defs/source" },
@@ -78,7 +80,88 @@
         "properties": {
           "files": { "$ref": "#/$defs/visiumHdFiles" },
           "options": { "$ref": "#/$defs/visiumHdOptions" }
-        }
+        },
+        "$comment": "options.binSize must be one of files.bins when that is given.",
+        "allOf": [
+          {
+            "if": {
+              "required": ["files", "options"],
+              "properties": {
+                "files": { "required": ["bins"] },
+                "options": {
+                  "required": ["binSize"],
+                  "properties": { "binSize": { "const": 2 } }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "files": {
+                  "properties": {
+                    "bins": {
+                      "contains": {
+                        "required": ["size"],
+                        "properties": { "size": { "const": 2 } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["files", "options"],
+              "properties": {
+                "files": { "required": ["bins"] },
+                "options": {
+                  "required": ["binSize"],
+                  "properties": { "binSize": { "const": 8 } }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "files": {
+                  "properties": {
+                    "bins": {
+                      "contains": {
+                        "required": ["size"],
+                        "properties": { "size": { "const": 8 } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": ["files", "options"],
+              "properties": {
+                "files": { "required": ["bins"] },
+                "options": {
+                  "required": ["binSize"],
+                  "properties": { "binSize": { "const": 16 } }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "files": {
+                  "properties": {
+                    "bins": {
+                      "contains": {
+                        "required": ["size"],
+                        "properties": { "size": { "const": 16 } }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     },
     {
@@ -94,6 +177,23 @@
       "if": { "properties": { "platform": { "const": "h5ad" } } },
       "then": {
         "required": ["files"],
+        "$comment": "options.coordinates needs files.image, and options.labelColumn files.labels.",
+        "allOf": [
+          {
+            "if": {
+              "required": ["options"],
+              "properties": { "options": { "required": ["coordinates"] } }
+            },
+            "then": { "properties": { "files": { "required": ["image"] } } }
+          },
+          {
+            "if": {
+              "required": ["options"],
+              "properties": { "options": { "required": ["labelColumn"] } }
+            },
+            "then": { "properties": { "files": { "required": ["labels"] } } }
+          }
+        ],
         "properties": {
           "files": {
             "type": "object",
@@ -126,6 +226,7 @@
               "labelColumn": {
                 "type": "string",
                 "minLength": 1,
+                "pattern": "\\S",
                 "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `files.labels`."
               }
             },
@@ -158,6 +259,62 @@
       "if": { "properties": { "platform": { "const": "image" } } },
       "then": {
         "required": ["files"],
+        "$comment": "Segmentation options need files.segmentation; a segmentation with an extension the viewer does not read needs options.segmentationFormat; files.zchunkstore is only for a TIFF image.",
+        "allOf": [
+          {
+            "if": {
+              "required": ["options"],
+              "properties": {
+                "options": {
+                  "anyOf": [
+                    { "required": ["segmentationFormat"] },
+                    { "required": ["segmentationCoordinates"] }
+                  ]
+                }
+              }
+            },
+            "then": { "properties": { "files": { "required": ["segmentation"] } } }
+          },
+          {
+            "if": {
+              "properties": {
+                "files": {
+                  "required": ["segmentation"],
+                  "properties": {
+                    "segmentation": {
+                      "type": "string",
+                      "not": {
+                        "pattern": "^[^?#]*(?:\\.(?:[Oo][Mm][Ee]\\.)?[Tt][Ii][Ff][Ff]?|\\.[Zz][Aa][Rr][Rr]|/\\.[Zz][Aa][Tt][Tt][Rr][Ss]|\\.(?:[Gg][Ee][Oo])?[Jj][Ss][Oo][Nn]|\\.(?:[Gg][Ee][Oo])?[Pp][Aa][Rr][Qq][Uu][Ee][Tt]|\\.[Pp][Qq]|\\.(?:[Ww][Kk][Tt]|[Cc][Ss][Vv]|[Tt][Ss][Vv]|[Tt][Xx][Tt]))(?:\\.[Gg][Zz])?/*(?:[?#][\\s\\S]*)?$"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "required": ["options"],
+              "properties": { "options": { "required": ["segmentationFormat"] } }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "files": {
+                  "required": ["image", "zchunkstore"],
+                  "properties": {
+                    "image": {
+                      "type": "string",
+                      "pattern": "^[^?#]*(?:\\.zarr/*|(?:^|/)(?:zarr\\.json|\\.zattrs)/*|\\.zarr/(?:[^/]+/)*[^/.]+/*|\\.icechunk/*|\\.zip/*)$"
+                    }
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": { "files": { "properties": { "zchunkstore": false } } }
+            }
+          }
+        ],
         "properties": {
           "files": {
             "type": "object",
@@ -200,7 +357,7 @@
     "path": {
       "type": "string",
       "minLength": 1,
-      "pattern": "^(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
+      "pattern": "^(?=[\\s\\S]*\\S)(?![A-Za-z][A-Za-z0-9+.-]*:)|^[Hh][Tt][Tt][Pp][Ss]?://",
       "description": "A path relative to the manifest folder (or `root`), or an http(s) URL."
     },
     "source": {
@@ -210,11 +367,13 @@
         "repository": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Repository or host, such as BioImage Archive."
         },
         "accession": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Accession or identifier in that repository."
         },
         "url": {
@@ -225,11 +384,13 @@
         "license": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Data licence, such as CC BY 4.0."
         },
         "citation": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "How to cite the data."
         }
       },
@@ -415,6 +576,24 @@
         "bins": {
           "type": "array",
           "minItems": 1,
+          "$comment": "Each bin size at most once.",
+          "allOf": [
+            {
+              "contains": { "properties": { "size": { "const": 2 } } },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": { "properties": { "size": { "const": 8 } } },
+              "minContains": 0,
+              "maxContains": 1
+            },
+            {
+              "contains": { "properties": { "size": { "const": 16 } } },
+              "minContains": 0,
+              "maxContains": 1
+            }
+          ],
           "description": "Binned outputs. Default: the binned_outputs/square_002um, _008um, and _016um tiers that exist.",
           "items": {
             "type": "object",
@@ -484,12 +663,14 @@
         "table": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Table element name, without the tables/ prefix."
         },
-        "coordinateSystem": { "type": "string", "minLength": 1 },
+        "coordinateSystem": { "type": "string", "minLength": 1, "pattern": "\\S" },
         "image": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Image element name, without the images/ prefix."
         },
         "micrometersPerUnit": {
@@ -507,7 +688,7 @@
       "properties": {
         "genes": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "description": "Genes to select. Names must match the gene panel exactly."
         },
         "colorCellsBy": {
@@ -540,7 +721,10 @@
             {
               "anyOf": [
                 { "type": ["number", "null"] },
-                { "type": "string", "pattern": "^p[0-9]+(\\.[0-9]+)?$" }
+                {
+                  "type": "string",
+                  "pattern": "^p(?:0*100(?:\\.0+)?|0*[1-9][0-9]?(?:\\.[0-9]+)?|0+\\.[0-9]*[1-9][0-9]*)$"
+                }
               ]
             }
           ],
@@ -556,7 +740,7 @@
         "nucleusBoundaries": { "type": "boolean" },
         "channels": {
           "type": "array",
-          "items": { "type": "string", "minLength": 1 },
+          "items": { "type": "string", "minLength": 1, "pattern": "\\S" },
           "description": "Image channels to turn on, by name (case-insensitive) or ID."
         },
         "imageOpacity": { "$ref": "#/$defs/opacity" },

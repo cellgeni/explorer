@@ -584,6 +584,14 @@ address the viewer is served from, including any subpath. Set `$schema` to
 that URL and editors such as VS Code will complete field names and flag errors
 as you type.
 
+The schema catches blank names and paths, unknown fields, an entry listed
+twice word for word, and options without what they need (such as `z` without
+`coordinateSystem`). The viewer checks more when it opens the collection: the
+same dataset in two spellings (`a` and `./a/`), sections of one coordinate
+system with and without `z`, and numbers too large to be finite, such as
+`1e400`. A collection the schema passes can still stop the load, with a
+message naming the entry.
+
 ## Known Limitations
 
 - Only sections registered to the open dataset, in one `coordinateSystem`,
