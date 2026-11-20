@@ -2,7 +2,7 @@
 // fetched whole, gunzipped when its bytes are gzip (GEO gzips every file),
 // and parsed into columns; see merscopeFormat.ts.
 
-import { readMaybeGzipText } from '../data/readMaybeGzipText'
+import { inflateMaybeGzipBytes } from '../data/readMaybeGzipText'
 import { urlFileName as fileName } from '../data/urlFileName'
 import {
   MERSCOPE_CSV_MAX_BYTES,
@@ -32,11 +32,20 @@ export class MerscopeCsvTooLargeError extends Error {
   readonly url: string
   readonly byteLength: number
 
-  constructor(url: string, byteLength: number) {
+  // `atLeast`: a gzipped file whose inflating stopped at `byteLength`.
+  constructor(
+    url: string,
+    byteLength: number,
+    options: { readonly atLeast?: boolean } = {},
+  ) {
     super(
-      `${fileName(url)} is ${formatMegabytes(byteLength)}, above the ${formatMegabytes(
-        MERSCOPE_CSV_MAX_BYTES,
-      )} browser load limit.`,
+      options.atLeast === true
+        ? `${fileName(url)} inflates to more than ${formatMegabytes(
+            MERSCOPE_CSV_MAX_BYTES,
+          )}, the browser load limit.`
+        : `${fileName(url)} is ${formatMegabytes(byteLength)}, above the ${formatMegabytes(
+            MERSCOPE_CSV_MAX_BYTES,
+          )} browser load limit.`,
     )
     this.name = 'MerscopeCsvTooLargeError'
     this.url = url
@@ -89,20 +98,21 @@ async function readCsvText(
     throw new MerscopeCsvTooLargeError(url, bytes.byteLength)
   }
 
-  const text = await readMaybeGzipText(new Response(bytes))
-
-  // A gzipped file is checked again once inflated. Characters stand in for
-  // bytes: the files are ASCII.
-  if (text.length > MERSCOPE_CSV_MAX_BYTES) {
-    throw new MerscopeCsvTooLargeError(url, text.length)
-  }
+  // A gzipped file is inflated within the same limit: refused from its
+  // trailer's size, or stopped once past it, rather than inflated whole.
+  const inflated = await inflateMaybeGzipBytes(
+    bytes,
+    MERSCOPE_CSV_MAX_BYTES,
+    ({ byteLength, exact }) =>
+      new MerscopeCsvTooLargeError(url, byteLength, { atLeast: !exact }),
+  )
 
   onProgress?.(
     `MERSCOPE ${fileName(url)} loaded (${formatMegabytes(bytes.byteLength)}${
-      text.length > bytes.byteLength ? `, ${formatMegabytes(text.length)} unzipped` : ''
+      inflated !== bytes ? `, ${formatMegabytes(inflated.byteLength)} unzipped` : ''
     })`,
   )
-  return text
+  return new TextDecoder().decode(inflated)
 }
 
 export { fileName }

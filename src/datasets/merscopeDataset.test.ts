@@ -249,6 +249,23 @@ describe('MerscopeDataset', () => {
     )
   })
 
+  it('refuses a gzipped CSV that inflates past the size limit without inflating it', async () => {
+    // A gzip trailer holds the inflated size; this one claims 520 MiB.
+    const gzipped = new Uint8Array(gzipSync(fixture('cell_by_gene.csv')))
+    new DataView(gzipped.buffer).setUint32(
+      gzipped.byteLength - 4,
+      520 * 1024 * 1024,
+      true,
+    )
+    const merscope = dataset({
+      fetcher: fixtureFetcher({ 'cell_by_gene.csv': gzipped }),
+    })
+
+    await expect(merscope.genePanel()).rejects.toThrow(
+      'cell_by_gene.csv is 520.0 MB, above the 300.0 MB browser load limit.',
+    )
+  })
+
   it('reports boundaries that belong to none of the cells', async () => {
     const merscope = dataset({
       fetcher: fixtureFetcher({
