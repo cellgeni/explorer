@@ -1175,14 +1175,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       )
     }
 
-    const depthTrack = base.continuousTracks.find((track) =>
-      SECTION_DEPTH_COLUMN.test(track.id),
-    )
-
     return groups.map(({ value, rows }) => {
-      const z =
-        (depthTrack === undefined ? undefined : sharedValue(depthTrack.values, rows)) ??
-        (base.depths === null ? undefined : sharedValue(base.depths, rows))
+      const z = sectionDepth(base, rows)
 
       return { value, cellCount: rows.length, ...(z === undefined ? {} : { z }) }
     })
@@ -1804,7 +1798,7 @@ function withSection(base: H5adCache, column: string, value: string): H5adCache 
     ...base,
     cellIds: pickRows(base.cellIds, rows),
     coordinates,
-    depths: sectionDepths(base.depths, rows),
+    depths: sectionDepths(base.depths, rows, sectionDepth(base, rows)),
     categoricalTracks: base.categoricalTracks.map((track) => {
       const values = pickLabels(track.values, rows)
       return { ...track, values, categoryCount: distinctLabelCount(values, rows.length) }
@@ -1917,16 +1911,35 @@ function finiteRange(values: readonly number[]): {
   return min <= max ? { min, max } : { min: 0, max: 0 }
 }
 
+// A section's depth: the value its rows share in a numeric obs column named
+// `z` or `z_…`, else in the table's third obsm column. Undefined when they
+// share neither.
+function sectionDepth(base: H5adCache, rows: Uint32Array): number | undefined {
+  const depthTrack = base.continuousTracks.find((track) =>
+    SECTION_DEPTH_COLUMN.test(track.id),
+  )
+
+  return (
+    (depthTrack === undefined ? undefined : sharedValue(depthTrack.values, rows)) ??
+    (base.depths === null ? undefined : sharedValue(base.depths, rows))
+  )
+}
+
 // A section's own depths, or null when its cells share one: a section of
 // registered serial sections lies in a plane, at the depth the collection
-// gives it.
+// gives it. Cells with depths of their own keep them relative to the
+// section's depth (`sectionZ`), which the stack adds back, so a cell is drawn
+// at the z it has in the table.
 function sectionDepths(
   depths: Float32Array | null,
   rows: Uint32Array,
+  sectionZ: number | undefined,
 ): Float32Array | null {
   if (depths === null || sharedValue(depths, rows) !== undefined) return null
 
-  return Float32Array.from(rows, (row) => depths[row] ?? Number.NaN)
+  const offset = sectionZ ?? 0
+
+  return Float32Array.from(rows, (row) => (depths[row] ?? Number.NaN) - offset)
 }
 
 // The value every row holds, if they hold one.

@@ -2772,6 +2772,29 @@ describe('AnnDataH5adDataset sections', () => {
     ])
   })
 
+  it('keeps cells with their own z at their table z, relative to the section', async () => {
+    // Sections 60 µm apart by obs z_um; each cell's table z (obsm spatial's
+    // third column) is within 2 µm of its section's.
+    const file = await openFile({
+      ...SECTIONS,
+      coordinates: [0, 0, 61, 10, 0, 0, 0, 10, 62, 10, 10, 2],
+    })
+    const z = async (value: string) =>
+      (await openSection(file, 'section', value).dataset.overview()).map(
+        (point) => point.z,
+      )
+
+    await expect(file.sections('section')).resolves.toEqual([
+      { value: 's2', cellCount: 2, z: 60 },
+      { value: 's1', cellCount: 2, z: 0 },
+    ])
+    // The stack draws a cell at its section's z plus its own: 61 and 62 µm,
+    // where the whole table puts them, rather than 121 and 122.
+    await expect(z('s2')).resolves.toEqual([1, 2])
+    await expect(z('s1')).resolves.toEqual([0, 2])
+    expect((await file.overview()).map((point) => point.z)).toEqual([61, 0, 62, 2])
+  })
+
   it('opens one section as a dataset of its rows, read through the file', async () => {
     const file = await openFile()
     const { dataset, holdFile } = openSection(file, 'section', 's1')

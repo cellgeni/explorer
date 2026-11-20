@@ -506,7 +506,10 @@ section's `Open N Sections` link opens the same collection.
   or `z_…` (`z_um`, `z_position`) shared by all its cells, else their third
   obsm `spatial` column when they share one. With a depth for every section
   the bar offers the [3D stack](#3d-stack); otherwise the sections are side
-  by side only.
+  by side only. Cells whose third `spatial` column varies within a section
+  keep it relative to the section's `z`, which the stack adds back, so each
+  cell is drawn at the z it has in the table. Opened on its own, such a
+  section shows those relative depths.
 - **One read.** The table is read once, by its own dataset, and each
   section is a view of its rows: switching sections, their previews and the
   stack read nothing more. The 64 MiB limit on [previews](#previews) of plain
