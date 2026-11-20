@@ -84,11 +84,20 @@ export class VisiumMatrixTooLargeError extends Error {
   readonly url: string
   readonly byteLength: number
 
-  constructor(url: string, byteLength: number) {
+  // `atLeast`: a gzipped matrix whose inflating stopped at `byteLength`.
+  constructor(
+    url: string,
+    byteLength: number,
+    options: { readonly atLeast?: boolean } = {},
+  ) {
     super(
-      `Visium filtered matrix is ${matrixMegabytes(byteLength)}, above the ${matrixMegabytes(
-        VISIUM_MATRIX_MAX_BYTES,
-      )} browser load limit.`,
+      options.atLeast === true
+        ? `Visium filtered matrix inflates to more than ${matrixMegabytes(
+            VISIUM_MATRIX_MAX_BYTES,
+          )}, the browser load limit.`
+        : `Visium filtered matrix is ${matrixMegabytes(byteLength)}, above the ${matrixMegabytes(
+            VISIUM_MATRIX_MAX_BYTES,
+          )} browser load limit.`,
     )
     this.name = 'VisiumMatrixTooLargeError'
     this.url = url

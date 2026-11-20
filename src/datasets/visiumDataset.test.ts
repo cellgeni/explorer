@@ -275,7 +275,7 @@ describe('createVisiumDataset', () => {
     expect(await dataset.annotationGroups()).toEqual([])
   })
 
-  it('reads gzipped GEO files, decompressing a .png.gz tissue image once', async () => {
+  it('reads gzipped GEO files, inflating the .h5.gz matrix and a .png.gz tissue image once', async () => {
     const createObjectUrl = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:hires')
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3])
     const geo = 'https://ftp.example.test/geo/GSM1'
@@ -284,7 +284,7 @@ describe('createVisiumDataset', () => {
       files: {
         tissuePositions: [`${geo}/GSM1_tissue_positions_list.csv.gz`],
         scalefactors: `${geo}/GSM1_scalefactors_json.json.gz`,
-        filteredMatrix: `${geo}/GSM1_filtered_feature_bc_matrix.h5`,
+        filteredMatrix: `${geo}/GSM1_filtered_feature_bc_matrix.h5.gz`,
         images: { hires: `${geo}/GSM1_tissue_hires_image.png.gz` },
         analysis: {},
       },
@@ -293,12 +293,15 @@ describe('createVisiumDataset', () => {
           positionsCsv({ header: false }),
         ),
         [`${geo}/GSM1_scalefactors_json.json.gz`]: gzipSync(JSON.stringify(SCALEFACTORS)),
-        [`${geo}/GSM1_filtered_feature_bc_matrix.h5`]: await createSpaceRangerMatrix(),
+        [`${geo}/GSM1_filtered_feature_bc_matrix.h5.gz`]: gzipSync(
+          await createSpaceRangerMatrix(),
+        ),
         [`${geo}/GSM1_tissue_hires_image.png.gz`]: gzipSync(png),
       }),
     })
 
     expect(await dataset.visiumSummary()).toMatchObject({ spotCount: SPOTS.length })
+    expect(await dataset.genePanel()).not.toHaveLength(0)
     expect(await dataset.image()).toEqual({
       kind: 'flat',
       url: 'blob:hires',

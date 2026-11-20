@@ -174,7 +174,9 @@ are optional; `options` must be empty. Files the manifest names must answer
 `HEAD`, or detection stops with an error naming the field. Files it leaves out
 are probed at their Space Ranger names; a missing tissue image is skipped.
 Every file is read whole, so no byte-range support is needed, and gzipped
-copies (`.gz`) work.
+copies (`.gz`) work. A gzipped `filtered_feature_bc_matrix.h5.gz` is inflated
+before it opens and must inflate to no more than the 300 MB a plain `.h5` may
+be.
 
 | Key                      | Standard name                                                                                          | Notes                                                                 |
 | ------------------------ | ------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |

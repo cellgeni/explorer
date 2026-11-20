@@ -65,7 +65,8 @@ gzipped ones. Files it names must answer `HEAD`; files it leaves out are probed
 at their Space Ranger names, and a missing tissue image is left out. This is
 how GEO samples load: GEO publishes each sample's Space Ranger files flat and
 gzipped, for example `GSM6592057_M10_tissue_positions_list.csv.gz` and
-`GSM6592057_M10_tissue_hires_image.png.gz`.
+`GSM6592057_M10_tissue_hires_image.png.gz`. A gzipped `.h5` matrix is inflated
+in memory before it opens, within the same 300 MB limit.
 
 Most GEO Visium samples deposit the MEX matrix instead of the `.h5`. A
 `filteredMatrix` ending in `.mtx` or `.mtx.gz` is read as MEX, and its barcode

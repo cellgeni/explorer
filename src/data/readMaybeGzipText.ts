@@ -26,6 +26,85 @@ export async function readMaybeGzipBytes(response: Response): Promise<Uint8Array
   )
 }
 
+export interface InflatedSize {
+  readonly byteLength: number
+  // True when the gzip trailer gave the whole size; false when inflating
+  // stopped at `byteLength`, so the file is larger.
+  readonly exact: boolean
+}
+
+// `bytes`, inflated when they start with the gzip magic number. A file whose
+// trailer gives an inflated size over `maxBytes` is refused unread, and
+// inflating stops once the output passes it (the trailer holds the size
+// modulo 4 GiB, and only the last member's), so a file far beyond the limit
+// is never held whole.
+export async function inflateMaybeGzipBytes(
+  bytes: Uint8Array<ArrayBuffer>,
+  maxBytes: number,
+  tooLarge: (size: InflatedSize) => Error,
+): Promise<Uint8Array> {
+  if (!hasGzipHeader(bytes)) {
+    return bytes
+  }
+
+  const declared = gzipTrailerSize(bytes)
+
+  if (declared !== undefined && declared > maxBytes) {
+    throw tooLarge({ byteLength: declared, exact: true })
+  }
+
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('This browser does not support gzip decompression.')
+  }
+
+  const body = new Response(bytes).body
+
+  if (body === null) {
+    return new Uint8Array(0)
+  }
+
+  const reader = body.pipeThrough(new DecompressionStream('gzip')).getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+
+  for (;;) {
+    const { done, value } = await reader.read()
+
+    if (done) break
+
+    total += value.byteLength
+
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => undefined)
+      throw tooLarge({ byteLength: total, exact: false })
+    }
+
+    chunks.push(value)
+  }
+
+  const inflated = new Uint8Array(total)
+  let offset = 0
+
+  for (const chunk of chunks) {
+    inflated.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+
+  return inflated
+}
+
+// ISIZE, the gzip trailer's inflated size of the last member, modulo 4 GiB.
+function gzipTrailerSize(bytes: Uint8Array): number | undefined {
+  if (bytes.byteLength < 18) {
+    return undefined
+  }
+
+  return new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(
+    bytes.byteLength - 4,
+    true,
+  )
+}
+
 function hasGzipHeader(bytes: Uint8Array): boolean {
   return bytes[0] === 0x1f && bytes[1] === 0x8b
 }
