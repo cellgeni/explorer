@@ -725,6 +725,7 @@ export async function readXeniumGeneExpression(options: {
   return {
     elements,
     genes: selectedGenes,
+    cellCount: viewportCells.length,
     geneCounts,
     maxCount,
     timing: {
@@ -855,6 +856,7 @@ async function readXeniumGeneExpressionByMatrixRows(options: {
   return {
     elements,
     genes,
+    cellCount: cells.rows.length,
     geneCounts: geneCounts.sort((left, right) => right.count - left.count),
     maxCount,
     timing: {

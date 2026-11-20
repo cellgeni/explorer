@@ -32,7 +32,7 @@ export function geneExpressionElementsToLayerData(
     return []
   }
 
-  const scores = geneExpressionScores(elements, genes, scoreMode)
+  const scores = geneExpressionScores(elements, genes, scoreMode, options.cellCount)
   const scaleMin = options.scaleMin ?? 0
   const scaleMax = expressionScoreScaleMax(scores, options.scaleMax)
 
@@ -108,14 +108,19 @@ export function expressingElementsByScore(
 }
 
 // The top of the Gene scale for these cells, at `percentile` of their scores
-// above 0, and the highest score among them.
+// above 0, and the highest score among them. `cellCount` is as for
+// geneExpressionScores.
 export function geneExpressionScoreSpread(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
   percentile?: number,
+  cellCount?: number,
 ): GeneScoreSpread {
-  return geneScoreSpread(geneExpressionScores(elements, genes, scoreMode), percentile)
+  return geneScoreSpread(
+    geneExpressionScores(elements, genes, scoreMode, cellCount),
+    percentile,
+  )
 }
 
 export function styleCellsByGeneExpression(
@@ -303,11 +308,14 @@ export function createGeneExpressionElementStyleIndex(
 }
 
 // Each element's score for the genes, as the map colours it: the sum of their
-// counts, the mean, or the mean's z-score across the elements.
+// counts, the mean, or the mean's z-score across the cells read. Those cells
+// are `cellCount` (GeneExpressionBatch.cellCount), so the cells left out of
+// `elements` count as 0, whichever platform left them out.
 export function geneExpressionScores(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
   scoreMode: GeneExpressionScoreMode,
+  cellCount = elements.length,
 ): readonly number[] {
   const geneCount = Math.max(genes.length, 1)
 
@@ -321,20 +329,22 @@ export function geneExpressionScores(
     return meanScores
   }
 
+  const populationSize = Math.max(cellCount, meanScores.length)
+  const zeroCellsLeftOut = populationSize - meanScores.length
   let total = 0
 
   for (const score of meanScores) {
     total += score
   }
 
-  const mean = total / meanScores.length
-  let squaredDistanceTotal = 0
+  const mean = total / populationSize
+  let squaredDistanceTotal = zeroCellsLeftOut * mean ** 2
 
   for (const score of meanScores) {
     squaredDistanceTotal += (score - mean) ** 2
   }
 
-  const standardDeviation = Math.sqrt(squaredDistanceTotal / meanScores.length)
+  const standardDeviation = Math.sqrt(squaredDistanceTotal / populationSize)
 
   if (standardDeviation === 0) {
     return meanScores.map(() => 0)

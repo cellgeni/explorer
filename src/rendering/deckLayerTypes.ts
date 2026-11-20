@@ -258,6 +258,9 @@ export interface GeneExpressionLayerDataOptions {
   // the scale.
   readonly scaleMin?: number
   readonly scaleMax?: number
+  // The cells the batch was read for (GeneExpressionBatch.cellCount), which
+  // z-scores compare against.
+  readonly cellCount?: number
 }
 
 export interface GeneExpressionElementStyleOptions {

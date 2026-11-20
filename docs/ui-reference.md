@@ -432,6 +432,16 @@ All cells.
   same way above that.
 - **All cells**: every cell on the slide.
 
+`Combine genes` Z-score compares each cell's mean with the mean and standard
+deviation of the cells read: all cells when the whole slide is read (Auto LOD
+up to 500,000 cells, its whole-slide sample, or All cells), otherwise the
+cells read for the viewport. Cells without expression count as 0 on every
+platform, including those a sample thins. Zoomed out, Visium HD reads 16 µm
+bins in place of finer ones, and compares those. The legend says which: "Mean
+z-score of n genes per cell, relative to all cells" or "… relative to cells in
+view". A cell's z-score can therefore change as the view moves on a large
+dataset, but not between platforms.
+
 For Visium HD, gene overlays colour bins (see
 [Visium HD](./modalities/visium-hd.md#feature-read-paths)).
 
@@ -1033,7 +1043,9 @@ category lists last:
 
 - `Cell color` Gene expression: the genes (up to three names, then "+n"),
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
-  the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin.
+  the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin. A
+  z-score adds the cells it compares with: ", relative to all cells" or ",
+  relative to cells in view" (see `Expression detail`).
 - `Cell color` Annotations: the set name and the first 12 labels, each with a
   visibility checkbox, swatch and cell count, then "+n more in Cells ›
   Clusters", a link that opens the layer panel and Cells and scrolls to the

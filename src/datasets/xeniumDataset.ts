@@ -147,6 +147,10 @@ export interface GeneExpressionGeneCount {
 export interface GeneExpressionBatch {
   readonly elements: readonly GeneExpressionElement[]
   readonly genes: readonly string[]
+  // How many cells or bins the batch was read for. Readers may leave out some
+  // or all of those without expression; a z-score counts them as 0. Without
+  // it, `elements` holds every cell read.
+  readonly cellCount?: number
   readonly geneCounts?: readonly GeneExpressionGeneCount[]
   readonly maxCount: number
   readonly timing?: GeneExpressionBatchTiming

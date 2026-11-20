@@ -26,6 +26,13 @@ export type GeneExpressionLoadMode =
   | 'all-cells'
 export type GeneExpressionDetailMode = 'auto' | 'exact-region' | 'all-cells'
 
+// The cells a z-score compares a cell with: every cell when expression is read
+// for the whole slide, otherwise those read for the view. Cells without
+// expression count as 0 in both.
+export function geneExpressionZScoreCells(mode: GeneExpressionLoadMode): 'all' | 'view' {
+  return mode === 'all-cells' || mode === 'overview-sampled' ? 'all' : 'view'
+}
+
 export interface GeneExpressionViewportDetail {
   readonly bbox: BBox
   readonly visibleCellCount: number

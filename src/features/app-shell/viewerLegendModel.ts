@@ -53,6 +53,8 @@ export interface ViewerLegendInput {
     readonly scaleMax: number
     // Unavailable: the expression failed, or the platform is waiting.
     readonly status: 'loading' | 'ready' | 'unavailable'
+    // The cells a z-score compares with (geneExpressionZScoreCells).
+    readonly zScoreCells?: 'all' | 'view'
   }
   // The loaded annotations with their colours, or null when none are loaded.
   readonly annotations: {
@@ -152,6 +154,13 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
     case 'gene-expression': {
       const { names, scoreMode, colorScale, scaleMin = 0, scaleMax, status } = input.genes
       if (names.length === 0) return null
+      const { singular, plural } = cellNoun(input)
+      const comparedWith =
+        scoreMode !== 'z-score' || input.genes.zScoreCells === undefined
+          ? ''
+          : input.genes.zScoreCells === 'all'
+            ? `, relative to all ${plural}`
+            : `, relative to ${plural} in view`
 
       return {
         kind: 'continuous',
@@ -163,8 +172,8 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
             : status === 'unavailable'
               ? 'Expression unavailable'
               : names.length === 1
-                ? `Expression per ${cellNoun(input).singular}`
-                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${cellNoun(input).singular}`,
+                ? `Expression per ${singular}`
+                : `${SCORE_MODE_LABELS[scoreMode]} of ${names.length.toLocaleString()} genes per ${singular}${comparedWith}`,
         gradient: geneExpressionScaleGradient(colorScale),
         min: formatGeneScaleValue(scaleMin),
         max: formatGeneScaleValue(scaleMax),

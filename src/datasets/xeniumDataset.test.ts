@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { intToCellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
+import { geneExpressionScores } from '../rendering/geneExpressionRenderer'
 import { XeniumDataset } from './xeniumDataset'
 import type {
   ArrowTableLike,
@@ -1411,6 +1412,7 @@ describe('XeniumDataset', () => {
 
     expect(batch).toMatchObject({
       genes: ['Actb', 'Gad1'],
+      cellCount: 4,
       maxCount: 6,
       geneCounts: [
         { gene: 'Actb', count: 7 },
@@ -1435,6 +1437,11 @@ describe('XeniumDataset', () => {
         },
       ],
     })
+    // Only the expressing cells are returned, but the z-score counts the other
+    // two as 0: means 0, 1, 0 and 3 have mean 1 and SD 1.22.
+    expect(
+      geneExpressionScores(batch.elements, batch.genes, 'z-score', batch.cellCount),
+    ).toEqual([0, expect.closeTo(1.633, 3)])
     expect(matrixReader).not.toHaveBeenCalled()
     expect(conn.preparedSql[0]).not.toContain('cell_id')
     expect(conn.statements[0]?.params).toEqual([
@@ -1501,6 +1508,7 @@ describe('XeniumDataset', () => {
 
     expect(matrixReader).toHaveBeenCalledOnce()
     expect(batch.elements).toMatchObject([{ id: cellId, count: 4 }])
+    expect(batch.cellCount).toBe(1)
   })
 
   it('reads every viewport cell for sampled expression queries', async () => {

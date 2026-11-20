@@ -54,6 +54,29 @@ describe('viewerLegendSections', () => {
     })
   })
 
+  it('names the cells a z-score compares with', () => {
+    const genes = { ...input().genes, names: ['A', 'B'], scoreMode: 'z-score' as const }
+    const detail = (
+      zScoreCells?: 'all' | 'view',
+      cellNoun?: ViewerLegendInput['cellNoun'],
+    ) => {
+      const [section] = viewerLegendSections(
+        input({
+          colorMode: 'gene-expression',
+          ...(cellNoun === undefined ? {} : { cellNoun }),
+          genes: { ...genes, ...(zScoreCells === undefined ? {} : { zScoreCells }) },
+        }),
+      )
+      return section?.kind === 'continuous' ? section.detail : undefined
+    }
+
+    expect(detail('all')).toBe('Mean z-score of 2 genes per cell, relative to all cells')
+    expect(detail('view', { singular: 'spot', plural: 'spots' })).toBe(
+      'Mean z-score of 2 genes per spot, relative to spots in view',
+    )
+    expect(detail()).toBe('Mean z-score of 2 genes per cell')
+  })
+
   it('says when expression is loading, or cannot be shown', () => {
     const genes = { ...input().genes, names: ['SNAP25'] }
     const sections = (status: ViewerLegendInput['genes']['status']) =>

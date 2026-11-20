@@ -230,6 +230,7 @@ export function useViewerLayerData({
             geneExpressionBatch.genes,
             geneExpressionScoreMode,
             geneScaleTopPercentile,
+            geneExpressionBatch.cellCount,
           ),
     [geneExpressionBatch, geneExpressionScoreMode, geneScaleTopPercentile],
   )
@@ -263,7 +264,13 @@ export function useViewerLayerData({
       geneExpressionBatch.genes,
       geneExpressionColorScale,
       geneExpressionScoreMode,
-      { scaleMin: geneExpressionScaleMin, scaleMax: geneExpressionScaleMax },
+      {
+        scaleMin: geneExpressionScaleMin,
+        scaleMax: geneExpressionScaleMax,
+        ...(geneExpressionBatch.cellCount === undefined
+          ? {}
+          : { cellCount: geneExpressionBatch.cellCount }),
+      },
     )
 
     return { elements, durationMs: Math.max(0, readTimestamp() - startedAt) }
