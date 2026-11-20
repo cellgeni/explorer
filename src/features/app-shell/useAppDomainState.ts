@@ -91,9 +91,11 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
+  parseGeneSetsLink,
   type GeneExpressionScaleDomain,
   type GeneExpressionState,
   type GenePanelState,
+  type SavedGeneSet,
 } from '../genes/geneControlsModel'
 import type {
   CustomMorphologyLayer,
@@ -500,6 +502,9 @@ export function useAppDomainState({
   const [selectedGenes, setSelectedGenes] = useState<readonly string[]>(
     initialShareableState.selectedGenes ?? DEFAULT_SHAREABLE_STATE.selectedGenes,
   )
+  const [savedGeneSets, setSavedGeneSets] = useState<readonly SavedGeneSet[]>(() =>
+    parseGeneSetsLink(initialShareableState.geneSets),
+  )
   const [roiName, setRoiName] = useState('ROI 1')
   const [observationColorMode, setObservationColorMode] = useState<ObservationColorMode>(
     () =>
@@ -613,6 +618,7 @@ export function useAppDomainState({
       geneExpressionScoreMode,
       geneExpressionState,
       genePanelState,
+      savedGeneSets,
       selectedGenes,
       setGeneExpressionBatch,
       setGeneExpressionColorScale,
@@ -622,6 +628,7 @@ export function useAppDomainState({
       setGeneExpressionScoreMode,
       setGeneExpressionState,
       setGenePanelState,
+      setSavedGeneSets,
       setSelectedGenes,
     },
     layers: {

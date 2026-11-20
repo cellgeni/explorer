@@ -9,6 +9,7 @@ import {
 import {
   sectionStackLayers,
   stackPick,
+  stackPickDepth,
   stackPickText,
   type SectionStackLayerOptions,
   type StackSectionInput,
@@ -38,6 +39,12 @@ const CLASSES: PreviewClasses = {
   ],
   classOf: Int32Array.from([0, 1, 0]),
 }
+// The same cells placed in 3D, and their scores with each one's z.
+const DEEP_CELLS: PreviewCells = {
+  ...CELLS,
+  depths: { values: Float32Array.of(4, 8, 12), min: 4, max: 12 },
+}
+const DEEP_SCORES: PreviewScores = { ...SCORES, depths: Float32Array.of(4, 8, 12) }
 const MATRIX = Float32Array.of(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, -15, 10, 40, 1)
 
 function section(overrides: Partial<StackSectionInput> = {}): StackSectionInput {
@@ -155,6 +162,58 @@ describe('sectionStackLayers', () => {
 
     expect(props(second[0]).data).toBe(props(first[0]).data)
     expect(props(second[1]).data).toBe(props(first[1]).data)
+  })
+
+  it('draws cells placed in 3D at their own z', () => {
+    const plain = sectionStackLayers([section({ cells: DEEP_CELLS })], OPTIONS)
+    const cells = props(plain.layers[0])
+
+    expect(cells.data.attributes.getPosition!.size).toBe(3)
+    expect([...cells.data.attributes.getPosition!.value]).toEqual([
+      0, -0, 4, 10, -20, 8, 30, -5, 12,
+    ])
+    const picked = stackPick(pick('section-stack-0-cells', 1), plain.targets)
+    expect(stackPickDepth(picked!, section({ cells: DEEP_CELLS }))).toBe(8)
+
+    // Scores keep their cells' z, highest last.
+    const scoredInput = section({
+      cells: DEEP_CELLS,
+      overlay: { kind: 'scores', scores: DEEP_SCORES },
+    })
+    const scored = sectionStackLayers([scoredInput], OPTIONS)
+    expect([...props(scored.layers[0]).data.attributes.getPosition!.value]).toEqual([
+      30, -5, 12, 0, -0, 4,
+    ])
+    expect([...props(scored.layers[1]).data.attributes.getPosition!.value]).toHaveLength(
+      9,
+    )
+    const pickedScore = stackPick(pick('section-stack-0-scored', 0), scored.targets)
+    expect(stackPickDepth(pickedScore!, scoredInput)).toBe(12)
+
+    // Shown and hidden classes alike.
+    const classes = sectionStackLayers(
+      [
+        section({
+          cells: DEEP_CELLS,
+          classes: CLASSES,
+          overlay: {
+            kind: 'classes',
+            classOf: CLASSES.classOf,
+            colors: ['#ff0000', null],
+          },
+        }),
+      ],
+      OPTIONS,
+    )
+    expect([...props(classes.layers[0]).data.attributes.getPosition!.value]).toEqual([
+      0, -0, 4, 30, -5, 12,
+    ])
+    expect([...props(classes.layers[1]).data.attributes.getPosition!.value]).toEqual([
+      10, -20, 8,
+    ])
+
+    // Cells in their section's plane have no depth of their own.
+    expect(stackPickDepth(picked!, section())).toBeNull()
   })
 
   it('picks nothing from the outline or outside the cells', () => {

@@ -56,7 +56,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 21](docs/plan/phases/21-structure-browser.md)                                      | Browse Store and Browse File (Zarr and Parquet)          | Done (2026-11-15 to 2026-11-16)                                  |
 | [Phase 22](docs/plan/phases/22-plots-panel.md)                                            | Plots panel: dot plot, violin, group-mean heatmap        | M1–M3 done (2026-11-17)                                          |
 | [Phase 23](docs/plan/phases/23-cell-query.md)                                             | Cell query: filter cells, a table with cell pictures     | M1 and M2 done (2026-11-18)                                      |
-| [Phase 24](docs/plan/phases/24-section-stack.md)                                          | 3D section stack: registered serial sections in 3D       | Done (2026-11-18)                                                |
+| [Phase 24](docs/plan/phases/24-section-stack.md)                                          | 3D section stack: registered serial sections in 3D       | Done (2026-11-18); one file's z and sections 2026-11-20          |
 | [Phase 25](docs/plan/phases/25-imported-segmentations.md)                                 | Segmentations imported onto images (masks, polygons)     | Done (2026-11-19)                                                |
 | [Phase 26](docs/plan/phases/26-image-channel-conditions.md)                               | Cell query on image channels: mean and % above per cell  | M1 and M2 done (2026-11-19): TIFF and OME-Zarr images            |
 

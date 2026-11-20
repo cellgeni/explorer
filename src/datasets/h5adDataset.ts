@@ -77,6 +77,7 @@ import type {
   GeneExpressionElement,
 } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
+import { SECTION_COLUMN_NAMES } from './annDataSections'
 import {
   encodeImageArrayAsBmp,
   parseVisiumScalefactors,
@@ -126,6 +127,34 @@ export interface AnnDataH5adDatasetOptions {
   // bytes, and slices it per request above. Defaults to whole for a file
   // within the 300 MiB limit, else H5AD_RANGE_MATRIX_MAX_BYTES.
   readonly rangeMatrixMaxBytes?: number
+  // Opens one section of a file holding several, rather than the whole file:
+  // `url` is the file's.
+  readonly section?: AnnDataSectionSource
+}
+
+// One section of an AnnData file holding several, such as registered serial
+// sections combined in one: the rows whose obs `column` holds `value`. Its
+// sections share one read of the file, by the file's own dataset.
+export interface AnnDataSectionSource {
+  readonly column: string
+  readonly value: string
+  // Opens the file's dataset and keeps it until `release` is called.
+  readonly holdFile: () => AnnDataSectionFileHold
+}
+
+export interface AnnDataSectionFileHold {
+  readonly dataset: Promise<unknown>
+  readonly release: () => void
+}
+
+// A value of an obs column that splits a file into sections.
+export interface AnnDataSection {
+  readonly value: string
+  readonly cellCount: number
+  // The section's depth, when all its cells share one: a numeric obs column
+  // named `z` or `z_…` (`z_um`), else a third obsm `spatial` column. In the
+  // units of the obsm coordinates.
+  readonly z?: number
 }
 
 // What cell boundaries need from a label image's reader.
@@ -261,6 +290,9 @@ interface H5adCache {
   readonly geneNames: readonly string[]
   readonly geneAliases: ReadonlyMap<string, string>
   readonly coordinates: readonly DataPoint[]
+  // Each row's z, in the units of its coordinates, from a third column of
+  // obsm `spatial`; null for cells in a plane.
+  readonly depths: Float32Array | null
   readonly root: H5GroupLike
   readonly embeddingOptions: readonly AnalysisEmbeddingOption[]
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
@@ -272,7 +304,23 @@ interface H5adCache {
   readonly visium: H5adVisiumLayout | null
   readonly visiumSource: H5adVisiumSource | null
   // Ends the H5 file worker the arrays are read from, for a file read in one.
-  readonly close?: () => void
+  readonly close?: (() => void) | undefined
+  // For a section (see withSection): which of the file's rows are its rows.
+  // The matrix and obsm are the file's, so they are read by the file's rows.
+  readonly section?: H5adSectionRows
+}
+
+interface H5adSectionRows {
+  // The file's row of each of the section's rows, ascending.
+  readonly rows: Uint32Array
+  // The file's cell IDs, by which obsm is read.
+  readonly fileCellIds: readonly string[]
+}
+
+interface H5adCoordinateEmbedding {
+  readonly embedding: AnalysisEmbedding
+  // The third column of a spatial matrix; see obsmDepths.
+  readonly depths: Float32Array | null
 }
 
 interface H5adVisiumSource {
@@ -459,6 +507,10 @@ const H5AD_COORDINATE_KEYS = [
   'X_pca',
 ] as const
 
+// The coordinate matrices whose third column, when there is one, places
+// cells in 3D. A third UMAP or PCA column is not a depth.
+const H5AD_SPATIAL_KEYS: ReadonlySet<string> = new Set(['X_spatial', 'spatial'])
+
 const H5AD_EMBEDDING_DISPLAY_KEYS = [
   'X_umap',
   'umap',
@@ -633,6 +685,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private readonly denseCellProfileMaxBytes: number
   private readonly h5WorkerFactory: H5WorkerFactory | undefined
   private readonly rangeMatrixMaxBytes: number | undefined
+  private readonly section: AnnDataSectionSource | undefined
+  // While this section's base is read from, or held: ends its hold on the
+  // file's dataset.
+  private releaseSectionFile: (() => void) | null = null
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
   private cachePromise: Promise<H5adCache> | null = null
@@ -675,6 +731,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       options.denseCellProfileMaxBytes ?? DENSE_ZARR_CELL_PROFILE_MAX_BYTES
     this.h5WorkerFactory = options.h5WorkerFactory
     this.rangeMatrixMaxBytes = options.rangeMatrixMaxBytes
+    this.section = options.section
     this.attachedImage = options.image
     this.openImage = options.openImage
     this.openLabels = options.openLabels
@@ -787,9 +844,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         return
       }
 
+      const z = cache.depths?.[index]
+
       points.push({
         cellId: cellId as never,
         position,
+        ...(z === undefined ? {} : { z }),
         transcriptCount: 0,
         ...(spotArea === undefined ? {} : { cellArea: spotArea }),
         // Read from the obs columns when shown: an object per cell holding
@@ -884,7 +944,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     genes: readonly string[],
     options: { readonly signal?: AbortSignal } = {},
   ): Promise<readonly GeneValuesRead[]> {
-    const { matrix, geneNames } = await this.cache()
+    const { matrix, geneNames, section } = await this.cache()
     throwIfAborted(options.signal)
     const { found, cols } = geneColumns(geneNames, genes)
     const columns =
@@ -895,7 +955,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       const column = byGene.get(gene)
       return column === undefined
         ? { gene, error: `${gene} is not in the expression matrix.` }
-        : { gene, ...column }
+        : {
+            gene,
+            ...(section === undefined ? column : sectionGeneValues(column, section)),
+          }
     })
   }
 
@@ -1025,8 +1088,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     for (const embeddingOption of optionsToLoad) {
       throwIfAborted(options.signal)
+      const { section } = cache
+      const embedding = await readObsmEmbeddingFromRoot(
+        cache.root,
+        embeddingOption.kind,
+        section?.fileCellIds ?? cache.cellIds,
+      )
       embeddings.push(
-        await readObsmEmbeddingFromRoot(cache.root, embeddingOption.kind, cache.cellIds),
+        section === undefined
+          ? embedding
+          : { ...embedding, points: pickRows(embedding.points, section.rows) },
       )
     }
 
@@ -1061,6 +1132,54 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async numericObsColumn(key: string): Promise<readonly number[] | null> {
     const cache = await this.cache()
     return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
+  }
+
+  // The obs columns that split the table into sections: label columns with
+  // from 2 to MAX_SECTIONS values, the likeliest first (see
+  // SECTION_COLUMN_NAMES). None for a Visium table, whose sections are its
+  // libraries.
+  async sectionColumns(): Promise<readonly string[]> {
+    const base = await this.baseCache()
+    if (base.visiumSource !== null) return []
+
+    const columns = base.categoricalTracks
+      .filter((track) => track.categoryCount >= 2 && track.categoryCount <= MAX_SECTIONS)
+      .map((track) => track.id)
+    const rank = (column: string) => {
+      const index = SECTION_COLUMN_NAMES.indexOf(column.toLowerCase())
+      return index === -1 ? SECTION_COLUMN_NAMES.length : index
+    }
+
+    return columns.sort((first, second) => rank(first) - rank(second))
+  }
+
+  // The sections an obs column splits the table into, in the column's order:
+  // a categorical's categories, numbers ascending, else as first seen.
+  async sections(column: string): Promise<readonly AnnDataSection[]> {
+    const base = await this.baseCache()
+    const groups = sectionGroups(base, column)
+
+    if (groups === null) {
+      throw new Error(`obs has no column "${column}" to split into sections.`)
+    }
+
+    if (groups.length > MAX_SECTIONS) {
+      throw new Error(
+        `obs column "${column}" has ${groups.length.toLocaleString()} values; a table splits into up to ${MAX_SECTIONS.toLocaleString()} sections.`,
+      )
+    }
+
+    const depthTrack = base.continuousTracks.find((track) =>
+      SECTION_DEPTH_COLUMN.test(track.id),
+    )
+
+    return groups.map(({ value, rows }) => {
+      const z =
+        (depthTrack === undefined ? undefined : sharedValue(depthTrack.values, rows)) ??
+        (base.depths === null ? undefined : sharedValue(base.depths, rows))
+
+      return { value, cellCount: rows.length, ...(z === undefined ? {} : { z }) }
+    })
   }
 
   async cells(
@@ -1452,6 +1571,9 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.cachePromise = null
     this.spotElementsPromise = null
     this.overviewPoints = null
+    // A section's arrays are the file's, which its own dataset closes.
+    this.releaseSectionFile?.()
+    this.releaseSectionFile = null
     void base?.then((cache) => cache.close?.()).catch(() => undefined)
   }
 
@@ -1475,6 +1597,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   private baseCache(): Promise<H5adCache> {
+    if (this.baseCachePromise === null && this.section !== undefined) {
+      this.baseCachePromise = this.sectionBaseCache(this.section)
+    }
+
     if (this.baseCachePromise === null) {
       this.baseCachePromise = (
         this.memorySource !== undefined
@@ -1507,6 +1633,32 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
 
     return this.baseCachePromise
+  }
+
+  // The section's rows of the file's base, read by the file's dataset, which
+  // is held until this section is disposed.
+  private sectionBaseCache(section: AnnDataSectionSource): Promise<H5adCache> {
+    const hold = section.holdFile()
+    this.releaseSectionFile?.()
+    this.releaseSectionFile = hold.release
+
+    const promise = hold.dataset.then(async (dataset) => {
+      if (!(dataset instanceof AnnDataH5adDataset)) {
+        throw new Error(
+          `${this.url} is not AnnData, so it has no obs column "${section.column}" to take a section from.`,
+        )
+      }
+
+      return withSection(await dataset.baseCache(), section.column, section.value)
+    })
+    promise.catch(() => {
+      if (this.baseCachePromise !== promise) return
+
+      this.baseCachePromise = null
+      this.releaseSectionFile?.()
+      this.releaseSectionFile = null
+    })
+    return promise
   }
 }
 
@@ -1591,8 +1743,9 @@ function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
       ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
       : point,
   )
+  const depths = base.depths?.map((z) => z * scale) ?? null
 
-  return { ...base, coordinates, extent: bboxForPoints(coordinates) }
+  return { ...base, coordinates, depths, extent: bboxForPoints(coordinates) }
 }
 
 function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {
@@ -1602,6 +1755,233 @@ function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {
 
   const { layout, coordinates } = placeVisiumView(base.visiumSource, view)
   return { ...base, coordinates, extent: bboxForPoints(coordinates), visium: layout }
+}
+
+// A table splits into at most as many sections as a collection lists
+// (MAX_COLLECTION_DATASETS).
+const MAX_SECTIONS = 500
+// A numeric obs column holding each cell's section depth: `z`, `z_um`,
+// `z_position`.
+const SECTION_DEPTH_COLUMN = /^z(?:_|$)/i
+
+interface H5adSectionGroup {
+  readonly value: string
+  // Ascending.
+  readonly rows: Uint32Array
+}
+
+// The rows of one section of a table holding several: those whose obs
+// `column` holds `value`. obsm and the matrix stay the file's, read by the
+// file's rows (`section.rows`); the H5 file worker is the file's to close.
+function withSection(base: H5adCache, column: string, value: string): H5adCache {
+  if (base.visiumSource !== null) {
+    throw new Error(
+      'A Visium table is split into sections by its libraries: open the file itself and choose one under Image.',
+    )
+  }
+
+  const groups = sectionGroups(base, column)
+
+  if (groups === null) {
+    throw new Error(`obs has no column "${column}" to take a section from.`)
+  }
+
+  const rows = groups.find((group) => group.value === value)?.rows
+
+  if (rows === undefined) {
+    throw new Error(`obs column "${column}" has no cells with the value "${value}".`)
+  }
+
+  const coordinates = pickRows(base.coordinates, rows)
+
+  return {
+    ...base,
+    cellIds: pickRows(base.cellIds, rows),
+    coordinates,
+    depths: sectionDepths(base.depths, rows),
+    categoricalTracks: base.categoricalTracks.map((track) => {
+      const values = pickLabels(track.values, rows)
+      return { ...track, values, categoryCount: distinctLabelCount(values, rows.length) }
+    }),
+    continuousTracks: base.continuousTracks.map((track) => {
+      const values = pickRows(track.values, rows)
+      return { ...track, values, ...finiteRange(values) }
+    }),
+    extent: bboxForPoints(coordinates),
+    close: undefined,
+    section: { rows, fileCellIds: base.cellIds },
+  }
+}
+
+// The rows of each value of an obs label or number column, in the column's
+// order: a categorical's categories, numbers ascending, else as first seen.
+// Null when obs has no such column.
+function sectionGroups(
+  cache: H5adCache,
+  column: string,
+): readonly H5adSectionGroup[] | null {
+  const labels = cache.categoricalTracks.find((track) => track.id === column)?.values
+  const numbers =
+    labels === undefined
+      ? cache.continuousTracks.find((track) => track.id === column)?.values
+      : undefined
+
+  if (labels === undefined && numbers === undefined) {
+    return null
+  }
+
+  const rowsByValue = new Map<string, number[]>()
+
+  for (let row = 0; row < cache.cellIds.length; row += 1) {
+    const number = numbers?.[row]
+    const value =
+      labels !== undefined
+        ? labelAt(labels, row)
+        : number === undefined || !Number.isFinite(number)
+          ? null
+          : String(number)
+
+    if (value === null) continue
+
+    const rows = rowsByValue.get(value)
+
+    if (rows === undefined) {
+      rowsByValue.set(value, [row])
+    } else {
+      rows.push(row)
+    }
+  }
+
+  const groups = [...rowsByValue].map(([value, rows]) => ({
+    value,
+    rows: Uint32Array.from(rows),
+  }))
+
+  if (labels?.kind === 'codes') {
+    const order = new Map(labels.categories.map((category, index) => [category, index]))
+    groups.sort(
+      (first, second) => (order.get(first.value) ?? 0) - (order.get(second.value) ?? 0),
+    )
+  } else if (numbers !== undefined) {
+    groups.sort((first, second) => Number(first.value) - Number(second.value))
+  }
+
+  return groups
+}
+
+function pickRows<T>(values: ArrayLike<T>, rows: Uint32Array): T[] {
+  return Array.from(rows, (row) => values[row] as T)
+}
+
+function pickLabels(labels: H5adLabels, rows: Uint32Array): H5adLabels {
+  return labels.kind === 'codes'
+    ? {
+        ...labels,
+        codes: Int32Array.from(rows, (row) =>
+          Math.trunc(numericValue(labels.codes, row)),
+        ),
+      }
+    : { kind: 'strings', strings: pickRows(labels.strings, rows) }
+}
+
+function distinctLabelCount(labels: H5adLabels, rowCount: number): number {
+  const seen = new Set<string>()
+
+  for (let row = 0; row < rowCount && seen.size < DISTINCT_LABEL_COUNT_LIMIT; row += 1) {
+    const label = labelAt(labels, row)
+    if (label !== null) seen.add(label)
+  }
+
+  return seen.size
+}
+
+function finiteRange(values: readonly number[]): {
+  readonly min: number
+  readonly max: number
+} {
+  let min = Infinity
+  let max = -Infinity
+
+  for (const value of values) {
+    if (!Number.isFinite(value)) continue
+    min = Math.min(min, value)
+    max = Math.max(max, value)
+  }
+
+  return min <= max ? { min, max } : { min: 0, max: 0 }
+}
+
+// A section's own depths, or null when its cells share one: a section of
+// registered serial sections lies in a plane, at the depth the collection
+// gives it.
+function sectionDepths(
+  depths: Float32Array | null,
+  rows: Uint32Array,
+): Float32Array | null {
+  if (depths === null || sharedValue(depths, rows) !== undefined) return null
+
+  return Float32Array.from(rows, (row) => depths[row] ?? Number.NaN)
+}
+
+// The value every row holds, if they hold one.
+function sharedValue(values: ArrayLike<number>, rows: Uint32Array): number | undefined {
+  const first = rows.length === 0 ? undefined : values[rows[0] ?? 0]
+
+  if (first === undefined || !Number.isFinite(first)) {
+    return undefined
+  }
+
+  for (const row of rows) {
+    if (values[row] !== first) return undefined
+  }
+
+  return first
+}
+
+// A section's gene values, from the file's: its rows by the section's own
+// numbering.
+function sectionGeneValues<
+  Values extends { readonly rows: Uint32Array; readonly values: Float32Array },
+>(column: Values, section: H5adSectionRows): Values {
+  const sectionRow = sectionRowIndex(section)
+  let count = 0
+
+  for (const row of column.rows) {
+    if ((sectionRow[row] ?? -1) >= 0) count += 1
+  }
+
+  const rows = new Uint32Array(count)
+  const values = new Float32Array(count)
+  let next = 0
+
+  column.rows.forEach((row, index) => {
+    const own = sectionRow[row] ?? -1
+    if (own < 0) return
+
+    rows[next] = own
+    values[next] = column.values[index] ?? 0
+    next += 1
+  })
+
+  return { ...column, rows, values }
+}
+
+const sectionRowIndexes = new WeakMap<H5adSectionRows, Int32Array>()
+
+// The section's row of each of the file's rows, or -1.
+function sectionRowIndex(section: H5adSectionRows): Int32Array {
+  let index = sectionRowIndexes.get(section)
+
+  if (index === undefined) {
+    const rowIndex = new Int32Array(section.fileCellIds.length).fill(-1)
+    section.rows.forEach((row, own) => {
+      rowIndex[row] = own
+    })
+    index = rowIndex
+    sectionRowIndexes.set(section, index)
+  }
+
+  return index
 }
 
 interface VisiumSpotEntry {
@@ -2429,18 +2809,19 @@ async function readH5adCacheFromGroup(
             .filter((key) => key !== '_index' && !key.startsWith('__')),
           readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
           readObsmPoints: async () => {
-            const embedding = await readOverviewCoordinateEmbedding(
+            const coordinates = await readOverviewCoordinateEmbedding(
               file,
               embeddingOptions,
               cellIds,
             ).catch(() => null)
-            return embedding?.points ?? null
+            return coordinates?.embedding.points ?? null
           },
         })
-  const coordinateEmbedding =
+  const obsmCoordinates =
     resolvedCoordinates === null
       ? await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds)
       : null
+  const coordinateEmbedding = obsmCoordinates?.embedding ?? null
   const observationTracks = await readObservationTracks(
     obs,
     cellIds.length,
@@ -2470,6 +2851,8 @@ async function readH5adCacheFromGroup(
         ? new Map()
         : geneAliasesByName(geneNames, varNames.indexNames),
     coordinates,
+    // Visium spots are placed on their slide, in 2D.
+    depths: visiumPlacement === null ? (obsmCoordinates?.depths ?? null) : null,
     root: file,
     embeddingOptions,
     categoricalTracks: observationTracks.categoricalTracks,
@@ -3003,6 +3386,16 @@ async function readObsmEmbedding(
   dataset: H5DatasetLike,
   cellIds: readonly string[],
 ): Promise<AnalysisEmbedding> {
+  return (await readObsmCoordinates(key, dataset, cellIds)).embedding
+}
+
+// An obsm matrix's first two columns as an embedding and, for a spatial one
+// with a third column, each cell's z: cells placed in 3D.
+async function readObsmCoordinates(
+  key: string,
+  dataset: H5DatasetLike,
+  cellIds: readonly string[],
+): Promise<H5adCoordinateEmbedding> {
   const shape = dataset.shape
 
   if (shape === null || shape.length !== 2) {
@@ -3034,23 +3427,54 @@ async function readObsmEmbedding(
   })
 
   return {
-    kind: key,
-    label: analysisEmbeddingLabel(key),
-    sourcePath: `/obsm/${key}`,
-    points,
+    embedding: {
+      kind: key,
+      label: analysisEmbeddingLabel(key),
+      sourcePath: `/obsm/${key}`,
+      points,
+    },
+    depths:
+      cols >= 3 && H5AD_SPATIAL_KEYS.has(key) ? obsmDepths(values, rows, cols) : null,
   }
+}
+
+// The third column, or null when any value is not finite or all are the
+// same, as when a writer pads 2D coordinates with a column of zeros.
+function obsmDepths(
+  values: NumericArrayLike,
+  rows: number,
+  cols: number,
+): Float32Array | null {
+  const depths = new Float32Array(rows)
+  let min = Infinity
+  let max = -Infinity
+
+  for (let row = 0; row < rows; row += 1) {
+    const z = numericValue(values, row * cols + 2)
+    if (!Number.isFinite(z)) return null
+
+    depths[row] = z
+    min = Math.min(min, z)
+    max = Math.max(max, z)
+  }
+
+  return max > min ? depths : null
 }
 
 async function readOverviewCoordinateEmbedding(
   file: H5GroupLike,
   embeddings: readonly AnalysisEmbeddingOption[],
   cellIds: readonly string[],
-): Promise<AnalysisEmbedding> {
+): Promise<H5adCoordinateEmbedding> {
   for (const key of H5AD_COORDINATE_KEYS) {
     const embedding = embeddings.find((candidate) => candidate.kind === key)
 
     if (embedding !== undefined) {
-      return readObsmEmbeddingFromRoot(file, embedding.kind, cellIds)
+      return readObsmCoordinates(
+        embedding.kind,
+        expectDataset(file.get(`/obsm/${embedding.kind}`), `/obsm/${embedding.kind}`),
+        cellIds,
+      )
     }
   }
 
@@ -3824,7 +4248,7 @@ async function h5adMatrixForCells(
   const colByGeneName = new Map<string, number>()
 
   cache.cellIds.forEach((cellId, row) => {
-    rowByCellId.set(cellId, row)
+    rowByCellId.set(cellId, cache.section?.rows[row] ?? row)
   })
   cache.geneNames.forEach((geneName, col) => {
     colByGeneName.set(geneName, col)

@@ -313,9 +313,9 @@ models instead of separate props
   sub-model, such as `GenePicker` (`cells.genes`) or `CustomImageLayers`
   (`image.customLayers`). The layer panel, info drawer and top bar arrange
   them.
-- Typing stays local: the gene search, gene set drafts, saved gene sets and the
-  transcript feature search live in their blocks, so a keystroke does not
-  re-render `App`.
+- Typing stays local: the gene search, gene set drafts and the transcript
+  feature search live in their blocks, so a keystroke does not re-render
+  `App`. Saved gene sets are app state, so the link keeps them (`geneSets=`).
 - Blocks make their own label IDs with `useId`.
 - `src/test/sectionModels.ts` builds idle models with mock callbacks for block
   and panel tests.

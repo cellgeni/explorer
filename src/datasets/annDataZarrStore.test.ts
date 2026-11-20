@@ -106,6 +106,37 @@ describe('AnnData Zarr stores', () => {
     await expect(embeddingKinds(dataset)).resolves.toContain('X_scvi')
   })
 
+  // anndata chunks a large obsm matrix two columns wide, so z is in chunks of
+  // its own.
+  it.each([
+    { name: 'consolidated metadata', hidden: [] },
+    { name: 'a walk', hidden: ['/stack.zarr/.zmetadata'] },
+  ])(
+    'places cells in 3D by a third obsm spatial column, read from $name',
+    async ({ hidden }) => {
+      const dataset = new AnnDataH5adDataset({
+        url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/stack.zarr`,
+        zarr: true,
+        fetcher: annDataZarrFixtureFetcher({ hidden }),
+      })
+
+      expect(
+        (await dataset.overview()).map((point) => [
+          point.cellId,
+          point.position.x,
+          point.z,
+        ]),
+      ).toEqual([
+        ['cell-a', 0, 0],
+        ['cell-b', 10, 0],
+        ['cell-c', 0, 60],
+        ['cell-d', 10, 60],
+        ['cell-e', 5, 120],
+        ['cell-f', 20, 120],
+      ])
+    },
+  )
+
   it('lists a path-style S3 bucket', async () => {
     const requests: string[] = []
     const opened = await openAnnDataZarrStore(

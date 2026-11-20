@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { asAnyCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
+import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
 import {
   openPreviewSource,
@@ -84,7 +85,7 @@ describe('openPreviewSource', () => {
     expect([...cells.positions]).toEqual([0, 0, 10, 4])
     expect(cells.bounds).toEqual({ minX: 0, maxX: 10, minY: 0, maxY: 4 })
 
-    const scores = await source.scores(cells.bounds, ['Aqp4', 'Gfap'], 'mean')
+    const scores = await source.scores(cells, ['Aqp4', 'Gfap'], 'mean')
     expect([...scores.scores]).toEqual([1, 3])
     expect(scores.maxScore).toBe(3)
     // Every cell: the query box is the cells' bounds and a little more.
@@ -96,6 +97,48 @@ describe('openPreviewSource', () => {
     expect(bbox.minX).toBeLessThan(0)
     expect(bbox.maxX).toBeGreaterThan(10)
     expect(bbox.maxY).toBeGreaterThan(4)
+  })
+
+  it('keeps the z of cells placed in 3D, for the cells and their scores', async () => {
+    const deep = (x: number, z: number, cellId: string): CellOverviewPoint => ({
+      ...point(x, 0, cellId),
+      z,
+    })
+    const dataset = {
+      overview: vi.fn(
+        async (): Promise<CellOverviewPoint[]> => [
+          deep(0, 5, 'a'),
+          deep(10, 25, 'b'),
+          deep(20, 15, 'c'),
+        ],
+      ),
+      geneExpression: vi.fn(async () => ({
+        genes: ['Aqp4'],
+        maxCount: 4,
+        elements: [
+          { id: 'c', position: { x: micrometers(20), y: micrometers(0) }, count: 4 },
+          { id: 'a', position: { x: micrometers(0), y: micrometers(0) }, count: 1 },
+        ],
+      })),
+    }
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'h5ad', h5adUrl: URL_A, source: 'zarr' },
+        { getSpatialDataset: vi.fn(async () => dataset as never) },
+      ),
+    )
+
+    const cells = await source.cells()
+    expect(cells.depths).toEqual({ values: Float32Array.of(5, 25, 15), min: 5, max: 25 })
+    const scores = await source.scores(cells, ['Aqp4'], 'sum')
+    expect([...(scores.depths ?? [])]).toEqual([15, 5])
+
+    // Cells in a plane have no depths.
+    dataset.overview.mockResolvedValueOnce([deep(0, 5, 'a'), deep(10, 5, 'b')])
+    expect((await source.cells()).depths).toBeUndefined()
+    dataset.overview.mockResolvedValueOnce([point(0, 0, 'a'), deep(10, 5, 'b')])
+    expect((await source.cells()).depths).toBeUndefined()
   })
 
   it('asks for the dataset again on each read, so a disposed one is reopened', async () => {
@@ -136,7 +179,7 @@ describe('openPreviewSource', () => {
       ),
     )
     const cells = await source.cells()
-    const scores = await source.scores(cells.bounds, ['EPCAM'], 'sum')
+    const scores = await source.scores(cells, ['EPCAM'], 'sum')
 
     expect(loadDatasetOverview).toHaveBeenCalledWith(URL_A, { limit: null })
     expect(loadGeneExpression).toHaveBeenCalledWith(
@@ -279,6 +322,28 @@ describe('openPreviewSource', () => {
     expect(fetchImpl).toHaveBeenCalledWith('https://example.test/big.h5ad', {
       method: 'HEAD',
     })
+  })
+
+  it('reads a large .h5ad the main view has open', async () => {
+    const fetchImpl = vi.fn()
+    const source = await openPreviewSource(
+      'https://example.test/big.h5ad',
+      loaders(
+        { platform: 'h5ad', h5adUrl: 'https://example.test/big.h5ad' },
+        {
+          fetchImpl,
+          getSpatialDataset: vi.fn(
+            async () =>
+              ({ overview: async () => [point(0, 0)], geneExpression: vi.fn() }) as never,
+          ),
+        },
+      ),
+      undefined,
+      { open: true },
+    )
+
+    expect([...(await source.cells()).positions]).toEqual([0, 0])
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('previews a small .h5ad, or one whose size the host does not say', async () => {

@@ -282,6 +282,73 @@ describe('AnnDataH5adDataset', () => {
     ])
   })
 
+  it('places cells in 3D by a third column of obsm spatial', async () => {
+    const open = async (options: TinyH5adOptions) =>
+      (
+        await new AnnDataH5adDataset({
+          url: 'https://example.test/stack.h5ad',
+          fetcher: h5adFetcher(await createTinyH5ad('dense', options)),
+        }).overview()
+      ).map((point) => [point.cellId, point.position.x, point.z])
+
+    expect(
+      await open({
+        coordinateKey: 'spatial',
+        coordinates: [0, 0, 0, 10, 0, 60, 0, 10, 120, 10, 10, 180],
+      }),
+    ).toEqual([
+      ['cell-a', 0, 0],
+      ['cell-b', 10, 60],
+      ['cell-c', 0, 120],
+      ['cell-d', 10, 180],
+    ])
+    // A column of zeros pads 2D coordinates; a third UMAP column is no depth.
+    expect(
+      await open({
+        coordinateKey: 'spatial',
+        coordinates: [0, 0, 0, 10, 0, 0, 0, 10, 0, 10, 10, 0],
+      }),
+    ).toEqual([
+      ['cell-a', 0, undefined],
+      ['cell-b', 10, undefined],
+      ['cell-c', 0, undefined],
+      ['cell-d', 10, undefined],
+    ])
+    expect(
+      (
+        await open({
+          coordinateKey: 'X_umap',
+          coordinates: [0, 0, 0, 10, 0, 60, 0, 10, 120, 10, 10, 180],
+        })
+      ).map(([, , z]) => z),
+    ).toEqual([undefined, undefined, undefined, undefined])
+  })
+
+  it('scales a third spatial column with image-pixel coordinates', async () => {
+    const bytes = await createTinyH5ad('dense', {
+      coordinates: [0, 0, 0, 10, 0, 40, 0, 10, 80, 10, 10, 120],
+    })
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      units: {
+        dataUnit: 'micrometer',
+        imageUnit: 'pixel',
+        micrometersPerPixel: micrometers(0.25),
+        origin: 'top-left',
+        imageYAxis: 'down',
+      },
+      channels: [{ id: 'c0' }],
+    } as unknown as ImagePyramidLoader
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(bytes),
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage: vi.fn().mockResolvedValue(loader),
+    })
+
+    expect((await dataset.overview()).map((point) => point.z)).toEqual([0, 10, 20, 30])
+  })
+
   it('lists only obsm matrices named as embeddings', async () => {
     const twoColumns = [0, 0, 1, 0, 0, 1, 1, 1]
     const bytes = await createTinyH5ad('dense', {
@@ -1852,6 +1919,9 @@ interface TinyH5adOptions {
   readonly spatialDataInstanceKey?: string
   readonly spatialDataInstanceKeyIn?: 'uns' | 'attributes'
   readonly coordinateKey?: string
+  // The coordinate matrix, with as many columns as its values allow; defaults
+  // to the corners of a 10 µm square.
+  readonly coordinates?: readonly number[]
   // Writes the var index as Ensembl IDs and gene symbols as a categorical
   // `feature_name`, the CELLxGENE layout.
   readonly featureNames?: CategoricalFeatureNames
@@ -2030,10 +2100,11 @@ async function createTinyH5ad(
   }
 
   const obsm = file.create_group('obsm')
+  const coordinates = options.coordinates ?? [0, 0, 10, 0, 0, 10, 10, 10]
   obsm.create_dataset({
     name: coordinateKey,
-    data: new Float32Array([0, 0, 10, 0, 0, 10, 10, 10]),
-    shape: [4, 2],
+    data: new Float32Array(coordinates),
+    shape: [4, coordinates.length / 4],
   })
   obsm.create_dataset({
     name: 'X_pca',
@@ -2528,3 +2599,163 @@ function fixedStringBytes(values: readonly string[], width: number): Uint8Array 
 
   return bytes
 }
+
+describe('AnnDataH5adDataset sections', () => {
+  const SECTIONS: TinyH5adOptions = {
+    coordinateKey: 'spatial',
+    extraObs: {
+      section: ['s2', 's1', 's2', 's1'],
+      z_um: new Int32Array([60, 0, 60, 0]),
+    },
+  }
+
+  async function openFile(options: TinyH5adOptions = SECTIONS) {
+    return new AnnDataH5adDataset({
+      url: 'https://example.test/sections.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense', options)),
+    })
+  }
+
+  function openSection(file: AnnDataH5adDataset, column: string, value: string) {
+    const release = vi.fn()
+    const holdFile = vi.fn(() => ({ dataset: Promise.resolve(file), release }))
+    const dataset = new AnnDataH5adDataset({
+      url: file.url,
+      section: { column, value, holdFile },
+    })
+    return { dataset, holdFile, release }
+  }
+
+  it('lists the obs columns and sections that split a table', async () => {
+    const file = await openFile()
+
+    await expect(file.sectionColumns()).resolves.toEqual(['section', 'cluster'])
+    // Strings as first seen, with each section's depth from obs z_um.
+    await expect(file.sections('section')).resolves.toEqual([
+      { value: 's2', cellCount: 2, z: 60 },
+      { value: 's1', cellCount: 2, z: 0 },
+    ])
+    // Categories in order; numbers ascending.
+    await expect(file.sections('cluster')).resolves.toMatchObject([
+      { value: 'A', cellCount: 2 },
+      { value: 'B', cellCount: 2 },
+    ])
+    await expect(file.sections('z_um')).resolves.toEqual([
+      { value: '0', cellCount: 2, z: 0 },
+      { value: '60', cellCount: 2, z: 60 },
+    ])
+    await expect(file.sections('stage')).rejects.toThrow(
+      'obs has no column "stage" to split into sections.',
+    )
+  })
+
+  it('takes a depth from a third obsm spatial column shared by each section', async () => {
+    const file = await openFile({
+      coordinateKey: 'spatial',
+      coordinates: [0, 0, 60, 10, 0, 0, 0, 10, 60, 10, 10, 0],
+      extraObs: { section: ['s2', 's1', 's2', 's1'] },
+    })
+    const { dataset } = openSection(file, 'section', 's2')
+
+    await expect(file.sections('section')).resolves.toEqual([
+      { value: 's2', cellCount: 2, z: 60 },
+      { value: 's1', cellCount: 2, z: 0 },
+    ])
+    // A section's cells in one plane have no depths of their own.
+    expect((await dataset.overview()).map((point) => point.z)).toEqual([
+      undefined,
+      undefined,
+    ])
+  })
+
+  it('opens one section as a dataset of its rows, read through the file', async () => {
+    const file = await openFile()
+    const { dataset, holdFile } = openSection(file, 'section', 's1')
+
+    expect(
+      (await dataset.overview()).map((point) => [
+        point.cellId,
+        point.position.x,
+        point.position.y,
+      ]),
+    ).toEqual([
+      ['cell-b', 10, 0],
+      ['cell-d', 10, 10],
+    ])
+    await expect(dataset.cellIds()).resolves.toEqual(['cell-b', 'cell-d'])
+    await expect(dataset.annotationGroups()).resolves.toMatchObject([
+      { id: 'analysis:cluster', groupCount: 1 },
+      { id: 'analysis:section', groupCount: 1 },
+    ])
+    expect(
+      (await dataset.annotations({ groupId: 'analysis:cluster' })).map((annotation) => [
+        annotation.label,
+        annotation.cellIds,
+      ]),
+    ).toEqual([['cluster: B', ['cell-b', 'cell-d']]])
+    await expect(dataset.metadataTracks()).resolves.toMatchObject([
+      { label: 'score', cellCount: 2, min: expect.closeTo(0.2), max: 0.5 },
+      { label: 'z_um', cellCount: 2, min: 0, max: 0 },
+    ])
+    expect((await dataset.matrix(['cell-d'])).cells.get('cell-d')).toEqual({
+      geneNames: ['Actb', 'Gapdh'],
+      counts: [7, 8],
+    })
+    expect(
+      (
+        await dataset.geneExpression(
+          {
+            minX: micrometers(-1),
+            maxX: micrometers(11),
+            minY: micrometers(-1),
+            maxY: micrometers(11),
+          },
+          ['Gapdh'],
+        )
+      ).elements.map((element) => [element.id, element.count]),
+    ).toEqual([
+      ['cell-b', 0],
+      ['cell-d', 8],
+    ])
+    // Plot values by the section's own rows.
+    await expect(dataset.geneValuesRowIds()).resolves.toEqual(['cell-b', 'cell-d'])
+    await expect(dataset.geneValues(['Actb'])).resolves.toEqual([
+      { gene: 'Actb', rows: Uint32Array.of(0, 1), values: Float32Array.of(2, 7) },
+    ])
+    expect((await dataset.embeddings({ kind: 'X_pca' }))[0]?.points).toEqual([
+      { id: 'cell-b', x: 0, y: 1 },
+      { id: 'cell-d', x: 0, y: -1 },
+    ])
+    expect((await dataset.meta()).extent).toEqual({
+      minX: 10,
+      maxX: 10,
+      minY: 0,
+      maxY: 10,
+    })
+    expect(holdFile).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets go of the file when disposed, leaving it open for its other users', async () => {
+    const file = await openFile()
+    const { dataset, holdFile, release } = openSection(file, 'section', 's2')
+
+    await dataset.overview()
+    dataset.dispose()
+
+    expect(release).toHaveBeenCalledTimes(1)
+    await expect(file.cellIds()).resolves.toHaveLength(4)
+    // Read again, it holds the file again.
+    await expect(dataset.cellIds()).resolves.toEqual(['cell-a', 'cell-c'])
+    expect(holdFile).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports a value the column does not hold, and lets go of the file', async () => {
+    const file = await openFile()
+    const { dataset, release } = openSection(file, 'section', 's9')
+
+    await expect(dataset.overview()).rejects.toThrow(
+      'obs column "section" has no cells with the value "s9".',
+    )
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+})

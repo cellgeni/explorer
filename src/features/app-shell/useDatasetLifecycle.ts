@@ -101,6 +101,8 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
+  parseGeneSetsLink,
+  type SavedGeneSet,
 } from '../genes/geneControlsModel'
 import {
   channelsToAutoContrastOnLoad,
@@ -240,6 +242,7 @@ import {
   type GridCellColumns,
 } from '../../rendering/gridCellColumns'
 import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
+import { parseCellView } from '../sections/cellsSectionModel'
 import { parseImageView } from '../sections/imageSectionModel'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
@@ -406,6 +409,9 @@ interface UseDatasetLifecycleSetters {
   // The dataset the 3D view is open for, which shows it once its image is a
   // z-stack.
   readonly setVolumeViewDatasetUrl?: Setter<string | null>
+  // The dataset the 3D view of cells is open for, which shows it once its
+  // cells are placed in 3D.
+  readonly setCellViewDatasetUrl?: Setter<string | null>
   // What the info drawer shows about a dataset with a manifest.
   readonly setDatasetAbout?: Setter<DatasetManifestAbout | null>
   // The manifest's defaults, which the dataset's links leave out.
@@ -465,6 +471,7 @@ interface UseDatasetLifecycleSetters {
   readonly setSelectedCell: Setter<OverviewCellDatum | null>
   readonly setSelectedGridCell: Setter<GridCellDatum | null>
   readonly setSelectedEmbeddingKind: Setter<AnalysisEmbeddingKind>
+  readonly setSavedGeneSets: Setter<readonly SavedGeneSet[]>
   readonly setSelectedGenes: Setter<readonly string[]>
   readonly setShowCellBoundaries: Setter<boolean>
   readonly setShowNucleusBoundaries: Setter<boolean>
@@ -593,6 +600,7 @@ export function useDatasetLifecycle({
     setCellFillOpacity,
     setCellPointScale,
     setVolumeViewDatasetUrl,
+    setCellViewDatasetUrl,
     setImageLayerOpacity,
     setShowTranscriptOverlay,
     setDatasetAbout,
@@ -646,6 +654,7 @@ export function useDatasetLifecycle({
     setSelectedCell,
     setSelectedGridCell,
     setSelectedEmbeddingKind,
+    setSavedGeneSets,
     setSelectedGenes,
     setShowCellBoundaries,
     setShowNucleusBoundaries,
@@ -1188,6 +1197,9 @@ export function useDatasetLifecycle({
               : current,
           )
           setSelectedGenes(sharedSelectedGenes)
+          setSavedGeneSets(
+            shouldRestoreSharedState ? parseGeneSetsLink(sharedState?.geneSets) : [],
+          )
           // A shared link's box, lasso or measure tool stays on (15.2-H).
           const sharedTool =
             shouldRestoreSharedState && sharedState !== null
@@ -1290,6 +1302,14 @@ export function useDatasetLifecycle({
         if (restoredImageView !== undefined) {
           whenCommitted(() => {
             setVolumeViewDatasetUrl?.(restoredImageView === '3d' ? requestedUrl : null)
+          })
+        }
+
+        const restoredCellView = parseCellView(restoreState.cellView)
+
+        if (restoredCellView !== undefined) {
+          whenCommitted(() => {
+            setCellViewDatasetUrl?.(restoredCellView === '3d' ? requestedUrl : null)
           })
         }
 

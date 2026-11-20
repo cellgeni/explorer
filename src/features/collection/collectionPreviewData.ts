@@ -45,6 +45,14 @@ export interface PreviewCells {
   // Each drawn cell's ID, or '' without one.
   readonly cellIds: readonly string[]
   readonly bounds: PreviewBounds
+  // For cells placed in 3D (CellOverviewPoint.z): each cell's z.
+  readonly depths?: PreviewDepths
+}
+
+export interface PreviewDepths {
+  readonly values: Float32Array
+  readonly min: number
+  readonly max: number
 }
 
 export interface PreviewScores {
@@ -52,6 +60,8 @@ export interface PreviewScores {
   readonly positions: Float32Array
   readonly scores: Float32Array
   readonly maxScore: number
+  // Each scored cell's z, for cells placed in 3D.
+  readonly depths?: Float32Array
 }
 
 export interface PreviewClass {
@@ -70,9 +80,9 @@ export interface PreviewClasses {
 
 export interface PreviewSource {
   readonly cells: (signal?: AbortSignal) => Promise<PreviewCells>
-  // Scores for the cells in bounds, which is every cell for the cells' bounds.
+  // Scores for every cell.
   readonly scores: (
-    bounds: PreviewBounds,
+    cells: PreviewCells,
     genes: readonly string[],
     scoreMode: GeneExpressionScoreMode,
     signal?: AbortSignal,
@@ -112,17 +122,21 @@ export function previewUnavailableMessage(unavailable: PreviewUnavailable): stri
 
 // Opens a dataset for previews. Xenium reads through the loaders the main
 // view uses for it; the other platforms with cells through the dataset.
-// Images and Visium HD bins have no preview.
+// Images and Visium HD bins have no preview. A dataset the main view has
+// open is read whatever its size.
 export async function openPreviewSource(
   url: string,
   loaders: CollectionPreviewLoaders,
   signal?: AbortSignal,
+  options: { readonly open?: boolean } = {},
 ): Promise<PreviewSource> {
   const detection = await loaders.detectSpatialDataset(url, {
     ...(signal === undefined ? {} : { signal }),
   })
   throwIfAborted(signal)
-  await rejectLargeWholeFile(detection, loaders.fetchImpl ?? fetch, signal)
+  if (options.open !== true) {
+    await rejectLargeWholeFile(detection, loaders.fetchImpl ?? fetch, signal)
+  }
 
   if (detection.platform === 'image' || detection.platform === 'visium-hd') {
     throw new PreviewUnavailableError({ reason: 'no-cells' })
@@ -138,9 +152,10 @@ export async function openPreviewSource(
           }),
           cellSignal,
         ),
-      scores: async (bounds, genes, scoreMode, scoreSignal) =>
+      scores: async (cells, genes, scoreMode, scoreSignal) =>
         previewScores(
-          await loaders.loadGeneExpression(url, boundsBbox(bounds), genes, {
+          cells,
+          await loaders.loadGeneExpression(url, boundsBbox(cells.bounds), genes, {
             ...(scoreSignal === undefined ? {} : { signal: scoreSignal }),
           }),
           scoreMode,
@@ -173,11 +188,12 @@ export async function openPreviewSource(
   return {
     cells: async (cellSignal) =>
       previewCells(await (await dataset()).overview(), cellSignal),
-    scores: async (bounds, genes, scoreMode, scoreSignal) =>
+    scores: async (cells, genes, scoreMode, scoreSignal) =>
       previewScores(
+        cells,
         await (
           await dataset()
-        ).geneExpression(boundsBbox(bounds), genes, {
+        ).geneExpression(boundsBbox(cells.bounds), genes, {
           ...(scoreSignal === undefined ? {} : { signal: scoreSignal }),
         }),
         scoreMode,
@@ -249,7 +265,26 @@ function previewCells(
     throw new PreviewUnavailableError({ reason: 'no-cells' })
   }
 
-  return { positions, cellIds, bounds }
+  const depths = previewDepths(cells)
+  return { positions, cellIds, bounds, ...(depths === null ? {} : { depths }) }
+}
+
+// Every cell's z, when every cell has one and they are not all the same.
+function previewDepths(cells: readonly CellOverviewPoint[]): PreviewDepths | null {
+  const values = new Float32Array(cells.length)
+  let min = Infinity
+  let max = -Infinity
+
+  for (let index = 0; index < cells.length; index += 1) {
+    const z = cells[index]?.z
+    if (z === undefined || !Number.isFinite(z)) return null
+
+    values[index] = z
+    min = Math.min(min, z)
+    max = Math.max(max, z)
+  }
+
+  return max > min ? { values, min, max } : null
 }
 
 export function previewBounds(positions: Float32Array): PreviewBounds | null {
@@ -286,6 +321,7 @@ function boundsBbox(bounds: PreviewBounds): BBox {
 }
 
 function previewScores(
+  cells: PreviewCells,
   batch: GeneExpressionBatch,
   scoreMode: GeneExpressionScoreMode,
   signal: AbortSignal | undefined,
@@ -295,6 +331,9 @@ function previewScores(
   const scores = geneExpressionScores(batch.elements, batch.genes, scoreMode)
   const positions = new Float32Array(batch.elements.length * 2)
   const values = new Float32Array(batch.elements.length)
+  const cellDepths = cells.depths?.values
+  const cellIndex = cellDepths === undefined ? null : previewCellIndex(cells)
+  const depths = cellIndex === null ? null : new Float32Array(batch.elements.length)
   let maxScore = 0
 
   batch.elements.forEach((element, index) => {
@@ -303,9 +342,34 @@ function previewScores(
     positions[index * 2 + 1] = element.position.y
     values[index] = score
     maxScore = Math.max(maxScore, score)
+
+    if (depths !== null) {
+      const cell = cellIndex?.get(element.id)
+      depths[index] = cell === undefined ? Number.NaN : (cellDepths?.[cell] ?? Number.NaN)
+    }
   })
 
-  return { positions, scores: values, maxScore }
+  return {
+    positions,
+    scores: values,
+    maxScore,
+    ...(depths === null ? {} : { depths }),
+  }
+}
+
+// Cell ID -> index in PreviewCells, built once per cells read.
+const cellIndexCache = new WeakMap<PreviewCells, ReadonlyMap<string, number>>()
+
+function previewCellIndex(cells: PreviewCells): ReadonlyMap<string, number> {
+  const cached = cellIndexCache.get(cells)
+  if (cached !== undefined) return cached
+
+  const cellIndex = new Map<string, number>()
+  cells.cellIds.forEach((cellId, index) => {
+    if (cellId !== '') cellIndex.set(cellId, index)
+  })
+  cellIndexCache.set(cells, cellIndex)
+  return cellIndex
 }
 
 function previewClasses(
@@ -315,10 +379,7 @@ function previewClasses(
 ): PreviewClasses {
   throwIfAborted(signal)
 
-  const cellIndex = new Map<string, number>()
-  cells.cellIds.forEach((cellId, index) => {
-    if (cellId !== '') cellIndex.set(cellId, index)
-  })
+  const cellIndex = previewCellIndex(cells)
   const classOf = new Int32Array(cells.cellIds.length).fill(-1)
 
   annotations.forEach((annotation, classIndex) => {
@@ -343,7 +404,14 @@ async function rejectLargeWholeFile(
   fetchImpl: typeof fetch,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  if (detection.platform !== 'h5ad' || detection.source !== undefined) return
+  // A section is read with its file's other sections, in one read.
+  if (
+    detection.platform !== 'h5ad' ||
+    detection.source !== undefined ||
+    detection.section !== undefined
+  ) {
+    return
+  }
 
   const response = await fetchImpl(detection.h5adUrl, {
     method: 'HEAD',

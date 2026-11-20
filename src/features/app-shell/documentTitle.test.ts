@@ -13,6 +13,21 @@ describe('document title', () => {
     expect(documentTitle('Mouse brain')).toBe('Mouse brain · Spatial Omics Explorer')
   })
 
+  it('names one section of a table after the file and the section', () => {
+    expect(
+      datasetDisplayName(
+        'https://example.test/ef6/aligned.h5ad#obs.section=section_01',
+        undefined,
+      ),
+    ).toBe('aligned.h5ad · section_01')
+    expect(
+      datasetDisplayName(
+        'https://example.test/ef6/aligned.h5ad#obs.section=section_01',
+        'Section 1',
+      ),
+    ).toBe('Section 1')
+  })
+
   it('uses the last meaningful part of the URL', () => {
     expect(datasetDisplayName('https://example.test/h5ad/pbmc3k.h5ad?x=1', '')).toBe(
       'pbmc3k.h5ad',

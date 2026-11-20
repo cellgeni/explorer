@@ -574,6 +574,10 @@
         "imageView": {
           "enum": ["2d", "3d"],
           "description": "The Image section's View: 3d opens an OME-Zarr z-stack in the 3D view."
+        },
+        "cellView": {
+          "enum": ["2d", "3d"],
+          "description": "The Cells section's View: 3d shows cells placed in 3D (a third column of AnnData obsm spatial) in the 3D view."
         }
       },
       "additionalProperties": false

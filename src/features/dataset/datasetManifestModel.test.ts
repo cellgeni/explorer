@@ -26,6 +26,7 @@ describe('manifestDefaultsToShareableState', () => {
         cellPointScale: 10,
         transcripts: true,
         imageView: '3d',
+        cellView: '3d',
       }),
     ).toEqual({
       state: {
@@ -45,6 +46,7 @@ describe('manifestDefaultsToShareableState', () => {
         cellPointScale: 12,
         transcriptOverlay: true,
         imageView: '3d',
+        cellView: '3d',
       },
       ignored: [],
     })
@@ -65,6 +67,7 @@ describe('manifestDefaultsToShareableState', () => {
         colorCellsBy: 'cluster',
         geneScoreMode: 'median',
         imageView: '4d',
+        cellView: 'volume',
         cellBoundaries: true,
       }),
     ).toEqual({
@@ -73,6 +76,7 @@ describe('manifestDefaultsToShareableState', () => {
         'defaults.colorCellsBy "cluster" is not a known value',
         'defaults.geneScoreMode "median" is not a known value',
         'defaults.imageView "4d" is not a known value',
+        'defaults.cellView "volume" is not a known value',
       ],
     })
     expect(manifestDefaultsToShareableState(undefined)).toEqual({

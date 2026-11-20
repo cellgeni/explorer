@@ -427,6 +427,104 @@ describe('App with a dataset collection', () => {
     expect(screen.getByLabelText('type: astro visible')).not.toBeChecked()
   })
 
+  describe('with cells placed in 3D', () => {
+    const STACK = 'https://example.test/skin/aligned_sections.h5ad'
+    const hashAfterWrite = async () => {
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 200))
+      })
+      return new URLSearchParams(window.location.hash.slice(1))
+    }
+
+    // Two cells 60 µm apart in z, from a third column of obsm spatial.
+    function deepDataset() {
+      return {
+        ...h5adDataset(),
+        overview: vi.fn(async () => [
+          { cellId: 'cell-a', position: { x: micrometers(0), y: micrometers(0) }, z: 0 },
+          {
+            cellId: 'cell-b',
+            position: { x: micrometers(10), y: micrometers(10) },
+            z: 60,
+          },
+        ]),
+      }
+    }
+
+    it('shows the cells of one dataset in 3D at their z, in the link', async () => {
+      window.history.replaceState(null, '', `/#xv=2&dataset=${encodeURIComponent(STACK)}`)
+
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(deepDataset())}
+        />,
+      )
+
+      openControls('cell-appearance')
+      const viewGroup = await screen.findByRole('group', { name: 'Cell view' })
+      fireEvent.click(within(viewGroup).getByRole('button', { name: '3D' }))
+
+      const view = await screen.findByRole('region', { name: '3D cells' })
+      expect(await within(view).findByText('2 cells, z 0 to 60 µm')).toBeInTheDocument()
+      await waitFor(() => {
+        expect(deckView.stackLayerIds).toEqual(['section-stack-0-cells'])
+      })
+      expect((await hashAfterWrite()).get('cellView')).toBe('3d')
+
+      // Colouring by a gene draws the scoring cells over the others.
+      openControls('genes')
+      fireEvent.click(screen.getByRole('button', { name: 'Aqp4' }))
+      await waitFor(() => {
+        expect(deckView.stackLayerIds).toEqual([
+          'section-stack-0-scored',
+          'section-stack-0-context',
+        ])
+      })
+
+      fireEvent.click(within(view).getByRole('button', { name: '2D View' }))
+      expect(screen.queryByRole('region', { name: '3D cells' })).not.toBeInTheDocument()
+      expect((await hashAfterWrite()).has('cellView')).toBe(false)
+    })
+
+    it('opens a link’s 3D view, and offers none for cells in a plane', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&dataset=${encodeURIComponent(STACK)}&cellView=3d`,
+      )
+
+      const { unmount } = render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(deepDataset())}
+        />,
+      )
+
+      expect(await screen.findByRole('region', { name: '3D cells' })).toBeInTheDocument()
+      unmount()
+
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&dataset=${encodeURIComponent(SHAM_A)}&cellView=3d`,
+      )
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      // Once the gene panel is read, the cells are too.
+      openControls('genes')
+      expect(await screen.findByRole('button', { name: 'Aqp4' })).toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Cell view' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: '3D cells' })).not.toBeInTheDocument()
+      expect((await hashAfterWrite()).has('cellView')).toBe(false)
+    })
+  })
+
   describe('with registered sections', () => {
     const SECTION_1 = 'https://example.test/cord/s1.h5ad'
     const SECTION_2 = 'https://example.test/cord/s2.h5ad'

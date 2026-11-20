@@ -9,11 +9,14 @@ import {
   deckPositions,
   LINKED_SECTION_CELL_RADIUS_MICROMETERS,
   scoredCells,
+  type LinkedScoredCells,
 } from './linkedSectionLayers'
 
 // The layers of serial sections stacked in 3D. Each section is its cells from
 // its collection preview, drawn at (x, -y) and lifted to its depth by a model
-// matrix, so changing the depth stretch uploads nothing. Cells are balls 10
+// matrix, so changing the depth stretch uploads nothing. Cells with their own
+// depths (a dataset placing cells in 3D) are drawn at (x, -y, z), and the
+// model matrix stretches z the same way. Cells are balls 10
 // µm across that face the camera. The cells a section is coloured for (those
 // scoring for the genes, or in a shown class; every cell without colouring)
 // are drawn solid and hide what is behind them; the others are a faint
@@ -99,11 +102,13 @@ export function sectionStackLayers(
     const { modelMatrix } = section
     const id = (part: string) => `section-stack-${index.toString()}-${part}`
 
+    const points = cellPoints(cells)
+
     if (overlay === null) {
       layers.push(
         new ScatterplotLayer({
           id: id('cells'),
-          data: pointData(deckPositions(cells.positions), null),
+          data: pointData(points, null),
           getFillColor: CELL_RGBA,
           modelMatrix,
           pickable: true,
@@ -122,21 +127,14 @@ export function sectionStackLayers(
       })
 
       if (options.showContext) {
-        context.push(
-          contextLayer(
-            id('context'),
-            deckPositions(cells.positions),
-            modelMatrix,
-            radius,
-          ),
-        )
+        context.push(contextLayer(id('context'), points, modelMatrix, radius))
       }
 
       if (scored.order.length > 0) {
         layers.push(
           new ScatterplotLayer({
             id: id('scored'),
-            data: pointData(scored.positions, scored.colors),
+            data: pointData(scoredPoints(scored, overlay.scores.depths), scored.colors),
             modelMatrix,
             pickable: true,
             ...radius,
@@ -151,16 +149,14 @@ export function sectionStackLayers(
     const split = classSplit(cells, overlay)
 
     if (options.showContext && split.faded.positions.length > 0) {
-      context.push(
-        contextLayer(id('context'), split.faded.positions, modelMatrix, radius),
-      )
+      context.push(contextLayer(id('context'), split.faded, modelMatrix, radius))
     }
 
     if (split.shown.index.length > 0) {
       layers.push(
         new ScatterplotLayer({
           id: id('classes'),
-          data: pointData(split.shown.positions, split.shown.colors),
+          data: pointData(split.shown, split.shown.colors),
           modelMatrix,
           pickable: true,
           ...radius,
@@ -192,6 +188,22 @@ export function stackPick(
   return index === undefined
     ? null
     : { section: target.section, kind: target.kind, index }
+}
+
+// A picked point's own depth, for cells placed in 3D; null for cells in the
+// plane of their section.
+export function stackPickDepth(
+  pick: StackPick,
+  section: StackSectionInput,
+): number | null {
+  const depth =
+    pick.kind === 'cell'
+      ? section.cells.depths?.values[pick.index]
+      : section.overlay?.kind === 'scores'
+        ? section.overlay.scores.depths?.[pick.index]
+        : undefined
+
+  return depth === undefined || !Number.isFinite(depth) ? null : depth
 }
 
 // The tooltip for a picked point: its section, then its cell and class, or
@@ -227,13 +239,13 @@ export function stackPickText(
 
 function contextLayer(
   id: string,
-  positions: Float32Array,
+  points: DeckPoints,
   modelMatrix: Float32Array,
   radius: object,
 ): Layer {
   return new ScatterplotLayer({
     id,
-    data: pointData(positions, null),
+    data: pointData(points, null),
     getFillColor: CONTEXT_RGBA,
     modelMatrix,
     parameters: CONTEXT_PARAMETERS,
@@ -242,22 +254,83 @@ function contextLayer(
   }) as Layer
 }
 
+// Positions as deck.gl takes them: (x, -y), or (x, -y, z) for cells with
+// their own depths.
+interface DeckPoints {
+  readonly positions: Float32Array
+  readonly size: 2 | 3
+}
+
+// Cached per cells read, so a camera move hands deck.gl the same arrays.
+const cellPointsCache = new WeakMap<PreviewCells, DeckPoints>()
+
+function cellPoints(cells: PreviewCells): DeckPoints {
+  const cached = cellPointsCache.get(cells)
+  if (cached !== undefined) return cached
+
+  const flat = deckPositions(cells.positions)
+  const points =
+    cells.depths === undefined
+      ? { positions: flat, size: 2 as const }
+      : withDepths(flat, (index) => cells.depths?.values[index])
+  cellPointsCache.set(cells, points)
+  return points
+}
+
+// The scored cells' positions, with each one's depth when the scores have
+// them. Cached per positions, which scoredCells keeps per colouring.
+const scoredPointsCache = new WeakMap<Float32Array, DeckPoints>()
+
+function scoredPoints(
+  scored: LinkedScoredCells,
+  depths: Float32Array | undefined,
+): DeckPoints {
+  if (depths === undefined) return { positions: scored.positions, size: 2 }
+
+  const cached = scoredPointsCache.get(scored.positions)
+  if (cached !== undefined) return cached
+
+  const points = withDepths(scored.positions, (index) => {
+    const scoreIndex = scored.order[index]
+    return scoreIndex === undefined ? undefined : depths[scoreIndex]
+  })
+  scoredPointsCache.set(scored.positions, points)
+  return points
+}
+
+// (x, -y) points with a z each; a point without one is at z 0.
+function withDepths(
+  flat: Float32Array,
+  depthOf: (index: number) => number | undefined,
+): DeckPoints {
+  const count = flat.length / 2
+  const positions = new Float32Array(count * 3)
+
+  for (let index = 0; index < count; index += 1) {
+    const z = depthOf(index)
+    positions[index * 3] = flat[index * 2] ?? 0
+    positions[index * 3 + 1] = flat[index * 2 + 1] ?? 0
+    positions[index * 3 + 2] = z !== undefined && Number.isFinite(z) ? z : 0
+  }
+
+  return { positions, size: 3 }
+}
+
 interface ClassSplit {
   // Cells in a shown class: positions, colours, and each one's cell index.
-  readonly shown: {
-    readonly positions: Float32Array
+  readonly shown: DeckPoints & {
     readonly colors: Uint8Array
     readonly index: Uint32Array
   }
   // Cells in a hidden class, or in none.
-  readonly faded: { readonly positions: Float32Array }
+  readonly faded: DeckPoints
 }
 
 // Cached per class array and colours, so a camera move or a depth change
 // hands deck.gl the same arrays and nothing is uploaded again.
 const classSplitCache = new WeakMap<
   Int32Array,
-  { readonly key: string; readonly positions: Float32Array; readonly split: ClassSplit }
+  { readonly key: string; readonly cells: PreviewCells; readonly split: ClassSplit }
 >()
 
 function classSplit(
@@ -266,10 +339,10 @@ function classSplit(
 ): ClassSplit {
   const key = overlay.colors.join('|')
   const cached = classSplitCache.get(overlay.classOf)
-  if (cached?.key === key && cached.positions === cells.positions) return cached.split
+  if (cached?.key === key && cached.cells === cells) return cached.split
 
   const rgb = overlay.colors.map(hexRgb)
-  const positions = deckPositions(cells.positions)
+  const points = cellPoints(cells)
   const shown: number[] = []
   const faded: number[] = []
 
@@ -285,26 +358,28 @@ function classSplit(
 
   const split: ClassSplit = {
     shown: {
-      positions: gather(positions, shown),
+      ...gather(points, shown),
       colors,
       index: Uint32Array.from(shown),
     },
-    faded: { positions: gather(positions, faded) },
+    faded: gather(points, faded),
   }
 
-  classSplitCache.set(overlay.classOf, { key, positions: cells.positions, split })
+  classSplitCache.set(overlay.classOf, { key, cells, split })
   return split
 }
 
-function gather(positions: Float32Array, cells: readonly number[]): Float32Array {
-  const gathered = new Float32Array(cells.length * 2)
+function gather(points: DeckPoints, cells: readonly number[]): DeckPoints {
+  const { positions, size } = points
+  const gathered = new Float32Array(cells.length * size)
 
   cells.forEach((cell, index) => {
-    gathered[index * 2] = positions[cell * 2] ?? 0
-    gathered[index * 2 + 1] = positions[cell * 2 + 1] ?? 0
+    for (let axis = 0; axis < size; axis += 1) {
+      gathered[index * size + axis] = positions[cell * size + axis] ?? 0
+    }
   })
 
-  return gathered
+  return { positions: gathered, size }
 }
 
 // Binary point data, one object per positions array (and colours), so
@@ -313,7 +388,8 @@ type PointData = LayerData<unknown>
 
 const pointDataCache = new WeakMap<Float32Array, Map<Uint8Array | null, PointData>>()
 
-function pointData(positions: Float32Array, colors: Uint8Array | null): PointData {
+function pointData(points: DeckPoints, colors: Uint8Array | null): PointData {
+  const { positions, size } = points
   let byColors = pointDataCache.get(positions)
 
   if (byColors === undefined) {
@@ -325,9 +401,9 @@ function pointData(positions: Float32Array, colors: Uint8Array | null): PointDat
   if (cached !== undefined) return cached
 
   const data: PointData = {
-    length: positions.length / 2,
+    length: positions.length / size,
     attributes: {
-      getPosition: { value: positions, size: 2 },
+      getPosition: { value: positions, size },
       ...(colors === null
         ? {}
         : { getFillColor: { value: colors, size: 4, type: 'unorm8' } }),

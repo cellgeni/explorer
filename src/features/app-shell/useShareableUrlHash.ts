@@ -82,6 +82,7 @@ interface ShareableLayerHashOptions {
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
   readonly morphologyZPlane: number | undefined
   readonly imageView: string | undefined
+  readonly cellView: string | undefined
   readonly measurementUnit: string
   readonly observationColorMode: string
   readonly cellMetadataTrackId: string | null
@@ -93,6 +94,8 @@ interface ShareableGeneHashOptions {
   readonly geneExpressionScaleRange: string | undefined
   readonly geneExpressionDetailMode: string
   readonly geneExpressionScoreMode: string
+  // The saved gene sets (geneSets=), if any.
+  readonly geneSets?: string | undefined
   readonly selectedGenes: readonly string[]
 }
 
@@ -225,6 +228,7 @@ export function useShareableUrlHash({
     morphologyEnabledChannelIds,
     morphologyZPlane,
     imageView,
+    cellView,
     observationColorMode,
     shouldLoadMorphology,
     showCellBoundaries,
@@ -236,6 +240,7 @@ export function useShareableUrlHash({
     geneExpressionScaleRange,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
+    geneSets,
     selectedGenes,
   } = genes
   const {
@@ -300,6 +305,7 @@ export function useShareableUrlHash({
                 ...(segmentationUnits === undefined ? {} : { segmentationUnits }),
               }),
           selectedGenes,
+          ...(geneSets === undefined ? {} : { geneSets }),
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
           ...(panels === undefined ? {} : { panels }),
@@ -332,6 +338,7 @@ export function useShareableUrlHash({
             : { morphologyEnabledChannelIds }),
           ...(morphologyZPlane === undefined ? {} : { morphologyZPlane }),
           ...(imageView === undefined ? {} : { imageView }),
+          ...(cellView === undefined ? {} : { cellView }),
           transcriptOverlay: showTranscriptOverlay,
           transcriptDetailMode,
           transcriptDensityColorScale,
@@ -411,6 +418,7 @@ export function useShareableUrlHash({
     geneExpressionDetailMode,
     geneExpressionScaleRange,
     geneExpressionScoreMode,
+    geneSets,
     imageOpacity,
     cellFillOpacity,
     cellPointScale,
@@ -421,6 +429,7 @@ export function useShareableUrlHash({
     morphologyEnabledChannelIds,
     morphologyZPlane,
     imageView,
+    cellView,
     magicLensRadiusMicrometers,
     magicLensScope,
     measurementUnit,

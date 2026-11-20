@@ -531,6 +531,22 @@ a supported embedding such as `/obsm/X_umap`. The app reads genes from `var`,
 observations from `obs`, and expression from `/X` for supported dense, CSR, and
 CSC layouts.
 
+When `/obsm/spatial` (or `X_spatial`) has a third column, such as registered
+serial sections combined in one `.h5ad` or AnnData Zarr store with each
+section's depth, the 2D view shows every cell in one plane and Cells ›
+Appearance › `View` › `3D` shows them at their z, coloured by the selected
+genes or annotation set. Drag to rotate; `Depth` stretches z; `2D View`
+returns to the plane. See
+[3D Cell View](./ui-reference.md#3d-cell-view).
+
+A table that holds several sections, its rows tagged by an obs column such
+as `section`, `sample` or `library_id`, can be opened a section at a time:
+the Cells section's `Open N Sections` link, or `collection=` with the
+table's URL, lists one dataset per section in the collection bar, to step
+through, show side by side, or stack in 3D when each section has a depth
+(an obs `z_um` column, say). The table is read once for all of them. See
+[Sections Of One Table](./dataset-collections.md#sections-of-one-table).
+
 Files up to 64 MiB are downloaded whole and opened with the browser HDF5
 reader. Larger files are read by range, so only the parts the viewer shows are
 fetched, not tissue images, `raw` or `layers`: the 226 MB CELLxGENE Visium

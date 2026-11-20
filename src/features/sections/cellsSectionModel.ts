@@ -16,6 +16,7 @@ import type {
   GeneExpressionScaleDomain,
   GeneExpressionState,
   GenePanelState,
+  SavedGeneSet,
 } from '../genes/geneControlsModel'
 import type { GeneScaleRange } from '../genes/geneScaleRange'
 import { useGeneControlsWorkflow } from '../genes/useGeneControlsWorkflow'
@@ -44,6 +45,21 @@ export interface CellAppearanceModel {
   // Multiplier on the size cells drawn as points have.
   readonly pointScale: number
   readonly onPointScaleChange: (scale: number) => void
+  // Set when the cells are placed in 3D, so the 3D view can show them.
+  readonly view: CellViewModel | null
+}
+
+export interface CellViewModel {
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+}
+
+// The Cells section's View: every cell in the plane, or the 3D view of
+// cells placed in 3D.
+export type CellView = '2d' | '3d'
+
+export function parseCellView(value: string | undefined): CellView | undefined {
+  return value === '2d' || value === '3d' ? value : undefined
 }
 
 export interface GeneSelectionModel {
@@ -58,6 +74,9 @@ export interface GeneSelectionModel {
     genes: readonly string[],
     scoreMode?: GeneExpressionScoreMode | undefined,
   ) => void
+  // Saved gene sets, newest first; kept in the link (geneSets=).
+  readonly savedSets: readonly SavedGeneSet[]
+  readonly onSavedSetsChange: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   // For the picker's own actions, such as saving a gene set.
   readonly log: AppendDebugEvent
   // Removing a saved gene set offers Undo (15.3-C).
@@ -102,6 +121,9 @@ export interface CellsSectionModelInput {
   readonly cellFillOpacity: number
   readonly cellPointScale: number
   readonly cellLayerControlsVisible: boolean
+  readonly cellViewAvailable: boolean
+  readonly cellViewOpen: boolean
+  readonly setCellViewOpen: (open: boolean) => void
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly geneExpressionColorScale: GeneExpressionColorScale
@@ -126,6 +148,7 @@ export interface CellsSectionModelInput {
     scoreMode: GeneExpressionScoreMode,
   ) => void
   readonly resetGeneExpressionSelectionState: () => void
+  readonly savedGeneSets: readonly SavedGeneSet[]
   readonly selectedCellMetadataTrackId: string | null
   readonly selectedGenes: readonly string[]
   readonly setCellBoundaryOpacity: Dispatch<SetStateAction<number>>
@@ -140,6 +163,7 @@ export interface CellsSectionModelInput {
   readonly setGeneExpressionScoreMode: Dispatch<SetStateAction<GeneExpressionScoreMode>>
   readonly setManualTranscriptExactRequestKey: Dispatch<SetStateAction<string | null>>
   readonly setObservationColorMode: Dispatch<SetStateAction<ObservationColorMode>>
+  readonly setSavedGeneSets: Dispatch<SetStateAction<readonly SavedGeneSet[]>>
   readonly setSelectedCellMetadataTrackId: Dispatch<SetStateAction<string | null>>
   readonly setSelectedGenes: Dispatch<SetStateAction<readonly string[]>>
   readonly setShowCellBoundaries: Dispatch<SetStateAction<boolean>>
@@ -158,6 +182,9 @@ export function useCellsSectionModel({
   cellFillOpacity,
   cellPointScale,
   cellLayerControlsVisible,
+  cellViewAvailable,
+  cellViewOpen,
+  setCellViewOpen,
   cellMetadataTracks,
   geneExpressionBatch,
   geneExpressionColorScale,
@@ -178,6 +205,7 @@ export function useCellsSectionModel({
   observationColorMode,
   rememberGeneExpressionScaleMax,
   resetGeneExpressionSelectionState,
+  savedGeneSets,
   selectedCellMetadataTrackId,
   selectedGenes,
   setCellBoundaryOpacity,
@@ -190,6 +218,7 @@ export function useCellsSectionModel({
   setGeneExpressionScoreMode,
   setManualTranscriptExactRequestKey,
   setObservationColorMode,
+  setSavedGeneSets,
   setSelectedCellMetadataTrackId,
   setSelectedGenes,
   setShowCellBoundaries,
@@ -274,6 +303,15 @@ export function useCellsSectionModel({
           coalesceKey: 'cell-point-scale',
         })
       },
+      view: cellViewAvailable
+        ? {
+            open: cellViewOpen,
+            onOpenChange: (open) => {
+              setCellViewOpen(open)
+              appendDebugEvent(open ? 'Cell view: 3D' : 'Cell view: 2D')
+            },
+          }
+        : null,
     },
     genes: {
       panelState: genePanelState,
@@ -282,6 +320,8 @@ export function useCellsSectionModel({
       scoreMode: geneExpressionScoreMode,
       onToggle: toggleGene,
       onApply: applyGenes,
+      savedSets: savedGeneSets,
+      onSavedSetsChange: setSavedGeneSets,
       log: appendDebugEvent,
       onOfferUndo: offerUndo,
     },

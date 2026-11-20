@@ -21,7 +21,10 @@ import {
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
   parseGeneExpressionScoreMode,
+  formatGeneSetsLink,
   parseGeneSetSymbols,
+  parseGeneSetsLink,
+  savedGeneSetId,
   withGeneSetAt,
 } from './geneControlsModel'
 
@@ -284,5 +287,40 @@ describe('geneControlsModel', () => {
     expect(withGeneSetAt(remaining, set('b', 'Second'), 9).at(-1)?.id).toBe('b')
     // A set saved since under the same name wins.
     expect(withGeneSetAt(remaining, set('b', 'third'), 0)).toBe(remaining)
+  })
+
+  it('writes saved gene sets to the link and reads them back', () => {
+    const sets = [
+      {
+        id: savedGeneSetId('Actb, Gad1'),
+        name: 'Actb, Gad1',
+        genes: ['Actb', 'Gad1'],
+        scoreMode: 'mean' as const,
+      },
+      {
+        id: savedGeneSetId('T|B; 100%'),
+        name: 'T|B; 100%',
+        genes: ['CD3E', 'MS4A1'],
+        scoreMode: 'sum' as const,
+      },
+    ]
+    const link = formatGeneSetsLink(sets)
+
+    expect(link).toBe('Actb%2C Gad1|mean|Actb,Gad1;T%7CB%3B 100%25|sum|CD3E,MS4A1')
+    expect(parseGeneSetsLink(link)).toEqual(sets)
+    expect(formatGeneSetsLink([])).toBeUndefined()
+    expect(parseGeneSetsLink(undefined)).toEqual([])
+  })
+
+  it('drops link gene sets without a name or genes, and repeated names', () => {
+    expect(
+      parseGeneSetsLink(
+        'Markers|z-score|Actb;|sum|Gad1;Empty|sum|;markers|sum|Sst;Odd|nope|Vip',
+      ),
+    ).toEqual([
+      { id: 'gene-set:markers', name: 'Markers', genes: ['Actb'], scoreMode: 'z-score' },
+      // An unknown score reads as the default.
+      { id: 'gene-set:odd', name: 'Odd', genes: ['Vip'], scoreMode: 'sum' },
+    ])
   })
 })

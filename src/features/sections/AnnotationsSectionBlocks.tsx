@@ -91,6 +91,15 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
           </optgroup>
         ) : null}
       </select>
+      {sets.sectionSplit === null ? null : (
+        <a
+          className="secondary-action"
+          href={sets.sectionSplit.href}
+          title={`Open each ${sets.sectionSplit.column} of this table as a dataset of its own, in a collection: side by side, or stacked in 3D`}
+        >
+          Open {sets.sectionSplit.sectionCount.toLocaleString()} Sections
+        </a>
+      )}
       <button
         type="button"
         className="secondary-action"

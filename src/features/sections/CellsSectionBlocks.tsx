@@ -12,7 +12,7 @@ import {
   cellPointScaleStepIndex,
 } from '../../rendering/cellPointStyle'
 import { opacityToPercent } from '../../rendering/layerOpacity'
-import { Button, Chip, InfoTip, NumberField } from '../../components/ui'
+import { Button, Chip, InfoTip, NumberField, Segmented } from '../../components/ui'
 import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
 import { GeneOptionList } from '../genes/GeneOptionList'
@@ -165,6 +165,37 @@ export function CellOpacityControls({
         />
       </div>
     </>
+  )
+}
+
+// 2D or 3D, for cells placed in 3D (a third spatial coordinate).
+export function CellViewControl({
+  appearance,
+}: {
+  readonly appearance: CellAppearanceModel
+}) {
+  const view = appearance.view
+
+  if (!appearance.available || view === null) {
+    return null
+  }
+
+  return (
+    <div className="ui-field ui-field--inline cell-view-control">
+      <span className="ui-field-label">View</span>
+      <Segmented
+        title="Show every cell in the plane, or the cells in 3D at their z"
+        label="Cell view"
+        value={view.open ? '3d' : '2d'}
+        options={[
+          { value: '2d', label: '2D', title: 'Show every cell in the plane' },
+          { value: '3d', label: '3D', title: 'Show the cells in 3D at their z' },
+        ]}
+        onChange={(value) => {
+          view.onOpenChange(value === '3d')
+        }}
+      />
+    </div>
   )
 }
 

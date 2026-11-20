@@ -7219,6 +7219,12 @@ ${cd16Negative},CD16- NK cells`,
     const savedSets = screen.getByLabelText('Saved gene sets')
     expect(savedSets).toHaveTextContent('Interneuron set')
     expect(savedSets).toHaveTextContent('mean')
+    // The link keeps the saved sets.
+    await waitFor(() => {
+      expect(window.location.hash).toContain(
+        'geneSets=Interneuron+set%7Cmean%7CActb%2CGad1',
+      )
+    })
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove Actb' }))
     expect(screen.getByLabelText('Selected genes')).not.toHaveTextContent('Actb')
@@ -7232,9 +7238,57 @@ ${cd16Negative},CD16- NK cells`,
 
     expect(screen.queryByLabelText('Saved gene sets')).not.toBeInTheDocument()
 
+    await waitFor(() => {
+      expect(window.location.hash).not.toContain('geneSets=')
+    })
+
     // Undo (15.3-C) puts the set back.
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByLabelText('Saved gene sets')).toHaveTextContent('Interneuron set')
+  })
+
+  it("restores a link's saved gene sets with its dataset", async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium' +
+        '&geneSets=Interneuron+set%7Cmean%7CActb%2CGad1%3BExcitatory%7Csum%7CSlc17a7',
+    )
+    const loadDatasetOverview = vi.fn(async () => [
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+      },
+    ])
+    const loadGenePanel = vi.fn(async () => ['Actb', 'Gad1', 'Slc17a7'])
+
+    render(
+      <TestApp loadDatasetOverview={loadDatasetOverview} loadGenePanel={loadGenePanel} />,
+    )
+    openControls('genes')
+    expect(await screen.findByText(/ · 3 genes$/)).toBeInTheDocument()
+
+    const savedSets = screen.getByLabelText('Saved gene sets')
+    expect(
+      within(savedSets)
+        .getAllByRole('button', { name: /^Apply / })
+        .map((button) => button.textContent),
+    ).toEqual(['Interneuron setmean', 'Excitatorysum'])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Interneuron set' }))
+
+    const selectedGenes = screen.getByLabelText('Selected genes')
+    expect(selectedGenes).toHaveTextContent('Actb')
+    expect(selectedGenes).toHaveTextContent('Gad1')
+    expect(screen.getByRole('combobox', { name: 'Combine genes' })).toHaveValue('mean')
+    // Still in the link.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('genes=Actb%2CGad1')
+    })
+    expect(window.location.hash).toContain(
+      'geneSets=Interneuron+set%7Cmean%7CActb%2CGad1%3BExcitatory%7Csum%7CSlc17a7',
+    )
   })
 })
 

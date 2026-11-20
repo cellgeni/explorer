@@ -245,6 +245,7 @@ export function overviewCellsToLayerData(
     return {
       id: cell.cellId ?? `overview-cell-${index}`,
       position: [cell.position.x, -cell.position.y, 0],
+      ...(cell.z === undefined ? {} : { z: cell.z }),
       radiusPixels:
         FALLBACK_CELL_RADIUS_MIN_MICROMETERS +
         intensity * FALLBACK_CELL_RADIUS_RANGE_MICROMETERS,

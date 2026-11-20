@@ -4,15 +4,18 @@ import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
 import { CollectionPreviewStore } from './collectionPreviewStore'
 
-interface UseCollectionPreviewStoreOptions {
-  // Null while there is nothing to preview.
-  readonly collection: DatasetCollection | null
+interface PreviewStoreRequestOptions {
   readonly loaders: CollectionPreviewLoaders
   readonly genes: readonly string[]
   readonly scoreMode: GeneExpressionScoreMode
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotationGroupId: string | null
   readonly paused: boolean
+}
+
+interface UseCollectionPreviewStoreOptions extends PreviewStoreRequestOptions {
+  // Null while there is nothing to preview.
+  readonly collection: DatasetCollection | null
 }
 
 // The previews of a collection's datasets, which the bar and the panels of
@@ -37,6 +40,46 @@ export function useCollectionPreviewStore({
           ),
     [collection, loaders],
   )
+
+  usePreviewStoreRequest(store, { genes, scoreMode, annotationGroupId, paused })
+  return store
+}
+
+// The open dataset read as a collection preview is, for the 3D view of its
+// cells: every cell, and the scores or classes that colour them. Null reads
+// nothing.
+export function useOpenDatasetPreviewStore({
+  url,
+  loaders,
+  genes,
+  scoreMode,
+  annotationGroupId,
+  paused,
+}: PreviewStoreRequestOptions & {
+  readonly url: string | null
+}): CollectionPreviewStore | null {
+  const store = useMemo(
+    () =>
+      url === null ? null : new CollectionPreviewStore([url], loaders, { open: true }),
+    [loaders, url],
+  )
+
+  useEffect(() => {
+    if (url !== null) store?.setLinked([url])
+  }, [store, url])
+  usePreviewStoreRequest(store, { genes, scoreMode, annotationGroupId, paused })
+  return store
+}
+
+function usePreviewStoreRequest(
+  store: CollectionPreviewStore | null,
+  {
+    genes,
+    scoreMode,
+    annotationGroupId,
+    paused,
+  }: Omit<PreviewStoreRequestOptions, 'loaders'>,
+): void {
   const genesKey = genes.join('\u0000')
 
   // The request and pause come first, so the start reads nothing before
@@ -62,8 +105,6 @@ export function useCollectionPreviewStore({
       store.stop()
     }
   }, [store])
-
-  return store
 }
 
 // Re-renders the caller whenever a preview changes.

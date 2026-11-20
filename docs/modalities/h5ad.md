@@ -229,7 +229,17 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
 - Spatial coordinates come from the first key present in
   `H5AD_COORDINATE_KEYS`: `X_spatial`, `spatial`, `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`. If none exists, the load fails.
-- Only columns 0 and 1 are used. Any non-finite value fails the load.
+- Columns 0 and 1 are x and y. Any non-finite value fails the load.
+- A third column of `X_spatial` or `spatial` is each cell's z, in the same
+  units, and the Cells section offers the
+  [3D cell view](../ui-reference.md#3d-cell-view) (`obsmDepths`), whether
+  the AnnData is an `.h5ad`, an AnnData Zarr store or in Icechunk. anndata
+  chunks a large matrix two columns wide, so a Zarr store's z is in chunks
+  of its own; the whole matrix is read. It is ignored when any value is not
+  finite or all are the same (a padding column of zeros), for other keys (a
+  third UMAP or PCA column), and for Visium files and SpatialData tables,
+  which place cells in their plane. Image-pixel coordinates scale it by the
+  pixel size, as they do x and y.
 - Values are used directly as micrometres (1 µm per unit), except for Visium
   files, whose `obsm/spatial` pixels are scaled to micrometres
   ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
@@ -369,12 +379,48 @@ chunked by gene, one chunk; in zarr's default chunks for a large table, 64
 chunks of 1,969 × 406 values per gene, about 195 MiB. CSC reads only each
 gene's column. See [Choosing CSR or CSC](../h5ad-reference.md#choosing-csr-or-csc).
 
+## Sections Of One Table
+
+`<table URL>#obs.<column>=<value>` opens one section of a table that holds
+several: the rows whose obs `column` holds `value`
+(`src/datasets/annDataSections.ts`; the user side is in
+[Sections Of One Table](../dataset-collections.md#sections-of-one-table)).
+
+- **Detection.** `detectAnnDataSection` detects the table's own URL, as
+  `.h5ad`, AnnData Zarr or Icechunk, and returns it with `section` set and
+  `baseUrl` the section's URL. A split (`#obs.<column>` with no value) as
+  `dataset=`, or a section of a table that is not AnnData, stops with an
+  error naming the problem.
+- **One read.** The section's `AnnDataH5adDataset` holds the table's cached
+  dataset (`cachedSpatialDataset(tableUrl)`, retained while held) and builds
+  its base from the table's (`withSection`): its rows' cell IDs,
+  coordinates, depths and obs columns, with label counts and number ranges
+  over its rows. The matrix and obsm stay the table's and are read by the
+  table's rows (`section.rows`): `matrix()` and `geneExpression()` map each
+  cell to its table row, `geneValues()` keeps the section's rows of the
+  table's read and renumbers them, and `embeddings()` reads the whole obsm
+  matrix and keeps the section's rows. Disposing a section lets go of the
+  table; the table's H5 file worker is the table's to close.
+- **Depths.** A section's cells keep their third obsm `spatial` column only
+  when it varies within the section; cells of one plane have none.
+- **Splitting.** `sectionColumns()` lists the label columns with 2 to 500
+  values, those named like section columns (`SECTION_COLUMN_NAMES`) first.
+  `sections(column)` gives each value's cell count and depth: a numeric obs
+  column matching `/^z(_|$)/i` (`z`, `z_um`) shared by the section's cells,
+  else their shared third obsm `spatial` column.
+  `loadDatasetCollection` (`src/datasets/annDataSectionCollection.ts`) turns
+  them into a collection when `collection=` names a table.
+- **Visium.** A table with a Visium layout is refused: its sections are its
+  libraries.
+
 ## Source Files
 
 | File                                            | Role                                                                |
 | ----------------------------------------------- | ------------------------------------------------------------------- |
 | `src/datasets/datasetFactory.ts`                | URL check, `HEAD` probe, lazy construction                          |
 | `src/datasets/h5adDataset.ts`                   | Both backends, HDF5 layout parsing, all dataset methods             |
+| `src/datasets/annDataSections.ts`               | Section and split URLs (`#obs.<column>=<value>`)                    |
+| `src/datasets/annDataSectionCollection.ts`      | `collection=` for a table: one dataset per section                  |
 | `src/features/app-shell/useDatasetLifecycle.ts` | `loadAnnDataOverview` first-paint sequence                          |
 | `src/features/app-shell/platformAdapter.ts`     | `H5AD_PLATFORM_ADAPTER` feature gating, `isAnnDataPlatform` routing |
 | `src/features/cells/useCellDetailWorkflow.ts`   | Selected-cell gene profile                                          |

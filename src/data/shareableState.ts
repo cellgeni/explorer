@@ -37,6 +37,9 @@ export interface ShareableState {
   readonly segmentationFormat?: string
   readonly segmentationUnits?: string
   readonly selectedGenes?: readonly string[]
+  // The gene picker's saved gene sets: `geneSets=`, in the form
+  // `formatGeneSetsLink` writes.
+  readonly geneSets?: string
   readonly viewState?: ShareableViewState
   readonly roiSelection?: RoiSelection
   // An old link's control tab, which the shell maps onto panels, card and
@@ -87,6 +90,9 @@ export interface ShareableState {
   readonly morphologyZPlane?: number
   // `3d` when an OME-Zarr z-stack is shown in the 3D view: `imageView=`.
   readonly imageView?: string
+  // `3d` when cells placed in 3D (a third spatial coordinate) are shown in
+  // the 3D view: `cellView=`.
+  readonly cellView?: string
   readonly transcriptOverlay?: boolean
   readonly transcriptDetailMode?: string
   readonly transcriptMinQv?: number
@@ -144,6 +150,7 @@ export function parseShareableState(hash: string): ShareableState {
   const segmentationUnits = readString(params, 'segmentationUnits')
   // An empty genes= clears a dataset manifest's genes.
   const selectedGenes = readCsvAllowEmpty(params, 'genes')
+  const geneSets = readString(params, 'geneSets')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
   const activeTab = readString(params, 'tab')
@@ -175,6 +182,7 @@ export function parseShareableState(hash: string): ShareableState {
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
   const imageView = readString(params, 'imageView')
+  const cellView = readString(params, 'cellView')
   const transcriptOverlay = parseBoolean(params.get('tx'))
   const transcriptDetailMode = readString(params, 'txDetail')
   const transcriptMinQv = parseNonNegativeInteger(params.get('txQv'))
@@ -252,6 +260,9 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (selectedGenes !== undefined) {
     state.selectedGenes = selectedGenes
+  }
+  if (geneSets !== undefined) {
+    state.geneSets = geneSets
   }
 
   if (viewState !== undefined) {
@@ -376,6 +387,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (imageView !== undefined) {
     state.imageView = imageView
+  }
+
+  if (cellView !== undefined) {
+    state.cellView = cellView
   }
 
   if (transcriptOverlay !== undefined) {
@@ -524,6 +539,8 @@ export function formatShareableState(state: ShareableState): string {
     params.set('genes', state.selectedGenes.join(','))
   }
 
+  setOptionalString(params, 'geneSets', state.geneSets)
+
   if (state.viewState !== undefined) {
     params.set('view', formatViewState(state.viewState))
   }
@@ -609,6 +626,7 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'imageView', state.imageView)
+  setOptionalString(params, 'cellView', state.cellView)
 
   if (state.transcriptOverlay !== undefined) {
     params.set('tx', state.transcriptOverlay ? '1' : '0')
@@ -778,6 +796,22 @@ function setEscapedCsv(
   if (kept.length > 0) {
     params.set(name, kept.map(escapeCsvEntry).join(','))
   }
+}
+
+// A part of a structured value such as `query=` or `geneSets=`: `%`, `;`,
+// `|` and `,` inside it are written as `%25`, `%3B`, `%7C` and `%2C`.
+export function escapeLinkPart(value: string): string {
+  return value
+    .replaceAll('%', '%25')
+    .replaceAll(';', '%3B')
+    .replaceAll('|', '%7C')
+    .replaceAll(',', '%2C')
+}
+
+export function unescapeLinkPart(value: string): string {
+  return value.replace(/%(25|3B|7C|2C)/gi, (_, code: string) =>
+    String.fromCharCode(Number.parseInt(code, 16)),
+  )
 }
 
 function escapeCsvEntry(entry: string): string {
