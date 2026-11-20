@@ -200,6 +200,50 @@ describe('transcriptOverlay', () => {
     ])
   })
 
+  it('pairs a Zarr point with the Parquet row of its 64-bit transcript ID', () => {
+    const cellId = intToCellId(1, 1)
+    // The Xenium demo's transcript 281668250306971 = 0x1002d × 2^32 + 67995:
+    // field of view F1 (index 45 in fov_names) and the low 32 bits the Zarr
+    // keeps.
+    const nativePoint = transcriptPoint({
+      id: 'F1:67995',
+      transcriptId: '67995',
+      cellId: null,
+      cellAssignment: 'unavailable',
+      fovName: 'F1',
+    })
+    const parquetPoint = transcriptPoint({
+      id: '281668250306971',
+      transcriptId: '281668250306971',
+      cellId,
+      cellAssignment: 'known',
+      fovName: 'F1',
+      overlapsNucleus: true,
+      nucleusDistance: 0,
+    })
+    // G1 (index 60) has a transcript with the same low 32 bits.
+    const otherFov = transcriptPoint({
+      id: '281732674816411',
+      transcriptId: '281732674816411',
+      cellId: intToCellId(2, 2),
+      cellAssignment: 'known',
+      fovName: 'G1',
+    })
+
+    expect(mergeTranscriptPointMetadata([nativePoint], [otherFov, parquetPoint])).toEqual(
+      [
+        expect.objectContaining({
+          id: 'F1:67995',
+          transcriptId: '281668250306971',
+          cellId,
+          cellAssignment: 'known',
+          overlapsNucleus: true,
+          nucleusDistance: 0,
+        }),
+      ],
+    )
+  })
+
   it('returns native exact points when Parquet metadata enrichment is slow', async () => {
     vi.useFakeTimers()
     const onFallback = vi.fn()
