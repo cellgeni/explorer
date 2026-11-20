@@ -6,7 +6,7 @@ import {
   testTopBarModel,
   testViewSettingsModel,
 } from '../../test/sectionModels'
-import { TopBar } from './TopBar'
+import { BuildCommitNote, TopBar } from './TopBar'
 import { toolOptions } from './topBarModel'
 
 function renderTopBar(
@@ -345,5 +345,33 @@ describe('TopBar', () => {
     fireEvent.keyDown(search, { key: '?', shiftKey: true })
     expect(screen.queryByRole('dialog', { name: 'Help' })).not.toBeInTheDocument()
     search.remove()
+  })
+})
+
+describe('BuildCommitNote', () => {
+  const commit = {
+    short: '0123456',
+    href: 'https://github.com/cellgeni/explorer/commit/0123456',
+  }
+
+  it("names a release build's tag beside its commit", () => {
+    const { container, rerender } = render(
+      <BuildCommitNote
+        commit={commit}
+        release={{
+          tag: 'v0.1.0',
+          href: 'https://github.com/cellgeni/explorer/releases/tag/v0.1.0',
+        }}
+      />,
+    )
+
+    expect(container.textContent).toBe('Release v0.1.0, build 0123456')
+    expect(screen.getByRole('link', { name: 'v0.1.0' })).toHaveAttribute(
+      'href',
+      'https://github.com/cellgeni/explorer/releases/tag/v0.1.0',
+    )
+
+    rerender(<BuildCommitNote commit={commit} release={null} />)
+    expect(container.textContent).toBe('Build 0123456')
   })
 })

@@ -43,7 +43,13 @@ import {
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
 import { ExampleGallery, RecentDatasetList } from '../start/StartScreen'
-import { buildCommit, HELP_LINKS } from './docLinks'
+import {
+  buildCommit,
+  buildRelease,
+  HELP_LINKS,
+  type BuildCommit,
+  type BuildRelease,
+} from './docLinks'
 import { isHelpKey, SHORTCUTS } from './shortcuts'
 import type {
   DatasetSummary,
@@ -615,13 +621,27 @@ function HelpMenu() {
   )
 }
 
-function BuildCommitNote() {
-  const commit = buildCommit()
+export function BuildCommitNote({
+  commit = buildCommit(),
+  release = buildRelease(),
+}: {
+  readonly commit?: BuildCommit | null
+  readonly release?: BuildRelease | null
+}) {
   if (commit === null) return null
 
   return (
     <p className="shell-help-build">
-      Build{' '}
+      {release === null ? null : (
+        <>
+          Release{' '}
+          <a href={release.href} target="_blank" rel="noopener noreferrer">
+            {release.tag}
+          </a>
+          ,{' '}
+        </>
+      )}
+      {release === null ? 'Build' : 'build'}{' '}
       <a href={commit.href} target="_blank" rel="noopener noreferrer">
         <code>{commit.short}</code>
       </a>

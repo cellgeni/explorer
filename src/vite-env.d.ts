@@ -5,8 +5,11 @@ interface ImportMetaEnv {
   // Where the start screen reads the example gallery (plan 15.3-A). Defaults
   // to examples/index.json on GitHub's main branch.
   readonly VITE_EXAMPLES_INDEX_URL?: string
-  // The commit a deployed build came from; the Pages workflow sets it.
+  // The commit a deployed build came from; the Pages and Release workflows
+  // set it.
   readonly VITE_COMMIT_SHA?: string
+  // A release build's tag; the Release workflow sets it.
+  readonly VITE_RELEASE_TAG?: string
 }
 
 interface ImportMeta {
