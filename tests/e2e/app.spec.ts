@@ -1145,7 +1145,49 @@ test('keeps the collection bar buttons clear of its datasets @smoke', async ({
       })
     })
     expect(problems, state).toEqual([])
+    await expectPreviewsDrawn(state)
     await collectAxeFindings(page, `collection, ${state}`, findings)
+  }
+
+  // While a preview is read its button also shows "Loading…", which axe
+  // counts as part of the button's label (label-content-name-mismatch), so
+  // which buttons it flagged depended on the reads still running. Before a
+  // scan, the previews in view have drawn their cells and no read runs,
+  // wherever the rows fall. A preview in view that is never read fails here.
+  async function expectPreviewsDrawn(state: string) {
+    await expect
+      .poll(
+        () =>
+          bar.evaluate((nav) => {
+            if (nav.querySelector('.collection-bar-preview[data-loading]') !== null) {
+              return ['a preview is being read']
+            }
+            const groups = nav.querySelector('.collection-bar-groups')
+            if (groups === null) return ['no datasets']
+            const view = groups.getBoundingClientRect()
+            return [...nav.querySelectorAll('.collection-bar-dataset')].flatMap(
+              (button) => {
+                const canvas = button.querySelector('canvas')
+                const box = button.getBoundingClientRect()
+                const inView =
+                  box.right > view.left &&
+                  box.left < view.right &&
+                  box.bottom > view.top &&
+                  box.top < view.bottom
+                if (canvas === null || !inView) return []
+                const pixels = canvas
+                  .getContext('2d')
+                  ?.getImageData(0, 0, canvas.width, canvas.height).data
+                const drawn = pixels?.some((value, index) => index % 4 === 3 && value > 0)
+                return drawn === true
+                  ? []
+                  : [`${button.getAttribute('aria-label') ?? '?'} has no preview`]
+              },
+            )
+          }),
+        { message: `previews drawn (${state})`, timeout: H5AD_LOAD_TIMEOUT_MS },
+      )
+      .toEqual([])
   }
 
   await expectButtonsClear('previews')
