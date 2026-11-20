@@ -93,6 +93,8 @@ interface ShareableGeneHashOptions {
   readonly geneExpressionScaleRange: string | undefined
   readonly geneExpressionDetailMode: string
   readonly geneExpressionScoreMode: string
+  // The saved gene sets (geneSets=), if any.
+  readonly geneSets?: string | undefined
   readonly selectedGenes: readonly string[]
 }
 
@@ -236,6 +238,7 @@ export function useShareableUrlHash({
     geneExpressionScaleRange,
     geneExpressionDetailMode,
     geneExpressionScoreMode,
+    geneSets,
     selectedGenes,
   } = genes
   const {
@@ -300,6 +303,7 @@ export function useShareableUrlHash({
                 ...(segmentationUnits === undefined ? {} : { segmentationUnits }),
               }),
           selectedGenes,
+          ...(geneSets === undefined ? {} : { geneSets }),
           ...(shareableViewState === undefined ? {} : { viewState: shareableViewState }),
           ...(activeRoiSelection === null ? {} : { roiSelection: activeRoiSelection }),
           ...(panels === undefined ? {} : { panels }),
@@ -411,6 +415,7 @@ export function useShareableUrlHash({
     geneExpressionDetailMode,
     geneExpressionScaleRange,
     geneExpressionScoreMode,
+    geneSets,
     imageOpacity,
     cellFillOpacity,
     cellPointScale,
