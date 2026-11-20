@@ -302,7 +302,8 @@ or exact points.
 ### ROI
 
 - Cells: DuckDB `cells()` query for the box or lasso, up to 50,000
-  (`src/data/roiCells.ts`).
+  (`src/data/roiCells.ts`). It asks for 50,001, so a selection with more
+  inside is marked as cut short and one with exactly 50,000 is not.
 - Gene stats (`src/data/roiGeneStats.ts`): a 32-cell preview, then a stratified
   10,000-cell refinement. Uses CSC Zarr rows from `file_row_number`, falling
   back to `cell_feature_matrix.h5`. Without either, ROI gene stats are

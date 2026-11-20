@@ -21,7 +21,7 @@ import {
   loadCustomMorphologyLayer,
   loadMorphologyImage,
 } from '../../data/morphologyImage'
-import { loadDatasetRoiCells } from '../../data/roiCells'
+import { loadDatasetRoiCells, type RoiCells } from '../../data/roiCells'
 import {
   loadDatasetRoiGeneStats,
   type RoiGeneStats,
@@ -153,7 +153,7 @@ export type RoiCellsLoader = (
   baseUrl: string,
   selection: RoiSelectionInput,
   options?: { readonly signal?: AbortSignal; readonly limit?: number },
-) => Promise<readonly DatasetCell[]>
+) => Promise<RoiCells>
 
 export type RoiGeneStatsLoader = (
   baseUrl: string,

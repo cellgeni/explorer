@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RoiSelection } from '../../data/roiSelection'
-import { ROI_CELL_EXPORT_LIMIT } from '../../data/roiCells'
+import { roiCellsStoppedAtLimit } from '../../data/roiCells'
 import type { RoiCellsLoader } from '../app-shell/appDependencies'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import type { SavedSelection } from '../roi/selectionListModel'
@@ -78,7 +78,7 @@ export function useSelectionCells({
           settle({
             status: 'ready',
             cellIds: cells.map((cell) => cell.id),
-            hitCellLimit: cells.length >= ROI_CELL_EXPORT_LIMIT,
+            hitCellLimit: roiCellsStoppedAtLimit(cells),
           })
           appendDebugEvent(
             `Plots: ${saved.name} holds ${cells.length.toLocaleString()} cells`,

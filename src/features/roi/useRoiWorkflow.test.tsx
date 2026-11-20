@@ -8,6 +8,7 @@ import type {
 } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
+import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
 import type { DatasetCell } from '../../datasets/xeniumDataset'
@@ -531,6 +532,47 @@ describe('useRoiWorkflow', () => {
     expect(click).toHaveBeenCalledTimes(1)
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
     expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON ROI 1')
+  })
+
+  it('says an ROI is cut short only when the reader stopped at its limit', async () => {
+    const manyCells = Array.from({ length: ROI_CELL_EXPORT_LIMIT + 1 }, (_, index) => ({
+      id: asCellId(`aaaaaaaa-${index + 1}`),
+      position: { x: micrometers(1), y: micrometers(2) },
+    }))
+    // An AnnData reader returns every cell; Xenium's stops at the limit.
+    const loadRoiCells = vi
+      .fn<RoiCellsLoader>()
+      .mockResolvedValueOnce(manyCells)
+      .mockResolvedValueOnce(roiCellsWithin(manyCells, ROI_CELL_EXPORT_LIMIT))
+
+    render(
+      <Probe
+        loadRoiCells={loadRoiCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+    expect(snapshot.roiState).toMatchObject({ status: 'ready', hitCellLimit: false })
+    expect(snapshot.debugMessages).toContainEqual(
+      expect.stringMatching(/^ROI cells ready: 50,001 in /),
+    )
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+    expect(snapshot.roiState).toMatchObject({ status: 'ready', hitCellLimit: true })
+    expect(snapshot.roiState.status === 'ready' && snapshot.roiState.cells).toHaveLength(
+      ROI_CELL_EXPORT_LIMIT,
+    )
+    expect(snapshot.debugMessages).toContainEqual(
+      expect.stringMatching(/^ROI cells ready: 50,000\+ in /),
+    )
   })
 
   it('compares the selection with the reference cells outside it (15.4-B)', async () => {
