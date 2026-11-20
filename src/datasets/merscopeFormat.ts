@@ -249,8 +249,7 @@ export function parseMerscopeCellByGene(
   text: string,
   label: string = MERSCOPE_FILE_DEFAULTS.cellByGene,
 ): MerscopeCellByGene {
-  const headerEnd = lineEnd(text, 0)
-  const header = splitHeader(text.slice(0, headerEnd))
+  const { fields: header, end: headerEnd } = parseHeader(text, label)
 
   if (header.length < 2) {
     throw new MerscopeFormatError(`${label} has no gene columns.`)
@@ -335,8 +334,7 @@ export function parseMerscopeCellMetadata(
   text: string,
   label: string = MERSCOPE_FILE_DEFAULTS.cellMetadata,
 ): MerscopeCellMetadata {
-  const headerEnd = lineEnd(text, 0)
-  const header = splitHeader(text.slice(0, headerEnd))
+  const { fields: header, end: headerEnd } = parseHeader(text, label)
   const ids: string[] = []
   const numbers = header.map(() => new GrowableArray(Float64Array))
   // Columns with a value that is not a number, as text from that row on.
@@ -638,15 +636,12 @@ function forEachRow(
   const ends = new Int32Array(columnCount)
   let row = 0
   const field = (column: number): string => {
-    let start = starts[column] ?? 0
-    let end = ends[column] ?? start
+    const start = starts[column] ?? 0
+    const end = ends[column] ?? start
 
-    if (end - start >= 2 && text.charCodeAt(start) === QUOTE) {
-      start += 1
-      end -= text.charCodeAt(end - 1) === QUOTE ? 1 : 0
-    }
-
-    return text.slice(start, end)
+    return text.charCodeAt(start) === QUOTE
+      ? quotedFieldText(text, start, end)
+      : text.slice(start, end)
   }
   const fields: RowFields = {
     text: field,
@@ -681,30 +676,71 @@ function forEachRow(
     },
   }
   let position = nextLineStart(text, headerEnd)
+  // The next quote at or after `position`, or the text's length: rows
+  // before it are split at every comma.
+  let nextQuote = -1
 
   while (position < text.length) {
-    const end = lineEnd(text, position)
-
-    if (end === position) {
-      position = nextLineStart(text, end)
+    if (isLineBreak(text, position)) {
+      position = nextLineStart(text, position)
       continue
     }
 
+    if (nextQuote < position) {
+      const quote = text.indexOf('"', position)
+      nextQuote = quote < 0 ? text.length : quote
+    }
+
     let column = 0
-    let fieldStart = position
+    let end = lineEnd(text, position)
 
-    for (let index = position; index <= end; index += 1) {
-      if (index < end && text.charCodeAt(index) !== COMMA) {
-        continue
+    if (nextQuote >= end) {
+      let fieldStart = position
+
+      for (let index = position; index <= end; index += 1) {
+        if (index < end && text.charCodeAt(index) !== COMMA) {
+          continue
+        }
+
+        if (column < columnCount) {
+          starts[column] = fieldStart
+          ends[column] = index
+        }
+
+        column += 1
+        fieldStart = index + 1
+      }
+    } else {
+      // RFC 4180: a quoted field may hold commas, line breaks and "" for a
+      // quote, so the record ends at the first line break outside quotes.
+      let index = position
+
+      for (;;) {
+        const fieldStart = index
+        let fieldEnd = -1
+
+        if (text.charCodeAt(index) === QUOTE) {
+          index = closingQuote(text, index + 1, label, row) + 1
+          fieldEnd = index
+        }
+
+        while (index < text.length && text.charCodeAt(index) !== COMMA) {
+          if (isLineBreak(text, index)) break
+          index += 1
+        }
+
+        if (column < columnCount) {
+          starts[column] = fieldStart
+          ends[column] = fieldEnd < 0 ? index : fieldEnd
+        }
+
+        column += 1
+
+        if (text.charCodeAt(index) !== COMMA) break
+        index += 1
       }
 
-      if (column < columnCount) {
-        starts[column] = fieldStart
-        ends[column] = index
-      }
-
-      column += 1
-      fieldStart = index + 1
+      end = index
     }
 
     if (column !== columnCount) {
@@ -724,6 +760,8 @@ const QUOTE = 0x22
 const ZERO = 0x30
 const CARRIAGE_RETURN = 0x0d
 const LINE_FEED = 0x0a
+const SPACE = 0x20
+const BYTE_ORDER_MARK = 0xfeff
 
 // The index of the line's `\r` or `\n`, or the end of the text.
 function lineEnd(text: string, start: number): number {
@@ -731,6 +769,46 @@ function lineEnd(text: string, start: number): number {
   const end = newline < 0 ? text.length : newline
 
   return end > start && text.charCodeAt(end - 1) === CARRIAGE_RETURN ? end - 1 : end
+}
+
+// A `\n`, or the `\r` of a `\r\n`.
+function isLineBreak(text: string, index: number): boolean {
+  const code = text.charCodeAt(index)
+
+  return (
+    code === LINE_FEED ||
+    (code === CARRIAGE_RETURN && text.charCodeAt(index + 1) === LINE_FEED)
+  )
+}
+
+// The index of the quote closing a quoted field whose text starts at
+// `from`, past any "" pairs.
+function closingQuote(text: string, from: number, label: string, row: number): number {
+  let index = from
+
+  for (;;) {
+    const quote = text.indexOf('"', index)
+
+    if (quote < 0) {
+      throw new MerscopeFormatError(
+        `${label} ${row < 0 ? 'header' : `row ${(row + 1).toLocaleString()}`} has a quoted field with no closing quote.`,
+      )
+    }
+
+    if (text.charCodeAt(quote + 1) !== QUOTE) {
+      return quote
+    }
+
+    index = quote + 2
+  }
+}
+
+// A quoted field's text, `start` at its opening quote and `end` just past
+// its closing one.
+function quotedFieldText(text: string, start: number, end: number): string {
+  const inner = text.slice(start + 1, Math.max(start + 1, end - 1))
+
+  return inner.includes('""') ? inner.replaceAll('""', '"') : inner
 }
 
 function nextLineStart(text: string, end: number): number {
@@ -743,11 +821,42 @@ function nextLineStart(text: string, end: number): number {
   return text.charCodeAt(position) === LINE_FEED ? position + 1 : position
 }
 
-function splitHeader(line: string): string[] {
-  return line
-    .replace(/^\uFEFF/, '')
-    .split(',')
-    .map((name) => name.trim().replace(/^"(.*)"$/, '$1'))
+// The header's names, trimmed, and where its record ends.
+function parseHeader(
+  text: string,
+  label: string,
+): { readonly fields: string[]; readonly end: number } {
+  const fields: string[] = []
+  let index = text.charCodeAt(0) === BYTE_ORDER_MARK ? 1 : 0
+
+  for (;;) {
+    while (text.charCodeAt(index) === SPACE) index += 1
+    const start = index
+    let quotedEnd = -1
+
+    if (text.charCodeAt(index) === QUOTE) {
+      index = closingQuote(text, index + 1, label, -1) + 1
+      quotedEnd = index
+    }
+
+    while (index < text.length) {
+      const code = text.charCodeAt(index)
+      if (code === COMMA || isLineBreak(text, index)) break
+      index += 1
+    }
+
+    fields.push(
+      quotedEnd < 0
+        ? text.slice(start, index).trim()
+        : quotedFieldText(text, start, quotedEnd),
+    )
+
+    if (text.charCodeAt(index) !== COMMA) {
+      return { fields, end: index }
+    }
+
+    index += 1
+  }
 }
 
 type TypedArrayConstructor<T> = {
