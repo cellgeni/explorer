@@ -233,6 +233,10 @@ describe('MERSCOPE image placement', () => {
     expect(() => parseMerscopeTransform('1 0.5 0 0 1 0 0 0 1')).toThrow(
       'not a scale and translation',
     )
+    // Unequal scales would draw the image squashed (EXP-016).
+    expect(() => parseMerscopeTransform('2 0 -2000 0 4 -12000 0 0 1')).toThrow(
+      'The micron-to-mosaic transform scales x by 2 and y by 4 pixels per µm.',
+    )
   })
 
   it('starts on the middle plane', () => {
