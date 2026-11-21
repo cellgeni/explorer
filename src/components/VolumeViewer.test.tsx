@@ -147,6 +147,25 @@ describe('volumeStatus', () => {
       }),
     ).toBe('Reading 256 × 128 × 64 voxels: 12 of 128 planes')
   })
+
+  it('says which channels it draws when more than six are on', () => {
+    const nine = { ...base, enabledChannelCount: 9 }
+
+    expect(volumeStatus(nine)).toBe(
+      '256 × 128 × 64 voxels. Showing the first 6 of 9 enabled channels',
+    )
+    expect(
+      volumeStatus({ ...nine, progress: { planesRead: 12, planesTotal: 384 } }),
+    ).toBe(
+      'Reading 256 × 128 × 64 voxels: 12 of 384 planes. Showing the first 6 of 9 enabled channels',
+    )
+    expect(volumeStatus({ ...nine, channels: [] })).toBe(
+      'Showing the first 6 of 9 enabled channels',
+    )
+    expect(volumeStatus({ ...base, enabledChannelCount: 6 })).toBe(
+      '256 × 128 × 64 voxels',
+    )
+  })
 })
 
 describe('fittedVolumeViewState', () => {
