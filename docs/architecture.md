@@ -427,9 +427,10 @@ All screen↔data conversions go through `coords.ts`.
   network failure.
 - **403 as missing.** Object stores that return `403` for missing keys are
   handled for Zarr metadata keys (`createZarrFetchStore`,
-  `src/zarr/zarrStores.ts`), Icechunk repository files
-  (`src/zarr/icechunkStore.ts`), and `.zchunkstore` sidecars. Other `403`s are
-  errors.
+  `src/zarr/zarrStores.ts`), the Icechunk `repo` file, refs and transaction
+  logs (`src/zarr/icechunkStore.ts`), and `.zchunkstore` sidecars. Other `403`s
+  are errors, as is a `404` for an Icechunk snapshot, manifest or chunk, which
+  icechunk-js would otherwise read as the fill value.
 - **Plain-http data from an HTTPS page.** A read that gets no response
   (detection's "Request blocked", a network error, or a Range probe without a
   response) from an HTTPS page to an `http://` address gets advice for that
