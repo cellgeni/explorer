@@ -69,6 +69,8 @@ export interface ViewerLegendInput {
     readonly label: string
     readonly min: number
     readonly max: number
+    // Cells whose value is NaN or infinite, drawn as no value.
+    readonly nonFiniteCount?: number
   } | null
   // The largest cell area, in µm², or null without areas.
   readonly cellAreaMax: number | null
@@ -161,11 +163,8 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
           : input.genes.zScoreCells === 'all'
             ? `, relative to all ${plural}`
             : `, relative to ${plural} in view`
-      const nonFinite = input.genes.nonFiniteCount ?? 0
-      const skipped =
-        nonFinite === 0
-          ? ''
-          : `; ${nonFinite.toLocaleString()} non-finite ${nonFinite === 1 ? 'value' : 'values'} skipped`
+      const nonFinite = nonFiniteValuesSkipped(input.genes.nonFiniteCount)
+      const skipped = nonFinite === null ? '' : `; ${nonFinite}`
 
       return {
         kind: 'continuous',
@@ -208,11 +207,13 @@ function cellColorLegendSection(input: ViewerLegendInput): ViewerLegendSection |
     case 'metadata': {
       const track = input.metadataTrack
       if (track === null) return null
+      const skipped = nonFiniteValuesSkipped(track.nonFiniteCount)
 
       return {
         kind: 'continuous',
         id: 'cells',
         title: track.label,
+        ...(skipped === null ? {} : { detail: skipped }),
         gradient: metadataScaleGradient(),
         min: formatLegendNumber(track.min),
         max: formatLegendNumber(track.max),
@@ -242,6 +243,13 @@ export function geneListLabel(names: readonly string[]): string {
   const rest = names.length - GENE_NAME_LIMIT
 
   return rest > 0 ? `${shown} +${rest.toLocaleString()}` : shown
+}
+
+// "n non-finite values skipped", or null when there are none.
+function nonFiniteValuesSkipped(count = 0): string | null {
+  return count === 0
+    ? null
+    : `${count.toLocaleString()} non-finite ${count === 1 ? 'value' : 'values'} skipped`
 }
 
 function formatLegendNumber(value: number): string {

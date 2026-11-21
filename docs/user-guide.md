@@ -284,7 +284,8 @@ For H5AD, SpatialData, and MERSCOPE, categorical and string `obs` columns load a
 annotation sets, and numeric `obs` values appear in the Cell card for the
 selected cell. Numeric `obs` columns are also listed as `Cell color` →
 `Metadata` tracks as soon as the dataset loads; a track's values are read when
-you first colour by it.
+you first colour by it. Cells with a missing (NaN) value are drawn like cells
+without a value, and the legend counts them.
 
 Imported CSV/JSON annotations and metadata tracks (Cells › Clusters) use the
 dataset's own cell IDs: Xenium IDs such as `aaabbbcc-1`, H5AD obs names and

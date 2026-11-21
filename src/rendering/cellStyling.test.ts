@@ -112,6 +112,25 @@ describe('cell observation styling', () => {
     expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
     expect(styled[1]?.fillColor).not.toEqual(cells[1]?.fillColor)
   })
+
+  // AnnData stores a missing obs value as NaN (EXP-046).
+  it('draws a NaN or infinite metadata value as no value', () => {
+    for (const value of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const styled = styleOverviewCellsByObservation(cells, 'metadata', {
+        metadataTrack: {
+          id: 'metadata:doublet-score',
+          values: [
+            { cellId: cellA, value },
+            { cellId: cellB, value: 0.75 },
+          ],
+          min: 0,
+          max: 1,
+        },
+      })
+
+      expect(styled[0]?.fillColor).toEqual([72, 68, 58, 44])
+    }
+  })
 })
 
 describe('element observation styling', () => {

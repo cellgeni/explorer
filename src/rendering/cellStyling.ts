@@ -135,8 +135,12 @@ function metadataColorizer(
 
   const valueByCellId = new Map<string, number>()
 
+  // A missing value (NaN, as AnnData stores one) or an infinite one is drawn
+  // as no value, like a cell the track does not list (EXP-046).
   for (const value of metadataTrack.values) {
-    valueByCellId.set(value.cellId, value.value)
+    if (Number.isFinite(value.value)) {
+      valueByCellId.set(value.cellId, value.value)
+    }
   }
 
   return (cell) => {
