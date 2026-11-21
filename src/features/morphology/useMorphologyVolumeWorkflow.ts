@@ -21,6 +21,8 @@ export interface MorphologyVolumeState {
   readonly levelCount: number
   // The enabled channels read so far, in channel order.
   readonly channels: readonly MorphologyVolumeChannel[]
+  // Channels turned on in the image controls, including any past the
+  // MAX_VOLUME_CHANNELS the 3D view draws.
   readonly enabledChannelCount: number
   // Planes read of the channels still loading.
   readonly progress: { readonly planesRead: number; readonly planesTotal: number } | null
@@ -36,9 +38,9 @@ export function morphologyVolumeLevels(
     : (image.loader.volumeLevels?.() ?? [])
 }
 
-// The enabled channels of the dataset image that the 3D view draws, at most
-// MAX_VOLUME_CHANNELS.
-export function morphologyVolumeChannels(
+// The enabled channels of the dataset image, in channel order. The 3D view
+// draws the first MAX_VOLUME_CHANNELS.
+function enabledMorphologyChannels(
   image: MorphologyImage | null,
   settings: readonly MorphologyChannelSetting[],
 ): readonly MorphologyImageChannel[] {
@@ -46,9 +48,7 @@ export function morphologyVolumeChannels(
     settings.filter((setting) => setting.enabled).map((setting) => setting.id),
   )
 
-  return (image?.channelLoaders ?? [])
-    .filter((channel) => enabled.has(channel.info.id))
-    .slice(0, MAX_VOLUME_CHANNELS)
+  return (image?.channelLoaders ?? []).filter((channel) => enabled.has(channel.info.id))
 }
 
 interface LoadedVolumes {
@@ -80,9 +80,13 @@ export function useMorphologyVolumeWorkflow({
   readonly settings: readonly MorphologyChannelSetting[]
 }): MorphologyVolumeState {
   const levels = useMemo(() => morphologyVolumeLevels(image), [image])
-  const channels = useMemo(
-    () => morphologyVolumeChannels(image, settings),
+  const enabledChannels = useMemo(
+    () => enabledMorphologyChannels(image, settings),
     [image, settings],
+  )
+  const channels = useMemo(
+    () => enabledChannels.slice(0, MAX_VOLUME_CHANNELS),
+    [enabledChannels],
   )
   const level = useMemo(
     () => chooseVolumeLevel(levels, { channelCount: channels.length }),
@@ -252,7 +256,7 @@ export function useMorphologyVolumeWorkflow({
     level,
     levelCount: levels.length,
     channels: loadedChannels,
-    enabledChannelCount: channels.length,
+    enabledChannelCount: enabledChannels.length,
     progress:
       level === null || missingIds.length === 0
         ? null

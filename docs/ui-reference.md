@@ -1060,8 +1060,8 @@ How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-
 
 `VolumeViewer` (`src/components/VolumeViewer.tsx`) covers the canvas when
 the Image section's `View` is `3D`. It draws the dataset image's enabled
-channels (up to six) as a volume on black, with their colours and contrast
-windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
+channels (the first six, in channel order) as a volume on black, with their
+colours and contrast windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
 scrolling zooms.
 
 | Control     | Type                                  | Default       | Notes                                                                   |
@@ -1075,6 +1075,8 @@ scrolling zooms.
 The status at the bottom left gives the level read ("Level 4 of 7, 1,097 ×
 281 × 41 voxels"), planes read while loading, why nothing is drawn (no
 channel on, or no level small enough), or a channel that could not be read.
+With more than six channels on, it adds "Showing the first 6 of 9 enabled
+channels".
 
 ### 3D Cell View
 

@@ -1,5 +1,6 @@
 import type { OrbitViewState } from '@deck.gl/core'
 import type { ImagePyramidVolumeLevel } from '../data/imagePyramid'
+import { MAX_VOLUME_CHANNELS } from '../data/imageVolume'
 
 // Tilted, so that the first view shows depth.
 const INITIAL_ROTATION_X = 30
@@ -22,7 +23,8 @@ export function fittedVolumeViewState(
 }
 
 // What the 3D view says under the volume: its resolution, how much is read,
-// or why nothing is drawn.
+// or why nothing is drawn; and which channels it draws when more are on than
+// it can draw.
 export function volumeStatus({
   level,
   levelCount,
@@ -32,7 +34,8 @@ export function volumeStatus({
 }: {
   readonly level: ImagePyramidVolumeLevel | null
   readonly levelCount: number
-  // Channels read so far, and those turned on in the image controls.
+  // Channels read so far, and those turned on in the image controls, which
+  // may be more than the 3D view draws.
   readonly channels: readonly unknown[]
   readonly enabledChannelCount: number
   readonly progress: { readonly planesRead: number; readonly planesTotal: number } | null
@@ -45,6 +48,22 @@ export function volumeStatus({
     return 'Turn on a channel to show it in 3D.'
   }
 
+  const status = volumeReadStatus(level, levelCount, channels, progress)
+
+  if (enabledChannelCount <= MAX_VOLUME_CHANNELS) {
+    return status
+  }
+
+  const shown = `Showing the first ${MAX_VOLUME_CHANNELS.toString()} of ${enabledChannelCount.toLocaleString()} enabled channels`
+  return status === null ? shown : `${status}. ${shown}`
+}
+
+function volumeReadStatus(
+  level: ImagePyramidVolumeLevel,
+  levelCount: number,
+  channels: readonly unknown[],
+  progress: { readonly planesRead: number; readonly planesTotal: number } | null,
+): string | null {
   const voxels = `${level.width.toLocaleString()} × ${level.height.toLocaleString()} × ${level.depth.toLocaleString()} voxels`
   const resolution =
     levelCount > 1

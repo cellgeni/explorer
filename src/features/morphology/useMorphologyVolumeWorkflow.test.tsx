@@ -25,7 +25,11 @@ interface Read {
   readonly reject: (error: unknown) => void
 }
 
-function volumeImage(url: string, reads: Read[]): MorphologyImage {
+function volumeImage(
+  url: string,
+  reads: Read[],
+  channelIds: readonly string[] = ['A', 'B'],
+): MorphologyImage {
   const loader = (channelId: string) =>
     ({
       url,
@@ -39,7 +43,7 @@ function volumeImage(url: string, reads: Read[]): MorphologyImage {
           reads.push({ channelId, level, signal, onProgress, resolve, reject })
         }),
     }) as unknown as ImagePyramidLoader
-  const channels = ['A', 'B'].map((id, index) => ({
+  const channels = channelIds.map((id, index) => ({
     info: {
       id,
       index,
@@ -58,8 +62,11 @@ function volumeImage(url: string, reads: Read[]): MorphologyImage {
   }
 }
 
-function settings(enabledIds: readonly string[]): readonly MorphologyChannelSetting[] {
-  return ['A', 'B'].map((id) => ({
+function settings(
+  enabledIds: readonly string[],
+  channelIds: readonly string[] = ['A', 'B'],
+): readonly MorphologyChannelSetting[] {
+  return channelIds.map((id) => ({
     id,
     enabled: enabledIds.includes(id),
     color: id === 'A' ? [255, 0, 0] : [0, 255, 0],
@@ -115,6 +122,21 @@ describe('useMorphologyVolumeWorkflow', () => {
       contrastMin: 10,
       contrastMax: 200,
       texture: { format: 'r8unorm', width: 4, height: 2, depth: 3 },
+    })
+  })
+
+  it('reads the first six enabled channels and counts them all', () => {
+    const reads: Read[] = []
+    const ids = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    const { result } = renderWorkflow({
+      image: volumeImage('https://example.test/stack.ome.zarr', reads, ids),
+      settings: settings(['A', 'C', 'D', 'E', 'F', 'G', 'H'], ids),
+    })
+
+    expect(reads.map((read) => read.channelId)).toEqual(['A', 'C', 'D', 'E', 'F', 'G'])
+    expect(result.current).toMatchObject({
+      enabledChannelCount: 7,
+      progress: { planesRead: 0, planesTotal: 18 },
     })
   })
 
