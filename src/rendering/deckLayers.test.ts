@@ -321,23 +321,54 @@ describe('deck layer factory', () => {
 
     expect(boundaryLayer.id).toBe('cell-boundary-paths')
     expect(boundaryLayer.props.pickable).toBe(false)
-    expect(boundaryLayer.props._pathType).toBe('loop')
+    expect(boundaryLayer.props._pathType).toBe('open')
     expect(boundaryLayer.props.widthUnits).toBe('pixels')
     expect(boundaryLayer.props.widthMinPixels).toBe(1.35)
 
     const boundaryData = getBoundaryPathData(boundaryLayer)
 
+    // deck.gl leaves binary paths open, so the first vertex is repeated.
     expect(boundaryData.length).toBe(1)
-    expect(Array.from(boundaryData.startIndices)).toEqual([0, 3])
+    expect(Array.from(boundaryData.startIndices)).toEqual([0, 4])
     expect(boundaryData.attributes.getPath.size).toBe(3)
     expect(Array.from(boundaryData.attributes.getPath.value)).toEqual([
-      0, 0, 0, 10, 0, 0, 10, -10, 0,
+      0, 0, 0, 10, 0, 0, 10, -10, 0, 0, 0, 0,
     ])
     expect(boundaryData.attributes.getColor.size).toBe(4)
     expect(Array.from(boundaryData.attributes.getColor.value)).toEqual([
-      246, 242, 232, 210, 246, 242, 232, 210, 246, 242, 232, 210,
+      246, 242, 232, 210, 246, 242, 232, 210, 246, 242, 232, 210, 246, 242, 232, 210,
     ])
     expect(pointLayer.props.data).toEqual([])
+  })
+
+  it('keeps boundary paths that already repeat their first vertex as they are', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+          [0, 0, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const [boundaryLayer] = createOverviewLayers(fixtureCells, boundaries, {
+      cellBoundaryOpacity: 1,
+    })
+
+    if (!(boundaryLayer instanceof PathLayer)) {
+      throw new Error('Expected first overview layer to be a PathLayer.')
+    }
+
+    const boundaryData = getBoundaryPathData(boundaryLayer)
+
+    expect(Array.from(boundaryData.startIndices)).toEqual([0, 4])
+    expect(Array.from(boundaryData.attributes.getPath.value)).toEqual([
+      0, 0, 0, 10, 0, 0, 10, -10, 0, 0, 0, 0,
+    ])
   })
 
   it('adds pickable boundary hit polygons when boundary picking is enabled', () => {
@@ -1067,7 +1098,7 @@ describe('deck layer factory', () => {
     const boundaryData = getBoundaryPathData(boundaryLayer)
 
     expect(boundaryLayer.props.pickable).toBe(false)
-    expect(boundaryLayer.props._pathType).toBe('loop')
+    expect(boundaryLayer.props._pathType).toBe('open')
     expect(Array.from(boundaryData.attributes.getColor.value.slice(0, 4))).toEqual([
       240, 128, 120, 110,
     ])

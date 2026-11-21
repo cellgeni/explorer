@@ -134,7 +134,9 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
         data: boundaryPathData,
         dataComparator: hasSameCellBoundaryLayerGeometry,
         pickable: false,
-        _pathType: 'loop',
+        // deck.gl draws binary paths open even with 'loop', so the geometry
+        // repeats each ring's first vertex to draw the closing edge.
+        _pathType: 'open',
         opacity: 1,
         widthUnits: 'pixels',
         widthMinPixels: CELL_BOUNDARY_LINE_WIDTH_PIXELS,
@@ -396,7 +398,55 @@ export function styleCellBoundariesByGeneExpression(
 function cellBoundariesToFillLayerGeometry(
   boundaries: readonly CellBoundaryDatum[],
 ): CellBoundaryGeometryBuildResult<CellBoundaryFillGeometryData> {
-  let polygonCount = 0
+  const rings = closedBoundaryRings(boundaries, (boundary) => boundary.fillColor)
+
+  return {
+    layerData: {
+      length: rings.length,
+      startIndices: rings.startIndices,
+      attributes: {
+        getPolygon: { value: rings.positions, size: 3 },
+      },
+    },
+    cellIds: rings.cellIds,
+    colors: rings.colors,
+  }
+}
+
+function cellBoundariesToPathLayerGeometry(
+  boundaries: readonly CellBoundaryDatum[],
+): CellBoundaryGeometryBuildResult<CellBoundaryPathGeometryData> {
+  const rings = closedBoundaryRings(boundaries, (boundary) => boundary.lineColor)
+
+  return {
+    layerData: {
+      length: rings.length,
+      startIndices: rings.startIndices,
+      attributes: {
+        getPath: { value: rings.positions, size: 3 },
+      },
+    },
+    cellIds: rings.cellIds,
+    colors: rings.colors,
+  }
+}
+
+interface ClosedBoundaryRings {
+  readonly length: number
+  readonly startIndices: Uint32Array
+  readonly positions: Float32Array
+  readonly cellIds: readonly string[]
+  readonly colors: readonly Color[]
+}
+
+// Packs boundaries with 3+ vertices into one position buffer. A ring that
+// does not end on its first vertex (Atera cells, imported segmentations) gets
+// it repeated, so fills and outlines both draw the closing edge.
+function closedBoundaryRings(
+  boundaries: readonly CellBoundaryDatum[],
+  colorOf: (boundary: CellBoundaryDatum) => Color,
+): ClosedBoundaryRings {
+  let ringCount = 0
   let vertexCount = 0
 
   for (const boundary of boundaries) {
@@ -404,7 +454,7 @@ function cellBoundariesToFillLayerGeometry(
       continue
     }
 
-    polygonCount += 1
+    ringCount += 1
     vertexCount += boundary.polygon.length
 
     if (!isClosedBoundaryPolygon(boundary.polygon)) {
@@ -412,12 +462,12 @@ function cellBoundariesToFillLayerGeometry(
     }
   }
 
-  const startIndices = new Uint32Array(polygonCount + 1)
+  const startIndices = new Uint32Array(ringCount + 1)
   const positions = new Float32Array(vertexCount * 3)
   const cellIds: string[] = []
   const colors: Color[] = []
 
-  let polygonIndex = 0
+  let ringIndex = 0
   let vertexIndex = 0
   let positionIndex = 0
 
@@ -426,9 +476,9 @@ function cellBoundariesToFillLayerGeometry(
       continue
     }
 
-    startIndices[polygonIndex] = vertexIndex
+    startIndices[ringIndex] = vertexIndex
     cellIds.push(boundary.id)
-    colors.push(boundary.fillColor)
+    colors.push(colorOf(boundary))
 
     for (const point of boundary.polygon) {
       positions[positionIndex] = point[0] ?? 0
@@ -447,81 +497,12 @@ function cellBoundariesToFillLayerGeometry(
       vertexIndex += 1
     }
 
-    polygonIndex += 1
+    ringIndex += 1
   }
 
-  startIndices[polygonIndex] = vertexIndex
+  startIndices[ringIndex] = vertexIndex
 
-  return {
-    layerData: {
-      length: polygonCount,
-      startIndices,
-      attributes: {
-        getPolygon: { value: positions, size: 3 },
-      },
-    },
-    cellIds,
-    colors,
-  }
-}
-
-function cellBoundariesToPathLayerGeometry(
-  boundaries: readonly CellBoundaryDatum[],
-): CellBoundaryGeometryBuildResult<CellBoundaryPathGeometryData> {
-  let pathCount = 0
-  let vertexCount = 0
-
-  for (const boundary of boundaries) {
-    if (boundary.polygon.length < 3) {
-      continue
-    }
-
-    pathCount += 1
-    vertexCount += boundary.polygon.length
-  }
-
-  const startIndices = new Uint32Array(pathCount + 1)
-  const positions = new Float32Array(vertexCount * 3)
-  const cellIds: string[] = []
-  const colors: Color[] = []
-
-  let pathIndex = 0
-  let vertexIndex = 0
-  let positionIndex = 0
-
-  for (const boundary of boundaries) {
-    if (boundary.polygon.length < 3) {
-      continue
-    }
-
-    startIndices[pathIndex] = vertexIndex
-    cellIds.push(boundary.id)
-    colors.push(boundary.lineColor)
-
-    for (const point of boundary.polygon) {
-      positions[positionIndex] = point[0] ?? 0
-      positions[positionIndex + 1] = point[1] ?? 0
-      positions[positionIndex + 2] = point[2] ?? 0
-      positionIndex += 3
-      vertexIndex += 1
-    }
-
-    pathIndex += 1
-  }
-
-  startIndices[pathIndex] = vertexIndex
-
-  return {
-    layerData: {
-      length: pathCount,
-      startIndices,
-      attributes: {
-        getPath: { value: positions, size: 3 },
-      },
-    },
-    cellIds,
-    colors,
-  }
+  return { length: ringCount, startIndices, positions, cellIds, colors }
 }
 
 function cellBoundaryFillLayerDataWithColors(
