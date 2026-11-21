@@ -601,7 +601,9 @@ CSC and Xenium's feature-major `cell_features`;
 with up to 4 million stored values; and `geneValuesFromDenseChunks` for the
 dense Zarr chunks that hold the genes. Four reads are in flight at once (six
 for H5AD). Before reading, `estimateGeneValuesRead(genes)` gives the bytes the
-read decodes, which the panel holds to its budget (plan 22-D7). The values go
+read decodes, which the panel holds to its budget (plan 22-D7). A column
+asked for twice, as for two spellings of a Xenium gene, is read once, and
+each later ask gets a copy of its arrays. The values go
 by transfer to the panel's plot worker, which the panel starts once per
 dataset and gives the dataset's row cell IDs; Xenium's are the
 `cell_features/cell_id` integer pairs, made text in the worker. The worker

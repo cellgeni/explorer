@@ -145,8 +145,33 @@ describe('gene values (plan 22-A)', () => {
     const csr = sparseFrom(dense.values, 4, 3, 'csr')
     const [first, second, unknown] = await geneValuesFromCsr(csr, [1, 1, 9])
 
-    expect(second).toBe(first)
+    expect(second).toEqual(first)
     expect(unknown?.rows).toHaveLength(0)
+  })
+
+  it('gives each ask of a column its own arrays, as workers take them by transfer', async () => {
+    const reads: [number, number][] = []
+    const asked = [
+      await geneValuesFromCsr(sparseFrom(dense.values, 4, 3, 'csr'), [2, 2]),
+      await geneValuesFromCsrBatches(
+        rangeRead(sparseFrom(dense.values, 4, 3, 'csr')),
+        [2, 2],
+      ),
+      await geneValuesFromColumnSlices(
+        rangeRead(sparseFrom(dense.values, 4, 3, 'csc'), reads),
+        [2, 2],
+      ),
+      await geneValuesFromDenseChunks(chunked(dense.values, 4, 3, [2, 2], 'C'), [2, 2]),
+    ]
+
+    for (const [first, second] of asked) {
+      expect(second).toEqual(first)
+      expect(second?.rows.buffer).not.toBe(first?.rows.buffer)
+      expect(second?.values.buffer).not.toBe(first?.values.buffer)
+    }
+
+    // The column itself is read once.
+    expect(reads).toHaveLength(1)
   })
 
   it('stops when aborted, between batches of stored values', async () => {
