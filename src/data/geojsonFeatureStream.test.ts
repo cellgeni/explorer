@@ -40,6 +40,30 @@ describe('createGeojsonFeatureStream', () => {
     )
   })
 
+  it('reads escapes and keys however the pieces fall', () => {
+    const tricky = [
+      { type: 'Feature', properties: { note: 'a\\"b\\\\', features: [1, 2] } },
+      { type: 'Feature', properties: { name: '{[ "]} \\u00e9' } },
+    ]
+    const text = `{"name":"features","feat\\u0075res" : ${JSON.stringify(tricky)}}`
+
+    for (const size of [1, 2, 3, 5, 1000]) {
+      expect(readInPieces(text, size)).toEqual(tricky)
+    }
+  })
+
+  it('refuses newline-delimited features when the first one closes', () => {
+    const stream = createGeojsonFeatureStream(() => undefined, { label: 'test' })
+    const line = `${JSON.stringify(features[0])}\n`
+
+    expect(() => {
+      stream.push(line)
+    }).toThrow('Expected test GeoJSON to be a FeatureCollection.')
+    expect(() => readInPieces('null', 2)).toThrow(
+      'Expected test GeoJSON to be a FeatureCollection.',
+    )
+  })
+
   it('reports a file that is not a FeatureCollection or ends early', () => {
     expect(() => readInPieces('{"type":"Feature"}', 4)).toThrow(
       'Expected test GeoJSON to be a FeatureCollection.',
