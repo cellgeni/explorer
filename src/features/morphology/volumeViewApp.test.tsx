@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../../App'
 import { imagePixels, micrometers } from '../../data/coords'
@@ -100,11 +100,19 @@ function detectImage(manifest?: DatasetManifest): SpatialDatasetDetector {
   })
 }
 
-async function linkAfterWrite(): Promise<URLSearchParams> {
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  })
-  return new URLSearchParams(window.location.hash.slice(1))
+// Waits for the share link to pass `check`. The app writes it 160 ms after
+// changes settle (useShareableUrlHash), and later on a slow runner. Only a
+// written link names the image's channels, so the link the test opened never
+// passes, even when `check` asks for a key to be left out.
+async function waitForLink(check: (link: URLSearchParams) => void): Promise<void> {
+  await waitFor(
+    () => {
+      const link = new URLSearchParams(window.location.hash.slice(1))
+      expect(link.get('channels')).toBe('Channel:0')
+      check(link)
+    },
+    { timeout: 3_000 },
+  )
 }
 
 describe('App with a z-stack image', () => {
@@ -133,11 +141,16 @@ describe('App with a z-stack image', () => {
     )
 
     const view = await screen.findByRole('region', { name: '3D view' })
-    expect((await linkAfterWrite()).get('imageView')).toBe('3d')
+    await waitForLink((link) => {
+      expect(link.get('imageView')).toBe('3d')
+    })
 
     fireEvent.click(within(view).getByRole('button', { name: '2D View' }))
     expect(screen.queryByRole('region', { name: '3D view' })).not.toBeInTheDocument()
-    expect((await linkAfterWrite()).has('imageView')).toBe(false)
+    // The link had imageView=3d, so only the 2D view's write passes.
+    await waitForLink((link) => {
+      expect(link.has('imageView')).toBe(false)
+    })
   })
 
   it("opens in 3D for a manifest's default, and writes 2D to undo it", async () => {
@@ -165,10 +178,14 @@ describe('App with a z-stack image', () => {
 
     const view = await screen.findByRole('region', { name: '3D view' })
     // The manifest's view, so the link leaves it out.
-    expect((await linkAfterWrite()).has('imageView')).toBe(false)
+    await waitForLink((link) => {
+      expect(link.has('imageView')).toBe(false)
+    })
 
     fireEvent.click(within(view).getByRole('button', { name: '2D View' }))
-    expect((await linkAfterWrite()).get('imageView')).toBe('2d')
+    await waitForLink((link) => {
+      expect(link.get('imageView')).toBe('2d')
+    })
     await waitFor(() => {
       expect(screen.queryByRole('region', { name: '3D view' })).not.toBeInTheDocument()
     })
