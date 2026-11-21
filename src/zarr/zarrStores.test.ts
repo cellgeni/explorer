@@ -88,6 +88,25 @@ describe('Zarr stores', () => {
     ])
   })
 
+  it('reads keys whose names hold %, # and ? at their own URLs', async () => {
+    const urls: string[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push((input as Request).url)
+      return new Response(new Uint8Array(4), { status: 206 })
+    }) as unknown as typeof fetch
+    const store = createZarrFetchStore('https://example.test/data/store.zarr?token=1', {
+      fetcher,
+    })
+
+    await store.get('/obs/% mito #1?/.zarray')
+    await store.getRange('/obs/a%41/0', { offset: 0, length: 4 })
+
+    expect(urls).toEqual([
+      'https://example.test/data/store.zarr/obs/%25%20mito%20%231%3F/.zarray?token=1',
+      'https://example.test/data/store.zarr/obs/a%2541/0?token=1',
+    ])
+  })
+
   it('enumerates chunk keys for v2 and v3 encodings', () => {
     expect(zarrChunkKeys(v2Array('<f4', [5, 3], [2, 2]))).toEqual([
       '0.0',

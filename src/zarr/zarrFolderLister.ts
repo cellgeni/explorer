@@ -1,4 +1,5 @@
 import { readFolderListing } from '../data/folderListing'
+import { urlSafeStoreKey } from './zarrStores'
 
 // Zarr has no listing of its own, and plain HTTP has none either, so stores
 // without consolidated metadata name only some children in their attributes.
@@ -62,7 +63,7 @@ export function createZarrFolderLister(
   const listS3 = (endpoint: S3Endpoint, path: string) =>
     listS3Folder(fetchFn, endpoint.url, joinKey(endpoint.prefix, path))
   const listIndexPage = async (path: string): Promise<FolderEntries | null> => {
-    const folder = path === '' ? `${rootPath}/` : `${rootPath}/${path}/`
+    const folder = path === '' ? `${rootPath}/` : `${rootPath}/${urlSafeStoreKey(path)}/`
     const listing = await readFolderListing(`${root.origin}${folder}`, {
       fetcher: fetchFn,
     })

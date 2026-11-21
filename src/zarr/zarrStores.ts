@@ -50,7 +50,7 @@ export function createZarrFetchStore(
   const fetcher = options.fetcher
   const rootPath = new URL(url).pathname.replace(/\/+$/, '')
 
-  return new zarr.FetchStore(url, {
+  return new NameSafeFetchStore(url, {
     async fetch(request: Request) {
       // Range reads (sharded chunks and shard indexes) skip Chromium's HTTP
       // cache, as TIFF tiles do. Two Range requests for the same bytes of a
@@ -79,6 +79,28 @@ export function createZarrFetchStore(
       )
     },
   })
+}
+
+// zarrita's FetchStore resolves a key as a URL, so in a node's name '%' would
+// read as an escape, '#' start a fragment and '?' a query. Keys are names, so
+// those three are escaped; the rest is left to the URL as before.
+class NameSafeFetchStore extends zarr.FetchStore {
+  override get(key: zarr.AbsolutePath, options?: RequestInit) {
+    return super.get(urlSafeStoreKey(key), options)
+  }
+
+  override getRange(
+    key: zarr.AbsolutePath,
+    range: zarr.RangeQuery,
+    options?: RequestInit,
+  ) {
+    return super.getRange(urlSafeStoreKey(key), range, options)
+  }
+}
+
+// A store key or folder path with '%', '#' and '?' escaped, to append to a URL.
+export function urlSafeStoreKey<Key extends string>(key: Key): Key {
+  return key.replace(/[%#?]/g, (character) => encodeURIComponent(character)) as Key
 }
 
 // Reads consolidated metadata from the store root, or returns null when none
