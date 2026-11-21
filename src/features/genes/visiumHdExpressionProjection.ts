@@ -1,9 +1,9 @@
 import { micrometers, type DataPoint } from '../../data/coords'
-import type { SpatialElementId } from '../../datasets/spatialDataset'
 import type {
   GeneExpressionBatch,
   GeneExpressionElement,
-} from '../../datasets/xeniumDataset'
+  SpatialElementId,
+} from '../../datasets/spatialDataset'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 
 export interface VisiumHdExpressionCellAssignment {
@@ -53,6 +53,7 @@ export function projectVisiumHdExpressionToBoundaryCells(
       batch: {
         elements: [],
         genes: batch.genes,
+        population: 'all',
         maxCount: 0,
         ...(batch.timing === undefined ? {} : { timing: batch.timing }),
       },
@@ -144,6 +145,8 @@ export function projectVisiumHdExpressionToBoundaryCells(
     batch: {
       elements,
       genes: batch.genes,
+      // Every boundary cell is listed, with 0 where no bin maps to it.
+      population: 'all',
       maxCount,
       ...(batch.timing === undefined ? {} : { timing: batch.timing }),
     },

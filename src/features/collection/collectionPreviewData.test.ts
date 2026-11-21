@@ -165,6 +165,7 @@ describe('openPreviewSource', () => {
     const loadDatasetOverview = vi.fn(async () => [point(1, 1), point(5, 9)])
     const loadGeneExpression = vi.fn(async () => ({
       genes: ['EPCAM'],
+      population: 'all' as const,
       maxCount: 3,
       elements: [
         { id: 'a', position: { x: micrometers(5), y: micrometers(9) }, count: 3 },

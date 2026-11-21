@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../../data/coords'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import {
   projectVisiumHdExpressionToBoundaryCells,
@@ -24,6 +24,7 @@ describe('Visium HD expression projection', () => {
         },
       ],
       genes: ['Actb'],
+      population: 'all',
       maxCount: 12,
     }
     const boundaries: readonly CellBoundaryDatum[] = [
@@ -96,6 +97,7 @@ describe('Visium HD expression projection', () => {
           },
         ],
         genes: ['Actb'],
+        population: 'all',
         maxCount: 3,
       }),
     ).toEqual(['bin-1', 'bin-2'])

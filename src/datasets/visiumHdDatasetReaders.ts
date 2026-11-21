@@ -57,6 +57,8 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionGeneCount,
   GridCellBatch,
   ImageSource,
   SpatialElement,
@@ -72,7 +74,6 @@ import type {
   VisiumHdScalefactors,
   VisiumHdTissuePositions,
 } from './visiumHdOverview'
-import type { GeneExpressionBatch, GeneExpressionGeneCount } from './xeniumDataset'
 import type {
   VisiumHdAnnotationQueryOptions,
   VisiumHdBarcodeMappingCellQueryOptions,
@@ -1200,6 +1201,7 @@ async function readVisiumHdGeneExpression(options: {
     return {
       elements: [],
       genes: [],
+      population: 'all',
       maxCount: 0,
     }
   }
@@ -1226,6 +1228,7 @@ async function readVisiumHdGeneExpression(options: {
     return {
       elements: [],
       genes: selectedGenes,
+      population: 'all',
       maxCount: 0,
       timing: {
         viewportCellsMs,
@@ -1297,10 +1300,12 @@ async function readVisiumHdGeneExpression(options: {
   })
 
   // Every bin in the box, or an even sample by the stride: the bins a z-score
-  // compares with.
+  // compares with. Only those with expression are listed. A stride reads every
+  // Nth bin only, so expressing bins between them are lost.
   return {
     elements,
     genes: selectedGenes,
+    population: 'expressing',
     cellCount: viewportBins.length,
     geneCounts,
     maxCount,

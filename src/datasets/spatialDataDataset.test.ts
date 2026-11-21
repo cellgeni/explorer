@@ -91,6 +91,19 @@ describe('SpatialDataDataset', () => {
       counts: [3, 4],
     })
 
+    // The table's expression batch passes through.
+    await expect(
+      dataset.geneExpression(
+        {
+          minX: micrometers(0),
+          maxX: micrometers(10),
+          minY: micrometers(0),
+          maxY: micrometers(10),
+        },
+        ['Actb'],
+      ),
+    ).resolves.toMatchObject({ population: 'all' })
+
     const elements = await dataset.elements({
       minX: micrometers(3),
       maxX: micrometers(10),

@@ -12,9 +12,9 @@ import type { TranscriptGroupSummary, TranscriptPoint } from '../data/transcript
 import type {
   DatasetCell,
   DatasetTranscript,
-  GeneExpressionGeneCount,
   TranscriptViewportQueryOptions,
 } from './xeniumDataset'
+import type { GeneExpressionGeneCount } from './spatialDataset'
 
 const DEFAULT_TRANSCRIPT_MIN_QV = 20
 

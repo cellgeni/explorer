@@ -1,7 +1,8 @@
 import type { BBox, DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelectionInput } from '../../data/roiSelection'
-import type { DatasetCell, GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { DatasetCell } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 
 export const MAGIC_LENS_CELL_LIMIT = 25_000
 export const MAGIC_LENS_TOP_GENE_LIMIT = 8

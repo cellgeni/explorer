@@ -6,8 +6,11 @@ import { asCellId } from '../../data/cellid'
 import { micrometers, type BBox } from '../../data/coords'
 import type { ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
-import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type {
+  ElementBatch,
+  GeneExpressionBatch,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -69,6 +72,7 @@ const batch: GeneExpressionBatch = {
     },
   ],
   genes: ['Actb'],
+  population: 'all',
   maxCount: 2,
 }
 

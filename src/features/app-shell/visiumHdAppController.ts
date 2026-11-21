@@ -1,6 +1,9 @@
 import type { CellFeatureMatrixReadOptions, GexResult } from '../../data/gexTypes'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { SpatialElement, SpatialElementId } from '../../datasets/spatialDataset'
+import type {
+  GeneExpressionBatch,
+  SpatialElement,
+  SpatialElementId,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
   visiumHdBarcodeMappingBinId,

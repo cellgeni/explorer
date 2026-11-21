@@ -3,8 +3,7 @@ import * as React from 'react'
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import type { SpatialElement } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   gridCellColumnsFixture,
@@ -40,6 +39,7 @@ const expressionBatch: GeneExpressionBatch = {
     },
   ],
   genes: ['Actb'],
+  population: 'all',
   maxCount: 3,
 }
 
@@ -146,6 +146,7 @@ describe('useViewerLayerData', () => {
         count: index + 1,
       })),
       genes: ['Actb'],
+      population: 'all',
       maxCount: 100,
     }
     const key = geneExpressionScaleKeyFor('https://example.test/output', 'sum', ['Actb'])

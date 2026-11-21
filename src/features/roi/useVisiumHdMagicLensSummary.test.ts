@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type { GexResult } from '../../data/gexTypes'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import {
   gridCellColumnsFixture,
   squareGridBasis,
@@ -213,6 +213,7 @@ function geneExpressionBatch(
   return {
     elements,
     genes,
+    population: 'all',
     geneCounts: genes.length === 1 ? [{ gene: genes[0] ?? '', count: sum(counts) }] : [],
     maxCount: Math.max(0, ...counts),
   }

@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { DebugLogAppendOptions } from '../app-shell/appRuntimeModel'
 import {

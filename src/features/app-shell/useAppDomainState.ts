@@ -19,8 +19,11 @@ import {
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import type { ShareableState, ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
-import type { Platform, SpatialElement } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type {
+  GeneExpressionBatch,
+  Platform,
+  SpatialElement,
+} from '../../datasets/spatialDataset'
 import type { MorphologyImage } from '../../data/morphologyImage'
 import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { normalizeLayerOpacity } from '../../rendering/layerOpacity'

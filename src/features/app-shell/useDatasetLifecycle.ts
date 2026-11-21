@@ -42,12 +42,12 @@ import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type {
   DatasetMeta,
+  GeneExpressionBatch,
   ImageSource,
   Platform,
   SpatialElement,
 } from '../../datasets/spatialDataset'
 import type { SpatialDataSummary } from '../../datasets/spatialDataDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type {
   AnalysisEmbeddingKind,
   AnalysisEmbeddingOption,
