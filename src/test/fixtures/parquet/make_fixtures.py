@@ -7,11 +7,16 @@ so its first rows sit in the first few pages of each column chunk:
   2024-01-01 plus id seconds), flag (bool, even ids).
 nested.parquet: 3 rows with a list and a struct column:
   id (int32), tags (list<string>), point (struct<x: double, y: double>).
+unsigned-decimal.parquet: 2 rows whose statistics hyparquet reads as signed,
+unscaled integers: u32 (uint32, 1 and 3,000,000,000), u64 (uint64, 1 and
+2**63 + 5), dec9 and dec18 (decimal(9, 2) and decimal(18, 2) stored as INT32
+and INT64, 1.50 and 123.45).
 
     uv run --with pyarrow python src/test/fixtures/parquet/make_fixtures.py
 """
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import pyarrow as pa
@@ -57,6 +62,20 @@ def main():
         }
     )
     pq.write_table(nested, HERE / "nested.parquet", compression="zstd")
+
+    unsigned_decimal = pa.table(
+        {
+            "u32": pa.array([1, 3_000_000_000], pa.uint32()),
+            "u64": pa.array([1, 2**63 + 5], pa.uint64()),
+            "dec9": pa.array([Decimal("1.50"), Decimal("123.45")], pa.decimal128(9, 2)),
+            "dec18": pa.array([Decimal("1.50"), Decimal("123.45")], pa.decimal128(18, 2)),
+        }
+    )
+    pq.write_table(
+        unsigned_decimal,
+        HERE / "unsigned-decimal.parquet",
+        store_decimal_as_integer=True,
+    )
 
 
 if __name__ == "__main__":

@@ -132,6 +132,14 @@ export async function readParquetStructure(
   const file = await openParquetFile(ref, options)
   let metadata: FileMetaData
 
+  // hyparquet reads the footer's last 8 bytes before checking the size.
+  if (file.byteLength < MIN_PARQUET_BYTES) {
+    throw new NotParquetFileError(
+      parquetFileAddress(ref),
+      `it is ${file.byteLength.toLocaleString()} bytes, too short for a Parquet file`,
+    )
+  }
+
   try {
     // GeoParquet columns are left as the file declares them; the `geo`
     // metadata says which they are.
@@ -151,6 +159,9 @@ export async function readParquetStructure(
 
   return parquetStructureFromMetadata(metadata, { ref, byteLength: file.byteLength })
 }
+
+// The leading magic, the footer's length and the trailing magic.
+const MIN_PARQUET_BYTES = 12
 
 // hyparquet's errors for a file whose last bytes are not a Parquet footer.
 const NOT_PARQUET_MESSAGE =
@@ -441,11 +452,26 @@ function statBounds(
     return [null, null]
   }
 
-  const legacy = NUMERIC_TYPES.has(element.type ?? '')
+  const unsigned = isUnsignedColumn(element)
+  const decimalScale = integerDecimalScale(element)
+  // Unsigned columns sort unsigned, which the legacy fields did not.
+  const legacy = NUMERIC_TYPES.has(element.type ?? '') && !unsigned
   const shown = (value: Statistics['min']): ParquetStatValue | null => {
     if (value === undefined || value instanceof Uint8Array) return null
     if (typeof value === 'number' && Number.isNaN(value)) return null
     if (typeof value === 'string' && !isTextColumn(element)) return null
+
+    // hyparquet reads INT32 and INT64 statistics as signed, unscaled
+    // integers; rows are converted as below, so the two agree.
+    if (
+      decimalScale !== undefined &&
+      (typeof value === 'number' || typeof value === 'bigint')
+    ) {
+      return Number(value) * 10 ** -decimalScale
+    }
+
+    if (unsigned && typeof value === 'number' && value < 0) return value + 2 ** 32
+    if (unsigned && typeof value === 'bigint' && value < 0n) return value + 2n ** 64n
     return value
   }
 
@@ -453,6 +479,30 @@ function statBounds(
     shown(statistics.min_value ?? (legacy ? statistics.min : undefined)),
     shown(statistics.max_value ?? (legacy ? statistics.max : undefined)),
   ]
+}
+
+function isUnsignedColumn(element: SchemaElement): boolean {
+  const logical = element.logical_type
+  return (
+    (logical?.type === 'INTEGER' && !logical.isSigned) ||
+    (element.converted_type?.startsWith('UINT_') ?? false)
+  )
+}
+
+// The scale of a DECIMAL stored as INT32 or INT64, whose statistics are the
+// unscaled integers.
+function integerDecimalScale(element: SchemaElement): number | undefined {
+  if (element.type !== 'INT32' && element.type !== 'INT64') {
+    return undefined
+  }
+
+  const logical = element.logical_type
+
+  if (logical?.type === 'DECIMAL') {
+    return logical.scale
+  }
+
+  return element.converted_type === 'DECIMAL' ? (element.scale ?? 0) : undefined
 }
 
 // BYTE_ARRAY columns marked as text; hyparquet decodes every BYTE_ARRAY

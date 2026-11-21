@@ -1417,15 +1417,16 @@ selection.
 from the file's address or, in a zipped store, from the zip entry. While
 reading, it says "Reading the file's footer…". Failures show "No Parquet file
 at this address" (HTTP 403, 404 or 410, or not in the zip) or "Not a Parquet
-file" (no `PAR1` footer), with `Retry`. Once read, it has the same filter,
+file" (no `PAR1` footer, or under 12 bytes), with `Retry`. Once read, it has
+the same filter,
 `Expand All`, `Collapse All` and tree as the store view:
 
-| Part    | Shows                                                                                                                                                                                                                                                                 |
-| ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Summary | Format version, "Written by" (`created_by`), "Written as" (GeoParquet, pandas, Arrow schema, Spark, from the key-value metadata), rows · columns · row groups, file and footer size                                                                                   |
-| Tree    | The schema: the file, then fields in schema order; structs, lists and maps hold their fields. Rows show the reader's type (`string`, `uint8`, `timestamp[us, UTC]`) and compressed size, and badges for GeoParquet geometry and pandas index columns                  |
-| File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length) |
-| Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics, dictionary, page index and bloom filter, and GeoParquet facts         |
+| Part    | Shows                                                                                                                                                                                                                                                                                                               |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary | Format version, "Written by" (`created_by`), "Written as" (GeoParquet, pandas, Arrow schema, Spark, from the key-value metadata), rows · columns · row groups, file and footer size                                                                                                                                 |
+| Tree    | The schema: the file, then fields in schema order; structs, lists and maps hold their fields. Rows show the reader's type (`string`, `uint8`, `timestamp[us, UTC]`) and compressed size, and badges for GeoParquet geometry and pandas index columns                                                                |
+| File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length)                                               |
+| Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics (unsigned and decimal integers as the rows show them), dictionary, page index and bloom filter, and GeoParquet facts |
 
 `Columns` / `Rows` (a segmented control under the summary) switch between
 the tree and the file's first rows; the tree stays mounted, so its selection

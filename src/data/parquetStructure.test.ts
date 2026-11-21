@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { FileMetaData, SchemaElement } from 'hyparquet'
 import { describe, expect, it } from 'vitest'
 import { spatialDataShapesFixtureBytes } from '../test/spatialDataShapesFixtures'
@@ -156,6 +158,41 @@ describe('readParquetStructure', () => {
         { fetcher: rangeFetcher(page) },
       ),
     ).rejects.toBeInstanceOf(NotParquetFileError)
+  })
+
+  it('shows unsigned and integer-stored decimal statistics as the rows read', async () => {
+    const bytes = new Uint8Array(
+      readFileSync(
+        join(process.cwd(), 'src/test/fixtures/parquet/unsigned-decimal.parquet'),
+      ),
+    )
+    const structure = await readParquetStructure(
+      { url: `${ORIGIN}/unsigned-decimal.parquet` },
+      { fetcher: rangeFetcher(bytes) },
+    )
+    const bounds = (path: string) => {
+      const summary = column(structure.root, path)
+      return [summary?.min, summary?.max]
+    }
+
+    expect(bounds('u32')).toEqual([1, 3_000_000_000])
+    expect(bounds('u64')).toEqual([1n, 2n ** 63n + 5n])
+    expect(bounds('dec9')).toEqual([1.5, 123.45])
+    expect(bounds('dec18')).toEqual([1.5, 123.45])
+  })
+
+  it('says a file too short for a footer is not Parquet', async () => {
+    for (const text of ['', 'PAR1', 'xxxPAR1', 'PAR1xxxPAR1']) {
+      await expect(
+        readParquetStructure(
+          { url: `${ORIGIN}/short.parquet` },
+          { fetcher: rangeFetcher(new TextEncoder().encode(text)) },
+        ),
+      ).rejects.toMatchObject({
+        name: 'NotParquetFileError',
+        message: expect.stringContaining('too short for a Parquet file'),
+      })
+    }
   })
 
   it('stops when aborted', async () => {
