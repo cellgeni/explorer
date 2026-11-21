@@ -17,9 +17,15 @@ interface MockTileRequest {
 
 const tileCacheMock = vi.hoisted(() => {
   const requests: MockTileRequest[] = []
+  // The colour each cache was made with, in order.
+  const colors: (readonly [number, number, number] | undefined)[] = []
 
   class MockTileCache {
     private readonly entries = new Map<string, TileCacheEntry>()
+
+    constructor(options: { readonly color?: readonly [number, number, number] } = {}) {
+      colors.push(options.color)
+    }
 
     key(level: number, col: number, row: number): string {
       return `${level}:${col}:${row}`
@@ -105,8 +111,10 @@ const tileCacheMock = vi.hoisted(() => {
 
   return {
     requests,
+    colors,
     reset: () => {
       requests.splice(0)
+      colors.splice(0)
     },
     TileCache: MockTileCache,
   }
@@ -427,6 +435,40 @@ describe('MorphologyCanvas', () => {
     })
     // The view's centre, frame (1175, 50), is in tile (5, 0).
     expect(requestedTileKeys()[0]).toBe('0:5:0')
+  })
+
+  it("decodes a channel's tiles again in its new colour (EXP-043)", async () => {
+    mockCanvasContext()
+    const loader = mockLoader()
+    const channel = (color: readonly [number, number, number]) => [
+      {
+        id: 'Channel:0',
+        loader,
+        enabled: true,
+        color,
+        contrast: { lo: 0, hi: 255 },
+      },
+    ]
+    const { rerender } = render(
+      <MorphologyCanvas channels={channel([255, 0, 0])} viewState={viewState} />,
+    )
+
+    await waitFor(() => {
+      expect(tileCacheMock.requests).toHaveLength(2)
+    })
+
+    rerender(<MorphologyCanvas channels={channel([0, 255, 0])} viewState={viewState} />)
+
+    // The tiles bake the colour in, so the red cache cannot serve green.
+    await waitFor(() => {
+      expect(tileCacheMock.colors).toEqual([
+        [255, 0, 0],
+        [0, 255, 0],
+      ])
+    })
+    await waitFor(() => {
+      expect(tileCacheMock.requests).toHaveLength(4)
+    })
   })
 
   describe('with a tile store shared by several canvases (plan 23-D11)', () => {
