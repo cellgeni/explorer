@@ -2285,21 +2285,26 @@ function ViewerSurface({
           />
         )}
         {transcriptHover === null ? null : (
-          <TranscriptHoverTooltip detail={transcriptHover} />
+          <TranscriptHoverTooltip
+            detail={transcriptHover}
+            unitLabel={physicalUnitLabel}
+          />
         )}
         {cellHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
           <OverviewCellHoverTooltip
             detail={cellHover}
             sourceLabel={overviewCellSourceLabel}
+            unitLabel={physicalUnitLabel}
           />
         )}
         {gridCellHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
-          <GridCellHoverTooltip detail={gridCellHover} />
+          <GridCellHoverTooltip detail={gridCellHover} unitLabel={physicalUnitLabel} />
         )}
         {cellBoundaryHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
           <CellBoundaryHoverTooltip
             detail={cellBoundaryHover}
             sourceLabel={overviewCellSourceLabel}
+            unitLabel={physicalUnitLabel}
           />
         )}
         {!hasSpatialData && status === 'idle' ? (

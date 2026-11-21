@@ -194,6 +194,26 @@ describe('UI primitives', () => {
     expect(onChange).toHaveBeenCalledWith(0.75)
   })
 
+  // A log-scale depth slider at -2 shows ×0.25 and must say so (EXP-061).
+  it('announces the slider value as shown', () => {
+    render(
+      <Slider
+        title="Depth scale"
+        label="Depth"
+        value={-2}
+        min={-3}
+        max={3}
+        formatValue={(value) => `×${String(2 ** value)}`}
+        onChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('slider', { name: 'Depth' })).toHaveAttribute(
+      'aria-valuetext',
+      '×0.25',
+    )
+  })
+
   it('commits a number field on Enter or blur, clamped, and reverts on Escape', () => {
     function Harness({ onChange }: { readonly onChange: (value: number) => void }) {
       const [value, setValue] = useState(100)

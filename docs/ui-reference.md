@@ -1182,6 +1182,9 @@ With the setting off and no transcripts drawn, ViewerCore gives deck.gl
 `onHover={null}` rather than leaving the prop out: deck.gl merges props, so a
 handler left out would stay, still showing the tooltips.
 
+Positions, lengths and areas are in the scale bar's unit: µm and µm², or
+"units" and "units²" for a SpatialData dataset whose units are unknown.
+
 | Target           | Fields                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------ |
 | Visium HD bin    | Barcode, bin, array row/col, image px, tissue, expression                            |

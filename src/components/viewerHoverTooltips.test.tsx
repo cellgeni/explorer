@@ -5,8 +5,17 @@ import {
   transcriptAggregateCountRows,
   transcriptAggregateTitle,
 } from './viewerHoverModel'
-import { CellBoundaryHoverTooltip, TranscriptHoverTooltip } from './viewerHoverTooltips'
-import type { ViewerCellBoundaryHoverDetail } from './viewerCoreTypes'
+import {
+  CellBoundaryHoverTooltip,
+  GridCellHoverTooltip,
+  OverviewCellHoverTooltip,
+  TranscriptHoverTooltip,
+} from './viewerHoverTooltips'
+import type {
+  ViewerCellBoundaryHoverDetail,
+  ViewerGridCellHoverDetail,
+  ViewerOverviewCellHoverDetail,
+} from './viewerCoreTypes'
 
 const square: TranscriptAggregateDatum = {
   id: 'native-zarr-density:2:1:1',
@@ -132,5 +141,102 @@ describe('cell boundary hover', () => {
       />,
     )
     expect(screen.getByText('Segmented')).toBeInTheDocument()
+  })
+})
+
+// A SpatialData dataset whose units are unknown shows "units" on the scale
+// bar and axes, so its tooltips say units too (EXP-052).
+describe('hover units', () => {
+  const screenPoint = { x: 10, y: 10 } as ViewerCellBoundaryHoverDetail['screen']
+  const rows = () =>
+    [...document.querySelectorAll('.transcript-hover-tooltip dl > div')].map(
+      (row) => row.textContent,
+    )
+
+  it('writes positions and areas in µm by default', () => {
+    const cell = {
+      id: 'cell-1',
+      position: [12, -34, 0],
+      cellArea: 56,
+    } as unknown as ViewerOverviewCellHoverDetail['cell']
+    render(<OverviewCellHoverTooltip detail={{ cell, screen: screenPoint }} />)
+
+    expect(rows()).toContain('X/Y12, 34 µm')
+    expect(rows()).toContain('Area56 µm²')
+  })
+
+  it("writes them in the viewer's unit", () => {
+    const cell = {
+      id: 'cell-1',
+      position: [12, -34, 0],
+      cellArea: 56,
+    } as unknown as ViewerOverviewCellHoverDetail['cell']
+    const boundary = {
+      id: 'cell-1',
+      polygon: [
+        [0, 0],
+        [2, 0],
+        [2, 2],
+      ],
+    } as unknown as ViewerCellBoundaryHoverDetail['boundary']
+    const bin = {
+      id: 'bin-1',
+      row: 1,
+      col: 2,
+      binSizeMicrometers: 8,
+    } as unknown as ViewerGridCellHoverDetail['cell']
+    const { unmount } = render(
+      <>
+        <OverviewCellHoverTooltip
+          detail={{ cell, screen: screenPoint }}
+          unitLabel="units"
+        />
+        <CellBoundaryHoverTooltip
+          detail={{ boundary, cell, screen: screenPoint }}
+          unitLabel="units"
+        />
+        <GridCellHoverTooltip
+          detail={{ cell: bin, screen: screenPoint }}
+          unitLabel="units"
+        />
+        <TranscriptHoverTooltip
+          detail={{
+            transcript: {
+              id: 'tx-1',
+              position: [5, -6, 0],
+              featureName: 'Actb',
+              fovName: null,
+              cellId: null,
+              qv: 30,
+              fillColor: [0, 0, 0],
+              zLocation: 7,
+              nucleusDistance: 1.5,
+            },
+            screen: screenPoint,
+          }}
+          unitLabel="units"
+        />
+        <TranscriptHoverTooltip
+          detail={{ aggregate: square, screen: screenPoint }}
+          unitLabel="units"
+        />
+      </>,
+    )
+
+    expect(rows()).toEqual(
+      expect.arrayContaining([
+        'X/Y12, 34 units',
+        'Area56 units²',
+        'Cell Area56 units²',
+        'Area2 units²',
+        'Bin8 units',
+        'X/Y5, 6 units',
+        'Z7 units',
+        'Distance1.5 units',
+        'X/Y60, 60 units',
+      ]),
+    )
+    expect(rows().join(' ')).not.toContain('µm')
+    unmount()
   })
 })
