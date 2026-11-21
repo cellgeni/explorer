@@ -8,7 +8,7 @@ import {
 import { intToCellId } from './cellid'
 import { micrometers } from './coords'
 import type { GexResult } from './gex'
-import type { DatasetCell } from '../datasets/xeniumDataset'
+import type { DatasetCell } from '../datasets/spatialDataset'
 
 describe('ROI gene stats', () => {
   it('summarizes top ROI genes by total expression', () => {

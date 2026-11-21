@@ -1,4 +1,4 @@
-import type { NumericArrayLike } from '../datasets/h5adDataset'
+import type { NumericArrayLike } from './numericArray'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { throwIfAborted } from '../utils/abort'
 

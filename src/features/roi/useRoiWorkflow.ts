@@ -8,7 +8,6 @@ import { roiCellsStoppedAtLimit } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type {
   RoiCellsLoader,
   RoiGeneStatsLoader,
@@ -77,6 +76,7 @@ import {
   type RoiReferenceState,
 } from './roiEnrichmentModel'
 import { slug } from '../../utils/slug'
+import type { DatasetCell } from '../../datasets/spatialDataset'
 
 interface MutableRef<T> {
   current: T

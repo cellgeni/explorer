@@ -10,9 +10,9 @@ import type {
 } from '../data/gex'
 import type { CellId } from '../data/cellid'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
-import type { Annotation } from './spatialDataset'
 import type { DuckDbClientLike } from './xeniumDataset'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { Annotation } from '../data/annotation'
 
 const lazyMocks = vi.hoisted(() => ({
   importedModules: [] as string[],

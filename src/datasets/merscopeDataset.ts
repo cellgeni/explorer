@@ -18,10 +18,6 @@ import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
 } from '../data/customAnnotations'
-import type {
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
-} from '../data/datasetAnnotations'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { FallbackNotifier } from '../data/fallbackNotice'
@@ -31,11 +27,8 @@ import type { RoiSelectionInput } from '../data/roiSelection'
 import { readZipDirectory, readZipEntry, type ZipDirectory } from '../data/zipArchive'
 import { readZipEntryInWorker, type ZipEntryReader } from '../data/zipEntryWorker'
 import { openTiff } from '../tiff/loader'
-import {
-  AnnDataH5adDataset,
-  type AnnDataMemoryTable,
-  type H5adLoadProgressReporter,
-} from './h5adDataset'
+import type { AnnDataMemoryTable } from './annDataMemory'
+import { AnnDataH5adDataset, type H5adLoadProgressReporter } from './h5adDataset'
 import {
   MERSCOPE_BOUNDARY_ID_COLUMN,
   MERSCOPE_BOUNDARY_PLANE_COLUMN,
@@ -53,7 +46,6 @@ import {
 import { fileName, type MerscopeTableReader } from './merscopeTableReader'
 import { readMerscopeTableInWorker } from './merscopeTableWorker'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -62,6 +54,7 @@ import type {
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
+  DatasetCell,
 } from './spatialDataset'
 import {
   shapeRing,
@@ -70,7 +63,11 @@ import {
 } from './spatialDataShapes'
 import { readSpatialDataShapesInWorker } from './spatialDataShapesWorker'
 import { IDENTITY_AFFINE } from './spatialDataTransforms'
-import type { DatasetCell } from './xeniumDataset'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../data/annotation'
 
 export interface MerscopeFileUrls {
   readonly cellByGene: string

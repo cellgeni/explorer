@@ -1,10 +1,10 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
-import type { Annotation } from '../../datasets/spatialDataset'
 import { testAnnotationsSectionModel } from '../../test/sectionModels'
 import type { AnnotationSetsModel } from './annotationsSectionModel'
 import { AnnotationLabelLists, MetadataTracksPanel } from './AnnotationsSectionBlocks'
+import type { Annotation } from '../../data/annotation'
 
 // 30 classes of one set, the largest first.
 const ANNOTATIONS: readonly Annotation[] = Array.from({ length: 30 }, (_, index) => ({

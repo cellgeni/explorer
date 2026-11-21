@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import { DatasetCache, dropDatasets, retainDataset } from './datasetCache'
 import { XeniumDataset } from './xeniumDataset'
-import type { DuckDbClientLike, XeniumDuckDbConnection } from './xeniumDataset'
+import type { DuckDbClientLike } from './xeniumDataset'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { XeniumDuckDbConnection } from './xeniumDatasetRows'
 
 const BBOX = {
   minX: micrometers(0),

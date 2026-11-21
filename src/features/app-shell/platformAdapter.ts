@@ -18,7 +18,7 @@ import type { RoiState } from '../roi/roiModel'
 import { IDLE_VISIUM_HD_ROI_STATE, type VisiumHdRoiState } from '../roi/visiumHdRoiModel'
 import type { AteraDataset } from '../../datasets/ateraDataset'
 import type { ImportedSegmentation } from '../../datasets/importedSegmentation'
-import { loadPerGeneCellTranscriptDistribution } from '../../data/cellTranscripts'
+import { loadPerGeneCellTranscriptDistribution } from '../../data/datasetCellTranscripts'
 import { loadPerGeneRoiTranscripts } from '../../data/roiTranscripts'
 import type {
   BoundaryElementsLoader,

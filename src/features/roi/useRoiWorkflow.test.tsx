@@ -11,7 +11,6 @@ import { micrometers } from '../../data/coords'
 import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -25,6 +24,7 @@ import type {
 import { ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS } from './roiModel'
 import { ALL_GENES, type RoiReferenceState } from './roiEnrichmentModel'
 import { useRoiWorkflow } from './useRoiWorkflow'
+import type { DatasetCell } from '../../datasets/spatialDataset'
 
 const selection: RoiSelection = {
   kind: 'box',

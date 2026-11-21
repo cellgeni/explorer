@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { AnalysisAnnotationGroupOption } from '../../data/analysisAnnotations'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
-import type { Annotation, SpatialElementId } from '../../datasets/spatialDataset'
+import type { SpatialElementId } from '../../datasets/spatialDataset'
 import { parseVisiumHdClusteringGroupId } from '../../datasets/visiumHdClusters'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
@@ -20,6 +19,7 @@ import {
 } from '../errors/loadErrorModel'
 import type { SpatialDatasetLoader } from './appDependencies'
 import { isAbortError, type DebugLogAppendOptions } from './appRuntimeModel'
+import type { Annotation, AnnotationGroupOption } from '../../data/annotation'
 
 // A Visium HD dataset's Space Ranger clusterings, which belong to one bin size
 // each (visiumHdClusters.ts).
@@ -27,7 +27,7 @@ export interface VisiumHdAnnotationDataset {
   annotationGroups(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<readonly AnalysisAnnotationGroupOption[]>
+  ): Promise<readonly AnnotationGroupOption[]>
   annotations(options?: {
     readonly groupId?: string
     readonly binSizeMicrometers?: VisiumHdBinSizeMicrometers
@@ -180,7 +180,7 @@ export function useVisiumHdAnnotationSetsWorkflow({
 // another tier's.
 function sameClusteringGroupId(
   groupId: string | undefined,
-  groups: readonly AnalysisAnnotationGroupOption[],
+  groups: readonly AnnotationGroupOption[],
 ): string | undefined {
   const group = groupId === undefined ? null : parseVisiumHdClusteringGroupId(groupId)
 

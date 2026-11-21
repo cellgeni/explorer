@@ -6,8 +6,9 @@ import type { BBox, DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { RoiSelectionInput } from './roiSelection'
 import type { TranscriptPoint, TranscriptViewportResult } from './transcriptOverlay'
-import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
+import type { XeniumDataset } from '../datasets/xeniumDataset'
 import { throwIfAborted } from '../utils/abort'
+import type { DatasetTranscript } from '../datasets/spatialDataset'
 
 export const ROI_TRANSCRIPT_EXPORT_LIMIT = 100_000
 const DEFAULT_ROI_TRANSCRIPT_MIN_QV = 20

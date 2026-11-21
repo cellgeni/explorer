@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { asAnyCellId, asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import {
   IDLE_ROI_GENE_STATS_STATE,
   IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE,
@@ -29,6 +28,7 @@ import {
   roiTranscriptsToCsv,
   summarizeRoiCells,
 } from './roiModel'
+import type { DatasetCell, DatasetTranscript } from '../../datasets/spatialDataset'
 
 const cells: readonly DatasetCell[] = [
   {

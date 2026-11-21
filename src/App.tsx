@@ -327,7 +327,6 @@ import {
 } from './rendering/deckLayers'
 import { annotationPaletteColor } from './rendering/annotationPalette'
 import { useViewerStore } from './store/viewerStore'
-import type { DatasetCell } from './datasets/xeniumDataset'
 import {
   normalizeCustomMorphologyLayerUrl,
   type MorphologyImage,
@@ -336,10 +335,10 @@ import { micrometers, type BBox } from './data/coords'
 import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
-  Annotation,
   GeneExpressionBatch,
   SpatialElement,
   SpatialElementId,
+  DatasetCell,
 } from './datasets/spatialDataset'
 import type { GexResult } from './data/gex'
 import type { AnalysisEmbedding } from './data/analysisEmbeddings'
@@ -363,6 +362,7 @@ import type {
   ViewerMagicLensStatus,
   ViewerViewportDetail,
 } from './components/ViewerCore'
+import type { Annotation } from './data/annotation'
 
 const EMPTY_CELL_BOUNDARY_DATA: readonly CellBoundaryDatum[] = []
 const EMPTY_SPATIAL_ELEMENTS: readonly SpatialElement[] = []

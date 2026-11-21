@@ -4,11 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CellId } from '../../data/cellid'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import { micrometers } from '../../data/coords'
-import type {
-  Annotation,
-  CellOutlineRequest,
-  SpatialElement,
-} from '../../datasets/spatialDataset'
+import type { CellOutlineRequest, SpatialElement } from '../../datasets/spatialDataset'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import { fakeCellImage, fakeOmeZarrCellImage } from '../../test/cellImageFixtures'
@@ -22,6 +18,7 @@ import {
   type CellQueryModel,
   type CellQueryModelInput,
 } from './useCellQueryModel'
+import type { Annotation } from '../../data/annotation'
 
 const DATASET = 'https://example.test/sample.h5ad'
 

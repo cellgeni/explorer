@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
 import type { RoiCellsLoader } from '../app-shell/appDependencies'
 import type { SavedSelection } from '../roi/selectionListModel'
 import { useSelectionCells } from './useSelectionCells'
+import type { DatasetCell } from '../../datasets/spatialDataset'
 
 const URL = 'https://example.org/run'
 

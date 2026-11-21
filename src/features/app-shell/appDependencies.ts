@@ -1,8 +1,6 @@
 import {
   loadDatasetAnnotationGroups,
   loadDatasetAnnotations,
-  type AnnotationGroupOption,
-  type LoadDatasetAnnotationsOptions,
 } from '../../data/datasetAnnotations'
 import { loadDatasetBoundaryElements } from '../../data/datasetBoundaries'
 import {
@@ -28,18 +26,18 @@ import {
   type RoiGeneStatsH5Fallback,
 } from '../../data/roiGeneStats'
 import { loadDatasetRoiTranscripts } from '../../data/roiTranscripts'
-import {
-  loadDatasetCellTranscriptDistribution,
-  type CellTranscriptZDistribution,
-} from '../../data/cellTranscripts'
+import { loadDatasetCellTranscriptDistribution } from '../../data/datasetCellTranscripts'
+import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import {
   loadDatasetTranscriptCapabilities,
   loadDatasetTranscriptAggregates,
   loadDatasetTranscriptViewport,
-  type TranscriptCapabilities,
-  type TranscriptAggregateResult,
-  type TranscriptGroupSummary,
-  type TranscriptPoint,
+} from '../../data/datasetTranscripts'
+import type {
+  TranscriptCapabilities,
+  TranscriptAggregateResult,
+  TranscriptGroupSummary,
+  TranscriptPoint,
 } from '../../data/transcriptOverlay'
 import { runDatasetDiagnostics } from '../../data/datasetDiagnostics'
 import { readParquetRows } from '../../data/parquetRows'
@@ -62,19 +60,24 @@ import type { ChannelAutoContrast } from '../../data/morphologyContrast'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
-import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import type {
-  Annotation,
   CellOutlineRequest,
   ElementBatch,
   GeneExpressionBatch,
   SpatialElement,
+  DatasetCell,
+  DatasetTranscript,
 } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { fetchExamplesIndex, type Example } from '../start/examplesIndex'
 import { loadDatasetCollection } from '../../datasets/annDataSectionCollection'
 import type { CollectionLoader } from '../collection/useDatasetCollection'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../../data/annotation'
 
 // The start screen's example gallery (plan 15.3-A).
 export type ExamplesIndexLoader = (

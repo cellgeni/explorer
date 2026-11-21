@@ -1,14 +1,11 @@
-import {
-  ALL_ANNOTATION_GROUP_ID,
-  type AnnotationGroupOption,
-} from '../../data/datasetAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
+import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import {
   annotationPaletteColor,
   normalizeAnnotationColor,
 } from '../../rendering/annotationPalette'
 import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
+import type { Annotation, AnnotationGroupOption } from '../../data/annotation'
 
 export type AnnotationState<ErrorType = unknown> =
   | { readonly status: 'idle' }

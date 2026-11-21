@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest'
-import type { Annotation } from '../../datasets/spatialDataset'
 import { PLOT_DENSITY_MAX_GROUPS } from './plotStats'
 import {
   defaultPlotSetId,
@@ -25,6 +24,7 @@ import {
   type PlotSavedSelection,
   type PlotSetSources,
 } from './plotsPanelModel'
+import type { Annotation } from '../../data/annotation'
 
 const annotations: readonly Annotation<string>[] = [
   { id: 'roi:1:roi-1', label: 'ROI 1', cellIds: ['a'] },

@@ -27,15 +27,9 @@ import type {
   GeneExpressionElement,
   GeneExpressionQueryOptions,
   SpatialElement,
-} from './spatialDataset'
-import type {
-  CellTranscriptZDistributionQueryOptions,
   DatasetCell,
   DatasetTranscript,
-  TranscriptQueryOptions,
-  TranscriptViewportQueryOptions,
-  XeniumDuckDbConnection,
-} from './xeniumDataset'
+} from './spatialDataset'
 import {
   findNumericProperty,
   isRecord,
@@ -53,6 +47,10 @@ import {
   selectedGeneCount,
   selectedGeneCounts,
   transcriptViewportFilterSql,
+  type CellTranscriptZDistributionQueryOptions,
+  type TranscriptQueryOptions,
+  type TranscriptViewportQueryOptions,
+  type XeniumDuckDbConnection,
 } from './xeniumDatasetRows'
 import { throwIfAborted } from '../utils/abort'
 

@@ -4,13 +4,13 @@ import type { FallbackNotifier } from '../data/fallbackNotice'
 import type { GexResult } from '../data/gex'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   ImageSource,
   SpatialDataset,
   SpatialElementId,
 } from './spatialDataset'
+import type { Annotation } from '../data/annotation'
 
 export interface ImageOnlyDatasetOptions {
   readonly imageUrl: string

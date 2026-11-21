@@ -6,8 +6,8 @@ import {
   loadTranscriptZarrAggregates,
   loadTranscriptZarrGridCounts,
   transcriptZarrExactGridLevel,
-  type TranscriptGridLevelMetadata,
 } from './transcriptZarr'
+import type { TranscriptGridLevelMetadata } from './transcriptOverlay'
 
 // The visible transcript estimate from the level-0 grid counts of
 // transcripts.zarr.zip (grids attrs grid_keys and grid_number_objects).

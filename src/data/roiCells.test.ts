@@ -6,7 +6,8 @@ import {
   roiCellsStoppedAtLimit,
 } from './roiCells'
 import type { RoiSelection } from './roiSelection'
-import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
+import type { XeniumDataset } from '../datasets/xeniumDataset'
+import type { DatasetCell } from '../datasets/spatialDataset'
 
 const bbox = {
   minX: micrometers(1),

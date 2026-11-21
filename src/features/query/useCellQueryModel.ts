@@ -10,7 +10,6 @@ import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
 } from '../../data/customAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import { formatCsv } from '../../utils/csv'
 import type { CellQueryColumnRequest } from '../../workers/cellQueryMessages'
@@ -86,6 +85,7 @@ import {
   type CellQueryValues,
 } from './cellQuerySession'
 import { useOnDemandLoads, type OnDemandLoad } from './useOnDemandLoads'
+import type { Annotation } from '../../data/annotation'
 
 // The Cell Query window (plan 23-B to 23-E): conditions on the dataset's
 // columns, the cells that match them in a table, and saving them as a class.

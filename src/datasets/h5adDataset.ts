@@ -58,12 +58,13 @@ import {
   type AnalysisEmbeddingKind,
   type AnalysisEmbeddingOption,
 } from '../data/analysisEmbeddings'
+import type { NumericArrayLike } from '../data/numericArray'
 import type {
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
-} from '../data/datasetAnnotations'
+  AnnDataMemoryColumn,
+  AnnDataMemoryTable,
+  AnnDataMemoryUns,
+} from './annDataMemory'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -72,8 +73,8 @@ import type {
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
+  DatasetCell,
 } from './spatialDataset'
-import type { DatasetCell } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 import {
   isSectionColumnName,
@@ -94,6 +95,11 @@ import {
   type VisiumUnits,
 } from './visiumFormat'
 import { throwIfAborted } from '../utils/abort'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../data/annotation'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -193,43 +199,6 @@ export type H5adLoadProgressReporter = (message: string) => void
 export interface AnnDataMemorySource {
   readonly label: string
   load(onProgress?: H5adLoadProgressReporter): Promise<AnnDataMemoryTable>
-}
-
-// An AnnData object held as plain arrays. `uns` values become scalar datasets
-// (numbers, strings), arrays, or nested groups (records).
-export interface AnnDataMemoryTable {
-  readonly obsNames: readonly string[]
-  readonly obs: readonly AnnDataMemoryColumn[]
-  readonly varNames: readonly string[]
-  readonly var?: readonly AnnDataMemoryColumn[]
-  readonly X: {
-    readonly kind: 'csr'
-    readonly data: NumericArrayLike
-    readonly indices: NumericArrayLike
-    readonly indptr: NumericArrayLike
-  }
-  readonly obsm: Readonly<
-    Record<string, { readonly values: NumericArrayLike; readonly columns: number }>
-  >
-  readonly uns?: AnnDataMemoryUns
-}
-
-export type AnnDataMemoryColumn =
-  | {
-      readonly name: string
-      readonly kind: 'numeric'
-      readonly values: NumericArrayLike
-    }
-  | {
-      readonly name: string
-      readonly kind: 'categorical'
-      readonly codes: NumericArrayLike
-      readonly categories: readonly string[]
-    }
-  | { readonly name: string; readonly kind: 'string'; readonly values: readonly string[] }
-
-export interface AnnDataMemoryUns {
-  readonly [key: string]: AnnDataMemoryUns | number | string | NumericArrayLike
 }
 
 // Standard Visium layout found in `uns/spatial/<library>`. Coordinates are
@@ -448,19 +417,6 @@ interface H5adVectorReader {
   readonly itemSize: number
   slice(start: number, end: number, signal?: AbortSignal): Promise<NumericArrayLike>
 }
-
-export type NumericArrayLike =
-  | readonly number[]
-  | Int8Array
-  | Uint8Array
-  | Int16Array
-  | Uint16Array
-  | Int32Array
-  | Uint32Array
-  | Float32Array
-  | Float64Array
-  | BigInt64Array
-  | BigUint64Array
 
 interface H5AttributeLike {
   readonly value: unknown

@@ -16,7 +16,6 @@ import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanva
 import {
   ALL_ANNOTATION_GROUP_ID,
   NO_ANNOTATION_GROUP_ID,
-  type AnnotationGroupOption,
 } from '../../data/datasetAnnotations'
 import type { WarmDatasetForRoiResult } from '../../data/datasetWarmup'
 import { collectionImageFor, datasetImageFor } from '../../data/datasetFiles'
@@ -246,6 +245,7 @@ import {
 import { parseGeneScaleRange, type GeneScaleRange } from '../genes/geneScaleRange'
 import { parseCellView } from '../sections/cellsSectionModel'
 import { parseImageView } from '../sections/imageSectionModel'
+import type { AnnotationGroupOption } from '../../data/annotation'
 
 type Setter<T> = Dispatch<SetStateAction<T>>
 

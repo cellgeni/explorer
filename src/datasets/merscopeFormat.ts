@@ -6,7 +6,7 @@
 // Cell IDs (`EntityID`, `cell`) are 19-digit int64 values, above 2^53, and
 // 38-digit values in the 2022 release, so they stay strings throughout.
 
-import type { AnnDataMemoryColumn } from './h5adDataset'
+import type { AnnDataMemoryColumn } from './annDataMemory'
 
 // Files a manifest can relocate, with the name the instrument writes. vpt
 // re-segmentation writes `<method>_cell_by_gene.csv`,

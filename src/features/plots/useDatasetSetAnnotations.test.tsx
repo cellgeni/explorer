@@ -1,9 +1,9 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
-import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationLoader } from '../app-shell/appDependencies'
 import { useDatasetSetAnnotations } from './useDatasetSetAnnotations'
+import type { Annotation } from '../../data/annotation'
 
 const URL = 'https://example.org/data.h5ad'
 

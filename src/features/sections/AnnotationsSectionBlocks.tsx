@@ -13,7 +13,6 @@ import {
   ALL_ANNOTATION_GROUP_ID,
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
 import { altClick } from '../../utils/altClick'
 import {
@@ -28,6 +27,7 @@ import type {
   GeometricShapesModel,
   MetadataTracksModel,
 } from './annotationsSectionModel'
+import type { Annotation } from '../../data/annotation'
 
 // Sets with more classes than this get a search box.
 const ANNOTATION_SET_SEARCH_MIN_ROWS = 8

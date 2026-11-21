@@ -1,8 +1,11 @@
 import type { CellTranscriptZDistribution } from '../../data/cellTranscripts'
 import { micrometers, type BBox, type DataPoint } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
-import type { ElementBatch, SpatialElement } from '../../datasets/spatialDataset'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
+import type {
+  ElementBatch,
+  SpatialElement,
+  DatasetCell,
+} from '../../datasets/spatialDataset'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 
 export const CELL_GENE_EXPRESSION_LIMIT = 100_000

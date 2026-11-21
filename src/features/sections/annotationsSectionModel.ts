@@ -1,6 +1,5 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
-import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
 import type {
   AnnotationGroupState,
   AnnotationState,
@@ -10,6 +9,7 @@ import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotat
 import type { SectionSplitLink } from '../collection/sectionSplitModel'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { SelectionList } from '../roi/useSelectionList'
+import type { AnnotationGroupOption } from '../../data/annotation'
 
 // Annotation sets and their labels, metadata tracks, selections and GeoJSON
 // shapes (plan 15.2-A). The sets and tracks are in the Cells

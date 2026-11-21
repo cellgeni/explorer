@@ -2,7 +2,7 @@ import { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import { intToCellId } from './cellid'
 import type { CellId } from './cellid'
-import type { Annotation } from '../datasets/spatialDataset'
+import type { Annotation, AnnotationGroupOption } from './annotation'
 import { getWholeArray } from '../zarr/zarrWholeArray'
 
 export interface AnalysisGroupingArrays {
@@ -11,13 +11,6 @@ export interface AnalysisGroupingArrays {
   readonly groupNames: readonly string[]
   readonly indptr: NumericIndexArray
   readonly indices: NumericIndexArray
-}
-
-export interface AnalysisAnnotationGroupOption {
-  readonly id: string
-  readonly label: string
-  readonly groupingName: string
-  readonly groupCount: number
 }
 
 export interface AnalysisAnnotationQueryOptions {
@@ -44,7 +37,7 @@ export async function readAnalysisZarrAnnotations(
 
 export async function readAnalysisZarrAnnotationGroupOptions(
   analysisUrl: string,
-): Promise<readonly AnalysisAnnotationGroupOption[]> {
+): Promise<readonly AnnotationGroupOption[]> {
   const metadata = await readAnalysisGroupingMetadata(analysisUrl)
 
   return analysisAnnotationGroupOptionsFromMetadata(
@@ -58,8 +51,8 @@ export function analysisAnnotationGroupOptionsFromMetadata(
   groupingNames: readonly string[],
   groupNames: readonly (readonly string[])[],
   groupingCount = groupingNames.length,
-): readonly AnalysisAnnotationGroupOption[] {
-  const options: AnalysisAnnotationGroupOption[] = []
+): readonly AnnotationGroupOption[] {
+  const options: AnnotationGroupOption[] = []
 
   for (let groupingIndex = 0; groupingIndex < groupingCount; groupingIndex += 1) {
     const groupingName = groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`
