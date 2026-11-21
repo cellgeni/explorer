@@ -342,13 +342,11 @@ export function CollectionBar({
         </p>
       ) : null}
       {expanded && previewSize !== undefined ? (
-        <label
-          className="collection-bar-size"
-          title="Size: drag to make the previews larger or smaller"
-        >
+        <label className="collection-bar-size">
           <span className="collection-bar-size-label">Size</span>
           <input
             type="range"
+            title="Size: drag to make the previews larger or smaller"
             aria-label="Preview size"
             min={MIN_COLLECTION_PREVIEW_SIZE}
             max={MAX_COLLECTION_PREVIEW_SIZE}
