@@ -1,4 +1,5 @@
 import { firstUrlIn, insecureRequestAction } from './insecureRequest'
+import { isWorkerStartError } from '../../workers/workerStartError'
 import { APP_UPDATED_ACTION, isStaleChunkError } from './staleChunk'
 
 export type LoadErrorCode =
@@ -15,7 +16,8 @@ export type LoadErrorCode =
   | 'parquet-decode'
   | 'manifest'
   | 'decode'
-  // A lazily loaded part of the app is gone after a deploy (staleChunk.ts).
+  // A lazily loaded part of the app is gone after a deploy (staleChunk.ts),
+  // or a worker did not start (workerStartError.ts): both need a reload.
   | 'app-updated'
   | 'unknown'
 
@@ -112,6 +114,21 @@ export function createStructuredLoadError(
         title: 'The app was updated',
         message,
         action: APP_UPDATED_ACTION,
+      },
+      detail,
+    )
+  }
+
+  // Before the decode advice: every tile's worker fails the same way.
+  if (isWorkerStartError(error)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'app-updated',
+        title: 'A background worker did not start',
+        message,
+        action:
+          'Reload the page to start the workers again. If it keeps failing, check that the page is allowed to run workers.',
       },
       detail,
     )

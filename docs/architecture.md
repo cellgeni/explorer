@@ -732,6 +732,14 @@ Diagnostics in the info drawer shows the active profile with debug info on.
   advice: "The app was updated. Reload the page.", with a `Reload` button in
   the Issues card, the load toast, the start screen and the error boundary
   (`src/features/errors/staleChunk.ts`). Nothing reloads by itself.
+- **Workers that do not start.** A worker whose script is gone after a deploy,
+  or that the page is not allowed to run, reports an error event with no
+  message. The tile decode pool, the H5 file worker and one-shot workers
+  (`runWorkerOnce`, such as the cells overview) turn it into a
+  `WorkerStartError` (`src/workers/workerStartError.ts`), classified as
+  `app-updated` too: "A background worker did not start", with the same
+  `Reload` button, since every new worker would fail the same way. A worker
+  that threw reports its own message.
 - **Fallback notices.** `notifyFallback` (`src/data/fallbackNotice.ts`) reports
   when a slower or partial path is used (for example the H5 matrix or
   cell-summary transcript density). Shown under "Data access notes" in the

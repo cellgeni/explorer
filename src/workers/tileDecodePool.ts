@@ -1,3 +1,4 @@
+import { workerFailureError } from './workerStartError'
 import type { TiffStripBandDecodeOptions } from '../codecs/tiffStrips'
 import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { TileCellSums } from '../data/tileCellMeasure'
@@ -277,7 +278,7 @@ export class TileDecodeWorkerPool {
       // A worker whose script does not load reports an empty message. One
       // already ended by a reset is ignored.
       if (this.workers.includes(worker)) {
-        this.reset(new Error(event.message || 'Tile decode worker failed.'))
+        this.reset(workerFailureError(event.message, 'The tile decode worker failed.'))
       }
     }
 
