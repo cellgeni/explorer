@@ -273,6 +273,22 @@ describe('OME-TIFF metadata parsing', () => {
     ).toBeCloseTo(0.2125)
   })
 
+  it('converts OME physical sizes in angstroms, picometres and inches', () => {
+    expect(
+      parsePhysicalSizeMicrometersPerPixel('PhysicalSizeX="2125" PhysicalSizeXUnit="Å"'),
+    ).toBeCloseTo(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="212500" PhysicalSizeXUnit="pm"',
+      ),
+    ).toBeCloseTo(0.2125)
+    expect(
+      parsePhysicalSizeMicrometersPerPixel(
+        'PhysicalSizeX="0.0001" PhysicalSizeXUnit="in"',
+      ),
+    ).toBeCloseTo(2.54)
+  })
+
   it('handles tifffile resolution-like OME physical size values', () => {
     expect(
       parsePhysicalSizeMicrometersPerPixel(
