@@ -494,7 +494,9 @@ describe('transcriptLayerModel', () => {
 
   it('formats density labels, manual-load copy, and aggregate messages', () => {
     expect(transcriptDensityScaleValueLabels(undefined)).toEqual(['0', '-', '-'])
-    expect(transcriptDensityScaleValueLabels(50)).toEqual(['0', '25', '50'])
+    // The middle of the gradient is the colour of a quarter of the top count.
+    expect(transcriptDensityScaleValueLabels(1000)).toEqual(['0', '250', '1,000'])
+    expect(transcriptDensityScaleValueLabels(50)).toEqual(['0', '13', '50'])
     expect(transcriptDensityScaleAriaLabel(50)).toBe(
       'Transcript density color scale from 0 to 50 transcripts per square.',
     )

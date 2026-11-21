@@ -319,7 +319,13 @@ filters density too. `Opacity` and
 
 Density square colors are normalized against the largest square on the whole
 slide at the current square size, rather than only the visible viewport, so
-the color scale stays stable while panning.
+the color scale stays stable while panning. Two kinds of square are the
+exception, scaled to the largest square in view, so their colors change as
+you pan: cell-summary squares (made from cells' transcript counts, on Atera
+with no genes selected or on Xenium when `transcripts.zarr.zip` cannot be
+read), and Atera's per-gene density. The middle label under the
+`Density color` preview is a quarter of the top count, since colors follow the
+square root of each square's share of it.
 
 `Density` uses the native grid pyramid and renders up to 1,500 count squares in
 the current viewport. Feature filters are applied by `Exact`, where individual

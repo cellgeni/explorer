@@ -4991,7 +4991,7 @@ describe('App', () => {
         'Transcript density color scale from 0 to 100 transcripts per square.',
       )
       expect(within(densityScale).getByText('0')).toBeInTheDocument()
-      expect(within(densityScale).getByText('50')).toBeInTheDocument()
+      expect(within(densityScale).getByText('25')).toBeInTheDocument()
       expect(within(densityScale).getByText('100')).toBeInTheDocument()
       expect(screen.getByText('Native')).toBeInTheDocument()
       expect(screen.getAllByText(/^[1-9][0-9]* squares$/).length).toBeGreaterThan(0)

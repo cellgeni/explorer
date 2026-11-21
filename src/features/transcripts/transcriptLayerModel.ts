@@ -420,6 +420,9 @@ export function transcriptDensityContentForRendering<
   }
 }
 
+// The counts under the ends and middle of the density preview. Squares are
+// coloured, and gene markers sized, by the square root of each count's share
+// of the top, so the middle stands for a quarter of it (EXP-047).
 export function transcriptDensityScaleValueLabels(
   scaleMax: number | undefined,
 ): readonly [string, string, string] {
@@ -429,7 +432,7 @@ export function transcriptDensityScaleValueLabels(
 
   return [
     '0',
-    formatTranscriptDensityScaleValue(scaleMax * 0.5),
+    formatTranscriptDensityScaleValue(scaleMax / 4),
     formatTranscriptDensityScaleValue(scaleMax),
   ]
 }
