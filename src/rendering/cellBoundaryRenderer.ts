@@ -291,7 +291,6 @@ export function boundaryElementsToLayerData(
   const cells: CellBoundaryDatum[] = []
   const defaultFillColor = options.fillColor ?? DEFAULT_CELL_BOUNDARY_FILL_COLOR
   const defaultLineColor = options.lineColor ?? DEFAULT_CELL_BOUNDARY_LINE_COLOR
-  const annotationPaletteByLabel = new Map<string, string>()
 
   for (const element of elements) {
     if (element.geometry.kind !== 'polygon') {
@@ -308,7 +307,6 @@ export function boundaryElementsToLayerData(
       element,
       defaultFillColor,
       defaultLineColor,
-      annotationPaletteByLabel,
     )
 
     const cellId = element.metadata?.segmentation?.cellId
@@ -672,7 +670,6 @@ function boundaryStyleFromElementMetadata(
   element: SpatialElement,
   defaultFillColor: Color,
   defaultLineColor: Color,
-  annotationPaletteByLabel: Map<string, string>,
 ): {
   readonly fillColor: Color
   readonly lineColor: Color
@@ -687,9 +684,7 @@ function boundaryStyleFromElementMetadata(
   const annotationLabel = annotation.label
   const paletteColor =
     annotation.color ??
-    (annotationLabel === undefined
-      ? undefined
-      : annotationPaletteColorForLabel(annotationLabel, annotationPaletteByLabel))
+    (annotationLabel === undefined ? undefined : labelHashColor(annotationLabel))
   const fillColor = hexToBoundaryColor(
     annotation.fillColor ?? paletteColor,
     ANNOTATED_SEGMENTATION_FILL_ALPHA,
@@ -706,19 +701,17 @@ function boundaryStyleFromElementMetadata(
   }
 }
 
-function annotationPaletteColorForLabel(
-  label: string,
-  paletteByLabel: Map<string, string>,
-): string {
-  const existing = paletteByLabel.get(label)
+// A label's palette colour from a hash of the label (FNV-1a), the same in
+// every view whatever other labels it shows (EXP-048). Readers that know a
+// file's labels, such as Visium HD segmentations, give each its own colour.
+function labelHashColor(label: string): string {
+  let hash = 0x811c9dc5
 
-  if (existing !== undefined) {
-    return existing
+  for (let index = 0; index < label.length; index += 1) {
+    hash = Math.imul(hash ^ label.charCodeAt(index), 0x01000193)
   }
 
-  const color = annotationPaletteColor(paletteByLabel.size)
-  paletteByLabel.set(label, color)
-  return color
+  return annotationPaletteColor(hash >>> 0)
 }
 
 function hexToBoundaryColor(hexColor: string | undefined, alpha: number): Color | null {

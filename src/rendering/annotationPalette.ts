@@ -1,3 +1,7 @@
+// Categorical colours: tab10 and tab20, then Set1, Dark2, Set3, Paired and
+// others. No two are within CIE76 ΔE 5 of each other (the test checks): the
+// Set1, Paired and later entries that repeated an earlier colour were swapped
+// for Kelly, Tableau and Okabe-Ito colours (EXP-049).
 export const ANNOTATION_DEFAULT_PALETTE = [
   '#1f77b4',
   '#ff7f0e',
@@ -19,10 +23,10 @@ export const ANNOTATION_DEFAULT_PALETTE = [
   '#c7c7c7',
   '#dbdb8d',
   '#9edae5',
-  '#377eb8',
+  '#9c755f',
   '#4daf4a',
   '#984ea3',
-  '#ff7f00',
+  '#b3446c',
   '#ffff33',
   '#a65628',
   '#f781bf',
@@ -50,11 +54,11 @@ export const ANNOTATION_DEFAULT_PALETTE = [
   '#ffed6f',
   '#a6cee3',
   '#b2df8a',
-  '#fb9a99',
+  '#dcd300',
   '#fdbf6f',
-  '#cab2d6',
+  '#c2b280',
   '#ffff99',
-  '#b15928',
+  '#59a14f',
   '#264653',
   '#2a9d8f',
   '#e9c46a',
@@ -73,7 +77,7 @@ export const ANNOTATION_DEFAULT_PALETTE = [
   '#1982c4',
   '#8ac926',
   '#ffca3a',
-  '#ff595e',
+  '#56b4e9',
   '#3d348b',
   '#7678ed',
   '#f7b801',
@@ -90,7 +94,7 @@ export const ANNOTATION_DEFAULT_PALETTE = [
   '#5f0f40',
   '#9a031e',
   '#fb8b24',
-  '#e36414',
+  '#e68fac',
   '#0f4c5c',
   '#2b2d42',
   '#8d99ae',
