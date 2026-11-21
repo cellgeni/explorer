@@ -465,6 +465,9 @@ describe('deck layer factory', () => {
     expect(nucleusLayer.props.pickable).toBe(true)
     expect(nucleusLayer.props.stroked).toBe(true)
     expect(nucleusLayer.props.filled).toBe(true)
+    expect(nucleusLayer.props.lineWidthUnits).toBe('pixels')
+    expect(nucleusLayer.props.lineWidthMinPixels).toBe(1.35)
+    expect(nucleusLayer.props.getLineWidth).toBe(1.35)
     expect(nucleusLayer.props.data).toEqual(nucleusBoundaries)
 
     const getFillColor = nucleusLayer.props.getFillColor as (
