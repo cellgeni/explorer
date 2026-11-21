@@ -24,6 +24,7 @@ import type {
   ImagePyramidTiffPlaneRef,
   OpenImagePyramidOptions,
 } from './imagePyramid'
+import { isAbortError } from '../utils/abort'
 
 export interface MorphologyImage {
   readonly url: string
@@ -214,10 +215,6 @@ function errorMessage(error: unknown): string {
   return error instanceof Error && error.message.length > 0
     ? error.message
     : String(error)
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
 }
 
 export async function loadCustomMorphologyLayer(

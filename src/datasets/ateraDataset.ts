@@ -77,6 +77,7 @@ import type {
 } from './spatialDataset'
 import type { DatasetCell } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
+import { throwIfAborted } from '../utils/abort'
 
 export interface AteraDatasetOptions {
   // Folder that relative file paths resolve against: the dataset folder, or a
@@ -1193,15 +1194,5 @@ function evictOldest<Key, Value>(cache: Map<Key, Value>, limit: number): void {
     }
 
     cache.delete(oldest.value)
-  }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw signal.reason instanceof Error
-      ? signal.reason
-      : Object.assign(new Error('Gene expression request aborted.'), {
-          name: 'AbortError',
-        })
   }
 }

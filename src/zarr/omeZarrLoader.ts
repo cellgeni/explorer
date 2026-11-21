@@ -42,6 +42,7 @@ import {
   newPixelArray,
   numericPixelsToRgba,
 } from './omeZarrPixels'
+import { throwIfAborted } from '../utils/abort'
 
 const DEFAULT_TILE_SIZE = 256
 // Chunks larger than this are served as several virtual tiles, so a 4096²
@@ -1788,14 +1789,6 @@ function isFinalWorkerError(error: unknown): boolean {
     error instanceof ZarrChunkUnavailableError ||
     (error instanceof Error && error.name === 'AbortError')
   )
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) {
-    throw signal.reason instanceof Error
-      ? signal.reason
-      : new DOMException('The operation was aborted.', 'AbortError')
-  }
 }
 
 function copyTilePixels(options: {

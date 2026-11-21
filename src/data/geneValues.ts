@@ -1,5 +1,6 @@
 import type { NumericArrayLike } from '../datasets/h5adDataset'
 import { mapWithConcurrency } from '../utils/mapWithConcurrency'
+import { throwIfAborted } from '../utils/abort'
 
 // A gene's value in every cell of a dataset, for the Plots panel (plan
 // 22-A). A read gives each gene's cells with a stored value other than 0, by
@@ -539,12 +540,4 @@ function nextTask(): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, 0)
   })
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) {
-    throw signal.reason instanceof Error
-      ? signal.reason
-      : new DOMException('Aborted', 'AbortError')
-  }
 }

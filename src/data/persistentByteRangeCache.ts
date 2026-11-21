@@ -1,3 +1,4 @@
+import { throwIfAborted } from '../utils/abort'
 export const DEFAULT_BYTE_RANGE_CACHE_NAME = 'cellgeni-byte-range-cache'
 export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 3
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_BYTES = 256 * 1024 * 1024
@@ -555,22 +556,6 @@ function copyToArrayBuffer(bytes: Uint8Array | ArrayBuffer): ArrayBuffer {
 
   copy.set(source)
   return copy.buffer
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Byte range request aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 function noop(): void {}

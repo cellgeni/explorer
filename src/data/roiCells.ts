@@ -4,6 +4,7 @@ import type { RoiSelectionInput } from './roiSelection'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export const ROI_CELL_EXPORT_LIMIT = 50_000
 
@@ -55,20 +56,4 @@ export async function loadDatasetRoiCells(
   throwIfAborted(options.signal)
 
   return roiCellsWithin(cells, limit)
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('ROI cell request aborted.')
-  error.name = 'AbortError'
-  return error
 }

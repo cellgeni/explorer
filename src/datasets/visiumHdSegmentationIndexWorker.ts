@@ -11,6 +11,7 @@ import type {
   VisiumHdSegmentationIndexWorkerRequest,
   VisiumHdSegmentationIndexWorkerResponse,
 } from '../workers/visiumHdSegmentationIndexMessages'
+import { abortError, throwIfAborted } from '../utils/abort'
 
 // Reads a Visium HD segmentation GeoJSON into a segmentation index. This
 // thread fetches the file, so custom fetchers and the full-file budget apply,
@@ -243,20 +244,4 @@ function createDefaultVisiumHdSegmentationIndexWorker(): VisiumHdSegmentationInd
     new URL('../workers/visiumHdSegmentationIndex.worker.ts', import.meta.url),
     { type: 'module' },
   )
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal | undefined): Error {
-  if (signal?.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Visium HD segmentation index request aborted.')
-  error.name = 'AbortError'
-  return error
 }

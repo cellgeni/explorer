@@ -93,6 +93,7 @@ import {
   type VisiumScalefactors,
   type VisiumUnits,
 } from './visiumFormat'
+import { throwIfAborted } from '../utils/abort'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -5419,12 +5420,4 @@ function expectGroup(value: unknown, label: string): H5GroupLike {
   }
 
   return value
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    const error = new Error('H5AD request aborted.')
-    error.name = 'AbortError'
-    throw error
-  }
 }

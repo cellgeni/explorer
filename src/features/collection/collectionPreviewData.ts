@@ -12,6 +12,7 @@ import type {
   SpatialDatasetDetector,
   SpatialDatasetLoader,
 } from '../app-shell/appDependencies'
+import { throwIfAborted } from '../../utils/abort'
 
 // What a collection preview reads: every cell's position once per dataset,
 // and the selected genes' scores per gene selection, or the classes of the
@@ -437,14 +438,6 @@ function hasMethod(value: unknown, name: string): value is Record<string, unknow
     value !== null &&
     typeof (value as Record<string, unknown>)[name] === 'function'
   )
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) {
-    throw signal.reason instanceof Error
-      ? signal.reason
-      : new DOMException('Aborted', 'AbortError')
-  }
 }
 
 function formatMegabytes(byteLength: number): string {

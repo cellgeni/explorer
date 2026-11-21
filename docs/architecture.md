@@ -46,8 +46,8 @@ files. Parsing happens in the browser:
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs; Zarr stores (HTTP, zipped, Icechunk), `Browse Store`'s reader (`zarrStructure.ts`) and its folder lister (`zarrFolderLister.ts`)                  |
-| `src/workers/`                          | Worker entry points (`*.worker.ts`) with their handlers (`*Core.ts`) and messages, the decode pools, and the H5 range-read file; see [Workers](#workers)                                 |
-| `src/utils/`                            | Small shared helpers: `sharedLoad`, `abortable`, `createAsyncLimiter`, `mapWithConcurrency`, `slug`                                                                                      |
+| `src/workers/`                          | Worker entry points (`*.worker.ts`) with their handlers (`*Core.ts`) and messages, the decode pools, `runWorkerOnce`, and the H5 range-read file; see [Workers](#workers)                |
+| `src/utils/`                            | Small shared helpers: `abort`, `sharedLoad`, `abortable`, `createAsyncLimiter`, `mapWithConcurrency`, `slug`                                                                             |
 | `src/store/`                            | Zustand store (dataset URL)                                                                                                                                                              |
 | `src/styles/`                           | CSS per UI area, imported by `src/index.css`. `tokens.css` defines the dark theme's colours plus the type, spacing and stacking scales; the other files use only those tokens            |
 | `src/test/`                             | Vitest setup, the App test harness, idle section models, and fixture builders; fixture files and the scripts that write them in `fixtures/`                                              |
@@ -557,6 +557,16 @@ custom fetcher (except the segmentation index), with no `Worker`, or if the
 worker fails to run, the same reader runs on the main thread. See
 [MERSCOPE](./modalities/merscope.md), [Standard Visium](./modalities/visium.md)
 and [Visium HD](./modalities/visium-hd.md#caching-and-workers).
+
+The one-shot readers (the cells overview, shapes, MERSCOPE table, MEX matrix,
+zip entry and imported segmentation workers) share `runWorkerOnce`
+(`src/workers/runWorkerOnce.ts`). It posts the request, ends the worker on the
+answer, a reported error or an abort, and reads on the main thread when the
+worker fails to run; the cells overview rejects instead. Each reader's wrapper
+(`merscopeTableWorker.ts` and the like) says which messages mean what and keeps
+its `new Worker(new URL(...))` call, which Vite needs in the file that creates
+the worker. Abort errors come from `src/utils/abort.ts` (`abortError`,
+`throwIfAborted`, `isAbortError`).
 
 The Plots panel reads each selected gene's value in every cell with the
 dataset's `geneValues(genes)` (`src/data/geneValues.ts`): the rows with a

@@ -7,6 +7,7 @@ import type { CellId } from './cellid'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { CellFeatureMatrixReadOptions, GexResult } from './gex'
 import type { DatasetCell } from '../datasets/xeniumDataset'
+import { isAbortError, throwIfAborted } from '../utils/abort'
 
 export const ROI_GENE_STATS_CELL_LIMIT = 10_000
 export const ROI_GENE_STATS_GENE_LIMIT = 10
@@ -322,26 +323,6 @@ function normalizeLimit(value: number | undefined, fallback: number): number {
   return value === undefined || !Number.isFinite(value)
     ? fallback
     : Math.max(1, Math.floor(value))
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('ROI gene stats request aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 // The Zarr matrix could not serve the cells, and a 'range-read' fallback found
