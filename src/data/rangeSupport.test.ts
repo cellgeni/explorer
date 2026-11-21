@@ -90,6 +90,26 @@ describe('HTTP Range support diagnostics', () => {
     )
   })
 
+  it.each([
+    [400, 'The host refused the request'],
+    [401, 'The host asks for a login'],
+    [410, 'The host refused the request'],
+    [429, 'The host is limiting requests'],
+  ])('reports HTTP %i as a failed read, not a Range problem', async (status, reason) => {
+    const error: unknown = await assertHttpRangeSupport(
+      'https://example.test/xenium/cells.parquet',
+      { fetcher: vi.fn(async () => rangeResponse(status, null)), label: 'cells.parquet' },
+    ).catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toMatch(
+      new RegExp(
+        `^cells\\.parquet could not be read\\. The Range probe received HTTP ${status} for https://example\\.test/xenium/cells\\.parquet\\. ${reason}`,
+      ),
+    )
+    expect((error as Error).message).not.toContain('cannot be range-read')
+  })
+
   it('accepts HTTP 206 when CORS does not expose Content-Range', async () => {
     const fetcher = vi.fn(async () => rangeResponse(206, null))
 
