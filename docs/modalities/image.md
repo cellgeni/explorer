@@ -113,7 +113,8 @@ next time.
 ### Z-Stacks
 
 An OME-TIFF with `SizeZ > 1` is a z-stack when the OME-XML locates every
-channel's plane at each z for `t = 0` (`parseOmeTiffMetadata`):
+channel's plane at each z for `t = 0` (`parseOmeTiffMetadata`). The same rules
+locate each channel's plane in a 2D image:
 
 - Planes are numbered in `DimensionOrder`, first letter after `XY` fastest.
 - A `TiffData` stores `PlaneCount` planes from its `FirstC`/`FirstZ`/`FirstT`
@@ -214,7 +215,7 @@ TIFF it already holds and place it:
 | `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                     |
 | `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                         |
 | `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                       |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`)                                                                  |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`); channels count in element order, not by ID                      |
 | `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                               |
 | `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                              |
 | `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                           |
