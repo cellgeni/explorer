@@ -208,17 +208,17 @@ TIFF it already holds and place it:
 
 ### OME-XML
 
-| Field                                          | Use                                                                                                                                                  |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Pixels@PhysicalSizeX` (+ unit)                | µm/px. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored.                                              |
-| `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it |
-| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                     |
-| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                         |
-| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                       |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`); channels count in element order, not by ID                      |
-| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                               |
-| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                              |
-| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                           |
+| Field                                          | Use                                                                                                                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Pixels@PhysicalSizeX` (+ unit)                | µm/px, from any length unit (Å to km, inches, feet; `src/data/lengthUnits.ts`). Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
+| `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it                             |
+| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                                                 |
+| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                                                     |
+| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                                                   |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`); channels count in element order, not by ID                                                  |
+| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                                                           |
+| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                                                          |
+| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                                                       |
 
 ### QPTIFF
 
@@ -530,9 +530,13 @@ transform.
   `…, c, y, x`. `x` and `y` are required. `z` starts at
   `omero.rdefs.defaultZ`, else the middle plane, and other planes open as
   `#z=N` loaders; `t` is `defaultT`, else 0.
-- µm/px is the product of multiscale and dataset `scale` values for x, with
-  unit conversion (nm, µm, mm, m). Unknown units count as µm; a missing scale
-  gives 1 µm/px. `translation` is ignored except for SpatialData placement.
+- µm/px is the product of multiscale and dataset `scale` values for x, and
+  for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
+  the image's extent and fit). Units are converted from any length the
+  specification names, from angstrom to kilometre, inch and foot
+  (`src/data/lengthUnits.ts`, shared with OME-TIFF). Unknown units count as
+  µm; a missing scale gives 1 µm/px. `translation` is ignored except for
+  SpatialData placement.
 - Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
   are served as several virtual tiles of at most 512 pixels that share one
   decoded chunk.

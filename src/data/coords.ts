@@ -9,9 +9,18 @@ export type ScreenPixels = number & { readonly [screenPixelsBrand]: true }
 export interface UnitsDescriptor {
   readonly dataUnit: 'micrometer'
   readonly imageUnit: 'pixel'
+  // The pixel width; also its height unless yMicrometersPerPixel is set.
   readonly micrometersPerPixel: Micrometers
+  // The pixel height of an image whose pixels are not square, as an OME-Zarr
+  // with a scale per axis.
+  readonly yMicrometersPerPixel?: Micrometers
   readonly origin: 'top-left'
   readonly imageYAxis: 'down'
+}
+
+// An image's pixel height.
+export function micrometersPerPixelY(units: UnitsDescriptor): Micrometers {
+  return units.yMicrometersPerPixel ?? units.micrometersPerPixel
 }
 
 export interface DataPoint {
@@ -340,7 +349,8 @@ function imageSizeMicrometers(
     width:
       (grid.fullImageWidth ?? grid.imageWidth * levelScale) * units.micrometersPerPixel,
     height:
-      (grid.fullImageHeight ?? grid.imageHeight * levelScale) * units.micrometersPerPixel,
+      (grid.fullImageHeight ?? grid.imageHeight * levelScale) *
+      micrometersPerPixelY(units),
   }
 }
 

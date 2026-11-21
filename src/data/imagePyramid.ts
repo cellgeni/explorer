@@ -3,6 +3,7 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import type { ZarrChunkSource, ZarrChunkWindow } from '../workers/zarrDecodeMessages'
 import {
   micrometers,
+  micrometersPerPixelY,
   placeFrameBbox,
   type BBox,
   type ImageFramePlacement,
@@ -268,7 +269,7 @@ export function placedImageExtent(loader: ImagePyramidLoader): BBox {
     minY: origin.minY,
     maxX: micrometers(origin.minX + loader.imageWidth * loader.units.micrometersPerPixel),
     maxY: micrometers(
-      origin.minY + loader.imageHeight * loader.units.micrometersPerPixel,
+      origin.minY + loader.imageHeight * micrometersPerPixelY(loader.units),
     ),
   }
 

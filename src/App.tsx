@@ -333,7 +333,7 @@ import {
   normalizeCustomMorphologyLayerUrl,
   type MorphologyImage,
 } from './data/morphologyImage'
-import { micrometers, type BBox } from './data/coords'
+import { micrometers, micrometersPerPixelY, type BBox } from './data/coords'
 import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
@@ -5455,13 +5455,12 @@ function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox 
   }
 
   const loader = image.loader
-  const micrometersPerPixel = loader.units.micrometersPerPixel
 
   return {
     minX: micrometers(0),
-    maxX: micrometers(loader.imageWidth * micrometersPerPixel),
+    maxX: micrometers(loader.imageWidth * loader.units.micrometersPerPixel),
     minY: micrometers(0),
-    maxY: micrometers(loader.imageHeight * micrometersPerPixel),
+    maxY: micrometers(loader.imageHeight * micrometersPerPixelY(loader.units)),
   }
 }
 

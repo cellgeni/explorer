@@ -24,6 +24,7 @@ import {
   type ImagePyramidZStack,
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
+import { micrometersPerLengthUnit } from '../data/lengthUnits'
 import type { Array as ZarrArray, DataType } from 'zarrita'
 import {
   consolidatedZarrStore,
@@ -246,6 +247,9 @@ export async function openOmeZarrImageWithOptions(
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
     micrometersPerPixel: micrometers(baseLevel.xMicrometersPerPixel),
+    ...(baseLevel.yMicrometersPerPixel === baseLevel.xMicrometersPerPixel
+      ? {}
+      : { yMicrometersPerPixel: micrometers(baseLevel.yMicrometersPerPixel) }),
     origin: 'top-left',
     imageYAxis: 'down',
   }
@@ -1504,38 +1508,6 @@ function zVoxelSizeForAxis(options: {
 
 function micrometerMultiplierForUnit(unit: string | undefined): number {
   return micrometersPerLengthUnit(unit) ?? 1
-}
-
-function micrometersPerLengthUnit(unit: string | undefined): number | undefined {
-  switch (unit?.toLowerCase()) {
-    case 'micrometer':
-    case 'micrometers':
-    case 'micrometre':
-    case 'micrometres':
-    case 'um':
-    case 'µm':
-      return 1
-    case 'nanometer':
-    case 'nanometers':
-    case 'nanometre':
-    case 'nanometres':
-    case 'nm':
-      return 0.001
-    case 'millimeter':
-    case 'millimeters':
-    case 'millimetre':
-    case 'millimetres':
-    case 'mm':
-      return 1000
-    case 'meter':
-    case 'meters':
-    case 'metre':
-    case 'metres':
-    case 'm':
-      return 1_000_000
-    default:
-      return undefined
-  }
 }
 
 function buildOmeZarrChannels(options: {

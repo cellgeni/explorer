@@ -1,8 +1,9 @@
 import type * as zarr from 'zarrita'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import { placedImageExtent, type ImagePyramidLoader } from '../data/imagePyramid'
 import { morphologyImageFromPyramidLoader } from '../data/morphologyImage'
+import { ImageOnlyDataset } from '../datasets/imageOnlyDataset'
 import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
@@ -263,6 +264,58 @@ describe('OME-Zarr image loader', () => {
         sourceUrl: 'https://example.test/plain/zarr.json#c=1',
       }),
     ])
+  })
+
+  it('sizes non-square pixels and converts every spec length unit', async () => {
+    const open = (rootPath: string, unit: string, scale: [number, number]) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(
+          new Map([
+            [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+            [
+              `${rootPath}/.zattrs`,
+              jsonBytes({
+                multiscales: [
+                  {
+                    version: '0.4',
+                    axes: [
+                      { name: 'y', type: 'space', unit },
+                      { name: 'x', type: 'space', unit },
+                    ],
+                    datasets: [
+                      {
+                        path: '0',
+                        coordinateTransformations: [{ type: 'scale', scale }],
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ],
+            [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([8, 16], [8, 16]))],
+          ]),
+        ),
+        decodePool: null,
+      })
+    const tall = await open('/tall.zarr', 'micrometer', [0.25, 0.5])
+
+    // 16 pixels 0.5 µm wide by 8 pixels 0.25 µm tall.
+    expect(tall.units).toMatchObject({
+      micrometersPerPixel: 0.5,
+      yMicrometersPerPixel: 0.25,
+    })
+    expect(placedImageExtent(tall)).toMatchObject({ maxX: 8, maxY: 2 })
+    await expect(
+      new ImageOnlyDataset({
+        imageUrl: 'https://example.test/tall.zarr',
+        openImage: async () => tall,
+      }).meta(),
+    ).resolves.toMatchObject({ extent: { maxX: 8, maxY: 2 } })
+
+    const tomogram = await open('/tomogram.zarr', 'angstrom', [10, 10])
+
+    expect(tomogram.units.micrometersPerPixel).toBeCloseTo(0.001, 12)
+    expect(tomogram.units).not.toHaveProperty('yMicrometersPerPixel')
   })
 
   it('selects tiles and level bounds from OME-Zarr coordinate transforms', async () => {
