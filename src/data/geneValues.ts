@@ -254,9 +254,11 @@ export async function geneValuesFromColumnSlices(
       return builder.finish()
     },
   )
-  const byCol = new Map(distinct.map((col, slot) => [col, columns[slot]]))
+  const byCol = new Map(
+    distinct.map((col, slot) => [col, columns[slot] ?? emptyColumn()] as const),
+  )
 
-  return cols.map((col) => byCol.get(col) ?? emptyColumn())
+  return resultPerAsk(cols, byCol)
 }
 
 // CSR read over HTTP: every stored value, in batches of whole rows, each
@@ -345,7 +347,7 @@ export async function geneValuesFromDenseChunks(
   )
 
   const finished = new Map([...builders].map(([col, builder]) => [col, builder.finish()]))
-  return cols.map((col) => finished.get(col) ?? emptyColumn())
+  return resultPerAsk(cols, finished)
 }
 
 // Bytes a read decodes (22-D7). `bytesPerValue` is a stored value's bytes,
@@ -443,7 +445,13 @@ class CsrColumnScan {
   }
 
   finish(): readonly ColumnValues[] {
-    return sharedColumns(this.cols, this.builders)
+    const byCol = new Map<number, ColumnValues>()
+
+    this.cols.forEach((col, slot) => {
+      if (!byCol.has(col)) byCol.set(col, this.builders[slot]?.finish() ?? emptyColumn())
+    })
+
+    return resultPerAsk(this.cols, byCol)
   }
 }
 
@@ -475,21 +483,26 @@ function csrRowBatches(
   return batches
 }
 
-// A column asked for twice shares one result.
-function sharedColumns(
+// One result per ask, from each distinct column's. A column asked for twice,
+// as for two spellings of one gene, is read once, and each later ask gets a
+// copy: readers hand the arrays to workers by transfer, which would leave a
+// shared one empty for the other ask.
+function resultPerAsk(
   cols: readonly number[],
-  builders: readonly ColumnBuilder[],
+  byCol: ReadonlyMap<number, ColumnValues>,
 ): readonly ColumnValues[] {
-  const firstSlot = new Map<number, number>()
-  const finished = builders.map((builder) => builder.finish())
+  const given = new Set<number>()
 
-  return cols.map((col, slot) => {
-    const first = firstSlot.get(col)
-    if (first === undefined) {
-      firstSlot.set(col, slot)
-      return finished[slot] ?? emptyColumn()
+  return cols.map((col) => {
+    const column = byCol.get(col)
+
+    if (column === undefined) return emptyColumn()
+    if (!given.has(col)) {
+      given.add(col)
+      return column
     }
-    return finished[first] ?? emptyColumn()
+
+    return { rows: column.rows.slice(), values: column.values.slice() }
   })
 }
 

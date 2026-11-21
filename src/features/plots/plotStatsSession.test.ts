@@ -3,6 +3,7 @@ import type {
   PlotStatsWorkerRequest,
   PlotStatsWorkerResponse,
 } from '../../workers/plotStatsMessages'
+import { geneValuesFromColumnSlices } from '../../data/geneValues'
 import { plotStatsHandler } from '../../workers/plotStatsCore'
 import { createPlotStatsSession, type PlotStatsWorkerLike } from './plotStatsSession'
 
@@ -19,9 +20,10 @@ class FakePlotStatsWorker implements PlotStatsWorkerLike {
     }, 0)
   })
 
+  // Transferred buffers leave the sender, as in a browser.
   postMessage(message: PlotStatsWorkerRequest, transfer: Transferable[] = []): void {
     this.transfers.push(transfer)
-    this.handle(structuredClone(message))
+    this.handle(structuredClone(message, { transfer }))
   }
 
   terminate(): void {
@@ -54,6 +56,34 @@ describe('plot statistics session (plan 22-D6)', () => {
     expect(result.missing).toEqual(['Gad1'])
     expect(result.stats[0]?.groups[0]).toMatchObject({ cells: 3, expressing: 2, sum: 4 })
     expect(worker.transfers.some((transfer) => transfer.length === 2)).toBe(true)
+  })
+
+  it('takes one matrix column read for two spellings of a gene', async () => {
+    // Xenium looks genes up in lower case, so SNAP25 and snap25 are one column.
+    const [upper, lower] = await geneValuesFromColumnSlices(
+      {
+        indptr: Uint32Array.from([0, 2]),
+        rows: 3,
+        cols: 1,
+        readValues: () =>
+          Promise.resolve({
+            indices: Uint32Array.from([0, 2]),
+            data: Uint32Array.from([1, 3]),
+          }),
+      },
+      [0, 0],
+    )
+    const worker = new FakePlotStatsWorker()
+    const session = createPlotStatsSession(() => worker)
+    session.setRows(['a', 'b', 'c'])
+    await session.setGroups({ classes: [['a', 'b', 'c']], selection: null })
+
+    session.addGene({ gene: 'SNAP25', rows: upper!.rows, values: upper!.values })
+    session.addGene({ gene: 'snap25', rows: lower!.rows, values: lower!.values })
+    const result = await session.stats(['SNAP25', 'snap25'])
+
+    expect(result.missing).toEqual([])
+    expect(result.stats.map((stat) => stat.groups[0]?.sum)).toEqual([4, 4])
   })
 
   it('carries on this thread when the worker fails, asking for genes again', async () => {
