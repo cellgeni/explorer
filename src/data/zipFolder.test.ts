@@ -193,6 +193,33 @@ describe('zip folders', () => {
     expect(fetcher).not.toHaveBeenCalled()
   })
 
+  it('reads a range of a deflated file with the HTTP cache skipped too', async () => {
+    const { fetch, fetcher } = await openFolder()
+    const range = await fetch(`${ZIP}/notes.txt`, { headers: { Range: 'bytes=0-5' } })
+
+    await expect(range.text()).resolves.toBe('notes ')
+    // The entry is read whole (readZipEntry) to answer the range.
+    expect(fetcher).toHaveBeenCalled()
+    expect(fetcher.mock.calls.every(([, init]) => init?.cache === 'no-store')).toBe(true)
+  })
+
+  it('answers files of a zip whose URL has a query, as a presigned URL does', async () => {
+    const signed = `${ZIP}?X-Amz-Signature=abc`
+    const requests: ByteRangeRequest[] = []
+    const host = byteRangeFetcher(new Map([[signed, archive(false)]]), requests)
+    const directory = await readZipDirectory(signed, { fetcher: host })
+    registerZipFolder({ url: signed, root: 'outs/', directory }, host)
+    const elsewhere = vi.fn(async () => new Response('elsewhere'))
+    const fetch = withZipFolders(elsewhere as unknown as typeof fetch)
+
+    // Readers append the file's path to the dataset URL, after its query.
+    await expect((await fetch(`${signed}/experiment.spatial`)).text()).resolves.toBe(
+      '{"pixel_size": 0.2125}',
+    )
+    expect(elsewhere).not.toHaveBeenCalled()
+    expect(requests.every((request) => request.url === signed)).toBe(true)
+  })
+
   it('answers 404 for files the zip lacks and passes other URLs on', async () => {
     const { fetch, requests, elsewhere } = await openFolder()
 

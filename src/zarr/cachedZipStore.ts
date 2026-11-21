@@ -1,4 +1,6 @@
 import { ZipFileStore } from '@zarrita/storage'
+import { fetchHead } from '../data/hostResponses'
+import { ZipArchiveError } from '../data/zipArchive'
 import {
   byteRangeFileVersion,
   defaultPersistentByteRangeCache,
@@ -105,18 +107,20 @@ export class CachedHttpRangeReader {
       return this.head
     }
 
-    const response = await this.fetcher(this.url, { method: 'HEAD' })
+    // fetchHead reads the first byte instead on hosts that answer GET but not
+    // HEAD, such as GET-only CORS buckets and presigned URLs.
+    const response = await fetchHead(this.fetcher, this.url)
 
     if (!response.ok) {
-      throw new Error(
-        `failed http request ${this.url}, status: ${response.status}: ${response.statusText}`,
-      )
+      throw new ZipArchiveError(this.url, `HEAD returned HTTP ${response.status}.`)
     }
 
-    const byteLength = Number(response.headers.get('content-length'))
+    const length = response.headers.get('content-length')
+    const byteLength = length === null ? Number.NaN : Number(length)
 
-    if (!Number.isFinite(byteLength)) {
-      throw new Error('could not get length')
+    // Without the size the zip's directory, at its end, cannot be found.
+    if (!Number.isFinite(byteLength) || byteLength <= 0) {
+      throw new ZipArchiveError(this.url, 'the host did not send the file size.')
     }
 
     this.head = {

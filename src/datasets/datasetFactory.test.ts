@@ -1946,6 +1946,40 @@ describe('Icechunk repositories', () => {
     )
   })
 
+  it('reads a zipped run opened again with a new token from the new URL', async () => {
+    const json = (value: unknown) => new TextEncoder().encode(JSON.stringify(value))
+    const zip = zipArchive([
+      { name: 'experiment.spatial', data: json({ pixel_size: 0.2125 }) },
+    ])
+    const stale = 'https://example.test/zips/signed_outs.zip?X-Amz-Signature=old'
+    const fresh = 'https://example.test/zips/signed_outs.zip?X-Amz-Signature=new'
+    const requests: ByteRangeRequest[] = []
+    const fetcher = withZipFolders(
+      byteRangeFetcher(
+        new Map([
+          [stale, zip],
+          [fresh, zip],
+        ]),
+        requests,
+      ),
+    )
+
+    await expect(detectSpatialDataset(stale, { fetcher })).resolves.toMatchObject({
+      platform: 'atera',
+    })
+    await expect(detectSpatialDataset(fresh, { fetcher })).resolves.toMatchObject({
+      platform: 'atera',
+      baseUrl: fresh,
+    })
+    requests.length = 0
+
+    await expect((await fetcher(`${fresh}/experiment.spatial`)).json()).resolves.toEqual({
+      pixel_size: 0.2125,
+    })
+    expect(requests.length).toBeGreaterThan(0)
+    expect(requests.every((request) => request.url === fresh)).toBe(true)
+  })
+
   it('reads an Atera manifest whose root is a zipped run', async () => {
     const zip = 'https://example.test/zips/manifest_outs.zip'
     const host = byteRangeFetcher(

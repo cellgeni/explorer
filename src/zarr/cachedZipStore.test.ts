@@ -51,6 +51,32 @@ describe('cached zip range reader', () => {
     await expect(readTail(rewritten)).resolves.toEqual([3, 3, 3, 3])
   })
 
+  it('reads the size with a one-byte GET on hosts that refuse HEAD', async () => {
+    const url = 'https://get-only.example.test/stores/sample.zarr.zip'
+    const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'HEAD') {
+        throw new TypeError('Failed to fetch')
+      }
+
+      return new Response(new Uint8Array(1), {
+        status: 206,
+        headers: { 'Content-Range': 'bytes 0-0/1000' },
+      })
+    }) as typeof fetch
+
+    await expect(
+      new CachedHttpRangeReader(url, new MemoryByteRangeCache(), fetcher).getLength(),
+    ).resolves.toBe(1_000)
+  })
+
+  it('says when the host sends no size', async () => {
+    const fetcher = (async () => new Response(null, { status: 200 })) as typeof fetch
+
+    await expect(
+      new CachedHttpRangeReader(ZIP_URL, new MemoryByteRangeCache(), fetcher).getLength(),
+    ).rejects.toThrow('sample.zarr.zip: the host did not send the file size.')
+  })
+
   it('refuses a host that ignores Range without reading the whole zip', async () => {
     const cache = new MemoryByteRangeCache()
     const body = countedBody(100, 10)

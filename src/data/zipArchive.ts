@@ -1,6 +1,8 @@
 // Reads single entries from a large zip over HTTP: the central directory
 // from the archive's tail (ZIP64 too), then one entry's bytes in one ranged
-// request, streamed through DecompressionStream when deflated. Used for
+// request, streamed through DecompressionStream when deflated. Ranges skip
+// the HTTP cache: Chromium serialises requests that share a URL's cache
+// entry, and every file of a zipped run is one URL. Used for
 // MERSCOPE `.vzg` archives (11-23 GB), whose image pyramids are deflated
 // entries of up to a few hundred MB. A deflate stream cannot be read from the
 // middle, so an entry is always read whole.
@@ -236,6 +238,7 @@ export async function readZipEntry(
     LOCAL_EXTRA_ALLOWANCE +
     entry.compressedSize
   const response = await fetcher(url, {
+    cache: 'no-store',
     headers: { Range: `bytes=${entry.localHeaderOffset}-${end - 1}` },
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
@@ -380,6 +383,7 @@ async function readRange(
   signal: AbortSignal | undefined,
 ): Promise<Uint8Array> {
   const response = await fetcher(url, {
+    cache: 'no-store',
     headers: { Range: `bytes=${start}-${end - 1}` },
     ...(signal === undefined ? {} : { signal }),
   })

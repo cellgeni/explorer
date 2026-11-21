@@ -754,6 +754,12 @@ async function registerZippedRunFolder(
   const registered = zipFolderFor(url)
 
   if (registered !== undefined) {
+    // The same zip under a new query, such as a refreshed presigned URL, is
+    // read with the new one from now on.
+    if (registered.url !== url) {
+      registerZipFolder({ ...registered, url }, options.fetcher)
+    }
+
     return { atera: registered.root }
   }
 
