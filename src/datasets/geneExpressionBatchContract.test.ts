@@ -441,10 +441,8 @@ async function visiumHdReader(): Promise<Reader> {
     read: (box, options = {}) => dataset.geneExpression(box, SELECTED, options),
     // Only the bins with expression are listed.
     population: 'expressing',
-    // DIFFERS from the other readers: the stride thins the bins read, whether
-    // or not they express. Bins 0 and 2 are read; the expressing bins 1 and 3
-    // never are, so the batch lists none. The app asks Visium HD for a stride
-    // of 1 only (planGeneExpressionLod), so this is not reached today.
-    sampled: { population: 'expressing', listed: [], cellCount: 2 },
+    // As for Xenium, the stride is ignored: every bin in the box is read, so
+    // that no expressing bin is lost.
+    sampled: { population: 'expressing', listed: [1, 3], cellCount: 4 },
   }
 }
