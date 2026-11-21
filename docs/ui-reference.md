@@ -1102,7 +1102,9 @@ for each of these, scales first and category lists last:
   one shown. Cells of hidden classes, and cells in no class, fade to a
   faint grey (fill and outline at 15% of the usual opacity), so the tissue
   still shows but the shown classes stand out.
-- `Cell color` Metadata: the track name and its range.
+- `Cell color` Metadata: the track name and its range. Cells whose value is
+  NaN (a missing value in AnnData) or infinite are drawn as cells without a
+  value, and the legend adds "n non-finite values skipped".
 - `Cell color` Cell area: µm² on a square-root scale.
 - Transcripts drawn as density: what the squares count ("SNAP25 transcripts per
   40 µm bin") with the density scale; points coloured by quality: QV 0 to

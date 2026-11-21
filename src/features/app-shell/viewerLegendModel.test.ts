@@ -95,6 +95,20 @@ describe('viewerLegendSections', () => {
     })
   })
 
+  it('counts the metadata values drawn as no value', () => {
+    const section = (nonFiniteCount: number) =>
+      viewerLegendSections(
+        input({
+          colorMode: 'metadata',
+          metadataTrack: { label: 'doublet score', min: 0, max: 1, nonFiniteCount },
+        }),
+      )[0]
+
+    expect(section(0)).not.toHaveProperty('detail')
+    expect(section(1)).toMatchObject({ detail: '1 non-finite value skipped' })
+    expect(section(1_200)).toMatchObject({ detail: '1,200 non-finite values skipped' })
+  })
+
   it('says when expression is loading, or cannot be shown', () => {
     const genes = { ...input().genes, names: ['SNAP25'] }
     const sections = (status: ViewerLegendInput['genes']['status']) =>

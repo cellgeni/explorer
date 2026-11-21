@@ -1683,6 +1683,13 @@ export function App({ dependencies }: AppProps = {}) {
       ),
     [styledGeneExpressionElements],
   )
+  const cellMetadataNonFiniteCount = useMemo(
+    () =>
+      activeCellMetadataTrack === null
+        ? 0
+        : nonFiniteScoreCount(activeCellMetadataTrack.values.map(({ value }) => value)),
+    [activeCellMetadataTrack],
+  )
   const legendSections = useMemo(
     () =>
       viewerLegendSections({
@@ -1718,6 +1725,7 @@ export function App({ dependencies }: AppProps = {}) {
                 label: selectedCellMetadataTrack.label,
                 min: activeCellMetadataTrack.min,
                 max: activeCellMetadataTrack.max,
+                nonFiniteCount: cellMetadataNonFiniteCount,
               },
         cellAreaMax: legendCellAreaMax,
         transcripts: {
@@ -1743,6 +1751,7 @@ export function App({ dependencies }: AppProps = {}) {
       }),
     [
       activeCellMetadataTrack,
+      cellMetadataNonFiniteCount,
       effectiveShowTranscriptOverlay,
       layerVisibility.cells,
       geneExpressionColorScale,
