@@ -78,6 +78,11 @@ interface ShareableLayerHashOptions {
   readonly showCellBoundaries: boolean
   readonly showNucleusBoundaries: boolean
   readonly showHoverTooltips: boolean
+  readonly showMinimap: boolean
+  readonly showAxes: boolean
+  readonly showLegend: boolean
+  readonly showNavigation: boolean
+  readonly showScaleBar: boolean
   readonly cellBoundaryOpacity: number
   readonly morphologyEnabledChannelIds: readonly string[] | undefined
   readonly morphologyZPlane: number | undefined
@@ -234,6 +239,11 @@ export function useShareableUrlHash({
     showCellBoundaries,
     showNucleusBoundaries,
     showHoverTooltips,
+    showMinimap,
+    showAxes,
+    showLegend,
+    showNavigation,
+    showScaleBar,
   } = layers
   const {
     geneExpressionColorScale,
@@ -332,6 +342,11 @@ export function useShareableUrlHash({
           showCellBoundaries,
           showNucleusBoundaries,
           showHoverTooltips,
+          showMinimap,
+          showAxes,
+          showLegend,
+          showNavigation,
+          showScaleBar,
           cellBoundaryOpacity,
           ...(morphologyEnabledChannelIds === undefined
             ? {}
@@ -425,6 +440,11 @@ export function useShareableUrlHash({
     showCellBoundaries,
     showNucleusBoundaries,
     showHoverTooltips,
+    showMinimap,
+    showAxes,
+    showLegend,
+    showNavigation,
+    showScaleBar,
     cellBoundaryOpacity,
     morphologyEnabledChannelIds,
     morphologyZPlane,

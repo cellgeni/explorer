@@ -64,6 +64,11 @@ describe('shareableState', () => {
       showCellBoundaries: false,
       showNucleusBoundaries: true,
       showHoverTooltips: false,
+      showMinimap: false,
+      showAxes: true,
+      showLegend: false,
+      showNavigation: false,
+      showScaleBar: false,
       cellBoundaryOpacity: 0.35,
       morphologyEnabledChannelIds: ['Channel:1', 'Channel:3'],
       morphologyZPlane: 7,
@@ -108,6 +113,11 @@ describe('shareableState', () => {
     expect(state.showCellBoundaries).toBe(false)
     expect(state.showNucleusBoundaries).toBe(true)
     expect(state.showHoverTooltips).toBe(false)
+    expect(state.showMinimap).toBe(false)
+    expect(state.showAxes).toBe(true)
+    expect(state.showLegend).toBe(false)
+    expect(state.showNavigation).toBe(false)
+    expect(state.showScaleBar).toBe(false)
     expect(state.cellBoundaryOpacity).toBe(0.35)
     expect(state.morphologyEnabledChannelIds).toEqual(['Channel:1', 'Channel:3'])
     expect(state.morphologyZPlane).toBe(7)

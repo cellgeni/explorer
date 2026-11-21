@@ -292,6 +292,7 @@ export function ViewerCore({
   loadingTasks = EMPTY_LOADING_TASKS,
   onCancelLoadingTask,
   legendSections = EMPTY_LEGEND_SECTIONS,
+  legend = true,
   showZoomLevel = false,
   selectionHighlight = null,
   onClearSelection,
@@ -324,6 +325,7 @@ export function ViewerCore({
   navigationControls = false,
   minimap = false,
   axes = false,
+  scaleBar = true,
   fitRequestKey = 0,
   overviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
@@ -413,7 +415,7 @@ export function ViewerCore({
       cellMetadataTrack={cellMetadataTrack}
       loadingTasks={loadingTasks}
       {...(onCancelLoadingTask === undefined ? {} : { onCancelLoadingTask })}
-      legendSections={legendSections}
+      legendSections={legend ? legendSections : EMPTY_LEGEND_SECTIONS}
       showZoomLevel={showZoomLevel}
       selectionHighlight={selectionHighlight}
       {...(onClearSelection === undefined ? {} : { onClearSelection })}
@@ -435,6 +437,7 @@ export function ViewerCore({
       navigationControls={navigationControls}
       minimap={minimap}
       axes={axes}
+      scaleBar={scaleBar}
       minimapPoints={minimapDots}
       fitRequestKey={fitRequestKey}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
@@ -528,6 +531,7 @@ interface ViewerSurfaceProps {
   readonly navigationControls: boolean
   readonly minimap: boolean
   readonly axes: boolean
+  readonly scaleBar: boolean
   readonly minimapPoints: readonly (readonly [number, number])[]
   readonly fitRequestKey: number
   readonly overviewRenderCellLimit?: number | null
@@ -615,6 +619,7 @@ function ViewerSurface({
   navigationControls,
   minimap,
   axes,
+  scaleBar,
   minimapPoints: minimapDots,
   fitRequestKey,
   overviewRenderCellLimit,
@@ -1364,6 +1369,7 @@ function ViewerSurface({
           physicalUnitLabel,
         )
   const zoomLevelText = formatViewportZoom(viewState.zoom)
+  const navigationShown = navigationControls && canTrackMouseCoordinates
   const axesModel = useMemo(
     () =>
       !axes || !canTrackMouseCoordinates
@@ -1385,9 +1391,12 @@ function ViewerSurface({
       viewport,
     ],
   )
-  const scaleBar = useMemo(
+  const scaleBarView = useMemo(
     () =>
-      !canTrackMouseCoordinates || viewport.width <= 0 || viewport.height <= 0
+      !scaleBar ||
+      !canTrackMouseCoordinates ||
+      viewport.width <= 0 ||
+      viewport.height <= 0
         ? null
         : scaleBarModel(
             viewState,
@@ -1401,6 +1410,7 @@ function ViewerSurface({
       coordinateUnit,
       micrometersPerPixel,
       physicalUnitLabel,
+      scaleBar,
       viewState,
       viewport,
     ],
@@ -1837,6 +1847,9 @@ function ViewerSurface({
       onTranscriptHover,
     ],
   )
+  // Without it deck.gl gets onHover null, not no onHover: deck.gl merges
+  // props, so a left-out handler would stay, still showing the tooltips
+  // Settings turned off.
   const deckHoverEnabled =
     hoverTooltipsEnabled ||
     transcriptPoints.length > 0 ||
@@ -2200,7 +2213,7 @@ function ViewerSurface({
               onViewStateChange={handleViewStateChange}
               onClick={handleDeckClick}
               eventRecognizerOptions={DECK_EVENT_RECOGNIZER_OPTIONS}
-              {...(deckHoverEnabled ? { onHover: handleDeckHover } : {})}
+              onHover={deckHoverEnabled ? handleDeckHover : null}
               controller
               layers={layers}
               onLoad={removeDeckFromTabOrder}
@@ -2274,16 +2287,16 @@ function ViewerSurface({
         {transcriptHover === null ? null : (
           <TranscriptHoverTooltip detail={transcriptHover} />
         )}
-        {cellHover === null || magicLensActive ? null : (
+        {cellHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
           <OverviewCellHoverTooltip
             detail={cellHover}
             sourceLabel={overviewCellSourceLabel}
           />
         )}
-        {gridCellHover === null || magicLensActive ? null : (
+        {gridCellHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
           <GridCellHoverTooltip detail={gridCellHover} />
         )}
-        {cellBoundaryHover === null || magicLensActive ? null : (
+        {cellBoundaryHover === null || magicLensActive || !hoverTooltipsEnabled ? null : (
           <CellBoundaryHoverTooltip
             detail={cellBoundaryHover}
             sourceLabel={overviewCellSourceLabel}
@@ -2315,7 +2328,7 @@ function ViewerSurface({
           </div>
         )}
         {axesModel === null ? null : <ViewerAxes model={axesModel} />}
-        {scaleBar === null ? null : <ScaleBar model={scaleBar} />}
+        {scaleBarView === null ? null : <ScaleBar model={scaleBarView} />}
       </div>
       {/* Outside the frame, whose role is img: these have controls. */}
       {minimapView !== null && canTrackMouseCoordinates ? (
@@ -2327,10 +2340,16 @@ function ViewerSurface({
           points={minimapDots}
           viewBbox={viewportBbox}
           onNavigate={handleMinimapNavigate}
+          navigationBelow={navigationShown}
+          scaleBarBelow={scaleBarView !== null}
         />
       ) : null}
-      {navigationControls && canTrackMouseCoordinates ? (
-        <div className="viewport-navigation" role="group" aria-label="Zoom">
+      {navigationShown ? (
+        <div
+          className={`viewport-navigation${scaleBarView === null ? ' without-scale-bar' : ''}`}
+          role="group"
+          aria-label="Zoom"
+        >
           <IconButton
             title="Zoom out (−)"
             icon={<MinusIcon />}

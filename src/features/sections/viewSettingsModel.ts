@@ -13,6 +13,13 @@ export interface ViewSettingsModel {
   // Rulers along the canvas edges (15.4-E).
   readonly showAxes: boolean
   readonly onShowAxesChange: (enabled: boolean) => void
+  // The zoom buttons, the legend and the scale bar.
+  readonly showNavigation: boolean
+  readonly onShowNavigationChange: (enabled: boolean) => void
+  readonly showLegend: boolean
+  readonly onShowLegendChange: (enabled: boolean) => void
+  readonly showScaleBar: boolean
+  readonly onShowScaleBarChange: (enabled: boolean) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly onCoordinateUnitChange: (unit: ViewerCoordinateUnit) => void
   readonly measure: MeasureToolModel
@@ -38,10 +45,16 @@ export interface ViewSettingsModelInput {
   readonly setMeasurementUnit: Dispatch<SetStateAction<ViewerCoordinateUnit>>
   readonly setShowAxes: Dispatch<SetStateAction<boolean>>
   readonly setShowHoverTooltips: Dispatch<SetStateAction<boolean>>
+  readonly setShowLegend: Dispatch<SetStateAction<boolean>>
   readonly setShowMinimap: Dispatch<SetStateAction<boolean>>
+  readonly setShowNavigation: Dispatch<SetStateAction<boolean>>
+  readonly setShowScaleBar: Dispatch<SetStateAction<boolean>>
   readonly showAxes: boolean
   readonly showHoverTooltips: boolean
+  readonly showLegend: boolean
   readonly showMinimap: boolean
+  readonly showNavigation: boolean
+  readonly showScaleBar: boolean
 }
 
 export function useViewSettingsModel({
@@ -56,30 +69,63 @@ export function useViewSettingsModel({
   setMeasurementUnit,
   setShowAxes,
   setShowHoverTooltips,
+  setShowLegend,
   setShowMinimap,
+  setShowNavigation,
+  setShowScaleBar,
   showAxes,
   showHoverTooltips,
+  showLegend,
   showMinimap,
+  showNavigation,
+  showScaleBar,
 }: ViewSettingsModelInput): ViewSettingsModel {
+  // Shows or hides one of the canvas overlays, logging only changes.
+  const visibilityChange =
+    (
+      shown: boolean,
+      setShown: Dispatch<SetStateAction<boolean>>,
+      name: string,
+      coalesceKey: string,
+    ) =>
+    (nextShown: boolean) => {
+      if (shown === nextShown) return
+
+      setShown(nextShown)
+      appendDebugEvent(`${name} ${nextShown ? 'shown' : 'hidden'}`, { coalesceKey })
+    }
+
   return {
     showAxes,
-    onShowAxesChange: (nextEnabled) => {
-      if (showAxes === nextEnabled) return
-
-      setShowAxes(nextEnabled)
-      appendDebugEvent(nextEnabled ? 'Axes shown' : 'Axes hidden', {
-        coalesceKey: 'axes-visible',
-      })
-    },
+    onShowAxesChange: visibilityChange(showAxes, setShowAxes, 'Axes', 'axes-visible'),
     showMinimap,
-    onShowMinimapChange: (nextEnabled) => {
-      if (showMinimap === nextEnabled) return
-
-      setShowMinimap(nextEnabled)
-      appendDebugEvent(nextEnabled ? 'Minimap shown' : 'Minimap hidden', {
-        coalesceKey: 'minimap-visible',
-      })
-    },
+    onShowMinimapChange: visibilityChange(
+      showMinimap,
+      setShowMinimap,
+      'Minimap',
+      'minimap-visible',
+    ),
+    showNavigation,
+    onShowNavigationChange: visibilityChange(
+      showNavigation,
+      setShowNavigation,
+      'Navigation buttons',
+      'navigation-visible',
+    ),
+    showLegend,
+    onShowLegendChange: visibilityChange(
+      showLegend,
+      setShowLegend,
+      'Legend',
+      'legend-visible',
+    ),
+    showScaleBar,
+    onShowScaleBarChange: visibilityChange(
+      showScaleBar,
+      setShowScaleBar,
+      'Scale bar',
+      'scale-bar-visible',
+    ),
     showHoverTooltips,
     onShowHoverTooltipsChange: (nextEnabled) => {
       if (showHoverTooltips === nextEnabled) {

@@ -84,6 +84,13 @@ export interface ShareableState {
   readonly showCellBoundaries?: boolean
   readonly showNucleusBoundaries?: boolean
   readonly showHoverTooltips?: boolean
+  // Settings › Show minimap, Show axes, Show legend, Show navigation buttons
+  // and Show scale bar.
+  readonly showMinimap?: boolean
+  readonly showAxes?: boolean
+  readonly showLegend?: boolean
+  readonly showNavigation?: boolean
+  readonly showScaleBar?: boolean
   readonly cellBoundaryOpacity?: number
   readonly morphologyEnabledChannelIds?: readonly string[]
   // Zero-based z plane of a z-stack dataset image.
@@ -178,6 +185,11 @@ export function parseShareableState(hash: string): ShareableState {
   const showCellBoundaries = parseBoolean(params.get('cellBounds'))
   const showNucleusBoundaries = parseBoolean(params.get('nucleusBounds'))
   const showHoverTooltips = parseBoolean(params.get('hoverTips'))
+  const showMinimap = parseBoolean(params.get('minimap'))
+  const showAxes = parseBoolean(params.get('axes'))
+  const showLegend = parseBoolean(params.get('legend'))
+  const showNavigation = parseBoolean(params.get('navButtons'))
+  const showScaleBar = parseBoolean(params.get('scaleBar'))
   const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
   const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
@@ -371,6 +383,26 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (showHoverTooltips !== undefined) {
     state.showHoverTooltips = showHoverTooltips
+  }
+
+  if (showMinimap !== undefined) {
+    state.showMinimap = showMinimap
+  }
+
+  if (showAxes !== undefined) {
+    state.showAxes = showAxes
+  }
+
+  if (showLegend !== undefined) {
+    state.showLegend = showLegend
+  }
+
+  if (showNavigation !== undefined) {
+    state.showNavigation = showNavigation
+  }
+
+  if (showScaleBar !== undefined) {
+    state.showScaleBar = showScaleBar
   }
 
   if (cellBoundaryOpacity !== undefined) {
@@ -608,6 +640,26 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.showHoverTooltips !== undefined) {
     params.set('hoverTips', state.showHoverTooltips ? '1' : '0')
+  }
+
+  if (state.showMinimap !== undefined) {
+    params.set('minimap', state.showMinimap ? '1' : '0')
+  }
+
+  if (state.showAxes !== undefined) {
+    params.set('axes', state.showAxes ? '1' : '0')
+  }
+
+  if (state.showLegend !== undefined) {
+    params.set('legend', state.showLegend ? '1' : '0')
+  }
+
+  if (state.showNavigation !== undefined) {
+    params.set('navButtons', state.showNavigation ? '1' : '0')
+  }
+
+  if (state.showScaleBar !== undefined) {
+    params.set('scaleBar', state.showScaleBar ? '1' : '0')
   }
 
   if (

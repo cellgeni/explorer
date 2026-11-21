@@ -250,14 +250,17 @@ tooltip does only that, and the tool stays.
 
 ### Settings
 
-| Control             | Type              | Default                                    | Notes                                                                             |
-| ------------------- | ----------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `Hover tooltips`    | Checkbox          | On                                         | Transcript tooltips ignore it                                                     |
-| `Show minimap`      | Checkbox          | On                                         | The [minimap](#minimap) at the bottom right; for the session, not in the link     |
-| `Show axes`         | Checkbox          | Off                                        | [Axes](#axes) along the top and left edges; for the session, not in the link      |
-| `Mouse coordinates` | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                      |
-| `Boundary limit`    | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD  |
-| `Show debug info`   | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6) |
+| Control                   | Type              | Default                                    | Notes                                                                               |
+| ------------------------- | ----------------- | ------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `Hover tooltips`          | Checkbox          | On                                         | Also the panels beside and the 3D views; transcript tooltips ignore it; `hoverTips` |
+| `Show legend`             | Checkbox          | On                                         | The [legend](#legend); the loading list stays; `legend`                             |
+| `Show minimap`            | Checkbox          | On                                         | The [minimap](#minimap) at the bottom right; `minimap`                              |
+| `Show navigation buttons` | Checkbox          | On                                         | Zoom out, Zoom in, Fit to view; the keys still work; `navButtons`                   |
+| `Show scale bar`          | Checkbox          | On                                         | The scale bar at the bottom right; `scaleBar`                                       |
+| `Show axes`               | Checkbox          | Off                                        | [Axes](#axes) along the top and left edges; `axes`                                  |
+| `Mouse coordinates`       | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                        |
+| `Boundary limit`          | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD    |
+| `Show debug info`         | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6)   |
 
 ## Layer Panel
 
@@ -1080,8 +1083,8 @@ the cells or what colours them are read, the status says so.
 
 `ViewerLegend` (`src/components/ViewerLegend.tsx`) sits at the bottom left,
 above the loading indicator, and explains what the canvas shows. The `Legend`
-header collapses it. It has a section for each of these, scales first and
-category lists last:
+header collapses it, and Settings › `Show legend` hides it. It has a section
+for each of these, scales first and category lists last:
 
 - `Cell color` Gene expression: the genes (up to three names, then "+n"),
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
@@ -1163,7 +1166,13 @@ to run.
 ### Hover Tooltips
 
 `src/components/viewerHoverTooltips.tsx`. Suppressed while the cursor lens is
-on or when `Hover tooltips` is off (except transcripts).
+on or when `Hover tooltips` is off (except transcripts). The setting also
+covers the cells of the sections shown beside the main view and of the 3D
+views.
+
+With the setting off and no transcripts drawn, ViewerCore gives deck.gl
+`onHover={null}` rather than leaving the prop out: deck.gl merges props, so a
+handler left out would stay, still showing the tooltips.
 
 | Target           | Fields                                                                               |
 | ---------------- | ------------------------------------------------------------------------------------ |
@@ -1218,7 +1227,8 @@ the coordinate readout says the same.
 
 - Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` with debug info on.
 - Bottom right: the [minimap](#minimap), zoom buttons, then the scale bar
-  (1/2/5 steps) in the `Mouse coordinates` unit.
+  (1/2/5 steps) in the `Mouse coordinates` unit. Settings can hide each; what
+  is left moves down, so hiding one leaves no gap.
 - Bottom left: the legend, the loading indicator (current task plus up to 3
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).
@@ -1554,6 +1564,7 @@ the page reloads that entry's link, with its view and settings.
 | `cellTrack`                                                                                               | Selected `Metadata` track id; written only when `cellColor=metadata`                                                                                                                                                                                                                                                                                                                   |
 | `coord`, `measureUnit`                                                                                    | `um` or `px`                                                                                                                                                                                                                                                                                                                                                                           |
 | `morphology`, `cellBounds`, `nucleusBounds`, `hoverTips`                                                  | Booleans                                                                                                                                                                                                                                                                                                                                                                               |
+| `legend`, `minimap`, `navButtons`, `scaleBar`, `axes`                                                     | [Settings](#settings) overlay toggles: `1` shows, `0` hides                                                                                                                                                                                                                                                                                                                            |
 | `boundaryLimit`                                                                                           | Boundary limit                                                                                                                                                                                                                                                                                                                                                                         |
 | `imgOpacity`, `cellFill`, `cellBoundary`                                                                  | Opacities (0–1)                                                                                                                                                                                                                                                                                                                                                                        |
 | `cellSize`                                                                                                | Cell point size multiplier; snapped to the nearest slider step                                                                                                                                                                                                                                                                                                                         |

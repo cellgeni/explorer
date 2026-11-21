@@ -19,6 +19,12 @@ interface MockViewState {
   readonly zoom?: number
 }
 type MockViewStateChange = (info: { readonly viewState: MockViewState }) => void
+type MockHover = (info: {
+  readonly index: number
+  readonly layer: { readonly id: string }
+  readonly x: number
+  readonly y: number
+}) => void
 
 // The camera ViewerCore gives deck.gl, and that of a section shown beside it.
 const deckView = vi.hoisted(() => ({
@@ -26,6 +32,7 @@ const deckView = vi.hoisted(() => ({
   onChange: undefined as MockViewStateChange | undefined,
   linked: undefined as MockViewState | undefined,
   onLinkedChange: undefined as MockViewStateChange | undefined,
+  onLinkedHover: undefined as MockHover | null | undefined,
   // The layer IDs of the sections stacked in 3D.
   stackLayerIds: undefined as readonly string[] | undefined,
 }))
@@ -36,17 +43,20 @@ vi.mock('@deck.gl/react', () => ({
     views,
     layers,
     onViewStateChange,
+    onHover,
   }: {
     readonly viewState?: MockViewState
     readonly views?: { readonly id?: string }
     readonly layers?: readonly { readonly id: string }[]
     readonly onViewStateChange?: MockViewStateChange
+    readonly onHover?: MockHover | null
   }) => {
     if (views?.id === 'section-stack') {
       deckView.stackLayerIds = layers?.map((layer) => layer.id)
     } else if (views?.id === 'linked-section') {
       deckView.linked = viewState
       deckView.onLinkedChange = onViewStateChange
+      deckView.onLinkedHover = onHover
     } else {
       deckView.current = viewState
       deckView.onChange = onViewStateChange
@@ -770,6 +780,51 @@ describe('App with a dataset collection', () => {
         within(bar).getByRole('button', { name: 'Show Section 2 beside' }),
       ).toHaveAttribute('aria-pressed', 'false')
       expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
+
+    it('names the hovered cell of a section beside, unless Settings turns tooltips off', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      await waitFor(() => {
+        expect(deckView.linked).toBeDefined()
+      })
+      const hoverFirstCell = () => {
+        act(() => {
+          deckView.onLinkedHover?.({
+            index: 0,
+            layer: { id: 'linked-section-cells' },
+            x: 10,
+            y: 10,
+          })
+        })
+      }
+
+      hoverFirstCell()
+      expect(within(panel).getByText('cell-a')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Settings' })).getByLabelText(
+          'Hover tooltips',
+        ),
+      )
+      expect(within(panel).queryByText('cell-a')).not.toBeInTheDocument()
+
+      hoverFirstCell()
+      expect(within(panel).queryByText('cell-a')).not.toBeInTheDocument()
     })
 
     it('keeps a section closed on reload when the query string named it', async () => {

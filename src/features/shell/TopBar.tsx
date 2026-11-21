@@ -37,8 +37,11 @@ import {
   CoordinateUnitControl,
   AxesToggle,
   HoverTooltipsToggle,
+  LegendToggle,
   MinimapToggle,
   MeasureToolOptions,
+  NavigationToggle,
+  ScaleBarToggle,
 } from '../sections/ViewSettingsBlocks'
 import type { ViewSettingsModel } from '../sections/viewSettingsModel'
 import type { DatasetLibraryModel } from '../start/datasetLibraryModel'
@@ -184,7 +187,10 @@ export function TopBar({
           className="shell-settings"
         >
           <HoverTooltipsToggle settings={settings} />
+          <LegendToggle settings={settings} />
           <MinimapToggle settings={settings} />
+          <NavigationToggle settings={settings} />
+          <ScaleBarToggle settings={settings} />
           <AxesToggle settings={settings} />
           <CoordinateUnitControl settings={settings} />
           <BoundaryLimitField open={info.open} />

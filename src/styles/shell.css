@@ -1573,6 +1573,10 @@
   bottom: calc(60px + var(--canvas-bottom-sheet-height, 0px));
 }
 
+.shell-body.is-narrow .viewport-navigation.without-scale-bar {
+  bottom: calc(12px + var(--canvas-bottom-sheet-height, 0px));
+}
+
 .shell-body.is-narrow .viewport-scale-bar {
   bottom: calc(12px + var(--canvas-bottom-sheet-height, 0px));
 }

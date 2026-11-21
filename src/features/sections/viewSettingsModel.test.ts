@@ -15,10 +15,16 @@ function input(overrides: Partial<ViewSettingsModelInput> = {}): ViewSettingsMod
     setMeasurementUnit: vi.fn(),
     setShowAxes: vi.fn(),
     setShowHoverTooltips: vi.fn(),
+    setShowLegend: vi.fn(),
     setShowMinimap: vi.fn(),
+    setShowNavigation: vi.fn(),
+    setShowScaleBar: vi.fn(),
     showAxes: false,
     showHoverTooltips: true,
+    showLegend: true,
     showMinimap: true,
+    showNavigation: true,
+    showScaleBar: true,
     ...overrides,
   }
 }
@@ -110,6 +116,30 @@ describe('useViewSettingsModel', () => {
     expect(options.setShowAxes).toHaveBeenCalledWith(true)
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Axes shown', {
       coalesceKey: 'axes-visible',
+    })
+  })
+
+  it('shows and hides the navigation buttons, legend and scale bar', () => {
+    const options = input({ showLegend: false })
+    const { result } = renderHook(() => useViewSettingsModel(options))
+
+    result.current.onShowNavigationChange(true)
+    result.current.onShowNavigationChange(false)
+    result.current.onShowLegendChange(true)
+    result.current.onShowScaleBarChange(false)
+
+    expect(options.setShowNavigation).toHaveBeenCalledTimes(1)
+    expect(options.setShowNavigation).toHaveBeenCalledWith(false)
+    expect(options.setShowLegend).toHaveBeenCalledWith(true)
+    expect(options.setShowScaleBar).toHaveBeenCalledWith(false)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Navigation buttons hidden', {
+      coalesceKey: 'navigation-visible',
+    })
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Legend shown', {
+      coalesceKey: 'legend-visible',
+    })
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Scale bar hidden', {
+      coalesceKey: 'scale-bar-visible',
     })
   })
 })

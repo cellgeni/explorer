@@ -53,6 +53,8 @@ interface LinkedSectionsProps {
   readonly coloring: LinkedSectionsColoring
   readonly cellPointScale: number
   readonly pointSizeFullViewScale: number
+  // Settings › Hover tooltips.
+  readonly hoverTooltips: boolean
   // Opens the section in the main view, in place of the open dataset.
   readonly onOpen: (entry: DatasetCollectionEntry) => void
   readonly onClose: (entry: DatasetCollectionEntry) => void
@@ -70,6 +72,7 @@ export function LinkedSections({
   coloring,
   cellPointScale,
   pointSizeFullViewScale,
+  hoverTooltips,
   onOpen,
   onClose,
 }: LinkedSectionsProps) {
@@ -86,6 +89,7 @@ export function LinkedSections({
           coloring={coloring}
           cellPointScale={cellPointScale}
           pointSizeFullViewScale={pointSizeFullViewScale}
+          hoverTooltips={hoverTooltips}
           onOpen={onOpen}
           onClose={onClose}
         />
@@ -101,6 +105,7 @@ interface LinkedSectionPanelProps {
   readonly coloring: LinkedSectionsColoring
   readonly cellPointScale: number
   readonly pointSizeFullViewScale: number
+  readonly hoverTooltips: boolean
   readonly onOpen: (entry: DatasetCollectionEntry) => void
   readonly onClose: (entry: DatasetCollectionEntry) => void
 }
@@ -118,6 +123,7 @@ function LinkedSectionPanel({
   coloring,
   cellPointScale,
   pointSizeFullViewScale,
+  hoverTooltips,
   onOpen,
   onClose,
 }: LinkedSectionPanelProps) {
@@ -190,6 +196,8 @@ function LinkedSectionPanel({
   const [hover, setHover] = useState<PanelHover | null>(null)
   const handleHover = useCallback(
     (info: PickingInfo) => {
+      if (!hoverTooltips) return
+
       const text = hoverText(info, preview, overlay, showsGenes ? coloring.genes : [], {
         colorScale,
         scaleMin,
@@ -197,7 +205,16 @@ function LinkedSectionPanel({
       })
       setHover(text === null ? null : { x: info.x, y: info.y, text })
     },
-    [colorScale, coloring.genes, overlay, preview, scaleMax, scaleMin, showsGenes],
+    [
+      colorScale,
+      coloring.genes,
+      hoverTooltips,
+      overlay,
+      preview,
+      scaleMax,
+      scaleMin,
+      showsGenes,
+    ],
   )
   const status =
     preview === null
@@ -265,7 +282,7 @@ function LinkedSectionPanel({
           {status}
         </p>
       )}
-      {hover === null ? null : (
+      {hover === null || !hoverTooltips ? null : (
         <div
           className="linked-section-tooltip"
           style={{ left: hover.x, top: hover.y }}

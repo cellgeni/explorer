@@ -6,46 +6,85 @@ export function HoverTooltipsToggle({
 }: {
   readonly settings: ViewSettingsModel
 }) {
-  const inputId = useId()
-
   return (
-    <label htmlFor={inputId}>
-      <input
-        id={inputId}
-        type="checkbox"
-        checked={settings.showHoverTooltips}
-        title="Toggle bin and cell hover tooltips"
-        onChange={(event) => {
-          settings.onShowHoverTooltipsChange(event.currentTarget.checked)
-        }}
-      />
-      <span>Hover tooltips</span>
-    </label>
+    <SettingsCheckbox
+      label="Hover tooltips"
+      title="Toggle bin and cell hover tooltips"
+      checked={settings.showHoverTooltips}
+      onChange={settings.onShowHoverTooltipsChange}
+    />
   )
 }
 
 // The minimap at the bottom right of the canvas (15.4-D).
 export function MinimapToggle({ settings }: { readonly settings: ViewSettingsModel }) {
-  const inputId = useId()
-
   return (
-    <label htmlFor={inputId}>
-      <input
-        id={inputId}
-        type="checkbox"
-        checked={settings.showMinimap}
-        title="Show the minimap at the bottom right of the canvas"
-        onChange={(event) => {
-          settings.onShowMinimapChange(event.currentTarget.checked)
-        }}
-      />
-      <span>Show minimap</span>
-    </label>
+    <SettingsCheckbox
+      label="Show minimap"
+      title="Show the minimap at the bottom right of the canvas"
+      checked={settings.showMinimap}
+      onChange={settings.onShowMinimapChange}
+    />
   )
 }
 
 // Rulers along the top and left edges of the canvas (15.4-E).
 export function AxesToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  return (
+    <SettingsCheckbox
+      label="Show axes"
+      title="Show rulers with coordinates along the top and left edges of the canvas"
+      checked={settings.showAxes}
+      onChange={settings.onShowAxesChange}
+    />
+  )
+}
+
+// Zoom out, Zoom in and Fit to view; the keys still work without them.
+export function NavigationToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  return (
+    <SettingsCheckbox
+      label="Show navigation buttons"
+      title="Show the Zoom out, Zoom in and Fit to view buttons at the bottom right of the canvas"
+      checked={settings.showNavigation}
+      onChange={settings.onShowNavigationChange}
+    />
+  )
+}
+
+export function LegendToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  return (
+    <SettingsCheckbox
+      label="Show legend"
+      title="Show the legend at the bottom left of the canvas"
+      checked={settings.showLegend}
+      onChange={settings.onShowLegendChange}
+    />
+  )
+}
+
+export function ScaleBarToggle({ settings }: { readonly settings: ViewSettingsModel }) {
+  return (
+    <SettingsCheckbox
+      label="Show scale bar"
+      title="Show the scale bar at the bottom right of the canvas"
+      checked={settings.showScaleBar}
+      onChange={settings.onShowScaleBarChange}
+    />
+  )
+}
+
+function SettingsCheckbox({
+  label,
+  title,
+  checked,
+  onChange,
+}: {
+  readonly label: string
+  readonly title: string
+  readonly checked: boolean
+  readonly onChange: (checked: boolean) => void
+}) {
   const inputId = useId()
 
   return (
@@ -53,13 +92,13 @@ export function AxesToggle({ settings }: { readonly settings: ViewSettingsModel 
       <input
         id={inputId}
         type="checkbox"
-        checked={settings.showAxes}
-        title="Show rulers with coordinates along the top and left edges of the canvas"
+        checked={checked}
+        title={title}
         onChange={(event) => {
-          settings.onShowAxesChange(event.currentTarget.checked)
+          onChange(event.currentTarget.checked)
         }}
       />
-      <span>Show axes</span>
+      <span>{label}</span>
     </label>
   )
 }

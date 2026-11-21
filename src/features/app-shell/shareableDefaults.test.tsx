@@ -47,6 +47,11 @@ function initialSettings(initialShareableState: ShareableState = {}) {
     showCellBoundaries: layers.showCellBoundaries,
     showNucleusBoundaries: layers.showNucleusBoundaries,
     showHoverTooltips: layers.showHoverTooltips,
+    showMinimap: layers.showMinimap,
+    showAxes: layers.showAxes,
+    showLegend: layers.showLegend,
+    showNavigation: layers.showNavigation,
+    showScaleBar: layers.showScaleBar,
     cellBoundaryOpacity: layers.cellBoundaryOpacity,
     transcriptOverlay: transcripts.showTranscriptOverlay,
     transcriptDetailMode: transcripts.transcriptDetailMode,
@@ -89,6 +94,23 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
       ...DEFAULT_SHAREABLE_STATE,
       cellFillOpacity: 0.7,
     })
+  })
+
+  it('opens a link with the canvas overlays it turned off or on', () => {
+    const settings = {
+      ...DEFAULT_SHAREABLE_STATE,
+      showMinimap: false,
+      showAxes: true,
+      showLegend: false,
+      showNavigation: false,
+      showScaleBar: false,
+    }
+    const link = formatShareableState(withoutShareableDefaults(settings))
+
+    expect(link).toBe(
+      '#xv=2&cellBounds=1&nucleusBounds=1&minimap=0&axes=1&legend=0&navButtons=0&scaleBar=0',
+    )
+    expect(initialSettings(parseShareableState(link))).toEqual(settings)
   })
 
   it('keeps the boundary toggles, whose default depends on the platform', () => {

@@ -40,7 +40,7 @@ type MockDeckClick = (info: {
 type MockDeckViewStateChange = (info: { readonly viewState: OverviewViewState }) => void
 
 const deckGlMock = vi.hoisted(() => ({
-  onHover: undefined as MockDeckHover | undefined,
+  onHover: undefined as MockDeckHover | null | undefined,
   onClick: undefined as MockDeckClick | undefined,
   eventRecognizerOptions: undefined as unknown,
   onViewStateChange: undefined as MockDeckViewStateChange | undefined,
@@ -59,7 +59,7 @@ vi.mock('@deck.gl/react', () => ({
     viewState,
   }: {
     readonly layers?: readonly unknown[]
-    readonly onHover?: MockDeckHover
+    readonly onHover?: MockDeckHover | null
     readonly onClick?: MockDeckClick
     readonly eventRecognizerOptions?: unknown
     readonly onViewStateChange?: MockDeckViewStateChange
@@ -1207,7 +1207,7 @@ describe('ViewerCore', () => {
       'data-count',
       '1',
     )
-    expect(deckGlMock.onHover).toBeUndefined()
+    expect(deckGlMock.onHover).toBeNull()
 
     act(() => {
       deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
@@ -1220,6 +1220,25 @@ describe('ViewerCore', () => {
     expect(screen.queryByText('hover-disabled-bin')).not.toBeInTheDocument()
     expect(screen.queryByText('hover-disabled-boundary')).not.toBeInTheDocument()
     expect(onCellBoundaryClick).toHaveBeenCalledWith(boundary)
+  })
+
+  it('hides a shown cell tooltip and clears the hover handler when tooltips are turned off', () => {
+    const cell: OverviewCellDatum = {
+      ...overviewCellDatum(),
+      id: 'hover-turned-off-cell',
+    }
+    const { rerender } = render(<ViewerCore cells={[cell]} />)
+
+    act(() => {
+      deckGlMock.onHover?.({ object: cell, x: 18, y: 24 })
+    })
+    expect(screen.getByText('hover-turned-off-cell')).toBeInTheDocument()
+
+    rerender(<ViewerCore cells={[cell]} hoverTooltipsEnabled={false} />)
+
+    expect(screen.queryByText('hover-turned-off-cell')).not.toBeInTheDocument()
+    // Null, not left out: deck.gl would keep the old handler.
+    expect(deckGlMock.onHover).toBeNull()
   })
 
   it('suppresses segmented cell boundary hover metadata while cursor magic lens is active', async () => {
@@ -1667,6 +1686,65 @@ describe('ViewerCore', () => {
     render(<ViewerCore cells={[]} imageLoader={null} />)
 
     expect(screen.queryByRole('group', { name: 'Zoom' })).not.toBeInTheDocument()
+  })
+
+  it('hides the scale bar and legend, and closes the gaps they leave', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const legendSections = [
+      {
+        kind: 'categories' as const,
+        id: 'cells',
+        title: 'graphclust',
+        items: [
+          { id: 'c1', label: 'Cluster 1', color: '#4cc39a', count: 1, visible: true },
+        ],
+      },
+    ]
+    const { rerender } = render(
+      <ViewerCore
+        cells={cells}
+        legendSections={legendSections}
+        navigationControls
+        minimap
+      />,
+    )
+
+    expect(await screen.findByLabelText(/^Scale bar/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Legend' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: 'Zoom' })).not.toHaveClass(
+      'without-scale-bar',
+    )
+    expect(document.querySelector('.viewer-minimap')).toHaveClass('viewer-minimap', {
+      exact: true,
+    })
+
+    rerender(
+      <ViewerCore
+        cells={cells}
+        legendSections={legendSections}
+        legend={false}
+        scaleBar={false}
+        minimap
+      />,
+    )
+
+    expect(screen.queryByLabelText(/^Scale bar/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Legend' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Zoom' })).not.toBeInTheDocument()
+    expect(document.querySelector('.viewer-minimap')).toHaveClass(
+      'without-navigation',
+      'without-scale-bar',
+    )
+
+    rerender(<ViewerCore cells={cells} navigationControls scaleBar={false} minimap />)
+
+    expect(screen.getByRole('group', { name: 'Zoom' })).toHaveClass('without-scale-bar')
+    expect(document.querySelector('.viewer-minimap')).toHaveClass('without-scale-bar')
+    expect(document.querySelector('.viewer-minimap')).not.toHaveClass(
+      'without-navigation',
+    )
   })
 
   it('centers the spatial view when a focus request is received', async () => {

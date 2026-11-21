@@ -724,6 +724,24 @@
   }
 }
 
+/* What Settings hides at the bottom right leaves no gap: the zoom buttons
+   take the scale bar's place, and the minimap sits on whatever is left. */
+.viewport-navigation.without-scale-bar {
+  bottom: 12px;
+}
+
+.viewer-minimap.without-navigation {
+  bottom: 60px;
+}
+
+.viewer-minimap.without-scale-bar {
+  bottom: 52px;
+}
+
+.viewer-minimap.without-navigation.without-scale-bar {
+  bottom: 12px;
+}
+
 .viewport-scale-bar {
   position: absolute;
   z-index: 4;

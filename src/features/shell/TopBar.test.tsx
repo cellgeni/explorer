@@ -268,12 +268,18 @@ describe('TopBar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     const panel = screen.getByRole('dialog', { name: 'Settings' })
     fireEvent.click(within(panel).getByLabelText('Hover tooltips'))
+    fireEvent.click(within(panel).getByLabelText('Show navigation buttons'))
+    fireEvent.click(within(panel).getByLabelText('Show legend'))
+    fireEvent.click(within(panel).getByLabelText('Show scale bar'))
     fireEvent.change(within(panel).getByLabelText('Boundary limit'), {
       target: { value: '20000' },
     })
     fireEvent.click(within(panel).getByRole('switch', { name: 'Show debug info' }))
 
     expect(settings.onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
+    expect(settings.onShowNavigationChange).toHaveBeenCalledWith(false)
+    expect(settings.onShowLegendChange).toHaveBeenCalledWith(false)
+    expect(settings.onShowScaleBarChange).toHaveBeenCalledWith(false)
     expect(info.open.onBoundaryCellLimitChange).toHaveBeenCalledWith(20000)
     expect(model.onDebugModeChange).toHaveBeenCalledWith(true)
   })

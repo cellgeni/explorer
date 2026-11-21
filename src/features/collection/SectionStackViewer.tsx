@@ -59,6 +59,8 @@ interface SectionStackViewerProps {
   readonly store: CollectionPreviewStore | null
   readonly coloring: LinkedSectionsColoring
   readonly cellPointScale: number
+  // Settings › Hover tooltips.
+  readonly hoverTooltips: boolean
   readonly onClose: () => void
 }
 
@@ -79,6 +81,7 @@ export function SectionStackViewer({
   store,
   coloring,
   cellPointScale,
+  hoverTooltips,
   onClose,
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
@@ -170,6 +173,8 @@ export function SectionStackViewer({
   const shownViewState = viewState ?? fittedVolumeViewState(extent, size ?? DEFAULT_SIZE)
   const handleHover = useCallback(
     (info: PickingInfo) => {
+      if (!hoverTooltips) return
+
       const pick = stackPick(info, stack.targets)
       const section = pick === null ? undefined : sections[pick.section]
       const input = pick === null ? null : (inputs[pick.section] ?? null)
@@ -193,7 +198,7 @@ export function SectionStackViewer({
             },
       )
     },
-    [cellsMode, genes, inputs, sections, stack.targets],
+    [cellsMode, genes, hoverTooltips, inputs, sections, stack.targets],
   )
   const handleViewStateChange = useCallback(
     ({ viewState: next }: { readonly viewState: unknown }) => {
@@ -348,7 +353,7 @@ export function SectionStackViewer({
           </p>
         )}
       </div>
-      {hover === null ? null : (
+      {hover === null || !hoverTooltips ? null : (
         <div
           className="linked-section-tooltip"
           style={{ left: hover.x, top: hover.y }}

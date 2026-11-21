@@ -260,7 +260,12 @@ The minimap at the bottom right of the canvas shows the whole dataset (its
 image, or its cells as dots) with the current view as a box; click or drag on
 it to move the view. Settings › `Show minimap` hides it, and Settings ›
 `Show axes` adds rulers with the coordinates along the top and left edges of
-the canvas, in the scale bar's unit.
+the canvas, in the scale bar's unit. `Show legend`, `Show navigation buttons`
+and `Show scale bar` in Settings hide the legend, the zoom and fit buttons
+(the `+`, `-` and `F` keys still work) and the scale bar. `Hover tooltips`
+turns off the tooltips over cells and bins, in the main view, the sections
+shown beside it and the 3D views; transcripts keep theirs. These settings are
+kept in the share link.
 
 The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,
