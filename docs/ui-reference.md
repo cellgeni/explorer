@@ -489,7 +489,7 @@ Atera stores transcripts per gene (see
 | Feature chips        | Chips with ×     |                                                          | × (`Remove {gene} from transcript features`) removes it from the shared gene selection            |
 | `Feature search`     | Search           | Up to 24 results, ranked like `Gene selection`           | Adds the gene and switches the filter to Selected genes                                           |
 | Gene list            | Rows             | See below                                                | With exact points coloured by Feature (Phase 15.4-C), or gene markers                             |
-| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal, Gene markers | Normalized to the largest square on the slide at the current square size. Gene markers: see below |
+| `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal, Gene markers | Relative to the largest square on the slide, or in view for some squares. Gene markers: see below |
 | `Point color`        | Select           | **Feature**, Gene set, QV                                | Exact points. Gene set colours by saved gene set (see below), gene markers too                    |
 | `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too                                                                   |
 | `Gene-only calls`    | Checkbox         | On                                                       | Excludes control probes                                                                           |
@@ -569,6 +569,15 @@ the transcripts, so the hover card and the selected square in the
 Transcripts section say `Sampled count`, with a `Sample` row giving the
 share of the slide's transcripts the level keeps ("0.95% of transcripts" at
 the demo's level 7). Level-0 squares say `Count`.
+
+Square colours, and gene marker sizes, are scaled to the largest square on
+the whole slide at the current square size, so they stay stable while
+panning. Two kinds of square are scaled to the largest square read for the
+view instead, so their colours change as the view moves: cell-summary
+squares, and Atera's per-gene density. Colours follow the square root of each
+square's share of the top count, so the middle of the `Density color` preview
+is labelled with a quarter of it, and the middle gene marker in the preview is
+half the width of the largest.
 
 The section ends with the overlay status
 (`src/features/transcripts/TranscriptStatusPanel.tsx`): source, rendered
