@@ -947,6 +947,8 @@ How it matches:
 - Conditions combine with AND; the classes ticked in one condition combine
   with OR. A cell that two classes list is in both, so `Is not one of`
   leaves it out if either is ticked.
+- A cell in no class of the set never matches `Is one of`, and always
+  matches `Is not one of`, whatever is ticked.
 - A cell with no value for a number column never matches a number condition,
   even over the whole range.
 - A column is read the first time a condition, table column or sort uses it,

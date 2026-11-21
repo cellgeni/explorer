@@ -570,6 +570,30 @@ describe('AnnDataH5adDataset', () => {
     expect(openImage).toHaveBeenCalledWith('https://example.test/section-raw.zarr')
   })
 
+  it('counts only cells inside a lasso towards its limit', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense')),
+    })
+    // The 10 µm square's corners, less the corner at the origin: cell-a is
+    // in the lasso's bounding box but outside the lasso.
+    const point = (x: number, y: number) => ({ x: micrometers(x), y: micrometers(y) })
+    const lasso = {
+      kind: 'lasso' as const,
+      bbox: {
+        minX: micrometers(-2),
+        minY: micrometers(-2),
+        maxX: micrometers(13),
+        maxY: micrometers(13),
+      },
+      points: [point(9, -2), point(13, -2), point(13, 13), point(-2, 13), point(-2, 9)],
+    }
+    const ids = (cells: readonly { readonly id: string }[]) => cells.map(({ id }) => id)
+
+    expect(ids(await dataset.cells(lasso))).toEqual(['cell-b', 'cell-c', 'cell-d'])
+    expect(ids(await dataset.cells(lasso, { limit: 2 }))).toEqual(['cell-b', 'cell-c'])
+  })
+
   it('keeps micrometre coordinates, and coordinates whose image fails, as read', async () => {
     const bytes = await createTinyH5ad('dense')
     const loader = {
