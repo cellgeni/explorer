@@ -510,9 +510,9 @@ their own, and their cards stayed on "Loading".
 
 | Worker                                | Created by                              | Purpose                                                                                                                                  |
 | ------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (≤ 4)            | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles |
+| `tileDecode.worker.ts`                | `TileDecodeWorkerPool` (see below)      | Decode TIFF tiles into `ImageBitmap`s, into auto-contrast samples, or into Cell Query's per-cell sums; decode and trace label TIFF tiles |
 | DuckDB-WASM worker                    | `src/data/duckdb.ts`                    | One per DuckDB client                                                                                                                    |
-| `zarrDecode.worker.ts`                | `ZarrDecodePool` (≤ 3)                  | Decode OME-Zarr tiles, or chunks into Cell Query's per-cell sums; trace SpatialData labels; run zarrita codecs for main-thread reads     |
+| `zarrDecode.worker.ts`                | `ZarrDecodePool` (see below)            | Decode OME-Zarr tiles, or chunks into Cell Query's per-cell sums; trace SpatialData labels; run zarrita codecs for main-thread reads     |
 | `h5File.worker.ts`                    | `src/data/h5WorkerFile.ts`              | One HDF5 file each: small H5AD and the standard Visium matrix whole; larger H5AD, Xenium and Visium HD by range                          |
 | `cellsOverview.worker.ts`             | `readCellsOverviewInWorker`             | The Xenium `cells.parquet` overview: fetch and decode its columns (one per read)                                                         |
 | `spatialDataShapes.worker.ts`         | `readSpatialDataShapesInWorker`         | SpatialData `shapes.parquet` files and MERSCOPE cell boundaries: decode them into transferred shape columns (one per read)               |
@@ -523,6 +523,22 @@ their own, and their cards stayed on "Loading".
 | `vectorSegmentation.worker.ts`        | `readVectorSegmentationInWorker`        | An image's imported GeoJSON, WKT or Parquet segmentation, by URL or picked file: parse it into shape columns (one per read)              |
 | `plotStats.worker.ts`                 | `createPlotStatsSession`                | The Plots panel's numbers: one dataset's rows, the plotted groups and up to 128 MiB of gene values (one per dataset)                     |
 | `cellQuery.worker.ts`                 | `createCellQuerySession`                | The Cell Query panel's columns by cell, its matching, sorting and the table's values (one per dataset)                                   |
+
+### Decode Workers
+
+The decode workers run in pools, each started with its first request and
+holding up to its size, where `cores` is `navigator.hardwareConcurrency`:
+
+| Pool                                | Workers                                           | Used for                                                                        | Ends                           |
+| ----------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------ |
+| Tiles (`sharedTileDecodePool`)      | `min(4, cores)`                                   | Every TIFF tile cache, whatever its channel and contrast                        | With the page                  |
+| Strips (`sharedStripDecodePool`)    | `min(4, cores)`                                   | Bands of stripped TIFF levels and label TIFFs                                   | With the page                  |
+| Auto-contrast                       | 1 per run                                         | TIFF tile samples for one channel's window (`morphologyContrast.ts`)            | With the run, or on abort      |
+| Zarr (`sharedZarrDecodePool`)       | `min(3, max(1, cores − 1))`                       | OME-Zarr tiles, zarrita codecs for main-thread reads, SpatialData label tracing | With the page                  |
+| Cell Query (`cellImageMeasurer.ts`) | `min(4, max(1, cores − 2))` tile and as many Zarr | Per-cell image measurements, kept apart from the canvas's pools                 | When nothing is being measured |
+
+So on six or more cores up to 20 decode workers can run at once: 4 for tiles,
+4 for strips, 1 for an auto-contrast run, 3 for Zarr and 8 for Cell Query.
 
 An H5 file worker gets the downloaded bytes by transfer (H5AD up to 64 MiB,
 standard Visium), writes them into its own h5wasm file system, and answers

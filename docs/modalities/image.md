@@ -664,17 +664,17 @@ fails, tiles are decoded and sampled on the main thread.
 
 ## Constants
 
-| Constant                   | Value                                                                                | File                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
-| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                              | `omeMetadata.ts`, `omeZarrLoader.ts`                           |
-| Default tile size          | 256                                                                                  | `loader.ts`, `omeZarrLoader.ts`                                |
-| Level threshold            | 1.5 screen px per source px                                                          | `loader.ts`, `omeZarrLoader.ts`                                |
-| Decode workers             | TIFF ≤ 4, plus 1 per auto-contrast run; OME-Zarr ≤ 3                                 | `tileDecodePool.ts`, `zarrDecodePool.ts`                       |
-| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px  | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts` |
-| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples from ≤ 64 tiles, 32 bins                     | `morphologyContrast.ts`                                        |
-| Stripped levels            | 256 px tiles; 8 MiB / 1,024-row bands; 256 MiB of bands; strips ≤ 256 MiB decoded    | `strips.ts`                                                    |
-| NDPI                       | 512 px tiles; 2 MiB bands; ~2,048 px blocks; 64 MiB of bands; DC level over 2,048 px | `ndpi.ts`, `loader.ts`                                         |
-| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                             | `persistentByteRangeCache.ts`                                  |
+| Constant                   | Value                                                                                                  | File                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| Default µm/px              | 0.2125 (TIFF), 1 (Zarr)                                                                                | `omeMetadata.ts`, `omeZarrLoader.ts`                             |
+| Default tile size          | 256                                                                                                    | `loader.ts`, `omeZarrLoader.ts`                                  |
+| Level threshold            | 1.5 screen px per source px                                                                            | `loader.ts`, `omeZarrLoader.ts`                                  |
+| Decode workers             | Per pool, see [Decode workers](../architecture.md#decode-workers): up to 20 at once on 6 or more cores | `tileDecodePool.ts`, `zarrDecodePool.ts`, `cellImageMeasurer.ts` |
+| Tile cache / concurrency   | compact 72 / 2, balanced 120 / 4, expanded 180 / 6; up to 4× for tiles under 512 px                    | `src/data/performanceBudget.ts`, `morphologyTileScheduling.ts`   |
+| Auto-contrast              | 0.5 / 99.8 percentiles, 250,000 samples from ≤ 64 tiles, 32 bins                                       | `morphologyContrast.ts`                                          |
+| Stripped levels            | 256 px tiles; 8 MiB / 1,024-row bands; 256 MiB of bands; strips ≤ 256 MiB decoded                      | `strips.ts`                                                      |
+| NDPI                       | 512 px tiles; 2 MiB bands; ~2,048 px blocks; 64 MiB of bands; DC level over 2,048 px                   | `ndpi.ts`, `loader.ts`                                           |
+| IndexedDB byte-range cache | 256 MiB, 20,000 entries, 8 MiB per entry                                                               | `persistentByteRangeCache.ts`                                    |
 
 ## Source Files
 
