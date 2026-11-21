@@ -42,7 +42,11 @@ import {
   type GridCellPacking,
   type GridCellStyler,
 } from './gridCellRenderer'
-import type { GridCellBatch, SpatialGrid } from '../datasets/spatialDataset'
+import type {
+  GridCellBatch,
+  SpatialElement,
+  SpatialGrid,
+} from '../datasets/spatialDataset'
 
 const fixtureCells: readonly OverviewCellDatum[] = [
   {
@@ -2200,7 +2204,7 @@ describe('deck layer factory', () => {
           metadata: {
             segmentation: {
               kind: 'cell',
-              annotation: { label: 'Cluster 1' },
+              annotation: { label: 'Cluster 1', color: '#1f77b4' },
             },
           },
           geometry: {
@@ -2252,6 +2256,38 @@ describe('deck layer factory', () => {
         lineColor: [0, 64, 128, 210],
       },
     ])
+  })
+
+  // Boundaries are read per view; a colour taken from the order labels
+  // appeared in view changed as the view panned (EXP-048).
+  it('gives a label without a colour the same colour whatever else is in view', () => {
+    const labelled = (id: string, label: string): SpatialElement => ({
+      id,
+      metadata: { segmentation: { kind: 'cell', annotation: { label } } },
+      geometry: {
+        kind: 'polygon',
+        rings: [
+          [
+            { x: micrometers(0), y: micrometers(0) },
+            { x: micrometers(1), y: micrometers(0) },
+            { x: micrometers(1), y: micrometers(1) },
+          ],
+        ],
+      },
+    })
+    const lineColors = (elements: readonly SpatialElement[]) =>
+      Object.fromEntries(
+        boundaryElementsToLayerData(elements).map((cell) => [
+          cell.annotationLabel,
+          cell.lineColor,
+        ]),
+      )
+    const firstView = lineColors([labelled('a', 'Tumour'), labelled('b', 'Stroma')])
+    const nextView = lineColors([labelled('c', 'Stroma'), labelled('d', 'Tumour')])
+    const tumourOnly = lineColors([labelled('e', 'Tumour')])
+
+    expect(nextView).toEqual(firstView)
+    expect(tumourOnly.Tumour).toEqual(firstView.Tumour)
   })
 
   it('builds a bin of a columnar affine grid as a deck.gl polygon', () => {

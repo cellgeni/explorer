@@ -11,6 +11,7 @@ import {
   VisiumHdSegmentationIndexBuilder,
   type VisiumHdSegmentationIndex,
 } from './visiumHdSegmentationIndex'
+import { annotationPaletteColor } from '../rendering/annotationPalette'
 import { throwIfAborted } from '../utils/abort'
 
 export interface VisiumHdSegmentedOutputPaths {
@@ -314,6 +315,7 @@ export function parseVisiumHdSegmentationGeojson(
 
   const elements: SpatialElement[] = []
   const kind = options.kind ?? 'cell'
+  const labelColors = new Map<string, string>()
 
   for (let featureIndex = 0; featureIndex < source.features.length; featureIndex += 1) {
     const feature = expectObject(
@@ -323,6 +325,7 @@ export function parseVisiumHdSegmentationGeojson(
     const featureElements = segmentationFeatureToElements(feature, featureIndex, {
       kind,
       scalefactors: options.scalefactors,
+      labelColors,
     })
 
     for (const element of featureElements) {
@@ -343,6 +346,7 @@ export function createVisiumHdSegmentationIndexParser(
   assertPositiveMicronsPerPixel(options.scalefactors.micronsPerPixel)
   const decoder = new TextDecoder()
   const builder = new VisiumHdSegmentationIndexBuilder()
+  const labelColors = new Map<string, string>()
   const features = createGeojsonFeatureStream(
     (value, featureIndex) => {
       const feature = expectObject(
@@ -350,11 +354,11 @@ export function createVisiumHdSegmentationIndexParser(
         `Visium HD segmentation feature ${featureIndex}`,
       )
 
-      for (const element of segmentationFeatureToElements(
-        feature,
-        featureIndex,
-        options,
-      )) {
+      for (const element of segmentationFeatureToElements(feature, featureIndex, {
+        kind: options.kind,
+        scalefactors: options.scalefactors,
+        labelColors,
+      })) {
         builder.add(element)
       }
     },
@@ -895,6 +899,8 @@ function segmentationFeatureToElements(
   options: {
     readonly kind: VisiumHdSegmentationKind
     readonly scalefactors: VisiumHdSegmentationScalefactors
+    // The colour given to each label without one, shared by the file's features.
+    readonly labelColors: Map<string, string>
   },
 ): readonly SpatialElement[] {
   if (feature.type !== 'Feature') {
@@ -909,7 +915,12 @@ function segmentationFeatureToElements(
   )
   const polygonRings = readGeometryPolygons(geometry, featureIndex, options.scalefactors)
   const baseId = readSegmentationFeatureId(feature, featureIndex, options.kind)
-  const metadata = readSegmentationFeatureMetadata(feature, featureIndex, options.kind)
+  const metadata = readSegmentationFeatureMetadata(
+    feature,
+    featureIndex,
+    options.kind,
+    options.labelColors,
+  )
   const elements: SpatialElement[] = []
 
   for (let polygonIndex = 0; polygonIndex < polygonRings.length; polygonIndex += 1) {
@@ -1095,6 +1106,7 @@ function readSegmentationFeatureMetadata(
   feature: Record<string, unknown>,
   featureIndex: number,
   kind: VisiumHdSegmentationKind,
+  labelColors: Map<string, string>,
 ): SpatialElementMetadata | undefined {
   const properties =
     feature.properties === null || feature.properties === undefined
@@ -1104,7 +1116,12 @@ function readSegmentationFeatureMetadata(
           `Visium HD segmentation feature ${featureIndex} properties`,
         )
   const label = readAnnotationLabel(properties)
-  const color = readColorProperty(properties, ANNOTATION_COLOR_PROPERTY_KEYS)
+  // A label the file gives no colour takes the next palette colour, in the
+  // order labels first appear in the file, so it has one colour in every view
+  // (EXP-048).
+  const color =
+    readColorProperty(properties, ANNOTATION_COLOR_PROPERTY_KEYS) ??
+    (label === undefined ? undefined : labelPaletteColor(label, labelColors))
   const fillColor = readColorProperty(properties, ANNOTATION_FILL_COLOR_PROPERTY_KEYS)
   const lineColor = readColorProperty(properties, ANNOTATION_LINE_COLOR_PROPERTY_KEYS)
   // Space Ranger's nucleus features name their cell by `cell_id`.
@@ -1136,6 +1153,18 @@ function readSegmentationFeatureMetadata(
       },
     },
   }
+}
+
+function labelPaletteColor(label: string, labelColors: Map<string, string>): string {
+  const existing = labelColors.get(label)
+
+  if (existing !== undefined) {
+    return existing
+  }
+
+  const color = annotationPaletteColor(labelColors.size)
+  labelColors.set(label, color)
+  return color
 }
 
 function readAnnotationLabel(source: Record<string, unknown>): string | undefined {

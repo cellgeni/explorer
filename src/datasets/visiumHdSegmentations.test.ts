@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
+import { annotationPaletteColor } from '../rendering/annotationPalette'
+import type { SpatialElement } from './spatialDataset'
 import {
   VisiumHdSegmentationGeojsonBudgetExceededError,
   createVisiumHdSegmentationIndexParser,
@@ -284,6 +286,61 @@ describe('Visium HD segmentation GeoJSON reader', () => {
 
     expect(elements.map((element) => element.id)).toEqual(['segmented-cell#2'])
     expect(elements[0]?.geometry.kind).toBe('polygon')
+  })
+
+  // Boundaries are read per view, so a colour picked from the labels in view
+  // changed as the view panned (EXP-048).
+  it('gives each label without a colour one palette colour, in file order', () => {
+    const square = (x: number) => [
+      [
+        [x, 0],
+        [x + 4, 0],
+        [x + 4, 4],
+        [x, 0],
+      ],
+    ]
+    const feature = (cellId: number, properties: Record<string, unknown>) => ({
+      type: 'Feature',
+      properties: { cell_id: cellId, ...properties },
+      geometry: { type: 'Polygon', coordinates: square(cellId * 100) },
+    })
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        feature(1, { label: 'Tumour' }),
+        feature(2, { label: 'Immune', color: '#00ff00' }),
+        feature(3, { label: 'Stroma' }),
+        feature(4, { label: 'Tumour' }),
+      ],
+    }
+    const colors = (elements: readonly SpatialElement[]) =>
+      elements.map((element) => element.metadata?.segmentation?.annotation?.color)
+    // Micrometres: 0.5 per pixel, so cell n spans x 50n to 50n + 2.
+    const around = (cellId: number) => ({
+      minX: micrometers(cellId * 50 - 1),
+      maxX: micrometers(cellId * 50 + 3),
+      minY: micrometers(-1),
+      maxY: micrometers(3),
+    })
+    const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
+    parser.push(new TextEncoder().encode(JSON.stringify(geojson)))
+    const index = parser.finish()
+
+    expect(colors(parseVisiumHdSegmentationGeojson(geojson, { scalefactors }))).toEqual([
+      annotationPaletteColor(0),
+      '#00ff00',
+      annotationPaletteColor(1),
+      annotationPaletteColor(0),
+    ])
+    // A view holding only Stroma, or only the second Tumour, keeps the colours.
+    expect(
+      colors(
+        parseVisiumHdSegmentationGeojson(geojson, { scalefactors, bbox: around(3) }),
+      ),
+    ).toEqual([annotationPaletteColor(1)])
+    expect(
+      colors([...selectVisiumHdSegmentationIndexElements(index, around(4)).values()]),
+    ).toEqual([annotationPaletteColor(0)])
   })
 
   it('indexes GeoJSON that arrives in pieces as the whole-file parse reads it', () => {
