@@ -515,13 +515,15 @@ function channelRequest(
   }
 }
 
+// Tiles are decoded in the channel's colour and contrast, so a cache holds
+// one of each: a new colour, like a new window, needs a cache of its own.
 function channelCacheKey(channel: MorphologyCanvasChannel): string {
   const contrastKey =
     channel.contrast === undefined
       ? 'auto'
       : `${channel.contrast.lo.toString()}:${channel.contrast.hi.toString()}`
   const alphaKey = channel.alphaFromIntensity === false ? 'opaque' : 'intensity-alpha'
-  return `${channel.id}:${channel.loader.url}:${contrastKey}:${alphaKey}`
+  return `${channel.id}:${channel.loader.url}:${contrastKey}:${channel.color.join(',')}:${alphaKey}`
 }
 
 // Not clamped to x, y >= 0: an image can sit at a negative origin (MERSCOPE

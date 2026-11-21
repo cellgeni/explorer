@@ -2176,6 +2176,71 @@ test("has no accessibility violations in an image's channel controls @smoke", as
   expectAxeFindingsMatchBaseline(findings)
 })
 
+test('draws an image channel in the colour picked for it @smoke', async ({
+  baseURL,
+  page,
+}) => {
+  // OME Color -16776961 is 0xFF0000FF: the channel opens red.
+  const omeXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">',
+    '<Image ID="Image:0"><Pixels ID="Pixels:0" DimensionOrder="XYCZT" Type="uint8"',
+    ' SizeX="64" SizeY="64" SizeC="1" SizeZ="1" SizeT="1"',
+    ' PhysicalSizeX="0.5" PhysicalSizeY="0.5">',
+    '<Channel ID="Channel:0:0" Name="rings" Color="-16776961" SamplesPerPixel="1"/>',
+    '<TiffData IFD="0" PlaneCount="1"/></Pixels></Image></OME>',
+  ].join('')
+  await routeRangeFiles(page, '/colour-smoke', {
+    'slide.ome.tif': tinyTiff(64, 64, 8, (x, y) => (x * 4 + y) % 256, omeXml),
+  })
+  const folder = new URL('/colour-smoke/', baseURL).toString()
+  await page.goto(`/#dataset=${encodeURIComponent(`${folder}slide.ome.tif`)}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: 'Image · 1 channel' }),
+  ).toBeVisible({ timeout: H5AD_LOAD_TIMEOUT_MS })
+  const image = await openControls(page, 'image')
+
+  await expect
+    .poll(async () => {
+      const [red = 0, green = 0] = await meanImageColour(page)
+      return red > 20 && green === 0
+    })
+    .toBe(true)
+
+  // The tiles already drawn are redrawn in the new colour (EXP-043).
+  await image.getByLabel('rings color').fill('#00ff00')
+  await expect
+    .poll(async () => {
+      const [red = 0, green = 0] = await meanImageColour(page)
+      return green > 20 && red === 0
+    })
+    .toBe(true)
+})
+
+// The mean red, green and blue over the middle of the image canvas.
+async function meanImageColour(page: Page): Promise<readonly number[]> {
+  return page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>('canvas.morphology-canvas')
+    const context = canvas?.getContext('2d')
+    if (canvas === null || context === null || context === undefined) return []
+    const width = Math.floor(canvas.width * 0.4)
+    const height = Math.floor(canvas.height * 0.4)
+    const { data } = context.getImageData(
+      Math.floor(canvas.width * 0.3),
+      Math.floor(canvas.height * 0.3),
+      width,
+      height,
+    )
+    const sums = [0, 0, 0]
+    for (let index = 0; index < data.length; index += 4) {
+      sums[0] += data[index] ?? 0
+      sums[1] += data[index + 1] ?? 0
+      sums[2] += data[index + 2] ?? 0
+    }
+    return sums.map((sum) => sum / (width * height))
+  })
+}
+
 test('draws an imported label mask and WKT outlines over an image @smoke', async ({
   page,
   baseURL,
