@@ -35,11 +35,13 @@ export function pointerEventToDataPoint(
   }
 }
 
+// Not clamped to x, y >= 0: data can sit at negative coordinates (MERSCOPE
+// mosaics, SpatialData translations), and a clamped box misses those cells.
 export function bboxFromCircle(center: DataPoint, radius: number): BBox {
   return {
-    minX: micrometers(Math.max(0, center.x - radius)),
+    minX: micrometers(center.x - radius),
     maxX: micrometers(center.x + radius),
-    minY: micrometers(Math.max(0, center.y - radius)),
+    minY: micrometers(center.y - radius),
     maxY: micrometers(center.y + radius),
   }
 }

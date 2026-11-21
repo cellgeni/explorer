@@ -2255,6 +2255,47 @@ describe('ViewerCore', () => {
     )
   })
 
+  it('centres the magic lens box on the pointer at negative coordinates (EXP-044)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const onMagicLensMove = vi.fn()
+    // Data x -1234, y -20: left of and above the origin.
+    const cells: OverviewCellDatum[] = [
+      {
+        id: 'cell-1',
+        position: [-1234, 20, 0],
+        radiusPixels: 4,
+        fillColor: [215, 63, 124, 220],
+      },
+    ]
+
+    render(
+      <ViewerCore
+        cells={cells}
+        magicLensActive
+        magicLensRadiusMicrometers={40}
+        magicLensStatus="loading"
+        onMagicLensMove={onMagicLensMove}
+      />,
+    )
+
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    fireEvent.pointerMove(frame, { clientX: 100, clientY: 50 })
+
+    await waitFor(() => {
+      expect(onMagicLensMove).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bbox: expect.objectContaining({
+            minX: -1274,
+            maxX: -1194,
+            minY: -60,
+            maxY: 20,
+          }),
+        }),
+      )
+    })
+  })
+
   it('emits a data-space bounding box after drawing a box ROI', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
