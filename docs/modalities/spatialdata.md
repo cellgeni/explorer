@@ -54,7 +54,8 @@ A [dataset manifest](../dataset-manifest.md) with `"platform": "spatialdata"`
 names the store in `files.store` and skips the metadata check. Its
 `options` (`table`, `coordinateSystem`, `image`, `micrometersPerUnit`) are the
 starting selection: `spatialDataSelectionFor` returns them until a choice in the info
-drawer's View options replaces them.
+drawer's View options replaces them, once the reload that choice starts
+replaces the view on screen.
 
 ## Store Access
 

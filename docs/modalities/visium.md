@@ -172,8 +172,10 @@ tissue, so the scale does not change with the off-tissue choice.
 
 `readVisiumSource` reads everything a placement needs once (every library's
 scale factors, images, and metadata; the pixels; the obs library, `in_tissue`,
-and array columns). `setVisiumView({ libraryId, showOffTissue })` then picks
-what `placeVisiumView` places, without reading the file again:
+and array columns). Each view, `{ libraryId, showOffTissue }`, is a dataset of
+its own (`visiumViewDataset`) that places what `placeVisiumView` places on
+that one read, so a view never changes in place and the file is not read
+again:
 
 - **Off-tissue spots.** Spots with `in_tissue` 0 are hidden by default
   (CELLxGENE files keep all 4,992 or 14,336 array spots; Space Ranger's
@@ -236,8 +238,11 @@ per pixel`.
 
 `useDatasetLifecycle` (`src/features/app-shell/useDatasetLifecycle.ts`):
 
-1. Applies the library and off-tissue choice from a shared link
-   (`setVisiumView`). Space Ranger: sets the platform to `visium`. H5AD: sets
+1. Opens the dataset for the library and off-tissue choice of a shared link
+   or a view change (the `visiumView` option of `cachedSpatialDataset`), and
+   sets that view for the URL (`setVisiumView`) once the load replaces the
+   dataset on screen, so reads by URL alone keep going to the view on screen
+   until then. Space Ranger: sets the platform to `visium`. H5AD: sets
    `h5ad`, reads the file, and switches to `visium` when `visiumSummary()` is
    not null.
 2. Logs the library, spot count, and units, and raises the units notice when

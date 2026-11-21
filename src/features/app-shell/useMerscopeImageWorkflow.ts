@@ -16,7 +16,6 @@ interface MutableRef<T> {
 export interface UseMerscopeImageWorkflowOptions {
   readonly appendDebugEvent: (message: string) => void
   readonly datasetUrl: string | null
-  readonly initialShareableStateRef: MutableRef<ShareableState | null>
   readonly merscopeImageState: MerscopeImageControlState
   // The shareable state the view is in now; defaults to the URL hash.
   readonly readShareableState?: () => ShareableState
@@ -32,7 +31,6 @@ export interface UseMerscopeImageWorkflowOptions {
 export function useMerscopeImageWorkflow({
   appendDebugEvent,
   datasetUrl,
-  initialShareableStateRef,
   merscopeImageState,
   readShareableState = readHashShareableState,
   setMerscopeImageState,
@@ -48,12 +46,6 @@ export function useMerscopeImageWorkflow({
       }
 
       const shownChoice = merscopeImageState.choice
-      const shownShareableState = initialShareableStateRef.current
-      initialShareableStateRef.current = {
-        ...readShareableState(),
-        datasetUrl,
-        merscopeImage: formatMerscopeImageChoice(choice),
-      }
       setMerscopeImageState((state) => merscopeImageControlLoading(state, choice))
       appendDebugEvent(
         `MERSCOPE image change: ${choice === null ? 'none' : `${choice.stain} z${choice.z}`}`,
@@ -62,8 +54,12 @@ export function useMerscopeImageWorkflow({
         datasetUrl,
         choice !== null || shouldLoadMorphology,
         {
-          undo: () => {
-            initialShareableStateRef.current = shownShareableState
+          shareableState: {
+            ...readShareableState(),
+            datasetUrl,
+            merscopeImage: formatMerscopeImageChoice(choice),
+          },
+          restoreControl: () => {
             setMerscopeImageState((state) =>
               merscopeImageControlRestored(state, shownChoice),
             )
@@ -74,7 +70,6 @@ export function useMerscopeImageWorkflow({
     [
       appendDebugEvent,
       datasetUrl,
-      initialShareableStateRef,
       merscopeImageState,
       readShareableState,
       setMerscopeImageState,

@@ -35,7 +35,6 @@ export interface UseVisiumControlsWorkflowOptions {
   readonly appendDebugEvent: (message: string) => void
   readonly datasetUrl: string | null
   readonly getSpatialDataset: SpatialDatasetLoader
-  readonly initialShareableStateRef: MutableRef<ShareableState | null>
   // The shareable state the view is in now; defaults to the URL hash.
   readonly readShareableState?: () => ShareableState
   readonly setFlatMorphologyImage: Setter<FlatMorphologyCanvasImage | null>
@@ -53,7 +52,6 @@ export function useVisiumControlsWorkflow({
   appendDebugEvent,
   datasetUrl,
   getSpatialDataset,
-  initialShareableStateRef,
   readShareableState = readHashShareableState,
   setFlatMorphologyImage,
   setMorphologyState,
@@ -157,14 +155,6 @@ export function useVisiumControlsWorkflow({
       const current = libraryChanged ? withoutRoi : shared
 
       requestIdRef.current += 1
-      const shownShareableState = initialShareableStateRef.current
-      initialShareableStateRef.current = {
-        ...current,
-        datasetUrl,
-        visiumImage: image ?? 'none',
-        visiumOffTissue: showOffTissue,
-        ...(summary.libraryIds.length > 1 ? { visiumLibrary: libraryId } : {}),
-      }
       setVisiumControlState((state) =>
         visiumControlLoading(state, { libraryId, showOffTissue }),
       )
@@ -174,12 +164,14 @@ export function useVisiumControlsWorkflow({
         }`,
       )
       void startDatasetLoadRef.current?.(datasetUrl, shouldLoadMorphology, {
-        visiumView: {
-          libraryId: summary.libraryId,
-          showOffTissue: summary.showOffTissue,
+        shareableState: {
+          ...current,
+          datasetUrl,
+          visiumImage: image ?? 'none',
+          visiumOffTissue: showOffTissue,
+          ...(summary.libraryIds.length > 1 ? { visiumLibrary: libraryId } : {}),
         },
-        undo: () => {
-          initialShareableStateRef.current = shownShareableState
+        restoreControl: () => {
           setVisiumControlState(visiumControlRestored)
         },
       })
@@ -187,7 +179,6 @@ export function useVisiumControlsWorkflow({
     [
       appendDebugEvent,
       datasetUrl,
-      initialShareableStateRef,
       readShareableState,
       setVisiumControlState,
       shouldLoadMorphology,

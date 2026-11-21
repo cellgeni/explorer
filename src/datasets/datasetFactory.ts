@@ -59,7 +59,11 @@ import type { CellId } from '../data/cellid'
 import type { VisiumHdSegmentedOutputPaths } from './visiumHdSegmentationModel'
 import type { SpatialDataset, SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
-import type { H5adLoadProgressReporter } from './h5adDataset'
+import type {
+  AnnDataH5adDataset,
+  AnnDataVisiumView,
+  H5adLoadProgressReporter,
+} from './h5adDataset'
 import type { SpatialDataSelection } from './spatialDataDataset'
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
@@ -192,12 +196,18 @@ export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions
   // dataset again when it is of this URL (EXP-024). It is passed with each
   // load, so it never outlives one.
   readonly detection?: SpatialDatasetDetection
+  // The SpatialData view to open, in place of the one set for the URL.
+  readonly spatialDataSelection?: SpatialDataSelection
 }
 
 export interface CachedSpatialDatasetOptions {
   readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
   readonly onH5adLoadProgress?: H5adLoadProgressReporter
   readonly detection?: SpatialDatasetDetection
+  // The view to open, in place of the one set for the URL: a load's, which
+  // is set for the URL once it replaces the dataset on screen (EXP-002).
+  readonly spatialDataSelection?: SpatialDataSelection
+  readonly visiumView?: AnnDataVisiumView
 }
 
 const VISIUM_HD_BINS: readonly {
@@ -252,9 +262,13 @@ const MAX_INACTIVE_SPATIAL_DATASETS = 2
 const spatialDatasetCache = new DatasetCache<AnySpatialDataset>(
   MAX_INACTIVE_SPATIAL_DATASETS,
 )
-// Coordinate system, image, and unit choices per SpatialData store URL. Kept
-// here so every caller that only knows the URL gets the matching instance.
+// Coordinate system, image, and unit choices per SpatialData store URL, and
+// the Visium library and off-tissue spots per AnnData URL: the view on
+// screen. Kept here so every caller that only knows the URL gets the
+// matching instance. A load sets its view once it replaces the dataset on
+// screen, so the view on screen keeps answering until then.
 const spatialDataSelections = new Map<string, SpatialDataSelection>()
+const visiumViews = new Map<string, AnnDataVisiumView>()
 
 export function setSpatialDataSelection(
   baseUrl: string,
@@ -268,22 +282,50 @@ export function setSpatialDataSelection(
     spatialDataSelections.set(key, selection)
   }
 
-  // Drop instances built for earlier selections so their tables, label
+  // Drop instances built for other selections so their tables, label
   // traces, and chunk caches can be released.
-  spatialDatasetCache.delete((cacheKey) => cacheKey.startsWith(`${key}\n`))
+  const shown = `\nspatialData=${JSON.stringify(spatialDataSelectionFor(key))}\n`
+  spatialDatasetCache.delete(
+    (cacheKey) => cacheKey.startsWith(`${key}\n`) && !cacheKey.includes(shown),
+  )
 }
 
-// The viewer's selection, else the dataset manifest's `options`. A manifest
-// only sets the starting view: any selection made since replaces it whole,
-// because images and units belong to one coordinate system.
-export function spatialDataSelectionFor(baseUrl: string): SpatialDataSelection {
+// A Visium view is placed on the file's one read, so the instances of other
+// views are kept.
+export function setVisiumView(
+  baseUrl: string,
+  view: AnnDataVisiumView | undefined,
+): void {
   const key = normalizeBaseUrl(baseUrl)
+
+  if (view === undefined || Object.keys(view).length === 0) {
+    visiumViews.delete(key)
+  } else {
+    visiumViews.set(key, view)
+  }
+}
+
+export function visiumViewFor(baseUrl: string): AnnDataVisiumView {
+  return visiumViews.get(normalizeBaseUrl(baseUrl)) ?? {}
+}
+
+// The viewer's selection (`selection`, else the one set for the URL), else
+// the dataset manifest's `options`. A manifest only sets the starting view:
+// any selection made since replaces it whole, because images and units
+// belong to one coordinate system.
+export function spatialDataSelectionFor(
+  baseUrl: string,
+  selection?: SpatialDataSelection,
+): SpatialDataSelection {
+  const key = normalizeBaseUrl(baseUrl)
+  const chosen = selection ?? spatialDataSelections.get(key)
   const manifest = datasetManifestFor(key)
 
-  return (
-    spatialDataSelections.get(key) ??
-    (manifest?.platform === 'spatialdata' ? manifest.options : {})
-  )
+  return chosen !== undefined && Object.keys(chosen).length > 0
+    ? chosen
+    : manifest?.platform === 'spatialdata'
+      ? manifest.options
+      : {}
 }
 const DATASET_PROBE_TIMEOUT_MS = 15_000
 // The folder index only saves requests, so a slow one is not waited for long.
@@ -1652,7 +1694,7 @@ export async function createSpatialDataset(
   if (detection.platform === 'spatialdata') {
     const { SpatialDataDataset } = await import('./spatialDataDataset')
     return new SpatialDataDataset({
-      ...spatialDataSelectionFor(baseUrl),
+      ...spatialDataSelectionFor(baseUrl, options.spatialDataSelection),
       url: detection.spatialDataUrl,
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       ...(options.onH5adLoadProgress === undefined
@@ -1798,13 +1840,18 @@ export function cachedSpatialDataset(
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
   const maxTwoMicrometerFilteredBarcodes =
     options.visiumHdMaxTwoMicrometerFilteredBarcodes
+  const spatialDataSelection = spatialDataSelectionFor(
+    normalizedBaseUrl,
+    options.spatialDataSelection,
+  )
+  const visiumView = options.visiumView ?? visiumViewFor(normalizedBaseUrl)
   const cacheKey = spatialDatasetCacheKey(
     normalizedBaseUrl,
     maxTwoMicrometerFilteredBarcodes,
-    spatialDataSelectionFor(normalizedBaseUrl),
+    spatialDataSelection,
     collectionImageFor(normalizedBaseUrl),
   )
-  return spatialDatasetCache.get(cacheKey, normalizedBaseUrl, () =>
+  const dataset = spatialDatasetCache.get(cacheKey, normalizedBaseUrl, () =>
     createSpatialDataset(normalizedBaseUrl, {
       ...(maxTwoMicrometerFilteredBarcodes === undefined
         ? {}
@@ -1815,8 +1862,21 @@ export function cachedSpatialDataset(
         ? {}
         : { onH5adLoadProgress: options.onH5adLoadProgress }),
       ...(options.detection === undefined ? {} : { detection: options.detection }),
+      spatialDataSelection,
     }),
   )
+
+  return Object.keys(visiumView).length === 0
+    ? dataset
+    : dataset.then((opened) =>
+        hasVisiumViews(opened) ? opened.visiumViewDataset(visiumView) : opened,
+      )
+}
+
+function hasVisiumViews(
+  dataset: AnySpatialDataset,
+): dataset is AnySpatialDataset & Pick<AnnDataH5adDataset, 'visiumViewDataset'> {
+  return typeof (dataset as Partial<AnnDataH5adDataset>).visiumViewDataset === 'function'
 }
 
 async function probeDatasetPath(
