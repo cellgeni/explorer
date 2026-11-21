@@ -1,4 +1,5 @@
 import { abortError } from '../utils/abort'
+import { workerFailureError } from './workerStartError'
 
 // Runs one request in a worker of its own and settles with its answer. The
 // worker is terminated once it has answered, failed to run or been aborted.
@@ -95,7 +96,12 @@ export function runWorkerOnce<Request, Response, Result>(
       finish()
 
       if (options.fallback === undefined) {
-        reject(new Error(event.message || options.failureMessage || 'The worker failed.'))
+        reject(
+          workerFailureError(
+            event.message,
+            options.failureMessage ?? 'The worker failed.',
+          ),
+        )
         return
       }
 

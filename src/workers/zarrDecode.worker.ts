@@ -73,6 +73,9 @@ function putChunk(cacheKey: string, source: ZarrChunkSource, bytes: ArrayBuffer 
 
   const entry: CachedChunk = { promise: decodeChunk(source, bytes), bytes: 0 }
   chunks.set(cacheKey, entry)
+  // A chunk that fails to decode is kept, holding no bytes, until it is put
+  // again: the requests sent after it then get its error, not a miss that
+  // would have the pool load and decode it again.
   entry.promise.then(
     (chunk) => {
       if (chunks.get(cacheKey) !== entry) {
@@ -83,11 +86,7 @@ function putChunk(cacheKey: string, source: ZarrChunkSource, bytes: ArrayBuffer 
       cachedBytes += entry.bytes
       evict()
     },
-    () => {
-      if (chunks.get(cacheKey) === entry) {
-        chunks.delete(cacheKey)
-      }
-    },
+    () => undefined,
   )
 }
 

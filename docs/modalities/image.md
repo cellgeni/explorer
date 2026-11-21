@@ -559,7 +559,9 @@ transform.
   worker, which keeps it for all of its virtual tiles. If a worker fails, the
   tile is decoded on the main thread with `zarr.get`, through a 256 MiB
   decoded-chunk cache. Store errors (for example a `403` chunk) are not retried.
-  No IndexedDB cache is used.
+  A chunk that fails to decode in a worker stays there with its error until it
+  is placed again, so its tiles get that error without the chunk being loaded
+  again. No IndexedDB cache is used.
 - Range reads (a sharded array's chunks and shard indexes) are sent with
   `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
   truncated body to one of two Range requests for the same bytes at once:

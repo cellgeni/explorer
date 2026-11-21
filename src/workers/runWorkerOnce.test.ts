@@ -196,9 +196,21 @@ describe('runWorkerOnce', () => {
     silent.crash()
     bare.crash()
 
-    await expect(reportedRead).rejects.toThrow('Script error.')
-    await expect(silentRead).rejects.toThrow('The test worker failed.')
-    await expect(bareRead).rejects.toThrow('The worker failed.')
+    await expect(reportedRead).rejects.toMatchObject({
+      name: 'Error',
+      message: 'Script error.',
+    })
+    // A worker that reports nothing did not start, and says so by name.
+    await expect(silentRead).rejects.toMatchObject({
+      name: 'WorkerStartError',
+      message: expect.stringMatching(
+        /^The test worker failed\. It did not start/,
+      ) as unknown,
+    })
+    await expect(bareRead).rejects.toMatchObject({
+      name: 'WorkerStartError',
+      message: expect.stringMatching(/^The worker failed\. It did not start/) as unknown,
+    })
     expect(event.preventDefault).not.toHaveBeenCalled()
     expect(reported.terminations).toBe(1)
   })

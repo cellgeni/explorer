@@ -1,3 +1,4 @@
+import { workerFailureError } from '../workers/workerStartError'
 import { transferablesOf } from '../workers/h5FileTransfer'
 import { unpackGexResult } from '../workers/h5MatrixCellsPayload'
 import type { SharedLoad } from '../utils/sharedLoad'
@@ -316,7 +317,7 @@ class H5WorkerConnection {
       this.sendNext()
     }
     worker.onerror = (event) => {
-      this.fail(new Error(event.message || 'The H5 file worker failed.'))
+      this.fail(workerFailureError(event.message, 'The H5 file worker failed.'))
     }
   }
 

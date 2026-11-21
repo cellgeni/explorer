@@ -190,6 +190,24 @@ describe('loadErrorModel', () => {
     expect(readErrorMessage(ignoredRange)).toContain('received HTTP 200')
   })
 
+  it('tells the user to reload when a worker did not start', () => {
+    const tiles = new Error(
+      'The tile decode worker failed. It did not start: the app may have been updated since the page loaded, or the page does not allow workers.',
+    )
+    tiles.name = 'WorkerStartError'
+
+    expect(createStructuredLoadError('Image tiles', tiles)).toMatchObject({
+      code: 'app-updated',
+      title: 'A background worker did not start',
+      action:
+        'Reload the page to start the workers again. If it keeps failing, check that the page is allowed to run workers.',
+    })
+    // A worker that threw is reported as what it threw.
+    expect(
+      createStructuredLoadError('Image tiles', new Error('Tile decode failed: bad JPEG')),
+    ).toMatchObject({ code: 'decode' })
+  })
+
   it('points a DuckDB extension that did not load at the extension repository', () => {
     const error = new DuckDbExtensionLoadError(
       'spatial',

@@ -216,8 +216,14 @@ describe('TileDecodeWorkerPool', () => {
     // worker never answers again.
     workers[0]?.onerror?.(new ErrorEvent('error'))
 
-    await expect(first).rejects.toThrow('Tile decode worker failed.')
-    await expect(second).rejects.toThrow('Tile decode worker failed.')
+    for (const request of [first, second]) {
+      await expect(request).rejects.toMatchObject({
+        name: 'WorkerStartError',
+        message: expect.stringContaining(
+          'The tile decode worker failed. It did not start',
+        ) as unknown,
+      })
+    }
     expect(workers.map((worker) => worker.terminate.mock.calls.length)).toEqual([1, 1])
 
     const third = pool.decode(new Uint8Array([3]))
