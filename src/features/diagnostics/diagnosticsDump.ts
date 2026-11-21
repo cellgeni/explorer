@@ -2,7 +2,7 @@ import {
   summarizeDatasetDiagnostics,
   type DatasetDiagnosticsReport,
 } from '../../data/datasetDiagnostics'
-import type { GeneExpressionBatchTiming } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatchTiming } from '../../datasets/spatialDataset'
 
 interface DatasetLoadDiagnosticState {
   readonly status: string

@@ -731,6 +731,7 @@ export async function loadPlatformGeneExpression(
     return {
       genes,
       elements: [],
+      population: 'all',
       maxCount: 0,
     }
   }

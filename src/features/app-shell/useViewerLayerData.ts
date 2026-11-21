@@ -3,8 +3,7 @@ import { useMemo } from 'react'
 import type { MorphologyCanvasChannel } from '../../components/MorphologyCanvas'
 import { micrometers, type BBox } from '../../data/coords'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
-import type { SpatialElement } from '../../datasets/spatialDataset'
+import type { GeneExpressionBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type {
   AnnotationColorStyle,
   CellMetadataColorStyle,

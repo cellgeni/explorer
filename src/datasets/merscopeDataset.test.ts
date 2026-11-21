@@ -167,6 +167,7 @@ describe('MerscopeDataset', () => {
     expect(cells).toEqual([
       { id: ID_A, position: { x: 1010, y: 2010 }, transcriptCount: 6 },
     ])
+    expect(expression.population).toBe('all')
     expect(
       expression.elements.map((element) => [
         element.id,

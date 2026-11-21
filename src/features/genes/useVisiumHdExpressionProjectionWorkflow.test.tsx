@@ -2,8 +2,7 @@ import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
-import type { SpatialElement } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
@@ -31,6 +30,7 @@ const DEFAULT_EXPRESSION_BATCH: GeneExpressionBatch = {
     },
   ],
   genes: ['Actb'],
+  population: 'all',
   maxCount: 9,
 }
 
@@ -206,7 +206,12 @@ describe('useVisiumHdExpressionProjectionWorkflow', () => {
 
     render(
       <Probe
-        expressionBatch={{ elements: [], genes: ['Actb'], maxCount: 0 }}
+        expressionBatch={{
+          elements: [],
+          genes: ['Actb'],
+          population: 'all',
+          maxCount: 0,
+        }}
         getSpatialDataset={getSpatialDataset}
         rowBudget={undefined}
         onReady={(snapshot) => {

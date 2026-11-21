@@ -80,6 +80,7 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
   ImageSource,
   SegmentationInfo,
   SpatialDataset,
@@ -87,7 +88,7 @@ import type {
   SpatialElementId,
   SpatialElementMetadata,
 } from './spatialDataset'
-import type { DatasetCell, GeneExpressionBatch } from './xeniumDataset'
+import type { DatasetCell } from './xeniumDataset'
 
 export interface SpatialDataImageRequest {
   // Element URL; per-channel requests carry an OME-Zarr `#c=N` selection.
@@ -455,7 +456,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     const table = await this.tableOrNull()
 
     return table === null
-      ? { elements: [], genes, maxCount: 0 }
+      ? { elements: [], genes, population: 'all', maxCount: 0 }
       : table.geneExpression(bbox, genes, options)
   }
 

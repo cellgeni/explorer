@@ -56,6 +56,8 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionElement,
   ImageSource,
   SpatialDataset,
   SpatialElement,
@@ -68,11 +70,7 @@ import {
 } from './spatialDataShapes'
 import { readSpatialDataShapesInWorker } from './spatialDataShapesWorker'
 import { IDENTITY_AFFINE } from './spatialDataTransforms'
-import type {
-  DatasetCell,
-  GeneExpressionBatch,
-  GeneExpressionElement,
-} from './xeniumDataset'
+import type { DatasetCell } from './xeniumDataset'
 
 export interface MerscopeFileUrls {
   readonly cellByGene: string

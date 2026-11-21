@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {
   GeneExpressionColorScale,

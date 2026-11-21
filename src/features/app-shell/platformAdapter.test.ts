@@ -214,6 +214,7 @@ describe('platformAdapter', () => {
     ).resolves.toEqual({
       genes: ['Actb'],
       elements: [],
+      population: 'all',
       maxCount: 0,
     })
     expect(getSpatialDataset).not.toHaveBeenCalled()
@@ -406,6 +407,7 @@ describe('platformAdapter', () => {
     const expressionBatch = {
       elements: [],
       genes: ['Actb'],
+      population: 'all' as const,
       maxCount: 0,
     }
     const loadBoundaryElements = vi.fn(async () => boundaryBatch)
@@ -1080,6 +1082,7 @@ describe('platformAdapter', () => {
     const expressionBatch = {
       elements: [],
       genes: ['Actb'],
+      population: 'all' as const,
       maxCount: 0,
     }
     const dataset = {
@@ -1143,6 +1146,7 @@ describe('platformAdapter', () => {
     const expressionBatch = {
       elements: [],
       genes: ['Actb'],
+      population: 'all' as const,
       maxCount: 0,
     }
     const dataset = {

@@ -20,14 +20,18 @@ import {
 } from '../data/roiSelection'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
 import type { CellId } from '../data/cellid'
-import type { CellOutlineRequest, ElementBatch, SpatialElement } from './spatialDataset'
+import type {
+  CellOutlineRequest,
+  ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionElement,
+  GeneExpressionQueryOptions,
+  SpatialElement,
+} from './spatialDataset'
 import type {
   CellTranscriptZDistributionQueryOptions,
   DatasetCell,
   DatasetTranscript,
-  GeneExpressionBatch,
-  GeneExpressionElement,
-  GeneExpressionQueryOptions,
   TranscriptQueryOptions,
   TranscriptViewportQueryOptions,
   XeniumDuckDbConnection,
@@ -616,6 +620,7 @@ export async function readXeniumGeneExpression(options: {
     return {
       elements: [],
       genes: [],
+      population: 'all',
       maxCount: 0,
     }
   }
@@ -659,6 +664,7 @@ export async function readXeniumGeneExpression(options: {
     return {
       elements: [],
       genes: selectedGenes,
+      population: 'all',
       maxCount: 0,
       timing: {
         viewportCellsMs,
@@ -725,6 +731,7 @@ export async function readXeniumGeneExpression(options: {
   return {
     elements,
     genes: selectedGenes,
+    population: 'expressing',
     cellCount: viewportCells.length,
     geneCounts,
     maxCount,
@@ -856,6 +863,7 @@ async function readXeniumGeneExpressionByMatrixRows(options: {
   return {
     elements,
     genes,
+    population: 'expressing',
     cellCount: cells.rows.length,
     geneCounts: geneCounts.sort((left, right) => right.count - left.count),
     maxCount,

@@ -1,7 +1,7 @@
 import { act, render } from '@testing-library/react'
 import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {

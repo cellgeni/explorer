@@ -327,7 +327,7 @@ import {
 } from './rendering/deckLayers'
 import { annotationPaletteColor } from './rendering/annotationPalette'
 import { useViewerStore } from './store/viewerStore'
-import type { DatasetCell, GeneExpressionBatch } from './datasets/xeniumDataset'
+import type { DatasetCell } from './datasets/xeniumDataset'
 import {
   normalizeCustomMorphologyLayerUrl,
   type MorphologyImage,
@@ -337,6 +337,7 @@ import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
   Annotation,
+  GeneExpressionBatch,
   SpatialElement,
   SpatialElementId,
 } from './datasets/spatialDataset'

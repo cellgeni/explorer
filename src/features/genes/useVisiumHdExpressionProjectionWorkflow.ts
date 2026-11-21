@@ -7,9 +7,12 @@ import {
   type SetStateAction,
 } from 'react'
 import { boundaryElementsToLayerData } from '../../rendering/deckLayers'
-import type { SpatialElement, SpatialElementId } from '../../datasets/spatialDataset'
+import type {
+  GeneExpressionBatch,
+  SpatialElement,
+  SpatialElementId,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import type { SpatialDatasetLoader } from '../app-shell/appDependencies'
 import {
   abortActiveRequest,

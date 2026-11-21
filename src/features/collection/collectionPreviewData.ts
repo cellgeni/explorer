@@ -1,8 +1,7 @@
 import { micrometers, type BBox } from '../../data/coords'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
-import type { Annotation } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { Annotation, GeneExpressionBatch } from '../../datasets/spatialDataset'
 import { geneExpressionScores } from '../../rendering/geneExpressionRenderer'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {

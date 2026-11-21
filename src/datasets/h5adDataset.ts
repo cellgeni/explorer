@@ -66,16 +66,14 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionElement,
   ImageSource,
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
 } from './spatialDataset'
-import type {
-  DatasetCell,
-  GeneExpressionBatch,
-  GeneExpressionElement,
-} from './xeniumDataset'
+import type { DatasetCell } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 import {
   isSectionColumnName,
@@ -951,6 +949,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return {
       elements,
       genes,
+      population: sampleStride > 1 ? 'sampled' : 'all',
       cellCount: selectedCells.length,
       maxCount,
     }

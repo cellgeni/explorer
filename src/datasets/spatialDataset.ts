@@ -7,6 +7,10 @@ import type {
 } from '../data/coords'
 import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
+import type {
+  GeneExpressionStageTiming,
+  GeneExpressionStageTimingHandler,
+} from '../data/geneExpressionTiming'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 
@@ -154,6 +158,59 @@ export interface Annotation<ElementId extends SpatialElementId = CellId> {
   // The class's colour as the dataset stores it (`#rrggbb`), used until the
   // user picks another.
   readonly color?: string
+}
+
+export interface GeneExpressionElement {
+  readonly id: string
+  readonly position: DataPoint
+  readonly count: number
+  readonly transcriptCount?: number
+  readonly cellArea?: number
+  readonly binSizeMicrometers?: number
+  readonly nucleusCount?: number
+  readonly segmentationMethod?: string
+}
+
+export interface GeneExpressionGeneCount {
+  readonly gene: string
+  readonly count: number
+}
+
+export type GeneExpressionPopulation = 'all' | 'expressing' | 'sampled'
+
+export interface GeneExpressionBatch {
+  readonly elements: readonly GeneExpressionElement[]
+  readonly genes: readonly string[]
+  // Which of the cells read `elements` lists: 'all' every one, zeros included;
+  // 'expressing' only those with expression (`cellCount` is how many were
+  // read); 'sampled' those with expression plus every Nth one without. A batch
+  // that read no cells is 'all'.
+  readonly population: GeneExpressionPopulation
+  // How many cells or bins the batch was read for. Readers may leave out some
+  // or all of those without expression; a z-score counts them as 0. Without
+  // it, `elements` holds every cell read.
+  readonly cellCount?: number
+  readonly geneCounts?: readonly GeneExpressionGeneCount[]
+  readonly maxCount: number
+  readonly timing?: GeneExpressionBatchTiming
+}
+
+export interface GeneExpressionBatchTiming {
+  readonly viewportCellsMs: number
+  readonly matrixReadMs: number
+  readonly scoreCellsMs: number
+  readonly totalMs: number
+  readonly stageTimings?: readonly GeneExpressionStageTiming[]
+  readonly stageSummary?: string
+}
+
+export interface GeneExpressionQueryOptions {
+  readonly limit?: number
+  // Keeps every Nth cell without expression; cells with expression are always
+  // kept.
+  readonly sampleStride?: number
+  readonly signal?: AbortSignal
+  readonly onStageTiming?: GeneExpressionStageTimingHandler
 }
 
 // A cell whose outline is wanted (plan 23-H): its ID, its row in the
