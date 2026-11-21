@@ -18,8 +18,7 @@ import {
 } from '../../data/runtimeMemory'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { BBox } from '../../data/coords'
-import type { SpatialElement } from '../../datasets/spatialDataset'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
   boundaryRequestCovers,

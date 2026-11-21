@@ -6,7 +6,11 @@ import {
   visiumHdGridLoadBinSize,
 } from '../../data/visiumHdGridLod'
 import type { FallbackNotice, FallbackNotifier } from '../../data/fallbackNotice'
-import type { DatasetMeta, ImageSource } from '../../datasets/spatialDataset'
+import type {
+  DatasetMeta,
+  GeneExpressionBatch,
+  ImageSource,
+} from '../../datasets/spatialDataset'
 import type {
   VisiumHdBinnedOverview,
   VisiumHdBinSizeMicrometers,
@@ -41,7 +45,6 @@ import {
   genePanelLoadReady,
   genePanelLoadStarted,
 } from '../genes/geneControlsModel'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
 import {
   formatRuntimeMemorySnapshot,
   readRuntimeMemorySnapshot,

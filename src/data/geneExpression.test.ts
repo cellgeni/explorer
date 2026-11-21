@@ -26,6 +26,7 @@ describe('dataset gene expression loader', () => {
     ).resolves.toEqual({
       elements: [],
       genes: [],
+      population: 'all',
       maxCount: 0,
     })
     expect(cachedXeniumDataset).not.toHaveBeenCalled()

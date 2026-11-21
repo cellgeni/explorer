@@ -1,5 +1,5 @@
 import type { Color, Position } from '@deck.gl/core'
-import type { GeneExpressionElement } from '../datasets/xeniumDataset'
+import type { GeneExpressionElement } from '../datasets/spatialDataset'
 import { geneScoreSpread, type GeneScoreSpread } from '../features/genes/geneScaleRange'
 import {
   boundaryLineColor,

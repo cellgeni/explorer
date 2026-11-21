@@ -4474,6 +4474,7 @@ describe('App', () => {
           },
         ],
         genes: ['Actb'],
+        population: 'all',
         maxCount: 8,
       }),
     )
@@ -4548,6 +4549,7 @@ describe('App', () => {
       async () => ({
         elements: [],
         genes: ['Actb'],
+        population: 'all',
         maxCount: 0,
       }),
     )
@@ -4617,6 +4619,7 @@ describe('App', () => {
       async () => ({
         elements: [],
         genes: ['Actb'],
+        population: 'all',
         maxCount: 0,
       }),
     )
@@ -5856,6 +5859,7 @@ describe('App', () => {
       async (_url, _bbox, genes) => ({
         elements: [{ id: cellId, position, count: 3 }],
         genes,
+        population: 'all',
         cellCount: 1,
         maxCount: 3,
       }),
@@ -5914,6 +5918,7 @@ describe('App', () => {
           },
         ],
         genes: ['Actb'],
+        population: 'all',
         maxCount: 8,
       }),
     )

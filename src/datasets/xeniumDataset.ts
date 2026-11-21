@@ -40,10 +40,6 @@ import type {
   TranscriptDuckDbConnection,
 } from '../data/gex'
 import type { Selection, TranscriptScope } from '../data/gexSelection'
-import type {
-  GeneExpressionStageTiming,
-  GeneExpressionStageTimingHandler,
-} from '../data/geneExpressionTiming'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { DatasetRangeValidator } from '../data/datasetOverview'
 import type {
@@ -57,6 +53,8 @@ import type {
   CellOutlineRequest,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionQueryOptions,
   ImageSource,
   SegmentationInfo,
   SpatialDataset,
@@ -126,52 +124,6 @@ export interface DuckDbClientLike {
 
 export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
   prepare(sql: string): Promise<DuckDbPreparedStatementLike>
-}
-
-export interface GeneExpressionElement {
-  readonly id: string
-  readonly position: DataPoint
-  readonly count: number
-  readonly transcriptCount?: number
-  readonly cellArea?: number
-  readonly binSizeMicrometers?: number
-  readonly nucleusCount?: number
-  readonly segmentationMethod?: string
-}
-
-export interface GeneExpressionGeneCount {
-  readonly gene: string
-  readonly count: number
-}
-
-export interface GeneExpressionBatch {
-  readonly elements: readonly GeneExpressionElement[]
-  readonly genes: readonly string[]
-  // How many cells or bins the batch was read for. Readers may leave out some
-  // or all of those without expression; a z-score counts them as 0. Without
-  // it, `elements` holds every cell read.
-  readonly cellCount?: number
-  readonly geneCounts?: readonly GeneExpressionGeneCount[]
-  readonly maxCount: number
-  readonly timing?: GeneExpressionBatchTiming
-}
-
-export interface GeneExpressionBatchTiming {
-  readonly viewportCellsMs: number
-  readonly matrixReadMs: number
-  readonly scoreCellsMs: number
-  readonly totalMs: number
-  readonly stageTimings?: readonly GeneExpressionStageTiming[]
-  readonly stageSummary?: string
-}
-
-export interface GeneExpressionQueryOptions {
-  readonly limit?: number
-  // Keeps every Nth cell without expression; cells with expression are always
-  // kept.
-  readonly sampleStride?: number
-  readonly signal?: AbortSignal
-  readonly onStageTiming?: GeneExpressionStageTimingHandler
 }
 
 export interface DatasetCell {

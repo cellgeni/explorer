@@ -3,7 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { TelemetryEvent } from '../../data/telemetry'
 import type { GeneExpressionState } from './geneControlsModel'
 import { useGeneExpressionLayerTelemetry } from './useGeneExpressionLayerTelemetry'
@@ -17,6 +17,7 @@ const batch: GeneExpressionBatch = {
     },
   ],
   genes: ['Actb'],
+  population: 'all',
   maxCount: 4,
   timing: {
     matrixReadMs: 2,

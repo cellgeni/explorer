@@ -175,6 +175,13 @@ All implementations satisfy `SpatialDataset` (`src/datasets/spatialDataset.ts`):
 
 Platforms add their own methods on top, such as `overview()`,
 `genePanel()`, `geneExpression()`, and `readBinnedOverview()`.
+`geneExpression()` returns a `GeneExpressionBatch`, defined beside
+`SpatialDataset`. Its `population` says which of the cells read `elements`
+lists: `all` of them, zeros included; only those with expression
+(`expressing`, and `cellCount` says how many were read); or those with
+expression plus every Nth one without (`sampled`). A z-score counts the cells a
+batch leaves out as 0. `geneExpressionBatchContract.test.ts` runs each platform's
+reader on one small layout and checks this.
 
 ### 3. First Paint
 

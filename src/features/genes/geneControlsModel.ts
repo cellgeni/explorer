@@ -6,7 +6,7 @@ import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
 import type {
   GeneExpressionBatch,
   GeneExpressionBatchTiming,
-} from '../../datasets/xeniumDataset'
+} from '../../datasets/spatialDataset'
 import {
   DEFAULT_GENE_EXPRESSION_SCORE_MODE,
   isGeneExpressionColorScale,

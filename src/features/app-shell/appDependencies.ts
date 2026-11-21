@@ -62,15 +62,12 @@ import type { ChannelAutoContrast } from '../../data/morphologyContrast'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { MorphologyImage, MorphologyImageChannel } from '../../data/morphologyImage'
 import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
-import type {
-  DatasetCell,
-  DatasetTranscript,
-  GeneExpressionBatch,
-} from '../../datasets/xeniumDataset'
+import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import type {
   Annotation,
   CellOutlineRequest,
   ElementBatch,
+  GeneExpressionBatch,
   SpatialElement,
 } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'

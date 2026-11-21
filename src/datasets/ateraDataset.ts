@@ -68,16 +68,14 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionElement,
   ImageSource,
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
 } from './spatialDataset'
-import type {
-  DatasetCell,
-  GeneExpressionBatch,
-  GeneExpressionElement,
-} from './xeniumDataset'
+import type { DatasetCell } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 
 export interface AteraDatasetOptions {
@@ -360,7 +358,13 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       })
     }
 
-    return { elements, genes, cellCount: cellsInBbox, maxCount }
+    return {
+      elements,
+      genes,
+      population: sampleStride > 1 ? 'sampled' : 'all',
+      cellCount: cellsInBbox,
+      maxCount,
+    }
   }
 
   // The Plots panel's rows are the matrix's, which the CSC matrix shares

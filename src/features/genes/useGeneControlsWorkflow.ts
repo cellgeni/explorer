@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { GeneExpressionDetailMode } from '../../data/geneExpressionLod'
-import type { GeneExpressionBatch } from '../../datasets/xeniumDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type {
   GeneExpressionColorScale,

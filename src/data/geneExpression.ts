@@ -10,7 +10,7 @@ import type { BBox } from './coords'
 import type {
   GeneExpressionBatch,
   GeneExpressionQueryOptions,
-} from '../datasets/xeniumDataset'
+} from '../datasets/spatialDataset'
 import type { DatasetRangeValidator } from './datasetOverview'
 
 export interface LoadDatasetGeneExpressionOptions extends GeneExpressionQueryOptions {
@@ -28,6 +28,7 @@ export async function loadDatasetGeneExpression(
     return {
       elements: [],
       genes: [],
+      population: 'all',
       maxCount: 0,
     }
   }

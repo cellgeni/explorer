@@ -33,6 +33,8 @@ import type {
   Annotation,
   DatasetMeta,
   ElementBatch,
+  GeneExpressionBatch,
+  GeneExpressionQueryOptions,
   ImageSource,
   SpatialDataset,
   SpatialElement,
@@ -43,7 +45,6 @@ import type {
   VisiumHdBinnedOverview,
   VisiumHdParquetObjectReader,
 } from './visiumHdOverview'
-import type { GeneExpressionBatch, GeneExpressionQueryOptions } from './xeniumDataset'
 
 export { DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET } from './visiumHdDatasetReaders'
 
