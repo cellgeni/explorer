@@ -81,6 +81,47 @@ describe('readParquetRows', () => {
     expect(values(rows, 'score')?.[1_199]).toBe(1_199 / 4)
   })
 
+  it('fails when a read inside a column chunk comes back empty', async () => {
+    const bytes = parquetFixture('pages.parquet')
+    const fetcher = rangeFetcher(bytes)
+    const structure = await readParquetStructure(
+      { url: 'https://bucket.test/file.parquet' },
+      { fetcher },
+    )
+    const firstChunk = structure.metadata.row_groups[0]?.columns[0]?.meta_data
+    const chunkStart = Number(
+      firstChunk?.dictionary_page_offset || firstChunk?.data_page_offset,
+    )
+    // The first read of each chunk is answered, later ones with no bytes, as
+    // from a store holding less of the file than its footer says.
+    const answered = new Set<number>()
+    const shortChunks = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      const start = Number(/^bytes=(\d+)-/.exec(request.headers.get('Range') ?? '')?.[1])
+
+      if (
+        start > chunkStart &&
+        !answered.has(start) &&
+        start < bytes.byteLength - 4_096
+      ) {
+        // A network read takes a macrotask, so a reader that asks again for
+        // ever lets the test time out.
+        await new Promise((resolve) => setTimeout(resolve, 1))
+        return new Response(new Uint8Array(0), {
+          status: 206,
+          headers: { 'Content-Range': `bytes ${start}-${start}/${bytes.byteLength}` },
+        })
+      }
+
+      answered.add(start)
+      return fetcher(request)
+    }) as typeof fetch
+
+    await expect(
+      readParquetRows(structure, { fetcher: shortChunks, rows: 1_200 }),
+    ).rejects.toThrow(/^The column chunk of \w+ ended at byte [\d,]+, before byte [\d,]+/)
+  })
+
   it('assembles nested columns', async () => {
     const rows = await preview(parquetFixture('nested.parquet'))
 

@@ -218,6 +218,14 @@ async function firstPages(
 
     const next = Math.min(end, start + Math.max(walk.needed, bytes.byteLength * 2))
     const more = new Uint8Array(await file.slice(start + bytes.byteLength, next))
+
+    // A source that answers with nothing would otherwise be asked again for ever.
+    if (more.byteLength === 0) {
+      throw new Error(
+        `The column chunk of ${meta.path_in_schema.join('.')} ended at byte ${(start + bytes.byteLength).toLocaleString()}, before byte ${end.toLocaleString()}, where the footer says it ends.`,
+      )
+    }
+
     const joined = new Uint8Array(bytes.byteLength + more.byteLength)
     joined.set(bytes)
     joined.set(more, bytes.byteLength)

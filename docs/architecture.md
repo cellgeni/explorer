@@ -24,6 +24,11 @@ files. Parsing happens in the browser:
 | `deck.gl`                             | Cells, bins, boundaries, transcripts, ROI geometry                                                                   |
 | `zustand`                             | Dataset URL store                                                                                                    |
 
+Some dependencies are patched on install by `patch-package` (`patches/`):
+`hyparquet`, for the bit-packed groups Polars cuts short, and
+`hyparquet-compressors`, whose LZ4 decoder misread matches of 15 bytes and of
+19 or more, and so could return wrong bytes without an error.
+
 ## Source Layout
 
 | Directory                               | Contents                                                                                                                                                                                 |
