@@ -128,6 +128,38 @@ describe('computeChannelAutoContrast', () => {
     })
   })
 
+  it('keeps a fractional window for float data, and leaves out NaN', async () => {
+    const contrastOf = (pixels: Float32Array) =>
+      computeChannelAutoContrast(
+        {
+          numLevels: 1,
+          tilesForLevel: () => [{ col: 0, row: 0 }],
+          tileSourceSize: () => ({
+            width: imagePixels(pixels.length),
+            height: imagePixels(1),
+          }),
+          loadTilePixels: async () => ({ pixels, width: pixels.length, height: 1 }),
+        },
+        { lowPercentile: 0, highPercentile: 100 },
+      )
+    // 0 to 0.05, as a normalised image.
+    const small = Float32Array.from({ length: 51 }, (_value, index) => index / 1000)
+    const contrast = await contrastOf(small)
+
+    expect(contrast.min).toBe(0)
+    expect(contrast.max).toBeCloseTo(0.05, 6)
+    // The histogram spans the window, so the samples fill its bins.
+    expect(contrast.histogram.bins.at(-1)).toBeGreaterThan(0)
+
+    // No-data pixels are NaN.
+    await expect(
+      contrastOf(Float32Array.from([Number.NaN, 2, Number.NaN, 7, 4, Number.NaN])),
+    ).resolves.toMatchObject({ min: 2, max: 7, histogram: { sampleCount: 3 } })
+    await expect(contrastOf(Float32Array.from([Number.NaN, Number.NaN]))).rejects.toThrow(
+      'no pixels were sampled',
+    )
+  })
+
   it('uses TIFF tile decode metadata when no test decoder is provided', async () => {
     const loader = fakeLoader({
       bytes: new Uint8Array([5, 10, 15, 20]),

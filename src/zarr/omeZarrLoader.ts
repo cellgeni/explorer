@@ -206,6 +206,7 @@ export async function openOmeZarrImageWithOptions(
     kind: 'array',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  assertSupportedImageDataType(firstArray.dtype)
   const axes = normalizeAxes(multiscale.axes, firstArray)
   const xAxis = findRequiredAxis(axes, 'x')
   const yAxis = findRequiredAxis(axes, 'y')
@@ -1722,6 +1723,28 @@ function contrastFromOmeroWindow(
   }
 
   return { min, max }
+}
+
+// The data types tiles and volumes are drawn from (isSupportedPixelArray).
+const SUPPORTED_IMAGE_DATA_TYPES: readonly DataType[] = [
+  'uint8',
+  'uint16',
+  'uint32',
+  'int8',
+  'int16',
+  'int32',
+  'float32',
+  'float64',
+]
+
+// Checked at open, so an image of another type, such as numpy's default int64,
+// says so once instead of failing every tile.
+function assertSupportedImageDataType(dtype: DataType): void {
+  if (!SUPPORTED_IMAGE_DATA_TYPES.includes(dtype)) {
+    throw new Error(
+      `OME-Zarr images of data type ${dtype} cannot be shown. Supported data types: ${SUPPORTED_IMAGE_DATA_TYPES.join(', ')}.`,
+    )
+  }
 }
 
 function contrastForDataType(dtype: DataType): {

@@ -1219,6 +1219,37 @@ describe('OME-Zarr image loader', () => {
     await expect(loader.loadVolume(0)).rejects.toThrow('no z axis')
   })
 
+  it('names a data type it cannot draw when the image opens', async () => {
+    for (const dtype of ['<i8', '<u8', '<f2', '|b1']) {
+      const rootPath = `/images/dtype-${dtype.slice(1)}.zarr`
+
+      await expect(
+        openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+          fetcher: fetcherForFiles(
+            new Map([
+              [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+              [
+                `${rootPath}/.zattrs`,
+                jsonBytes({
+                  multiscales: [
+                    { version: '0.4', axes: ['y', 'x'], datasets: [{ path: '0' }] },
+                  ],
+                }),
+              ],
+              [
+                `${rootPath}/0/.zarray`,
+                jsonBytes(v2ArrayMetadata([4, 4], [4, 4], dtype)),
+              ],
+            ]),
+          ),
+          decodePool: null,
+        }),
+      ).rejects.toThrow(
+        /^OME-Zarr images of data type (int64|uint64|float16|bool) cannot be shown\. Supported data types: uint8, uint16, uint32, int8, int16, int32, float32, float64\.$/,
+      )
+    }
+  })
+
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {
     await expect(
       openOmeZarrImageWithOptions('https://example.test/generic.zarr', {
