@@ -30,8 +30,9 @@ that file is too large for the same eager overview path used by 16 µm and 8 µm
   and queries 16 µm expression (`src/data/geneExpressionLod.ts`). With no
   16 µm tier the 2 µm bins are drawn, and the 16 µm expression is read for
   bins made from them.
-- Lower-level callers and tests may still pass
-  `maxTwoMicrometerFilteredBarcodes` to impose an explicit barcode-count cap.
+- `VisiumHdDataset` still takes `maxTwoMicrometerFilteredBarcodes`, an
+  explicit barcode-count cap. Only tests pass it: the dataset factory no
+  longer forwards one, and the app never set it.
 
 ## Budgeted Barcode Path
 

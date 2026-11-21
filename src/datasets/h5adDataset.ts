@@ -10,8 +10,12 @@ import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { getWholeArray } from '../zarr/zarrWholeArray'
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
-import type { RoiSelectionInput } from '../data/roiSelection'
-import { normalizeRoiSelection } from '../data/roiSelection'
+import {
+  normalizeRoiSelection,
+  roiSelectionContains,
+  type RoiSelection,
+  type RoiSelectionInput,
+} from '../data/roiSelection'
 import {
   openH5WorkerFile,
   openH5WorkerFileFromUrl,
@@ -863,7 +867,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   ): Promise<GeneExpressionBatch> {
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const selectedCells = h5adCellsInBbox(cache, bbox, options.limit)
+    const selectedCells = h5adCellsInSelection(
+      cache,
+      { kind: 'box', bbox },
+      options.limit,
+    )
     const matrix = await h5adMatrixForCells(
       cache,
       selectedCells.map((cell) => cell.id),
@@ -1179,19 +1187,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     options: { readonly limit?: number } = {},
   ): Promise<readonly DatasetCell[]> {
     const cache = await this.cache()
-    const normalizedSelection = normalizeRoiSelection(selection)
-    const candidates = h5adCellsInBbox(cache, normalizedSelection.bbox, options.limit)
-    const selected =
-      normalizedSelection.kind === 'box'
-        ? candidates
-        : candidates.filter((cell) =>
-            pointInPolygon(cell.position, normalizedSelection.points),
-          )
 
-    return selected.map((cell) => ({
-      id: cell.id as never,
-      position: cell.position,
-    }))
+    return h5adCellsInSelection(cache, normalizeRoiSelection(selection), options.limit)
   }
 
   // The Visium tissue image, high-res when present, else low-res; otherwise
@@ -4879,9 +4876,11 @@ function emptyH5adCells(
   return new Map(rows.map(({ id }) => [id, { geneNames: [], counts: [] }]))
 }
 
-function h5adCellsInBbox(
+// The limit counts cells inside the selection, so a lasso is tested before a
+// cell counts towards it.
+function h5adCellsInSelection(
   cache: H5adCache,
-  bbox: BBox,
+  selection: RoiSelection,
   limit: number | undefined,
 ): readonly DatasetCell[] {
   const cells: DatasetCell[] = []
@@ -4895,12 +4894,7 @@ function h5adCellsInBbox(
       continue
     }
 
-    if (
-      position.x < bbox.minX ||
-      position.x > bbox.maxX ||
-      position.y < bbox.minY ||
-      position.y > bbox.maxY
-    ) {
+    if (!roiSelectionContains(selection, position)) {
       continue
     }
 
@@ -4997,31 +4991,6 @@ function countUniqueLabels(
   }
 
   return values.size
-}
-
-function pointInPolygon(point: DataPoint, polygon: readonly DataPoint[]): boolean {
-  let inside = false
-
-  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i, i += 1) {
-    const current = polygon[i]
-    const previous = polygon[j]
-
-    if (current === undefined || previous === undefined) {
-      continue
-    }
-
-    const intersects =
-      current.y > point.y !== previous.y > point.y &&
-      point.x <
-        ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y) +
-          current.x
-
-    if (intersects) {
-      inside = !inside
-    }
-  }
-
-  return inside
 }
 
 function bboxForPoints(points: readonly DataPoint[]): BBox {

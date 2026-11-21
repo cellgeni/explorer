@@ -190,7 +190,6 @@ export interface DetectSpatialDatasetOptions {
 }
 
 export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions {
-  readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
   readonly onH5adLoadProgress?: H5adLoadProgressReporter
   // The detection the load already made, used instead of probing the
   // dataset again when it is of this URL (EXP-024). It is passed with each
@@ -201,7 +200,6 @@ export interface CreateSpatialDatasetOptions extends DetectSpatialDatasetOptions
 }
 
 export interface CachedSpatialDatasetOptions {
-  readonly visiumHdMaxTwoMicrometerFilteredBarcodes?: number
   readonly onH5adLoadProgress?: H5adLoadProgressReporter
   readonly detection?: SpatialDatasetDetection
   // The view to open, in place of the one set for the URL: a load's, which
@@ -1797,12 +1795,6 @@ export async function createSpatialDataset(
       ...(detection.segmentedOutputs === undefined
         ? {}
         : { segmentedOutputs: detection.segmentedOutputs }),
-      ...(options.visiumHdMaxTwoMicrometerFilteredBarcodes === undefined
-        ? {}
-        : {
-            maxTwoMicrometerFilteredBarcodes:
-              options.visiumHdMaxTwoMicrometerFilteredBarcodes,
-          }),
     })
   }
 
@@ -1838,8 +1830,6 @@ export function cachedSpatialDataset(
   options: CachedSpatialDatasetOptions = {},
 ): Promise<AnySpatialDataset> {
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
-  const maxTwoMicrometerFilteredBarcodes =
-    options.visiumHdMaxTwoMicrometerFilteredBarcodes
   const spatialDataSelection = spatialDataSelectionFor(
     normalizedBaseUrl,
     options.spatialDataSelection,
@@ -1847,17 +1837,11 @@ export function cachedSpatialDataset(
   const visiumView = options.visiumView ?? visiumViewFor(normalizedBaseUrl)
   const cacheKey = spatialDatasetCacheKey(
     normalizedBaseUrl,
-    maxTwoMicrometerFilteredBarcodes,
     spatialDataSelection,
     collectionImageFor(normalizedBaseUrl),
   )
   const dataset = spatialDatasetCache.get(cacheKey, normalizedBaseUrl, () =>
     createSpatialDataset(normalizedBaseUrl, {
-      ...(maxTwoMicrometerFilteredBarcodes === undefined
-        ? {}
-        : {
-            visiumHdMaxTwoMicrometerFilteredBarcodes: maxTwoMicrometerFilteredBarcodes,
-          }),
       ...(options.onH5adLoadProgress === undefined
         ? {}
         : { onH5adLoadProgress: options.onH5adLoadProgress }),
@@ -2252,9 +2236,8 @@ function hasSegmentedOutputPaths(paths: VisiumHdSegmentedOutputPaths): boolean {
 
 function spatialDatasetCacheKey(
   baseUrl: string,
-  visiumHdMaxTwoMicrometerFilteredBarcodes: number | undefined,
   spatialDataSelection: SpatialDataSelection | undefined,
   image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nvisiumHd2umBudget=${visiumHdMaxTwoMicrometerFilteredBarcodes ?? ''}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
+  return `${baseUrl}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
 }

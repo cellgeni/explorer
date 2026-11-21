@@ -49,6 +49,7 @@ describe('cell query store (plan 23-A)', () => {
       'c4',
     ])
     // c4 is in B cells and Myeloid: leaving out B cells still leaves it out.
+    // c5 and c6 are in no class, so they match whatever is ticked.
     expect(matchedIds(store, [leiden('not-in', ['leiden:1'])])).toEqual([
       'c1',
       'c2',

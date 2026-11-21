@@ -911,25 +911,6 @@ describe('spatial dataset detection', () => {
 
     expect(dataset).toBeInstanceOf(ImageOnlyDataset)
   })
-
-  it('passes an explicit Visium HD 2 µm barcode budget into created datasets', async () => {
-    const dataset = await createSpatialDataset('https://example.test/visium/', {
-      fetcher: fetcherForOkPaths([
-        '/visium/binned_outputs/square_002um/spatial/tissue_positions.parquet',
-        '/visium/binned_outputs/square_002um/spatial/scalefactors_json.json',
-        '/visium/binned_outputs/square_002um/filtered_feature_bc_matrix.h5',
-        '/visium/binned_outputs/square_016um/spatial/tissue_positions.parquet',
-        '/visium/binned_outputs/square_016um/spatial/scalefactors_json.json',
-        '/visium/binned_outputs/square_016um/filtered_feature_bc_matrix.h5',
-      ]),
-      visiumHdMaxTwoMicrometerFilteredBarcodes: 25_000,
-    })
-
-    expect(dataset).toBeInstanceOf(VisiumHdDataset)
-    expect(dataset).toMatchObject({
-      maxTwoMicrometerFilteredBarcodes: 25_000,
-    })
-  })
 })
 
 describe('dataset manifests', () => {
