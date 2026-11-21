@@ -126,10 +126,15 @@ deflate stream cannot be read from the middle, so an image is read whole:
 
 1. `readZipDirectory` (`src/data/zipArchive.ts`) reads the central directory
    from the archive's tail (one `HEAD` and one or two ranges), then the
-   image manifest and transform entries.
+   image manifest and transform entries. The end record taken is the one
+   whose comment ends the file, so a comment holding its signature does not
+   hide it. Backslashes in entry names, as some Windows tools write them,
+   are read as `/`.
 2. `imageSource({ stain, z })` fetches the pyramid's entry in one ranged
    request and inflates it with `DecompressionStream('deflate-raw')` in a
-   worker (`zipEntry.worker.ts`), logging progress.
+   worker (`zipEntry.worker.ts`), logging progress. The request allows 1 KiB
+   for the entry's local extra field; when a writer padded it more, the rest
+   of the data is fetched with a second range.
 3. The TIFF is opened from memory as a [page
    pyramid](./image.md#page-pyramids) at the transform's origin
    (−translation ÷ scale, the mosaic's `bbox_microns` corner, in stage µm)

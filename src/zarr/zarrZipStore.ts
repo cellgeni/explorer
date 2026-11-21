@@ -115,10 +115,18 @@ async function readZippedZarrStore(
     new CachedHttpRangeReader(url, defaultPersistentByteRangeCache(), fetcher),
     {
       transformEntries: (entries) => {
-        root = zarrRootInZip(url, Object.keys(entries))
+        // Some Windows tools, such as PowerShell 5.1's Compress-Archive, write
+        // backslashes between folders.
+        const named = Object.entries(entries).map(
+          ([name, entry]) => [name.replaceAll('\\', '/'), entry] as const,
+        )
+        root = zarrRootInZip(
+          url,
+          named.map(([name]) => name),
+        )
         const rooted: typeof entries = {}
 
-        for (const [name, entry] of Object.entries(entries)) {
+        for (const [name, entry] of named) {
           if (entry.isDirectory || !name.startsWith(root) || name === root) {
             continue
           }
