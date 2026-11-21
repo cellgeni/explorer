@@ -245,6 +245,35 @@ describe('viewerLegendSections', () => {
     ])
   })
 
+  it('lists gene sets by their IDs when transcripts are coloured by gene set', () => {
+    const [section] = viewerLegendSections(
+      input({
+        transcripts: {
+          density: null,
+          pointColorMode: 'gene-set',
+          genes: {
+            items: [
+              {
+                gene: 'Astrocytes',
+                color: '#4cd3c2',
+                visible: true,
+                count: 12,
+                geneSet: { id: 'gene-set:astrocytes', geneCount: 2 },
+              },
+            ],
+            moreCount: 0,
+            bySet: true,
+          },
+        },
+      }),
+    )
+
+    expect(section).toMatchObject({
+      title: 'Transcripts by gene set',
+      items: [{ id: 'gene-set:astrocytes', label: 'Astrocytes', count: 12 }],
+    })
+  })
+
   it('says what the transcript density counts and per what size of bin', () => {
     const content = { source: 'native-zarr', binSizeMicrometers: 40 } as const
 

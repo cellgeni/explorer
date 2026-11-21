@@ -233,7 +233,9 @@ export type TranscriptDensityRampScale =
 // `gene` draws a marker per selected gene in each square, in the gene's
 // colour; squares counting all transcripts keep the default ramp.
 export type TranscriptDensityColorScale = TranscriptDensityRampScale | 'gene'
-export type TranscriptPointColorMode = 'feature' | 'quality'
+// `gene-set` colours each gene by the saved gene set listing it, like 10x
+// Explorer's gene groups.
+export type TranscriptPointColorMode = 'feature' | 'gene-set' | 'quality'
 
 export interface GeneExpressionColorScaleOption {
   readonly id: GeneExpressionColorScale
@@ -282,6 +284,12 @@ export interface TranscriptAggregateLayerDataOptions {
   // genes not drawn.
   readonly featureColor?: (featureName: string) => Color
   readonly hiddenFeatures?: ReadonlySet<string>
+  // Gene markers only: merges the genes of one group (a gene set) in a
+  // square into one marker, named by the group's label.
+  readonly featureGroup?: (featureName: string) => {
+    readonly id: string
+    readonly label: string
+  }
 }
 
 export type ColorStop = readonly [number, number, number, number]

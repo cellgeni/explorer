@@ -205,6 +205,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
   const symbolsInputId = useId()
   const setNameInputId = useId()
   const {
+    addSavedGeneSet,
     aliases,
     applyGeneSetSymbols,
     applySavedGeneSet,
@@ -222,6 +223,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
   } = useGeneSetControls(genes)
   const isPanelReady = genes.panelState.status === 'ready'
   const selectedGenes = genes.selected
+  const selectedGeneSet = new Set(selectedGenes)
 
   return (
     <>
@@ -333,6 +335,22 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
               >
                 <span>{geneSet.name}</span>
                 <small>{geneSet.scoreMode}</small>
+              </button>
+              <button
+                type="button"
+                className="gene-set-add"
+                aria-label={`Add ${geneSet.name}`}
+                title={
+                  geneSet.genes.every((gene) => selectedGeneSet.has(gene))
+                    ? `${geneSet.name}'s genes are all selected`
+                    : `Add ${geneSet.name}'s genes to the selection`
+                }
+                disabled={geneSet.genes.every((gene) => selectedGeneSet.has(gene))}
+                onClick={() => {
+                  addSavedGeneSet(geneSet)
+                }}
+              >
+                Add
               </button>
               <button
                 type="button"

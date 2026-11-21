@@ -671,10 +671,12 @@ export function App({ dependencies }: AppProps = {}) {
       spatialFocusRequest,
     },
     transcripts: {
+      hiddenTranscriptGeneSets,
       hiddenTranscriptGenes,
       hoveredTranscript,
       manualTranscriptExactRequestKey,
       pinnedTranscript,
+      setHiddenTranscriptGeneSets,
       setHiddenTranscriptGenes,
       setHoveredTranscript,
       setManualTranscriptExactRequestKey,
@@ -687,6 +689,7 @@ export function App({ dependencies }: AppProps = {}) {
       setTranscriptFeatureFilterMode,
       setTranscriptGeneColors,
       setTranscriptGeneOnly,
+      setTranscriptGeneSetColors,
       setTranscriptLayerState,
       setTranscriptMinQv,
       setTranscriptOpacity,
@@ -700,6 +703,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptFeatureFilterMode,
       transcriptGeneColors,
       transcriptGeneOnly,
+      transcriptGeneSetColors,
       transcriptLayerState,
       transcriptMinQv,
       transcriptOpacity,
@@ -1096,24 +1100,31 @@ export function App({ dependencies }: AppProps = {}) {
     },
     loaders: { getSpatialDataset },
   })
-  // The transcript gene legend (15.4-C): each gene's colour and eye.
+  // The transcript gene legend (15.4-C): each gene's colour and eye, or each
+  // saved gene set's with Point color on Gene set.
   const transcriptGenes = useTranscriptGeneLegend({
     appendDebugEvent,
     colorMode: transcriptPointColorMode,
     colors: transcriptGeneColors,
     densityColorScale: transcriptDensityColorScale,
     filterMode: effectiveTranscriptFeatureFilterMode,
+    geneSets: savedGeneSets,
+    geneSetColors: transcriptGeneSetColors,
     hiddenGenes: hiddenTranscriptGenes,
+    hiddenGeneSets: hiddenTranscriptGeneSets,
     layerState: transcriptLayerState,
     overlayShown: platformAdapter.effectiveTranscriptOverlay(showTranscriptOverlay),
     selectedGenes,
     setColors: setTranscriptGeneColors,
+    setGeneSetColors: setTranscriptGeneSetColors,
     setHiddenGenes: setHiddenTranscriptGenes,
+    setHiddenGeneSets: setHiddenTranscriptGeneSets,
   })
-  // Hidden genes belong to the dataset; colours are kept.
+  // Hidden genes and sets belong to the dataset; colours are kept.
   useEffect(() => {
     setHiddenTranscriptGenes([])
-  }, [loadedDatasetUrl, setHiddenTranscriptGenes])
+    setHiddenTranscriptGeneSets([])
+  }, [loadedDatasetUrl, setHiddenTranscriptGeneSets, setHiddenTranscriptGenes])
   const {
     activeCellMetadataTrack,
     annotationStyleColors,
@@ -1175,6 +1186,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptCapabilityState,
       transcriptDensityColorScale,
       transcriptGeneColor: transcriptGenes.featureColor,
+      transcriptGeneGroup: transcriptGenes.featureGroup,
       transcriptLayerState,
       transcriptPointColorMode,
     },

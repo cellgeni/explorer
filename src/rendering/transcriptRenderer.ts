@@ -1,6 +1,10 @@
 import type { Color, Position } from '@deck.gl/core'
 import { PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
-import type { TranscriptAggregateBin, TranscriptPoint } from '../data/transcriptOverlay'
+import type {
+  TranscriptAggregateBin,
+  TranscriptAggregateFeatureGroup,
+  TranscriptPoint,
+} from '../data/transcriptOverlay'
 import {
   colorWithOpacity,
   DEFAULT_TRANSCRIPT_DENSITY_COLOR_SCALE,
@@ -22,6 +26,8 @@ const GENE_MARKER_MIN_RADIUS_PIXELS = 1.5
 const GENE_MARKER_MIN_SHARE = 0.18
 const GENE_MARKER_OUTLINE_COLOR: Color = [12, 12, 12, 150]
 const GENE_MARKER_OUTLINE_PIXELS = 0.6
+// Genes a merged (gene set) marker's hover card lists, as for a square.
+const GENE_MARKER_GROUP_SUMMARY_LIMIT = 4
 
 // Density squares, or gene markers when the data holds them
 // (transcriptAggregateBinsToLayerData gives one or the other).
@@ -246,13 +252,15 @@ export function transcriptAggregateBinsToLayerData(
 // One circle per gene in each square, in the gene's colour, at the centre of
 // the gene's transcripts there. Its area follows the count, so the square's
 // largest possible count fills the square. Larger circles are drawn first, so
-// smaller ones stay on top.
+// smaller ones stay on top. With `featureGroup`, one circle per group (gene
+// set) instead, at the centre of its genes' transcripts.
 function transcriptGeneMarkers(
   bins: readonly TranscriptAggregateBin[],
   scaleMax: number,
   {
     featureColor = transcriptFeatureColor,
     hiddenFeatures,
+    featureGroup,
   }: TranscriptAggregateLayerDataOptions,
 ): readonly TranscriptAggregateDatum[] {
   const colors = new Map<string, Color>()
@@ -269,16 +277,18 @@ function transcriptGeneMarkers(
   for (const bin of bins) {
     const binSize = bin.binSizeMicrometers ?? bin.radiusMicrometers * 2
 
-    for (const group of bin.featureGroups ?? []) {
-      if (group.count <= 0 || hiddenFeatures?.has(group.featureName) === true) {
-        continue
-      }
+    const shown = (bin.featureGroups ?? []).filter(
+      (group) => group.count > 0 && hiddenFeatures?.has(group.featureName) !== true,
+    )
 
+    for (const group of featureGroup === undefined
+      ? shown.map(singleGeneMarkerGroup)
+      : mergeGeneMarkerGroups(shown, featureGroup)) {
       const share = Math.sqrt(Math.min(1, group.count / Math.max(1, scaleMax)))
 
       markers.push({
-        id: `${bin.id}:${group.featureName}`,
-        position: [group.position.x, -group.position.y, 0],
+        id: `${bin.id}:${group.id}`,
+        position: [group.x, -group.y, 0],
         ...(bin.source === undefined ? {} : { source: bin.source }),
         glyphType: 'gene',
         level: bin.level,
@@ -287,13 +297,84 @@ function transcriptGeneMarkers(
         count: group.count,
         radiusMicrometers: (binSize / 2) * Math.max(GENE_MARKER_MIN_SHARE, share),
         binSizeMicrometers: binSize,
-        featureName: group.featureName,
-        fillColor: colorFor(group.featureName),
+        // A merged marker lists its genes' counts, as a square of several
+        // selected genes does.
+        ...(group.genes.length > 1
+          ? {
+              selectedGeneCount: group.genes.length,
+              topFeatures: group.genes.slice(0, GENE_MARKER_GROUP_SUMMARY_LIMIT),
+            }
+          : {}),
+        featureName: group.label,
+        // Every gene of a group has the group's colour.
+        fillColor: colorFor(group.genes[0]?.featureName ?? group.label),
       })
     }
   }
 
   return markers.sort((left, right) => right.count - left.count)
+}
+
+interface GeneMarkerGroup {
+  readonly id: string
+  readonly label: string
+  readonly count: number
+  readonly x: number
+  readonly y: number
+  // Most transcripts first.
+  readonly genes: readonly { readonly featureName: string; readonly count: number }[]
+}
+
+function singleGeneMarkerGroup(group: TranscriptAggregateFeatureGroup): GeneMarkerGroup {
+  return {
+    id: group.featureName,
+    label: group.featureName,
+    count: group.count,
+    x: group.position.x,
+    y: group.position.y,
+    genes: [{ featureName: group.featureName, count: group.count }],
+  }
+}
+
+// One marker per group, its count summed and its centre weighted by count.
+function mergeGeneMarkerGroups(
+  groups: readonly TranscriptAggregateFeatureGroup[],
+  featureGroup: NonNullable<TranscriptAggregateLayerDataOptions['featureGroup']>,
+): GeneMarkerGroup[] {
+  const merged = new Map<
+    string,
+    {
+      label: string
+      count: number
+      sumX: number
+      sumY: number
+      genes: { readonly featureName: string; readonly count: number }[]
+    }
+  >()
+
+  for (const group of groups) {
+    const { id, label } = featureGroup(group.featureName)
+    let entry = merged.get(id)
+
+    if (entry === undefined) {
+      entry = { label, count: 0, sumX: 0, sumY: 0, genes: [] }
+      merged.set(id, entry)
+    }
+
+    entry.count += group.count
+    entry.sumX += group.position.x * group.count
+    entry.sumY += group.position.y * group.count
+    entry.genes.push({ featureName: group.featureName, count: group.count })
+  }
+
+  return [...merged].map(([id, entry]) => ({
+    id,
+    label: entry.label,
+    count: entry.count,
+    x: entry.sumX / entry.count,
+    y: entry.sumY / entry.count,
+    genes: entry.genes.sort((left, right) => right.count - left.count),
+  }))
 }
 
 function transcriptDensitySquarePolygon(

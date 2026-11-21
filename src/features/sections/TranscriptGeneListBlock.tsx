@@ -4,7 +4,8 @@ import type { TranscriptGeneLegendModel } from '../transcripts/useTranscriptGene
 
 // The genes coloured on the canvas (plan 15.4-C): each with its
 // swatch (editable), an eye and its count of points in view, as in 10x
-// Explorer. The canvas legend shows the same list.
+// Explorer. With Point color on Gene set, the same for each saved gene set,
+// like 10x Explorer's gene groups. The canvas legend shows the same list.
 export function TranscriptGeneList({
   geneLegend: model,
 }: {
@@ -16,16 +17,29 @@ export function TranscriptGeneList({
     )
   }
 
-  if (model.items.length === 0) return null
+  if (model.items.length === 0) {
+    return model.note === null ? null : (
+      <p className="transcript-gene-note">{model.note}</p>
+    )
+  }
+
+  const noun = model.bySet ? 'gene set' : 'gene'
 
   return (
-    <section className="transcript-gene-panel" aria-label="Transcript genes">
+    <section
+      className="transcript-gene-panel"
+      aria-label={model.bySet ? 'Transcript gene sets' : 'Transcript genes'}
+    >
+      {model.note === null ? null : <p className="transcript-gene-note">{model.note}</p>}
       <ul
         className="annotation-list transcript-gene-list"
-        aria-label="Transcript gene colours"
+        aria-label={`Transcript ${noun} colours`}
       >
         {model.items.map((item) => (
-          <li key={item.gene} className={item.visible ? undefined : 'is-hidden'}>
+          <li
+            key={item.geneSet?.id ?? item.gene}
+            className={item.visible ? undefined : 'is-hidden'}
+          >
             <label
               className="annotation-color-picker"
               style={{ '--annotation-color': item.color } as CSSProperties}
@@ -37,7 +51,10 @@ export function TranscriptGeneList({
                 value={item.color}
                 title={`${item.gene} transcript color`}
                 onChange={(event) => {
-                  model.onColorChange(item.gene, event.currentTarget.value)
+                  model.onColorChange(
+                    item.geneSet?.id ?? item.gene,
+                    event.currentTarget.value,
+                  )
                 }}
               />
               <span className="annotation-color-swatch" aria-hidden="true" />
@@ -49,11 +66,23 @@ export function TranscriptGeneList({
                 aria-label={`${item.gene} transcripts visible`}
                 title={`${item.visible ? 'Hide' : 'Show'} ${item.gene} transcripts`}
                 onChange={(event) => {
-                  model.onVisibilityChange(item.gene, event.currentTarget.checked)
+                  model.onVisibilityChange(
+                    item.geneSet?.id ?? item.gene,
+                    event.currentTarget.checked,
+                  )
                 }}
               />
             </label>
-            <span>{item.gene}</span>
+            <span>
+              {item.gene}
+              {item.geneSet === undefined || item.geneSet.geneCount === 0 ? null : (
+                <small className="transcript-gene-set-size">
+                  {' '}
+                  {item.geneSet.geneCount.toLocaleString()}{' '}
+                  {item.geneSet.geneCount === 1 ? 'gene' : 'genes'}
+                </small>
+              )}
+            </span>
             <small title="Points loaded in view">{item.count.toLocaleString()}</small>
           </li>
         ))}
@@ -70,7 +99,7 @@ export function TranscriptGeneList({
           )}
           {model.hiddenCount > 0 ? (
             <Button
-              title="Show every hidden gene's transcripts"
+              title={`Show every hidden ${noun}'s transcripts`}
               variant="ghost"
               onClick={model.onShowAll}
             >

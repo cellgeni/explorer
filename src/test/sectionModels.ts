@@ -280,6 +280,7 @@ export function testTranscriptsSectionModel(
     onLoadExactViewport: vi.fn(),
     geneLegend: {
       active: false,
+      bySet: false,
       note: null,
       items: [],
       moreCount: 0,

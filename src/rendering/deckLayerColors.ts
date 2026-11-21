@@ -52,6 +52,7 @@ export const TRANSCRIPT_DENSITY_COLOR_SCALE_OPTIONS: readonly TranscriptDensityC
 export const TRANSCRIPT_POINT_COLOR_MODE_OPTIONS: readonly TranscriptPointColorModeOption[] =
   [
     { id: 'feature', label: 'Feature' },
+    { id: 'gene-set', label: 'Gene set' },
     { id: 'quality', label: 'QV' },
   ]
 

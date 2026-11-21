@@ -319,11 +319,19 @@ transcript records can be loaded and inspected.
 
 Use `Feature filter` to switch between all features and the currently selected
 genes. `Feature search` can add genes directly from the Transcripts section.
-The `Point color` control colors exact transcript points either by feature
-identity or by QV. Colored by feature, the Transcripts section and the canvas
+The `Point color` control colors exact transcript points by feature
+identity, by gene set, or by QV. Colored by feature, the Transcripts section and the canvas
 legend list the genes on screen, each with its color, an eye that hides its
 points, and its number of points in view; selected genes each get their own
 color, and clicking a swatch changes it.
+
+Colored by `Gene set`, like 10x Explorer's gene groups, each gene set saved
+under Cells › Genes is one color: the list and the legend show one row per
+set, with its eye and its points in view, and genes in no set are
+`Other genes`, in grey. Gene markers then draw one circle per set in each
+square. To show several groups, save each as a set, then `Apply` one and
+`Add` the others, which adds a set's genes to the selection (on Atera only
+selected genes' transcripts are read).
 
 When exact mode is close to the configured point budget, the section shows
 `Load exact viewport` instead of starting the fetch automatically. Use it when
