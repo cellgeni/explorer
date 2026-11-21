@@ -415,8 +415,11 @@ All screen↔data conversions go through `coords.ts`.
   `Access-Control-Expose-Headers` hide it from the browser; readers take file
   sizes from `Content-Length`. Results are cached per URL. Failures produce
   "cannot be range-read" errors with the URL. A `404` or `403` is reported as
-  a missing or unreadable file ("File not found or not readable") and a `5xx`
-  as a server error ("Host server error"), not as blocked Range requests.
+  a missing or unreadable file ("File not found or not readable"), a `5xx` as
+  a server error ("Host server error"), a `401` as "Access denied", a `429` as
+  "Too many requests", and any other error status by its number, not as
+  blocked Range requests. Only a success other than `206` means the host
+  ignores Range.
 - **Missing files on hosts that hide errors.** A file the registered folder
   listing does not include fails the Range probe without a request
   (`FileNotListedError`, "File not found"). Without a listing, a request that

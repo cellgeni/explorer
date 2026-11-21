@@ -96,10 +96,9 @@ async function assertHttpRangeSupportUncached(
   }
 }
 
-// A 404, a 403 from buckets that deny listing, or a 5xx means the file could not
-// be fetched at all, so the host's Range support was never tested. The wording
-// keeps "Range probe received HTTP <status>" so createStructuredLoadError can
-// classify it.
+// Any error status means the file could not be fetched at all, so the host's
+// Range support was never tested. The wording keeps "Range probe received HTTP
+// <status>" so createStructuredLoadError can classify it.
 function failedResponseMessage(
   label: string,
   url: string,
@@ -117,6 +116,18 @@ function failedResponseMessage(
 
   if (status >= 500 && status <= 599) {
     return `${label} could not be read. ${received} The host returned a server error, so Range support was not tested.`
+  }
+
+  if (status === 401) {
+    return `${label} could not be read. ${received} The host asks for a login, so Range support was not tested.`
+  }
+
+  if (status === 429) {
+    return `${label} could not be read. ${received} The host is limiting requests, so Range support was not tested.`
+  }
+
+  if (status >= 400) {
+    return `${label} could not be read. ${received} The host refused the request, as for an expired signed URL or a withdrawn file, so Range support was not tested.`
   }
 
   return undefined

@@ -146,7 +146,7 @@ export async function readParquetStructure(
       throw new NotParquetFileError(parquetFileAddress(ref), error.message)
     }
 
-    throw error
+    throw httpReadError(parquetFileAddress(ref), error) ?? error
   }
 
   return parquetStructureFromMetadata(metadata, { ref, byteLength: file.byteLength })
@@ -207,18 +207,28 @@ export async function openParquetFile(
     )
   } catch (error) {
     signal?.throwIfAborted()
-    // hyparquet's size probe: "fetch head failed 404", or "fetch with range
-    // failed 403" after a HEAD that was refused.
-    const status = Number(
-      /\bfailed (\d{3})$/.exec(error instanceof Error ? error.message : '')?.[1],
-    )
-
-    if (status === 403 || status === 404 || status === 410) {
-      throw new ParquetFileNotFoundError(ref.url, status)
-    }
-
-    throw error
+    throw httpReadError(ref.url, error) ?? error
   }
+}
+
+// hyparquet's errors for an HTTP status name only the number: "fetch head
+// failed 404" from the size probe, "fetch with range failed 403" after a HEAD
+// that was refused, and "fetch failed 503" from a read. They become errors
+// naming the file and "HTTP <status>", which the load error model classifies.
+function httpReadError(address: string, error: unknown): Error | undefined {
+  const status = Number(
+    /^fetch (?:head |with range )?failed (\d{3})$/.exec(
+      error instanceof Error ? error.message : '',
+    )?.[1],
+  )
+
+  if (status === 403 || status === 404 || status === 410) {
+    return new ParquetFileNotFoundError(address, status)
+  }
+
+  return status >= 400
+    ? new Error(`${address} could not be read (HTTP ${status}).`, { cause: error })
+    : undefined
 }
 
 export function parquetStructureFromMetadata(

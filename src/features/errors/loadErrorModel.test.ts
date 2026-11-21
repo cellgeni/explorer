@@ -151,6 +151,34 @@ describe('loadErrorModel', () => {
     )
   })
 
+  it('classifies other range-probed 4xx statuses by status, not as blocked Range', async () => {
+    expect(
+      createStructuredLoadError('Dataset overview', await rangeProbeError(401)),
+    ).toMatchObject({
+      code: 'access-denied',
+      title: 'Access denied',
+      action:
+        'Make the files public, or open them through a public or presigned address.',
+    })
+    expect(
+      createStructuredLoadError('Dataset overview', await rangeProbeError(429)),
+    ).toMatchObject({
+      code: 'http',
+      title: 'Too many requests',
+      action: 'The host is limiting how often it is read. Wait a minute, then reload.',
+    })
+
+    for (const status of [400, 410]) {
+      expect(
+        createStructuredLoadError('Dataset overview', await rangeProbeError(status)),
+      ).toMatchObject({
+        code: 'http',
+        title: `HTTP ${status} response`,
+        action: 'Check the dataset URL and object permissions.',
+      })
+    }
+  })
+
   it('keeps range-not-supported for hosts that ignore Range requests', async () => {
     const ignoredRange = await rangeProbeError(200)
 
