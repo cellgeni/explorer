@@ -47,6 +47,9 @@ export function Slider({
         max={max}
         step={step}
         value={value}
+        // Screen readers announce the value as shown, such as ×0.25 for a
+        // log-scale slider at -2 (EXP-061).
+        aria-valuetext={formatValue(value)}
         disabled={disabled}
         onChange={(event) => {
           onChange(Number(event.currentTarget.value))

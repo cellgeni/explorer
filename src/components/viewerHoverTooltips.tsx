@@ -1,4 +1,4 @@
-import { withMicrometers, withSquareMicrometers } from '../data/units'
+import { MICROMETERS } from '../data/units'
 import type { Position } from '@deck.gl/core'
 import type {
   GridCellDatum,
@@ -19,10 +19,14 @@ import {
 } from './viewerHoverModel'
 import { formatCoordinateValue } from './viewerMeasurements'
 
+// Each tooltip writes lengths and areas in the viewer's data unit: µm, or
+// "units" for a SpatialData dataset whose units are unknown (EXP-052).
 export function GridCellHoverTooltip({
   detail,
+  unitLabel = MICROMETERS,
 }: {
   readonly detail: ViewerGridCellHoverDetail
+  readonly unitLabel?: string
 }) {
   const cell = detail.cell
 
@@ -39,7 +43,7 @@ export function GridCellHoverTooltip({
       <dl>
         <div>
           <dt>Bin</dt>
-          <dd>{formatGridCellBinSize(cell)}</dd>
+          <dd>{formatGridCellBinSize(cell, unitLabel)}</dd>
         </div>
         <div>
           <dt>Array</dt>
@@ -70,9 +74,11 @@ export function GridCellHoverTooltip({
 export function OverviewCellHoverTooltip({
   detail,
   sourceLabel = 'Xenium',
+  unitLabel = MICROMETERS,
 }: {
   readonly detail: ViewerOverviewCellHoverDetail
   readonly sourceLabel?: string
+  readonly unitLabel?: string
 }) {
   const cell = detail.cell
   const cellCount = cell.cellCount
@@ -101,7 +107,7 @@ export function OverviewCellHoverTooltip({
         )}
         <div>
           <dt>X/Y</dt>
-          <dd>{formatOverviewCellPosition(cell)}</dd>
+          <dd>{formatOverviewCellPosition(cell, unitLabel)}</dd>
         </div>
         {cell.transcriptCount === undefined ? null : (
           <div>
@@ -112,7 +118,7 @@ export function OverviewCellHoverTooltip({
         {cell.cellArea === undefined ? null : (
           <div>
             <dt>Area</dt>
-            <dd>{withSquareMicrometers(formatCoordinateValue(cell.cellArea))}</dd>
+            <dd>{withAreaUnit(formatCoordinateValue(cell.cellArea), unitLabel)}</dd>
           </div>
         )}
         {cell.expressionCount === undefined ? null : (
@@ -137,15 +143,23 @@ export function OverviewCellHoverTooltip({
 export function CellBoundaryHoverTooltip({
   detail,
   sourceLabel = 'Xenium',
+  unitLabel = MICROMETERS,
 }: {
   readonly detail: ViewerCellBoundaryHoverDetail
   readonly sourceLabel?: string
+  readonly unitLabel?: string
 }) {
   const boundary = detail.boundary
   const cell = detail.cell
 
   if (detail.nucleus !== undefined) {
-    return <NucleusBoundaryHoverTooltip detail={detail} nucleus={detail.nucleus} />
+    return (
+      <NucleusBoundaryHoverTooltip
+        detail={detail}
+        nucleus={detail.nucleus}
+        unitLabel={unitLabel}
+      />
+    )
   }
 
   return (
@@ -173,7 +187,7 @@ export function CellBoundaryHoverTooltip({
         {cell === undefined ? null : (
           <div>
             <dt>X/Y</dt>
-            <dd>{formatOverviewCellPosition(cell)}</dd>
+            <dd>{formatOverviewCellPosition(cell, unitLabel)}</dd>
           </div>
         )}
         {cell?.transcriptCount === undefined ? null : (
@@ -185,7 +199,7 @@ export function CellBoundaryHoverTooltip({
         {cell?.cellArea === undefined ? null : (
           <div>
             <dt>Cell Area</dt>
-            <dd>{withSquareMicrometers(formatCoordinateValue(cell.cellArea))}</dd>
+            <dd>{withAreaUnit(formatCoordinateValue(cell.cellArea), unitLabel)}</dd>
           </div>
         )}
         <div>
@@ -194,7 +208,7 @@ export function CellBoundaryHoverTooltip({
         </div>
         <div>
           <dt>Area</dt>
-          <dd>{formatBoundaryPolygonArea(boundary.polygon)}</dd>
+          <dd>{formatBoundaryPolygonArea(boundary.polygon, unitLabel)}</dd>
         </div>
         {detail.expressionCount === undefined ? null : (
           <div>
@@ -218,9 +232,11 @@ export function CellBoundaryHoverTooltip({
 function NucleusBoundaryHoverTooltip({
   detail,
   nucleus,
+  unitLabel,
 }: {
   readonly detail: ViewerCellBoundaryHoverDetail
   readonly nucleus: ViewerNucleusOrdinal
+  readonly unitLabel: string
 }) {
   const boundary = detail.boundary
 
@@ -255,7 +271,7 @@ function NucleusBoundaryHoverTooltip({
         </div>
         <div>
           <dt>Area</dt>
-          <dd>{formatBoundaryPolygonArea(boundary.polygon)}</dd>
+          <dd>{formatBoundaryPolygonArea(boundary.polygon, unitLabel)}</dd>
         </div>
       </dl>
     </div>
@@ -284,8 +300,10 @@ function selectedGeneRows(aggregate: TranscriptAggregateDatum) {
 
 export function TranscriptHoverTooltip({
   detail,
+  unitLabel = MICROMETERS,
 }: {
   readonly detail: ViewerTranscriptHoverDetail
+  readonly unitLabel?: string
 }) {
   const aggregate = detail.aggregate
 
@@ -327,7 +345,10 @@ export function TranscriptHoverTooltip({
             <dt>X/Y</dt>
             <dd>
               {formatCoordinateValue(aggregate.position[0] ?? 0)},{' '}
-              {withMicrometers(formatCoordinateValue(-(aggregate.position[1] ?? 0)))}
+              {withLengthUnit(
+                formatCoordinateValue(-(aggregate.position[1] ?? 0)),
+                unitLabel,
+              )}
             </dd>
           </div>
           <div>
@@ -391,13 +412,18 @@ export function TranscriptHoverTooltip({
           <dt>X/Y</dt>
           <dd>
             {formatCoordinateValue(transcript.position[0] ?? 0)},{' '}
-            {withMicrometers(formatCoordinateValue(-(transcript.position[1] ?? 0)))}
+            {withLengthUnit(
+              formatCoordinateValue(-(transcript.position[1] ?? 0)),
+              unitLabel,
+            )}
           </dd>
         </div>
         {transcript.zLocation === undefined ? null : (
           <div>
             <dt>Z</dt>
-            <dd>{withMicrometers(formatCoordinateValue(transcript.zLocation))}</dd>
+            <dd>
+              {withLengthUnit(formatCoordinateValue(transcript.zLocation), unitLabel)}
+            </dd>
           </div>
         )}
         {transcript.overlapsNucleus === undefined ? null : (
@@ -409,7 +435,12 @@ export function TranscriptHoverTooltip({
         {transcript.nucleusDistance === undefined ? null : (
           <div>
             <dt>Distance</dt>
-            <dd>{withMicrometers(formatCoordinateValue(transcript.nucleusDistance))}</dd>
+            <dd>
+              {withLengthUnit(
+                formatCoordinateValue(transcript.nucleusDistance),
+                unitLabel,
+              )}
+            </dd>
           </div>
         )}
       </dl>
@@ -425,17 +456,26 @@ function transcriptCellDisplayLabel(transcript: TranscriptPointDatum): string | 
   return transcript.cellAssignment === 'unassigned' ? 'Unassigned' : null
 }
 
-function formatGridCellBinSize(cell: GridCellDatum): string {
-  return cell.binSizeMicrometers === undefined
-    ? 'Unknown'
-    : withMicrometers(formatCoordinateValue(cell.binSizeMicrometers))
+function withLengthUnit(value: string, unitLabel: string): string {
+  return `${value} ${unitLabel}`
 }
 
-function formatOverviewCellPosition(cell: OverviewCellDatum): string {
-  return withMicrometers(
+function withAreaUnit(value: string, unitLabel: string): string {
+  return `${value} ${unitLabel}²`
+}
+
+function formatGridCellBinSize(cell: GridCellDatum, unitLabel: string): string {
+  return cell.binSizeMicrometers === undefined
+    ? 'Unknown'
+    : withLengthUnit(formatCoordinateValue(cell.binSizeMicrometers), unitLabel)
+}
+
+function formatOverviewCellPosition(cell: OverviewCellDatum, unitLabel: string): string {
+  return withLengthUnit(
     `${formatCoordinateValue(cell.position[0] ?? 0)}, ${formatCoordinateValue(
       -(cell.position[1] ?? 0),
     )}`,
+    unitLabel,
   )
 }
 
@@ -457,8 +497,11 @@ function formatGridCellTissue(cell: GridCellDatum): string {
   return cell.inTissue ? 'In tissue' : 'Out of tissue'
 }
 
-function formatBoundaryPolygonArea(polygon: readonly Position[]): string {
-  return withSquareMicrometers(formatCoordinateValue(boundaryPolygonArea(polygon)))
+function formatBoundaryPolygonArea(
+  polygon: readonly Position[],
+  unitLabel: string,
+): string {
+  return withAreaUnit(formatCoordinateValue(boundaryPolygonArea(polygon)), unitLabel)
 }
 
 function boundaryPolygonArea(polygon: readonly Position[]): number {
