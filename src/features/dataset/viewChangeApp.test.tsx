@@ -4,7 +4,10 @@ import { App } from '../../App'
 import { micrometers } from '../../data/coords'
 import {
   setSpatialDataSelection,
+  setVisiumView,
   spatialDataSelectionFor,
+  visiumViewFor,
+  type CachedSpatialDatasetOptions,
 } from '../../datasets/datasetFactory'
 import { initialViewerState, useViewerStore } from '../../store/viewerStore'
 import {
@@ -86,8 +89,9 @@ describe('a cancelled or failed Visium library switch', () => {
   const URL = 'https://example.test/two-libraries.h5ad'
   type Mode = 'hang-detection' | 'hang-overview' | 'fail-overview'
 
-  // One shared instance whose library is switched in place, as
-  // AnnDataH5adDataset.setVisiumView does; lib-A has 3 spots, lib-B 5.
+  // One instance per library, as cachedSpatialDataset gives each view of
+  // the file (AnnDataH5adDataset.visiumViewDataset); lib-A has 3 spots,
+  // lib-B 5.
   function visiumH5ad(mode: Mode) {
     const spots = (library: string) =>
       Array.from({ length: library === 'lib-A' ? 3 : 5 }, (_value, index) => ({
@@ -95,26 +99,9 @@ describe('a cancelled or failed Visium library switch', () => {
         position: { x: micrometers(index * 100), y: micrometers(0) },
         transcriptCount: 0,
       }))
-    const dataset = {
-      view: {} as { readonly libraryId?: string },
-      library: () => dataset.view.libraryId ?? 'lib-A',
-      setVisiumView: (view: { readonly libraryId?: string }) => {
-        dataset.view = view
-        return dataset
-      },
-      visiumSummary: async () => ({
-        libraryId: dataset.library(),
-        libraryIds: ['lib-A', 'lib-B'],
-        spotCount: spots(dataset.library()).length,
-        offTissueSpotCount: 0,
-        showOffTissue: false,
-        spotDiameterMicrometers: 55,
-        units: { micrometersPerPixel: 1, source: 'spot-grid', detail: 'test' },
-        scalefactors: {},
-        images: [],
-      }),
-      overview: async () => {
-        const library = dataset.library()
+    const instances = new Map<string, ReturnType<typeof instance>>()
+    const instance = (library: string) => ({
+      overview: vi.fn(async () => {
         if (library === 'lib-B' && mode === 'hang-overview') {
           return pendingPromise<ReturnType<typeof spots>>()
         }
@@ -122,7 +109,18 @@ describe('a cancelled or failed Visium library switch', () => {
           throw new Error('obsm chunk 0 returned HTTP 503')
         }
         return spots(library)
-      },
+      }),
+      visiumSummary: async () => ({
+        libraryId: library,
+        libraryIds: ['lib-A', 'lib-B'],
+        spotCount: spots(library).length,
+        offTissueSpotCount: 0,
+        showOffTissue: false,
+        spotDiameterMicrometers: 55,
+        units: { micrometersPerPixel: 1, source: 'spot-grid', detail: 'test' },
+        scalefactors: {},
+        images: [],
+      }),
       genePanel: async () => ['Gad1'],
       annotationGroups: async () => [],
       embeddingOptions: async () => [],
@@ -150,7 +148,7 @@ describe('a cancelled or failed Visium library switch', () => {
           multiChannel: false,
         },
       }),
-    }
+    })
     let detections = 0
     const props: AppTestDependencyProps = {
       detectSpatialDataset: vi.fn(async (baseUrl: string) => {
@@ -158,10 +156,17 @@ describe('a cancelled or failed Visium library switch', () => {
         if (detections > 1 && mode === 'hang-detection') return pendingPromise<never>()
         return { platform: 'h5ad' as const, baseUrl, h5adUrl: baseUrl, checked: [] }
       }),
-      getSpatialDataset: vi.fn(async () => dataset as never),
+      getSpatialDataset: vi.fn(
+        async (url: string, options?: CachedSpatialDatasetOptions) => {
+          const library = (options?.visiumView ?? visiumViewFor(url)).libraryId ?? 'lib-A'
+          const known = instances.get(library) ?? instance(library)
+          instances.set(library, known)
+          return known as never
+        },
+      ),
     }
     render(<App dependencies={appTestDependencies(props)} />)
-    return dataset
+    return instances
   }
 
   async function switchToLibraryB() {
@@ -174,53 +179,60 @@ describe('a cancelled or failed Visium library switch', () => {
     return hash
   }
 
-  async function expectLibraryAShown(
-    dataset: ReturnType<typeof visiumH5ad>,
-    hash: string,
-  ) {
+  async function expectLibraryAShown(hash: string) {
     expect(cellsOnScreen()).toBe('3')
     openControls('view-options')
     const library = screen.getByTitle<HTMLSelectElement>('Visium library to show')
     expect(library.value).toBe('lib-A')
     expect(library).toBeEnabled()
     expect(await settledHash()).toBe(hash)
-    // Gene, ROI, annotation and Plots reads go to the shared instance.
-    expect(dataset.library()).toBe('lib-A')
+    // Gene, ROI, annotation and Plots reads by URL go to library A.
+    expect(visiumViewFor(URL).libraryId ?? 'lib-A').toBe('lib-A')
   }
 
-  it('cancelled while the dataset is detected again', async () => {
-    const dataset = visiumH5ad('hang-detection')
-    const hash = await switchToLibraryB()
-    await cancelLoad()
-
-    await expectLibraryAShown(dataset, hash)
+  beforeEach(() => {
+    setVisiumView(URL, undefined)
   })
 
-  it('cancelled once the shared instance has switched library', async () => {
-    const dataset = visiumH5ad('hang-overview')
+  afterEach(() => {
+    setVisiumView(URL, undefined)
+  })
+
+  it('cancelled while the dataset is detected again', async () => {
+    visiumH5ad('hang-detection')
     const hash = await switchToLibraryB()
-    await waitFor(() => {
-      expect(dataset.library()).toBe('lib-B')
-    })
     await cancelLoad()
 
-    await expectLibraryAShown(dataset, hash)
+    await expectLibraryAShown(hash)
+  })
+
+  it('cancelled while library B is read', async () => {
+    const instances = visiumH5ad('hang-overview')
+    const hash = await switchToLibraryB()
+    await waitFor(() => {
+      expect(instances.get('lib-B')?.overview).toHaveBeenCalled()
+    })
+    // Until the reload replaces it, reads by URL go to library A.
+    expect(visiumViewFor(URL).libraryId ?? 'lib-A').toBe('lib-A')
+    await cancelLoad()
+
+    await expectLibraryAShown(hash)
   })
 
   it('failed', async () => {
-    const dataset = visiumH5ad('fail-overview')
+    visiumH5ad('fail-overview')
     const hash = await switchToLibraryB()
     await screen.findAllByText(/could not be opened|Dataset load failed/)
 
-    await expectLibraryAShown(dataset, hash)
+    await expectLibraryAShown(hash)
   })
 })
 
 describe('a cancelled or failed SpatialData coordinate system change', () => {
   const URL = 'https://example.test/sample.zarr'
 
-  // One instance per registered selection, as cachedSpatialDataset keys
-  // them; the pixels view's cells hang or fail.
+  // One instance per selection, as cachedSpatialDataset keys them; the
+  // pixels view's cells hang or fail.
   function spatialData(mode: 'hang' | 'fail') {
     const instances = new Map<string, ReturnType<typeof instance>>()
     const instance = (coordinateSystem: string) => {
@@ -295,12 +307,16 @@ describe('a cancelled or failed SpatialData coordinate system change', () => {
         spatialDataUrl: baseUrl,
         checked: [],
       })),
-      getSpatialDataset: vi.fn(async (url: string) => {
-        const coordinateSystem = spatialDataSelectionFor(url).coordinateSystem ?? 'global'
-        const known = instances.get(coordinateSystem) ?? instance(coordinateSystem)
-        instances.set(coordinateSystem, known)
-        return known as never
-      }),
+      getSpatialDataset: vi.fn(
+        async (url: string, options?: CachedSpatialDatasetOptions) => {
+          const coordinateSystem =
+            spatialDataSelectionFor(url, options?.spatialDataSelection)
+              .coordinateSystem ?? 'global'
+          const known = instances.get(coordinateSystem) ?? instance(coordinateSystem)
+          instances.set(coordinateSystem, known)
+          return known as never
+        },
+      ),
     }
     render(<App dependencies={appTestDependencies(props)} />)
     return instances

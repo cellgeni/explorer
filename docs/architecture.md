@@ -194,6 +194,17 @@ commits:
   once with `flushSync` (so effects keyed on the dataset's status and URL
   rerun even when the same URL reloads, as a Visium library switch does),
   and then the queue and the new data are applied together.
+- A change of the view on screen (a Visium library or off-tissue spots; a
+  SpatialData table, coordinate system or image; an Atera or MERSCOPE image)
+  reloads its URL with the view as part of the load (`DatasetViewChange`),
+  not set beforehand. The load opens that view's dataset (the `visiumView`
+  and `spatialDataSelection` options of `cachedSpatialDataset`), and
+  committing sets the view for the URL (`setVisiumView`,
+  `setSpatialDataSelection` in `src/datasets/datasetFactory.ts`), so reads
+  by URL alone go to the view on screen until then. Each Visium view is a
+  dataset of its own over one read of the file (`visiumViewDataset`), so
+  none changes in place. A load cancelled or failed first puts back only the
+  change's control.
 - If it fails first, nothing changes on screen: `pendingDatasetLoadState`
   holds the error, which the Issues card and a toast (`DatasetLoadToast`)
   show. While a load is pending it is `loading`, which the loading list

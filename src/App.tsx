@@ -12,10 +12,7 @@ import {
   type ViewerTranscriptHoverDetail,
 } from './components/ViewerCore'
 import type { LegendCategoryVisibilityChange } from './components/ViewerLegend'
-import {
-  setSpatialDataSelection,
-  spatialDataSelectionFor,
-} from './datasets/datasetFactory'
+import { spatialDataSelectionFor } from './datasets/datasetFactory'
 import type { SpatialDataSelection } from './datasets/spatialDataDataset'
 import {
   spatialDataControlLoading,
@@ -3722,7 +3719,6 @@ export function App({ dependencies }: AppProps = {}) {
       // The open dataset, not the address box, which may hold a failed one.
       const viewUrl = loadedDatasetUrl ?? datasetUrl
       const shownSelection = spatialDataSelectionFor(viewUrl)
-      setSpatialDataSelection(viewUrl, selection)
       setSpatialDataControlState((state) => spatialDataControlLoading(state, selection))
       appendDebugEvent(
         `SpatialData view change: ${[
@@ -3739,8 +3735,8 @@ export function App({ dependencies }: AppProps = {}) {
           .join(', ')}`,
       )
       void startDatasetLoadRef.current?.(viewUrl, shouldLoadMorphology, {
-        undo: () => {
-          setSpatialDataSelection(viewUrl, shownSelection)
+        spatialDataSelection: selection,
+        restoreControl: () => {
           setSpatialDataControlState((state) =>
             spatialDataControlRestored(state, shownSelection),
           )
@@ -3759,7 +3755,6 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     datasetUrl: loadState.status === 'idle' ? null : loadState.url,
     getSpatialDataset,
-    initialShareableStateRef,
     setFlatMorphologyImage,
     setMorphologyState,
     setVisiumControlState,
@@ -3770,7 +3765,6 @@ export function App({ dependencies }: AppProps = {}) {
   const { handleMerscopeImageChange } = useMerscopeImageWorkflow({
     appendDebugEvent,
     datasetUrl: loadState.status === 'idle' ? null : loadState.url,
-    initialShareableStateRef,
     merscopeImageState,
     setMerscopeImageState,
     shouldLoadMorphology,
@@ -3780,7 +3774,6 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     ateraImageState,
     datasetUrl: loadState.status === 'idle' ? null : loadState.url,
-    initialShareableStateRef,
     setAteraImageState,
     startDatasetLoadRef,
   })

@@ -2,6 +2,7 @@ import { act, render, waitFor } from '@testing-library/react'
 import { useEffect, useState, type SetStateAction } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
+import { setVisiumView, visiumViewFor } from '../../datasets/datasetFactory'
 import type {
   DatasetMeta,
   GridCellBatch,
@@ -1216,7 +1217,6 @@ describe('useDatasetLifecycle', () => {
             multiChannel: false,
           },
         })),
-        setVisiumView: vi.fn(() => dataset),
         visiumSummary: vi.fn(async () => summary),
         tissueImage: vi.fn(async () => ({
           kind: 'flat' as const,
@@ -1224,6 +1224,9 @@ describe('useDatasetLifecycle', () => {
           scaleFactor: 0.2,
         })),
       }
+      const getSpatialDataset = vi.fn(
+        async () => dataset,
+      ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
       const appendFallbackNotice = vi.fn()
       const setDatasetPlatform = vi.fn()
       const setFlatMorphologyImage = vi.fn()
@@ -1237,11 +1240,7 @@ describe('useDatasetLifecycle', () => {
           refs={refs}
           appendFallbackNotice={appendFallbackNotice}
           detectSpatialDataset={vi.fn(async () => detection)}
-          getSpatialDataset={
-            vi.fn(
-              async () => dataset,
-            ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
-          }
+          getSpatialDataset={getSpatialDataset}
           extraSetters={{ setVisiumControlState }}
           setDatasetPlatform={setDatasetPlatform}
           setFlatMorphologyImage={setFlatMorphologyImage}
@@ -1282,7 +1281,12 @@ describe('useDatasetLifecycle', () => {
         })
       })
       expect(dataset.tissueImage).toHaveBeenCalledWith('hires')
-      expect(dataset.setVisiumView).toHaveBeenCalledWith({})
+      // The default view, set for the URL once the load commits.
+      expect(getSpatialDataset).toHaveBeenCalledWith(
+        detection.baseUrl,
+        expect.objectContaining({ visiumView: {} }),
+      )
+      expect(visiumViewFor(datasetUrl)).toEqual({})
       expect(setMorphologyState).toHaveBeenLastCalledWith({
         status: 'ready',
         url: 'https://example.test/hires.png',
@@ -1318,10 +1322,12 @@ describe('useDatasetLifecycle', () => {
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => []),
       meta: vi.fn(),
-      setVisiumView: vi.fn(() => dataset),
       visiumSummary: vi.fn(async () => summary),
       tissueImage: vi.fn(async () => null),
     }
+    const getSpatialDataset = vi.fn(
+      async () => dataset,
+    ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
     const setVisiumControlState = vi.fn()
 
     render(
@@ -1333,11 +1339,7 @@ describe('useDatasetLifecycle', () => {
           h5adUrl: datasetUrl,
           checked: [],
         }))}
-        getSpatialDataset={
-          vi.fn(
-            async () => dataset,
-          ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
-        }
+        getSpatialDataset={getSpatialDataset}
         extraSetters={{ setVisiumControlState }}
         initialShareableState={{
           datasetUrl,
@@ -1353,10 +1355,14 @@ describe('useDatasetLifecycle', () => {
       await startDatasetLoadRef.current?.(datasetUrl, true)
     })
 
-    expect(dataset.setVisiumView).toHaveBeenCalledWith({
-      libraryId: 'lib-B',
-      showOffTissue: true,
-    })
+    // The shared view is opened as its own dataset and set for the URL.
+    expect(getSpatialDataset).toHaveBeenCalledWith(
+      datasetUrl,
+      expect.objectContaining({
+        visiumView: { libraryId: 'lib-B', showOffTissue: true },
+      }),
+    )
+    expect(visiumViewFor(datasetUrl)).toEqual({ libraryId: 'lib-B', showOffTissue: true })
     expect(setVisiumControlState).toHaveBeenCalledWith({
       status: 'ready',
       source: 'h5ad',
@@ -1366,6 +1372,7 @@ describe('useDatasetLifecycle', () => {
     await waitFor(() => {
       expect(dataset.tissueImage).toHaveBeenCalledWith('lowres')
     })
+    setVisiumView(datasetUrl, undefined)
   })
 
   it('keeps an .h5ad without uns/spatial on the H5AD platform', async () => {
@@ -1381,7 +1388,6 @@ describe('useDatasetLifecycle', () => {
       embeddingOptions: vi.fn(async () => []),
       metadataTracks: vi.fn(async () => []),
       meta: vi.fn(),
-      setVisiumView: vi.fn(() => dataset),
       visiumSummary: vi.fn(async () => null),
       tissueImage: vi.fn(),
     }

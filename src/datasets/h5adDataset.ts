@@ -134,6 +134,9 @@ export interface AnnDataH5adDatasetOptions {
   // Opens one section of a file holding several, rather than the whole file:
   // `url` is the file's.
   readonly section?: AnnDataSectionSource
+  // The Visium library shown, and whether spots off the tissue are placed;
+  // by default the first library without them.
+  readonly visiumView?: AnnDataVisiumView
 }
 
 // One section of an AnnData file holding several, such as registered serial
@@ -681,6 +684,7 @@ export class H5adDenseCellProfileOverBudgetError extends Error {
 
 export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   readonly url: string
+  private readonly options: AnnDataH5adDatasetOptions
   private readonly fetcher: typeof fetch
   private readonly onProgress: H5adLoadProgressReporter | undefined
   private readonly zarrSource: AnnDataZarrSource | undefined
@@ -701,7 +705,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private baseCachePromise: Promise<H5adCache> | null = null
   // The base cache placed for `visiumView`.
   private cachePromise: Promise<H5adCache> | null = null
-  private visiumView: AnnDataVisiumView = {}
+  private readonly visiumView: AnnDataVisiumView
+  // The dataset that reads the file, for one showing another Visium view of
+  // it; null for that dataset itself.
+  private viewOf: AnnDataH5adDataset | null = null
+  // The datasets showing other Visium views of this file, by view key.
+  private readonly visiumViews = new Map<string, AnnDataH5adDataset>()
   private spotElementsPromise: Promise<readonly VisiumSpotEntry[]> | null = null
   // The overview built from a cache, kept while that cache is current:
   // building it again for every caller cost 0.6–1.4 s each on a 598,222-cell
@@ -728,6 +737,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   constructor(options: AnnDataH5adDatasetOptions) {
     this.url = options.url
+    this.options = options
     this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
     this.onProgress = options.onProgress
     this.zarrSource = options.zarrSource
@@ -744,6 +754,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.attachedImage = options.image
     this.openImage = options.openImage
     this.openLabels = options.openLabels
+    this.visiumView = options.visiumView ?? {}
   }
 
   async meta(): Promise<DatasetMeta> {
@@ -811,20 +822,31 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  // Chooses the Visium library and whether off-tissue spots are placed. The
-  // file is not read again; later calls see the new placement.
-  setVisiumView(view: AnnDataVisiumView): this {
-    if (
-      view.libraryId !== this.visiumView.libraryId ||
-      (view.showOffTissue === true) !== (this.visiumView.showOffTissue === true)
-    ) {
-      this.visiumView = view
-      this.cachePromise = null
-      this.spotElementsPromise = null
-      this.overviewPoints = null
+  // The dataset showing a Visium library, and off-tissue spots or not: this
+  // one for its own view, else one kept per view. Each places the spots of
+  // one read of the file, this dataset's, so a view never changes in place
+  // and the file is not read again.
+  visiumViewDataset(view: AnnDataVisiumView): AnnDataH5adDataset {
+    if (this.viewOf !== null) {
+      return this.viewOf.visiumViewDataset(view)
     }
 
-    return this
+    const key = visiumViewKey(view)
+
+    if (key === visiumViewKey(this.visiumView)) {
+      return this
+    }
+
+    const known = this.visiumViews.get(key)
+
+    if (known !== undefined) {
+      return known
+    }
+
+    const dataset = new AnnDataH5adDataset({ ...this.options, visiumView: view })
+    dataset.viewOf = this
+    this.visiumViews.set(key, dataset)
+    return dataset
   }
 
   // Standard Visium layout read from `uns/spatial`, or null for other AnnData.
@@ -1578,8 +1600,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // Ends the H5 file worker and drops the arrays read; a later read opens
-  // the file again.
+  // the file again. A dataset showing another Visium view drops its
+  // placement only, as the file is read by the dataset it views.
   dispose(): void {
+    for (const view of this.visiumViews.values()) {
+      view.dispose()
+    }
+
     const base = this.baseCachePromise
     this.baseCachePromise = null
     this.cachePromise = null
@@ -1611,6 +1638,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   private baseCache(): Promise<H5adCache> {
+    if (this.viewOf !== null) {
+      return this.viewOf.baseCache()
+    }
+
     if (this.baseCachePromise === null && this.section !== undefined) {
       this.baseCachePromise = this.sectionBaseCache(this.section)
     }
@@ -1760,6 +1791,10 @@ function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
   const depths = base.depths?.map((z) => z * scale) ?? null
 
   return { ...base, coordinates, depths, extent: bboxForPoints(coordinates) }
+}
+
+function visiumViewKey(view: AnnDataVisiumView): string {
+  return `${view.libraryId ?? ''}\n${view.showOffTissue === true ? 'off-tissue' : ''}`
 }
 
 function withVisiumView(base: H5adCache, view: AnnDataVisiumView): H5adCache {

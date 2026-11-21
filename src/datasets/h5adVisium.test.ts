@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
-import { AnnDataH5adDataset } from './h5adDataset'
+import { AnnDataH5adDataset, type AnnDataVisiumView } from './h5adDataset'
 
 const MICROMETERS_PER_PIXEL = 0.8
 
@@ -197,7 +197,7 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(await dataset.tissueImage('lowres')).toBeNull()
   })
 
-  it('switches library without reading the file again', async () => {
+  it('shows another library from the same read of the file', async () => {
     const createObjectUrl = vi
       .spyOn(URL, 'createObjectURL')
       .mockImplementation(() => `blob:${createObjectUrl.mock.calls.length.toString()}`)
@@ -213,9 +213,10 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     })
     const first = await dataset.image()
 
-    const summary = await dataset.setVisiumView({ libraryId: 'lib-B' }).visiumSummary()
-    const cells = await dataset.overview()
-    const image = await dataset.image()
+    const libraryB = dataset.visiumViewDataset({ libraryId: 'lib-B' })
+    const summary = await libraryB.visiumSummary()
+    const cells = await libraryB.overview()
+    const image = await libraryB.image()
 
     expect(summary).toMatchObject({
       libraryId: 'lib-B',
@@ -225,20 +226,34 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(cells.map((cell) => cell.cellId)).toEqual(
       Array.from({ length: 12 }, (_value, index) => `spot-${(index + 24).toString()}`),
     )
-    expect((await dataset.elements((await dataset.meta()).extent)).elements).toHaveLength(
-      12,
-    )
+    expect(
+      (await libraryB.elements((await libraryB.meta()).extent)).elements,
+    ).toHaveLength(12)
     // Each library's image is encoded once.
     expect(image).toMatchObject({ scaleFactor: 0.5 })
     expect(
       image?.kind === 'flat' && first?.kind === 'flat' && image.url !== first.url,
     ).toBe(true)
     expect(requests.filter((method) => method !== 'HEAD')).toHaveLength(1)
+    // The view asked of is its own dataset, kept; the file's still shows the
+    // first library.
+    expect((await dataset.visiumSummary())?.libraryId).toBe('lib-A')
+    expect(dataset.visiumViewDataset({ libraryId: 'lib-B' })).toBe(libraryB)
+    expect(libraryB.visiumViewDataset({})).toBe(dataset)
 
     // An unknown library falls back to the default one.
     expect(
-      (await dataset.setVisiumView({ libraryId: 'missing' }).visiumSummary())?.libraryId,
+      (await dataset.visiumViewDataset({ libraryId: 'missing' }).visiumSummary())
+        ?.libraryId,
     ).toBe('lib-A')
+
+    // Disposing the file's dataset drops its views' spots too; they read the
+    // file again through it.
+    dataset.dispose()
+    expect((await libraryB.overview()).map((cell) => cell.cellId)).toEqual(
+      cells.map((cell) => cell.cellId),
+    )
+    expect(requests.filter((method) => method !== 'HEAD')).toHaveLength(2)
   })
 
   it('places only the first library when obs names each row’s library', async () => {
@@ -273,7 +288,8 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
   it('shows spots off the tissue when the view asks for them', async () => {
     const dataset = datasetFor(await createVisiumH5ad({ inTissue: true }))
     const hidden = await dataset.visiumSummary()
-    const shown = await dataset.setVisiumView({ showOffTissue: true }).visiumSummary()
+    const offTissue = dataset.visiumViewDataset({ showOffTissue: true })
+    const shown = await offTissue.visiumSummary()
 
     expect(shown).toMatchObject({
       spotCount: 36,
@@ -281,25 +297,31 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
       showOffTissue: true,
     })
     expect(shown?.units.micrometersPerPixel).toBe(hidden?.units.micrometersPerPixel)
-    expect(await dataset.overview()).toHaveLength(36)
-    expect(await dataset.setVisiumView({}).overview()).toHaveLength(30)
+    expect(await offTissue.overview()).toHaveLength(36)
+    expect(await dataset.overview()).toHaveLength(30)
   })
 
   it('counts and scales metadata tracks over the placed spots', async () => {
     const dataset = datasetFor(
       await createVisiumH5ad({ inTissue: true, secondLibrary: true }),
     )
-    const track = async () =>
-      (await dataset.metadataTracks()).find(
+    const track = async (view: AnnDataVisiumView = {}) =>
+      (await dataset.visiumViewDataset(view).metadataTracks()).find(
         (candidate) => candidate.label === 'in_tissue',
       )
 
     // Library A's 24 rows, less the six spots off the tissue.
     expect(await track()).toMatchObject({ cellCount: 18, min: 1, max: 1 })
-    dataset.setVisiumView({ showOffTissue: true })
-    expect(await track()).toMatchObject({ cellCount: 24, min: 0, max: 1 })
-    dataset.setVisiumView({ libraryId: 'lib-B' })
-    expect(await track()).toMatchObject({ cellCount: 12, min: 1, max: 1 })
+    expect(await track({ showOffTissue: true })).toMatchObject({
+      cellCount: 24,
+      min: 0,
+      max: 1,
+    })
+    expect(await track({ libraryId: 'lib-B' })).toMatchObject({
+      cellCount: 12,
+      min: 1,
+      max: 1,
+    })
   })
 
   it('falls back to the spot pitch without array coordinates', async () => {

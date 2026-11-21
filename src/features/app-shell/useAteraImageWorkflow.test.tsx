@@ -17,7 +17,6 @@ const SHARED: ShareableState = {
 }
 
 function renderWorkflow(state: AteraImageControlState) {
-  const initialShareableStateRef = { current: null as ShareableState | null }
   const startDatasetLoad = vi.fn<StartDatasetLoad>(async () => undefined)
   const setAteraImageState = vi.fn()
   const { result } = renderHook(() =>
@@ -25,46 +24,47 @@ function renderWorkflow(state: AteraImageControlState) {
       appendDebugEvent: vi.fn(),
       ateraImageState: state,
       datasetUrl: DATASET_URL,
-      initialShareableStateRef,
       readShareableState: () => SHARED,
       setAteraImageState,
       startDatasetLoadRef: { current: startDatasetLoad },
     }),
   )
 
-  return { initialShareableStateRef, result, setAteraImageState, startDatasetLoad }
+  return { result, setAteraImageState, startDatasetLoad }
 }
 
 describe('useAteraImageWorkflow', () => {
   it('reloads the dataset with the chosen image and keeps the view', () => {
-    const { initialShareableStateRef, result, setAteraImageState, startDatasetLoad } =
-      renderWorkflow(ateraImageControlReady('2d'))
+    const { result, setAteraImageState, startDatasetLoad } = renderWorkflow(
+      ateraImageControlReady('2d'),
+    )
 
     act(() => {
       result.current.handleAteraImageChange('3d')
     })
 
-    expect(initialShareableStateRef.current).toEqual({ ...SHARED, ateraImage: '3d' })
     expect(setAteraImageState).toHaveBeenCalledTimes(1)
-    // The image loads even when Morphology image is off.
+    // The image loads even when Morphology image is off. The reload holds
+    // the new choice until it replaces the view on screen.
     expect(startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true, {
-      undo: expect.any(Function),
+      shareableState: { ...SHARED, ateraImage: '3d' },
+      restoreControl: expect.any(Function),
     })
   })
 
   it('puts the image on screen back if the reload is cancelled or fails', () => {
-    const { initialShareableStateRef, result, setAteraImageState, startDatasetLoad } =
-      renderWorkflow(ateraImageControlReady('2d'))
+    const { result, setAteraImageState, startDatasetLoad } = renderWorkflow(
+      ateraImageControlReady('2d'),
+    )
 
     act(() => {
       result.current.handleAteraImageChange('3d')
     })
     const [, , viewChange] = startDatasetLoad.mock.calls[0] ?? []
     act(() => {
-      viewChange?.undo()
+      viewChange?.restoreControl()
     })
 
-    expect(initialShareableStateRef.current).toBeNull()
     const restore = setAteraImageState.mock.calls.at(-1)?.[0] as (
       state: AteraImageControlState,
     ) => AteraImageControlState

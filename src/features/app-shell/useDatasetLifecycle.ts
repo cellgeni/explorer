@@ -201,10 +201,12 @@ import {
 } from '../dataset/visiumModel'
 import {
   setSpatialDataSelection,
+  setVisiumView,
   spatialDataSelectionFor,
 } from '../../datasets/datasetFactory'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
-import type { AnnDataVisiumSummary, AnnDataVisiumView } from '../../datasets/h5adDataset'
+import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
+import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import { MERSCOPE_BOUNDARIES_AUTOLOAD_MAX_BYTES } from '../../datasets/merscopeFormat'
 import type {
@@ -294,14 +296,18 @@ export type DatasetOpeningState = ShareableState & {
 
 // A change of the dataset on screen's view (Visium library or off-tissue
 // spots; SpatialData table, coordinate system or image; Atera or MERSCOPE
-// image) reloads its URL. If that reload is cancelled or fails before it
-// replaces the view on screen, what the change set beforehand is put back,
-// as the view stays (15.1-F).
+// image) reloads its URL with the view it asks for. The load holds the view
+// and sets it for the URL when it replaces the view on screen, so until then
+// the view on screen, its link and its reads stay as they are. A reload
+// cancelled or failed before then is dropped with its view (15.1-F).
 export interface DatasetViewChange {
-  // The Visium view on screen, for the shared instance the reload switches.
-  readonly visiumView?: AnnDataVisiumView
-  // Puts back the change's control, share state and selection.
-  readonly undo: () => void
+  // What the reload opens with in place of a link's state: the Visium
+  // library and image, or the Atera or MERSCOPE image, and what carries over.
+  readonly shareableState?: DatasetOpeningState
+  // The SpatialData table, coordinate system, image and units to open.
+  readonly spatialDataSelection?: SpatialDataSelection
+  // Puts the change's control back on the view on screen.
+  readonly restoreControl: () => void
 }
 
 export type StartDatasetLoad = (
@@ -312,7 +318,6 @@ export type StartDatasetLoad = (
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
   meta(): Promise<DatasetMeta>
-  setVisiumView(view: AnnDataVisiumView): VisiumLifecycleDataset
   visiumSummary(): Promise<AnnDataVisiumSummary | null>
   tissueImage(kind: VisiumImageKind): Promise<ImageSource | null>
 }
@@ -508,16 +513,21 @@ interface UseDatasetLifecycleSetters {
 }
 
 // One dataset load (15.1-F). Until it commits, the dataset on screen stays,
-// with its requests and state; what the load would set is queued. Committing
-// makes its controller the dataset's (datasetAbortRef) and gives it a new
-// loadRequestIdRef value, which other workflows use to tell stale results.
+// with its requests, state and view; what the load would set is queued.
+// Committing makes its controller the dataset's (datasetAbortRef) and gives
+// it a new loadRequestIdRef value, which other workflows use to tell stale
+// results.
 interface PendingDatasetLoad {
   readonly url: string
   readonly controller: AbortController
   datasetRequestId: number | null
   readonly queued: (() => void)[]
-  // Run, last first, if the load is cancelled or fails before it commits.
-  readonly undo: (() => void)[]
+  // Set the views the load opens for its URL, first thing when it commits,
+  // so reads by URL alone go to them from then on (EXP-002).
+  readonly views: (() => void)[]
+  // The change of the view on screen this load makes, if any. It is
+  // dropped with the load if the load is cancelled or fails first.
+  readonly viewChange: DatasetViewChange | undefined
 }
 
 interface UseDatasetLifecycleOptions {
@@ -899,21 +909,24 @@ export function useDatasetLifecycle({
 
     if (requestedUrl !== '') {
       const loadStartedAt = readTimestamp()
-      const sharedState = initialShareableStateRef.current
+      const sharedState = viewChange?.shareableState ?? initialShareableStateRef.current
       const shouldRestoreSharedState =
         sharedState?.datasetUrl !== undefined &&
         sharedState.datasetUrl.trim() === requestedUrl
       const sharedSelectedGenes = shouldRestoreSharedState
         ? (sharedState.selectedGenes ?? [])
         : []
+      const sharedSpatialDataSelection = shouldRestoreSharedState
+        ? spatialDataSelectionFromShareable(sharedState)
+        : {}
+      // Opened in place of the one set for the URL, and set for it on commit.
+      const spatialDataSelection =
+        viewChange?.spatialDataSelection ??
+        (Object.keys(sharedSpatialDataSelection).length > 0
+          ? sharedSpatialDataSelection
+          : undefined)
       if (!shouldRestoreSharedState) {
         initialShareableStateRef.current = null
-      } else {
-        const sharedSelection = spatialDataSelectionFromShareable(sharedState)
-
-        if (Object.keys(sharedSelection).length > 0) {
-          setSpatialDataSelection(requestedUrl, sharedSelection)
-        }
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
       pendingLoadRef.current?.controller.abort()
@@ -922,7 +935,8 @@ export function useDatasetLifecycle({
         controller: new AbortController(),
         datasetRequestId: null,
         queued: [],
-        undo: viewChange === undefined ? [] : [viewChange.undo],
+        views: [],
+        viewChange,
       }
       pendingLoadRef.current = load
       latestLoadRef.current = load
@@ -942,21 +956,13 @@ export function useDatasetLifecycle({
         }
       }
       const committedRequestId = () => load.datasetRequestId ?? loadRequestIdRef.current
-      // The Visium instance is shared with the view on screen, so a view
-      // change switches it back if this load does not commit.
-      const switchVisiumView = (
-        dataset: VisiumLifecycleDataset,
-        view: AnnDataVisiumView,
-      ) => {
-        const shown = viewChange?.visiumView
-
-        if (shown !== undefined) {
-          load.undo.push(() => {
-            dataset.setVisiumView(shown)
-          })
+      // Sets a view this load opens for its URL, once the load commits.
+      const showViewWhenCommitted = (show: () => void) => {
+        if (load.datasetRequestId === null) {
+          load.views.push(show)
+        } else {
+          show()
         }
-
-        return dataset.setVisiumView(view)
       }
       // Notices about this dataset; committing clears the old dataset's.
       const notifyFallbackWhenCommitted: FallbackNotifier = (notice) => {
@@ -1065,6 +1071,9 @@ export function useDatasetLifecycle({
         loadRequestIdRef.current += 1
         load.datasetRequestId = loadRequestIdRef.current
         pendingLoadRef.current = null
+        for (const show of load.views.splice(0)) {
+          show()
+        }
         const clearOpenDataset = () => {
           setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
           onBeforeDatasetLoad?.()
@@ -1607,17 +1616,19 @@ export function useDatasetLifecycle({
             }
             setGenePanelState(genePanelLoadStarted(requestedUrl))
           })
+          const visiumView = visiumViewFromShareable(restoreState)
+          showViewWhenCommitted(() => {
+            setVisiumView(requestedUrl, visiumView)
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
             detection,
+            visiumView,
           })
           // An .h5ad with `uns/spatial` is standard Visium; the file has to be
           // read to know.
           const visium = isVisiumLifecycleDataset(dataset)
-            ? await switchVisiumView(
-                dataset,
-                visiumViewFromShareable(restoreState),
-              ).visiumSummary()
+            ? await dataset.visiumSummary()
             : null
 
           if (!isCurrentDatasetLoad()) {
@@ -1664,19 +1675,21 @@ export function useDatasetLifecycle({
             setShowNucleusBoundaries(false)
             setGenePanelState(genePanelLoadStarted(requestedUrl))
           })
+          const visiumView = visiumViewFromShareable(restoreState)
+          showViewWhenCommitted(() => {
+            setVisiumView(requestedUrl, visiumView)
+          })
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
             detection,
+            visiumView,
           })
 
           if (!isVisiumLifecycleDataset(dataset)) {
             throw new Error('Detected Visium dataset does not expose spots.')
           }
 
-          const visium = await switchVisiumView(
-            dataset,
-            visiumViewFromShareable(restoreState),
-          ).visiumSummary()
+          const visium = await dataset.visiumSummary()
 
           if (!isCurrentDatasetLoad()) {
             return
@@ -1697,9 +1710,15 @@ export function useDatasetLifecycle({
             setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
             setGenePanelState(genePanelLoadStarted(requestedUrl))
           })
+          if (spatialDataSelection !== undefined) {
+            showViewWhenCommitted(() => {
+              setSpatialDataSelection(requestedUrl, spatialDataSelection)
+            })
+          }
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
             detection,
+            ...(spatialDataSelection === undefined ? {} : { spatialDataSelection }),
           })
 
           // The image needs only the store's metadata and units, not the
@@ -1710,7 +1729,10 @@ export function useDatasetLifecycle({
 
           if (isSpatialDataSummaryDataset(dataset)) {
             const summary = await dataset.summary()
-            const selection = spatialDataSelectionFor(detection.baseUrl)
+            const selection = spatialDataSelectionFor(
+              detection.baseUrl,
+              spatialDataSelection,
+            )
             whenCommitted(() => {
               setSpatialDataControlState(spatialDataControlReady(summary, selection))
             })
@@ -2326,7 +2348,7 @@ export function useDatasetLifecycle({
         // The dataset on screen stays; the failed load is reported instead.
         if (load.datasetRequestId === null) {
           pendingLoadRef.current = null
-          undoPendingLoad(load)
+          dropPendingLoad(load)
           setPendingDatasetLoadState(datasetLoadFailed(requestedUrl, loadError))
           appendDebugEvent('Dataset load failed; the open dataset stays')
           recordTelemetry(
@@ -2376,11 +2398,10 @@ export function useDatasetLifecycle({
     setTranscriptLayerState(IDLE_TRANSCRIPT_LAYER_STATE)
   }
 
-  // What a load that did not commit set beforehand, put back.
-  function undoPendingLoad(load: PendingDatasetLoad) {
-    for (const undo of load.undo.splice(0).reverse()) {
-      undo()
-    }
+  // A load dropped before it commits leaves the view on screen as it was,
+  // so only the control that asked for its change is put back.
+  function dropPendingLoad(load: PendingDatasetLoad) {
+    load.viewChange?.restoreControl()
   }
 
   function cancelDatasetLoad() {
@@ -2389,7 +2410,7 @@ export function useDatasetLifecycle({
     if (pending !== null) {
       pending.controller.abort()
       pendingLoadRef.current = null
-      undoPendingLoad(pending)
+      dropPendingLoad(pending)
       setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
       appendDebugEvent(
         `Cancelled loading ${shortDatasetLabel(pending.url)}; the open dataset stays`,
@@ -2499,7 +2520,6 @@ export function isVisiumLifecycleDataset(
   return (
     isH5adLifecycleDataset(dataset) &&
     hasFunction(dataset, 'meta') &&
-    hasFunction(dataset, 'setVisiumView') &&
     hasFunction(dataset, 'visiumSummary') &&
     hasFunction(dataset, 'tissueImage')
   )
