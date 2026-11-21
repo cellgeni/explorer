@@ -6,6 +6,7 @@ import {
   type SpatialDataShapes,
   type SpatialDataShapesReader,
 } from './spatialDataShapes'
+import { runWorkerOnce, type OneShotWorker } from '../workers/runWorkerOnce'
 import type {
   SpatialDataShapesSource,
   SpatialDataShapesWorkerRequest,
@@ -18,12 +19,10 @@ import type {
 // custom fetcher, is read here and handed over slice by slice. The worker
 // exits once it has answered; an abort terminates it.
 
-export interface SpatialDataShapesWorkerLike {
-  onmessage: ((event: MessageEvent<SpatialDataShapesWorkerResponse>) => void) | null
-  onerror: ((event: ErrorEvent) => void) | null
-  postMessage(message: SpatialDataShapesWorkerRequest, transfer?: Transferable[]): void
-  terminate(): void
-}
+export type SpatialDataShapesWorkerLike = OneShotWorker<
+  SpatialDataShapesWorkerRequest,
+  SpatialDataShapesWorkerResponse
+>
 
 export type SpatialDataShapesWorkerFactory = () => SpatialDataShapesWorkerLike
 
@@ -75,112 +74,64 @@ function readInWorker(
   source: SpatialDataShapesSource,
   options: ReadSpatialDataShapesOptions,
 ): Promise<SpatialDataShapes> {
-  const { file, signal } = options
-
-  if (signal?.aborted === true) {
-    worker.terminate()
-    return Promise.reject(abortError(signal))
+  const { file } = options
+  const layout = {
+    ...(options.idColumn === undefined ? {} : { idColumn: options.idColumn }),
+    ...(options.planeColumn === undefined ? {} : { planeColumn: options.planeColumn }),
+    ...(options.wholeFile === undefined ? {} : { wholeFile: options.wholeFile }),
   }
 
-  return new Promise<SpatialDataShapes>((resolve, reject) => {
-    let finished = false
-    const finish = () => {
-      finished = true
-      signal?.removeEventListener('abort', handleAbort)
-      worker.onmessage = null
-      worker.onerror = null
-      worker.terminate()
-    }
-    const handleAbort = () => {
-      finish()
-      reject(abortError(signal))
-    }
-    // Zipped entries and fetched ranges come back in buffers of their own,
-    // so each slice is transferred rather than copied.
-    const sendSlice = (file: AsyncBuffer, id: number, start: number, end: number) => {
-      Promise.resolve()
-        .then(() => file.slice(start, end))
-        .then(
-          (bytes) => {
-            if (!finished) {
-              worker.postMessage({ type: 'slice', id, bytes }, [bytes])
-            }
-          },
-          (cause: unknown) => {
-            if (!finished) {
-              worker.postMessage({
-                type: 'slice-error',
-                id,
-                error: cause instanceof Error ? cause.message : String(cause),
-              })
-            }
-          },
-        )
-    }
+  return runWorkerOnce(
+    worker,
+    {
+      type: 'read',
+      source,
+      affine: options.affine,
+      ...(Object.keys(layout).length === 0 ? {} : { layout }),
+    },
+    {
+      signal: options.signal,
+      fallback: () => readSpatialDataShapes(options),
+      errorName: 'SpatialDataShapesWorkerError',
+      onMessage: (response, send) => {
+        if (response.type === 'slice') {
+          if (file !== undefined) {
+            sendSlice(file, response.id, response.start, response.end, send)
+          }
 
-    worker.onmessage = (event) => {
-      const response = event.data
-
-      if (response.type === 'slice') {
-        if (file !== undefined) {
-          sendSlice(file, response.id, response.start, response.end)
+          return undefined
         }
 
-        return
-      }
+        return response.type === 'shapes' ? { value: response.shapes } : response
+      },
+    },
+  )
+}
 
-      finish()
-
-      if (response.type === 'shapes') {
-        resolve(response.shapes)
-        return
-      }
-
-      const error = new Error(response.error)
-      error.name = response.errorName ?? 'SpatialDataShapesWorkerError'
-      reject(error)
-    }
-    // The worker did not load or crashed: read on this thread instead.
-    worker.onerror = (event) => {
-      finish()
-      event.preventDefault()
-      resolve(readSpatialDataShapes(options))
-    }
-    signal?.addEventListener('abort', handleAbort, { once: true })
-
-    try {
-      const layout = {
-        ...(options.idColumn === undefined ? {} : { idColumn: options.idColumn }),
-        ...(options.planeColumn === undefined
-          ? {}
-          : { planeColumn: options.planeColumn }),
-        ...(options.wholeFile === undefined ? {} : { wholeFile: options.wholeFile }),
-      }
-      worker.postMessage({
-        type: 'read',
-        source,
-        affine: options.affine,
-        ...(Object.keys(layout).length === 0 ? {} : { layout }),
-      })
-    } catch (cause) {
-      finish()
-      reject(cause instanceof Error ? cause : new Error(String(cause)))
-    }
-  })
+// Zipped entries and fetched ranges come back in buffers of their own, so each
+// slice is transferred rather than copied.
+function sendSlice(
+  file: AsyncBuffer,
+  id: number,
+  start: number,
+  end: number,
+  send: (message: SpatialDataShapesWorkerRequest, transfer?: Transferable[]) => void,
+): void {
+  Promise.resolve()
+    .then(() => file.slice(start, end))
+    .then(
+      (bytes) => send({ type: 'slice', id, bytes }, [bytes]),
+      (cause: unknown) =>
+        send({
+          type: 'slice-error',
+          id,
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
 }
 
 function createDefaultSpatialDataShapesWorker(): SpatialDataShapesWorkerLike {
   return new Worker(new URL('../workers/spatialDataShapes.worker.ts', import.meta.url), {
     type: 'module',
   })
-}
-
-function abortError(signal: AbortSignal | undefined): Error {
-  if (signal?.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('SpatialData shapes request aborted.')
-  error.name = 'AbortError'
-  return error
 }

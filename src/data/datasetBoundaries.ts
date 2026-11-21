@@ -4,6 +4,7 @@ import { assertHttpRangeSupport } from './rangeSupport'
 import { cachedSpatialDataset } from '../datasets/datasetFactory'
 import type { ElementBatch, SpatialDataset } from '../datasets/spatialDataset'
 import type { DatasetRangeValidator } from './datasetOverview'
+import { throwIfAborted } from '../utils/abort'
 
 export interface LoadDatasetBoundaryElementsOptions {
   readonly getDataset?: (baseUrl: string) => Promise<SpatialDataset> | SpatialDataset
@@ -37,20 +38,4 @@ export async function loadDatasetBoundaryElements(
   const batch = await dataset.elements(bbox)
   throwIfAborted(options.signal)
   return batch
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Boundary request aborted.')
-  error.name = 'AbortError'
-  return error
 }

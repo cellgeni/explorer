@@ -16,6 +16,7 @@ import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { AsyncBuffer } from 'hyparquet'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export interface WarmDatasetForRoiOptions {
   readonly getDataset?: (baseUrl: string) => XeniumDataset | Promise<XeniumDataset>
@@ -143,22 +144,6 @@ async function prefetchParquetFooter(
 
   await cachedFile.slice(start, cachedFile.byteLength)
   throwIfAborted(options.signal)
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Dataset warmup aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 function noop(): void {}

@@ -1,5 +1,6 @@
 import { isGeneFeature } from './geneFeatures'
 import type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
+import { throwIfAborted } from '../utils/abort'
 
 // Reading Visium HD feature_slice.h5 from an open h5wasm file. Kept apart from
 // visiumFeatureSlice.ts, which starts workers, so the H5 file worker can
@@ -454,22 +455,6 @@ function readFiniteNumber(source: Record<string, unknown>, key: string): number 
   }
 
   throw new Error(`Expected feature_slice.h5 metadata_json ${key} to be a number.`)
-}
-
-export function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Feature Slice H5 request aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 export function elapsedMs(startedAt: number): number {

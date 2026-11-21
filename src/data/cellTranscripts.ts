@@ -8,6 +8,7 @@ import type { DatasetRangeValidator } from './datasetOverview'
 import type { PerGeneTranscriptReader } from './roiTranscripts'
 import type { TranscriptPoint } from './transcriptOverlay'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export const CELL_TRANSCRIPT_DISTRIBUTION_LIMIT = 100_000
 export const CELL_TRANSCRIPT_DISTRIBUTION_BIN_COUNT = 16
@@ -418,20 +419,4 @@ function pointInPolygon(point: DataPoint, polygon: readonly DataPoint[]): boolea
   }
 
   return inside
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Cell transcript distribution request aborted.')
-  error.name = 'AbortError'
-  return error
 }

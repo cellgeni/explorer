@@ -12,6 +12,7 @@ import {
   type SpatialDataShapes,
 } from './spatialDataShapes'
 import type { Affine2D } from './spatialDataTransforms'
+import { throwIfAborted } from '../utils/abort'
 
 // Reads polygon segmentations into shape columns (see SpatialDataShapes): a
 // GeoJSON FeatureCollection (QuPath's bare feature array too), WKT text (one
@@ -639,21 +640,6 @@ function parseJsonRecord(value: string | undefined): Record<string, unknown> | n
     return recordOrNull(JSON.parse(value) as unknown)
   } catch {
     return null
-  }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted === true) {
-    const error =
-      signal.reason instanceof Error
-        ? signal.reason
-        : new Error('Segmentation read aborted.')
-
-    if (!(signal.reason instanceof Error)) {
-      error.name = 'AbortError'
-    }
-
-    throw error
   }
 }
 

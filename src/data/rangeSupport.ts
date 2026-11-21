@@ -1,6 +1,7 @@
 import { fileNotListedError } from './folderListing'
 import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
+import { isAbortError, throwIfAborted } from '../utils/abort'
 
 export type RangeSupportFetcher = typeof fetch
 
@@ -127,24 +128,4 @@ function rangeSupportCacheKey(url: string, label: string | undefined): string {
 
 function readTargetLabel(label: string | undefined): string {
   return label ?? 'Dataset file'
-}
-
-function isAbortError(cause: unknown): boolean {
-  return cause instanceof Error && cause.name === 'AbortError'
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('HTTP Range support probe aborted.')
-  error.name = 'AbortError'
-  return error
 }

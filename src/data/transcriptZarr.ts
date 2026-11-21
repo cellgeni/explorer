@@ -17,6 +17,7 @@ import type {
   TranscriptLodLevel,
   TranscriptPoint,
 } from './transcriptOverlay'
+import { throwIfAborted } from '../utils/abort'
 
 const TRANSCRIPT_ZARR_EXACT_LEVEL = 0
 const TRANSCRIPT_GRID_BASE_SIZE_MICROMETERS = 250
@@ -1693,20 +1694,4 @@ function expectNumericStride(value: unknown, label: string): readonly number[] {
   }
 
   return value
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Transcript Zarr request aborted.')
-  error.name = 'AbortError'
-  return error
 }

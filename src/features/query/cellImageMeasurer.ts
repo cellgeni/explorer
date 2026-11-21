@@ -4,6 +4,7 @@ import type { ImageFramePlacement, TileIndex } from '../../data/coords'
 import type { ImagePyramidChunkRead, ImagePyramidLoader } from '../../data/imagePyramid'
 import type { TileCellSums } from '../../data/tileCellMeasure'
 import { TileRequestSlots } from '../../tiff/tileRequestScheduler'
+import { abortError } from '../../utils/abort'
 import type { TileMeasure } from '../../workers/tileDecodeMessages'
 import { TileDecodeWorkerPool } from '../../workers/tileDecodePool'
 import { ZarrDecodePool } from '../../workers/zarrDecodePool'
@@ -589,7 +590,7 @@ function takeSlot(slots: TileRequestSlots, signal: AbortSignal): Promise<() => v
       slots.give()
     }
     const onAbort = () => {
-      reject(signal.reason instanceof Error ? signal.reason : abortError())
+      reject(abortError(signal))
     }
     const attempt = () => {
       if (signal.aborted) return
@@ -605,10 +606,6 @@ function takeSlot(slots: TileRequestSlots, signal: AbortSignal): Promise<() => v
     signal.addEventListener('abort', onAbort, { once: true })
     attempt()
   })
-}
-
-function abortError(): DOMException {
-  return new DOMException('The measurement was cancelled.', 'AbortError')
 }
 
 // Decodes and measures tiles and chunks in pools of workers of their own, so

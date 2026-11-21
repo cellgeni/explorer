@@ -12,6 +12,7 @@ import type {
   GeneExpressionQueryOptions,
 } from '../datasets/xeniumDataset'
 import type { DatasetRangeValidator } from './datasetOverview'
+import { throwIfAborted } from '../utils/abort'
 
 export interface LoadDatasetGeneExpressionOptions extends GeneExpressionQueryOptions {
   readonly validateRangeSupport?: DatasetRangeValidator
@@ -85,20 +86,4 @@ export async function loadDatasetGeneExpression(
       stageSummary: stageTimings.map(formatGeneExpressionStageTiming).join('; '),
     },
   }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Gene expression request aborted.')
-  error.name = 'AbortError'
-  return error
 }

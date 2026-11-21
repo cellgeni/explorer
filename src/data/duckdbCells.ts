@@ -3,6 +3,7 @@ import { parseCellOverviewRow } from './hyparquetCells'
 import { notifyFallback } from './fallbackNotice'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
 import type { ArrowTableLike, DuckDbPreparedStatementLike, SqlParameter } from './gex'
+import { throwIfAborted } from '../utils/abort'
 
 export interface DuckDbOverviewClientLike {
   readonly conn: DuckDbOverviewConnectionLike
@@ -118,22 +119,6 @@ async function queryOverviewRows(
   }
 
   return statement.query(...params)
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('DuckDB overview read aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 function readMissingOptionalOverviewColumn(error: unknown): string | null {

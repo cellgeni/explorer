@@ -3,11 +3,8 @@ import {
   notifyMissingCellOverviewColumns,
   readCellsOverview,
 } from './hyparquetCells'
-import type {
-  CellOverviewPoint,
-  CellsOverviewColumns,
-  ReadCellsOverviewOptions,
-} from './hyparquetCells'
+import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
+import { runWorkerOnce, type OneShotWorker } from '../workers/runWorkerOnce'
 import type {
   CellsOverviewWorkerRequest,
   CellsOverviewWorkerResponse,
@@ -18,12 +15,10 @@ import type {
 // the transferred columns into cells. The worker exits once it has answered;
 // an abort terminates it, which cancels its requests.
 
-export interface CellsOverviewWorkerLike {
-  onmessage: ((event: MessageEvent<CellsOverviewWorkerResponse>) => void) | null
-  onerror: ((event: ErrorEvent) => void) | null
-  postMessage(message: CellsOverviewWorkerRequest): void
-  terminate(): void
-}
+export type CellsOverviewWorkerLike = OneShotWorker<
+  CellsOverviewWorkerRequest,
+  CellsOverviewWorkerResponse
+>
 
 export type CellsOverviewWorkerFactory = () => CellsOverviewWorkerLike
 
@@ -45,14 +40,19 @@ export async function readCellsOverviewInWorker(
     return readCellsOverview(options)
   }
 
-  const columns = await readColumnsInWorker(
+  const columns = await runWorkerOnce(
     workerFactory(),
     {
       url: options.url,
       includeCellIds: options.includeCellIds !== false,
       ...(options.limit === undefined ? {} : { limit: options.limit }),
     },
-    options.signal,
+    {
+      signal: options.signal,
+      errorName: 'CellsOverviewWorkerError',
+      failureMessage: 'The cells.parquet overview worker failed.',
+      onMessage: (response) => (response.ok ? { value: response.columns } : response),
+    },
   )
   notifyMissingCellOverviewColumns(columns.missingColumns, options.onFallback)
   return cellsOverviewFromColumns(columns)
@@ -69,68 +69,8 @@ function workerCanRead(options: ReadCellsOverviewOptions): boolean {
   )
 }
 
-function readColumnsInWorker(
-  worker: CellsOverviewWorkerLike,
-  request: CellsOverviewWorkerRequest,
-  signal: AbortSignal | undefined,
-): Promise<CellsOverviewColumns> {
-  if (signal?.aborted === true) {
-    worker.terminate()
-    return Promise.reject(abortError(signal))
-  }
-
-  return new Promise<CellsOverviewColumns>((resolve, reject) => {
-    const finish = () => {
-      signal?.removeEventListener('abort', handleAbort)
-      worker.onmessage = null
-      worker.onerror = null
-      worker.terminate()
-    }
-    const handleAbort = () => {
-      finish()
-      reject(abortError(signal))
-    }
-
-    worker.onmessage = (event) => {
-      finish()
-      const response = event.data
-
-      if (response.ok) {
-        resolve(response.columns)
-        return
-      }
-
-      const error = new Error(response.error)
-      error.name = response.errorName ?? 'CellsOverviewWorkerError'
-      reject(error)
-    }
-    worker.onerror = (event) => {
-      finish()
-      reject(new Error(event.message || 'The cells.parquet overview worker failed.'))
-    }
-    signal?.addEventListener('abort', handleAbort, { once: true })
-
-    try {
-      worker.postMessage(request)
-    } catch (cause) {
-      finish()
-      reject(cause instanceof Error ? cause : new Error(String(cause)))
-    }
-  })
-}
-
 function createDefaultCellsOverviewWorker(): CellsOverviewWorkerLike {
   return new Worker(new URL('../workers/cellsOverview.worker.ts', import.meta.url), {
     type: 'module',
   })
-}
-
-function abortError(signal: AbortSignal | undefined): Error {
-  if (signal?.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Cells overview request aborted.')
-  error.name = 'AbortError'
-  return error
 }

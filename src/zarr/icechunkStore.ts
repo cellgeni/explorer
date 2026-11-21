@@ -11,6 +11,7 @@ import {
 import type * as zarr from 'zarrita'
 import { abortable } from '../utils/abortable'
 import { createAsyncLimiter } from '../utils/asyncLimiter'
+import { isAbortError } from '../utils/abort'
 
 // An Icechunk repository read through icechunk-js. Its snapshot holds every
 // node's Zarr v3 metadata, so the hierarchy is known as soon as it opens and
@@ -360,8 +361,4 @@ function recordOrEmpty(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {}
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
 }

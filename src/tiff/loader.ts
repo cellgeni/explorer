@@ -100,6 +100,7 @@ import type {
   OpenImagePyramidOptions,
 } from '../data/imagePyramid'
 import type { QptiffIfdSummary } from './qptiff'
+import { isAbortError } from '../utils/abort'
 
 export interface TiffChunk {
   readonly offset: number
@@ -3344,8 +3345,4 @@ function numberLikeToNumber(value: number | bigint, key: string): number {
 
 function positiveFiniteScale(value: number): number {
   return Number.isFinite(value) && value > 0 ? value : 1
-}
-
-function isAbortError(cause: unknown): boolean {
-  return cause instanceof Error && cause.name === 'AbortError'
 }

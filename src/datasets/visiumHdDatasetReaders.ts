@@ -85,6 +85,7 @@ import type {
 } from './visiumHdDataset'
 import { normalizeGeneList, normalizeSampleStride } from './xeniumDatasetRows'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
+import { throwIfAborted } from '../utils/abort'
 
 export type VisiumHdTissuePositionsReader = (
   options: ReadVisiumHdTissuePositionsOptions,
@@ -1421,22 +1422,6 @@ function normalizeLimit(limit: number): number {
   return Math.max(0, Math.floor(limit))
 }
 
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
 function elapsedMs(startedAt: number): number {
   return Date.now() - startedAt
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Visium HD expression request aborted.')
-  error.name = 'AbortError'
-  return error
 }

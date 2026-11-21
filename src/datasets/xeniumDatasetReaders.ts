@@ -50,6 +50,7 @@ import {
   selectedGeneCounts,
   transcriptViewportFilterSql,
 } from './xeniumDatasetRows'
+import { throwIfAborted } from '../utils/abort'
 
 export type XeniumMatrixReader = (
   url: string,
@@ -1122,22 +1123,6 @@ LIMIT ?
   return result.toArray().map(parseViewportCellRow)
 }
 
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
 function elapsedMs(startedAt: number): number {
   return Math.max(0, Date.now() - startedAt)
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Xenium dataset request aborted.')
-  error.name = 'AbortError'
-  return error
 }
