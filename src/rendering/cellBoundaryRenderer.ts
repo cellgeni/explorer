@@ -171,6 +171,7 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
 export const NUCLEUS_BOUNDARY_LAYER_ID = 'nucleus-segmentation-polygons'
 
 // Nuclei can be hovered and picked; a click selects the nucleus's cell.
+// Outlines are as wide as cell outlines; their colour tells them apart.
 export function createNucleusBoundaryLayers(
   boundaries: readonly CellBoundaryDatum[],
   opacity: number | undefined,
@@ -190,13 +191,13 @@ export function createNucleusBoundaryLayers(
       filled: true,
       opacity: 1,
       lineWidthUnits: 'pixels',
-      lineWidthMinPixels: 0.5,
+      lineWidthMinPixels: CELL_BOUNDARY_LINE_WIDTH_PIXELS,
       getPolygon: (boundary) => boundary.polygon,
       getFillColor: (boundary) =>
         colorWithOpacity(boundary.fillColor, nucleusBoundaryOpacity),
       getLineColor: (boundary) =>
         colorWithOpacity(boundary.lineColor, nucleusBoundaryOpacity),
-      getLineWidth: 0.5,
+      getLineWidth: CELL_BOUNDARY_LINE_WIDTH_PIXELS,
       updateTriggers: {
         getFillColor: [nucleusBoundaryOpacity],
         getLineColor: [nucleusBoundaryOpacity],
