@@ -455,9 +455,10 @@ describe('Visium HD segmentation GeoJSON reader', () => {
   it('rejects indexed GeoJSON without a features array', () => {
     const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
 
-    parser.push(new TextEncoder().encode('{"type":"Feature","geometry":null}'))
-
-    expect(() => parser.finish()).toThrow('to be a FeatureCollection')
+    // Refused as soon as the root object closes without one.
+    expect(() =>
+      parser.push(new TextEncoder().encode('{"type":"Feature","geometry":null}')),
+    ).toThrow('to be a FeatureCollection')
   })
 
   it('converts labelled nucleus instance-mask TIFF pixels into polygon elements', () => {
