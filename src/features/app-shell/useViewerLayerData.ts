@@ -20,6 +20,7 @@ import {
   type GeneExpressionColorScale,
   type GeneExpressionScoreMode,
   type OverviewCellDatum,
+  type TranscriptAggregateLayerDataOptions,
   type TranscriptDensityColorScale,
   type TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
@@ -100,9 +101,11 @@ interface ViewerLayerTranscriptOptions {
   readonly transcriptPointColorMode: TranscriptPointColorMode
   readonly transcriptDensityColorScale: TranscriptDensityColorScale
   // The transcript gene legend (15.4-C): each gene's colour, and genes whose
-  // points are hidden. Both must be stable between renders.
+  // points are hidden; with Point color on Gene set, each gene's set, which
+  // gene markers merge. All must be stable between renders.
   readonly transcriptGeneColor?: (featureName: string) => Color
   readonly hiddenTranscriptGenes?: ReadonlySet<string>
+  readonly transcriptGeneGroup?: TranscriptAggregateLayerDataOptions['featureGroup']
 }
 
 interface ViewerLayerMorphologyOptions {
@@ -159,6 +162,7 @@ export function useViewerLayerData({
     transcriptCapabilityState,
     transcriptDensityColorScale,
     transcriptGeneColor,
+    transcriptGeneGroup,
     transcriptLayerState,
     transcriptPointColorMode,
   } = transcripts
@@ -345,6 +349,9 @@ export function useViewerLayerData({
         ...(hiddenTranscriptGenes === undefined
           ? {}
           : { hiddenFeatures: hiddenTranscriptGenes }),
+        ...(transcriptGeneGroup === undefined
+          ? {}
+          : { featureGroup: transcriptGeneGroup }),
       },
     )
   }, [
@@ -352,6 +359,7 @@ export function useViewerLayerData({
     transcriptDensityColorScale,
     transcriptDensityScaleMax,
     transcriptGeneColor,
+    transcriptGeneGroup,
     transcriptLayerState,
   ])
   const visibleTranscriptEstimate = useMemo(

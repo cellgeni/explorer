@@ -77,6 +77,7 @@
 
 .gene-set-actions button,
 .gene-set-apply,
+.gene-set-add,
 .gene-set-remove {
   min-width: 0;
   min-height: 25px;
@@ -93,12 +94,14 @@
 
 .gene-set-actions button:hover,
 .gene-set-apply:hover,
+.gene-set-add:not(:disabled):hover,
 .gene-set-remove:hover {
   background: var(--accent);
   color: var(--accent-contrast);
 }
 
-.gene-set-actions button:disabled {
+.gene-set-actions button:disabled,
+.gene-set-add:disabled {
   cursor: not-allowed;
   opacity: 0.52;
 }
@@ -110,7 +113,7 @@
 
 .gene-set-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 24px;
+  grid-template-columns: minmax(0, 1fr) auto 24px;
   gap: 4px;
   min-width: 0;
 }

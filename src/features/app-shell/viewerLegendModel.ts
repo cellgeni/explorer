@@ -117,17 +117,14 @@ export function viewerLegendSections(input: ViewerLegendInput): ViewerLegendSect
       min: '0',
       max: `${TRANSCRIPT_QUALITY_SCALE_MAX}+`,
     })
-  } else if (
-    (pointColorMode === 'feature' || pointColorMode === null) &&
-    input.transcripts.genes != null
-  ) {
-    const { items, moreCount } = input.transcripts.genes
+  } else if (input.transcripts.genes != null) {
+    const { items, moreCount, bySet = false } = input.transcripts.genes
     sections.push({
       kind: 'categories',
       id: TRANSCRIPT_GENE_LEGEND_ID,
-      title: 'Transcripts',
+      title: bySet ? 'Transcripts by gene set' : 'Transcripts',
       items: items.map((item) => ({
-        id: item.gene,
+        id: item.geneSet?.id ?? item.gene,
         label: item.gene,
         color: item.color,
         count: item.count,

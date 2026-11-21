@@ -10,7 +10,11 @@ import type {
   TranscriptDensityColorScale,
   TranscriptPointColorMode,
 } from '../../rendering/deckLayers'
-import { TRANSCRIPT_GENE_PALETTE } from './transcriptGeneLegendModel'
+import {
+  OTHER_TRANSCRIPT_GENES_COLOR,
+  OTHER_TRANSCRIPT_GENES_ID,
+  TRANSCRIPT_GENE_PALETTE,
+} from './transcriptGeneLegendModel'
 import type { TranscriptLayerState } from './transcriptLayerModel'
 import { useTranscriptGeneLegend } from './useTranscriptGeneLegend'
 
@@ -42,26 +46,41 @@ const DENSITY: TranscriptLayerState = {
   ] as unknown as readonly TranscriptAggregateBin[],
 } as unknown as TranscriptLayerState
 
+const ASTROCYTES = {
+  id: 'gene-set:astrocytes',
+  name: 'Astrocytes',
+  genes: ['GFAP', 'AQP4'],
+}
+const NO_SETS: readonly (typeof ASTROCYTES)[] = []
+
 function useHarness(
   colorMode: TranscriptPointColorMode,
   layerState = READY,
   selectedGenes: readonly string[] = ['SNAP25', 'GFAP'],
   densityColorScale: TranscriptDensityColorScale = 'thermal',
+  geneSets = NO_SETS,
 ) {
   const [colors, setColors] = useState<Readonly<Record<string, string>>>({})
+  const [setColorsById, setSetColors] = useState<Readonly<Record<string, string>>>({})
   const [hidden, setHidden] = useState<readonly string[]>([])
+  const [hiddenSets, setHiddenSets] = useState<readonly string[]>([])
   return useTranscriptGeneLegend({
     appendDebugEvent: vi.fn(),
     colorMode,
     colors,
     densityColorScale,
     filterMode: 'selected',
+    geneSets,
+    geneSetColors: setColorsById,
     hiddenGenes: hidden,
+    hiddenGeneSets: hiddenSets,
     layerState,
     overlayShown: true,
     selectedGenes,
     setColors,
+    setGeneSetColors: setSetColors,
     setHiddenGenes: setHidden,
+    setHiddenGeneSets: setHiddenSets,
   })
 }
 
@@ -167,5 +186,93 @@ describe('useTranscriptGeneLegend', () => {
     colorMode = 'feature'
     rerender()
     expect(result.current.hiddenGenes.has('SNAP25')).toBe(true)
+  })
+
+  it('colours by gene set, with Other genes for genes in no set', () => {
+    const { result } = renderHook(() =>
+      useHarness('gene-set', READY, ['SNAP25', 'GFAP'], 'thermal', [ASTROCYTES]),
+    )
+
+    expect(result.current.model.bySet).toBe(true)
+    expect(result.current.model.note).toBeNull()
+    expect(result.current.model.items).toEqual([
+      {
+        gene: 'Astrocytes',
+        color: TRANSCRIPT_GENE_PALETTE[0],
+        visible: true,
+        count: 2,
+        geneSet: { id: ASTROCYTES.id, geneCount: 2 },
+      },
+      {
+        gene: 'Other genes',
+        color: OTHER_TRANSCRIPT_GENES_COLOR,
+        visible: true,
+        count: 1,
+        geneSet: { id: OTHER_TRANSCRIPT_GENES_ID, geneCount: 0 },
+      },
+    ])
+    expect(result.current.legend?.bySet).toBe(true)
+    expect(result.current.featureColor('GFAP')).toEqual([76, 211, 194, 235])
+    expect(result.current.featureColor('SNAP25')).toEqual([156, 163, 175, 235])
+    expect(result.current.featureGroup?.('AQP4')).toMatchObject({ label: 'Astrocytes' })
+  })
+
+  it('hides and recolours a gene set by its ID', () => {
+    const { result } = renderHook(() =>
+      useHarness('gene-set', READY, ['SNAP25', 'GFAP'], 'thermal', [ASTROCYTES]),
+    )
+
+    act(() => {
+      result.current.model.onVisibilityChange(ASTROCYTES.id, false)
+      result.current.model.onColorChange(ASTROCYTES.id, '#ff0000')
+    })
+
+    expect([...result.current.hiddenGenes]).toEqual(['GFAP'])
+    expect(result.current.model.hiddenCount).toBe(1)
+    expect(result.current.model.items[0]).toMatchObject({
+      color: '#ff0000',
+      visible: false,
+    })
+    expect(result.current.featureColor('GFAP')).toEqual([255, 0, 0, 235])
+
+    act(() => {
+      result.current.model.onVisibilityChange(OTHER_TRANSCRIPT_GENES_ID, false)
+    })
+    expect([...result.current.hiddenGenes].sort()).toEqual(['GFAP', 'SNAP25'])
+
+    act(() => {
+      result.current.model.onShowAll()
+    })
+    expect(result.current.hiddenGenes.size).toBe(0)
+  })
+
+  it('merges gene markers by gene set and counts the sets’ transcripts', () => {
+    const { result } = renderHook(() =>
+      useHarness('gene-set', DENSITY, ['SNAP25', 'GFAP'], 'gene', [ASTROCYTES]),
+    )
+
+    expect(result.current.markersShown).toBe(true)
+    expect(result.current.featureGroup).toBeDefined()
+    expect(result.current.legend?.items.map((item) => [item.gene, item.count])).toEqual([
+      ['Astrocytes', 4],
+      ['Other genes', 3],
+    ])
+  })
+
+  it('says how to save a set when there are none', () => {
+    const { result } = renderHook(() => useHarness('gene-set'))
+
+    expect(result.current.model.active).toBe(true)
+    expect(result.current.model.note).toMatch(/No gene sets are saved/)
+    expect(result.current.model.items.map((item) => item.gene)).toEqual(['Other genes'])
+  })
+
+  it('leaves gene markers per gene unless coloured by gene set', () => {
+    const { result } = renderHook(() =>
+      useHarness('feature', DENSITY, ['SNAP25', 'GFAP'], 'gene', [ASTROCYTES]),
+    )
+
+    expect(result.current.featureGroup).toBeUndefined()
+    expect(result.current.legend?.bySet).toBeUndefined()
   })
 })

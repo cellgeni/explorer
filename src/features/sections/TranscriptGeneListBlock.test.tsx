@@ -47,4 +47,53 @@ describe('TranscriptGeneList', () => {
     rerender(<TranscriptGeneList geneLegend={model()} />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('lists gene sets by name and size, and calls back with the set ID', () => {
+    const geneLegend = model({
+      active: true,
+      bySet: true,
+      note: 'No gene sets are saved …',
+      items: [
+        {
+          gene: 'Astrocytes',
+          color: '#4cd3c2',
+          visible: false,
+          count: 40,
+          geneSet: { id: 'gene-set:astrocytes', geneCount: 2 },
+        },
+        {
+          gene: 'Other genes',
+          color: '#9ca3af',
+          visible: true,
+          count: 7,
+          geneSet: { id: 'other-genes', geneCount: 0 },
+        },
+      ],
+      hiddenCount: 1,
+    })
+    render(<TranscriptGeneList geneLegend={geneLegend} />)
+
+    expect(
+      screen.getByRole('list', { name: 'Transcript gene set colours' }),
+    ).toHaveTextContent('Astrocytes 2 genes40Other genes7')
+    expect(screen.getByText('No gene sets are saved …')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Astrocytes transcript color'), {
+      target: { value: '#00ff00' },
+    })
+    fireEvent.click(screen.getByLabelText('Astrocytes transcripts visible'))
+
+    expect(geneLegend.onColorChange).toHaveBeenCalledWith(
+      'gene-set:astrocytes',
+      '#00ff00',
+    )
+    expect(geneLegend.onVisibilityChange).toHaveBeenCalledWith(
+      'gene-set:astrocytes',
+      true,
+    )
+    expect(screen.getByRole('button', { name: 'Show All' })).toHaveAttribute(
+      'title',
+      "Show every hidden gene set's transcripts",
+    )
+  })
 })

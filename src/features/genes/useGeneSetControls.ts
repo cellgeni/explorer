@@ -102,6 +102,25 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
       onApply(geneSet.genes, geneSet.scoreMode)
       setGeneSearch('')
     },
+    // Adds the set's genes to the selection, sorted as picked genes are, and
+    // keeps the score mode, so several sets show at once (as Point color's
+    // Gene set colours them).
+    addSavedGeneSet: (geneSet: SavedGeneSet) => {
+      const current = new Set(selected)
+      const added = geneSet.genes.filter((gene) => !current.has(gene))
+
+      if (added.length === 0) {
+        return
+      }
+
+      log(
+        `Added gene set ${geneSet.name}: ${added.length.toLocaleString()} ${
+          added.length === 1 ? 'gene' : 'genes'
+        }`,
+      )
+      onApply([...selected, ...added].sort((a, b) => a.localeCompare(b)))
+      setGeneSearch('')
+    },
     // Offers Undo, which puts the set back where it was (15.3-C).
     removeSavedGeneSet: (id: string) => {
       const index = savedGeneSets.findIndex((geneSet) => geneSet.id === id)

@@ -391,7 +391,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The transcript gene list (15.4-C): swatch, eye, gene, count. */
+/* The transcript gene list (15.4-C): swatch, eye, gene (or gene set), count. */
 .transcript-gene-panel {
   display: grid;
   gap: 4px;
@@ -404,6 +404,12 @@
 
 .transcript-gene-list li {
   grid-template-columns: 22px 16px minmax(0, 1fr) auto;
+}
+
+/* A gene set row's gene count, after its name. */
+.transcript-gene-set-size {
+  color: var(--text-3);
+  font-size: var(--font-caption);
 }
 
 .transcript-gene-footer {

@@ -1748,6 +1748,73 @@ describe('deck layer factory', () => {
     expect(allTranscripts?.fillColor).toEqual([255, 223, 91, 246])
   })
 
+  it('merges gene markers by gene set, at the count-weighted centre', () => {
+    const square = {
+      id: 'sq-1',
+      glyphType: 'density' as const,
+      level: 1,
+      binX: 0,
+      binY: 0,
+      position: { x: micrometers(10), y: micrometers(10) },
+      radiusMicrometers: 8.4,
+      binSizeMicrometers: 20,
+      count: 10,
+      featureGroups: [
+        {
+          featureName: 'GFAP',
+          count: 6,
+          position: { x: micrometers(2), y: micrometers(4) },
+        },
+        {
+          featureName: 'AQP4',
+          count: 2,
+          position: { x: micrometers(10), y: micrometers(12) },
+        },
+        {
+          featureName: 'SNAP25',
+          count: 2,
+          position: { x: micrometers(18), y: micrometers(18) },
+        },
+      ],
+    }
+    const astrocytes = { id: 'gene-set:astrocytes', label: 'Astrocytes' }
+    const other = { id: 'other-genes', label: 'Other genes' }
+    const markers = transcriptAggregateBinsToLayerData([square], 'gene', {
+      scaleMax: 10,
+      featureColor: (gene) => (gene === 'SNAP25' ? [9, 9, 9, 255] : [1, 2, 3, 255]),
+      featureGroup: (gene) => (gene === 'SNAP25' ? other : astrocytes),
+    })
+
+    expect(markers).toHaveLength(2)
+    expect(markers[0]).toMatchObject({
+      id: 'sq-1:gene-set:astrocytes',
+      featureName: 'Astrocytes',
+      count: 8,
+      // (6 × 2 + 2 × 10) / 8 and (6 × 4 + 2 × 12) / 8.
+      position: [4, -6, 0],
+      fillColor: [1, 2, 3, 255],
+      selectedGeneCount: 2,
+      topFeatures: [
+        { featureName: 'GFAP', count: 6 },
+        { featureName: 'AQP4', count: 2 },
+      ],
+    })
+    // One gene: no gene list.
+    expect(markers[1]).toMatchObject({ featureName: 'Other genes', count: 2 })
+    expect(markers[1]?.topFeatures).toBeUndefined()
+
+    // Hidden genes leave their set's marker.
+    const hidden = transcriptAggregateBinsToLayerData([square], 'gene', {
+      scaleMax: 10,
+      hiddenFeatures: new Set(['GFAP']),
+      featureGroup: (gene) => (gene === 'SNAP25' ? other : astrocytes),
+    })
+    expect(hidden.map((marker) => [marker.featureName, marker.count])).toEqual([
+      ['Astrocytes', 2],
+      ['Other genes', 2],
+    ])
+  })
+
   it('can color exact transcript points by QV instead of feature', () => {
     const transcript = {
       id: 'tx-1',

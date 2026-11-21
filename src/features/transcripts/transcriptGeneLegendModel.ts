@@ -117,23 +117,144 @@ export function countTranscriptsByGeneInBins(
 }
 
 export interface TranscriptGeneLegendItem {
+  // The gene, or the gene set's name.
   readonly gene: string
   // CSS hex.
   readonly color: string
   readonly visible: boolean
   // Points loaded in view, hidden ones included.
   readonly count: number
+  // A gene set's row: its ID, for the swatch and the eye, and its genes.
+  readonly geneSet?: { readonly id: string; readonly geneCount: number }
 }
 
 export interface TranscriptGeneLegend {
   readonly items: readonly TranscriptGeneLegendItem[]
   // Genes with points that the list leaves out (All features).
   readonly moreCount: number
+  // The rows are gene sets (Point color: Gene set).
+  readonly bySet?: boolean
 }
 
 export const EMPTY_TRANSCRIPT_GENE_LEGEND: TranscriptGeneLegend = {
   items: [],
   moreCount: 0,
+}
+
+// Colouring by gene set, like 10x Explorer's gene groups: each saved set is
+// one colour and one row. A gene in several sets takes the first one listed;
+// genes in no set are Other genes, whose ID no saved set can have (theirs
+// start with `gene-set:`).
+export const OTHER_TRANSCRIPT_GENES_ID = 'other-genes'
+export const OTHER_TRANSCRIPT_GENES_LABEL = 'Other genes'
+export const OTHER_TRANSCRIPT_GENES_COLOR = '#9ca3af'
+
+export interface TranscriptGeneSetGroup {
+  readonly id: string
+  readonly label: string
+  // CSS hex.
+  readonly color: string
+  readonly geneCount: number
+}
+
+export interface TranscriptGeneSetGrouping {
+  // The sets in their listed order, then Other genes.
+  readonly groups: readonly TranscriptGeneSetGroup[]
+  readonly groupOf: (gene: string) => TranscriptGeneSetGroup
+}
+
+// Set colours go round the palette in the sets' order; an edited one is kept
+// by the set's ID.
+export function transcriptGeneSetGrouping(
+  sets: readonly {
+    readonly id: string
+    readonly name: string
+    readonly genes: readonly string[]
+  }[],
+  overrides: Readonly<Record<string, string>>,
+): TranscriptGeneSetGrouping {
+  const other: TranscriptGeneSetGroup = {
+    id: OTHER_TRANSCRIPT_GENES_ID,
+    label: OTHER_TRANSCRIPT_GENES_LABEL,
+    color: overrides[OTHER_TRANSCRIPT_GENES_ID] ?? OTHER_TRANSCRIPT_GENES_COLOR,
+    geneCount: 0,
+  }
+  const byGene = new Map<string, TranscriptGeneSetGroup>()
+  const groups = sets.map((set, index): TranscriptGeneSetGroup => {
+    const group = {
+      id: set.id,
+      label: set.name,
+      color:
+        overrides[set.id] ??
+        TRANSCRIPT_GENE_PALETTE[index % TRANSCRIPT_GENE_PALETTE.length] ??
+        TRANSCRIPT_GENE_PALETTE[0],
+      geneCount: set.genes.length,
+    }
+
+    for (const gene of set.genes) {
+      if (!byGene.has(gene)) byGene.set(gene, group)
+    }
+
+    return group
+  })
+
+  return {
+    groups: [...groups, other],
+    groupOf: (gene) => byGene.get(gene) ?? other,
+  }
+}
+
+// One row per set, every set listed, then Other genes when it has points.
+// Counts add up the set's genes' counts.
+export function transcriptGeneSetLegend({
+  counts,
+  grouping,
+  hiddenSets,
+}: {
+  readonly counts: ReadonlyMap<string, number>
+  readonly grouping: TranscriptGeneSetGrouping
+  readonly hiddenSets: ReadonlySet<string>
+}): TranscriptGeneLegend {
+  const groupCounts = new Map<string, number>()
+
+  for (const [gene, count] of counts) {
+    const { id } = grouping.groupOf(gene)
+    groupCounts.set(id, (groupCounts.get(id) ?? 0) + count)
+  }
+
+  return {
+    items: grouping.groups
+      .filter(
+        (group) =>
+          group.id !== OTHER_TRANSCRIPT_GENES_ID || (groupCounts.get(group.id) ?? 0) > 0,
+      )
+      .map((group) => ({
+        gene: group.label,
+        color: group.color,
+        visible: !hiddenSets.has(group.id),
+        count: groupCounts.get(group.id) ?? 0,
+        geneSet: { id: group.id, geneCount: group.geneCount },
+      })),
+    moreCount: 0,
+    bySet: true,
+  }
+}
+
+// The loaded genes whose set is hidden, for the layers, which hide by gene.
+export function genesInHiddenSets(
+  counts: ReadonlyMap<string, number>,
+  grouping: TranscriptGeneSetGrouping,
+  hiddenSets: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const hidden = new Set<string>()
+
+  if (hiddenSets.size === 0) return hidden
+
+  for (const gene of counts.keys()) {
+    if (hiddenSets.has(grouping.groupOf(gene).id)) hidden.add(gene)
+  }
+
+  return hidden
 }
 
 // Selected genes, in order, when the filter is Selected genes; otherwise

@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { testCellsSectionModel } from '../../test/sectionModels'
 import type { CellColourModel } from './cellsSectionModel'
-import { GeneExpressionControls } from './CellsSectionBlocks'
+import { GeneExpressionControls, GenePicker } from './CellsSectionBlocks'
 
 function renderScale(overrides: Partial<CellColourModel> = {}) {
   const { colour } = testCellsSectionModel({
@@ -106,5 +106,46 @@ describe('Gene scale range', () => {
     )
     fireEvent.click(reset)
     expect(colour.onScaleRangeChange).toHaveBeenCalledWith({ min: null, max: null })
+  })
+})
+
+describe('Saved gene sets', () => {
+  const caf = {
+    id: 'gene-set:cafs',
+    name: 'CAFs',
+    genes: ['COL1A2', 'POSTN'],
+    scoreMode: 'mean' as const,
+  }
+  const apocrine = {
+    id: 'gene-set:apocrine',
+    name: 'Apocrine',
+    genes: ['PIP'],
+    scoreMode: 'sum' as const,
+  }
+
+  it('adds a set’s genes to the selection, sorted, keeping the score mode', () => {
+    const { genes } = testCellsSectionModel({
+      genes: { selected: ['AGR3', 'POSTN'], savedSets: [caf, apocrine] },
+    })
+    render(<GenePicker genes={genes} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add CAFs' }))
+
+    expect(genes.onApply).toHaveBeenCalledWith(['AGR3', 'COL1A2', 'POSTN'])
+    expect(genes.log).toHaveBeenCalledWith('Added gene set CAFs: 1 gene')
+  })
+
+  it('disables Add when the set’s genes are all selected', () => {
+    const { genes } = testCellsSectionModel({
+      genes: { selected: ['PIP'], savedSets: [caf, apocrine] },
+    })
+    render(<GenePicker genes={genes} />)
+
+    expect(screen.getByRole('button', { name: 'Add Apocrine' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Apocrine' })).toHaveAttribute(
+      'title',
+      "Apocrine's genes are all selected",
+    )
+    expect(screen.getByRole('button', { name: 'Add CAFs' })).toBeEnabled()
   })
 })
