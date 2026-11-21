@@ -130,10 +130,17 @@ the canvas, a `nav` named "Collection":
   previews out as a grid over the canvas, with the heading and buttons
   along the top; the layer panel stays beside it. Each group is a box with
   its name, boxes sit side by side where they fit, and the grid scrolls
-  down. Previews there are 150 px wide and 16:10, drawn at their size.
+  down. Previews there are 16:10 and 150 px wide, or as `Size` sets
+  them, drawn at their size.
   Choosing a dataset, `Collapse` (arrows in) or Escape returns to the bar.
   Disabled with previews off. Its tooltip says what it does. The link
   keeps it as `collectionView=grid`.
+- `Size` (a slider labelled "Preview size", before the ×), only in the
+  grid, sets the previews' width from 100 to 600 px in 10 px steps; none
+  is wider than the grid. While it is dragged the previews stretch, and
+  each is drawn again at its new size once it stops for 150 ms. The size
+  is kept when the grid closes and opens again, and the link keeps it as
+  `collectionPreviewSize=` when it is not 150.
 - `Previews` (picture icon, `aria-pressed`, pressed by default) turns the
   previews off, leaving the labels, and back on in the row. Its tooltip
   says what it does. The link keeps it as `collectionView=names`.
@@ -143,7 +150,8 @@ the canvas, a `nav` named "Collection":
   main view, or closes it. Disabled, with a tooltip saying so, while three
   are shown. A shown section's button has an accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
-  `collectionView=` and `compare=` from the address; the open dataset stays.
+  `collectionView=`, `collectionPreviewSize=` and `compare=` from the
+  address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
@@ -1539,6 +1547,7 @@ the page reloads that entry's link, with its view and settings.
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `collection`                                                                                              | The open [dataset collection](./dataset-collections.md)'s URL                                                                                                                                                                                                                                                                                                                          |
 | `collectionView`                                                                                          | How the collection bar shows its datasets: `grid` (`Expand`) or `names` (`Previews` off). Left out for the previews in a row. Written only with `collection`                                                                                                                                                                                                                           |
+| `collectionPreviewSize`                                                                                   | The width of each preview in the collection grid, in CSS px, from its `Size` slider: 100 to 600. Left out at 150. Written only with `collection`                                                                                                                                                                                                                                       |
 | `compare`                                                                                                 | A section shown [side by side](#sections-side-by-side) with the open dataset, by its URL as in `dataset`; repeatable, in the panels' order. Once the collection is read and its dataset open, only the first three other sections in the open dataset's `coordinateSystem` stay. Written only with `collection`                                                                        |
 | `sectionView`                                                                                             | `3d` while the collection's serial sections are stacked in 3D (the collection bar's `Stack in 3D`; see [3D Stack](dataset-collections.md#3d-stack))                                                                                                                                                                                                                                    |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                                                                 |

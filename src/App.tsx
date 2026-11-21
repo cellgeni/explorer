@@ -97,6 +97,8 @@ import {
   type CollectionBarAnnotations,
 } from './features/collection/CollectionBar'
 import {
+  collectionPreviewSizeForLink,
+  collectionPreviewSizeFromLink,
   collectionSwitchOpening,
   collectionViewForLink,
   collectionViewFromLink,
@@ -457,6 +459,9 @@ export function App({ dependencies }: AppProps = {}) {
   )
   const [collectionView, setCollectionView] = useState<CollectionView>(() =>
     collectionViewFromLink(initialShareableState),
+  )
+  const [collectionPreviewSize, setCollectionPreviewSize] = useState(() =>
+    collectionPreviewSizeFromLink(initialShareableState),
   )
   // Registered sections of the collection shown beside the open dataset
   // (compare=), and the view they share with it.
@@ -3963,6 +3968,7 @@ export function App({ dependencies }: AppProps = {}) {
         : {
             collectionUrl: datasetCollection.state.url,
             collectionView: collectionViewForLink(collectionView),
+            collectionPreviewSize: collectionPreviewSizeForLink(collectionPreviewSize),
             compareUrls: linkCompareUrls,
             sectionView: linkSectionView,
           }),
@@ -5223,6 +5229,10 @@ export function App({ dependencies }: AppProps = {}) {
               onClose={datasetCollection.close}
               view={collectionView}
               onViewChange={setCollectionView}
+              previewSize={{
+                value: collectionPreviewSize,
+                onChange: setCollectionPreviewSize,
+              }}
               previews={{
                 store: collectionPreviewStore,
                 genes: collectionPreviewGenes,

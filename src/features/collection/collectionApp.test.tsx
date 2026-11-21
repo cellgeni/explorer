@@ -291,11 +291,11 @@ describe('App with a dataset collection', () => {
     })
   })
 
-  it("keeps the bar's grid and previews in the address", async () => {
+  it("keeps the bar's grid, its preview size and previews in the address", async () => {
     window.history.replaceState(
       null,
       '',
-      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}&collectionView=grid`,
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}&collectionView=grid&collectionPreviewSize=240`,
     )
 
     render(
@@ -322,6 +322,14 @@ describe('App with a dataset collection', () => {
       return new URLSearchParams(window.location.hash.slice(1))
     }
     expect((await hashAfterWrite()).get('collectionView')).toBe('grid')
+    const size = within(bar).getByRole('slider', { name: 'Preview size' })
+    expect(size).toHaveValue('240')
+    expect((await hashAfterWrite()).get('collectionPreviewSize')).toBe('240')
+    fireEvent.change(size, { target: { value: '320' } })
+    expect((await hashAfterWrite()).get('collectionPreviewSize')).toBe('320')
+    // The default size is left out.
+    fireEvent.change(size, { target: { value: '150' } })
+    expect((await hashAfterWrite()).has('collectionPreviewSize')).toBe(false)
 
     // The row is the default, so the link leaves it out.
     fireEvent.click(within(bar).getByRole('button', { name: 'Collapse' }))

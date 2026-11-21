@@ -30,6 +30,9 @@ interface ShareableDatasetHashOptions {
   readonly collectionUrl?: string | undefined
   // How its bar shows the datasets, when not in a row (collectionView=).
   readonly collectionView?: string | undefined
+  // The width of each preview in its grid, when not the default
+  // (collectionPreviewSize=).
+  readonly collectionPreviewSize?: number | undefined
   // Its registered sections shown beside the dataset (compare=).
   readonly compareUrls?: readonly string[] | undefined
   // `3d` while its serial sections are stacked in 3D (sectionView=).
@@ -185,6 +188,7 @@ export function useShareableUrlHash({
   const {
     annotationGroupIds,
     annotationUrl,
+    collectionPreviewSize,
     collectionUrl,
     collectionView,
     customImageOpacities,
@@ -300,6 +304,7 @@ export function useShareableUrlHash({
         {
           ...(collectionUrl === undefined ? {} : { collectionUrl }),
           ...(collectionView === undefined ? {} : { collectionView }),
+          ...(collectionPreviewSize === undefined ? {} : { collectionPreviewSize }),
           ...(compareKey === '' ? {} : { compareUrls: compareKey.split('\n') }),
           ...(sectionView === undefined ? {} : { sectionView }),
           datasetUrl,
@@ -417,6 +422,7 @@ export function useShareableUrlHash({
     annotationUrl,
     collectionUrl,
     collectionView,
+    collectionPreviewSize,
     compareKey,
     sectionView,
     boundaryCellLimit,

@@ -39,6 +39,30 @@ export function collectionViewForLink(view: CollectionView): string | undefined 
   return view === 'row' ? undefined : view
 }
 
+// The width of each preview in the grid, in CSS px, which its Size slider
+// sets. A preview never grows wider than the grid.
+export const DEFAULT_COLLECTION_PREVIEW_SIZE = 150
+export const MIN_COLLECTION_PREVIEW_SIZE = 100
+export const MAX_COLLECTION_PREVIEW_SIZE = 600
+export const COLLECTION_PREVIEW_SIZE_STEP = 10
+
+// The link's collectionPreviewSize=, within the slider's range; the default
+// when it has none.
+export function collectionPreviewSizeFromLink(state: ShareableState): number {
+  const size = state.collectionPreviewSize
+  if (size === undefined) return DEFAULT_COLLECTION_PREVIEW_SIZE
+
+  return Math.min(
+    MAX_COLLECTION_PREVIEW_SIZE,
+    Math.max(MIN_COLLECTION_PREVIEW_SIZE, size),
+  )
+}
+
+// Left out at the default.
+export function collectionPreviewSizeForLink(size: number): number | undefined {
+  return size === DEFAULT_COLLECTION_PREVIEW_SIZE ? undefined : size
+}
+
 // How a collection dataset opens: the state its load restores, like a shared
 // link's. Version 2, so the colour mode is taken as written.
 export interface CollectionDatasetOpening {

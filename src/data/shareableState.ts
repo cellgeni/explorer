@@ -18,6 +18,9 @@ export interface ShareableState {
   // How the collection bar shows its datasets when not in a row:
   // `collectionView=grid` (expanded) or `names` (previews off).
   readonly collectionView?: string
+  // The width of each preview in its grid, in CSS px:
+  // `collectionPreviewSize=`.
+  readonly collectionPreviewSize?: number
   // Registered sections of the collection shown beside the dataset, one
   // `compare=` each.
   readonly compareUrls?: readonly string[]
@@ -145,6 +148,7 @@ export function parseShareableState(hash: string): ShareableState {
   const linkVersion = parsePositiveInteger(params.get('xv'))
   const collectionUrl = readString(params, 'collection')
   const collectionView = readString(params, 'collectionView')
+  const collectionPreviewSize = parsePositiveInteger(params.get('collectionPreviewSize'))
   const compareUrls = readStrings(params, 'compare')
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
@@ -228,6 +232,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (collectionView !== undefined) {
     state.collectionView = collectionView
+  }
+
+  if (collectionPreviewSize !== undefined) {
+    state.collectionPreviewSize = collectionPreviewSize
   }
 
   if (compareUrls !== undefined) {
@@ -526,6 +534,16 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   setOptionalString(params, 'collectionView', state.collectionView)
+
+  if (
+    state.collectionPreviewSize !== undefined &&
+    Number.isFinite(state.collectionPreviewSize)
+  ) {
+    params.set(
+      'collectionPreviewSize',
+      Math.max(1, Math.floor(state.collectionPreviewSize)).toString(),
+    )
+  }
 
   if (state.compareUrls !== undefined) {
     for (const compareUrl of state.compareUrls) {

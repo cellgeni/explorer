@@ -48,18 +48,29 @@ type TestPreviews = Omit<CollectionBarPreviews, 'store'> & {
 
 type BarProps = Omit<
   ComponentProps<typeof CollectionBar>,
-  'view' | 'onViewChange' | 'previews'
+  'view' | 'onViewChange' | 'previews' | 'previewSize'
 > & {
   readonly initialView?: CollectionView
   readonly onViewChange?: (view: CollectionView) => void
   readonly previews?: TestPreviews
+  readonly initialPreviewSize?: number
+  readonly onPreviewSizeChange?: (size: number) => void
 }
 
 const NO_LOADERS = {} as CollectionPreviewLoaders
 
-// The bar with its view and its previews' store in state, as App keeps them.
-function Bar({ initialView = 'row', onViewChange, previews, ...props }: BarProps) {
+// The bar with its view, preview size and previews' store in state, as App
+// keeps them.
+function Bar({
+  initialView = 'row',
+  onViewChange,
+  previews,
+  initialPreviewSize = 150,
+  onPreviewSizeChange,
+  ...props
+}: BarProps) {
   const [view, setView] = useState(initialView)
+  const [previewSize, setPreviewSize] = useState(initialPreviewSize)
   const store = useCollectionPreviewStore({
     collection:
       previews !== undefined && props.state.status === 'ready'
@@ -79,6 +90,13 @@ function Bar({ initialView = 'row', onViewChange, previews, ...props }: BarProps
       onViewChange={(next) => {
         setView(next)
         onViewChange?.(next)
+      }}
+      previewSize={{
+        value: previewSize,
+        onChange: (next) => {
+          setPreviewSize(next)
+          onPreviewSizeChange?.(next)
+        },
       }}
       {...(previews === undefined
         ? {}
@@ -498,6 +516,52 @@ describe('CollectionBar previews', () => {
     fireEvent.click(within(bar).getByRole('button', { name: 'Previews' }))
     expect(onViewChange).toHaveBeenLastCalledWith('row')
     expect(bar).not.toHaveClass('is-expanded')
+  })
+
+  it('sizes the grid previews with its Size slider', async () => {
+    const onPreviewSizeChange = vi.fn()
+    render(
+      <Bar
+        state={{ status: 'ready', url: COLLECTION_URL, collection: COLLECTION }}
+        loadedUrl={SHAM_A}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+        initialPreviewSize={240}
+        onPreviewSizeChange={onPreviewSizeChange}
+        previews={{
+          loaders: previewLoaders(),
+          genes: ['Aqp4'],
+          scoreMode: 'sum',
+          colorScale: 'plasma',
+          annotations: null,
+          paused: false,
+        }}
+      />,
+    )
+    const bar = screen.getByRole('navigation', { name: 'Collection' })
+    // In a row the previews keep their size.
+    expect(within(bar).queryByRole('slider')).toBe(null)
+
+    fireEvent.click(within(bar).getByRole('button', { name: 'Expand' }))
+
+    const slider = within(bar).getByRole('slider', { name: 'Preview size' })
+    expect(slider).toHaveValue('240')
+    expect(slider).toHaveAttribute('aria-valuetext', '240 px wide')
+    expect(bar.style.getPropertyValue('--collection-preview-size')).toBe('240px')
+    expect(await within(bar).findByText('top 8')).toBeInTheDocument()
+
+    fireEvent.change(slider, { target: { value: '400' } })
+
+    expect(onPreviewSizeChange).toHaveBeenLastCalledWith(400)
+    expect(slider).toHaveAttribute('aria-valuetext', '400 px wide')
+    expect(bar.style.getPropertyValue('--collection-preview-size')).toBe('400px')
+
+    // Collapsed, the slider goes; expanded again, the size is kept.
+    fireEvent.click(within(bar).getByRole('button', { name: 'Collapse' }))
+    expect(within(bar).queryByRole('slider')).toBe(null)
+    fireEvent.click(within(bar).getByRole('button', { name: 'Expand' }))
+    expect(within(bar).getByRole('slider', { name: 'Preview size' })).toHaveValue('400')
   })
 
   it("opens in the link's view", async () => {
