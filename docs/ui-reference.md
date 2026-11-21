@@ -1380,16 +1380,18 @@ the same address shows the same tree, and another address reads that store.
 Closing it during a read stops the read. `readZarrStructure`
 (`src/zarr/zarrStructure.ts`) reads the store:
 
-| Source                | Lists                                                                                                                                                                                         |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Consolidated metadata | Every group and array (v2 `.zmetadata` or `zmetadata`, v3 `consolidated_metadata`)                                                                                                            |
-| Zip directory         | Every file: metadata comes from the consolidated metadata or the zip's metadata files; chunk files add up to each array's stored size; other files show as files                              |
-| Icechunk snapshot     | Every group and array on `main`                                                                                                                                                               |
-| Walked from the root  | Each group's children from the host's listing (S3 ListObjectsV2 or index pages, `createZarrFolderLister`), or else from its attributes; groups whose children may be missing are `not listed` |
+| Source                | Lists                                                                                                                                                                                                                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Consolidated metadata | Every group and array (v2 `.zmetadata` or `zmetadata`, v3 `consolidated_metadata`)                                                                                                                                                                                                              |
+| Zip directory         | Every file: metadata comes from the consolidated metadata or the zip's metadata files; chunk files add up to each array's stored size; other files show as files                                                                                                                                |
+| Icechunk snapshot     | Every group and array on `main`                                                                                                                                                                                                                                                                 |
+| Walked from the root  | Each group's children from the host's listing (S3 ListObjectsV2, also at a bucket's root, or index pages, `createZarrFolderLister`), or else from its attributes; an S3 listing that leaves out the node's own metadata file is not used; groups whose children may be missing are `not listed` |
 
 While reading, it says how many nodes it has read (`role="status"`). A
 failure shows the error's title, message and next step (`role="alert"`), as
-"No Zarr store at this address" when no metadata file answers, with `Retry`.
+"No Zarr store at this address" when no metadata file is found, with `Retry`.
+A metadata read that fails (a network error, or a status other than 404 and 403) fails the read with that error, such as "HTTP 503 response", instead of
+being taken for missing metadata.
 Once read:
 
 | Part                          | Shows                                                                                                                                                                                                |
