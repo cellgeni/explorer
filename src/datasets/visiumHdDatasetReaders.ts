@@ -84,7 +84,7 @@ import type {
   VisiumHdGeneExpressionQueryOptions,
   VisiumHdImageOptions,
 } from './visiumHdDataset'
-import { normalizeGeneList, normalizeSampleStride } from './xeniumDatasetRows'
+import { normalizeGeneList } from './xeniumDatasetRows'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import { throwIfAborted } from '../utils/abort'
 
@@ -1207,21 +1207,20 @@ async function readVisiumHdGeneExpression(options: {
     }
   }
 
+  // Only bins with expression are listed, so `sampleStride` has nothing to
+  // thin: every bin in the box is read, so that no expressing bin is lost. A
+  // feature slice is read a gene at a time, so more bins cost no more reads.
   const limit = queryOptions.limit ?? 5_000
-  const sampleStride = normalizeSampleStride(queryOptions.sampleStride)
   throwIfAborted(queryOptions.signal)
   const viewportBinsStartedAt = Date.now()
   const overview = await options.readBinnedOverview(queryOptions.binSizeMicrometers)
-  const viewportBins = selectExpressionBinsInBbox(overview, options.bbox, {
-    limit,
-    sampleStride,
-  })
+  const viewportBins = selectExpressionBinsInBbox(overview, options.bbox, limit)
   const viewportCellsMs = elapsedMs(viewportBinsStartedAt)
   queryOptions.onStageTiming?.({
     stage: 'viewport-cells',
     label: 'Viewport bin query',
     durationMs: viewportCellsMs,
-    detail: `${viewportBins.length.toLocaleString()} bins, limit ${limit.toLocaleString()}, stride ${sampleStride.toLocaleString()}`,
+    detail: `${viewportBins.length.toLocaleString()} bins, limit ${limit.toLocaleString()}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -1300,9 +1299,8 @@ async function readVisiumHdGeneExpression(options: {
     detail: `${elements.length.toLocaleString()} positive bins`,
   })
 
-  // Every bin in the box, or an even sample by the stride: the bins a z-score
-  // compares with. Only those with expression are listed. A stride reads every
-  // Nth bin only, so expressing bins between them are lost.
+  // Every bin in the box is what a z-score compares with; only those with
+  // expression are listed.
   return {
     elements,
     genes: selectedGenes,
@@ -1322,19 +1320,15 @@ async function readVisiumHdGeneExpression(options: {
 function selectExpressionBinsInBbox(
   overview: VisiumHdBinnedOverview,
   bbox: BBox,
-  options: {
-    readonly limit: number
-    readonly sampleStride: number
-  },
+  maxBins: number,
 ): readonly VisiumHdExpressionBin[] {
-  const limit = normalizeLimit(options.limit)
+  const limit = normalizeLimit(maxBins)
 
   if (limit === 0) {
     return []
   }
 
   const bins: VisiumHdExpressionBin[] = []
-  let candidateIndex = 0
 
   for (let index = 0; index < overview.gridCells.rows.length; index += 1) {
     const row = overview.gridCells.rows[index] ?? 0
@@ -1344,18 +1338,12 @@ function selectExpressionBinsInBbox(
       continue
     }
 
-    const center = gridCellCenter(overview.grid, row, col)
-
-    if (candidateIndex % options.sampleStride === 0) {
-      bins.push({
-        id: overview.gridCells.ids[index] ?? '',
-        row,
-        col,
-        position: center,
-      })
-    }
-
-    candidateIndex += 1
+    bins.push({
+      id: overview.gridCells.ids[index] ?? '',
+      row,
+      col,
+      position: gridCellCenter(overview.grid, row, col),
+    })
 
     if (bins.length >= limit) {
       break

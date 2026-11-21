@@ -207,7 +207,8 @@ export interface GeneExpressionBatchTiming {
 export interface GeneExpressionQueryOptions {
   readonly limit?: number
   // Keeps every Nth cell without expression; cells with expression are always
-  // kept.
+  // kept. A reader that lists only cells with expression ('expressing') has
+  // nothing to thin, so it reads every cell.
   readonly sampleStride?: number
   readonly signal?: AbortSignal
   readonly onStageTiming?: GeneExpressionStageTimingHandler
