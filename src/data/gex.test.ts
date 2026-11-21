@@ -313,6 +313,31 @@ describe('GEX helpers', () => {
     expect(result.cells.get(cellC)).toEqual({ geneNames: [], counts: [] })
   })
 
+  it('reads float counts from cell-major matrix arrays, and names other types', () => {
+    const cellA = intToCellId(1, 1)
+    const read = (data: unknown) =>
+      gexFromCellMajorSparseArrays({
+        cellIds: [cellA],
+        geneNames: ['Actb', 'Gad1'],
+        featureTypes: ['Gene Expression', 'Gene Expression'],
+        cellIdRows: new Map([[cellA, 0]]),
+        indptr: new Int32Array([0, 2]),
+        indicesDataset: { slice: () => new Int32Array([0, 1]) },
+        dataDataset: { slice: () => data },
+      })
+
+    for (const data of [new Float32Array([0.5, 3.25]), new Float64Array([0.5, 3.25])]) {
+      expect(read(data).cells.get(cellA)).toEqual({
+        geneNames: ['Actb', 'Gad1'],
+        counts: [0.5, 3.25],
+      })
+    }
+
+    expect(() => read(['0.5', '3.25'])).toThrow(
+      'Expected the cell feature matrix /matrix/data to be numbers, not Array.',
+    )
+  })
+
   it('reads ROI genes from a cell_feature_matrix.h5 file with h5wasm', async () => {
     const cellA = intToCellId(1, 1)
     const cellB = intToCellId(2, 1)
