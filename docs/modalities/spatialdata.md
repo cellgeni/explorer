@@ -42,7 +42,8 @@ refuse `HEAD`, as for detection), the zip's central directory is read by
 range (`openZippedZarrStore`, `src/zarr/zarrZipStore.ts`) and the store
 root is the shallowest folder holding `zarr.json`, `.zgroup`, `.zattrs`, or
 `zmetadata`: the top of the zip, or the `sample.zarr/` folder that zipping a
-store folder keeps. `__MACOSX/` is ignored, and a zip with no store or with
+store folder keeps. Backslashes in entry names, as some Windows tools write
+them, are read as `/`. `__MACOSX/` is ignored, and a zip with no store or with
 two side by side is an error. The store is SpatialData when its root
 metadata passes `isSpatialDataRootMetadata`, or, since some writers (for
 example the STHELAR exports) leave root attributes out, when the root holds

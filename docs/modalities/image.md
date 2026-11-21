@@ -208,17 +208,17 @@ TIFF it already holds and place it:
 
 ### OME-XML
 
-| Field                                          | Use                                                                                                                                                  |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Pixels@PhysicalSizeX` (+ unit)                | µm/px. Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored.                                              |
-| `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it |
-| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                     |
-| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                         |
-| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                       |
-| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`); channels count in element order, not by ID                      |
-| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                               |
-| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                              |
-| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                           |
+| Field                                          | Use                                                                                                                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Pixels@PhysicalSizeX` (+ unit)                | µm/px, from any length unit (Å to km, inches, feet; `src/data/lengthUnits.ts`). Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
+| `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it                             |
+| `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                                                 |
+| `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                                                     |
+| `Channel@Color`                                | Channel colour as signed 32-bit RGBA (alpha ignored); without it, keyword defaults (DAPI, boundary, RNA, protein) or a palette                                                   |
+| `TiffData` `FirstC`/`IFD`/`UUID@FileName`      | Per-channel IFD (`#ifd=N`) or sibling file (Xenium `morphology_focus_000N.ome.tif`); channels count in element order, not by ID                                                  |
+| `SizeZ`, `DimensionOrder`, `TiffData` `FirstZ` | Z-stack planes per channel (see [Z-Stacks](#z-stacks))                                                                                                                           |
+| `PhysicalSizeZ` (+ unit)                       | Depth shown beside the `Z plane` slider                                                                                                                                          |
+| `SamplesPerPixel ≥ 3` or `Interleaved="true"`  | Native RGB, drawn without colour or window                                                                                                                                       |
 
 ### QPTIFF
 
@@ -526,22 +526,33 @@ transform.
   inflated whole, so each chunk costs its compressed size.
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
-- Axes come from `axes`, else array dimension names, else positional
-  `…, c, y, x`. `x` and `y` are required. `z` starts at
-  `omero.rdefs.defaultZ`, else the middle plane, and other planes open as
-  `#z=N` loaders; `t` is `defaultT`, else 0.
-- µm/px is the product of multiscale and dataset `scale` values for x, with
-  unit conversion (nm, µm, mm, m). Unknown units count as µm; a missing scale
-  gives 1 µm/px. `translation` is ignored except for SpatialData placement.
+- Axes come from `axes`, else array dimension names, else by position. A 5D
+  array (OME-Zarr 0.1 and 0.2) is `t, c, z, y, x`; other ranks end
+  `…, c, y, x`. `x` and `y` are required. `z` starts at `omero.rdefs.defaultZ`,
+  else the middle plane, and other planes open as `#z=N` loaders; `t` is
+  `defaultT`, else 0.
+- µm/px is the product of multiscale and dataset `scale` values for x, and
+  for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
+  the image's extent and fit). Units are converted from any length the
+  specification names, from angstrom to kilometre, inch and foot
+  (`src/data/lengthUnits.ts`, shared with OME-TIFF). Unknown units count as
+  µm; a missing scale gives level 0 1 µm/px. A later level without a `scale`
+  (OME-Zarr 0.1 to 0.3) takes level 0's pixel size scaled by its shape, so a
+  level half as wide has pixels twice as wide. `translation` is ignored except
+  for SpatialData placement.
 - Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
   are served as several virtual tiles of at most 512 pixels that share one
-  decoded chunk.
+  decoded chunk. Pixels may be `uint8`, `uint16`, `uint32`, `int8`, `int16`,
+  `int32`, `float32` or `float64`; an image of another data type, such as
+  numpy's default `int64`, fails to open with its type named.
 - `omero.channels` gives names, `RRGGBB` colours, and windows (`start`/`end`,
   else `min`/`max`). Channels after the first open as `#c=N` loaders. An
   image without a `c` axis is one channel, white unless omero gives a colour,
   so a `z, y, x` volume gets the `Z plane` control.
-- Three channels with no omero data, or labelled/coloured R, G, B, are treated
-  as native RGB.
+- Three `uint8` channels with no omero data, or labelled/coloured R, G, B, are
+  treated as native RGB. They keep their omero labels, except R, G, B and
+  channel indices, which become Red, Green and Blue. Other dtypes are always
+  fluorescence channels.
 - Chunk bytes are fetched on the main thread. Decoding and RGBA conversion run
   in the Zarr decode worker pool (`src/workers/zarrDecodePool.ts`, up to
   `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one
@@ -553,7 +564,10 @@ transform.
   `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
   truncated body to one of two Range requests for the same bytes at once:
   opening the 3D view while the 2D view was loading the same chunks of the
-  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18).
+  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18). A
+  `200` answer to a Range read is refused as blocked Range requests
+  (`createZarrFetchStore`), since zarrita would take the whole shard for the
+  bytes it asked for.
 
 ### 3D View
 
@@ -568,8 +582,12 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
   (8,781 × 2,253 × 41, 3 channels) at level 4 of 7, 1,097 × 281 × 41.
 - **Reading.** `loadVolume` reads the loader's channel at every plane of the
   level with `zarr.get`, in slabs one chunk deep so each chunk is decoded
-  once, four slabs at a time, and reports planes read. Codecs run in the Zarr
-  decode workers, as for other zarrita reads. Up to six enabled channels are
+  once, four slabs at a time, and reports planes read. After a slab fails no
+  more are started, and slabs still being read are dropped. zarrita shares a
+  shard's index read under the signal of the read that started it, so a 3D
+  slab or a 2D tile whose read was aborted by another read's cancel is read
+  again, up to three times. Codecs run in the Zarr decode workers, as for other
+  zarrita reads. Up to six enabled channels are
   read, each once while the 3D view stays open; moving the `Z plane` slider
   does not read them again. Leaving 3D drops them.
 - **Textures.** An 8-bit volume is uploaded as it is (`r8unorm`). Other dtypes
@@ -626,7 +644,10 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
 
 `computeChannelAutoContrast` (`src/data/morphologyContrast.ts`) samples up to
 250,000 values from the coarsest level and sets the window to the 0.5 and
-99.8 percentiles, with a 32-bin histogram for the Image section. It reads at
+99.8 percentiles, with a 32-bin histogram for the Image section. Samples that
+are not finite, such as NaN for no data, are left out. For whole-number data
+the window is rounded outward to whole numbers; fractional data, such as a
+float image of values below 1, keeps the percentiles as they are. It reads at
 most 64 of the level's tiles, from 8 evenly spaced rows (more per row when
 there are fewer rows), so an image without a pyramid is not read whole. It
 runs after an image loads and when a channel's `Auto` button is pressed.

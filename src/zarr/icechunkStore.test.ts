@@ -10,6 +10,17 @@ import { icechunkCompanionFileUrl, isIcechunkUrl } from './icechunkUrl'
 
 const TINY_X_DATA = [1, 5, 2, 3, 4, 6, 1, 7, 8, 2, 3, 1]
 
+// The fixture host, except that paths containing `blocked` answer `status`.
+function refusing(blocked: string, status: number): typeof fetch {
+  const fetcher = icechunkFixtureFetcher()
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    return new URL(request.url).pathname.includes(blocked)
+      ? new Response(null, { status })
+      : fetcher(request)
+  }) as typeof fetch
+}
+
 describe('openIcechunkRepository', () => {
   it('lists every node and its metadata from the snapshot', async () => {
     const requests: IcechunkFixtureRequest[] = []
@@ -117,6 +128,40 @@ describe('openIcechunkRepository', () => {
       message: expect.stringContaining(
         `No readable Icechunk repository at ${ICECHUNK_FIXTURE_ORIGIN}/missing.icechunk`,
       ),
+    })
+  })
+
+  it.each([403, 404])(
+    'fails a read whose manifest answers %i instead of reading zeros',
+    async (status) => {
+      const repository = await openIcechunkRepository(
+        `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk?manifests=${status}`,
+        { fetcher: refusing('/manifests/', status) },
+      )
+      const array = await zarr.open.v3(zarr.root(repository.store).resolve('X/data'), {
+        kind: 'array',
+      })
+
+      await expect(zarr.get(array)).rejects.toThrow(
+        new RegExp(
+          `^HTTP ${status} for ${ICECHUNK_FIXTURE_ORIGIN}/anndata\\.icechunk/manifests/`,
+        ),
+      )
+    },
+  )
+
+  it('reports a refused snapshot as a repository that was found', async () => {
+    await expect(
+      openIcechunkRepository(
+        `${ICECHUNK_FIXTURE_ORIGIN}/anndata.icechunk?snapshots=403`,
+        {
+          fetcher: refusing('/snapshots/', 403),
+        },
+      ),
+    ).rejects.toMatchObject({
+      name: 'IcechunkRepositoryUnavailableError',
+      found: true,
+      message: expect.stringContaining('HTTP 403 for'),
     })
   })
 

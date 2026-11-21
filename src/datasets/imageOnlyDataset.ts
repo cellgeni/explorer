@@ -1,4 +1,4 @@
-import { micrometers } from '../data/coords'
+import { micrometers, micrometersPerPixelY } from '../data/coords'
 import { openImagePyramid, openImagePyramidOptions } from '../data/morphologyImage'
 import type { FallbackNotifier } from '../data/fallbackNotice'
 import type { GexResult } from '../data/gex'
@@ -34,7 +34,7 @@ export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
   async meta(): Promise<DatasetMeta> {
     const loader = await this.loader()
     const widthMicrometers = loader.imageWidth * loader.units.micrometersPerPixel
-    const heightMicrometers = loader.imageHeight * loader.units.micrometersPerPixel
+    const heightMicrometers = loader.imageHeight * micrometersPerPixelY(loader.units)
 
     return {
       platform: 'image',

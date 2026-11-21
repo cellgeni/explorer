@@ -24,6 +24,7 @@ import {
   type ImagePyramidZStack,
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
+import { micrometersPerLengthUnit } from '../data/lengthUnits'
 import type { Array as ZarrArray, DataType } from 'zarrita'
 import {
   consolidatedZarrStore,
@@ -56,8 +57,9 @@ const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
 const VOLUME_SLAB_CONCURRENCY = 4
 // zarrita shares a shard's pending index read among the reads that need it,
 // under the signal of the read that started it, so cancelling a 2D tile read
-// can abort a volume read too. Such a slab is read again, this many times.
-const VOLUME_SLAB_FOREIGN_ABORT_RETRIES = 3
+// can abort a volume read, and cancelling a volume read can abort a tile read.
+// Such a read is made again, this many times.
+const FOREIGN_ABORT_RETRIES = 3
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]
@@ -204,12 +206,13 @@ export async function openOmeZarrImageWithOptions(
     kind: 'array',
     ...(options.signal === undefined ? {} : { signal: options.signal }),
   })
+  assertSupportedImageDataType(firstArray.dtype)
   const axes = normalizeAxes(multiscale.axes, firstArray)
   const xAxis = findRequiredAxis(axes, 'x')
   const yAxis = findRequiredAxis(axes, 'y')
   const channelAxis = findOptionalChannelAxis(axes)
   const zAxis = findOptionalZAxis(axes)
-  const levels = await Promise.all(
+  const declaredLevels = await Promise.all(
     multiscale.datasets.map(async (dataset) => {
       const array =
         dataset === firstDataset
@@ -236,6 +239,7 @@ export async function openOmeZarrImageWithOptions(
       })
     }),
   )
+  const levels = withImpliedLevelScales(declaredLevels, multiscale.datasets, zAxis)
   const baseLevel = levels[0]
 
   if (baseLevel === undefined) {
@@ -246,6 +250,9 @@ export async function openOmeZarrImageWithOptions(
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
     micrometersPerPixel: micrometers(baseLevel.xMicrometersPerPixel),
+    ...(baseLevel.yMicrometersPerPixel === baseLevel.xMicrometersPerPixel
+      ? {}
+      : { yMicrometersPerPixel: micrometers(baseLevel.yMicrometersPerPixel) }),
     origin: 'top-left',
     imageYAxis: 'down',
   }
@@ -573,9 +580,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       return fromChunk
     }
 
-    const chunk = await zarr.get(meta.array, selection.projection, {
-      ...(signal === undefined ? {} : { signal }),
-    })
+    const chunk = await getRetryingForeignAborts(meta.array, selection.projection, signal)
 
     if (typeof chunk === 'number' || typeof chunk === 'bigint') {
       throw new Error('OME-Zarr tile selection unexpectedly returned a scalar.')
@@ -633,6 +638,9 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     )
     let data: ImagePyramidPixelArray | null = null
     let planesRead = 0
+    // Once a slab fails the volume cannot be shown, so no more are started,
+    // and those still being read are dropped.
+    let failed = false
 
     const readSlab = async (zStart: number): Promise<void> => {
       const zEnd = Math.min(depth, zStart + slabDepth)
@@ -645,8 +653,12 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
               ? (this.selectedChannelIndex ?? 0)
               : this.planeIndexAt(meta, axis),
       )
-      const slab = await getVolumeSlab(meta.array, projection, signal)
+      const slab = await getRetryingForeignAborts(meta.array, projection, signal)
       throwIfAborted(signal)
+
+      if (failed) {
+        return
+      }
 
       if (typeof slab === 'number' || typeof slab === 'bigint') {
         throw new Error('OME-Zarr volume selection unexpectedly returned a scalar.')
@@ -678,10 +690,16 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       Array.from(
         { length: Math.min(VOLUME_SLAB_CONCURRENCY, slabStarts.length) },
         async () => {
-          while (next < slabStarts.length) {
+          while (!failed && next < slabStarts.length) {
             const zStart = slabStarts[next] ?? 0
             next += 1
-            await readSlab(zStart)
+
+            try {
+              await readSlab(zStart)
+            } catch (error) {
+              failed = true
+              throw error
+            }
           }
         },
       ),
@@ -1241,6 +1259,17 @@ function axesFromArray(
     throw new Error('OME-Zarr image arrays must have at least x and y axes.')
   }
 
+  // OME-Zarr 0.1 and 0.2 have no axes; their arrays are always t, c, z, y, x.
+  if (array.shape.length === 5) {
+    return [
+      { name: 't', type: 'time' },
+      { name: 'c', type: 'channel' },
+      { name: 'z', type: 'space' },
+      { name: 'y', type: 'space' },
+      { name: 'x', type: 'space' },
+    ]
+  }
+
   return array.shape.map((_size, index) => {
     if (index === array.shape.length - 1) {
       return { name: 'x', type: 'space' }
@@ -1403,6 +1432,56 @@ function levelMetaFromArray(options: {
   }
 }
 
+// OME-Zarr 0.1 to 0.3 give levels no scale, so a level's pixel size follows
+// from its shape: a level half as wide as level 0 has pixels twice as wide.
+function withImpliedLevelScales(
+  levels: readonly OmeZarrLevelMeta[],
+  datasets: readonly OmeZarrDatasetMetadata[],
+  zAxis: number | undefined,
+): readonly OmeZarrLevelMeta[] {
+  const base = levels[0]
+
+  if (base === undefined) {
+    return levels
+  }
+
+  const baseDepth = zAxis === undefined ? undefined : base.array.shape[zAxis]
+
+  return levels.map((level, index) => {
+    if (
+      index === 0 ||
+      hasScaleTransformation(datasets[index]?.coordinateTransformations)
+    ) {
+      return level
+    }
+
+    const depth = zAxis === undefined ? undefined : level.array.shape[zAxis]
+
+    return {
+      ...level,
+      xMicrometersPerPixel: (base.xMicrometersPerPixel * base.width) / level.width,
+      yMicrometersPerPixel: (base.yMicrometersPerPixel * base.height) / level.height,
+      ...(base.zVoxelSize === undefined ||
+      baseDepth === undefined ||
+      depth === undefined ||
+      depth <= 0
+        ? {}
+        : { zVoxelSize: (base.zVoxelSize * baseDepth) / depth }),
+    }
+  })
+}
+
+function hasScaleTransformation(
+  transformations: readonly unknown[] | undefined,
+): boolean {
+  return (
+    transformations?.some((transformation) => {
+      const record = objectRecord(transformation)
+      return record?.type === 'scale' && Array.isArray(record.scale)
+    }) ?? false
+  )
+}
+
 function micrometersPerPixelForAxis(options: {
   readonly axis: number
   readonly axes: readonly OmeZarrAxis[]
@@ -1506,38 +1585,6 @@ function micrometerMultiplierForUnit(unit: string | undefined): number {
   return micrometersPerLengthUnit(unit) ?? 1
 }
 
-function micrometersPerLengthUnit(unit: string | undefined): number | undefined {
-  switch (unit?.toLowerCase()) {
-    case 'micrometer':
-    case 'micrometers':
-    case 'micrometre':
-    case 'micrometres':
-    case 'um':
-    case 'µm':
-      return 1
-    case 'nanometer':
-    case 'nanometers':
-    case 'nanometre':
-    case 'nanometres':
-    case 'nm':
-      return 0.001
-    case 'millimeter':
-    case 'millimeters':
-    case 'millimetre':
-    case 'millimetres':
-    case 'mm':
-      return 1000
-    case 'meter':
-    case 'meters':
-    case 'metre':
-    case 'metres':
-    case 'm':
-      return 1_000_000
-    default:
-      return undefined
-  }
-}
-
 function buildOmeZarrChannels(options: {
   readonly array: ZarrArray<DataType, zarr.Readable>
   readonly attrs: Readonly<Record<string, unknown>>
@@ -1581,11 +1628,18 @@ function buildOmeZarrChannels(options: {
     const color = rgbChannel?.color ??
       parseOmeroColor(omeroChannel?.color) ??
       defaultColor ?? [255, 255, 255]
-    const name =
-      rgbChannel?.name ??
-      (typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''
+    const omeroLabel =
+      typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''
         ? omeroChannel.label.trim()
-        : `Channel ${index + 1}`)
+        : undefined
+    // An RGB image keeps its channels' own names, but not R, G, B or the
+    // channel indices SpatialData writes.
+    const ownName =
+      rgbChannel === undefined ||
+      (omeroLabel !== String(index) && !isRgbChannelLabel(omeroLabel ?? '', rgbChannel))
+        ? omeroLabel
+        : undefined
+    const name = ownName ?? rgbChannel?.name ?? `Channel ${index + 1}`
 
     return {
       id: `Channel:${index}`,
@@ -1602,15 +1656,17 @@ function buildOmeZarrChannels(options: {
   })
 }
 
-// Three 8-bit channels without channel names or colors are treated as an RGB
-// image (for example H&E). SpatialData writes the channel coordinate as the
-// omero label, so default-named images carry labels 0, 1, 2.
+// Three 8-bit channels without channel names or colors, or labelled or
+// coloured R, G and B, are treated as an RGB image (for example H&E).
+// SpatialData writes the channel coordinate as the omero label, so
+// default-named images carry labels 0, 1, 2. Other dtypes are fluorescence,
+// whatever their colours.
 function isNativeRgbChannelSet(
   channelCount: number,
   omeroChannels: readonly Record<string, unknown>[],
   dtype: DataType,
 ): boolean {
-  if (channelCount !== RGB_CHANNELS.length) {
+  if (channelCount !== RGB_CHANNELS.length || dtype !== 'uint8') {
     return false
   }
 
@@ -1618,22 +1674,31 @@ function isNativeRgbChannelSet(
     omeroChannels.length === 0 ||
     omeroChannels.every((channel, index) => isUnnamedOmeroChannel(channel, index))
   ) {
-    return dtype === 'uint8'
+    return true
   }
 
   return RGB_CHANNELS.every((channel, index) => {
     const omeroChannel = omeroChannels[index]
     const label = typeof omeroChannel?.label === 'string' ? omeroChannel.label : ''
-    const color = parseOmeroColor(omeroChannel?.color)
-
-    const normalizedLabel = label.trim().toLowerCase()
 
     return (
-      normalizedLabel === channel.name.toLowerCase() ||
-      normalizedLabel === channel.name.charAt(0).toLowerCase() ||
-      colorsEqual(color, channel.color)
+      isRgbChannelLabel(label, channel) ||
+      colorsEqual(parseOmeroColor(omeroChannel?.color), channel.color)
     )
   })
+}
+
+// 'Red' or 'R' for the red channel, in any case.
+function isRgbChannelLabel(
+  label: string,
+  channel: (typeof RGB_CHANNELS)[number],
+): boolean {
+  const normalizedLabel = label.trim().toLowerCase()
+
+  return (
+    normalizedLabel === channel.name.toLowerCase() ||
+    normalizedLabel === channel.name.charAt(0).toLowerCase()
+  )
 }
 
 function isUnnamedOmeroChannel(channel: Record<string, unknown>, index: number): boolean {
@@ -1658,6 +1723,28 @@ function contrastFromOmeroWindow(
   }
 
   return { min, max }
+}
+
+// The data types tiles and volumes are drawn from (isSupportedPixelArray).
+const SUPPORTED_IMAGE_DATA_TYPES: readonly DataType[] = [
+  'uint8',
+  'uint16',
+  'uint32',
+  'int8',
+  'int16',
+  'int32',
+  'float32',
+  'float64',
+]
+
+// Checked at open, so an image of another type, such as numpy's default int64,
+// says so once instead of failing every tile.
+function assertSupportedImageDataType(dtype: DataType): void {
+  if (!SUPPORTED_IMAGE_DATA_TYPES.includes(dtype)) {
+    throw new Error(
+      `OME-Zarr images of data type ${dtype} cannot be shown. Supported data types: ${SUPPORTED_IMAGE_DATA_TYPES.join(', ')}.`,
+    )
+  }
 }
 
 function contrastForDataType(dtype: DataType): {
@@ -1714,7 +1801,7 @@ function decodedChunk(
   }
 
   const entry: DecodedChunkEntry = {
-    promise: array.getChunk([...coords]),
+    promise: getChunkRetryingForeignAborts(array, coords),
     bytes: 0,
   }
   decodedChunks.set(key, entry)
@@ -1761,8 +1848,9 @@ function chunkByteLength(chunk: zarr.Chunk<DataType>): number {
       : 0
 }
 
-// A slab of a volume; an abort that is not `signal`'s reads it again.
-async function getVolumeSlab(
+// A selection, such as a slab of a volume or a tile that straddles chunks; an
+// abort that is not `signal`'s reads it again.
+async function getRetryingForeignAborts(
   array: ZarrArray<DataType, zarr.Readable>,
   projection: (zarr.Slice | number)[],
   signal: AbortSignal | undefined,
@@ -1771,15 +1859,35 @@ async function getVolumeSlab(
     try {
       return await zarr.get(array, projection, signal === undefined ? {} : { signal })
     } catch (error) {
-      if (
-        signal?.aborted === true ||
-        (error as { readonly name?: unknown } | null)?.name !== 'AbortError' ||
-        attempt >= VOLUME_SLAB_FOREIGN_ABORT_RETRIES
-      ) {
+      if (signal?.aborted === true || !isForeignAbortToRetry(error, attempt)) {
         throw error
       }
     }
   }
+}
+
+// A chunk read for the shared decoded-chunk cache. It has no signal of its
+// own, so any abort is another read's.
+async function getChunkRetryingForeignAborts(
+  array: ZarrArray<DataType, zarr.Readable>,
+  coords: readonly number[],
+): Promise<zarr.Chunk<DataType>> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await array.getChunk([...coords])
+    } catch (error) {
+      if (!isForeignAbortToRetry(error, attempt)) {
+        throw error
+      }
+    }
+  }
+}
+
+function isForeignAbortToRetry(error: unknown, attempt: number): boolean {
+  return (
+    (error as { readonly name?: unknown } | null)?.name === 'AbortError' &&
+    attempt < FOREIGN_ABORT_RETRIES
+  )
 }
 
 // Store errors and aborts are final; worker failures fall back to the main

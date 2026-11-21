@@ -78,6 +78,27 @@ describe('zipped Zarr stores', () => {
     await expect(openZippedZarrStore(ZIP_URL, { fetcher })).resolves.toBe(zip)
   })
 
+  it('reads a zip whose entry names use backslashes', async () => {
+    const url = 'https://example.test/stores/windows.zarr.zip'
+    const zip = await openZippedZarrStore(url, {
+      fetcher: byteRangeFetcher(
+        new Map([
+          [
+            url,
+            zipArchive([
+              { name: 'sample.zarr\\.zgroup', data: encoder.encode('{"zarr_format":2}') },
+              { name: 'sample.zarr\\obs\\.zgroup', data: encoder.encode('{}') },
+            ]),
+          ],
+        ]),
+      ),
+    })
+
+    expect(zip.root).toBe('sample.zarr/')
+    expect([...zip.paths()].sort()).toEqual(['.zgroup', 'obs/.zgroup'])
+    expect(new TextDecoder().decode(await zip.store.get('/obs/.zgroup'))).toBe('{}')
+  })
+
   it('inflates a compressed file once for all its slices', async () => {
     const url = 'https://example.test/stores/deflated.zarr.zip'
     const parquet = encoder.encode(`PAR1${'y'.repeat(10_000)}PAR1`)

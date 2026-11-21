@@ -1,4 +1,5 @@
 import { DEFAULT_CHANNEL_COLORS } from '../data/imagePyramid'
+import { micrometersPerLengthUnit } from '../data/lengthUnits'
 
 export interface TiffChannelContrast {
   readonly min: number
@@ -531,22 +532,9 @@ function normalizePhysicalSizeUnit(unit: string | undefined): string | undefined
   }
 }
 
+// A size without a unit is in micrometres, OME-XML's default.
 function micrometersPerUnitFor(unit: string | undefined): number | undefined {
-  switch (unit) {
-    case undefined:
-    case 'um':
-      return 1
-    case 'nm':
-      return 0.001
-    case 'mm':
-      return 1_000
-    case 'cm':
-      return 10_000
-    case 'm':
-      return 1_000_000
-    default:
-      return undefined
-  }
+  return unit === undefined ? 1 : micrometersPerLengthUnit(unit)
 }
 
 function looksLikePixelsPerUnit(value: number, unit: string | undefined): boolean {

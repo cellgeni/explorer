@@ -1,8 +1,9 @@
 import type * as zarr from 'zarrita'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers, type BBox } from '../data/coords'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import { placedImageExtent, type ImagePyramidLoader } from '../data/imagePyramid'
 import { morphologyImageFromPyramidLoader } from '../data/morphologyImage'
+import { ImageOnlyDataset } from '../datasets/imageOnlyDataset'
 import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
@@ -194,6 +195,68 @@ describe('OME-Zarr image loader', () => {
     ).toHaveLength(1)
   })
 
+  it('sizes the pixels of OME-Zarr 0.3 levels without a scale from their shapes', async () => {
+    const rootPath = '/images/v03.zarr'
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(
+        new Map([
+          [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+          [
+            `${rootPath}/.zattrs`,
+            jsonBytes({
+              multiscales: [
+                {
+                  version: '0.3',
+                  axes: ['z', 'y', 'x'],
+                  datasets: [{ path: '0' }, { path: '1' }],
+                },
+              ],
+            }),
+          ],
+          [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([4, 8, 6], [1, 8, 6]))],
+          [`${rootPath}/1/.zarray`, jsonBytes(v2ArrayMetadata([2, 4, 3], [1, 4, 3]))],
+        ]),
+      ),
+      decodePool: null,
+    })
+
+    // Level 1's one tile covers the whole 6 × 8 µm image, not 3 × 4 µm.
+    expect(loader.tileBounds(1, 0, 0)).toMatchObject({
+      minX: 0,
+      maxX: 6,
+      minY: 0,
+      maxY: 8,
+    })
+    expect(loader.bestLevel(0.01)).toBe(1)
+    expect(loader.volumeLevels().map((level) => level.voxelSize)).toEqual([
+      { x: 1, y: 1, z: 1 },
+      { x: 2, y: 2, z: 2 },
+    ])
+  })
+
+  it('reads OME-Zarr 0.1 and 0.2 arrays without axes as t, c, z, y, x', async () => {
+    const rootPath = '/images/v01.zarr'
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(
+        new Map([
+          [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+          [
+            `${rootPath}/.zattrs`,
+            jsonBytes({ multiscales: [{ version: '0.1', datasets: [{ path: '0' }] }] }),
+          ],
+          [
+            `${rootPath}/0/.zarray`,
+            jsonBytes(v2ArrayMetadata([1, 2, 5, 4, 4], [1, 1, 1, 4, 4], '<u2')),
+          ],
+        ]),
+      ),
+      decodePool: null,
+    })
+
+    expect(loader.channels).toHaveLength(2)
+    expect(loader.zStack?.sizeZ).toBe(5)
+  })
+
   it('treats SpatialData index-labelled 8-bit three-channel images as RGB', async () => {
     const rootUrl = 'https://example.test/images/he.zarr'
     const loader = await openOmeZarrImageWithOptions(rootUrl, {
@@ -237,6 +300,78 @@ describe('OME-Zarr image loader', () => {
     )
   })
 
+  it('keeps 16-bit three-channel images coloured or labelled R, G, B as fluorescence', async () => {
+    const primaries = await openOmeZarrImageWithOptions(
+      'https://example.test/images/primaries.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/primaries.zarr', {
+            omero: {
+              channels: [
+                { label: 'CD3', color: 'FF0000' },
+                { label: 'CD20', color: '00FF00' },
+                { label: 'DAPI', color: '0000FF' },
+              ],
+            },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+    const labelled = await openOmeZarrImageWithOptions(
+      'https://example.test/images/labelled.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/labelled.zarr', {
+            omero: { channels: [{ label: 'R' }, { label: 'G' }, { label: 'B' }] },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+
+    expect(primaries.channels.map((channel) => [channel.name, channel.color])).toEqual([
+      ['CD3', [255, 0, 0]],
+      ['CD20', [0, 255, 0]],
+      ['DAPI', [0, 0, 255]],
+    ])
+    expect(labelled.channels.map((channel) => channel.name)).toEqual(['R', 'G', 'B'])
+
+    for (const loader of [primaries, labelled]) {
+      expect(
+        loader.channels.some((channel) => channel.alphaFromIntensity === false),
+      ).toBe(false)
+    }
+  })
+
+  it('keeps the omero labels of 8-bit three-channel images coloured R, G, B', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stained.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/stained.zarr', {
+            omero: {
+              channels: [
+                { label: 'Eosin', color: 'FF0000' },
+                { label: 'g', color: '00FF00' },
+                { label: 'Haematoxylin', color: '0000FF' },
+              ],
+            },
+          }),
+        ),
+      },
+    )
+
+    expect(loader.channels.map((channel) => channel.name)).toEqual([
+      'Eosin',
+      'Green',
+      'Haematoxylin',
+    ])
+    expect(loader.channels.every((channel) => channel.alphaFromIntensity === false)).toBe(
+      true,
+    )
+  })
+
   it('parses v0.5 metadata under the ome attribute and converts spatial units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/plain/zarr.json',
@@ -263,6 +398,58 @@ describe('OME-Zarr image loader', () => {
         sourceUrl: 'https://example.test/plain/zarr.json#c=1',
       }),
     ])
+  })
+
+  it('sizes non-square pixels and converts every spec length unit', async () => {
+    const open = (rootPath: string, unit: string, scale: [number, number]) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(
+          new Map([
+            [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+            [
+              `${rootPath}/.zattrs`,
+              jsonBytes({
+                multiscales: [
+                  {
+                    version: '0.4',
+                    axes: [
+                      { name: 'y', type: 'space', unit },
+                      { name: 'x', type: 'space', unit },
+                    ],
+                    datasets: [
+                      {
+                        path: '0',
+                        coordinateTransformations: [{ type: 'scale', scale }],
+                      },
+                    ],
+                  },
+                ],
+              }),
+            ],
+            [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([8, 16], [8, 16]))],
+          ]),
+        ),
+        decodePool: null,
+      })
+    const tall = await open('/tall.zarr', 'micrometer', [0.25, 0.5])
+
+    // 16 pixels 0.5 µm wide by 8 pixels 0.25 µm tall.
+    expect(tall.units).toMatchObject({
+      micrometersPerPixel: 0.5,
+      yMicrometersPerPixel: 0.25,
+    })
+    expect(placedImageExtent(tall)).toMatchObject({ maxX: 8, maxY: 2 })
+    await expect(
+      new ImageOnlyDataset({
+        imageUrl: 'https://example.test/tall.zarr',
+        openImage: async () => tall,
+      }).meta(),
+    ).resolves.toMatchObject({ extent: { maxX: 8, maxY: 2 } })
+
+    const tomogram = await open('/tomogram.zarr', 'angstrom', [10, 10])
+
+    expect(tomogram.units.micrometersPerPixel).toBeCloseTo(0.001, 12)
+    expect(tomogram.units).not.toHaveProperty('yMicrometersPerPixel')
   })
 
   it('selects tiles and level bounds from OME-Zarr coordinate transforms', async () => {
@@ -927,6 +1114,88 @@ describe('OME-Zarr image loader', () => {
     })
   })
 
+  it('starts no more slabs, and reports no progress, once a slab fails', async () => {
+    const rootPath = '/images/deep.zarr'
+    const depth = 12
+    const files = new Map<string, Uint8Array>([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            { version: '0.4', axes: ['z', 'y', 'x'], datasets: [{ path: '0' }] },
+          ],
+        }),
+      ],
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([depth, 2, 2], [1, 2, 2]))],
+      ...Array.from(
+        { length: depth },
+        (_value, z) => [`${rootPath}/0/${z}.0.0`, new Uint8Array(4).fill(z)] as const,
+      ),
+    ])
+    const served = fetcherForFiles(files)
+    const chunkReads: string[] = []
+    // Plane 0 is refused at once; the others take a moment.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestUrl(input).pathname
+
+      if (/\/0\/\d+\.0\.0$/.test(path)) {
+        chunkReads.push(path)
+
+        if (path.endsWith('/0/0.0.0')) {
+          return new Response(null, { status: 403 })
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+
+      return served(input)
+    }) as unknown as typeof fetch
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher,
+      decodePool: null,
+    })
+    let rejected = false
+    let progressAfterFailure = 0
+
+    await expect(
+      loader.loadVolume(0, undefined, () => {
+        progressAfterFailure += rejected ? 1 : 0
+      }),
+    ).rejects.toMatchObject({ name: 'ZarrChunkUnavailableError' })
+    rejected = true
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // The four slabs read at once, and no more.
+    expect(chunkReads).toHaveLength(4)
+    expect(progressAfterFailure).toBe(0)
+  })
+
+  it("reads a 2D tile's chunk again when another read's abort reaches it", async () => {
+    const rootUrl = 'https://example.test/images/tile-abort.ome.zarr'
+    const files = fetcherForFiles(zStackOmeZarrFiles('/images/tile-abort.ome.zarr'))
+    let failed = false
+    // The first read of the tile's chunk fails with the abort of a 3D read it
+    // shared, as zarrita's shard index reads are shared.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (!failed && requestUrl(input).pathname.endsWith('/0/1.1.0.0')) {
+        failed = true
+        throw new DOMException('signal is aborted without reason', 'AbortError')
+      }
+
+      return files(input)
+    }) as unknown as typeof fetch
+    const loader = await openOmeZarrImageWithOptions(`${rootUrl}#c=1`, {
+      fetcher,
+      decodePool: null,
+    })
+
+    await expect(loader.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([12, 12, 12, 12]),
+    })
+    expect(failed).toBe(true)
+  })
+
   it('leaves the plane spacing unknown when only x and y have units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/images/stack.ome.zarr',
@@ -948,6 +1217,37 @@ describe('OME-Zarr image loader', () => {
 
     expect(loader.volumeLevels()).toEqual([])
     await expect(loader.loadVolume(0)).rejects.toThrow('no z axis')
+  })
+
+  it('names a data type it cannot draw when the image opens', async () => {
+    for (const dtype of ['<i8', '<u8', '<f2', '|b1']) {
+      const rootPath = `/images/dtype-${dtype.slice(1)}.zarr`
+
+      await expect(
+        openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+          fetcher: fetcherForFiles(
+            new Map([
+              [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+              [
+                `${rootPath}/.zattrs`,
+                jsonBytes({
+                  multiscales: [
+                    { version: '0.4', axes: ['y', 'x'], datasets: [{ path: '0' }] },
+                  ],
+                }),
+              ],
+              [
+                `${rootPath}/0/.zarray`,
+                jsonBytes(v2ArrayMetadata([4, 4], [4, 4], dtype)),
+              ],
+            ]),
+          ),
+          decodePool: null,
+        }),
+      ).rejects.toThrow(
+        /^OME-Zarr images of data type (int64|uint64|float16|bool) cannot be shown\. Supported data types: uint8, uint16, uint32, int8, int16, int32, float32, float64\.$/,
+      )
+    }
   })
 
   it('rejects generic Zarr groups without OME multiscales metadata', async () => {

@@ -1,0 +1,17 @@
+diff --git a/node_modules/zarrita/dist/src/hierarchy.js b/node_modules/zarrita/dist/src/hierarchy.js
+index 7942848..1f035cd 100644
+--- a/node_modules/zarrita/dist/src/hierarchy.js
++++ b/node_modules/zarrita/dist/src/hierarchy.js
+@@ -11,7 +11,11 @@ export class Location {
+     resolve(path) {
+         // reuse URL resolution logic built into the browser
+         // handles relative paths, absolute paths, etc.
+-        let root = new URL(`file://${this.path.endsWith("/") ? this.path : `${this.path}/`}`);
++        // `this.path` is decoded, so its segments are encoded again: a name
++        // holding '%', '#' or '?' would otherwise be read as an escape, a
++        // fragment or a query.
++        let base = this.path.split("/").map(encodeURIComponent).join("/");
++        let root = new URL(`file://${base.endsWith("/") ? base : `${base}/`}`);
+         return new Location(this.store, decodeURIComponent(new URL(path, root).pathname));
+     }
+ }

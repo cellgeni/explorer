@@ -85,8 +85,19 @@ export async function readZipDirectory(
   const tailView = view(tail)
   let eocd = -1
 
+  // The record is the one whose comment ends the file; a comment can hold the
+  // signature too. Failing that, as for a zip with bytes appended, the last
+  // signature is taken.
   for (let offset = tail.length - EOCD_SIZE; offset >= 0; offset -= 1) {
-    if (tailView.getUint32(offset, true) === EOCD_SIGNATURE) {
+    if (tailView.getUint32(offset, true) !== EOCD_SIGNATURE) {
+      continue
+    }
+
+    if (eocd < 0) {
+      eocd = offset
+    }
+
+    if (offset + EOCD_SIZE + tailView.getUint16(offset + 20, true) === tail.length) {
       eocd = offset
       break
     }
@@ -167,7 +178,11 @@ export function parseCentralDirectory(
     const extraLength = directoryView.getUint16(offset + 30, true)
     const commentLength = directoryView.getUint16(offset + 32, true)
     let localHeaderOffset = directoryView.getUint32(offset + 42, true)
-    const name = decoder.decode(directory.subarray(offset + 46, offset + 46 + nameLength))
+    // Some Windows tools, such as PowerShell 5.1's Compress-Archive, write
+    // backslashes between folders.
+    const name = decoder
+      .decode(directory.subarray(offset + 46, offset + 46 + nameLength))
+      .replaceAll('\\', '/')
     let extra = offset + 46 + nameLength
     const extraEnd = extra + extraLength
 
@@ -231,29 +246,35 @@ export async function readZipEntry(
   }
 
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
+  const requestRange = async (
+    start: number,
+    stop: number,
+  ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> => {
+    const response = await fetcher(url, {
+      cache: 'no-store',
+      headers: { Range: `bytes=${start}-${stop - 1}` },
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    if (response.status !== 206 || response.body === null) {
+      await response.body?.cancel()
+      throw new ZipArchiveError(
+        url,
+        response.ok
+          ? 'the host does not answer byte-range requests.'
+          : `${entry.name} returned HTTP ${response.status}.`,
+      )
+    }
+
+    return response.body
+  }
   const end =
     entry.localHeaderOffset +
     LOCAL_HEADER_SIZE +
     new TextEncoder().encode(entry.name).length +
     LOCAL_EXTRA_ALLOWANCE +
     entry.compressedSize
-  const response = await fetcher(url, {
-    cache: 'no-store',
-    headers: { Range: `bytes=${entry.localHeaderOffset}-${end - 1}` },
-    ...(options.signal === undefined ? {} : { signal: options.signal }),
-  })
-
-  if (response.status !== 206 || response.body === null) {
-    await response.body?.cancel()
-    throw new ZipArchiveError(
-      url,
-      response.ok
-        ? 'the host does not answer byte-range requests.'
-        : `${entry.name} returned HTTP ${response.status}.`,
-    )
-  }
-
-  const reader = response.body.getReader()
+  let reader = (await requestRange(entry.localHeaderOffset, end)).getReader()
   const output = new Uint8Array(entry.size)
   let written = 0
   const write = (chunk: Uint8Array) => {
@@ -290,17 +311,22 @@ export async function readZipEntry(
           void inflaterWriter?.abort(error).catch(() => undefined)
         })
   let header: Uint8Array<ArrayBuffer> | null = new Uint8Array(0)
+  // Where the data starts, from the entry's local header, once read.
+  let dataStart: number | undefined
+  let streamed = 0
   let remaining = entry.compressedSize
   let received = 0
 
-  try {
+  // Reads the entry's bytes from `reader` until they or the response end.
+  const consume = async (): Promise<void> => {
     for (;;) {
       const { done, value } = await reader.read()
 
       if (done) {
-        break
+        return
       }
 
+      streamed += value.length
       let chunk: Uint8Array<ArrayBuffer> = value
 
       // The local header's name and extra lengths say where the data starts.
@@ -318,7 +344,7 @@ export async function readZipEntry(
           throw new ZipArchiveError(url, `${entry.name} has no local header.`)
         }
 
-        const dataStart =
+        dataStart =
           LOCAL_HEADER_SIZE +
           headerView.getUint16(26, true) +
           headerView.getUint16(28, true)
@@ -345,8 +371,28 @@ export async function readZipEntry(
 
       if (remaining === 0) {
         await reader.cancel()
-        break
+        return
       }
+    }
+  }
+
+  try {
+    await consume()
+
+    // Writers that pad entries for alignment can write a local extra field
+    // longer than LOCAL_EXTRA_ALLOWANCE, so the data runs past the range read.
+    if (
+      remaining > 0 &&
+      dataStart !== undefined &&
+      entry.localHeaderOffset + streamed === end
+    ) {
+      reader = (
+        await requestRange(
+          end,
+          entry.localHeaderOffset + dataStart + entry.compressedSize,
+        )
+      ).getReader()
+      await consume()
     }
 
     if (remaining > 0) {

@@ -4,6 +4,7 @@ import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { isIcechunkUrl } from './icechunkUrl'
 import {
   createZarrFolderLister,
+  type FolderEntries,
   type FolderListingKind,
   type ZarrFolderLister,
 } from './zarrFolderLister'
@@ -587,7 +588,10 @@ async function walkNode(
     path: joinPath(item.path, name),
     ...(kind === undefined ? {} : { kind }),
   })
-  const listed = await context.lister.list(item.path)
+  const listed = trustedListing(
+    await context.lister.list(item.path),
+    read !== null && context.lister.kind() === 'S3 listing',
+  )
 
   if (listed !== null) {
     return {
@@ -617,6 +621,20 @@ async function walkNode(
     files: [],
     children: named.children.map((entry) => child(entry.name, entry.kind)),
   }
+}
+
+// An S3 listing names every key, so one that leaves out the metadata just read
+// was asked for the wrong prefix; the node's attributes are used instead.
+// Index pages may hide dotfiles such as .zgroup, so they are not checked.
+function trustedListing(
+  listed: FolderEntries | null,
+  hasMetadata: boolean,
+): FolderEntries | null {
+  return listed !== null &&
+    hasMetadata &&
+    !listed.files.some((file) => METADATA_FILE_NAMES.has(file.name))
+    ? null
+    : listed
 }
 
 async function readV3Node(
@@ -1159,7 +1177,10 @@ async function readJson(
       throw error
     }
 
-    return undefined
+    // The store answers undefined for a missing key (a 404, or a 403 for a
+    // metadata key), so anything thrown is a read that failed: a server error,
+    // a rate limit, or a host that cannot be reached.
+    throw metadataReadError(key, error)
   }
 
   if (bytes === undefined) {
@@ -1172,6 +1193,20 @@ async function readJson(
     // An HTML page served for a missing key is not metadata.
     return undefined
   }
+}
+
+// zarrita names only the status ("Unexpected response status 503 Service
+// Unavailable"); the load error model classifies "HTTP <status>".
+function metadataReadError(key: string, error: unknown): unknown {
+  const status = /^Unexpected response status (\d{3})\b/.exec(
+    error instanceof Error ? error.message : '',
+  )?.[1]
+
+  return status === undefined
+    ? error
+    : new Error(`Zarr metadata ${key} could not be read (HTTP ${status}).`, {
+        cause: error,
+      })
 }
 
 function metadataKey(path: string, file: string): string {

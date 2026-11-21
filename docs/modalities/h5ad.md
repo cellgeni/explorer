@@ -28,7 +28,11 @@ Two other addresses open as `h5ad` without the suffix (see the
   `openAnnDataZarrStore` (`src/datasets/annDataZarrStore.ts`) takes the
   store's groups and arrays from consolidated metadata or, without it, walks
   only the groups the viewer reads, with the host's folder listing for the
-  children of `obsm` and `uns/spatial`.
+  children of `obsm` and `uns/spatial`. Column and key names may hold any
+  character, `%`, `#` and `?` included: the store escapes them in URLs
+  (`createZarrFetchStore`), and zarrita's `Location.resolve` is patched to
+  encode a node's path before resolving inside it
+  (`patches/zarrita+0.7.3.patch`).
 - **Icechunk repository**: a URL whose path ends in `.icechunk` and whose root
   has `encoding-type: anndata`, or `obs` and `var` groups; see
   [AnnData in Icechunk](#anndata-in-icechunk).

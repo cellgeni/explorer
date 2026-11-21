@@ -135,6 +135,24 @@ describe('readParquetStructure', () => {
     ).rejects.toBeInstanceOf(ParquetFileNotFoundError)
   })
 
+  it('names the status of other failed reads', async () => {
+    for (const [status, rangeOnly] of [
+      [503, false],
+      [429, false],
+      [503, true],
+    ] as const) {
+      // With `rangeOnly`, the size probe succeeds and the footer read fails.
+      const fetcher = (async (_input: RequestInfo | URL, init?: RequestInit) =>
+        rangeOnly && init?.method === 'HEAD'
+          ? new Response(null, { headers: { 'Content-Length': '1000' } })
+          : new Response(null, { status })) as typeof fetch
+
+      await expect(
+        readParquetStructure({ url: `${ORIGIN}/busy.parquet` }, { fetcher }),
+      ).rejects.toThrow(`${ORIGIN}/busy.parquet could not be read (HTTP ${status}).`)
+    }
+  })
+
   it('says when there is no file, or it is not Parquet', async () => {
     const missing = readParquetStructure(
       { url: `${ORIGIN}/missing.parquet` },
