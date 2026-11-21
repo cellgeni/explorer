@@ -114,17 +114,23 @@ export async function computeChannelAutoContrast(
     workers.end()
   }
 
-  if (sampleCount === 0) {
+  // NaN marks no-data pixels in some float images; it would sort last and
+  // become the high percentile.
+  const samples = joinSamples(tileSamples, sampleCount).filter(Number.isFinite)
+
+  if (samples.length === 0) {
     throw new Error('Unable to auto-contrast channel because no pixels were sampled.')
   }
 
-  const samples = joinSamples(tileSamples, sampleCount)
   samples.sort()
 
   const low = percentile(samples, options.lowPercentile ?? DEFAULT_LOW_PERCENTILE)
   const high = percentile(samples, options.highPercentile ?? DEFAULT_HIGH_PERCENTILE)
-  const min = Math.floor(low)
-  const max = Math.ceil(high)
+  // Whole-number data gets a whole-number window, rounded outward. Fractional
+  // data, such as a float image of values below 1, keeps its percentiles.
+  const wholeNumbers = samples.every(Number.isInteger)
+  const min = wholeNumbers ? Math.floor(low) : low
+  const max = wholeNumbers ? Math.ceil(high) : high
   const contrast = max > min ? { min, max } : { min, max: min + 1 }
 
   const threshold = otsuThreshold(samples)
@@ -380,7 +386,8 @@ function buildHistogram(
   max: number,
 ): ChannelHistogram {
   const bins = new Array<number>(DEFAULT_HISTOGRAM_BINS).fill(0)
-  const range = Math.max(1, max - min)
+  // A float window can be narrower than 1.
+  const range = max > min ? max - min : 1
 
   for (const value of sortedValues) {
     const ratio = (value - min) / range

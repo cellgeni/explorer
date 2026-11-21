@@ -535,7 +535,9 @@ transform.
   gives 1 µm/px. `translation` is ignored except for SpatialData placement.
 - Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
   are served as several virtual tiles of at most 512 pixels that share one
-  decoded chunk.
+  decoded chunk. Pixels may be `uint8`, `uint16`, `uint32`, `int8`, `int16`,
+  `int32`, `float32` or `float64`; an image of another data type, such as
+  numpy's default `int64`, fails to open with its type named.
 - `omero.channels` gives names, `RRGGBB` colours, and windows (`start`/`end`,
   else `min`/`max`). Channels after the first open as `#c=N` loaders. An
   image without a `c` axis is one channel, white unless omero gives a colour,
@@ -626,7 +628,10 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
 
 `computeChannelAutoContrast` (`src/data/morphologyContrast.ts`) samples up to
 250,000 values from the coarsest level and sets the window to the 0.5 and
-99.8 percentiles, with a 32-bin histogram for the Image section. It reads at
+99.8 percentiles, with a 32-bin histogram for the Image section. Samples that
+are not finite, such as NaN for no data, are left out. For whole-number data
+the window is rounded outward to whole numbers; fractional data, such as a
+float image of values below 1, keeps the percentiles as they are. It reads at
 most 64 of the level's tiles, from 8 evenly spaced rows (more per row when
 there are fewer rows), so an image without a pyramid is not read whole. It
 runs after an image loads and when a channel's `Auto` button is pressed.
