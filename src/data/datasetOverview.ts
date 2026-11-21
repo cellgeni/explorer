@@ -6,6 +6,7 @@ import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { CellOverviewPoint, ReadCellsOverviewOptions } from './hyparquetCells'
 import type { ReadCellsOverviewWithDuckDbOptions } from './duckdbCells'
 import type { AssertHttpRangeSupportOptions } from './rangeSupport'
+import { throwIfAborted } from '../utils/abort'
 
 export const DEFAULT_OVERVIEW_CELL_LIMIT = 50_000
 
@@ -84,20 +85,4 @@ async function readCellsOverviewWithDuckDb(
 ): Promise<readonly CellOverviewPoint[]> {
   const duckDbCells = await import('./duckdbCells')
   return duckDbCells.readCellsOverviewWithDuckDb(options)
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Dataset overview request aborted.')
-  error.name = 'AbortError'
-  return error
 }

@@ -583,6 +583,5 @@ export function throwAbortError(message: string): never {
   throw error
 }
 
-export function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
+// The workflow hooks import it from here.
+export { isAbortError } from '../../utils/abort'

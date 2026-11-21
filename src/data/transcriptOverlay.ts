@@ -12,6 +12,7 @@ import type { CellId } from './cellid'
 import type { BBox, DataPoint } from './coords'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { XeniumDataset } from '../datasets/xeniumDataset'
+import { abortError, isAbortError, throwIfAborted } from '../utils/abort'
 
 export const TRANSCRIPT_EXACT_RENDER_LIMIT = 100_000
 export const MIN_TRANSCRIPT_EXACT_RENDER_LIMIT = 1
@@ -778,24 +779,4 @@ async function probeTranscriptFile(
       error: cause instanceof Error ? cause.message : String(cause),
     }
   }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Transcript overlay request aborted.')
-  error.name = 'AbortError'
-  return error
-}
-
-function isAbortError(cause: unknown): boolean {
-  return cause instanceof Error && cause.name === 'AbortError'
 }

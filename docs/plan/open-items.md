@@ -318,10 +318,7 @@ Code structure:
       `datasetDiagnostics.ts` each hold parts that could stand alone:
       matrix reading, the NDPI, QPTIFF and SVS pyramids, detection, and the
       SpatialData and Visium HD runners.
-- [ ] Helpers are copied rather than shared: `throwIfAborted` is defined 28
-      times, `abortError` and `isAbortError` 40 times between them,
-      `parseCsvRows` twice, and the six one-shot worker wrappers are near
-      copies of each other.
+- [ ] `parseCsvRows` is defined twice.
 - [ ] A type-aware ESLint pass found no floating promises and one misused one
       (`handleDatasetSubmit`, an async function used as a submit handler in
       `App.tsx`). Turning on `no-floating-promises` and `no-misused-promises`

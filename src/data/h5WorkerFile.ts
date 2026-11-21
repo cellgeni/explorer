@@ -14,6 +14,7 @@ import type {
   H5TreeNode,
 } from '../workers/h5FileMessages'
 import type { H5FileHandler, H5FileHandlerOptions } from '../workers/h5FileCore'
+import { abortError } from '../utils/abort'
 
 // An HDF5 file opened with h5wasm in its own worker, so copying it into
 // h5wasm's file system and decoding its datasets stay off the main thread.
@@ -449,14 +450,4 @@ export function createInProcessH5Worker(
   }
 
   return worker
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('H5 file request aborted.')
-  error.name = 'AbortError'
-  return error
 }

@@ -63,6 +63,7 @@ import type {
   SpatialElement,
 } from './spatialDataset'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
+import { throwIfAborted } from '../utils/abort'
 
 type MatrixReader = (url: string, ids: readonly CellId[]) => Promise<GexResult>
 type GeneExpressionMatrixReader = (
@@ -757,12 +758,4 @@ function spatialSelectionFor(selectionInput: RoiSelectionInput): Selection | nul
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted !== true) return
-  if (signal.reason instanceof Error) throw signal.reason
-  const error = new Error('Cell outline read aborted.')
-  error.name = 'AbortError'
-  throw error
 }

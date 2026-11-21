@@ -30,6 +30,7 @@ import type {
   TranscriptScope,
 } from './gexSelection'
 import type { Array as ZarrArray, DataType, Group as ZarrGroup } from 'zarrita'
+import { isAbortError, throwIfAborted } from '../utils/abort'
 
 export type { CellFeatureMatrixReadOptions, GexCell, GexResult } from './gexTypes'
 export type {
@@ -1560,26 +1561,6 @@ function formatByteCount(byteLength: number): string {
   }
 
   return `${byteLength.toLocaleString()} bytes`
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Cell feature matrix request aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 function isZarrNotFoundError(error: unknown): boolean {

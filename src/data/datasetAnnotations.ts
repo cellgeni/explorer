@@ -5,6 +5,7 @@ import {
   type AnalysisAnnotationGroupOption,
 } from './analysisAnnotations'
 import type { Annotation } from '../datasets/spatialDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export const ALL_ANNOTATION_GROUP_ID = 'all'
 export const NO_ANNOTATION_GROUP_ID = 'none'
@@ -48,20 +49,4 @@ export async function loadDatasetAnnotations(
   throwIfAborted(options.signal)
 
   return annotations
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Annotation request aborted.')
-  error.name = 'AbortError'
-  return error
 }

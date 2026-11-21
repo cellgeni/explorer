@@ -11,6 +11,7 @@ import {
   VisiumHdSegmentationIndexBuilder,
   type VisiumHdSegmentationIndex,
 } from './visiumHdSegmentationIndex'
+import { throwIfAborted } from '../utils/abort'
 
 export interface VisiumHdSegmentedOutputPaths {
   readonly scalefactorsPath?: string
@@ -1314,24 +1315,8 @@ function formatVisiumHdMatrixCellId(value: number | bigint): string {
   return `cellid_${digits.padStart(9, '0')}-1`
 }
 
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
 function isTiffPath(path: string): boolean {
   return /\.tiff?$/i.test(path)
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Visium HD segmentation request aborted.')
-  error.name = 'AbortError'
-  return error
 }
 
 function formatByteCount(byteLength: number): string {

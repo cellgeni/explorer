@@ -34,6 +34,7 @@ import {
   type AteraTranscriptGrid,
   type AteraTranscriptGridTile,
 } from './ateraFormat'
+import { throwIfAborted } from '../utils/abort'
 
 export interface AteraTranscriptFile {
   readonly url: string
@@ -987,13 +988,5 @@ function evictOldest<Key, Value>(cache: Map<Key, Value>, limit: number): void {
     }
 
     cache.delete(oldest.value)
-  }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw signal.reason instanceof Error
-      ? signal.reason
-      : Object.assign(new Error('Transcript request aborted.'), { name: 'AbortError' })
   }
 }

@@ -8,6 +8,7 @@ import type {
   ImagePyramidTileRenderOptions,
 } from '../data/imagePyramid'
 import type { TileBitmapDecoder } from '../workers/tileDecodePool'
+import { abortError, isAbortError, throwIfAborted } from '../utils/abort'
 
 export interface TileSource {
   tileBounds(level: number, col: number, row: number): BBox
@@ -436,23 +437,3 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
 function noop(): void {}
 
 function noopNumber(): void {}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Tile request aborted.')
-  error.name = 'AbortError'
-  return error
-}
-
-function isAbortError(error: Error): boolean {
-  return error.name === 'AbortError'
-}

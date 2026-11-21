@@ -7,6 +7,7 @@ import type { DatasetRangeValidator } from './datasetOverview'
 import type { RoiSelectionInput } from './roiSelection'
 import type { TranscriptPoint, TranscriptViewportResult } from './transcriptOverlay'
 import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export const ROI_TRANSCRIPT_EXPORT_LIMIT = 100_000
 const DEFAULT_ROI_TRANSCRIPT_MIN_QV = 20
@@ -113,20 +114,4 @@ function datasetTranscriptFromPoint(point: TranscriptPoint): DatasetTranscript {
     overlapsNucleus: point.overlapsNucleus,
     isGene: point.isGene,
   }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('ROI transcript request aborted.')
-  error.name = 'AbortError'
-  return error
 }

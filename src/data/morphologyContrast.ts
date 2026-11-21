@@ -5,6 +5,7 @@ import { sampleTileBytes } from '../workers/tileSamplesCore'
 import type { ImagePixels, TileIndex } from './coords'
 import type { ImagePyramidTilePixels } from './imagePyramid'
 import { sampleDecodedTile, type TileSamples, type TileSampling } from './tileSamples'
+import { throwIfAborted } from '../utils/abort'
 
 export interface ChannelAutoContrast {
   readonly min: number
@@ -398,20 +399,4 @@ function buildHistogram(
     max,
     sampleCount: sortedValues.length,
   }
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('Auto contrast request aborted.')
-  error.name = 'AbortError'
-  return error
 }

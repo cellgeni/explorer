@@ -13,12 +13,12 @@ import {
   emptyCellsFor,
   gexFromVisiumFeatureSliceLoadedH5,
   normalizeSelectedGeneList,
-  throwIfAborted,
   type H5FileLike,
   type VisiumFeatureSliceCache,
   type VisiumFeatureSliceMetadata,
   type VisiumFeatureSliceTarget,
 } from './visiumFeatureSliceH5'
+import { isAbortError, throwIfAborted } from '../utils/abort'
 
 export {
   featureSliceBinningScale,
@@ -166,10 +166,6 @@ function openFeatureSliceFile(
       }),
     options.signal,
   )
-}
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === 'AbortError'
 }
 
 function loadVisiumFeatureSliceH5(

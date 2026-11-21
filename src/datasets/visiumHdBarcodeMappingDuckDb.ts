@@ -10,6 +10,7 @@ import type {
   SqlParameter,
 } from '../data/gex'
 import type { SpatialElementId } from './spatialDataset'
+import { throwIfAborted } from '../utils/abort'
 
 export interface DuckDbBarcodeMappingClientLike {
   readonly conn: DuckDbBarcodeMappingConnectionLike
@@ -72,20 +73,4 @@ async function queryBarcodeMappingsForCell(
   const params: SqlParameter[] = [datasetFileUrlFor(baseUrl, 'barcodeMappings'), cellId]
 
   return statement.query(...params)
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw abortError(signal)
-  }
-}
-
-function abortError(signal: AbortSignal): Error {
-  if (signal.reason instanceof Error) {
-    return signal.reason
-  }
-
-  const error = new Error('DuckDB barcode mapping query aborted.')
-  error.name = 'AbortError'
-  return error
 }

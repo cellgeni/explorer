@@ -2,6 +2,7 @@ import { datasetFileLabelFor, datasetFileUrlFor } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isGeneFeature } from './geneFeatures'
 import { loadTranscriptZarrGenePanel as loadTranscriptZarrGenePanelFromZip } from './transcriptZarr'
+import { isAbortError } from '../utils/abort'
 
 export interface LoadGenePanelOptions {
   readonly fetcher?: typeof fetch
@@ -200,15 +201,6 @@ async function loadGenePanelFromTranscriptZarr(
       { cause: transcriptZarrError },
     )
   }
-}
-
-function isAbortError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'name' in error &&
-    error.name === 'AbortError'
-  )
 }
 
 function errorMessage(error: unknown): string {
