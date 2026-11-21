@@ -60,6 +60,67 @@ describe('zip archives', () => {
     },
   )
 
+  it.each([false, true])(
+    'reads an entry whose local extra field is longer than 1 KiB (deflated %s)',
+    async (deflate) => {
+      const requests: ByteRangeRequest[] = []
+      const fetcher = byteRangeFetcher(
+        new Map([
+          [
+            URL,
+            zipArchive([
+              {
+                name: 'padded.bin',
+                data: pyramid,
+                deflate,
+                localExtra: new Uint8Array(3000),
+              },
+            ]),
+          ],
+        ]),
+        requests,
+      )
+      const directory = await readZipDirectory(URL, { fetcher })
+      requests.length = 0
+
+      await expect(
+        readZipEntry(URL, directory.entries.get('padded.bin')!, { fetcher }),
+      ).resolves.toEqual(pyramid)
+      // The first range, then the rest of the data.
+      expect(requests).toHaveLength(2)
+    },
+  )
+
+  it('finds the end record when the archive comment holds its signature', async () => {
+    const comment = new Uint8Array(40)
+    comment.set([0x50, 0x4b, 0x05, 0x06], 10)
+    const fetcher = byteRangeFetcher(
+      new Map([[URL, zipArchive([{ name: 'a.bin', data: manifest }], { comment })]]),
+    )
+
+    const directory = await readZipDirectory(URL, { fetcher })
+
+    expect(Array.from(directory.entries.keys())).toEqual(['a.bin'])
+  })
+
+  it('reads backslashes in entry names as folder separators', async () => {
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [URL, zipArchive([{ name: 'outs\\analysis\\clusters.csv', data: manifest }])],
+      ]),
+    )
+
+    const directory = await readZipDirectory(URL, { fetcher })
+
+    expect(Array.from(directory.entries.keys())).toEqual(['outs/analysis/clusters.csv'])
+    const bytes = await readZipEntry(
+      URL,
+      directory.entries.get('outs/analysis/clusters.csv')!,
+      { fetcher },
+    )
+    expect(new TextDecoder().decode(bytes)).toBe('{"microns_per_pixel": 0.108}')
+  })
+
   it('reports files that are not zips, and hosts without ranges', async () => {
     const notZip = byteRangeFetcher(new Map([[URL, new Uint8Array(100)]]))
     await expect(readZipDirectory(URL, { fetcher: notZip })).rejects.toThrow(

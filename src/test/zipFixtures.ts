@@ -5,6 +5,9 @@ export interface ZipFixtureFile {
   readonly data: Uint8Array
   // Deflate the entry instead of storing it.
   readonly deflate?: boolean
+  // The local header's extra field, in place of the default 4 bytes, as
+  // writers that pad entries for alignment write.
+  readonly localExtra?: Uint8Array
 }
 
 export interface ByteRangeRequest {
@@ -21,6 +24,8 @@ export interface ZipArchiveOptions {
   // Writes sizes and offsets in ZIP64 extra fields and ZIP64 end records,
   // with the 32-bit fields saturated, as writers of archives over 4 GB do.
   readonly zip64?: boolean
+  // The archive comment after the end of central directory record.
+  readonly comment?: Uint8Array
 }
 
 export function zipArchive(
@@ -39,7 +44,8 @@ export function zipArchive(
     const body =
       file.deflate === true ? new Uint8Array(deflateRawSync(file.data)) : file.data
     const crc = crc32(file.data)
-    const local = new Uint8Array(30 + nameBytes.length + LOCAL_EXTRA_FIELD.length)
+    const localExtra = file.localExtra ?? LOCAL_EXTRA_FIELD
+    const local = new Uint8Array(30 + nameBytes.length + localExtra.length)
     const localView = new DataView(local.buffer)
     localView.setUint32(0, 0x04034b50, true)
     localView.setUint16(4, 20, true)
@@ -48,9 +54,9 @@ export function zipArchive(
     localView.setUint32(18, body.length, true)
     localView.setUint32(22, file.data.length, true)
     localView.setUint16(26, nameBytes.length, true)
-    localView.setUint16(28, LOCAL_EXTRA_FIELD.length, true)
+    localView.setUint16(28, localExtra.length, true)
     local.set(nameBytes, 30)
-    local.set(LOCAL_EXTRA_FIELD, 30 + nameBytes.length)
+    local.set(localExtra, 30 + nameBytes.length)
 
     const central = new Uint8Array(46 + nameBytes.length + (zip64 ? 28 : 0))
     const centralView = new DataView(central.buffer)
@@ -81,13 +87,16 @@ export function zipArchive(
   }
 
   const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0)
-  const end = new Uint8Array(22)
+  const comment = options.comment ?? new Uint8Array(0)
+  const end = new Uint8Array(22 + comment.length)
   const endView = new DataView(end.buffer)
   endView.setUint32(0, 0x06054b50, true)
   endView.setUint16(8, zip64 ? 0xffff : files.length, true)
   endView.setUint16(10, zip64 ? 0xffff : files.length, true)
   endView.setUint32(12, zip64 ? 0xffffffff : centralSize, true)
   endView.setUint32(16, zip64 ? 0xffffffff : offset, true)
+  endView.setUint16(20, comment.length, true)
+  end.set(comment, 22)
 
   if (!zip64) {
     return concat([...localParts, ...centralParts, end])
