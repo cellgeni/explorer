@@ -6,6 +6,7 @@ import {
   createCustomMorphologyLayer,
   customMorphologyLayerChannels,
   customMorphologyLayerDefaultEnabledChannelIds,
+  customMorphologyLayerLabel,
   customMorphologyLayerLoadFailed,
   customMorphologyLayerLoadStarted,
   isCustomMorphologyLayerChannelId,
@@ -32,6 +33,17 @@ describe('customMorphologyLayers', () => {
       url: 'https://example.test/layers/remote.ome.tif',
       error,
     })
+  })
+
+  it('labels a layer by its decoded file name, or the raw one', () => {
+    expect(customMorphologyLayerLabel('https://example.test/a/my%20slide.ome.tif')).toBe(
+      'my slide.ome.tif',
+    )
+    // A literal % that is not an escape.
+    expect(customMorphologyLayerLabel('https://example.test/a/100%.ome.tif')).toBe(
+      '100%.ome.tif',
+    )
+    expect(customMorphologyLayerLabel('https://example.test/')).toBe('example.test')
   })
 
   it('prefixes custom layer channel IDs and labels', () => {

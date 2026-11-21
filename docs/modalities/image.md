@@ -652,9 +652,12 @@ fails, tiles are decoded and sampled on the main thread.
 (`useCustomMorphologyLayerWorkflow`, `src/features/morphology/`):
 
 - Accepts `http`/`https` OME-TIFF, TIFF, QPTIFF, SVS, or OME-Zarr URLs; http
-  URLs that fail are retried over https.
-- Channels are prefixed with the layer name (the file name). A layer without
-  channel metadata gets one white channel.
+  URLs that fail are retried over https. If both fail, the error shown is the
+  http read's (a 404, or not a TIFF), unless that read got no response, as
+  from an HTTPS page, and the https retry did.
+- Channels are prefixed with the layer name (the file name, decoded unless it
+  holds a `%` that is not an escape). A layer without channel metadata gets one
+  white channel.
 - Layers are saved in the share URL as repeated `customImageUrl` and
   `customImageOpacity` parameters.
 

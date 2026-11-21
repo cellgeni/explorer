@@ -87,7 +87,16 @@ export function customMorphologyLayerLabel(url: string): string {
   const pathParts = parsedUrl.pathname.split('/').filter(Boolean)
   const fileName = pathParts.at(-1)
 
-  return fileName === undefined ? parsedUrl.hostname : decodeURIComponent(fileName)
+  if (fileName === undefined) {
+    return parsedUrl.hostname
+  }
+
+  // A literal % that is not an escape (100%.ome.tif) cannot be decoded.
+  try {
+    return decodeURIComponent(fileName)
+  } catch {
+    return fileName
+  }
 }
 
 function prefixedCustomLayerChannels(
