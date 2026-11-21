@@ -163,7 +163,9 @@ coordinate system.
 
 `points` (transcripts), extra images, and extra tables are not read. Label
 chunks in view are decoded and traced into cell outlines in the Zarr decode
-worker when you zoom in below `Boundary limit`.
+worker when you zoom in below `Boundary limit`. Views share a chunk's read; if
+the view that started it is panned away and cancels it, a view still waiting
+reads the chunk again.
 
 ## Table
 
