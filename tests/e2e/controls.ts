@@ -21,11 +21,11 @@ export async function openControls(page: Page, area: ControlArea): Promise<Locat
       if (await isExpanded(infoButton(page))) {
         return page.getByRole('region', { name: 'Open another dataset' })
       }
-      await openButton(page.getByTitle('Open dataset'))
+      await openButton(datasetMenuButton(page))
       return page.getByRole('dialog', { name: 'Open dataset' })
     }
     case 'info-drawer':
-      await closeButton(page.getByTitle('Open dataset'))
+      await closeButton(datasetMenuButton(page))
       await openButton(infoButton(page))
       return page.getByRole('dialog', { name: 'Dataset info' })
     case 'section': {
@@ -73,6 +73,14 @@ export function isNarrow(page: Page): boolean {
 // Under 860 px, the top bar's menu of window toggles.
 export function panelMenuButton(page: Page): Locator {
   return page.getByRole('button', { name: 'Panels', exact: true })
+}
+
+// The top bar's dataset name, which opens the dataset menu. Its accessible
+// name is the file name, so it is found by its title, exactly: each Activity
+// log entry has its message as a title, and "Cancelled loading …; the open
+// dataset stays" holds "open dataset".
+function datasetMenuButton(page: Page): Locator {
+  return page.getByTitle('Open dataset', { exact: true })
 }
 
 function infoButton(page: Page): Locator {
