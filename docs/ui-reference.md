@@ -328,7 +328,7 @@ The filter is not saved in the share link. Each row has:
 | Visibility checkbox (channel name) | First channel on for Xenium; first six on for Image and SpatialData. Turning on a channel that still has its default window auto-contrasts it         |
 | Colour picker                      | Hidden for native RGB images                                                                                                                          |
 | `Auto`                             | Recomputes the contrast window from the coarsest level. Runs on load for every channel, or only the channels that are on when there are more than six |
-| Min / Max                          | Contrast window                                                                                                                                       |
+| Min / Max                          | Contrast window. A Min or Max set while auto-contrast runs is kept; the result then updates only the histogram                                        |
 | Histogram                          | 32 bins from the last auto-contrast, an image named `{channel} histogram` for screen readers                                                          |
 
 ### Segmentation

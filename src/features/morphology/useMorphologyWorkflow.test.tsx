@@ -134,6 +134,64 @@ describe('useMorphologyWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Channel contrast dapi')
   })
 
+  // Sampling can take seconds on a large image (EXP-051).
+  it('keeps a window set while auto contrast ran, and takes its histogram', async () => {
+    const results: ((value: {
+      min: number
+      max: number
+      histogram: typeof histogram
+    }) => void)[] = []
+    const computeAutoChannelContrast = vi.fn(
+      () =>
+        new Promise<{ min: number; max: number; histogram: typeof histogram }>(
+          (resolve) => {
+            results.push(resolve)
+          },
+        ),
+    )
+
+    render(
+      <Probe
+        computeAutoChannelContrast={computeAutoChannelContrast}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleAutoContrast(channel)
+      api.updateMorphologyChannel('dapi', { color: [255, 0, 0] })
+    })
+    await act(async () => {
+      results[0]?.({ min: 5, max: 95, histogram })
+      await Promise.resolve()
+    })
+
+    // A colour change leaves the result to apply.
+    expect(snapshot.morphologyChannelSettings[0]).toMatchObject({
+      contrastMin: 5,
+      contrastMax: 95,
+    })
+
+    act(() => {
+      api.handleAutoContrast(channel)
+      api.updateMorphologyChannel('dapi', { contrastMin: 40 })
+    })
+    await act(async () => {
+      results[1]?.({ min: 7, max: 90, histogram })
+      await Promise.resolve()
+    })
+
+    expect(snapshot.morphologyChannelSettings[0]).toMatchObject({
+      contrastMin: 40,
+      contrastMax: 95,
+      histogram,
+    })
+    expect(snapshot.autoContrastChannelIds).toEqual([])
+  })
+
   it('marks morphology state as errored when auto contrast fails', async () => {
     const computeAutoChannelContrast = vi.fn(async () => {
       throw new Error('decode failed')

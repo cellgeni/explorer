@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import type { AutoChannelContrastLoader } from '../app-shell/appDependencies'
 import {
@@ -77,9 +77,17 @@ export function useMorphologyWorkflow({
   const { autoContrastChannelIdsRef, datasetAbortRef, loadRequestIdRef } = refs
   const { setAutoContrastChannelIds, setMorphologyChannelSettings, setMorphologyState } =
     setters
+  // How many times each channel's window has been set, so an auto-contrast
+  // that finishes after the user set Min or Max keeps their window (EXP-051).
+  const windowEditCountsRef = useRef(new Map<string, number>())
 
   const updateMorphologyChannel = useCallback(
     (id: string, patch: Partial<Omit<MorphologyChannelSetting, 'id'>>) => {
+      if ('contrastMin' in patch || 'contrastMax' in patch) {
+        const counts = windowEditCountsRef.current
+        counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
+
       setMorphologyChannelSettings((current) =>
         current.map((setting) =>
           setting.id === id ? { ...setting, ...patch } : setting,
@@ -99,17 +107,26 @@ export function useMorphologyWorkflow({
       signal: AbortSignal | undefined,
     ) => {
       const channelId = channel.info.id
+      const windowEditCount = windowEditCountsRef.current.get(channelId) ?? 0
       void computeAutoChannelContrast(channel, signal === undefined ? {} : { signal })
         .then((contrast) => {
           if (loadRequestIdRef.current !== requestId) {
             return
           }
 
-          updateMorphologyChannel(channelId, {
-            contrastMin: contrast.min,
-            contrastMax: contrast.max,
-            histogram: contrast.histogram,
-          })
+          const windowSetSinceStart =
+            (windowEditCountsRef.current.get(channelId) ?? 0) !== windowEditCount
+
+          updateMorphologyChannel(
+            channelId,
+            windowSetSinceStart
+              ? { histogram: contrast.histogram }
+              : {
+                  contrastMin: contrast.min,
+                  contrastMax: contrast.max,
+                  histogram: contrast.histogram,
+                },
+          )
         })
         .catch((error) => {
           if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
