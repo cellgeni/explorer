@@ -793,7 +793,7 @@ function ViewerSurface({
       if (view === null || linkedView.source === linkedViewSource) return
 
       // Exactly the view given, not one within equivalentViewState's
-      // tolerance, which at high zoom is many pixels.
+      // half-pixel tolerance, so the panels line up.
       setViewState((currentViewState) => {
         const zoom = Math.min(
           currentViewState.maxZoom,

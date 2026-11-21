@@ -103,6 +103,12 @@ export function viewStateFromKeyboardEvent(
   viewState: OverviewViewState,
   initialViewState: OverviewViewState,
 ): OverviewViewState | null {
+  // Ctrl, Cmd and Alt combinations are the browser's (page zoom, back and
+  // forward).
+  if (event.ctrlKey || event.metaKey || event.altKey) {
+    return null
+  }
+
   const panStep = (event.shiftKey ? 256 : 64) / scaleFromZoom(viewState.zoom)
 
   switch (event.key) {
@@ -116,15 +122,17 @@ export function viewStateFromKeyboardEvent(
         ...viewState,
         target: [viewState.target[0] + panStep, viewState.target[1], viewState.target[2]],
       }
+    // Deck y is data y negated: Up moves the view toward smaller data y, the
+    // top of the image, as Left moves it toward smaller x.
     case 'ArrowUp':
       return {
         ...viewState,
-        target: [viewState.target[0], viewState.target[1] - panStep, viewState.target[2]],
+        target: [viewState.target[0], viewState.target[1] + panStep, viewState.target[2]],
       }
     case 'ArrowDown':
       return {
         ...viewState,
-        target: [viewState.target[0], viewState.target[1] + panStep, viewState.target[2]],
+        target: [viewState.target[0], viewState.target[1] - panStep, viewState.target[2]],
       }
     case '+':
     case '=':
@@ -161,14 +169,19 @@ export function normaliseViewState(viewState: {
   }
 }
 
+// Targets within half a screen pixel are the same view. The tolerance is in
+// pixels, not data units: at zoom 10, half a data unit is 512 px, and an
+// arrow key's pan or a drag would be dropped.
 export function equivalentViewState(
   left: OverviewViewState,
   right: OverviewViewState,
 ): boolean {
+  const targetTolerance = 0.5 / scaleFromZoom(Math.max(left.zoom, right.zoom))
+
   return (
-    nearlyEqual(left.target[0], right.target[0], 0.5) &&
-    nearlyEqual(left.target[1], right.target[1], 0.5) &&
-    nearlyEqual(left.target[2], right.target[2], 0.5) &&
+    nearlyEqual(left.target[0], right.target[0], targetTolerance) &&
+    nearlyEqual(left.target[1], right.target[1], targetTolerance) &&
+    nearlyEqual(left.target[2], right.target[2], targetTolerance) &&
     nearlyEqual(left.zoom, right.zoom, 0.001) &&
     nearlyEqual(left.minZoom, right.minZoom, 0.001) &&
     nearlyEqual(left.maxZoom, right.maxZoom, 0.001)

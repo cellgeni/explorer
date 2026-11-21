@@ -313,8 +313,8 @@ describe('ViewerCore', () => {
     })
     expect(channel.getView()).toEqual({ target: [8, -8], zoom: 5 })
 
-    // A panel moves the view by less than equivalentViewState's tolerance; the
-    // viewer follows it exactly.
+    // A panel moves the view by a fraction of a data unit; the viewer follows
+    // it exactly.
     act(() => {
       channel.publish({ target: [8.25, -8], zoom: 7.5 }, 'panel')
     })
@@ -2041,6 +2041,34 @@ describe('ViewerCore', () => {
       const nextZoom = onViewportChange.mock.calls.at(-1)?.[0].viewState.zoom
       expect(nextZoom).toBeGreaterThan(initialZoom)
     })
+  })
+
+  it('pans with the arrow keys at the highest zoom and leaves modifier shortcuts alone', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 10 }}
+      />,
+    )
+    await waitFor(() => {
+      expect(deckGlMock.viewState?.zoom).toBe(10)
+    })
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+
+    // 64 screen px is 1/16 of a data unit at zoom 10. Up shows more of the
+    // top of the image: smaller data y, larger deck y.
+    expect(fireEvent.keyDown(frame, { key: 'ArrowRight' })).toBe(false)
+    expect(fireEvent.keyDown(frame, { key: 'ArrowUp' })).toBe(false)
+    expect(deckGlMock.viewState?.target).toEqual([0.0625, 0.0625, 0])
+
+    // Page zoom and history shortcuts reach the browser.
+    expect(fireEvent.keyDown(frame, { key: '-', ctrlKey: true })).toBe(true)
+    expect(fireEvent.keyDown(frame, { key: 'ArrowLeft', altKey: true })).toBe(true)
+    expect(deckGlMock.viewState?.target).toEqual([0.0625, 0.0625, 0])
+    expect(deckGlMock.viewState?.zoom).toBe(10)
   })
 
   it('reports a broad-zoom viewport cell estimate without waiting for render clipping', async () => {

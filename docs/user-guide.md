@@ -209,7 +209,7 @@ returns to the view. See [3D Stack](./dataset-collections.md#3d-stack).
 Use mouse pan and zoom for normal navigation. The spatial view is also keyboard
 focusable:
 
-- Arrow keys pan the spatial view.
+- Arrow keys pan the spatial view the way they point, at any zoom.
 - Shift plus an arrow key pans farther.
 - `+` and `-` zoom in and out by one level, as the zoom buttons do.
 - `Home` resets to the fitted dataset view.
@@ -217,6 +217,8 @@ focusable:
   opens the cell, spot or bin there in its card. With Box selection on (`R`),
   `Enter` selects everything in view, so you can frame a region with the
   arrow keys and `+`/`-` and select it without a mouse.
+- With Ctrl, Cmd or Alt held, these keys go to the browser, so page zoom and
+  back and forward still work.
 
 Everything else is reachable with Tab. The tool buttons are one stop: use the
 arrow keys to move between them. Closing a card, a menu or the Embedding panel
