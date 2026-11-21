@@ -48,6 +48,20 @@ describe('Zarr stores', () => {
     })
   })
 
+  it('reads a cached big-endian chunk the same every time', async () => {
+    const store = consolidatedZarrStore(
+      { get: vi.fn(async () => new Uint8Array([0, 1, 0, 2, 0, 3, 0, 4])) },
+      new Map<string, unknown>([['/X/.zarray', v2Array('>i2', [4], [4])]]),
+      { chunkCacheMaxBytes: 1024 },
+    )
+    const array = await zarr.open.v2(zarr.root(store).resolve('X'), { kind: 'array' })
+
+    // zarrita swaps a big-endian chunk's bytes in place.
+    for (let read = 0; read < 3; read += 1) {
+      expect(Array.from((await zarr.get(array)).data as Int16Array)).toEqual([1, 2, 3, 4])
+    }
+  })
+
   it('reports forbidden chunks with their store key', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = input instanceof Request ? input.url : String(input)
@@ -65,6 +79,35 @@ describe('Zarr stores', () => {
     expect((error as Error).message).toBe(
       'Zarr chunk images/he/0/0.0 could not be read (HTTP 403). The object is missing or not publicly readable.',
     )
+  })
+
+  it('refuses a whole file sent for a Range read', async () => {
+    let cancelled = false
+    const fetcher = vi.fn(async (input: RequestInfo | URL) =>
+      (input as Request).headers.has('Range')
+        ? // A host that ignores Range starts sending the whole file.
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(new Uint8Array(64))
+              },
+              cancel() {
+                cancelled = true
+              },
+            }),
+          )
+        : new Response(new Uint8Array(4)),
+    ) as unknown as typeof fetch
+    const store = createZarrFetchStore('https://example.test/data/store.zarr/', {
+      fetcher,
+    })
+
+    await expect(store.getRange('/0/c/0/0', { offset: 8, length: 4 })).rejects.toThrow(
+      'Zarr chunk 0/c/0/0 cannot be range-read. Expected HTTP 206 for Range: bytes=8-11, received HTTP 200. Configure the host to honor byte-range GET requests for https://example.test/data/store.zarr/.',
+    )
+    expect(cancelled).toBe(true)
+    // A read of a whole object is still answered with 200.
+    await expect(store.get('/0/c/0/0')).resolves.toHaveLength(4)
   })
 
   it('sends Range reads past the HTTP cache', async () => {
@@ -85,6 +128,25 @@ describe('Zarr stores', () => {
     ).toEqual([
       [null, 'default'],
       ['bytes=8-11', 'no-store'],
+    ])
+  })
+
+  it('reads keys whose names hold %, # and ? at their own URLs', async () => {
+    const urls: string[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      urls.push((input as Request).url)
+      return new Response(new Uint8Array(4), { status: 206 })
+    }) as unknown as typeof fetch
+    const store = createZarrFetchStore('https://example.test/data/store.zarr?token=1', {
+      fetcher,
+    })
+
+    await store.get('/obs/% mito #1?/.zarray')
+    await store.getRange('/obs/a%41/0', { offset: 0, length: 4 })
+
+    expect(urls).toEqual([
+      'https://example.test/data/store.zarr/obs/%25%20mito%20%231%3F/.zarray?token=1',
+      'https://example.test/data/store.zarr/obs/a%2541/0?token=1',
     ])
   })
 

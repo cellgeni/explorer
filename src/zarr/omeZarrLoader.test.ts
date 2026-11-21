@@ -195,6 +195,68 @@ describe('OME-Zarr image loader', () => {
     ).toHaveLength(1)
   })
 
+  it('sizes the pixels of OME-Zarr 0.3 levels without a scale from their shapes', async () => {
+    const rootPath = '/images/v03.zarr'
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(
+        new Map([
+          [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+          [
+            `${rootPath}/.zattrs`,
+            jsonBytes({
+              multiscales: [
+                {
+                  version: '0.3',
+                  axes: ['z', 'y', 'x'],
+                  datasets: [{ path: '0' }, { path: '1' }],
+                },
+              ],
+            }),
+          ],
+          [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([4, 8, 6], [1, 8, 6]))],
+          [`${rootPath}/1/.zarray`, jsonBytes(v2ArrayMetadata([2, 4, 3], [1, 4, 3]))],
+        ]),
+      ),
+      decodePool: null,
+    })
+
+    // Level 1's one tile covers the whole 6 × 8 µm image, not 3 × 4 µm.
+    expect(loader.tileBounds(1, 0, 0)).toMatchObject({
+      minX: 0,
+      maxX: 6,
+      minY: 0,
+      maxY: 8,
+    })
+    expect(loader.bestLevel(0.01)).toBe(1)
+    expect(loader.volumeLevels().map((level) => level.voxelSize)).toEqual([
+      { x: 1, y: 1, z: 1 },
+      { x: 2, y: 2, z: 2 },
+    ])
+  })
+
+  it('reads OME-Zarr 0.1 and 0.2 arrays without axes as t, c, z, y, x', async () => {
+    const rootPath = '/images/v01.zarr'
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(
+        new Map([
+          [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+          [
+            `${rootPath}/.zattrs`,
+            jsonBytes({ multiscales: [{ version: '0.1', datasets: [{ path: '0' }] }] }),
+          ],
+          [
+            `${rootPath}/0/.zarray`,
+            jsonBytes(v2ArrayMetadata([1, 2, 5, 4, 4], [1, 1, 1, 4, 4], '<u2')),
+          ],
+        ]),
+      ),
+      decodePool: null,
+    })
+
+    expect(loader.channels).toHaveLength(2)
+    expect(loader.zStack?.sizeZ).toBe(5)
+  })
+
   it('treats SpatialData index-labelled 8-bit three-channel images as RGB', async () => {
     const rootUrl = 'https://example.test/images/he.zarr'
     const loader = await openOmeZarrImageWithOptions(rootUrl, {
@@ -235,6 +297,78 @@ describe('OME-Zarr image loader', () => {
     ])
     expect(loader.channels.some((channel) => channel.alphaFromIntensity === false)).toBe(
       false,
+    )
+  })
+
+  it('keeps 16-bit three-channel images coloured or labelled R, G, B as fluorescence', async () => {
+    const primaries = await openOmeZarrImageWithOptions(
+      'https://example.test/images/primaries.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/primaries.zarr', {
+            omero: {
+              channels: [
+                { label: 'CD3', color: 'FF0000' },
+                { label: 'CD20', color: '00FF00' },
+                { label: 'DAPI', color: '0000FF' },
+              ],
+            },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+    const labelled = await openOmeZarrImageWithOptions(
+      'https://example.test/images/labelled.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/labelled.zarr', {
+            omero: { channels: [{ label: 'R' }, { label: 'G' }, { label: 'B' }] },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+
+    expect(primaries.channels.map((channel) => [channel.name, channel.color])).toEqual([
+      ['CD3', [255, 0, 0]],
+      ['CD20', [0, 255, 0]],
+      ['DAPI', [0, 0, 255]],
+    ])
+    expect(labelled.channels.map((channel) => channel.name)).toEqual(['R', 'G', 'B'])
+
+    for (const loader of [primaries, labelled]) {
+      expect(
+        loader.channels.some((channel) => channel.alphaFromIntensity === false),
+      ).toBe(false)
+    }
+  })
+
+  it('keeps the omero labels of 8-bit three-channel images coloured R, G, B', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stained.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/stained.zarr', {
+            omero: {
+              channels: [
+                { label: 'Eosin', color: 'FF0000' },
+                { label: 'g', color: '00FF00' },
+                { label: 'Haematoxylin', color: '0000FF' },
+              ],
+            },
+          }),
+        ),
+      },
+    )
+
+    expect(loader.channels.map((channel) => channel.name)).toEqual([
+      'Eosin',
+      'Green',
+      'Haematoxylin',
+    ])
+    expect(loader.channels.every((channel) => channel.alphaFromIntensity === false)).toBe(
+      true,
     )
   })
 

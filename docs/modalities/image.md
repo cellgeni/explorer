@@ -526,17 +526,20 @@ transform.
   inflated whole, so each chunk costs its compressed size.
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
-- Axes come from `axes`, else array dimension names, else positional
-  `…, c, y, x`. `x` and `y` are required. `z` starts at
-  `omero.rdefs.defaultZ`, else the middle plane, and other planes open as
-  `#z=N` loaders; `t` is `defaultT`, else 0.
+- Axes come from `axes`, else array dimension names, else by position. A 5D
+  array (OME-Zarr 0.1 and 0.2) is `t, c, z, y, x`; other ranks end
+  `…, c, y, x`. `x` and `y` are required. `z` starts at `omero.rdefs.defaultZ`,
+  else the middle plane, and other planes open as `#z=N` loaders; `t` is
+  `defaultT`, else 0.
 - µm/px is the product of multiscale and dataset `scale` values for x, and
   for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
   the image's extent and fit). Units are converted from any length the
   specification names, from angstrom to kilometre, inch and foot
   (`src/data/lengthUnits.ts`, shared with OME-TIFF). Unknown units count as
-  µm; a missing scale gives 1 µm/px. `translation` is ignored except for
-  SpatialData placement.
+  µm; a missing scale gives level 0 1 µm/px. A later level without a `scale`
+  (OME-Zarr 0.1 to 0.3) takes level 0's pixel size scaled by its shape, so a
+  level half as wide has pixels twice as wide. `translation` is ignored except
+  for SpatialData placement.
 - Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
   are served as several virtual tiles of at most 512 pixels that share one
   decoded chunk.
@@ -544,8 +547,10 @@ transform.
   else `min`/`max`). Channels after the first open as `#c=N` loaders. An
   image without a `c` axis is one channel, white unless omero gives a colour,
   so a `z, y, x` volume gets the `Z plane` control.
-- Three channels with no omero data, or labelled/coloured R, G, B, are treated
-  as native RGB.
+- Three `uint8` channels with no omero data, or labelled/coloured R, G, B, are
+  treated as native RGB. They keep their omero labels, except R, G, B and
+  channel indices, which become Red, Green and Blue. Other dtypes are always
+  fluorescence channels.
 - Chunk bytes are fetched on the main thread. Decoding and RGBA conversion run
   in the Zarr decode worker pool (`src/workers/zarrDecodePool.ts`, up to
   `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one
@@ -557,7 +562,10 @@ transform.
   `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
   truncated body to one of two Range requests for the same bytes at once:
   opening the 3D view while the 2D view was loading the same chunks of the
-  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18).
+  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18). A
+  `200` answer to a Range read is refused as blocked Range requests
+  (`createZarrFetchStore`), since zarrita would take the whole shard for the
+  bytes it asked for.
 
 ### 3D View
 

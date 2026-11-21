@@ -80,6 +80,10 @@ export interface LoadErrorContext {
 
 const SERVER_ERROR_ACTION =
   'The host failed to serve the file. Retry; if it keeps failing, check the server, gateway, or object store hosting the dataset.'
+const ACCESS_DENIED_ACTION =
+  'Make the files public, or open them through a public or presigned address.'
+const RATE_LIMITED_ACTION =
+  'The host is limiting how often it is read. Wait a minute, then reload.'
 
 export function createStructuredLoadError(
   source: LoadErrorSource,
@@ -292,15 +296,7 @@ export function createStructuredLoadError(
 
   if (httpStatus !== undefined) {
     return withOptionalDetail(
-      {
-        source,
-        code: 'http',
-        title: `HTTP ${httpStatus} response`,
-        message,
-        action: isServerErrorStatus(Number(httpStatus))
-          ? SERVER_ERROR_ACTION
-          : 'Check the dataset URL and object permissions.',
-      },
+      { source, ...httpStatusError(Number(httpStatus)), message },
       detail,
     )
   }
@@ -553,6 +549,27 @@ function readRangeReadFailureStatus(normalizedMessage: string): number | undefin
   return status === undefined ? undefined : Number(status)
 }
 
+// For a failed read that names its HTTP status and that no reader explains.
+function httpStatusError(
+  status: number,
+): Pick<StructuredLoadError, 'code' | 'title' | 'action'> {
+  if (status === 401) {
+    return { code: 'access-denied', title: 'Access denied', action: ACCESS_DENIED_ACTION }
+  }
+
+  if (status === 429) {
+    return { code: 'http', title: 'Too many requests', action: RATE_LIMITED_ACTION }
+  }
+
+  return {
+    code: 'http',
+    title: `HTTP ${status} response`,
+    action: isServerErrorStatus(status)
+      ? SERVER_ERROR_ACTION
+      : 'Check the dataset URL and object permissions.',
+  }
+}
+
 function isServerErrorStatus(status: number): boolean {
   return status >= 500 && status <= 599
 }
@@ -720,7 +737,7 @@ const DATASET_DETECTION_ERRORS: Record<
   'access-denied': {
     code: 'access-denied',
     title: 'Access denied',
-    action: 'Make the files public, or open them through a public or presigned address.',
+    action: ACCESS_DENIED_ACTION,
   },
   blocked: {
     code: 'blocked',

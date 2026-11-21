@@ -23,6 +23,12 @@ export class ZarrChunkUnavailableError extends Error {
   }
 }
 
+// A request's key in the store whose root path is `rootPath`.
+function storeKey(requestUrl: string, rootPath: string): string {
+  const pathname = new URL(requestUrl).pathname
+  return pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname
+}
+
 const MAX_TRACKED_MISSING_CHUNKS = 1_000
 
 export interface ConsolidatedZarrMetadata {
@@ -50,35 +56,63 @@ export function createZarrFetchStore(
   const fetcher = options.fetcher
   const rootPath = new URL(url).pathname.replace(/\/+$/, '')
 
-  return new zarr.FetchStore(url, {
+  return new NameSafeFetchStore(url, {
     async fetch(request: Request) {
       // Range reads (sharded chunks and shard indexes) skip Chromium's HTTP
       // cache, as TIFF tiles do. Two Range requests for the same bytes of a
       // file at once, such as the 2D and 3D views reading one chunk, can get
       // a truncated body from it, and Range requests to one file otherwise
       // wait for each other.
-      const sent = request.headers.has('Range')
-        ? new Request(request, { cache: 'no-store' })
-        : request
+      const range = request.headers.get('Range')
+      const sent = range === null ? request : new Request(request, { cache: 'no-store' })
       const response = await (fetcher ?? fetch)(sent)
+
+      // zarrita takes a 200 as the range asked for, so a host that ignores
+      // Range would hand it a whole shard as its index or one inner chunk.
+      if (range !== null && response.status === 200) {
+        await response.body?.cancel().catch(() => undefined)
+        throw new Error(
+          `Zarr chunk ${storeKey(request.url, rootPath).replace(/^\/+/, '')} cannot be range-read. Expected HTTP 206 for Range: ${range}, received HTTP 200. Configure the host to honor byte-range GET requests for ${url}.`,
+        )
+      }
 
       if (response.status !== 403) {
         return response
       }
 
-      const pathname = new URL(request.url).pathname
-
-      if (isZarrMetadataKey(pathname)) {
+      if (isZarrMetadataKey(new URL(request.url).pathname)) {
         return new Response(null, { status: 404, statusText: 'Not Found' })
       }
 
       throw new ZarrChunkUnavailableError(
-        pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname,
+        storeKey(request.url, rootPath),
         403,
         'The object is missing or not publicly readable.',
       )
     },
   })
+}
+
+// zarrita's FetchStore resolves a key as a URL, so in a node's name '%' would
+// read as an escape, '#' start a fragment and '?' a query. Keys are names, so
+// those three are escaped; the rest is left to the URL as before.
+class NameSafeFetchStore extends zarr.FetchStore {
+  override get(key: zarr.AbsolutePath, options?: RequestInit) {
+    return super.get(urlSafeStoreKey(key), options)
+  }
+
+  override getRange(
+    key: zarr.AbsolutePath,
+    range: zarr.RangeQuery,
+    options?: RequestInit,
+  ) {
+    return super.getRange(urlSafeStoreKey(key), range, options)
+  }
+}
+
+// A store key or folder path with '%', '#' and '?' escaped, to append to a URL.
+export function urlSafeStoreKey<Key extends string>(key: Key): Key {
+  return key.replace(/[%#?]/g, (character) => encodeURIComponent(character)) as Key
 }
 
 // Reads consolidated metadata from the store root, or returns null when none
@@ -162,14 +196,16 @@ export function consolidatedZarrStore(
       const cache = options.cacheChunk?.(key) === false ? undefined : chunkCache
       const cached = cache?.get(key)
 
+      // The cache keeps its own copy and hands out copies: zarrita's bytes
+      // codec swaps a big-endian chunk's bytes in place.
       if (cached !== undefined) {
-        return cached
+        return cached.slice()
       }
 
       const bytes = await base.get(key, getOptions)
 
       if (bytes !== undefined) {
-        cache?.set(key, bytes)
+        cache?.set(key, bytes.slice())
         return bytes
       }
 

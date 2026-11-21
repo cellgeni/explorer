@@ -51,6 +51,75 @@ function jsonFetcher(
   }) as typeof fetch
 }
 
+// A virtual-hosted S3 bucket at https://store.test: keys from `files`, and
+// ListObjectsV2 listings unless `listing` replaces them.
+function s3BucketFetcher(
+  files: Readonly<Record<string, unknown>>,
+  options: {
+    readonly status?: Readonly<Record<string, number>>
+    readonly listing?: (prefix: string) => string
+  } = {},
+): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : new Request(input, init)
+    const url = new URL(request.url)
+    const key = decodeURIComponent(url.pathname.slice(1))
+
+    if (url.searchParams.get('list-type') === '2') {
+      const prefix = url.searchParams.get('prefix') ?? ''
+      const children = Object.keys(files)
+        .filter((name) => name.startsWith(prefix))
+        .map((name) => name.slice(prefix.length))
+      const folders = new Set(
+        children.filter((name) => name.includes('/')).map((name) => name.split('/')[0]),
+      )
+      const body =
+        options.listing?.(prefix) ??
+        [
+          ...Array.from(
+            folders,
+            (name) =>
+              `<CommonPrefixes><Prefix>${prefix}${name}/</Prefix></CommonPrefixes>`,
+          ),
+          ...children
+            .filter((name) => !name.includes('/'))
+            .map(
+              (name) => `<Contents><Key>${prefix}${name}</Key><Size>2</Size></Contents>`,
+            ),
+        ].join('')
+      return new Response(
+        `<ListBucketResult>${body}<IsTruncated>false</IsTruncated></ListBucketResult>`,
+      )
+    }
+
+    const status = options.status?.[key]
+    const file = files[key]
+
+    if (status !== undefined) {
+      return new Response(null, { status, statusText: 'Service Unavailable' })
+    }
+
+    return file === undefined
+      ? new Response(null, { status: 404 })
+      : new Response(JSON.stringify(file))
+  }) as typeof fetch
+}
+
+const BUCKET_ROOT_STORE = {
+  '.zgroup': { zarr_format: 2 },
+  'obs/.zgroup': { zarr_format: 2 },
+  'obs/score/.zarray': {
+    zarr_format: 2,
+    shape: [4],
+    chunks: [4],
+    dtype: '<f4',
+    compressor: null,
+    fill_value: 0,
+    order: 'C',
+    filters: null,
+  },
+}
+
 describe('Zarr store structure', () => {
   it('finds the store root of metadata file and folder URLs', () => {
     expect(zarrStoreRootUrl('https://x.test/a.zarr/')).toBe('https://x.test/a.zarr')
@@ -264,6 +333,52 @@ describe('Zarr store structure', () => {
 
     expect(structure.truncated).toBe(true)
     expect(structure.groupCount + structure.arrayCount).toBeLessThanOrEqual(5)
+  })
+
+  it('lists a store at the root of a bucket', async () => {
+    const structure = await readZarrStructure(`${STORE_ORIGIN}/.zgroup`, {
+      fetcher: s3BucketFetcher(BUCKET_ROOT_STORE),
+    })
+
+    expect(structure.listing).toBe('S3 listing')
+    expect(outline(structure.root)).toEqual([
+      '/ (group)',
+      'obs (group)',
+      'obs/score (array)',
+    ])
+  })
+
+  it('does not trust an S3 listing that leaves out the metadata it read', async () => {
+    const structure = await readZarrStructure(`${STORE_ORIGIN}/.zgroup`, {
+      fetcher: s3BucketFetcher(BUCKET_ROOT_STORE, { listing: () => '' }),
+    })
+
+    expect(outline(structure.root)).toEqual(['/ (group, unlisted)'])
+  })
+
+  it('reports a failed metadata read, not missing metadata', async () => {
+    const offline = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof fetch
+
+    await expect(
+      readZarrStructure(`${STORE_ORIGIN}/a.zarr`, { fetcher: offline }),
+    ).rejects.toThrow(TypeError)
+    await expect(
+      readZarrStructure(`${STORE_ORIGIN}/.zgroup`, {
+        fetcher: s3BucketFetcher(BUCKET_ROOT_STORE, {
+          status: { '.zgroup': 503, '.zarray': 503, '.zattrs': 503, 'zarr.json': 503 },
+        }),
+      }),
+    ).rejects.toThrow(/^Zarr metadata \/\S+ could not be read \(HTTP 503\)\.$/)
+    // A failed .zarray does not make the array a group.
+    await expect(
+      readZarrStructure(`${STORE_ORIGIN}/.zgroup`, {
+        fetcher: s3BucketFetcher(BUCKET_ROOT_STORE, {
+          status: { 'obs/score/.zarray': 503 },
+        }),
+      }),
+    ).rejects.toThrow('Zarr metadata /obs/score/.zarray could not be read (HTTP 503).')
   })
 
   it('says when no Zarr metadata is at the URL', async () => {

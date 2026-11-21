@@ -95,6 +95,36 @@ describe('AnnData Zarr stores', () => {
     await expect(embeddingKinds(dataset)).resolves.not.toContain('X_scvi')
   })
 
+  it('opens obs columns whose names hold %, # and ?', async () => {
+    const name = '% cluster #1?'
+    const fixture = annDataZarrFixtureFetcher({
+      hidden: ['/tiny.zarr/.zmetadata'],
+      aliases: { [`/tiny.zarr/obs/${name}`]: '/tiny.zarr/obs/cluster' },
+    })
+    // The fixture's cluster column, renamed.
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+
+      if (new URL(request.url).pathname !== '/tiny.zarr/obs/.zattrs') {
+        return fixture(request)
+      }
+
+      const attrs = (await (await fixture(request)).json()) as Record<string, unknown>
+      return new Response(
+        JSON.stringify({ ...attrs, 'column-order': [name, 'score', 'stage  '] }),
+      )
+    }) as typeof fetch
+    const dataset = new AnnDataH5adDataset({
+      url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`,
+      zarr: true,
+      fetcher,
+    })
+
+    await expect(dataset.annotationGroups()).resolves.toContainEqual(
+      expect.objectContaining({ label: name, groupingName: name, groupCount: 2 }),
+    )
+  })
+
   it('walks a v3 store with a CSR X', async () => {
     const dataset = new AnnDataH5adDataset({
       url: `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.v3.zarr`,
