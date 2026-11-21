@@ -58,6 +58,11 @@ function ShareableUrlHashProbe({
       showCellBoundaries: false,
       showNucleusBoundaries: true,
       showHoverTooltips: false,
+      showMinimap: true,
+      showAxes: true,
+      showLegend: false,
+      showNavigation: true,
+      showScaleBar: false,
     },
     magicLens: {
       magicLensRadiusMicrometers: 120,
@@ -138,6 +143,10 @@ describe('useShareableUrlHash', () => {
     expect(window.location.hash).toContain('nucleusBounds=1')
     expect(window.location.hash).not.toContain('transcriptOpacity')
     expect(window.location.hash).toContain('hoverTips=0')
+    expect(window.location.hash).toContain('axes=1')
+    expect(window.location.hash).toContain('legend=0')
+    expect(window.location.hash).toContain('scaleBar=0')
+    expect(window.location.hash).not.toMatch(/[#&](minimap|navButtons)=/)
     expect(window.location.hash).toContain('cellBoundary=0.35')
     expect(window.location.hash).toContain('channels=Channel%3A1')
     expect(window.location.hash).toMatch(/[#&]z=6(&|$)/)

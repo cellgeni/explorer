@@ -3997,6 +3997,11 @@ export function App({ dependencies }: AppProps = {}) {
       showCellBoundaries,
       showNucleusBoundaries,
       showHoverTooltips,
+      showMinimap,
+      showAxes,
+      showLegend,
+      showNavigation,
+      showScaleBar,
     },
     magicLens: {
       magicLensRadiusMicrometers,
