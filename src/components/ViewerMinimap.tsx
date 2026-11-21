@@ -28,6 +28,10 @@ interface ViewerMinimapProps {
   // The main view, in data µm.
   readonly viewBbox: BBox | null
   readonly onNavigate: (target: readonly [number, number]) => void
+  // Which of the zoom buttons and scale bar below it are shown, so it sits
+  // just above them.
+  readonly navigationBelow: boolean
+  readonly scaleBarBelow: boolean
 }
 
 // The minimap (plan 15.4-D). It sits beside the deck.gl canvas,
@@ -43,6 +47,8 @@ export const ViewerMinimap = memo(function ViewerMinimap({
   points,
   viewBbox,
   onNavigate,
+  navigationBelow,
+  scaleBarBelow,
 }: ViewerMinimapProps) {
   const draggingRef = useRef(false)
   const hasImage = minimapDrawsImage(imageLoader, imageChannels, flatImage)
@@ -69,7 +75,9 @@ export const ViewerMinimap = memo(function ViewerMinimap({
 
   return (
     <div
-      className="viewer-minimap"
+      className={`viewer-minimap${navigationBelow ? '' : ' without-navigation'}${
+        scaleBarBelow ? '' : ' without-scale-bar'
+      }`}
       style={{ width: layout.width, height: layout.height }}
       role="img"
       aria-label="Minimap of the whole dataset; the box is the view"

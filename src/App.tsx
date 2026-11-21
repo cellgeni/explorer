@@ -589,13 +589,19 @@ export function App({ dependencies }: AppProps = {}) {
       setShowCellBoundaries,
       setShowAxes,
       setShowHoverTooltips,
+      setShowLegend,
       setShowMinimap,
+      setShowNavigation,
       setShowNucleusBoundaries,
+      setShowScaleBar,
       showAxes,
       showCellBoundaries,
       showHoverTooltips,
+      showLegend,
       showMinimap,
+      showNavigation,
       showNucleusBoundaries,
+      showScaleBar,
     },
     magicLens: {
       magicLensActive,
@@ -4589,10 +4595,16 @@ export function App({ dependencies }: AppProps = {}) {
     setMeasurementUnit,
     setShowAxes,
     setShowHoverTooltips,
+    setShowLegend,
     setShowMinimap,
+    setShowNavigation,
+    setShowScaleBar,
     showAxes,
     showHoverTooltips,
+    showLegend,
     showMinimap,
+    showNavigation,
+    showScaleBar,
   })
   const loadingDatasetUrl =
     pendingDatasetLoadState.status === 'loading'
@@ -5002,6 +5014,7 @@ export function App({ dependencies }: AppProps = {}) {
             loadingTasks={loadingTasks}
             onCancelLoadingTask={handleCancelLoadingTask}
             legendSections={legendSections}
+            legend={showLegend}
             showZoomLevel={debugMode}
             selectionHighlight={selectionHighlight}
             onClearSelection={handleClearSelection}
@@ -5027,9 +5040,10 @@ export function App({ dependencies }: AppProps = {}) {
             magicLensSummary={magicLensViewerSummary}
             viewResetKey={viewerViewResetKey}
             focusRequest={spatialFocusRequest}
-            navigationControls
+            navigationControls={showNavigation}
             minimap={showMinimap}
             axes={showAxes}
+            scaleBar={showScaleBar}
             fitRequestKey={fitRequestKey}
             onImageTileError={handleImageTileError}
             onTileCacheEviction={handleTileCacheEviction}
@@ -5087,6 +5101,7 @@ export function App({ dependencies }: AppProps = {}) {
               store={cellViewStore}
               coloring={sectionColoring}
               cellPointScale={cellPointScale}
+              hoverTooltips={showHoverTooltips}
               onClose={() => {
                 setCellViewOpen(false)
               }}
@@ -5108,6 +5123,7 @@ export function App({ dependencies }: AppProps = {}) {
             coloring={sectionColoring}
             cellPointScale={cellPointScale}
             pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+            hoverTooltips={showHoverTooltips}
             onOpen={handleSelectCollectionEntry}
             onClose={(entry) => {
               setCompareUrls(toggledCompareUrls(linkedSections, entry))
@@ -5122,6 +5138,7 @@ export function App({ dependencies }: AppProps = {}) {
           store={collectionPreviewStore}
           coloring={sectionColoring}
           cellPointScale={cellPointScale}
+          hoverTooltips={showHoverTooltips}
           onClose={() => {
             setSectionStackCollectionUrl(null)
           }}

@@ -335,15 +335,15 @@ models instead of separate props
 ([plan 15.2-A](plan/phases/15-interface-redesign.md#152-shell-re-layout)).
 `App.tsx` builds seven, one hook each, in `src/features/sections/`:
 
-| Model                     | Hook                         | Holds                                                                                                            |
-| ------------------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `DatasetInfoModel`        | `useDatasetInfoModel`        | Dataset facts, open a dataset, Share, About, platform view options (Visium HD, Visium, SpatialData), diagnostics |
-| `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                            |
-| `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                              |
-| `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript            |
-| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, saved selections (15.4-A), GeoJSON shapes                           |
-| `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, mouse coordinate units, the measure tool                                                         |
-| `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                     |
+| Model                     | Hook                         | Holds                                                                                                                      |
+| ------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `DatasetInfoModel`        | `useDatasetInfoModel`        | Dataset facts, open a dataset, Share, About, platform view options (Visium HD, Visium, SpatialData), diagnostics           |
+| `ImageSectionModel`       | `useImageSectionModel`       | Image opacity, z plane, channels, custom image layers                                                                      |
+| `CellsSectionModel`       | `useCellsSectionModel`       | Cell appearance (boundaries, opacities), the gene selection, and what colours cells                                        |
+| `TranscriptsSectionModel` | `useTranscriptsSectionModel` | Transcript display, gene filter, colours, filters, point style, budget, hovered and pinned transcript                      |
+| `AnnotationsSectionModel` | `useAnnotationsSectionModel` | Annotation sets and labels, metadata tracks, saved selections (15.4-A), GeoJSON shapes                                     |
+| `ViewSettingsModel`       | `useViewSettingsModel`       | Hover tooltips, canvas overlays (legend, minimap, zoom buttons, scale bar, axes), mouse coordinate units, the measure tool |
+| `EmbeddingModel`          | `useEmbeddingModel`          | The embedding view, Load Embeddings, and the plot's selection links (15.2-G)                                               |
 
 - A model holds values and intent callbacks such as `onOpacityPercentChange`.
   The hook does what the old panel wrappers did: converts percents, normalizes

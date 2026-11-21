@@ -73,6 +73,8 @@ export interface ViewerCoreProps {
   readonly onCancelLoadingTask?: (id: string) => void
   // The canvas legend, bottom left above the loading indicator.
   readonly legendSections?: readonly ViewerLegendSection[]
+  // Settings › Show legend; off hides the legend but not the loading list.
+  readonly legend?: boolean
   // The selected cell, spot or bin, marked over the canvas. Esc on the canvas
   // calls onClearSelection.
   readonly selectionHighlight?: ViewerSelectionHighlight | null
@@ -117,6 +119,8 @@ export interface ViewerCoreProps {
   readonly minimap?: boolean
   // Rulers along the top and left edges, in the scale bar's unit (15.4-E).
   readonly axes?: boolean
+  // The scale bar at the bottom right.
+  readonly scaleBar?: boolean
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null
