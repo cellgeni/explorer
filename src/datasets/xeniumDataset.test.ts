@@ -9,9 +9,10 @@ import type {
   SqlParameter,
 } from '../data/gex'
 import type { CellId } from '../data/cellid'
-import type { DuckDbClientLike, XeniumDuckDbConnection } from './xeniumDataset'
+import type { DuckDbClientLike } from './xeniumDataset'
 import type { GexResult } from '../data/gex'
 import type { TiffPyramidLoader } from '../tiff/loader'
+import type { XeniumDuckDbConnection } from './xeniumDatasetRows'
 
 class FakeTable implements ArrowTableLike {
   constructor(private readonly rows: readonly Record<string, unknown>[]) {}

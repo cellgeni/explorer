@@ -6,8 +6,8 @@ import {
   type TranscriptAggregateBin,
   type TranscriptCapabilities,
   type TranscriptPoint,
+  type TranscriptGridLevelMetadata,
 } from '../../data/transcriptOverlay'
-import type { TranscriptGridLevelMetadata } from '../../data/transcriptZarr'
 import type { OverviewCellDatum } from '../../rendering/deckLayers'
 import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,

@@ -23,7 +23,6 @@ import {
 } from './App'
 import { intToCellId } from './data/cellid'
 import { imagePixels, micrometers } from './data/coords'
-import type { Annotation } from './datasets/spatialDataset'
 import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
@@ -46,6 +45,7 @@ import {
   visiumOverviewFixture,
   type AppTestDependencyProps,
 } from './test/appTestHarness'
+import type { Annotation } from './data/annotation'
 
 vi.mock('@deck.gl/react', () => ({
   DeckGL: ({

@@ -5,13 +5,14 @@ import type {
   Micrometers,
   UnitsDescriptor,
 } from '../data/coords'
-import type { CellId } from '../data/cellid'
 import type { GexResult, Selection, TranscriptScope } from '../data/gex'
 import type {
   GeneExpressionStageTiming,
   GeneExpressionStageTimingHandler,
 } from '../data/geneExpressionTiming'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
+import type { Annotation } from '../data/annotation'
+import type { CellId } from '../data/cellid'
 import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
 
 export type Platform =
@@ -151,15 +152,6 @@ export type ImageSource =
       readonly size?: readonly [number, number]
     }
 
-export interface Annotation<ElementId extends SpatialElementId = CellId> {
-  readonly id: string
-  readonly label: string
-  readonly cellIds: readonly ElementId[]
-  // The class's colour as the dataset stores it (`#rrggbb`), used until the
-  // user picks another.
-  readonly color?: string
-}
-
 export interface GeneExpressionElement {
   readonly id: string
   readonly position: DataPoint
@@ -212,6 +204,28 @@ export interface GeneExpressionQueryOptions {
   readonly sampleStride?: number
   readonly signal?: AbortSignal
   readonly onStageTiming?: GeneExpressionStageTimingHandler
+}
+
+// A cell, spot or bin as a reader lists it.
+export interface DatasetCell {
+  readonly id: CellId
+  readonly position: DataPoint
+  readonly transcriptCount?: number
+  readonly cellArea?: number
+  readonly nucleusCount?: number
+  readonly segmentationMethod?: string
+  readonly cellFeatureMatrixRow?: number
+}
+
+// A transcript as a reader lists it.
+export interface DatasetTranscript {
+  readonly cellId: CellId | null
+  readonly featureName: string
+  readonly position: DataPoint
+  readonly zLocation: number | undefined
+  readonly qv: number
+  readonly overlapsNucleus: boolean | undefined
+  readonly isGene: boolean | undefined
 }
 
 // A cell whose outline is wanted (plan 23-H): its ID, its row in the

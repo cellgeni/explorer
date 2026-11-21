@@ -1,6 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { AnalysisAnnotationGroupOption } from '../../data/analysisAnnotations'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
@@ -13,13 +12,14 @@ import { datasetLoadReady } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { SpatialDatasetLoader } from './appDependencies'
 import { useVisiumHdAnnotationSetsWorkflow } from './useVisiumHdAnnotationSetsWorkflow'
+import type { AnnotationGroupOption } from '../../data/annotation'
 
 const DATASET_URL = 'https://example.test/visium'
 
 function group(
   binSizeMicrometers: VisiumHdBinSizeMicrometers,
   clustering: string,
-): AnalysisAnnotationGroupOption {
+): AnnotationGroupOption {
   return {
     id: `visium-hd-clusters:${binSizeMicrometers}:${clustering}`,
     label: clustering.replace(/^gene_expression_/, ''),
@@ -28,9 +28,7 @@ function group(
   }
 }
 
-const GROUPS: Readonly<
-  Record<VisiumHdBinSizeMicrometers, AnalysisAnnotationGroupOption[]>
-> = {
+const GROUPS: Readonly<Record<VisiumHdBinSizeMicrometers, AnnotationGroupOption[]>> = {
   2: [],
   8: [
     group(8, 'gene_expression_kmeans_2_clusters'),

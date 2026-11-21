@@ -2,9 +2,9 @@ import { formatGroupingName } from '../data/analysisAnnotations'
 import { datasetFileUrl } from '../data/datasetFiles'
 import { fetchHead, noteReadableResponse } from '../data/hostResponses'
 import { parseVisiumClustersCsv } from './visiumFormat'
-import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
-import type { Annotation, SpatialElementId } from './spatialDataset'
+import type { SpatialElementId } from './spatialDataset'
 import type { VisiumHdBinDescriptor, VisiumHdBinSizeMicrometers } from './visiumHdDataset'
+import type { Annotation, AnnotationGroupOption } from '../data/annotation'
 
 // Space Ranger clusters each 8 and 16 µm tier's bins (not 2 µm), and writes
 // each clustering to analysis/clustering/<name>/clusters.csv as
@@ -66,7 +66,7 @@ export async function readVisiumHdClusteringGroups(
   baseUrl: string,
   bin: VisiumHdBinDescriptor,
   options: VisiumHdClusterReadOptions = {},
-): Promise<readonly AnalysisAnnotationGroupOption[]> {
+): Promise<readonly AnnotationGroupOption[]> {
   const fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis)
   const present = await Promise.all(
     VISIUM_HD_CLUSTERINGS.map(async (clustering) => {

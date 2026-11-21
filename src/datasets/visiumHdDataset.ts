@@ -26,11 +26,9 @@ import type {
   VisiumHdBarcodeMappingCellAssignment,
 } from './visiumHdBarcodeMappings'
 import type { Compressors } from 'hyparquet'
-import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
 import type { BBox } from '../data/coords'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -47,6 +45,7 @@ import type {
 } from './visiumHdOverview'
 
 export { DEFAULT_VISIUM_HD_FEATURE_SLICE_BYTE_BUDGET } from './visiumHdDatasetReaders'
+import type { Annotation, AnnotationGroupOption } from '../data/annotation'
 
 export type {
   CreateVisiumHdBinnedOverviewOptions,
@@ -171,7 +170,7 @@ export class VisiumHdDataset implements SpatialDataset<SpatialElementId> {
   annotationGroups(
     binSizeMicrometers?: VisiumHdBinSizeMicrometers,
     options: VisiumHdAnnotationQueryOptions = {},
-  ): Promise<readonly AnalysisAnnotationGroupOption[]> {
+  ): Promise<readonly AnnotationGroupOption[]> {
     return this.readers.annotationGroups(binSizeMicrometers, options)
   }
 

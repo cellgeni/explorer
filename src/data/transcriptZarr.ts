@@ -13,6 +13,7 @@ import {
 import type {
   TranscriptAggregateBin,
   TranscriptAggregateResult,
+  TranscriptGridLevelMetadata,
   TranscriptGroupSummary,
   TranscriptLodLevel,
   TranscriptPoint,
@@ -82,16 +83,6 @@ interface TranscriptZarrMetadata {
   readonly codewordGeneNames: readonly string[]
   readonly fovNames: readonly string[]
   readonly numberRnas?: number
-}
-
-export interface TranscriptGridLevelMetadata {
-  readonly level: number
-  readonly tileSizeMicrometers: number
-  readonly gridKeys: readonly string[]
-  readonly transcriptCounts: readonly number[]
-  // The level's share of the transcripts level 0 counts, when it is below 1:
-  // the coarser levels count a sample.
-  readonly sampledShare?: number
 }
 
 interface TranscriptDensityGeneMetadata {

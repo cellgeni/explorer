@@ -2,15 +2,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { intToCellId } from './cellid'
 import {
   CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
-  loadDatasetCellTranscriptDistribution,
-  loadPerGeneCellTranscriptDistribution,
   summarizeCellTranscriptZDistribution,
 } from './cellTranscripts'
+import {
+  loadDatasetCellTranscriptDistribution,
+  loadPerGeneCellTranscriptDistribution,
+} from './datasetCellTranscripts'
 import { loadTranscriptZarrViewport } from './transcriptZarr'
 import { micrometers, type DataPoint } from './coords'
 import { cachedXeniumTranscriptDataset } from './xeniumDatasetCache'
 import type { CellId } from './cellid'
-import type { DatasetTranscript, XeniumDataset } from '../datasets/xeniumDataset'
+import type { XeniumDataset } from '../datasets/xeniumDataset'
+import type { DatasetTranscript } from '../datasets/spatialDataset'
 
 vi.mock('./transcriptZarr', () => ({
   loadTranscriptZarrViewport: vi.fn(),

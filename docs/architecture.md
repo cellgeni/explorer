@@ -55,6 +55,15 @@ files. Parsing happens in the browser:
 | `tests/config/`                         | Vitest tests of `vite.config.ts`                                                                                                                                                         |
 | `tests/e2e/`                            | Playwright tests: `@smoke` tests run offline on fixtures; `@live` tests load hosted datasets and every example in `examples/`                                                            |
 
+Readers in `src/datasets` import from `src/data`, so a `src/data` module they
+import must not lead back to them through its own imports, types included, or
+the two form an import cycle. Types both sides use live in `src/data`
+(`annotation.ts`, `numericArray.ts`, and the transcript types in
+`transcriptOverlay.ts` and `cellTranscripts.ts`). The loaders that open a
+Xenium dataset (`datasetTranscripts.ts`, `datasetCellTranscripts.ts`,
+`datasetAnnotations.ts` and `xeniumDatasetCache.ts`) are kept apart from them,
+as no reader imports a loader.
+
 Unit tests sit next to their modules as `*.test.ts(x)` and run with Vitest.
 On every pull request, CI (`.github/workflows/ci.yml`) runs Prettier, ESLint,
 the typecheck, `npm test` and the build, and in a job of their own the
@@ -182,6 +191,8 @@ lists: `all` of them, zeros included; only those with expression
 expression plus every Nth one without (`sampled`). A z-score counts the cells a
 batch leaves out as 0. `geneExpressionBatchContract.test.ts` runs each platform's
 reader on one small layout and checks this.
+`DatasetCell` and `DatasetTranscript`, the cell and transcript records the
+readers list, are defined there too.
 
 ### 3. First Paint
 

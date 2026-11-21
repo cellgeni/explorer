@@ -209,7 +209,7 @@ the FLOAT-cast vertex bounds prune row groups.
 
 Capabilities are checked lazily, when the overlay is on or the Transcripts
 section is open (`loadDatasetTranscriptCapabilities`,
-`src/data/transcriptOverlay.ts`). Once the check has read the
+`src/data/datasetTranscripts.ts`). Once the check has read the
 `transcripts.zarr.zip` metadata, the visible transcript estimate sums the
 level-0 tile counts (`grid_number_objects`) in the viewport, weighting edge
 tiles by the share of their area in view (`estimateTranscriptZarrViewportCount`).
@@ -295,7 +295,7 @@ or exact points.
 - Gene profile: `loadRoiGeneStats` for one cell (CSC Zarr, else H5).
 - Boundary and shape metrics: a boundary query around the cell.
 - Z-axis distribution: `loadDatasetCellTranscriptDistribution`
-  (`src/data/cellTranscripts.ts`) reads Zarr transcripts in the cell's bbox,
+  (`src/data/datasetCellTranscripts.ts`) reads Zarr transcripts in the cell's bbox,
   keeps those inside the polygon, and builds 16 bins. Needs
   `transcripts.zarr.zip`.
 
@@ -356,8 +356,8 @@ not passed to the readers, so it does not change the result.
 | `src/features/app-shell/useViewportDataWorkflow.ts`                                 | Separate cell and nucleus boundary requests                    |
 | `src/features/app-shell/platformAdapter.ts`                                         | Nucleus loader routing; cell query skipped while hidden        |
 | `src/data/geneExpression.ts`, `geneExpressionLod.ts`, `gex.ts`                      | Expression LOD and matrix readers                              |
-| `src/data/transcriptOverlay.ts`, `transcriptZarr.ts`                                | Transcript capabilities, density, exact points                 |
-| `src/data/cellTranscripts.ts`                                                       | Selected-cell z distribution                                   |
+| `src/data/datasetTranscripts.ts`, `transcriptOverlay.ts`, `transcriptZarr.ts`       | Transcript capabilities, density, exact points                 |
+| `src/data/datasetCellTranscripts.ts`, `cellTranscripts.ts`                          | Selected-cell z distribution                                   |
 | `src/data/roiCells.ts`, `roiGeneStats.ts`, `roiTranscripts.ts`                      | ROI queries and exports                                        |
 | `src/data/analysisAnnotations.ts`, `analysisEmbeddings.ts`, `datasetAnnotations.ts` | Clusterings and embeddings                                     |
 | `src/data/genePanel.ts`, `geneFeatures.ts`                                          | Gene list                                                      |

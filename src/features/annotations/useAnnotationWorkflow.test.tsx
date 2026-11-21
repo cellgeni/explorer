@@ -5,13 +5,13 @@ import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { RoiState } from '../roi/roiModel'
 import type { AnnotationState } from './annotationModel'
 import { useAnnotationWorkflow } from './useAnnotationWorkflow'
+import type { Annotation } from '../../data/annotation'
 
 interface Snapshot {
   readonly annotationColors: Readonly<Record<string, string>>

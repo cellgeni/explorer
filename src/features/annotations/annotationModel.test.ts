@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { asAnyCellId, asCellId } from '../../data/cellid'
 import { parseCustomAnnotations } from '../../data/customAnnotations'
-import type { AnnotationGroupOption } from '../../data/datasetAnnotations'
-import type { Annotation } from '../../datasets/spatialDataset'
 import {
   IDLE_ANNOTATION_GROUP_STATE,
   IDLE_ANNOTATION_STATE,
@@ -29,6 +27,7 @@ import {
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
 } from './annotationModel'
+import type { Annotation, AnnotationGroupOption } from '../../data/annotation'
 
 const annotations: readonly Annotation[] = [
   { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },

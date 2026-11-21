@@ -7,14 +7,42 @@ import type {
   CellTranscriptZBin,
   CellTranscriptZDistribution,
 } from '../data/cellTranscripts'
-import type { GexCell, GexResult, SqlFragment, SqlParameter } from '../data/gex'
+import type {
+  DuckDbPreparedStatementLike,
+  GexCell,
+  GexResult,
+  SqlFragment,
+  SqlParameter,
+  TranscriptDuckDbConnection,
+} from '../data/gex'
 import type { TranscriptGroupSummary, TranscriptPoint } from '../data/transcriptOverlay'
 import type {
   DatasetCell,
   DatasetTranscript,
-  TranscriptViewportQueryOptions,
-} from './xeniumDataset'
-import type { GeneExpressionGeneCount } from './spatialDataset'
+  GeneExpressionGeneCount,
+} from './spatialDataset'
+
+export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
+  prepare(sql: string): Promise<DuckDbPreparedStatementLike>
+}
+
+export interface TranscriptQueryOptions {
+  readonly limit?: number
+  readonly minQv?: number
+}
+
+export interface CellTranscriptZDistributionQueryOptions extends TranscriptQueryOptions {
+  readonly binCount?: number
+  readonly bbox?: BBox
+}
+
+export interface TranscriptViewportQueryOptions {
+  readonly pointLimit?: number
+  readonly groupLimit?: number
+  readonly minQv?: number
+  readonly geneOnly?: boolean
+  readonly featureNames?: readonly string[]
+}
 
 const DEFAULT_TRANSCRIPT_MIN_QV = 20
 

@@ -1,4 +1,3 @@
-import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import { annotationSetGrouping } from '../annotations/annotationModel'
@@ -8,6 +7,7 @@ import {
   type PlotGeneStats,
   type PlotGroupsInput,
 } from './plotStats'
+import type { Annotation } from '../../data/annotation'
 
 // What the Plots panel plots (plan 22-D1 to 22-D3): the selected genes,
 // grouped by the classes of one annotation set, with the active selection

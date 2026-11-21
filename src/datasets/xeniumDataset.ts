@@ -28,14 +28,13 @@ import {
 } from './xeniumDatasetReaders'
 import type { CellId } from '../data/cellid'
 import type { DatasetFileRole } from './datasetManifest'
-import type { BBox, DataPoint, UnitsDescriptor } from '../data/coords'
+import type { BBox, UnitsDescriptor } from '../data/coords'
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { CellTranscriptZDistribution } from '../data/cellTranscripts'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { ImagePyramidOpener } from '../data/imagePyramid'
 import type {
   CellFeatureMatrixReadOptions,
-  DuckDbPreparedStatementLike,
   GexResult,
   TranscriptDuckDbConnection,
 } from '../data/gex'
@@ -48,10 +47,11 @@ import type {
   GeneValuesRowIds,
 } from '../data/geneValues'
 import type {
-  Annotation,
   CellOutlineDataset,
   CellOutlineRequest,
+  DatasetCell,
   DatasetMeta,
+  DatasetTranscript,
   ElementBatch,
   GeneExpressionBatch,
   GeneExpressionQueryOptions,
@@ -60,8 +60,15 @@ import type {
   SpatialDataset,
   SpatialElement,
 } from './spatialDataset'
+import type {
+  CellTranscriptZDistributionQueryOptions,
+  TranscriptQueryOptions,
+  TranscriptViewportQueryOptions,
+  XeniumDuckDbConnection,
+} from './xeniumDatasetRows'
 import type { TranscriptViewportResult } from '../data/transcriptOverlay'
 import { throwIfAborted } from '../utils/abort'
+import type { Annotation } from '../data/annotation'
 
 type MatrixReader = (url: string, ids: readonly CellId[]) => Promise<GexResult>
 type GeneExpressionMatrixReader = (
@@ -121,48 +128,6 @@ export interface DuckDbClientLike {
   readonly conn: XeniumDuckDbConnection
   loadSpatial(): Promise<void>
   close?(): Promise<void>
-}
-
-export interface XeniumDuckDbConnection extends TranscriptDuckDbConnection {
-  prepare(sql: string): Promise<DuckDbPreparedStatementLike>
-}
-
-export interface DatasetCell {
-  readonly id: CellId
-  readonly position: DataPoint
-  readonly transcriptCount?: number
-  readonly cellArea?: number
-  readonly nucleusCount?: number
-  readonly segmentationMethod?: string
-  readonly cellFeatureMatrixRow?: number
-}
-
-export interface DatasetTranscript {
-  readonly cellId: CellId | null
-  readonly featureName: string
-  readonly position: DataPoint
-  readonly zLocation: number | undefined
-  readonly qv: number
-  readonly overlapsNucleus: boolean | undefined
-  readonly isGene: boolean | undefined
-}
-
-export interface TranscriptQueryOptions {
-  readonly limit?: number
-  readonly minQv?: number
-}
-
-export interface CellTranscriptZDistributionQueryOptions extends TranscriptQueryOptions {
-  readonly binCount?: number
-  readonly bbox?: BBox
-}
-
-export interface TranscriptViewportQueryOptions {
-  readonly pointLimit?: number
-  readonly groupLimit?: number
-  readonly minQv?: number
-  readonly geneOnly?: boolean
-  readonly featureNames?: readonly string[]
 }
 
 const DEFAULT_XENIUM_UNITS: UnitsDescriptor = {

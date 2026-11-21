@@ -1,21 +1,15 @@
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import { datasetFileUrlFor } from './datasetFiles'
-import {
-  readAnalysisZarrAnnotationGroupOptions,
-  type AnalysisAnnotationGroupOption,
-} from './analysisAnnotations'
-import type { Annotation } from '../datasets/spatialDataset'
+import { readAnalysisZarrAnnotationGroupOptions } from './analysisAnnotations'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from './annotation'
 import { throwIfAborted } from '../utils/abort'
 
 export const ALL_ANNOTATION_GROUP_ID = 'all'
 export const NO_ANNOTATION_GROUP_ID = 'none'
-
-export interface LoadDatasetAnnotationsOptions {
-  readonly groupId?: string
-  readonly signal?: AbortSignal
-}
-
-export type AnnotationGroupOption = AnalysisAnnotationGroupOption
 
 export interface LoadDatasetAnnotationGroupsOptions {
   readonly signal?: AbortSignal

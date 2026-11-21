@@ -1,7 +1,7 @@
 import { asAnyCellId } from './cellid'
 import type { CellId } from './cellid'
-import type { Annotation } from '../datasets/spatialDataset'
 import { withoutCsvFormulaGuard } from '../utils/csv'
+import type { Annotation } from './annotation'
 
 export interface ContinuousCellMetadataValue {
   readonly cellId: CellId

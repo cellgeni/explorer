@@ -13,12 +13,8 @@ import { inflateMaybeGzipBytes, readMaybeGzipText } from '../data/readMaybeGzipT
 import type { H5TreeGroup } from '../workers/h5FileMessages'
 import type { FeatureBarcodeMexReader, FeatureBarcodeMexUrls } from './featureBarcodeMex'
 import { readFeatureBarcodeMexInWorker } from './featureBarcodeMexWorker'
-import {
-  AnnDataH5adDataset,
-  type AnnDataMemoryColumn,
-  type AnnDataMemoryTable,
-  type H5adLoadProgressReporter,
-} from './h5adDataset'
+import type { AnnDataMemoryColumn, AnnDataMemoryTable } from './annDataMemory'
+import { AnnDataH5adDataset, type H5adLoadProgressReporter } from './h5adDataset'
 import {
   parseVisiumClustersCsv,
   parseVisiumTissuePositions,

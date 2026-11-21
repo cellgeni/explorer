@@ -9,7 +9,6 @@ import {
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
 import type { CellId } from '../../data/cellid'
-import type { Annotation } from '../../datasets/spatialDataset'
 import {
   annotationPaletteColor,
   normalizeAnnotationColor,
@@ -47,6 +46,7 @@ import {
   type AnnotationState,
 } from './annotationModel'
 import { AnnotationUrlTooLargeError, readAnnotationUrlText } from './annotationUrlText'
+import type { Annotation } from '../../data/annotation'
 
 interface MutableRef<T> {
   current: T

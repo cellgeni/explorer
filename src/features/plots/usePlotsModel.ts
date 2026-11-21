@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from 'react'
-import type { Annotation } from '../../datasets/spatialDataset'
 import type { AnnotationColorStyle } from '../../rendering/cellStyling'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
@@ -40,6 +39,7 @@ import { useDatasetSetAnnotations } from './useDatasetSetAnnotations'
 import { useSelectionCells } from './useSelectionCells'
 import { openPlotsSource, usePlotsWorkflow, type PlotsData } from './usePlotsWorkflow'
 import { violinPlotModel } from './violinPlot'
+import type { Annotation } from '../../data/annotation'
 
 // The Plots panel (plan 22-D): what it shows and what its controls do.
 

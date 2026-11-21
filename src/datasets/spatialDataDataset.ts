@@ -19,10 +19,6 @@ import type {
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { AnalysisEmbedding, AnalysisEmbeddingKind } from '../data/analysisEmbeddings'
 import type { AnalysisEmbeddingOption } from '../data/analysisEmbeddings'
-import type {
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
-} from '../data/datasetAnnotations'
 import { placedImageExtent, type ImagePyramidLoader } from '../data/imagePyramid'
 import { datasetFileUrl } from '../data/datasetFiles'
 import {
@@ -77,7 +73,6 @@ import {
 } from './spatialDataUnits'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -87,8 +82,13 @@ import type {
   SpatialElement,
   SpatialElementId,
   SpatialElementMetadata,
+  DatasetCell,
 } from './spatialDataset'
-import type { DatasetCell } from './xeniumDataset'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../data/annotation'
 
 export interface SpatialDataImageRequest {
   // Element URL; per-channel requests carry an OME-Zarr `#c=N` selection.

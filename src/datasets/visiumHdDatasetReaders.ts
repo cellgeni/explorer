@@ -52,9 +52,7 @@ import {
 } from './spatialGrid'
 import type { Compressors } from 'hyparquet'
 import type { PersistentByteRangeCache } from '../data/persistentByteRangeCache'
-import type { AnalysisAnnotationGroupOption } from '../data/analysisAnnotations'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -87,6 +85,7 @@ import type {
 import { normalizeGeneList } from './xeniumDatasetRows'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import { throwIfAborted } from '../utils/abort'
+import type { Annotation, AnnotationGroupOption } from '../data/annotation'
 
 export type VisiumHdTissuePositionsReader = (
   options: ReadVisiumHdTissuePositionsOptions,
@@ -300,7 +299,7 @@ export class VisiumHdDatasetReaderController {
   >()
   private readonly annotationGroupLoads = new Map<
     VisiumHdBinSizeMicrometers,
-    SharedLoad<readonly AnalysisAnnotationGroupOption[]>
+    SharedLoad<readonly AnnotationGroupOption[]>
   >()
   private readonly genePanelPromises = new Map<
     VisiumHdBinSizeMicrometers,
@@ -464,7 +463,7 @@ export class VisiumHdDatasetReaderController {
   annotationGroups(
     binSizeMicrometers = this.defaultBinSizeMicrometers,
     options: VisiumHdAnnotationQueryOptions = {},
-  ): Promise<readonly AnalysisAnnotationGroupOption[]> {
+  ): Promise<readonly AnnotationGroupOption[]> {
     const bin = this.bins.find(
       (candidate) => candidate.binSizeMicrometers === binSizeMicrometers,
     )

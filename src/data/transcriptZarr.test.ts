@@ -7,10 +7,9 @@ import {
   transcriptGroupsFromPoints,
   transcriptZarrGridLevelBins,
   transcriptZarrTileKeysForViewport,
-  type TranscriptGridLevelMetadata,
 } from './transcriptZarr'
 import { micrometers } from './coords'
-import type { TranscriptPoint } from './transcriptOverlay'
+import type { TranscriptPoint, TranscriptGridLevelMetadata } from './transcriptOverlay'
 
 const zarrMock = vi.hoisted(() => ({
   open: vi.fn(),

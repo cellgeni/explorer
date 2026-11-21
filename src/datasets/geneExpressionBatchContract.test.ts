@@ -12,7 +12,7 @@ import {
   type VisiumHdScalefactors,
 } from './visiumHdDataset'
 import { parseVisiumHdTissuePositionRows } from './visiumHdOverview'
-import { XeniumDataset, type XeniumDuckDbConnection } from './xeniumDataset'
+import { XeniumDataset } from './xeniumDataset'
 import type {
   ArrowTableLike,
   DuckDbPreparedStatementLike,
@@ -23,6 +23,7 @@ import type {
 import type { CellId } from '../data/cellid'
 import type { TiffPyramidLoader } from '../tiff/loader'
 import type { GeneExpressionBatch, GeneExpressionPopulation } from './spatialDataset'
+import type { XeniumDuckDbConnection } from './xeniumDatasetRows'
 
 // Every platform's selected-gene reader gets the same layout: four cells in a
 // 2 x 2 block, 16 µm apart. GENEA is expressed by cells 1 and 3 and GENEB by

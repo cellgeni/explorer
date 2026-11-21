@@ -2,8 +2,8 @@ import type { RoiDrawMode } from '../../components/ViewerCore'
 import type { BBox } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { DatasetCell, DatasetTranscript } from '../../datasets/xeniumDataset'
 import { formatCsv } from '../../utils/csv'
+import type { DatasetCell, DatasetTranscript } from '../../datasets/spatialDataset'
 
 export const ROI_GENE_STATS_PREVIEW_CELL_LIMIT = 32
 export const ROI_GENE_VIEWPORT_PREWARM_CELL_LIMIT = 5_000

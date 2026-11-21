@@ -6,8 +6,8 @@ import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import type { CellId } from './cellid'
 import type { DatasetRangeValidator } from './datasetOverview'
 import type { CellFeatureMatrixReadOptions, GexResult } from './gex'
-import type { DatasetCell } from '../datasets/xeniumDataset'
 import { isAbortError, throwIfAborted } from '../utils/abort'
+import type { DatasetCell } from '../datasets/spatialDataset'
 
 export const ROI_GENE_STATS_CELL_LIMIT = 10_000
 export const ROI_GENE_STATS_GENE_LIMIT = 10

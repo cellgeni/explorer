@@ -3,7 +3,6 @@ import { asCellId } from '../../data/cellid'
 import { micrometers } from '../../data/coords'
 import type { RoiGeneStats } from '../../data/roiGeneStats'
 import type { RoiSelectionInput } from '../../data/roiSelection'
-import type { DatasetCell } from '../../datasets/xeniumDataset'
 import {
   IDLE_MAGIC_LENS_STATE,
   filterCellsForCircle,
@@ -22,6 +21,7 @@ import {
   summarizeMagicLensExpressionBins,
   summarizeMagicLensExpressionProfile,
 } from './magicLensModel'
+import type { DatasetCell } from '../../datasets/spatialDataset'
 
 const cells: readonly DatasetCell[] = [
   {

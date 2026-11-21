@@ -14,10 +14,6 @@ import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
 } from '../data/customAnnotations'
-import type {
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
-} from '../data/datasetAnnotations'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import {
   columnSlicesReadBytes,
@@ -65,7 +61,6 @@ import {
   type H5adLoadProgressReporter,
 } from './h5adDataset'
 import type {
-  Annotation,
   DatasetMeta,
   ElementBatch,
   GeneExpressionBatch,
@@ -74,10 +69,15 @@ import type {
   SpatialDataset,
   SpatialElement,
   SpatialElementId,
+  DatasetCell,
 } from './spatialDataset'
-import type { DatasetCell } from './xeniumDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 import { throwIfAborted } from '../utils/abort'
+import type {
+  Annotation,
+  AnnotationGroupOption,
+  LoadDatasetAnnotationsOptions,
+} from '../data/annotation'
 
 export interface AteraDatasetOptions {
   // Folder that relative file paths resolve against: the dataset folder, or a

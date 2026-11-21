@@ -3,8 +3,9 @@ import { assertHttpRangeSupport } from './rangeSupport'
 import type { RoiSelectionInput } from './roiSelection'
 import { cachedXeniumDataset } from './xeniumDatasetCache'
 import type { DatasetRangeValidator } from './datasetOverview'
-import type { DatasetCell, XeniumDataset } from '../datasets/xeniumDataset'
+import type { XeniumDataset } from '../datasets/xeniumDataset'
 import { throwIfAborted } from '../utils/abort'
+import type { DatasetCell } from '../datasets/spatialDataset'
 
 export const ROI_CELL_EXPORT_LIMIT = 50_000
 

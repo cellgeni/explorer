@@ -374,7 +374,7 @@ which covers the 2D channel files only. On the reference run the switch took
 | `src/features/app-shell/useDatasetLifecycle.ts`     | Atera load branch, 2D or 3D image                                                                |
 | `src/features/app-shell/useAteraImageWorkflow.ts`   | `Morphology` choice: reload with `aimg`                                                          |
 | `src/data/roiTranscripts.ts`                        | `loadPerGeneRoiTranscripts`: selected-gene ROI export                                            |
-| `src/data/cellTranscripts.ts`                       | `loadPerGeneCellTranscriptDistribution`: selected-gene cell z histogram                          |
+| `src/data/datasetCellTranscripts.ts`                | `loadPerGeneCellTranscriptDistribution`: selected-gene cell z histogram                          |
 | `src/data/datasetDiagnostics.ts`                    | Atera diagnostics                                                                                |
 
 ## Known Limitations

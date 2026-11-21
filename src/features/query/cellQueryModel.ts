@@ -1,6 +1,5 @@
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import { escapeLinkPart, unescapeLinkPart } from '../../data/shareableState'
-import type { Annotation } from '../../datasets/spatialDataset'
 import { slug } from '../../utils/slug'
 import type { PlotSetKind, PlotSetOption } from '../plots/plotsPanelModel'
 import type {
@@ -8,6 +7,7 @@ import type {
   CellQueryCondition,
   CellQueryNumberOperator,
 } from './cellQuery'
+import type { Annotation } from '../../data/annotation'
 
 // What the Cell Query window can filter on (plan 23-D2) and how its
 // conditions read in a link (23-D9).

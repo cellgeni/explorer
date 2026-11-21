@@ -1,7 +1,7 @@
 import { micrometers, type BBox } from '../../data/coords'
 import type { CellOverviewPoint } from '../../data/hyparquetCells'
 import type { SpatialDatasetDetection } from '../../datasets/datasetFactory'
-import type { Annotation, GeneExpressionBatch } from '../../datasets/spatialDataset'
+import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import { geneExpressionScores } from '../../rendering/geneExpressionRenderer'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type {
@@ -13,6 +13,7 @@ import type {
   SpatialDatasetLoader,
 } from '../app-shell/appDependencies'
 import { throwIfAborted } from '../../utils/abort'
+import type { Annotation } from '../../data/annotation'
 
 // What a collection preview reads: every cell's position once per dataset,
 // and the selected genes' scores per gene selection, or the classes of the
