@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { decodeTiffTilePixels } from '../codecs/tiffTile'
 import { datasetFileUrl, setDatasetManifest } from './datasetFiles'
 import {
   clearFolderListings,
@@ -14,8 +15,9 @@ import {
   normalizeCustomMorphologyLayerUrl,
   openImagePyramid,
 } from './morphologyImage'
-import type { TiffPyramidLoader } from '../tiff/loader'
+import { clearOpenTiffFiles, openTiff, type TiffPyramidLoader } from '../tiff/loader'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import { buildTiff } from '../test/tiffFixtures'
 
 describe('morphology image loader', () => {
   it('opens an image in an Icechunk repository as OME-Zarr', async () => {
@@ -574,6 +576,56 @@ describe('morphology image loader', () => {
       undefined,
       undefined,
     )
+  })
+
+  // One IFD per channel, holding 100 × (channel + 1), described by a TiffData
+  // with no IFD attribute: OME-TIFF reads that as IFD 0, every plane (EXP-045).
+  it('draws each 2D OME-TIFF channel from its own IFD when TiffData gives no IFD', async () => {
+    const url = 'https://example.test/three-channels.ome.tif'
+    const omeXml = `<OME xmlns="http://www.openmicroscopy.org/Schemas/OME/2016-06">
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYCZT" Type="uint16" SizeX="16" SizeY="16" SizeZ="1" SizeC="3" SizeT="1" PhysicalSizeX="0.5" PhysicalSizeY="0.5">
+      <Channel ID="Channel:0:0" Name="A" SamplesPerPixel="1"/>
+      <Channel ID="Channel:0:1" Name="B" SamplesPerPixel="1"/>
+      <Channel ID="Channel:0:2" Name="C" SamplesPerPixel="1"/>
+      <TiffData/>
+    </Pixels>
+  </Image>
+</OME>`
+    const bytes = new Uint8Array(
+      buildTiff(
+        [0, 1, 2].map((channel) => ({
+          width: 16,
+          height: 16,
+          tile: 16,
+          subfileType: 0,
+          description: channel === 0 ? omeXml : '',
+          value: () => 100 * (channel + 1),
+        })),
+      ),
+    )
+    const openImage = (imageUrl: string) =>
+      openTiff(imageUrl, undefined, undefined, { bytes })
+
+    try {
+      const image = await morphologyImageFromPyramidLoader(url, await openImage(url), {
+        openImage,
+      })
+      const firstPixels = await Promise.all(
+        image.channelLoaders.map(async (channel) => {
+          const loader = channel.loader as TiffPyramidLoader
+          const decoded = await decodeTiffTilePixels(
+            await loader.fetchTileBytes(0, 0, 0),
+            loader.tileDecodeOptions(0, 0, 0),
+          )
+          return decoded.pixels[0]
+        }),
+      )
+
+      expect(firstPixels).toEqual([100, 200, 300])
+    } finally {
+      clearOpenTiffFiles()
+    }
   })
 
   it('creates a full morphology image from an already-opened pyramid loader', async () => {

@@ -71,20 +71,22 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
 
   const contrast = contrastForPixelType(pixels.getAttribute('Type'))
   const purposes = readAnnotationPurposes(document)
-  const tiffDataByChannel = readChannelTiffData(pixels)
   const channelElements = elements(pixels, 'Channel')
-  const zPlanesForChannel = readChannelZPlanes(pixels, channelElements.length)
-  const channels = channelElements.map((channel, index) => {
-    const channelIndex = readChannelIndex(channel, index)
+  const planesForChannel = readChannelPlanes(pixels, channelElements.length)
+  const sizeZ = readIntegerAttribute(pixels, 'SizeZ') ?? 1
+  // OME numbers channels by the order of their Channel elements; IDs are
+  // opaque, so a trailing number in one is not its index (EXP-045).
+  const channels = channelElements.map((channel, channelIndex) => {
     const purpose = readChannelPurpose(channel, purposes)
     const samplesPerPixel = readIntegerAttribute(channel, 'SamplesPerPixel') ?? 1
     const interleaved = pixels.getAttribute('Interleaved') === 'true'
     const isRgb = samplesPerPixel >= 3 || (interleaved && samplesPerPixel > 1)
     const name =
       readOptionalAttribute(channel, 'Name') ?? purpose ?? `Channel ${channelIndex + 1}`
-    const zPlanes = zPlanesForChannel?.(channelIndex)
-    // A z-stack channel's file and IFD are those of its first plane.
-    const tiffData = zPlanes?.[0] ?? tiffDataByChannel.get(channelIndex)
+    const planes = planesForChannel(channelIndex)
+    const zPlanes = sizeZ > 1 ? planes : undefined
+    // A channel's file and IFD are those of its first plane.
+    const tiffData = planes?.[0]
     const color = isRgb
       ? ([255, 255, 255] as const)
       : (parseOmeColor(channel.getAttribute('Color')) ??
@@ -108,7 +110,6 @@ export function parseOmeTiffMetadata(description: string | undefined): OmeTiffMe
       ...(purpose === undefined ? {} : { purpose }),
     }
   })
-  const sizeZ = readIntegerAttribute(pixels, 'SizeZ') ?? 1
   const micrometersPerPlane = readPhysicalSizeZMicrometers(pixels)
   const isZStack =
     sizeZ > 1 &&
@@ -237,48 +238,6 @@ function readChannelPurpose(
   return undefined
 }
 
-interface ChannelTiffData {
-  readonly fileName?: string
-  readonly ifdIndex?: number
-}
-
-function readChannelTiffData(pixels: Element): ReadonlyMap<number, ChannelTiffData> {
-  const tiffDataByChannel = new Map<number, ChannelTiffData>()
-  const sizeC = readIntegerAttribute(pixels, 'SizeC') ?? 1
-  const sizeZ = readIntegerAttribute(pixels, 'SizeZ') ?? 1
-  const sizeT = readIntegerAttribute(pixels, 'SizeT') ?? 1
-
-  for (const tiffData of elements(pixels, 'TiffData')) {
-    const firstC = readIntegerAttribute(tiffData, 'FirstC') ?? 0
-    const firstIfd = readIntegerAttribute(tiffData, 'IFD')
-    const planeCount = readIntegerAttribute(tiffData, 'PlaneCount') ?? 1
-    const channelsInPlaneRun =
-      sizeZ === 1 && sizeT === 1 ? Math.min(planeCount, sizeC - firstC) : 1
-    const uuid = firstElement(tiffData, 'UUID')
-    const fileName = uuid?.getAttribute('FileName')?.trim()
-
-    if (channelsInPlaneRun <= 0) {
-      continue
-    }
-
-    for (let offset = 0; offset < channelsInPlaneRun; offset += 1) {
-      const channelIndex = firstC + offset
-      const current = tiffDataByChannel.get(channelIndex)
-      const next = {
-        ...(current ?? {}),
-        ...(fileName === undefined || fileName.length === 0 ? {} : { fileName }),
-        ...(firstIfd === undefined ? {} : { ifdIndex: firstIfd + offset }),
-      }
-
-      if (Object.keys(next).length > 0) {
-        tiffDataByChannel.set(channelIndex, next)
-      }
-    }
-  }
-
-  return tiffDataByChannel
-}
-
 type PlaneDimension = 'Z' | 'C' | 'T'
 
 interface PlaneRun {
@@ -298,25 +257,19 @@ const PLANE_DIMENSION_ORDERS: ReadonlyMap<string, readonly PlaneDimension[]> = n
 ])
 
 // Locates each channel's z planes at t = 0 following the OME-TIFF TiffData
-// rules: planes are numbered in DimensionOrder (first letter after XY varies
-// fastest); a TiffData stores `PlaneCount` planes from its FirstC/FirstZ/FirstT
-// position in consecutive IFDs from `IFD` (default 0); `PlaneCount` defaults
-// to 1 when `IFD` is given and to every remaining plane otherwise; with no
-// TiffData at all, plane N is IFD N. Returns undefined for 2D images, and
-// undefined for a channel with any plane not located.
-function readChannelZPlanes(
+// rules, for 2D images as for z-stacks (EXP-045): planes are numbered in
+// DimensionOrder (first letter after XY varies fastest); a TiffData stores
+// `PlaneCount` planes from its FirstC/FirstZ/FirstT position in consecutive
+// IFDs from `IFD` (default 0); `PlaneCount` defaults to 1 when `IFD` is given
+// and to every remaining plane otherwise; with no TiffData at all, plane N is
+// IFD N. Returns undefined for a channel with any plane not located.
+function readChannelPlanes(
   pixels: Element,
   channelCount: number,
-): ((channelIndex: number) => readonly TiffPlaneRef[] | undefined) | undefined {
-  const sizeZ = readIntegerAttribute(pixels, 'SizeZ') ?? 1
-
-  if (sizeZ <= 1) {
-    return undefined
-  }
-
+): (channelIndex: number) => readonly TiffPlaneRef[] | undefined {
   // SizeC counts RGB samples; planes are counted per Channel element.
   const sizes: Readonly<Record<PlaneDimension, number>> = {
-    Z: sizeZ,
+    Z: readIntegerAttribute(pixels, 'SizeZ') ?? 1,
     C: channelCount > 0 ? channelCount : (readIntegerAttribute(pixels, 'SizeC') ?? 1),
     T: readIntegerAttribute(pixels, 'SizeT') ?? 1,
   }
@@ -413,14 +366,6 @@ function readPhysicalSizeZMicrometers(pixels: Element): number | undefined {
   return value > 0 && micrometersPerUnit !== undefined
     ? value * micrometersPerUnit
     : undefined
-}
-
-function readChannelIndex(channel: Element, fallback: number): number {
-  const id = channel.getAttribute('ID')
-  const indexFromId = id?.match(/(?:^|:)(\d+)$/)?.[1]
-  const parsed = indexFromId === undefined ? Number.NaN : Number(indexFromId)
-
-  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 function contrastForPixelType(type: string | null): TiffChannelContrast {

@@ -50,6 +50,7 @@ describe('OME-TIFF metadata parsing', () => {
         color: [88, 144, 255],
         contrast: { min: 0, max: 65_535 },
         fileName: 'morphology_focus_0000.ome.tif',
+        ifdIndex: 0,
         purpose: 'Nuclear',
       },
       {
@@ -59,6 +60,7 @@ describe('OME-TIFF metadata parsing', () => {
         color: [32, 166, 122],
         contrast: { min: 0, max: 65_535 },
         fileName: 'morphology_focus_0001.ome.tif',
+        ifdIndex: 0,
         purpose: 'Boundary',
       },
       {
@@ -68,6 +70,7 @@ describe('OME-TIFF metadata parsing', () => {
         color: [240, 200, 75],
         contrast: { min: 0, max: 65_535 },
         fileName: 'morphology_focus_0002.ome.tif',
+        ifdIndex: 0,
         purpose: 'Interior - RNA',
       },
       {
@@ -77,6 +80,7 @@ describe('OME-TIFF metadata parsing', () => {
         color: [215, 63, 124],
         contrast: { min: 0, max: 65_535 },
         fileName: 'morphology_focus_0003.ome.tif',
+        ifdIndex: 0,
         purpose: 'Interior - Protein',
       },
     ])
@@ -101,6 +105,7 @@ describe('OME-TIFF metadata parsing', () => {
         name: 'Red',
         color: [255, 0, 0],
         contrast: { min: 0, max: 255 },
+        ifdIndex: 0,
       },
       {
         id: 'Channel:1',
@@ -108,6 +113,7 @@ describe('OME-TIFF metadata parsing', () => {
         name: 'Green',
         color: [0, 255, 0],
         contrast: { min: 0, max: 255 },
+        ifdIndex: 1,
       },
       {
         id: 'Channel:2',
@@ -115,6 +121,7 @@ describe('OME-TIFF metadata parsing', () => {
         name: 'Blue',
         color: [0, 0, 255],
         contrast: { min: 0, max: 255 },
+        ifdIndex: 2,
       },
     ])
   })
@@ -175,6 +182,63 @@ describe('OME-TIFF metadata parsing', () => {
       'Channel 1',
       'Channel 2',
       'Channel 3',
+    ])
+  })
+
+  // OME-TIFF defaults TiffData's IFD to 0 and its PlaneCount to every
+  // remaining plane, and stores plane N in IFD N when there is no TiffData.
+  it('applies the TiffData defaults to 2D images (EXP-045)', () => {
+    const ifdIndices = (tiffData: string) =>
+      parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYCZT" Type="uint16" SizeX="16" SizeY="16" SizeZ="1" SizeC="3" SizeT="1">
+      <Channel ID="Channel:0:0"/>
+      <Channel ID="Channel:0:1"/>
+      <Channel ID="Channel:0:2"/>
+      ${tiffData}
+    </Pixels>
+  </Image>
+</OME>`).channels.map((channel) => channel.ifdIndex)
+
+    expect(ifdIndices('<TiffData/>')).toEqual([0, 1, 2])
+    expect(ifdIndices('')).toEqual([0, 1, 2])
+    expect(
+      ifdIndices('<TiffData IFD="3"/><TiffData FirstC="1" IFD="5" PlaneCount="2"/>'),
+    ).toEqual([3, 5, 6])
+  })
+
+  it('finds a 2D channel at t = 0 when time varies faster than channel', () => {
+    const metadata = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYZTC" Type="uint16" SizeX="16" SizeY="16" SizeZ="1" SizeC="2" SizeT="3">
+      <Channel ID="Channel:0:0"/>
+      <Channel ID="Channel:0:1"/>
+      <TiffData IFD="0" PlaneCount="6"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(metadata.channels.map((channel) => channel.ifdIndex)).toEqual([0, 3])
+  })
+
+  it('indexes channels by element order, not by the number in their IDs (EXP-045)', () => {
+    const metadata = parseOmeTiffMetadata(`<OME>
+  <Image ID="Image:0">
+    <Pixels DimensionOrder="XYCZT" Type="uint16" SizeX="16" SizeY="16" SizeZ="1" SizeC="3" SizeT="1">
+      <Channel ID="Channel:0:1" Name="A"/>
+      <Channel ID="Channel:0:2" Name="B"/>
+      <Channel ID="Channel:0:3" Name="C"/>
+      <TiffData IFD="0" PlaneCount="3"/>
+    </Pixels>
+  </Image>
+</OME>`)
+
+    expect(
+      metadata.channels.map(({ id, index, ifdIndex }) => ({ id, index, ifdIndex })),
+    ).toEqual([
+      { id: 'Channel:0:1', index: 0, ifdIndex: 0 },
+      { id: 'Channel:0:2', index: 1, ifdIndex: 1 },
+      { id: 'Channel:0:3', index: 2, ifdIndex: 2 },
     ])
   })
 
