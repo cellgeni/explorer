@@ -868,6 +868,49 @@ describe('morphology image loader', () => {
     )
   })
 
+  it('reports the HTTP read error when the HTTPS retry fails too', async () => {
+    const notFound = new Error(
+      'The Range probe received HTTP 404 for http://example.test/layers/custom.ome.tif.',
+    )
+    const noHttps = new TypeError('Failed to fetch')
+    const openImage = vi.fn(async (url: string) => {
+      throw url.startsWith('http://') ? notFound : noHttps
+    })
+
+    const error = await loadCustomMorphologyLayer(
+      'http://example.test/layers/custom.ome.tif',
+      { openImage },
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBe(notFound)
+    expect(notFound.cause).toBe(noHttps)
+    expect(openImage).toHaveBeenCalledTimes(2)
+  })
+
+  it('reports the HTTPS retry error when the HTTP read got no response', async () => {
+    // An HTTPS page blocks the http: read as mixed content.
+    const blocked = new Error(
+      'The Range probe failed before an HTTP response was available.',
+      {
+        cause: new TypeError('Failed to fetch'),
+      },
+    )
+    const notFound = new Error(
+      'The Range probe received HTTP 404 for https://example.test/layers/custom.ome.tif.',
+    )
+    const openImage = vi.fn(async (url: string) => {
+      throw url.startsWith('http://') ? blocked : notFound
+    })
+
+    const error = await loadCustomMorphologyLayer(
+      'http://example.test/layers/custom.ome.tif',
+      { openImage },
+    ).catch((reason: unknown) => reason)
+
+    expect(error).toBe(notFound)
+    expect(notFound.cause).toBe(blocked)
+  })
+
   it('does not rewrite localhost custom morphology layer URLs', async () => {
     const error = new TypeError('Failed to fetch')
     const openImage = vi.fn(async () => {

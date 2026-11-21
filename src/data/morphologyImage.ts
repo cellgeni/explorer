@@ -244,8 +244,45 @@ export async function loadCustomMorphologyLayer(
       throw error
     }
 
-    return loadMorphologyImageFromUrl(fallbackUrl, loadOptions)
+    try {
+      return await loadMorphologyImageFromUrl(fallbackUrl, loadOptions)
+    } catch (fallbackError) {
+      if (options.signal?.aborted) {
+        throw fallbackError
+      }
+
+      // Report the attempt the server answered: the http: read's 404 or "not
+      // a TIFF", unless it got no response (an HTTPS page blocks it as mixed
+      // content) and the https: retry did. The other is kept as the cause.
+      throw gotNoResponse(error) && !gotNoResponse(fallbackError)
+        ? withCause(fallbackError, error)
+        : withCause(error, fallbackError)
+    }
   }
+}
+
+// A fetch that failed without a response throws a TypeError, which readers
+// may wrap (the Range probe keeps it as the cause).
+function gotNoResponse(error: unknown): boolean {
+  let current = error
+
+  for (let depth = 0; depth < 8 && current instanceof Error; depth += 1) {
+    if (current.name === 'TypeError') {
+      return true
+    }
+
+    current = current.cause
+  }
+
+  return false
+}
+
+function withCause(error: unknown, cause: unknown): unknown {
+  if (error instanceof Error && error.cause === undefined) {
+    error.cause = cause
+  }
+
+  return error
 }
 
 export async function morphologyImageFromPyramidLoader(
