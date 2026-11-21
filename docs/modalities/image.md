@@ -553,7 +553,10 @@ transform.
   `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
   truncated body to one of two Range requests for the same bytes at once:
   opening the 3D view while the 2D view was loading the same chunks of the
-  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18).
+  SciVis `engine.ome.zarr` failed to decode in 5 of 6 runs (2026-11-18). A
+  `200` answer to a Range read is refused as blocked Range requests
+  (`createZarrFetchStore`), since zarrita would take the whole shard for the
+  bytes it asked for.
 
 ### 3D View
 

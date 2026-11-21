@@ -57,28 +57,40 @@ export function createZarrFetchStore(
       // file at once, such as the 2D and 3D views reading one chunk, can get
       // a truncated body from it, and Range requests to one file otherwise
       // wait for each other.
-      const sent = request.headers.has('Range')
-        ? new Request(request, { cache: 'no-store' })
-        : request
+      const range = request.headers.get('Range')
+      const sent = range === null ? request : new Request(request, { cache: 'no-store' })
       const response = await (fetcher ?? fetch)(sent)
+
+      // zarrita takes a 200 as the range asked for, so a host that ignores
+      // Range would hand it a whole shard as its index or one inner chunk.
+      if (range !== null && response.status === 200) {
+        await response.body?.cancel().catch(() => undefined)
+        throw new Error(
+          `Zarr chunk ${storeKey(request.url, rootPath).replace(/^\/+/, '')} cannot be range-read. Expected HTTP 206 for Range: ${range}, received HTTP 200. Configure the host to honor byte-range GET requests for ${url}.`,
+        )
+      }
 
       if (response.status !== 403) {
         return response
       }
 
-      const pathname = new URL(request.url).pathname
-
-      if (isZarrMetadataKey(pathname)) {
+      if (isZarrMetadataKey(new URL(request.url).pathname)) {
         return new Response(null, { status: 404, statusText: 'Not Found' })
       }
 
       throw new ZarrChunkUnavailableError(
-        pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname,
+        storeKey(request.url, rootPath),
         403,
         'The object is missing or not publicly readable.',
       )
     },
   })
+}
+
+// A request's key in the store whose root path is `rootPath`.
+function storeKey(requestUrl: string, rootPath: string): string {
+  const pathname = new URL(requestUrl).pathname
+  return pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname
 }
 
 // Reads consolidated metadata from the store root, or returns null when none
@@ -162,14 +174,16 @@ export function consolidatedZarrStore(
       const cache = options.cacheChunk?.(key) === false ? undefined : chunkCache
       const cached = cache?.get(key)
 
+      // The cache keeps its own copy and hands out copies: zarrita's bytes
+      // codec swaps a big-endian chunk's bytes in place.
       if (cached !== undefined) {
-        return cached
+        return cached.slice()
       }
 
       const bytes = await base.get(key, getOptions)
 
       if (bytes !== undefined) {
-        cache?.set(key, bytes)
+        cache?.set(key, bytes.slice())
         return bytes
       }
 
