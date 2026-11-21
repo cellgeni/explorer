@@ -40,7 +40,6 @@ const SHARED: ShareableState = {
 }
 
 function renderControls(state: VisiumControlState) {
-  const initialShareableStateRef = { current: null as ShareableState | null }
   const startDatasetLoad = vi.fn<StartDatasetLoad>(async () => undefined)
   const setVisiumControlState = vi.fn()
   const { result } = renderHook(() =>
@@ -48,7 +47,6 @@ function renderControls(state: VisiumControlState) {
       appendDebugEvent: vi.fn(),
       datasetUrl: DATASET_URL,
       getSpatialDataset: vi.fn(),
-      initialShareableStateRef,
       readShareableState: () => SHARED,
       setFlatMorphologyImage: vi.fn(),
       setMorphologyState: vi.fn(),
@@ -59,7 +57,7 @@ function renderControls(state: VisiumControlState) {
     }),
   )
 
-  return { initialShareableStateRef, result, setVisiumControlState, startDatasetLoad }
+  return { result, setVisiumControlState, startDatasetLoad }
 }
 
 describe('useVisiumControlsWorkflow', () => {
@@ -70,17 +68,16 @@ describe('useVisiumControlsWorkflow', () => {
       controls.result.current.handleVisiumViewChange({ showOffTissue: true })
     })
 
-    expect(controls.initialShareableStateRef.current).toEqual({
-      ...SHARED,
-      visiumImage: 'hires',
-      visiumLibrary: 'lib-A',
-      visiumOffTissue: true,
-    })
     expect(controls.setVisiumControlState).toHaveBeenCalled()
-    // The view on screen, for the shared instance, if the reload stops.
+    // The reload holds the view it opens until it replaces the one on screen.
     expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true, {
-      visiumView: { libraryId: 'lib-A', showOffTissue: false },
-      undo: expect.any(Function),
+      shareableState: {
+        ...SHARED,
+        visiumImage: 'hires',
+        visiumLibrary: 'lib-A',
+        visiumOffTissue: true,
+      },
+      restoreControl: expect.any(Function),
     })
   })
 
@@ -91,19 +88,17 @@ describe('useVisiumControlsWorkflow', () => {
       controls.result.current.handleVisiumViewChange({ libraryId: 'lib-B' })
     })
 
-    expect(controls.initialShareableStateRef.current).toEqual({
-      datasetUrl: DATASET_URL,
-      selectedGenes: ['Actb'],
-      observationColorMode: 'annotations',
-      viewState: { target: [10, -20, 0], zoom: 2 },
-      visiumImage: 'none',
-      visiumLibrary: 'lib-B',
-      visiumOffTissue: false,
-    })
-    // The view on screen, for the shared instance, if the reload stops.
     expect(controls.startDatasetLoad).toHaveBeenCalledWith(DATASET_URL, true, {
-      visiumView: { libraryId: 'lib-A', showOffTissue: false },
-      undo: expect.any(Function),
+      shareableState: {
+        datasetUrl: DATASET_URL,
+        selectedGenes: ['Actb'],
+        observationColorMode: 'annotations',
+        viewState: { target: [10, -20, 0], zoom: 2 },
+        visiumImage: 'none',
+        visiumLibrary: 'lib-B',
+        visiumOffTissue: false,
+      },
+      restoreControl: expect.any(Function),
     })
   })
 
@@ -116,10 +111,9 @@ describe('useVisiumControlsWorkflow', () => {
     })
     const [, , viewChange] = controls.startDatasetLoad.mock.calls[0] ?? []
     act(() => {
-      viewChange?.undo()
+      viewChange?.restoreControl()
     })
 
-    expect(controls.initialShareableStateRef.current).toBeNull()
     const restore = controls.setVisiumControlState.mock.calls.at(-1)?.[0] as (
       state: VisiumControlState,
     ) => VisiumControlState
@@ -136,6 +130,5 @@ describe('useVisiumControlsWorkflow', () => {
     })
 
     expect(controls.startDatasetLoad).not.toHaveBeenCalled()
-    expect(controls.initialShareableStateRef.current).toBeNull()
   })
 })

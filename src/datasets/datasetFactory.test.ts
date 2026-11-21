@@ -16,6 +16,7 @@ import {
   detectSpatialDataset,
   isImageOnlyUrl,
   setSpatialDataSelection,
+  setVisiumView,
   spatialDataSelectionFor,
 } from './datasetFactory'
 import { AteraDataset } from './ateraDataset'
@@ -612,6 +613,60 @@ describe('spatial dataset detection', () => {
       expect(second).not.toBe(first)
     } finally {
       setSpatialDataSelection(url, undefined)
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("opens a load's SpatialData selection, set for the URL only once given (EXP-002)", async () => {
+    const url = 'https://example.test/stores/pending.zarr'
+    const selection = { coordinateSystem: 'pixels' }
+    vi.stubGlobal(
+      'fetch',
+      fetcherForJsonPaths({
+        '/stores/pending.zarr/.zattrs': { spatialdata_attrs: { version: '0.1' } },
+      }),
+    )
+
+    try {
+      const shown = await cachedSpatialDataset(url)
+      const pending = await cachedSpatialDataset(url, { spatialDataSelection: selection })
+
+      expect(pending).not.toBe(shown)
+      await expect(cachedSpatialDataset(url)).resolves.toBe(shown)
+
+      // Setting it keeps the instance opened for it and drops the others.
+      setSpatialDataSelection(url, selection)
+      await expect(cachedSpatialDataset(url)).resolves.toBe(pending)
+      setSpatialDataSelection(url, undefined)
+      await expect(cachedSpatialDataset(url)).resolves.not.toBe(shown)
+    } finally {
+      setSpatialDataSelection(url, undefined)
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('opens each Visium view as its own dataset of one file read (EXP-002)', async () => {
+    const url = 'https://example.test/spatial/libraries.h5ad'
+    const view = { libraryId: 'lib-B' }
+    vi.stubGlobal('fetch', fetcherForOkPaths(['/spatial/libraries.h5ad']))
+
+    try {
+      const file = await cachedSpatialDataset(url)
+      const libraryB = await cachedSpatialDataset(url, { visiumView: view })
+
+      expect(file).toBeInstanceOf(AnnDataH5adDataset)
+      expect(libraryB).not.toBe(file)
+      expect(libraryB).toBe((file as AnnDataH5adDataset).visiumViewDataset(view))
+      // Reads by URL alone get the view set for it.
+      await expect(cachedSpatialDataset(url)).resolves.toBe(file)
+      setVisiumView(url, view)
+      await expect(cachedSpatialDataset(`${url}/`)).resolves.toBe(libraryB)
+      await expect(cachedSpatialDataset(url, { visiumView: {} })).resolves.toBe(file)
+      setVisiumView(url, undefined)
+      await expect(cachedSpatialDataset(url)).resolves.toBe(file)
+    } finally {
+      setVisiumView(url, undefined)
+      dropDatasets(url)
       vi.unstubAllGlobals()
     }
   })
