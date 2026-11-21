@@ -252,8 +252,9 @@ class FetcherStorage implements Storage {
 
     // Object stores that deny listing answer 403 for a missing object. A v1
     // repository has no `repo` file, and icechunk-js only tries the v1 layout
-    // after a NotFoundError.
-    if (response.status === 404 || response.status === 403) {
+    // after a NotFoundError. Only objects a repository can lack are reported
+    // missing: icechunk-js reads a missing manifest or chunk as the fill value.
+    if ((response.status === 404 || response.status === 403) && mayBeAbsent(path)) {
       throw new NotFoundError(path)
     }
 
@@ -340,6 +341,14 @@ function virtualChunkFetchClient(
       return response
     },
   }
+}
+
+// The `repo` file (absent in v1), refs (icechunk-js tries several layouts) and
+// transaction logs (absent for the first snapshot) may be missing. Snapshots,
+// manifests and chunks named by the repository may not.
+function mayBeAbsent(path: string): boolean {
+  const key = path.replace(/^\/+/, '')
+  return key === 'repo' || key.startsWith('refs/') || key.startsWith('transactions/')
 }
 
 // The repository URL's query string, such as an access token, is kept on every
