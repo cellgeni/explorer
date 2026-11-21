@@ -2,22 +2,24 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { screenPixels } from '../../data/coords'
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
-import { TranscriptStatusPanel } from './TranscriptStatusPanel'
+import type { TranscriptPointDatum } from '../../rendering/deckLayerTypes'
+import { TranscriptInspectionPanel, TranscriptStatusPanel } from './TranscriptStatusPanel'
 
+const transcript: TranscriptPointDatum = {
+  id: 'tx-1',
+  transcriptId: 'raw-1',
+  position: [1, -2, 0],
+  featureName: 'Actb',
+  fovName: null,
+  cellId: 'aaaaaaaa-1',
+  qv: 40,
+  fillColor: [255, 255, 255],
+  zLocation: 3,
+  overlapsNucleus: true,
+  isGene: true,
+}
 const hoveredTranscript: ViewerTranscriptHoverDetail = {
-  transcript: {
-    id: 'tx-1',
-    transcriptId: 'raw-1',
-    position: [1, -2, 0],
-    featureName: 'Actb',
-    fovName: null,
-    cellId: 'aaaaaaaa-1',
-    qv: 40,
-    fillColor: [255, 255, 255],
-    zLocation: 3,
-    overlapsNucleus: true,
-    isGene: true,
-  },
+  transcript,
   screen: { x: screenPixels(1), y: screenPixels(2) },
 }
 
@@ -94,6 +96,28 @@ describe('TranscriptStatusPanel', () => {
 
     expect(onPinTranscript).toHaveBeenCalledWith(hoveredTranscript)
     expect(onClearPinnedTranscript).toHaveBeenCalledTimes(1)
+  })
+
+  // Deck y is the data y negated, so data y -150 is deck y 150 (EXP-050).
+  it("shows a transcript's data Y with its sign", () => {
+    const xyAt = (deckY: number) => {
+      const { unmount } = render(
+        <TranscriptInspectionPanel
+          detail={{
+            ...hoveredTranscript,
+            transcript: { ...transcript, position: [120, deckY, 0] },
+          }}
+          showFov={false}
+        />,
+      )
+      const text = screen.getByText('X/Y').nextElementSibling?.textContent
+      unmount()
+      return text
+    }
+
+    expect(xyAt(150)).toBe('120, -150')
+    expect(xyAt(-2)).toBe('120, 2')
+    expect(xyAt(0)).toBe('120, 0')
   })
 
   it('shows no FOVs for per-gene outputs', () => {

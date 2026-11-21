@@ -478,7 +478,11 @@ Atera stores transcripts per gene (see
   budget. The `Exact points` meter shows that count, not the all-transcript
   cell estimate.
 - With All features, or no genes selected, the layer is cell-summary squares
-  from cell transcript counts, and Exact waits for genes.
+  from cell transcript counts, and Exact waits for genes. The `Exact points`
+  meter shows 0, since an exact read would read no genes.
+- When `binned_transcripts.zarr.zip` cannot be read, the source is "Per-gene,
+  LOD unreadable" and the layer is unavailable: exact points need the
+  density's count of the selected genes to stay within the budget.
 - `Gene-only calls` is disabled, and transcripts have no FOV.
 - Density follows `Min QV`: at 20 it is the binned store's counts; at another
   value it bins the selected genes' rows from `transcripts.zarr.zip`, unless

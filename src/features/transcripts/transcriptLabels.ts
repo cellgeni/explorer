@@ -32,7 +32,9 @@ export function transcriptCapabilityLabel(capabilities: TranscriptCapabilities):
       return 'Per-gene LOD'
     }
 
-    return capabilities.geneRanges ? 'Per-gene exact' : 'No transcripts'
+    // Exact points need the density's per-gene count to stay in budget, so
+    // without the binned store nothing loads (EXP-057).
+    return capabilities.geneRanges ? 'Per-gene, LOD unreadable' : 'No transcripts'
   }
 
   if (capabilities.nativeZarr && capabilities.rawParquet) {

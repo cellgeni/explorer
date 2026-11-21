@@ -183,7 +183,9 @@ and reads their root attributes (and the zip directories, which later requests
 reuse). The result is `{ rawParquet: false, nativeZarr, geneRanges }`:
 `nativeZarr` for the binned store, `geneRanges` for `transcripts.zarr.zip`.
 `geneRanges` being present is what sends `useTranscriptWorkflow` down the
-per-gene branch; the source shows as "Per-gene LOD + exact".
+per-gene branch; the source shows as "Per-gene LOD + exact". Without a
+readable binned store it shows "Per-gene, LOD unreadable", and nothing is
+drawn, since exact reads are sized by the density's count.
 
 **Density.** Each gene in `binned_transcripts.zarr.zip` is a zip stored
 inside the outer zip, `gene/<gene_index>.zip` (about 50–190 KB; genes without

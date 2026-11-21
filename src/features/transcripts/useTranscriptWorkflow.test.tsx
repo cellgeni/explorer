@@ -397,10 +397,12 @@ describe('useTranscriptWorkflow', () => {
     })
 
     await waitFor(() => expect(snapshot.layerState.status).toBe('aggregate'))
+    // An exact read would read no genes, so the meter shows 0, not the cells'
+    // 40 transcripts (EXP-056).
     expect(snapshot.layerState).toMatchObject({
       source: 'cell-summary',
       message: expect.stringContaining('Select genes to see their transcript density'),
-      visibleTranscriptEstimate: 40,
+      visibleTranscriptEstimate: 0,
     })
     expect(loaders.loadTranscriptAggregates).not.toHaveBeenCalled()
     expect(loaders.loadTranscriptViewport).not.toHaveBeenCalled()
@@ -411,11 +413,13 @@ describe('useTranscriptWorkflow', () => {
       capabilities: PER_GENE_CAPABILITIES,
       detailMode: 'exact',
       showTranscriptOverlay: true,
+      visibleTranscriptEstimate: 5_000_000,
     })
 
     await waitFor(() => expect(snapshot.layerState.status).toBe('waiting'))
     expect(snapshot.layerState).toMatchObject({
       message: expect.stringContaining('Select genes to load exact transcript points'),
+      visibleTranscriptEstimate: 0,
     })
   })
 
