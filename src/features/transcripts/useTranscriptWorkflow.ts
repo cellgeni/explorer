@@ -418,11 +418,14 @@ export function useTranscriptWorkflow({
             return
           }
 
+          // An exact read covers only the genes read, here none, so the
+          // Exact points meter shows 0, not the cells' all-transcript
+          // estimate (EXP-056).
           setTranscriptLayerState(
             bins === null
               ? transcriptLayerWaiting({
                   message: transcriptPerGeneExactNeedsGenesMessage(hasSelectedGenes),
-                  visibleTranscriptEstimate,
+                  visibleTranscriptEstimate: 0,
                 })
               : transcriptLayerAggregate({
                   source: 'cell-summary',
@@ -430,7 +433,7 @@ export function useTranscriptWorkflow({
                   bins,
                   featureNames: EMPTY_GENE_LIST,
                   message: transcriptPerGeneCellSummaryMessage(hasSelectedGenes),
-                  visibleTranscriptEstimate,
+                  visibleTranscriptEstimate: 0,
                   scaleMax: maxTranscriptAggregateCount(bins),
                 }),
           )

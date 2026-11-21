@@ -37,7 +37,7 @@ describe('transcriptLabels', () => {
       'Per-gene LOD',
     )
     expect(transcriptCapabilityLabel({ ...perGene, nativeZarr: false })).toBe(
-      'Per-gene exact',
+      'Per-gene, LOD unreadable',
     )
     expect(
       transcriptCapabilityLabel({ ...perGene, nativeZarr: false, geneRanges: false }),

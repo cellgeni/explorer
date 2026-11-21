@@ -213,7 +213,8 @@ export function TranscriptInspectionPanel({
             <dt>X/Y</dt>
             <dd>
               {formatOptionalNumber(transcript.position[0])},{' '}
-              {formatOptionalNumber(Math.abs(transcript.position[1] ?? 0))}
+              {/* Deck y is data y negated; 0 - y keeps its sign, never -0. */}
+              {formatOptionalNumber(0 - (transcript.position[1] ?? 0))}
             </dd>
           </div>
           <div>
