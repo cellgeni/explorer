@@ -885,6 +885,34 @@ test('loads a local H5AD fixture with obs tracks and gene expression @smoke', as
   await expect(
     cellPanel.getByRole('img', { name: 'UMAP embedding, 4 cells' }),
   ).toBeVisible()
+
+  // A second load, held at its first request, is cancelled from the loading
+  // list. Its log entry's title holds "open dataset", which the dataset
+  // menu's button must not be confused with.
+  let releasePending = () => {}
+  const pendingReleased = new Promise<void>((resolve) => {
+    releasePending = resolve
+  })
+  await page.route('**/h5ad-pending.h5ad', async (route) => {
+    await pendingReleased
+    await route.abort().catch(() => {})
+  })
+  const openForm = await openControls(page, 'open-dataset')
+  await openForm
+    .getByLabel('Dataset or image URL')
+    .fill(new URL('/h5ad-pending.h5ad', page.url()).toString())
+  await openForm.getByRole('button', { name: 'Load Dataset' }).click()
+  const loading = page.getByRole('status', { name: 'Active loading tasks' })
+  await expect(loading).toContainText('h5ad-pending.h5ad')
+  await loading.getByRole('button', { name: 'Cancel loading dataset' }).click()
+  releasePending()
+
+  await expectLogEntry(
+    page,
+    /^Cancelled loading h5ad-pending\.h5ad; the open dataset stays$/,
+  )
+  const info = await openControls(page, 'dataset-info')
+  await expect(info).toContainText('h5ad-smoke.h5ad')
 })
 
 test.describe('at 390 × 844 px', () => {
@@ -2138,7 +2166,7 @@ test("has no accessibility violations in an image's channel controls @smoke", as
     // Under 860 px the layers are a sheet, opened from its handle, whose
     // name also holds "Image".
     const layers = page.getByRole('complementary', { name: 'Layers' })
-    if (width < 860) await page.getByTitle('Expand Layers').click()
+    if (width < 860) await page.getByTitle('Expand Layers', { exact: true }).click()
     const section = layers.getByRole('heading', { level: 3 }).getByTitle(/ Image$/)
     if ((await section.getAttribute('aria-expanded')) !== 'true') await section.click()
     await expect(layers.getByRole('img', { name: 'rings histogram' })).toBeVisible()
