@@ -23,6 +23,12 @@ export class ZarrChunkUnavailableError extends Error {
   }
 }
 
+// A request's key in the store whose root path is `rootPath`.
+function storeKey(requestUrl: string, rootPath: string): string {
+  const pathname = new URL(requestUrl).pathname
+  return pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname
+}
+
 const MAX_TRACKED_MISSING_CHUNKS = 1_000
 
 export interface ConsolidatedZarrMetadata {
@@ -85,12 +91,6 @@ export function createZarrFetchStore(
       )
     },
   })
-}
-
-// A request's key in the store whose root path is `rootPath`.
-function storeKey(requestUrl: string, rootPath: string): string {
-  const pathname = new URL(requestUrl).pathname
-  return pathname.startsWith(rootPath) ? pathname.slice(rootPath.length) : pathname
 }
 
 // Reads consolidated metadata from the store root, or returns null when none
