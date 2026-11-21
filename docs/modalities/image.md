@@ -568,8 +568,12 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
   (8,781 × 2,253 × 41, 3 channels) at level 4 of 7, 1,097 × 281 × 41.
 - **Reading.** `loadVolume` reads the loader's channel at every plane of the
   level with `zarr.get`, in slabs one chunk deep so each chunk is decoded
-  once, four slabs at a time, and reports planes read. Codecs run in the Zarr
-  decode workers, as for other zarrita reads. Up to six enabled channels are
+  once, four slabs at a time, and reports planes read. After a slab fails no
+  more are started, and slabs still being read are dropped. zarrita shares a
+  shard's index read under the signal of the read that started it, so a 3D
+  slab or a 2D tile whose read was aborted by another read's cancel is read
+  again, up to three times. Codecs run in the Zarr decode workers, as for other
+  zarrita reads. Up to six enabled channels are
   read, each once while the 3D view stays open; moving the `Z plane` slider
   does not read them again. Leaving 3D drops them.
 - **Textures.** An 8-bit volume is uploaded as it is (`r8unorm`). Other dtypes

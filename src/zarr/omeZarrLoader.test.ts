@@ -927,6 +927,88 @@ describe('OME-Zarr image loader', () => {
     })
   })
 
+  it('starts no more slabs, and reports no progress, once a slab fails', async () => {
+    const rootPath = '/images/deep.zarr'
+    const depth = 12
+    const files = new Map<string, Uint8Array>([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            { version: '0.4', axes: ['z', 'y', 'x'], datasets: [{ path: '0' }] },
+          ],
+        }),
+      ],
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([depth, 2, 2], [1, 2, 2]))],
+      ...Array.from(
+        { length: depth },
+        (_value, z) => [`${rootPath}/0/${z}.0.0`, new Uint8Array(4).fill(z)] as const,
+      ),
+    ])
+    const served = fetcherForFiles(files)
+    const chunkReads: string[] = []
+    // Plane 0 is refused at once; the others take a moment.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const path = requestUrl(input).pathname
+
+      if (/\/0\/\d+\.0\.0$/.test(path)) {
+        chunkReads.push(path)
+
+        if (path.endsWith('/0/0.0.0')) {
+          return new Response(null, { status: 403 })
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+
+      return served(input)
+    }) as unknown as typeof fetch
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher,
+      decodePool: null,
+    })
+    let rejected = false
+    let progressAfterFailure = 0
+
+    await expect(
+      loader.loadVolume(0, undefined, () => {
+        progressAfterFailure += rejected ? 1 : 0
+      }),
+    ).rejects.toMatchObject({ name: 'ZarrChunkUnavailableError' })
+    rejected = true
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    // The four slabs read at once, and no more.
+    expect(chunkReads).toHaveLength(4)
+    expect(progressAfterFailure).toBe(0)
+  })
+
+  it("reads a 2D tile's chunk again when another read's abort reaches it", async () => {
+    const rootUrl = 'https://example.test/images/tile-abort.ome.zarr'
+    const files = fetcherForFiles(zStackOmeZarrFiles('/images/tile-abort.ome.zarr'))
+    let failed = false
+    // The first read of the tile's chunk fails with the abort of a 3D read it
+    // shared, as zarrita's shard index reads are shared.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (!failed && requestUrl(input).pathname.endsWith('/0/1.1.0.0')) {
+        failed = true
+        throw new DOMException('signal is aborted without reason', 'AbortError')
+      }
+
+      return files(input)
+    }) as unknown as typeof fetch
+    const loader = await openOmeZarrImageWithOptions(`${rootUrl}#c=1`, {
+      fetcher,
+      decodePool: null,
+    })
+
+    await expect(loader.loadTilePixels(0, 0, 0)).resolves.toMatchObject({
+      pixels: new Uint8Array([12, 12, 12, 12]),
+    })
+    expect(failed).toBe(true)
+  })
+
   it('leaves the plane spacing unknown when only x and y have units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/images/stack.ome.zarr',

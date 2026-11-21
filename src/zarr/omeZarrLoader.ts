@@ -56,8 +56,9 @@ const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
 const VOLUME_SLAB_CONCURRENCY = 4
 // zarrita shares a shard's pending index read among the reads that need it,
 // under the signal of the read that started it, so cancelling a 2D tile read
-// can abort a volume read too. Such a slab is read again, this many times.
-const VOLUME_SLAB_FOREIGN_ABORT_RETRIES = 3
+// can abort a volume read, and cancelling a volume read can abort a tile read.
+// Such a read is made again, this many times.
+const FOREIGN_ABORT_RETRIES = 3
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]
@@ -573,9 +574,7 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       return fromChunk
     }
 
-    const chunk = await zarr.get(meta.array, selection.projection, {
-      ...(signal === undefined ? {} : { signal }),
-    })
+    const chunk = await getRetryingForeignAborts(meta.array, selection.projection, signal)
 
     if (typeof chunk === 'number' || typeof chunk === 'bigint') {
       throw new Error('OME-Zarr tile selection unexpectedly returned a scalar.')
@@ -633,6 +632,9 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     )
     let data: ImagePyramidPixelArray | null = null
     let planesRead = 0
+    // Once a slab fails the volume cannot be shown, so no more are started,
+    // and those still being read are dropped.
+    let failed = false
 
     const readSlab = async (zStart: number): Promise<void> => {
       const zEnd = Math.min(depth, zStart + slabDepth)
@@ -645,8 +647,12 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
               ? (this.selectedChannelIndex ?? 0)
               : this.planeIndexAt(meta, axis),
       )
-      const slab = await getVolumeSlab(meta.array, projection, signal)
+      const slab = await getRetryingForeignAborts(meta.array, projection, signal)
       throwIfAborted(signal)
+
+      if (failed) {
+        return
+      }
 
       if (typeof slab === 'number' || typeof slab === 'bigint') {
         throw new Error('OME-Zarr volume selection unexpectedly returned a scalar.')
@@ -678,10 +684,16 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       Array.from(
         { length: Math.min(VOLUME_SLAB_CONCURRENCY, slabStarts.length) },
         async () => {
-          while (next < slabStarts.length) {
+          while (!failed && next < slabStarts.length) {
             const zStart = slabStarts[next] ?? 0
             next += 1
-            await readSlab(zStart)
+
+            try {
+              await readSlab(zStart)
+            } catch (error) {
+              failed = true
+              throw error
+            }
           }
         },
       ),
@@ -1714,7 +1726,7 @@ function decodedChunk(
   }
 
   const entry: DecodedChunkEntry = {
-    promise: array.getChunk([...coords]),
+    promise: getChunkRetryingForeignAborts(array, coords),
     bytes: 0,
   }
   decodedChunks.set(key, entry)
@@ -1761,8 +1773,9 @@ function chunkByteLength(chunk: zarr.Chunk<DataType>): number {
       : 0
 }
 
-// A slab of a volume; an abort that is not `signal`'s reads it again.
-async function getVolumeSlab(
+// A selection, such as a slab of a volume or a tile that straddles chunks; an
+// abort that is not `signal`'s reads it again.
+async function getRetryingForeignAborts(
   array: ZarrArray<DataType, zarr.Readable>,
   projection: (zarr.Slice | number)[],
   signal: AbortSignal | undefined,
@@ -1771,15 +1784,35 @@ async function getVolumeSlab(
     try {
       return await zarr.get(array, projection, signal === undefined ? {} : { signal })
     } catch (error) {
-      if (
-        signal?.aborted === true ||
-        (error as { readonly name?: unknown } | null)?.name !== 'AbortError' ||
-        attempt >= VOLUME_SLAB_FOREIGN_ABORT_RETRIES
-      ) {
+      if (signal?.aborted === true || !isForeignAbortToRetry(error, attempt)) {
         throw error
       }
     }
   }
+}
+
+// A chunk read for the shared decoded-chunk cache. It has no signal of its
+// own, so any abort is another read's.
+async function getChunkRetryingForeignAborts(
+  array: ZarrArray<DataType, zarr.Readable>,
+  coords: readonly number[],
+): Promise<zarr.Chunk<DataType>> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await array.getChunk([...coords])
+    } catch (error) {
+      if (!isForeignAbortToRetry(error, attempt)) {
+        throw error
+      }
+    }
+  }
+}
+
+function isForeignAbortToRetry(error: unknown, attempt: number): boolean {
+  return (
+    (error as { readonly name?: unknown } | null)?.name === 'AbortError' &&
+    attempt < FOREIGN_ABORT_RETRIES
+  )
 }
 
 // Store errors and aborts are final; worker failures fall back to the main
