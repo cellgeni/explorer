@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type RefObject,
+} from 'react'
 import {
   CloseIcon,
   CollapseIcon,
@@ -25,7 +33,10 @@ import {
   type GeneScaleRange,
 } from '../genes/geneScaleRange'
 import {
+  COLLECTION_PREVIEW_SIZE_STEP,
   collectionEntryLabel,
+  MAX_COLLECTION_PREVIEW_SIZE,
+  MIN_COLLECTION_PREVIEW_SIZE,
   type CollectionState,
   type CollectionView,
 } from './collectionModel'
@@ -41,6 +52,9 @@ export const PREVIEW_HEIGHT = 64
 // are read ahead of a scroll.
 const PREVIEW_READ_AHEAD = '0px 240px'
 const GRID_READ_AHEAD = '240px 0px'
+// A preview is redrawn at a new size once it has kept it this many ms, so
+// dragging the Size slider does not redraw every preview at each step.
+const PREVIEW_RESIZE_SETTLE_MS = 150
 
 export interface CollectionBarPreviews {
   // Shared with the panels of sections shown side by side; null until the
@@ -53,6 +67,12 @@ export interface CollectionBarPreviews {
   readonly scaleRange?: GeneScaleRange
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotations: CollectionBarAnnotations | null
+}
+
+// The width of each preview in the grid, in CSS px, set by its Size slider.
+export interface CollectionBarPreviewSize {
+  readonly value: number
+  readonly onChange: (size: number) => void
 }
 
 // Registered sections shown side by side with the open dataset.
@@ -91,6 +111,8 @@ interface CollectionBarProps {
   readonly onViewChange: (view: CollectionView) => void
   // Without it, the bar lists names only.
   readonly previews?: CollectionBarPreviews
+  // Without it, the grid's previews keep their default size.
+  readonly previewSize?: CollectionBarPreviewSize
   // Without it, no section can be shown beside the open one.
   readonly beside?: CollectionBarBeside
   // Without it, the open dataset's sections cannot be stacked.
@@ -112,6 +134,7 @@ export function CollectionBar({
   view,
   onViewChange,
   previews,
+  previewSize,
   beside,
   stack,
 }: CollectionBarProps) {
@@ -191,6 +214,13 @@ export function CollectionBar({
         .filter(Boolean)
         .join(' ')}
       aria-label="Collection"
+      style={
+        previewSize === undefined
+          ? undefined
+          : ({
+              '--collection-preview-size': `${previewSize.value.toString()}px`,
+            } as CSSProperties)
+      }
       onKeyDown={(event) => {
         if (expanded && event.key === 'Escape') {
           event.stopPropagation()
@@ -310,6 +340,24 @@ export function CollectionBar({
         <p className="collection-bar-status is-error" role="alert">
           The collection could not be opened. {state.message}
         </p>
+      ) : null}
+      {expanded && previewSize !== undefined ? (
+        <label className="collection-bar-size">
+          <span className="collection-bar-size-label">Size</span>
+          <input
+            type="range"
+            title="Size: drag to make the previews larger or smaller"
+            aria-label="Preview size"
+            min={MIN_COLLECTION_PREVIEW_SIZE}
+            max={MAX_COLLECTION_PREVIEW_SIZE}
+            step={COLLECTION_PREVIEW_SIZE_STEP}
+            value={previewSize.value}
+            aria-valuetext={`${previewSize.value.toString()} px wide`}
+            onChange={(event) => {
+              previewSize.onChange(event.currentTarget.valueAsNumber)
+            }}
+          />
+        </label>
       ) : null}
       {collection === null ? null : (
         <div className="collection-bar-groups" ref={groupsRef}>
@@ -541,6 +589,8 @@ function CollectionPreview({
 }
 
 // The canvas's size in CSS px, which the bar sets and the grid stretches.
+// After the first, a size is taken once the canvas stops resizing; until
+// then the old pixels are stretched to fit.
 function usePreviewSize(canvasRef: RefObject<HTMLCanvasElement | null>): PreviewSize {
   const [size, setSize] = useState<PreviewSize>(DEFAULT_PREVIEW_SIZE)
 
@@ -548,20 +598,32 @@ function usePreviewSize(canvasRef: RefObject<HTMLCanvasElement | null>): Preview
     const canvas = canvasRef.current
     if (canvas === null || typeof ResizeObserver === 'undefined') return
 
+    let measured = false
+    let timeout: ReturnType<typeof setTimeout> | undefined
     const observer = new ResizeObserver(([entry]) => {
       if (entry === undefined) return
       const width = Math.round(entry.contentRect.width)
       const height = Math.round(entry.contentRect.height)
       if (width === 0 || height === 0) return
-      setSize((current) =>
-        current.width === width && current.height === height
-          ? current
-          : { width, height },
-      )
+      const apply = () => {
+        setSize((current) =>
+          current.width === width && current.height === height
+            ? current
+            : { width, height },
+        )
+      }
+      clearTimeout(timeout)
+      if (measured) {
+        timeout = setTimeout(apply, PREVIEW_RESIZE_SETTLE_MS)
+      } else {
+        measured = true
+        apply()
+      }
     })
     observer.observe(canvas)
     return () => {
       observer.disconnect()
+      clearTimeout(timeout)
     }
   }, [canvasRef])
 

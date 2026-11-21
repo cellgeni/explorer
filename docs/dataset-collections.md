@@ -558,8 +558,8 @@ The address keeps `collection=` next to `dataset=`, so a copied link reopens
 the collection with the same dataset and view, a `compare=` for each
 section shown side by side, in order, and `sectionView=3d` while the sections
 are stacked in 3D (not the 3D camera). It keeps the bar's `Expand`
-grid as `collectionView=grid` and `Previews` off as `collectionView=names`,
-so the bar opens the same way. Opening a dataset that is not
+grid as `collectionView=grid`, with its `Size` as `collectionPreviewSize=`,
+and `Previews` off as `collectionView=names`, so the bar opens the same way. Opening a dataset that is not
 in the collection, from the dataset menu or `Load Dataset`, closes the
 collection; so does the bar's close button.
 

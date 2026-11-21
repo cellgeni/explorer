@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   collectionEntryLabel,
   collectionFirstOpening,
+  collectionPreviewSizeForLink,
+  collectionPreviewSizeFromLink,
   collectionSwitchOpening,
   collectionViewForLink,
   collectionViewFromLink,
@@ -37,6 +39,20 @@ describe('collectionViewFromLink', () => {
     expect(collectionViewForLink('row')).toBeUndefined()
     expect(collectionViewForLink('grid')).toBe('grid')
     expect(collectionViewForLink('names')).toBe('names')
+  })
+})
+
+describe('collectionPreviewSizeFromLink', () => {
+  it("reads the grid's preview width within the slider's range", () => {
+    expect(collectionPreviewSizeFromLink({ collectionPreviewSize: 320 })).toBe(320)
+    expect(collectionPreviewSizeFromLink({ collectionPreviewSize: 20 })).toBe(100)
+    expect(collectionPreviewSizeFromLink({ collectionPreviewSize: 5000 })).toBe(600)
+    expect(collectionPreviewSizeFromLink({})).toBe(150)
+  })
+
+  it('leaves the default width out of the link', () => {
+    expect(collectionPreviewSizeForLink(150)).toBeUndefined()
+    expect(collectionPreviewSizeForLink(320)).toBe(320)
   })
 })
 

@@ -213,6 +213,25 @@ describe('shareableState', () => {
     })
   })
 
+  it("round-trips the collection grid's preview width", () => {
+    const hash = formatShareableState({
+      collectionUrl: 'https://example.test/c.json',
+      collectionView: 'grid',
+      collectionPreviewSize: 320,
+    })
+
+    expect(hash).toBe(
+      '#xv=2&collection=https%3A%2F%2Fexample.test%2Fc.json&collectionView=grid&collectionPreviewSize=320',
+    )
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      collectionUrl: 'https://example.test/c.json',
+      collectionView: 'grid',
+      collectionPreviewSize: 320,
+    })
+    expect(parseShareableState('#collectionPreviewSize=big')).toEqual({})
+  })
+
   it('round-trips the sections shown side by side, in order', () => {
     const hash = formatShareableState({
       collectionUrl: 'https://example.test/c.json',

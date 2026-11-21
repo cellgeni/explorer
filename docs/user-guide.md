@@ -178,7 +178,9 @@ is in each section. To show a group of classes, such as every
 astrocyte cluster, uncheck all with the checkbox by the set's name in Cells,
 type part of their name in the set's search box, and check the box again:
 it then applies to the matching classes only. `Expand` (the arrows next to "Collection") shows every preview larger, as a grid over
-the view, to compare more sections at once. Choosing one opens it in place and
+the view, to compare more sections at once; its `Size` slider makes the
+previews larger, to see more of each section, or smaller, to fit more on
+screen. Choosing one opens it in place and
 keeps the selected genes, the annotation set with its hidden classes and
 colours, and the cell colouring, so you can step through sections with the
 same gene or cell type. `Share` copies a link with the collection and
