@@ -225,7 +225,13 @@ async function readHyparquetColumns(
     parquetSchema(metadata).children.map((child) => child.element.name),
   )
   const columns = options.columns.filter((column) => fileColumns.has(column))
-  const rowCount = Math.min(Number(metadata.num_rows), options.rowEnd ?? Infinity)
+  // Counted from the row groups, which hyparquet reads: some writers put a
+  // wrong total in the footer (fastparquet 1.0.0, in a Xenium XOA 1.0.1 run).
+  const fileRows = metadata.row_groups.reduce(
+    (sum, group) => sum + Number(group.num_rows),
+    0,
+  )
+  const rowCount = Math.min(fileRows, options.rowEnd ?? Infinity)
   const chunks = new Map<string, ColumnChunk[]>(columns.map((column) => [column, []]))
 
   await parquetRead({
@@ -398,10 +404,16 @@ function requiredNumericColumn(
   length: number,
 ): Float64Array {
   const column = values[key]
+
+  // hyparquet leaves out a column the file lacks rather than failing.
+  if (column === undefined) {
+    throw new Error(`cells.parquet has no ${key} column, which the cell overview needs.`)
+  }
+
   const numbers = new Float64Array(length)
 
   for (let index = 0; index < length; index += 1) {
-    const value = numericValue(column?.[index])
+    const value = numericValue(column[index])
 
     if (value === null) {
       throw new Error(`Expected cells.parquet ${key} to be numeric.`)

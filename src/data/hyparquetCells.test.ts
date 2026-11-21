@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { parquetMetadata } from 'hyparquet'
 import { compressors as parquetCompressors } from 'hyparquet-compressors'
 import {
   asyncBufferFromBytes,
@@ -17,6 +18,39 @@ import {
 } from './hyparquetCells'
 import type { AsyncBuffer } from 'hyparquet'
 import type { CellOverviewPoint, HyparquetReadColumnsOptions } from './hyparquetCells'
+
+// The file with its footer's row count rewritten. The count is Thrift field
+// 3 of the file metadata, a one-byte zigzag varint for a small file: the
+// first such field that parses back as the count is the one.
+function withFooterRowCount(bytes: Uint8Array, rows: number): Uint8Array {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const footerStart = bytes.byteLength - 8 - view.getUint32(bytes.byteLength - 8, true)
+  const original = parquetMetadata(bytes.slice(footerStart).buffer)
+
+  for (let at = footerStart; at < bytes.byteLength - 8; at += 1) {
+    if (bytes[at] !== 0x16 || bytes[at + 1] !== Number(original.num_rows) * 2) {
+      continue
+    }
+
+    const patched = bytes.slice()
+    patched[at + 1] = rows * 2
+
+    try {
+      const parsed = parquetMetadata(patched.slice(footerStart).buffer)
+
+      if (
+        parsed.num_rows === BigInt(rows) &&
+        parsed.row_groups.length === original.row_groups.length
+      ) {
+        return patched
+      }
+    } catch {
+      // Not the field.
+    }
+  }
+
+  throw new Error('No row count found in the footer.')
+}
 
 const fakeFile: AsyncBuffer = {
   byteLength: 8,
@@ -257,6 +291,19 @@ describe('readCellsOverview with hyparquet', () => {
     expect(onFallback).not.toHaveBeenCalled()
   })
 
+  it("counts rows from the row groups, not the footer's total", async () => {
+    // fastparquet 1.0.0 wrote a wrong total for a Xenium XOA 1.0.1 run.
+    for (const total of [3, 20]) {
+      const cells = await readCellsOverview({
+        file: asyncBufferFromBytes(
+          withFooterRowCount(xeniumCellsFixtureBytes('cells.parquet'), total),
+        ),
+      })
+
+      expect(cells).toHaveLength(XENIUM_CELLS_FIXTURE_ROWS)
+    }
+  })
+
   it('stops at the row limit inside a row group', async () => {
     const cells = await readCellsOverview({
       file: asyncBufferFromBytes(xeniumCellsFixtureBytes('cells.parquet')),
@@ -321,7 +368,12 @@ describe('cellsOverviewColumnsFromValues', () => {
   })
 
   it('returns no cells for empty columns', () => {
-    const columns = cellsOverviewColumnsFromValues({ cell_id: [], x_centroid: [] })
+    const columns = cellsOverviewColumnsFromValues({
+      cell_id: [],
+      x_centroid: [],
+      y_centroid: [],
+      transcript_counts: [],
+    })
 
     expect(columns.length).toBe(0)
     expect(cellsOverviewFromColumns(columns)).toEqual([])
@@ -350,6 +402,12 @@ describe('cellsOverviewColumnsFromValues', () => {
   it('requires the centroid and count columns', () => {
     expect(() =>
       cellsOverviewColumnsFromValues({ x_centroid: [1], y_centroid: [2] }),
-    ).toThrow('Expected cells.parquet transcript_counts to be numeric.')
+    ).toThrow(
+      'cells.parquet has no transcript_counts column, which the cell overview needs.',
+    )
+    // As hyparquet reads a file with none of the columns: no values at all.
+    expect(() => cellsOverviewColumnsFromValues({})).toThrow(
+      'cells.parquet has no x_centroid column',
+    )
   })
 })

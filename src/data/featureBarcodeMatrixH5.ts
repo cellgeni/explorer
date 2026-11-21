@@ -7,7 +7,7 @@ import type { GexCell, GexResult } from './gexTypes'
 const CELL_MAJOR_RANGE_COALESCE_GAP = 4_096
 const CELL_MAJOR_RANGE_MAX_SPAN = 500_000
 
-type NumericArrayLike =
+type IndexArrayLike =
   | Int8Array
   | Uint8Array
   | Int16Array
@@ -16,6 +16,9 @@ type NumericArrayLike =
   | Uint32Array
   | BigInt64Array
   | BigUint64Array
+
+// Counts may be floats, as in normalised or ambient-corrected exports.
+type NumericArrayLike = IndexArrayLike | Float32Array | Float64Array
 
 interface SliceableNumericDataset {
   slice(ranges: readonly (readonly (number | null)[])[]): unknown
@@ -30,7 +33,7 @@ interface H5MatrixCache {
   readonly geneNames: readonly string[]
   readonly featureTypes: readonly string[]
   readonly barcodeRows: ReadonlyMap<string, number>
-  readonly indptr: NumericArrayLike
+  readonly indptr: IndexArrayLike
   readonly indicesDataset: SliceableNumericDataset
   readonly dataDataset: SliceableNumericDataset
 }
@@ -74,7 +77,7 @@ export function gexFromCellMajorSparseArrays<ElementId extends string>(options: 
   readonly geneNames: readonly string[]
   readonly featureTypes: readonly string[]
   readonly cellIdRows: ReadonlyMap<string, number>
-  readonly indptr: NumericArrayLike
+  readonly indptr: IndexArrayLike
   readonly indicesDataset: SliceableNumericDataset
   readonly dataDataset: SliceableNumericDataset
 }): GexResult<ElementId> {
@@ -124,13 +127,13 @@ export function gexFromCellMajorSparseArrays<ElementId extends string>(options: 
   }
 
   for (const rangeGroup of coalesceCellMajorRanges(ranges)) {
-    const indices = expectNumericArrayLike(
+    const indices = expectIndexArrayLike(
       options.indicesDataset.slice([[rangeGroup.start, rangeGroup.end]]),
-      'cell feature matrix indices',
+      'the cell feature matrix /matrix/indices',
     )
     const data = expectNumericArrayLike(
       options.dataDataset.slice([[rangeGroup.start, rangeGroup.end]]),
-      'cell feature matrix data',
+      'the cell feature matrix /matrix/data',
     )
 
     for (const target of rangeGroup.targets) {
@@ -244,7 +247,7 @@ function createH5MatrixCache(file: H5FileLike): H5MatrixCache {
     barcodeRows: h5BarcodeRows(
       expectStringArray(barcodeDataset.value, '/matrix/barcodes'),
     ),
-    indptr: expectNumericArrayLike(indptrDataset.value, '/matrix/indptr'),
+    indptr: expectIndexArrayLike(indptrDataset.value, '/matrix/indptr'),
     indicesDataset,
     dataDataset,
   }
@@ -293,8 +296,28 @@ function expectStringArray(value: unknown, label: string): readonly string[] {
   return value
 }
 
+function expectIndexArrayLike(value: unknown, label: string): IndexArrayLike {
+  if (isIndexArrayLike(value)) {
+    return value
+  }
+
+  throw new Error(`Expected ${label} to be integers, not ${valueKind(value)}.`)
+}
+
 function expectNumericArrayLike(value: unknown, label: string): NumericArrayLike {
   if (
+    value instanceof Float32Array ||
+    value instanceof Float64Array ||
+    isIndexArrayLike(value)
+  ) {
+    return value
+  }
+
+  throw new Error(`Expected ${label} to be numbers, not ${valueKind(value)}.`)
+}
+
+function isIndexArrayLike(value: unknown): value is IndexArrayLike {
+  return (
     value instanceof Int8Array ||
     value instanceof Uint8Array ||
     value instanceof Int16Array ||
@@ -303,11 +326,23 @@ function expectNumericArrayLike(value: unknown, label: string): NumericArrayLike
     value instanceof Uint32Array ||
     value instanceof BigInt64Array ||
     value instanceof BigUint64Array
-  ) {
-    return value
+  )
+}
+
+// What a dataset read as, such as Float16Array or string, for messages.
+function valueKind(value: unknown): string {
+  if (value === null) {
+    return 'null'
   }
 
-  throw new Error(`Expected ${label} to be a numeric typed array.`)
+  if (typeof value === 'object') {
+    return (
+      (value as { readonly constructor?: { readonly name?: string } }).constructor
+        ?.name ?? 'an object'
+    )
+  }
+
+  return typeof value
 }
 
 function readNumericArrayValue(array: NumericArrayLike, index: number): number {
