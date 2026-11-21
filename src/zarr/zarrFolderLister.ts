@@ -123,8 +123,10 @@ interface S3Endpoint {
   readonly prefix: string
 }
 
+// The S3 prefix of a folder, ending in '/', or '' for the bucket's root.
 function joinKey(prefix: string, path: string): string {
-  return `${[prefix, path].filter((part) => part.length > 0).join('/')}/`
+  const key = [prefix, path].filter((part) => part.length > 0).join('/')
+  return key === '' ? '' : `${key}/`
 }
 
 // Child folders and files under `prefix` (which ends in '/'), or null when
