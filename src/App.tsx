@@ -268,8 +268,10 @@ import {
   geometricAnnotationFromRoiSelection,
   geometricAnnotationsEmptyMessage,
   geometricAnnotationsImportFailedMessage,
+  geometricAnnotationsSkippedMessage,
   geometricAnnotationsToGeoJson,
   parseGeometricAnnotationsGeoJson,
+  type GeoJsonCoordinateUnit,
   removeGeometricAnnotation,
   updateGeometricAnnotationColor,
   updateGeometricAnnotationVisibility,
@@ -309,7 +311,7 @@ import {
 import type { TranscriptFeatureFilterMode } from './data/transcriptOverlay'
 import type { RoiSelection } from './data/roiSelection'
 import { detectPerformanceBudget, type PerformanceBudget } from './data/performanceBudget'
-import { placedImageExtent } from './data/imagePyramid'
+import { imagePixelFrame, placedImageExtent } from './data/imagePyramid'
 import type { ShareableState } from './data/shareableState'
 import {
   appendTelemetryEvent,
@@ -333,7 +335,12 @@ import {
   normalizeCustomMorphologyLayerUrl,
   type MorphologyImage,
 } from './data/morphologyImage'
-import { micrometers, micrometersPerPixelY, type BBox } from './data/coords'
+import {
+  micrometers,
+  micrometersPerPixelY,
+  scaledImagePixelFrame,
+  type BBox,
+} from './data/coords'
 import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
@@ -492,7 +499,7 @@ export function App({ dependencies }: AppProps = {}) {
       annotationImportUrl,
       annotationState,
       cellMetadataTracks,
-      geometricAnnotationImportError,
+      geometricAnnotationImportMessage,
       geometricAnnotations,
       hiddenAnnotationIds,
       hiddenAnnotationSetIds,
@@ -503,7 +510,7 @@ export function App({ dependencies }: AppProps = {}) {
       setAnnotationImportUrl,
       setAnnotationState,
       setCellMetadataTracks,
-      setGeometricAnnotationImportError,
+      setGeometricAnnotationImportMessage,
       setGeometricAnnotations,
       setHiddenAnnotationIds,
       setHiddenAnnotationSetIds,
@@ -1264,6 +1271,15 @@ export function App({ dependencies }: AppProps = {}) {
   }, [expressionStyledBoundaryLayerData, platformAdapter, selectedBoundaryCell])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
+  // GeoJSON pixel coordinates are the image's full-resolution pixels, as
+  // QuPath writes them.
+  const geometricAnnotationPixelFrame = useCallback(
+    () =>
+      morphologyImage === null
+        ? scaledImagePixelFrame(viewerMicrometersPerPixel ?? 1)
+        : imagePixelFrame(morphologyImage.loader),
+    [morphologyImage, viewerMicrometersPerPixel],
+  )
   const geometricAnnotationLayerData = useMemo(
     () => geometricAnnotationsToLayerData(geometricAnnotations),
     [geometricAnnotations],
@@ -2783,13 +2799,13 @@ export function App({ dependencies }: AppProps = {}) {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
     setGeometricAnnotations([])
-    setGeometricAnnotationImportError(null)
+    setGeometricAnnotationImportMessage(null)
     setFallbackNotices([])
   }, [
     clearVisiumHdExpressionProfileState,
     clearVisiumHdRoiState,
     setFallbackNotices,
-    setGeometricAnnotationImportError,
+    setGeometricAnnotationImportMessage,
     setGeometricAnnotations,
   ])
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
@@ -2860,59 +2876,78 @@ export function App({ dependencies }: AppProps = {}) {
     setters: { setCellMetadataTracks },
   })
   const handleImportGeometricAnnotations = useCallback(
-    async (file: File | null) => {
+    async (file: File | null, unit: GeoJsonCoordinateUnit) => {
       if (file === null) {
         return
       }
 
       try {
         geometricAnnotationIdRef.current += 1
-        const imported = parseGeometricAnnotationsGeoJson(await file.text(), {
-          defaultCoordinateUnit:
-            platformAdapter.kind === 'image' ? 'pixel' : 'micrometer',
-          micrometersPerPixel: viewerMicrometersPerPixel ?? 1,
-          idPrefix: `geojson:${geometricAnnotationIdRef.current}`,
-        })
+        const { annotations: imported, skipped } = parseGeometricAnnotationsGeoJson(
+          await file.text(),
+          {
+            defaultCoordinateUnit: unit,
+            pixelFrame: geometricAnnotationPixelFrame(),
+            idPrefix: `geojson:${geometricAnnotationIdRef.current}`,
+          },
+        )
 
         if (imported.length === 0) {
-          setGeometricAnnotationImportError(geometricAnnotationsEmptyMessage(file.name))
+          setGeometricAnnotationImportMessage({
+            tone: 'error',
+            text: geometricAnnotationsEmptyMessage(file.name, skipped),
+          })
           appendDebugEvent('GeoJSON annotations empty')
           return
         }
 
-        setGeometricAnnotationImportError(null)
+        const skippedMessage = geometricAnnotationsSkippedMessage(
+          file.name,
+          imported.length,
+          skipped,
+        )
+        setGeometricAnnotationImportMessage(
+          skippedMessage === null ? null : { tone: 'notice', text: skippedMessage },
+        )
         setGeometricAnnotations((current) => [...imported, ...current])
         appendDebugEvent(
           `GeoJSON annotations imported: ${imported.length.toLocaleString()} shapes`,
         )
       } catch (error) {
-        setGeometricAnnotationImportError(
-          geometricAnnotationsImportFailedMessage(file.name, error),
-        )
+        setGeometricAnnotationImportMessage({
+          tone: 'error',
+          text: geometricAnnotationsImportFailedMessage(file.name, error),
+        })
         appendDebugEvent('GeoJSON annotation import failed')
       }
     },
     [
       appendDebugEvent,
-      platformAdapter.kind,
-      setGeometricAnnotationImportError,
+      geometricAnnotationPixelFrame,
+      setGeometricAnnotationImportMessage,
       setGeometricAnnotations,
-      viewerMicrometersPerPixel,
     ],
   )
-  const handleExportGeometricAnnotations = useCallback(() => {
-    if (geometricAnnotations.length === 0) {
-      return
-    }
+  const handleExportGeometricAnnotations = useCallback(
+    (unit: GeoJsonCoordinateUnit) => {
+      if (geometricAnnotations.length === 0) {
+        return
+      }
 
-    downloadTextFile(
-      'geometric-annotations.geojson',
-      geometricAnnotationsToGeoJson(geometricAnnotations),
-    )
-    appendDebugEvent(
-      `GeoJSON annotations exported: ${geometricAnnotations.length.toLocaleString()} shapes`,
-    )
-  }, [appendDebugEvent, geometricAnnotations])
+      downloadTextFile(
+        'geometric-annotations.geojson',
+        geometricAnnotationsToGeoJson(geometricAnnotations, {
+          coordinateUnit: unit,
+          pixelFrame: geometricAnnotationPixelFrame(),
+        }),
+        'application/geo+json;charset=utf-8',
+      )
+      appendDebugEvent(
+        `GeoJSON annotations exported: ${geometricAnnotations.length.toLocaleString()} shapes in ${unit}s`,
+      )
+    },
+    [appendDebugEvent, geometricAnnotationPixelFrame, geometricAnnotations],
+  )
   const handleClearGeometricAnnotations = useCallback(() => {
     if (geometricAnnotations.length === 0) {
       return
@@ -4578,7 +4613,11 @@ export function App({ dependencies }: AppProps = {}) {
     annotationState,
     cellMetadataTracks,
     elementNoun: embeddingElementLabel,
-    geometricAnnotationImportError,
+    geometricAnnotationDefaultUnit:
+      platformAdapter.kind === 'image' ? 'pixel' : 'micrometer',
+    geometricAnnotationImportMessage,
+    geometricAnnotationPixelsAvailable:
+      morphologyImage !== null || flatMorphologyImage !== null,
     geometricAnnotations,
     geometricAnnotationsEnabled:
       platformAdapter.capabilities.geometricAnnotations && loadState.status === 'ready',

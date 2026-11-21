@@ -5,7 +5,11 @@ import type {
   AnnotationState,
   PlacedCellIds,
 } from '../annotations/annotationModel'
-import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
+import type {
+  GeoJsonCoordinateUnit,
+  GeometricAnnotationFeature,
+  GeometricAnnotationImportMessage,
+} from '../annotations/geometricAnnotationModel'
 import type { SectionSplitLink } from '../collection/sectionSplitModel'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { SelectionList } from '../roi/useSelectionList'
@@ -98,10 +102,14 @@ export interface MetadataTracksModel {
 export interface GeometricShapesModel {
   readonly enabled: boolean
   readonly shapes: readonly GeometricAnnotationFeature[]
-  // Why the last import added no shapes.
-  readonly importError: string | null
-  readonly onImportFile: (file: File | null) => void
-  readonly onExport: () => void
+  // Why the last import added no shapes, or what it left out.
+  readonly importMessage: GeometricAnnotationImportMessage | null
+  // Whether shapes can be read and written in the image's pixels, and the
+  // units used until others are chosen.
+  readonly pixelCoordinatesAvailable: boolean
+  readonly defaultCoordinateUnit: GeoJsonCoordinateUnit
+  readonly onImportFile: (file: File | null, unit: GeoJsonCoordinateUnit) => void
+  readonly onExport: (unit: GeoJsonCoordinateUnit) => void
   readonly onClear: () => void
   readonly onColorChange: (annotationId: string, color: string) => void
   readonly onVisibilityChange: (annotationId: string, visible: boolean) => void
@@ -119,7 +127,9 @@ export interface AnnotationsSectionModelInput {
   readonly annotationState: AnnotationState
   readonly cellMetadataTracks: readonly ContinuousCellMetadataTrack[]
   readonly elementNoun: string
-  readonly geometricAnnotationImportError: string | null
+  readonly geometricAnnotationDefaultUnit: GeoJsonCoordinateUnit
+  readonly geometricAnnotationImportMessage: GeometricAnnotationImportMessage | null
+  readonly geometricAnnotationPixelsAvailable: boolean
   readonly geometricAnnotations: readonly GeometricAnnotationFeature[]
   readonly geometricAnnotationsEnabled: boolean
   readonly handleAnnotationColorChange: (annotationId: string, color: string) => void
@@ -137,7 +147,7 @@ export interface AnnotationsSectionModelInput {
   readonly handleClearAnnotations: () => void
   readonly handleClearGeometricAnnotations: () => void
   readonly handleExportAnnotations: () => void
-  readonly handleExportGeometricAnnotations: () => void
+  readonly handleExportGeometricAnnotations: (unit: GeoJsonCoordinateUnit) => void
   readonly handleGeometricAnnotationColorChange: (
     annotationId: string,
     color: string,
@@ -148,7 +158,10 @@ export interface AnnotationsSectionModelInput {
   ) => void
   readonly handleImportAnnotationUrl: (url: string) => Promise<boolean>
   readonly handleImportAnnotations: (file: File | null) => Promise<void>
-  readonly handleImportGeometricAnnotations: (file: File | null) => Promise<void>
+  readonly handleImportGeometricAnnotations: (
+    file: File | null,
+    unit: GeoJsonCoordinateUnit,
+  ) => Promise<void>
   readonly handleLoadAnnotations: () => void
   readonly handleRemoveAnnotation: (annotationId: string) => void
   readonly handleRemoveCellMetadataTrack: (trackId: string) => void
@@ -174,7 +187,9 @@ export function useAnnotationsSectionModel({
   annotationState,
   cellMetadataTracks,
   elementNoun,
-  geometricAnnotationImportError,
+  geometricAnnotationDefaultUnit,
+  geometricAnnotationImportMessage,
+  geometricAnnotationPixelsAvailable,
   geometricAnnotations,
   geometricAnnotationsEnabled,
   handleAnnotationColorChange,
@@ -278,9 +293,11 @@ export function useAnnotationsSectionModel({
     shapes: {
       enabled: geometricAnnotationsEnabled,
       shapes: geometricAnnotations,
-      importError: geometricAnnotationImportError,
-      onImportFile: (file) => {
-        void handleImportGeometricAnnotations(file)
+      importMessage: geometricAnnotationImportMessage,
+      pixelCoordinatesAvailable: geometricAnnotationPixelsAvailable,
+      defaultCoordinateUnit: geometricAnnotationDefaultUnit,
+      onImportFile: (file, unit) => {
+        void handleImportGeometricAnnotations(file, unit)
       },
       onExport: handleExportGeometricAnnotations,
       onClear: handleClearGeometricAnnotations,

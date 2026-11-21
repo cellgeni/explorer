@@ -318,6 +318,67 @@ export function placeFrameBbox(placement: ImageFramePlacement, bbox: BBox): BBox
   }
 }
 
+// Where an image's full-resolution pixels sit in the dataset: pixel (0, 0)'s
+// corner in the image's frame, the pixel size, and the frame's placement.
+// QuPath and other image tools write coordinates in these pixels.
+export interface ImagePixelFrame {
+  readonly originX: number
+  readonly originY: number
+  readonly micrometersPerPixelX: number
+  readonly micrometersPerPixelY: number
+  readonly placement?: ImageFramePlacement | undefined
+}
+
+// Square pixels from the dataset origin, unplaced.
+export function scaledImagePixelFrame(micrometersPerPixel: number): ImagePixelFrame {
+  return {
+    originX: 0,
+    originY: 0,
+    micrometersPerPixelX: micrometersPerPixel,
+    micrometersPerPixelY: micrometersPerPixel,
+  }
+}
+
+export function imagePixelToData(
+  frame: ImagePixelFrame,
+  x: number,
+  y: number,
+): DataPoint {
+  const frameX = frame.originX + x * frame.micrometersPerPixelX
+  const frameY = frame.originY + y * frame.micrometersPerPixelY
+
+  if (frame.placement === undefined) {
+    return { x: micrometers(frameX), y: micrometers(frameY) }
+  }
+
+  const { a, b, c, d, e, f } = frame.placement
+
+  return {
+    x: micrometers(a * frameX + b * frameY + c),
+    y: micrometers(d * frameX + e * frameY + f),
+  }
+}
+
+// The placement's inverse is its transpose.
+export function dataToImagePixel(
+  frame: ImagePixelFrame,
+  point: DataPoint,
+): { readonly x: number; readonly y: number } {
+  let frameX: number = point.x
+  let frameY: number = point.y
+
+  if (frame.placement !== undefined) {
+    const { a, b, c, d, e, f } = frame.placement
+    frameX = a * (point.x - c) + d * (point.y - f)
+    frameY = b * (point.x - c) + e * (point.y - f)
+  }
+
+  return {
+    x: (frameX - frame.originX) / frame.micrometersPerPixelX,
+    y: (frameY - frame.originY) / frame.micrometersPerPixelY,
+  }
+}
+
 // A dataset bbox in frame coordinates. A signed permutation's inverse is its
 // transpose.
 export function unplaceFrameBbox(placement: ImageFramePlacement, bbox: BBox): BBox {

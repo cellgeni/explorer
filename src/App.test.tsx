@@ -480,7 +480,7 @@ describe('App', () => {
         },
       })
       expect(await screen.findByRole('alert')).toHaveTextContent(
-        'Could not import line.geojson. GeoJSON geometry must be Polygon or MultiPolygon.',
+        'line.geojson has no Polygon or MultiPolygon shapes. Skipped 1 line.',
       )
 
       fireEvent.change(screen.getByLabelText('Import GeoJSON'), {
@@ -512,7 +512,7 @@ describe('App', () => {
       })
 
       expect(await screen.findByText('Image region')).toBeInTheDocument()
-      expect(screen.queryByText(/Could not import line\.geojson/)).toBeNull()
+      expect(screen.queryByText(/line\.geojson has no/)).toBeNull()
       expect(screen.getByRole('button', { name: 'Export GeoJSON' })).toBeEnabled()
       expect(screen.getByTestId('deck-layer-geometric-annotations')).toHaveAttribute(
         'data-count',
@@ -525,8 +525,22 @@ describe('App', () => {
       const blob = createObjectUrlSpy.mock.calls[0]?.[0]
       expect(blob).toBeInstanceOf(Blob)
 
+      // An image's shapes go out in its pixels, as QuPath reads them.
+      expect(screen.getByLabelText('Shape coordinates')).toHaveValue('pixel')
       if (blob instanceof Blob) {
-        await expect(blob.text()).resolves.toContain('"coordinate_unit": "micrometer"')
+        await expect(blob.text()).resolves.toContain('"coordinate_unit": "pixel"')
+      }
+
+      fireEvent.change(screen.getByLabelText('Shape coordinates'), {
+        target: { value: 'micrometer' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Export GeoJSON' }))
+      const micrometreBlob = createObjectUrlSpy.mock.calls[1]?.[0]
+      expect(micrometreBlob).toBeInstanceOf(Blob)
+      if (micrometreBlob instanceof Blob) {
+        await expect(micrometreBlob.text()).resolves.toContain(
+          '"coordinate_unit": "micrometer"',
+        )
       }
     } finally {
       viewport.restore()
@@ -7398,6 +7412,12 @@ function imageOnlyTiffLoaderFixture(url: string): TiffPyramidLoader {
     tileHeight: imagePixels(256),
     numLevels: 1,
     tilesForLevel: () => [{ col: 0, row: 0 }],
+    tileBounds: () => ({
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(80),
+      maxY: micrometers(40),
+    }),
     units: {
       dataUnit: 'micrometer',
       imageUnit: 'pixel',

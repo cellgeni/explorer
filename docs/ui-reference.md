@@ -628,13 +628,14 @@ counts them: "2 selections · 1 shape".
 
 GeoJSON shapes, on all platforms (`src/features/annotations/geometricAnnotationModel.ts`):
 
-| Control          | Notes                                                                                                                                     |
-| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `Import GeoJSON` | `.geojson` / `.json` Feature or FeatureCollection of Polygon/MultiPolygon. Coordinates default to pixels for Image, micrometres otherwise |
-| `Export GeoJSON` | Downloads `geometric-annotations.geojson` in micrometres                                                                                  |
-| `Clear GeoJSON`  | Removes all shapes                                                                                                                        |
-| Shape rows       | Colour, visible, label, polygon count, `x`                                                                                                |
-| Import message   | Shown when an import adds no shapes: the file name and the reason (not JSON, wrong geometry, no polygons)                                 |
+| Control             | Notes                                                                                                                                                            |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Import GeoJSON`    | `.geojson` / `.json` FeatureCollection, Feature or bare array of features (QuPath's export); Polygon and MultiPolygon features, other features skipped           |
+| `Export GeoJSON`    | Downloads `geometric-annotations.geojson` in the `Shape coordinates` units, as QuPath reads annotations                                                          |
+| `Clear GeoJSON`     | Removes all shapes                                                                                                                                               |
+| `Shape coordinates` | Image pixels or Micrometres, for export and for imported features without `coordinate_unit`. Shown with an image; Image pixels on Image, Micrometres otherwise   |
+| Shape rows          | Colour, visible, label, class (QuPath's classification) and polygon count, `x`                                                                                   |
+| Import message      | When an import adds no shapes, the file name and the reason (not JSON, no polygons); when it skips features, how many of each (points, lines, QuPath detections) |
 
 Import rules are in [Image-only and GeoJSON](./image-only-and-geojson.md).
 
