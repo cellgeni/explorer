@@ -1139,7 +1139,7 @@ except for `F`):
 
 | Key                | Action                                          |
 | ------------------ | ----------------------------------------------- |
-| Arrow keys         | Pan 64 screen px                                |
+| Arrow keys         | Pan 64 screen px the way the arrow points       |
 | Shift + arrow keys | Pan 256 screen px                               |
 | `+` or `=`         | Zoom in one level, as the button does           |
 | `-` or `_`         | Zoom out one level                              |
@@ -1147,6 +1147,9 @@ except for `F`):
 | `Home`             | Return to the first view (the link's, or a fit) |
 | `Enter`            | Open what is at the centre; see below           |
 | `Esc`              | Clear the selected cell                         |
+
+The pan is the same 64 px at every zoom. With Ctrl, Cmd or Alt held, these
+keys are left to the browser, for page zoom and back and forward.
 
 While the spatial view has keyboard focus, a 48 px ring marks its centre.
 `Enter` opens the Visium HD bin at the centre, or else the cell or spot
