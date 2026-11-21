@@ -526,13 +526,17 @@ transform.
   inflated whole, so each chunk costs its compressed size.
 - Reads `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`. Each
   `datasets[].path` is a level.
-- Axes come from `axes`, else array dimension names, else positional
-  `…, c, y, x`. `x` and `y` are required. `z` starts at
-  `omero.rdefs.defaultZ`, else the middle plane, and other planes open as
-  `#z=N` loaders; `t` is `defaultT`, else 0.
+- Axes come from `axes`, else array dimension names, else by position. A 5D
+  array (OME-Zarr 0.1 and 0.2) is `t, c, z, y, x`; other ranks end
+  `…, c, y, x`. `x` and `y` are required. `z` starts at `omero.rdefs.defaultZ`,
+  else the middle plane, and other planes open as `#z=N` loaders; `t` is
+  `defaultT`, else 0.
 - µm/px is the product of multiscale and dataset `scale` values for x, with
   unit conversion (nm, µm, mm, m). Unknown units count as µm; a missing scale
-  gives 1 µm/px. `translation` is ignored except for SpatialData placement.
+  gives level 0 1 µm/px. A later level without a `scale` (OME-Zarr 0.1 to
+  0.3) takes level 0's pixel size scaled by its shape, so a level half as wide
+  has pixels twice as wide. `translation` is ignored except for SpatialData
+  placement.
 - Tile size is the x/y chunk shape (default 256). Chunks larger than 512 pixels
   are served as several virtual tiles of at most 512 pixels that share one
   decoded chunk.
