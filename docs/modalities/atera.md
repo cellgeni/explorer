@@ -35,7 +35,10 @@ holds no Zarr metadata, detection reads its central directory
 it, such as `outs/` (`zipFolderRoot`, ignoring `__MACOSX/`). The zip is then
 registered as the run's folder (`registerZipFolder`, `src/data/zipFolder.ts`)
 and the dataset's base URL is the zip's URL, so `<zip url>/cells.zarr.zip`
-names `outs/cells.zarr.zip` in the zip.
+names `outs/cells.zarr.zip` in the zip. That holds for a zip URL with a
+query, such as a presigned URL, where the path follows the query; opening the
+same zip again under a new query, such as a refreshed signature, reads it with
+the new one.
 
 The page's `fetch` answers those URLs from the zip, so every reader and
 diagnostic below works unchanged: `HEAD` from the directory (size, the zip's

@@ -37,8 +37,9 @@ repository; it is SpatialData when its root group has `spatialdata_attrs` (see
 [AnnData in Icechunk](./h5ad.md#anndata-in-icechunk) for how it is opened).
 
 A URL whose path ends in `.zip` (usually `.zarr.zip`) is a zipped store
-(`detectZarrZip`). After a `HEAD` probe, the zip's central directory is read
-by range (`openZippedZarrStore`, `src/zarr/zarrZipStore.ts`) and the store
+(`detectZarrZip`). After a `HEAD` probe (a one-byte `GET` on hosts that
+refuse `HEAD`, as for detection), the zip's central directory is read by
+range (`openZippedZarrStore`, `src/zarr/zarrZipStore.ts`) and the store
 root is the shallowest folder holding `zarr.json`, `.zgroup`, `.zattrs`, or
 `zmetadata`: the top of the zip, or the `sample.zarr/` folder that zipping a
 store folder keeps. Backslashes in entry names, as some Windows tools write

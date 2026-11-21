@@ -150,16 +150,18 @@ function zipFolderFile(input: RequestInfo | URL): ZipFolderFile | undefined {
   }
 
   for (const folder of zipFolders.values()) {
-    if (!path.startsWith(folder.prefix)) {
+    const encodedPath = zipFolderFilePath(folder, url, path)
+
+    if (encodedPath === undefined) {
       continue
     }
 
     let filePath: string
 
     try {
-      filePath = decodeURIComponent(path.slice(folder.prefix.length))
+      filePath = decodeURIComponent(encodedPath)
     } catch {
-      filePath = path.slice(folder.prefix.length)
+      filePath = encodedPath
     }
 
     return {
@@ -173,6 +175,21 @@ function zipFolderFile(input: RequestInfo | URL): ZipFolderFile | undefined {
   }
 
   return undefined
+}
+
+// A file's path in the zip's folder, still encoded, when `url` names one.
+// Readers name files `${folder.url}/<path>`, which puts the path after the
+// query of a zip URL that has one, such as a presigned URL.
+function zipFolderFilePath(
+  folder: RegisteredZipFolder,
+  url: string,
+  path: string,
+): string | undefined {
+  if (folder.url.includes('?') && url.startsWith(`${folder.url}/`)) {
+    return url.slice(folder.url.length + 1)
+  }
+
+  return path.startsWith(folder.prefix) ? path.slice(folder.prefix.length) : undefined
 }
 
 async function fetchZipFolderFile(
