@@ -540,8 +540,10 @@ transform.
   else `min`/`max`). Channels after the first open as `#c=N` loaders. An
   image without a `c` axis is one channel, white unless omero gives a colour,
   so a `z, y, x` volume gets the `Z plane` control.
-- Three channels with no omero data, or labelled/coloured R, G, B, are treated
-  as native RGB.
+- Three `uint8` channels with no omero data, or labelled/coloured R, G, B, are
+  treated as native RGB. They keep their omero labels, except R, G, B and
+  channel indices, which become Red, Green and Blue. Other dtypes are always
+  fluorescence channels.
 - Chunk bytes are fetched on the main thread. Decoding and RGBA conversion run
   in the Zarr decode worker pool (`src/workers/zarrDecodePool.ts`, up to
   `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one

@@ -237,6 +237,78 @@ describe('OME-Zarr image loader', () => {
     )
   })
 
+  it('keeps 16-bit three-channel images coloured or labelled R, G, B as fluorescence', async () => {
+    const primaries = await openOmeZarrImageWithOptions(
+      'https://example.test/images/primaries.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/primaries.zarr', {
+            omero: {
+              channels: [
+                { label: 'CD3', color: 'FF0000' },
+                { label: 'CD20', color: '00FF00' },
+                { label: 'DAPI', color: '0000FF' },
+              ],
+            },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+    const labelled = await openOmeZarrImageWithOptions(
+      'https://example.test/images/labelled.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/labelled.zarr', {
+            omero: { channels: [{ label: 'R' }, { label: 'G' }, { label: 'B' }] },
+            dtype: '<u2',
+          }),
+        ),
+      },
+    )
+
+    expect(primaries.channels.map((channel) => [channel.name, channel.color])).toEqual([
+      ['CD3', [255, 0, 0]],
+      ['CD20', [0, 255, 0]],
+      ['DAPI', [0, 0, 255]],
+    ])
+    expect(labelled.channels.map((channel) => channel.name)).toEqual(['R', 'G', 'B'])
+
+    for (const loader of [primaries, labelled]) {
+      expect(
+        loader.channels.some((channel) => channel.alphaFromIntensity === false),
+      ).toBe(false)
+    }
+  })
+
+  it('keeps the omero labels of 8-bit three-channel images coloured R, G, B', async () => {
+    const loader = await openOmeZarrImageWithOptions(
+      'https://example.test/images/stained.zarr',
+      {
+        fetcher: fetcherForFiles(
+          legacyV2OmeZarrFiles('/images/stained.zarr', {
+            omero: {
+              channels: [
+                { label: 'Eosin', color: 'FF0000' },
+                { label: 'g', color: '00FF00' },
+                { label: 'Haematoxylin', color: '0000FF' },
+              ],
+            },
+          }),
+        ),
+      },
+    )
+
+    expect(loader.channels.map((channel) => channel.name)).toEqual([
+      'Eosin',
+      'Green',
+      'Haematoxylin',
+    ])
+    expect(loader.channels.every((channel) => channel.alphaFromIntensity === false)).toBe(
+      true,
+    )
+  })
+
   it('parses v0.5 metadata under the ome attribute and converts spatial units', async () => {
     const loader = await openOmeZarrImageWithOptions(
       'https://example.test/plain/zarr.json',
