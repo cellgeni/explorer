@@ -1581,11 +1581,18 @@ function buildOmeZarrChannels(options: {
     const color = rgbChannel?.color ??
       parseOmeroColor(omeroChannel?.color) ??
       defaultColor ?? [255, 255, 255]
-    const name =
-      rgbChannel?.name ??
-      (typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''
+    const omeroLabel =
+      typeof omeroChannel?.label === 'string' && omeroChannel.label.trim() !== ''
         ? omeroChannel.label.trim()
-        : `Channel ${index + 1}`)
+        : undefined
+    // An RGB image keeps its channels' own names, but not R, G, B or the
+    // channel indices SpatialData writes.
+    const ownName =
+      rgbChannel === undefined ||
+      (omeroLabel !== String(index) && !isRgbChannelLabel(omeroLabel ?? '', rgbChannel))
+        ? omeroLabel
+        : undefined
+    const name = ownName ?? rgbChannel?.name ?? `Channel ${index + 1}`
 
     return {
       id: `Channel:${index}`,
@@ -1602,15 +1609,17 @@ function buildOmeZarrChannels(options: {
   })
 }
 
-// Three 8-bit channels without channel names or colors are treated as an RGB
-// image (for example H&E). SpatialData writes the channel coordinate as the
-// omero label, so default-named images carry labels 0, 1, 2.
+// Three 8-bit channels without channel names or colors, or labelled or
+// coloured R, G and B, are treated as an RGB image (for example H&E).
+// SpatialData writes the channel coordinate as the omero label, so
+// default-named images carry labels 0, 1, 2. Other dtypes are fluorescence,
+// whatever their colours.
 function isNativeRgbChannelSet(
   channelCount: number,
   omeroChannels: readonly Record<string, unknown>[],
   dtype: DataType,
 ): boolean {
-  if (channelCount !== RGB_CHANNELS.length) {
+  if (channelCount !== RGB_CHANNELS.length || dtype !== 'uint8') {
     return false
   }
 
@@ -1618,22 +1627,31 @@ function isNativeRgbChannelSet(
     omeroChannels.length === 0 ||
     omeroChannels.every((channel, index) => isUnnamedOmeroChannel(channel, index))
   ) {
-    return dtype === 'uint8'
+    return true
   }
 
   return RGB_CHANNELS.every((channel, index) => {
     const omeroChannel = omeroChannels[index]
     const label = typeof omeroChannel?.label === 'string' ? omeroChannel.label : ''
-    const color = parseOmeroColor(omeroChannel?.color)
-
-    const normalizedLabel = label.trim().toLowerCase()
 
     return (
-      normalizedLabel === channel.name.toLowerCase() ||
-      normalizedLabel === channel.name.charAt(0).toLowerCase() ||
-      colorsEqual(color, channel.color)
+      isRgbChannelLabel(label, channel) ||
+      colorsEqual(parseOmeroColor(omeroChannel?.color), channel.color)
     )
   })
+}
+
+// 'Red' or 'R' for the red channel, in any case.
+function isRgbChannelLabel(
+  label: string,
+  channel: (typeof RGB_CHANNELS)[number],
+): boolean {
+  const normalizedLabel = label.trim().toLowerCase()
+
+  return (
+    normalizedLabel === channel.name.toLowerCase() ||
+    normalizedLabel === channel.name.charAt(0).toLowerCase()
+  )
 }
 
 function isUnnamedOmeroChannel(channel: Record<string, unknown>, index: number): boolean {
