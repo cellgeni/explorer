@@ -156,4 +156,44 @@ describe('plot exports (plan 22-H)', () => {
       'run-violin.png',
     )
   })
+
+  it('names files from the decoded file name, keeping versions and any script', () => {
+    expect(
+      plotFileName(
+        'https://example.test/data/Brain%20section%201.h5ad',
+        'dot-plot',
+        'Cell type',
+        'svg',
+      ),
+    ).toBe('brain-section-1-dot-plot-cell-type.svg')
+    expect(
+      plotFileName('https://example.test/atlas.v2.h5ad', 'violin', null, 'csv'),
+    ).toBe('atlas-v2-violin.csv')
+    expect(
+      plotFileName('https://example.test/run.sdata.zarr.zip', 'heatmap', 'Leiden', 'png'),
+    ).toBe('run-heatmap-leiden.png')
+    expect(
+      plotFileName('https://example.test/%E8%82%BA.h5ad', 'dot-plot', '细胞类型', 'svg'),
+    ).toBe('肺-dot-plot-细胞类型.svg')
+    expect(plotFileName('https://example.test/data/x.h5ad', 'violin', '***', 'csv')).toBe(
+      'x-violin-set.csv',
+    )
+  })
+
+  it('writes a file that parses when a name holds a character XML does not allow', () => {
+    const svg = dotPlotSvg(
+      dotPlotModel({
+        ...input,
+        groups: input.groups.map((group, index) =>
+          index === 1 ? { ...group, label: 'A\u000B\u0000\uFFFE' } : group,
+        ),
+      }),
+      PANEL_PLOT_PAINT,
+      'test',
+    )
+    const document = parse(svgDocument(svg))
+
+    expect(document.querySelector('parsererror')).toBeNull()
+    expect(document.documentElement.textContent).toContain('A\uFFFD\uFFFD\uFFFD')
+  })
 })
