@@ -10,6 +10,7 @@ import {
   appTestDependencies,
   createSpatialDatasetLoaderMock,
   openControls,
+  pendingPromise,
   type AppTestDependencyProps,
 } from '../../test/appTestHarness'
 import type { SpatialDatasetDetector } from '../app-shell/appDependencies'
@@ -286,6 +287,34 @@ describe('App with a dataset collection', () => {
     })
 
     // The two cells span 0 to 10 µm, so the fitted view centres on them.
+    await waitFor(() => {
+      expect(deckView.current?.target?.[0]).toBeCloseTo(5)
+    })
+  })
+
+  it('applies the link view once, not again when its dataset loads again', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}&view=900%2C900%2C0%2C3`,
+    )
+    render(
+      <TestApp
+        loadCollection={async () => COLLECTION}
+        detectSpatialDataset={detectSpatialDataset}
+        getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(deckView.current?.target?.slice(0, 2)).toEqual([900, 900])
+    })
+
+    // Load Dataset again, as a view change reloads the open dataset.
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+    // Fitted to the two cells (0 to 10 µm), not the link's view again.
     await waitFor(() => {
       expect(deckView.current?.target?.[0]).toBeCloseTo(5)
     })
@@ -648,6 +677,42 @@ describe('App with a dataset collection', () => {
         expect(deckView.current?.target?.[0]).toBeCloseTo(5)
       })
       expect((await hashAfterWrite()).has('compare')).toBe(false)
+    })
+
+    it('keeps the sections beside the open dataset while the next one loads', async () => {
+      window.history.replaceState(
+        null,
+        '',
+        `/#xv=2&collection=${encodeURIComponent(REGISTERED.url)}&dataset=${encodeURIComponent(SECTION_1)}&compare=${encodeURIComponent(SECTION_2)}`,
+      )
+      // From the click on, Section 2 never answers, as a slow server.
+      let hold = false
+      const detect: SpatialDatasetDetector = async (baseUrl) =>
+        hold && baseUrl === SECTION_2 ? pendingPromise() : detectSpatialDataset(baseUrl)
+
+      render(
+        <TestApp
+          loadCollection={async () => REGISTERED}
+          detectSpatialDataset={detect}
+          getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+        />,
+      )
+
+      const panel = await screen.findByRole('region', { name: 'Section 2' })
+      const bar = screen.getByRole('navigation', { name: 'Collection' })
+      hold = true
+      fireEvent.click(within(panel).getByRole('button', { name: 'Open' }))
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      })
+
+      // Section 1 is still open, with Section 2 beside it.
+      expect(within(bar).getByRole('button', { name: 'Section 1' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+      expect(screen.getByRole('region', { name: 'Section 2' })).toBeInTheDocument()
+      expect((await hashAfterWrite()).getAll('compare')).toEqual([SECTION_2])
     })
 
     it('stacks serial sections in 3D, in the link, until a dataset outside opens', async () => {

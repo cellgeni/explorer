@@ -484,10 +484,24 @@ export function App({ dependencies }: AppProps = {}) {
       ? (initialShareableState.collectionUrl ?? null)
       : null,
   )
-  // The view kept when a registered section opens in place of another.
+  // The view kept when a registered section opens in place of another, for
+  // that opening only.
   const [carriedView, setCarriedView] = useState<{
     readonly url: string
     readonly view: InitialViewStateOverride
+  } | null>(null)
+  // What an opened collection entry brings (the sections beside it, the view
+  // it keeps, whether the 3D stack closes), applied when its load commits:
+  // until then, and for good if it fails or is cancelled, the open dataset
+  // keeps its own.
+  const pendingCollectionLayoutRef = useRef<{
+    readonly url: string
+    readonly carriedView: {
+      readonly url: string
+      readonly view: InitialViewStateOverride
+    } | null
+    readonly compareUrls: readonly string[]
+    readonly closesStack: boolean
   } | null>(null)
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -913,6 +927,12 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()
   ) {
     setLinkViewApplies(false)
+  }
+  // It opens that dataset once: a later load of it (a view change, or Load
+  // Dataset again) opens as any load does.
+  const [linkViewOpened, setLinkViewOpened] = useState(false)
+  if (linkViewApplies && !linkViewOpened && loadState.status === 'ready') {
+    setLinkViewOpened(true)
   }
   useEffect(() => {
     document.title = documentTitle(loadedDatasetName)
@@ -2812,23 +2832,43 @@ export function App({ dependencies }: AppProps = {}) {
       setVisiumHdRoiState,
     },
   })
-  const handleBeforeDatasetLoad = useCallback(() => {
-    clearVisiumHdRoiState()
-    clearVisiumHdExpressionProfileState()
-    // The lifecycle clears the selected cell and bin; an outline picked
-    // without an overview point (segmentations) goes too.
-    setSelectedBoundaryCell(null)
-    setGeometricAnnotations([])
-    setGeometricAnnotationImportMessage(null)
-    setFallbackNotices([])
-  }, [
-    clearVisiumHdExpressionProfileState,
-    clearVisiumHdRoiState,
-    setFallbackNotices,
-    setGeometricAnnotationImportMessage,
-    setGeometricAnnotations,
-    setSelectedBoundaryCell,
-  ])
+  const handleBeforeDatasetLoad = useCallback(
+    (datasetUrl: string) => {
+      clearVisiumHdRoiState()
+      clearVisiumHdExpressionProfileState()
+      // The lifecycle clears the selected cell and bin; an outline picked
+      // without an overview point (segmentations) goes too.
+      setSelectedBoundaryCell(null)
+      if (linkViewOpened) {
+        setLinkViewApplies(false)
+      }
+      // The opened collection entry's layout; any other load carries no view.
+      const layout = pendingCollectionLayoutRef.current
+      pendingCollectionLayoutRef.current = null
+      if (layout?.url === datasetUrl) {
+        setCarriedView(layout.carriedView)
+        setCompareUrls(layout.compareUrls)
+        if (layout.closesStack) {
+          setSectionStackCollectionUrl(null)
+        }
+      } else {
+        setCarriedView(null)
+      }
+      setGeometricAnnotations([])
+      setGeometricAnnotationImportMessage(null)
+      setFallbackNotices([])
+    },
+    [
+      clearVisiumHdExpressionProfileState,
+      clearVisiumHdRoiState,
+      linkViewOpened,
+      setCompareUrls,
+      setFallbackNotices,
+      setGeometricAnnotationImportMessage,
+      setGeometricAnnotations,
+      setSelectedBoundaryCell,
+    ],
+  )
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
@@ -4446,26 +4486,24 @@ export function App({ dependencies }: AppProps = {}) {
   const handleSelectCollectionEntry = (entry: DatasetCollectionEntry) => {
     const view = linkedViewChannel.getView()
 
-    setCarriedView(
-      view !== null && keepsViewOnOpening(readyCollection, loadedDatasetUrl, entry.url)
-        ? {
-            url: entry.url,
-            view: { target: [view.target[0], view.target[1], 0], zoom: view.zoom },
-          }
-        : null,
-    )
-    setCompareUrls(
-      compareUrlsAfterOpening(
+    pendingCollectionLayoutRef.current = {
+      url: entry.url,
+      carriedView:
+        view !== null && keepsViewOnOpening(readyCollection, loadedDatasetUrl, entry.url)
+          ? {
+              url: entry.url,
+              view: { target: [view.target[0], view.target[1], 0], zoom: view.zoom },
+            }
+          : null,
+      compareUrls: compareUrlsAfterOpening(
         readyCollection,
         loadedDatasetUrl,
         linkedSections,
         entry.url,
       ),
-    )
-    // A section of another stack keeps the 3D view; any other dataset opens
-    // in 2D.
-    if (stackSections(readyCollection, entry.url).length === 0) {
-      setSectionStackCollectionUrl(null)
+      // A section of another stack keeps the 3D view; any other dataset
+      // opens in 2D.
+      closesStack: stackSections(readyCollection, entry.url).length === 0,
     }
     handleOpenCollectionDataset(
       entry.url,

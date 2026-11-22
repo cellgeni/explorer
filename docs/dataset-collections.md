@@ -408,7 +408,9 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
 - **Opening another section.** Choosing another section of the coordinate
   system in the bar keeps the view and the panels; choosing a panel's section
   swaps it with the open one. A dataset outside the coordinate system closes
-  the panels and fits the view.
+  the panels and fits the view. The panels change when the next dataset
+  opens: while it loads, and if it cannot be opened or is cancelled, the open
+  dataset keeps its own.
 
 ## 3D Stack
 
