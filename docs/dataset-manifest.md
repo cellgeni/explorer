@@ -365,7 +365,7 @@ Segmentation section keeps it removed until the dataset is opened again. See
 | `spatialdata` | `table`                   | Table element name, without `tables/`                                                                                        |
 | `spatialdata` | `coordinateSystem`        | Coordinate system to show                                                                                                    |
 | `spatialdata` | `image`                   | Image element name, without `images/`                                                                                        |
-| `spatialdata` | `micrometersPerUnit`      | Scale for stores that do not declare one; shown as the `µm per unit` value                                                   |
+| `spatialdata` | `micrometersPerUnit`      | µm per coordinate unit, used instead of what the store declares; shown as the `µm per unit` value                            |
 | `h5ad`        | `coordinates`             | `micrometers` (default) or `image-pixels`: what the cell coordinates are in. Needs `files.image`                             |
 | `h5ad`        | `labelColumn`             | The obs column holding each cell's label value. Needs `files.labels`                                                         |
 | `image`       | `segmentationFormat`      | `label-tiff`, `label-zarr`, `geojson`, `wkt` or `parquet`: the format of `files.segmentation` when its name does not tell it |

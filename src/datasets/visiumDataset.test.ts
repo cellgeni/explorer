@@ -2,7 +2,12 @@ import { gzipSync } from 'node:zlib'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { overviewCellMetadata } from '../data/cellMetadata'
 import { micrometers } from '../data/coords'
-import { createVisiumDataset, type VisiumFileUrls } from './visiumDataset'
+import {
+  createVisiumDataset,
+  visiumAnnDataTable,
+  type VisiumFileUrls,
+} from './visiumDataset'
+import { parseVisiumTissuePositions } from './visiumFormat'
 import { VISIUM_SPOT_AREA_SQUARE_MICROMETERS } from './visiumFormat'
 
 const ROOT = 'https://example.test/visium/outs'
@@ -375,6 +380,42 @@ describe('createVisiumDataset', () => {
         SPOTS[2]?.barcode ?? '',
       ),
     ).toEqual({ geneNames: ['Actb', 'Gad1'], counts: [3, 2] })
+  })
+
+  it('counts gene expression only in total_counts and n_genes_by_counts', () => {
+    // CytAssist Gene and Protein Expression: Antibody Capture beside genes.
+    const table = visiumAnnDataTable({
+      positions: parseVisiumTissuePositions(
+        [
+          'barcode,in_tissue,array_row,array_col,pxl_row_in_fullres,pxl_col_in_fullres',
+          'AAA-1,1,0,0,100,200',
+          'CCC-1,1,0,2,100,300',
+        ].join('\n'),
+      ),
+      scalefactors: {},
+      matrix: {
+        barcodes: ['AAA-1', 'CCC-1'],
+        featureNames: ['GENE1', 'GENE2', 'CD3'],
+        featureIds: ['ENSG1', 'ENSG2', 'CD3'],
+        featureTypes: ['Gene Expression', 'Gene Expression', 'Antibody Capture'],
+        // AAA-1: GENE1 5, CD3 900. CCC-1: GENE2 7.
+        data: new Int32Array([5, 900, 7]),
+        indices: new Int32Array([0, 2, 1]),
+        indptr: new Float64Array([0, 2, 3]),
+      },
+    })
+    const column = (name: string) => {
+      const found = table.obs.find((entry) => entry.name === name)
+      return found?.kind === 'numeric' ? Array.from(found.values, Number) : []
+    }
+
+    expect(column('total_counts')).toEqual([5, 7])
+    expect(column('n_genes_by_counts')).toEqual([1, 1])
+    // The antibody stays in X, beside the genes.
+    expect(table.varNames).toEqual(['GENE1', 'GENE2', 'CD3'])
+    expect(Array.from(table.X.kind === 'csr' ? table.X.data : [], Number)).toEqual([
+      5, 900, 7,
+    ])
   })
 
   it('reports a filtered matrix above the browser load limit', async () => {

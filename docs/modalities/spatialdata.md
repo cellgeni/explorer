@@ -224,7 +224,7 @@ thread keeps no object or typed array per shape.
   GeoJSON-shaped values are still accepted.
 - Instance ids: the first pandas `index_columns` entry, or a `RangeIndex`
   start/step.
-- Points become circles with diameter from the `radius` column (default 1)
+- Points become circles whose radius is the `radius` column (default 1)
   times the affine scale.
 - Polygons keep only the outer ring of their largest polygon, as interleaved
   x, y in the shared ring buffer. A 598,222-cell Xenium `cell_boundaries`
