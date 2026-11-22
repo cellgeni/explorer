@@ -365,6 +365,26 @@ describe('cell image measurements', () => {
       expect(values(result.mean)).toEqual([20, 7])
     })
 
+    it('reads a level one chunk wide at its own scale', async () => {
+      // 9 pixels at 1 µm; level 1 is 5 pixels at 2 µm, its last pixel past
+      // the image's 9 µm.
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 9,
+        height: 9,
+        levels: 2,
+        chunkSize: 16,
+        pixel: (x) => x * 10,
+      })
+
+      expect(cellImageLevels(loader).map((level) => level.micrometersPerPixel)).toEqual([
+        1, 2,
+      ])
+      // x = 7.4 µm is in level 1’s pixel 3, which holds level 0’s pixel 6.
+      const result = await measure(loader, [cell(7.4, 5)], { level: 1, radius: 0.9 })
+
+      expect(values(result.mean)).toEqual([60])
+    })
+
     it('sizes the read as the chunks decoded, at most', async () => {
       const { loader } = await fakeOmeZarrCellImage({
         width: 16,

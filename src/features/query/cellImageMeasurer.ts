@@ -145,6 +145,8 @@ function levelGeometry(loader: CellImageLoader, level: number): LevelGeometry {
   if (chunks !== undefined) {
     return {
       ...placed,
+      micrometersPerPixel: chunks.micrometersPerPixel,
+      micrometersPerPixelY: chunks.micrometersPerPixelY,
       tileWidth: chunks.chunkWidth,
       tileHeight: chunks.chunkHeight,
       cols: Math.ceil(width / chunks.chunkWidth),

@@ -142,6 +142,10 @@ export interface ImagePyramidChunkGrid {
   readonly chunkHeight: number
   // A chunk decoded, with every channel and plane it holds.
   readonly chunkBytes: number
+  // The level's pixel size, from its scale. The first tile's bounds are cut
+  // to the image's extent, so on a level one chunk wide they give another.
+  readonly micrometersPerPixel: number
+  readonly micrometersPerPixelY: number
 }
 
 // A chunk as stored, with what a decode worker needs to read the loader's
