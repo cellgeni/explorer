@@ -1518,6 +1518,83 @@ describe('AnnDataH5adDataset', () => {
   })
 })
 
+describe('AnnDataH5adDataset attached image with non-square pixels', () => {
+  // Pixels 0.5 µm wide and 2 µm tall.
+  const loader = {
+    url: 'https://example.test/he.zarr',
+    imageWidth: 100,
+    imageHeight: 100,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(0.5),
+      yMicrometersPerPixel: micrometers(2),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    channels: [],
+  } as unknown as ImagePyramidLoader
+  const memorySource = {
+    label: 'Memory table',
+    load: async () => ({
+      obsNames: ['1', '2'],
+      obs: [],
+      varNames: ['A'],
+      X: {
+        kind: 'csr' as const,
+        data: new Float32Array([1, 2]),
+        indices: new Int32Array([0, 0]),
+        indptr: new Int32Array([0, 1, 2]),
+      },
+      // Image pixels (x, y).
+      obsm: { spatial: { values: new Float32Array([20, 10, 60, 40]), columns: 2 } },
+    }),
+  }
+
+  it('places image-pixel coordinates by the pixel width and height', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://anisotropic',
+      memorySource,
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage: vi.fn().mockResolvedValue(loader),
+    })
+    const overview = await dataset.overview()
+
+    expect(overview.map((point) => point.position)).toEqual([
+      { x: micrometers(10), y: micrometers(20) },
+      { x: micrometers(30), y: micrometers(80) },
+    ])
+  })
+
+  it('converts the view to label pixels by the pixel height', async () => {
+    // 50 x 50 label pixels over the 100 x 100 image: each 1 µm wide, 4 µm tall.
+    const outlines = vi.fn(async () => [])
+    const openLabels = vi.fn(async () => ({
+      levels: [{ width: 50, height: 50 }],
+      outlines,
+    })) as unknown as AnnDataLabelsOpener
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://anisotropic-labels',
+      memorySource,
+      image: { url: loader.url, coordinates: 'micrometers', labelsUrl: 'labels.zarr' },
+      openImage: vi.fn().mockResolvedValue(loader),
+      openLabels,
+    })
+
+    await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(100),
+      minY: micrometers(0),
+      maxY: micrometers(100),
+    })
+
+    expect(outlines).toHaveBeenCalledWith(
+      { minX: 0, minY: 0, maxX: 100, maxY: 25 },
+      expect.anything(),
+    )
+  })
+})
+
 describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
   // The tiny fixture's matrix, cells by genes (Actb, Gad1, Gapdh).
   const expected = {

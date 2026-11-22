@@ -19,6 +19,9 @@ import type { VectorSegmentationReader } from './vectorSegmentationWorker'
 // The image the segmentation was drawn on, which places it.
 export interface SegmentationPlacement {
   readonly micrometersPerPixel: number
+  // The pixel height, when it differs from the width (OME-Zarr can declare
+  // non-square pixels).
+  readonly yMicrometersPerPixel?: number
   // Full-resolution size in pixels.
   readonly imageWidth: number
   readonly imageHeight: number
@@ -87,6 +90,10 @@ export async function openImportedSegmentation(
     format: source.format as 'geojson' | 'wkt' | 'parquet',
     micrometersPerUnit:
       source.coordinates === 'micrometers' ? 1 : placement.micrometersPerPixel,
+    ...(source.coordinates === 'micrometers' ||
+    placement.yMicrometersPerPixel === undefined
+      ? {}
+      : { yMicrometersPerUnit: placement.yMicrometersPerPixel }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
   })
@@ -150,6 +157,10 @@ function tiffLabelUrl(source: SegmentationSource): string {
   return `picked-file://${pickedFileCount.toString()}/${encodeURIComponent(source.url)}`
 }
 
+function placementPixelHeight(placement: SegmentationPlacement): number {
+  return placement.yMicrometersPerPixel ?? placement.micrometersPerPixel
+}
+
 // Mask pixels -> µm: the mask covers the image, so a mask on the image's own
 // pixel grid lines up pixel for pixel and a downsampled one is stretched.
 function maskToMicrometers(
@@ -162,7 +173,7 @@ function maskToMicrometers(
     b: 0,
     c: 0,
     d: 0,
-    e: (placement.micrometersPerPixel * placement.imageHeight) / maskHeight,
+    e: (placementPixelHeight(placement) * placement.imageHeight) / maskHeight,
     f: 0,
   }
 }
@@ -279,7 +290,7 @@ class LabelSegmentation implements ImportedSegmentation {
       minX: micrometers(0),
       minY: micrometers(0),
       maxX: micrometers(placement.imageWidth * placement.micrometersPerPixel),
-      maxY: micrometers(placement.imageHeight * placement.micrometersPerPixel),
+      maxY: micrometers(placement.imageHeight * placementPixelHeight(placement)),
     }
     const warning = maskPlacementWarning(this.maskSize, placement)
 
@@ -384,7 +395,7 @@ function vectorPlacementWarning(
   }
 
   const width = placement.imageWidth * placement.micrometersPerPixel
-  const height = placement.imageHeight * placement.micrometersPerPixel
+  const height = placement.imageHeight * placementPixelHeight(placement)
   const other = source.coordinates === 'pixels' ? 'Micrometres' : 'Pixels'
 
   if (maxX > width * 1.05 || maxY > height * 1.05) {

@@ -31,8 +31,10 @@ export interface ReadVectorSegmentationOptions {
   readonly file: VectorSegmentationFile
   readonly format: VectorSegmentationFormat
   // Micrometres per file coordinate: the image's pixel size for pixel
-  // coordinates, or 1.
+  // coordinates, or 1. `yMicrometersPerUnit` is the pixel height when it
+  // differs from the width.
   readonly micrometersPerUnit: number
+  readonly yMicrometersPerUnit?: number
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
   readonly compressors?: Compressors
@@ -90,15 +92,16 @@ export async function readVectorSegmentation(
   options: ReadVectorSegmentationOptions,
 ): Promise<SpatialDataShapes> {
   const scale = options.micrometersPerUnit
+  const yScale = options.yMicrometersPerUnit ?? scale
 
-  if (!Number.isFinite(scale) || scale <= 0) {
+  if (!Number.isFinite(scale) || scale <= 0 || !Number.isFinite(yScale) || yScale <= 0) {
     throw new Error(
       'Segmentation coordinates need a positive micrometres-per-unit scale.',
     )
   }
 
   const builder = new SpatialDataShapesBuilder()
-  const affine: Affine2D = { a: scale, b: 0, c: 0, d: 0, e: scale, f: 0 }
+  const affine: Affine2D = { a: scale, b: 0, c: 0, d: 0, e: yScale, f: 0 }
   let count = 0
   const add: AddShape = (id, ring) => {
     builder.addPolygon(id, ring, affine)

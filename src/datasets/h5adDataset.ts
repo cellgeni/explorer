@@ -8,7 +8,12 @@ import {
 import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { getWholeArray } from '../zarr/zarrWholeArray'
-import { micrometers, type BBox, type DataPoint } from '../data/coords'
+import {
+  micrometers,
+  micrometersPerPixelY,
+  type BBox,
+  type DataPoint,
+} from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import {
   normalizeRoiSelection,
@@ -1376,9 +1381,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       return []
     }
 
-    const micrometersPerPixel = image.units.micrometersPerPixel
-    const scaleX = (micrometersPerPixel * image.imageWidth) / labels.width
-    const scaleY = (micrometersPerPixel * image.imageHeight) / labels.height
+    const scaleX = (image.units.micrometersPerPixel * image.imageWidth) / labels.width
+    const scaleY = (micrometersPerPixelY(image.units) * image.imageHeight) / labels.height
     const outlines = await reader.outlines(
       {
         minX: bbox.minX / scaleX,
@@ -1423,12 +1427,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
-  // Micrometres per coordinate unit: the attached image's pixel size when the
-  // coordinates are its pixels, else 1. An image that cannot be opened leaves
-  // the coordinates as they are; image() reports the failure.
-  private async coordinateScale(): Promise<number> {
+  // Micrometres per coordinate unit along x and y: the attached image's pixel
+  // width and height when the coordinates are its pixels, else 1. An image
+  // that cannot be opened leaves the coordinates as they are; image() reports
+  // the failure.
+  private async coordinateScale(): Promise<CoordinateScale> {
     if (this.attachedImage?.coordinates !== 'image-pixels') {
-      return 1
+      return UNIT_COORDINATE_SCALE
     }
 
     const loader = await this.attachedImageLoaderOrNull()
@@ -1437,10 +1442,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.onProgress?.(
         'Attached image could not be opened, so cell coordinates are read as micrometres',
       )
-      return 1
+      return UNIT_COORDINATE_SCALE
     }
 
-    return loader.units.micrometersPerPixel
+    return { x: loader.units.micrometersPerPixel, y: micrometersPerPixelY(loader.units) }
   }
 
   // A Visium tissue image placed with its `tissue_<kind>_scalef`. Images held
@@ -1744,17 +1749,25 @@ async function readSpatialDataInstanceKey(
   }
 }
 
-function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
-  if (scale === 1) {
+interface CoordinateScale {
+  readonly x: number
+  readonly y: number
+}
+
+const UNIT_COORDINATE_SCALE: CoordinateScale = { x: 1, y: 1 }
+
+// Depths in image pixels are scaled by the pixel width.
+function withCoordinateScale(base: H5adCache, scale: CoordinateScale): H5adCache {
+  if (scale.x === 1 && scale.y === 1) {
     return base
   }
 
   const coordinates = base.coordinates.map((point) =>
     isFinitePoint(point)
-      ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
+      ? { x: micrometers(point.x * scale.x), y: micrometers(point.y * scale.y) }
       : point,
   )
-  const depths = base.depths?.map((z) => z * scale) ?? null
+  const depths = base.depths?.map((z) => z * scale.x) ?? null
 
   return { ...base, coordinates, depths, extent: bboxForPoints(coordinates) }
 }

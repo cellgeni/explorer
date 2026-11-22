@@ -331,8 +331,10 @@ SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
   collection is read.
 - **Placement.** With `coordinates: "image-pixels"`, the dataset opens the
   image (`attachedImageLoader`, once per instance) before placing its cells
-  and multiplies the obsm coordinates by the image's micrometres per pixel, so
-  the cells, the image, the scale bar and every distance are in micrometres.
+  and multiplies the obsm coordinates by the image's micrometres per pixel
+  (its pixel width for x and height for y, which differ for some OME-Zarr
+  images), so the cells, the image, the scale bar and every distance are in
+  micrometres.
   With `micrometers`, the default, the coordinates are used as they are and
   the image is placed by its own pixel size. If the image cannot be opened,
   the coordinates are used as they are, with a line in the log.

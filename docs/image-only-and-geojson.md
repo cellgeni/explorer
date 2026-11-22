@@ -163,7 +163,8 @@ label value, or for polygons the first of these that the file has:
   downsampled image, is stretched to fit. The section says so when the mask
   is not the image's shape.
 - **Polygons** are in full-resolution image pixels by default, as Cellpose,
-  QuPath and StarDist write them, and placed by the image's pixel size.
+  QuPath and StarDist write them, and placed by the image's pixel size: its
+  width for x and its height for y, which differ for some OME-Zarr images.
   Choose `Coordinates` › `Micrometres` for micrometre files such as
   Xenium's. The section warns when the outlines reach beyond the image, or
   cover only its top-left part, which usually means the other units.
