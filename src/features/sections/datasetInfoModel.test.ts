@@ -1,8 +1,10 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { reportZarrCodecWorkerFailure } from '../../zarr/zarrCodecWorkerStatus'
+import type { ImagePyramidLoader } from '../../data/imagePyramid'
 import {
   datasetFacts,
+  datasetImageSize,
   useDatasetInfoModel,
   type DatasetFactsInput,
   type DatasetInfoModelInput,
@@ -188,15 +190,22 @@ describe('datasetFacts', () => {
     channelCount: 4,
     zPlaneCount: 1,
     hasFlatImage: false,
+    imageSize: {
+      width: 40_960,
+      height: 31_232,
+      widthMicrometers: 8704,
+      heightMicrometers: 6636.8,
+    },
     micrometersPerPixel: 0.2125,
   }
 
-  it('lists the platform, exact counts, image, pixel size and address', () => {
+  it('lists the platform, exact counts, image, its size, pixel size and address', () => {
     expect(datasetFacts(xenium)).toEqual([
       { label: 'Platform', value: 'Xenium' },
       { label: 'Cells', value: '1,414,155' },
       { label: 'Genes', value: '5,001' },
       { label: 'Image', value: '4 channels' },
+      { label: 'Image size', value: '40,960 × 31,232 px · 8.7 × 6.64 mm' },
       { label: 'Pixel size', value: '0.2125 µm/px' },
       { label: 'Address', value: 'https://example.test/output' },
     ])
@@ -211,6 +220,7 @@ describe('datasetFacts', () => {
         elementCount: 370,
         channelCount: 0,
         hasFlatImage: true,
+        imageSize: null,
         micrometersPerPixel: undefined,
       }).map((fact) => fact.value),
     ).toEqual(['Visium', '370', '5,001', 'Tissue image', 'https://example.test/output'])
@@ -222,10 +232,53 @@ describe('datasetFacts', () => {
         channelCount: 1,
         zPlaneCount: 15,
       }).map((fact) => fact.label),
-    ).toEqual(['Platform', 'Image', 'Pixel size', 'Address'])
+    ).toEqual(['Platform', 'Image', 'Image size', 'Pixel size', 'Address'])
     expect(datasetFacts({ ...xenium, channelCount: 1, zPlaneCount: 15 })[3]?.value).toBe(
       '1 channel · 15 z planes',
     )
+  })
+
+  it('gives an image size in µm when it is small, and only pixels when uncalibrated', () => {
+    const small = {
+      width: 2048,
+      height: 1024,
+      widthMicrometers: 665.6,
+      heightMicrometers: 332.8,
+    }
+
+    expect(datasetFacts({ ...xenium, imageSize: small })[4]?.value).toBe(
+      '2,048 × 1,024 px · 666 × 333 µm',
+    )
+    expect(
+      datasetFacts({ ...xenium, imageSize: small, micrometersPerPixel: undefined })[4]
+        ?.value,
+    ).toBe('2,048 × 1,024 px')
+  })
+
+  it('sizes a pyramid by level 0 and a flat image at full resolution', () => {
+    const loader = {
+      imageWidth: 1000,
+      imageHeight: 500,
+      units: { micrometersPerPixel: 0.5, yMicrometersPerPixel: 2 },
+    } as unknown as ImagePyramidLoader
+
+    expect(datasetImageSize(loader, null)).toEqual({
+      width: 1000,
+      height: 500,
+      widthMicrometers: 500,
+      heightMicrometers: 1000,
+    })
+    expect(
+      datasetImageSize(null, {
+        size: [2000, 1800],
+        scaleFactor: 0.08,
+        micrometersPerPixel: 0.3236,
+      }),
+    ).toMatchObject({ width: 25_000, height: 22_500 })
+    expect(
+      datasetImageSize(null, { scaleFactor: 0.08, micrometersPerPixel: 0.3236 }),
+    ).toBeNull()
+    expect(datasetImageSize(null, null)).toBeNull()
   })
 
   it('is empty in the model until a dataset is ready', () => {

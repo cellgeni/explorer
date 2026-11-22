@@ -37,7 +37,10 @@ import {
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
 import { useAnnotationsSectionModel } from './features/sections/annotationsSectionModel'
 import { useCellsSectionModel } from './features/sections/cellsSectionModel'
-import { useDatasetInfoModel } from './features/sections/datasetInfoModel'
+import {
+  datasetImageSize,
+  useDatasetInfoModel,
+} from './features/sections/datasetInfoModel'
 import { useImageSectionModel } from './features/sections/imageSectionModel'
 import { useTranscriptsSectionModel } from './features/sections/transcriptsSectionModel'
 import { useViewSettingsModel } from './features/sections/viewSettingsModel'
@@ -4360,6 +4363,10 @@ export function App({ dependencies }: AppProps = {}) {
             channelCount: morphologyChannels.length,
             zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
             hasFlatImage: flatMorphologyImage !== null,
+            imageSize: datasetImageSize(
+              morphologyImage?.loader ?? null,
+              flatMorphologyImage,
+            ),
             micrometersPerPixel: viewerMicrometersPerPixel,
           }
         : null,
