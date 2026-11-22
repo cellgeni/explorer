@@ -181,10 +181,22 @@ export async function summarizeVisiumHdMagicLensSelection({
     sameGeneSet(geneExpressionBatch.genes, selectedGenes)
       ? geneExpressionBatch
       : null
+  // Expression is read for the selection's bounding box, and the reader keeps
+  // the first `limit` bins of it. A lasso can hold fewer bins than the lens
+  // limit while its box holds more, so the limit covers every bin the box can
+  // hold, up to a cap; past the cap the summary says it may be incomplete.
+  const boxBins = boxBinCapacity(
+    normalizedSelection.bbox,
+    selectedBinSize ?? gridCells.binSizeMicrometers,
+  )
+  const boxLimit = Math.min(
+    Math.max(MAGIC_LENS_CELL_LIMIT, boxBins ?? 0),
+    MAGIC_LENS_BOX_BIN_LIMIT,
+  )
   const expressionBatch =
     reusableExpressionBatch ??
     (await loadGeneExpression(datasetUrl, normalizedSelection.bbox, selectedGenes, {
-      limit: MAGIC_LENS_CELL_LIMIT,
+      limit: boxLimit,
       signal: loaderOptions.signal,
     }))
   const filteredExpressionElements = expressionBatch.elements.filter((element) =>
@@ -211,8 +223,31 @@ export async function summarizeVisiumHdMagicLensSelection({
     selectedBins.length,
     filteredExpressionBatch,
     selectedGenes,
-    { hitLimit: selectedBinsResult.hitBinLimit },
+    {
+      hitLimit:
+        selectedBinsResult.hitBinLimit ||
+        (reusableExpressionBatch === null && (boxBins ?? 0) > boxLimit),
+    },
   )
+}
+
+// Bins of the selection's box read for its expression at most; beyond this a
+// lens over a thin, long lasso is marked as possibly incomplete.
+const MAGIC_LENS_BOX_BIN_LIMIT = 200_000
+
+// How many bins of `binSizeMicrometers` can meet `bbox`, allowing for a grid
+// rotated against it; null without a bin size.
+function boxBinCapacity(
+  bbox: BBox,
+  binSizeMicrometers: number | undefined,
+): number | null {
+  if (binSizeMicrometers === undefined || !(binSizeMicrometers > 0)) {
+    return null
+  }
+
+  const columns = (bbox.maxX - bbox.minX) / binSizeMicrometers + 2
+  const rows = (bbox.maxY - bbox.minY) / binSizeMicrometers + 2
+  return Math.ceil(columns * rows)
 }
 
 function sameBbox(left: BBox, right: BBox): boolean {

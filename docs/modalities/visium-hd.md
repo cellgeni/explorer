@@ -218,6 +218,12 @@ selecting the size again retries it. After a failed load, selected-gene
 overlays, ROI, Magic Lens and the Bin card read the drawn tier
 (`visiumHdActiveBinSize`); while a tier loads they read the new size.
 
+The Magic Lens reads selected-gene expression for its selection's bounding
+box and keeps the bins in the lens or ROI. It asks for every bin the box can
+hold, since a lasso can hold fewer bins than the 25,000-bin lens limit while
+its box holds more; past 200,000 the summary is marked as possibly
+incomplete.
+
 ## Caching And Workers
 
 - `VisiumHdDatasetReaderController` caches overviews per tier and one

@@ -180,6 +180,77 @@ describe('summarizeVisiumHdMagicLensSelection', () => {
   })
 })
 
+describe('summarizeVisiumHdMagicLensSelection over a lasso', () => {
+  // A thin lasso along the diagonal holds two bins, but its box is large.
+  function lasso(size: number): RoiSelection {
+    return {
+      kind: 'lasso',
+      bbox: {
+        minX: micrometers(0),
+        minY: micrometers(0),
+        maxX: micrometers(size),
+        maxY: micrometers(size),
+      },
+      points: [
+        { x: micrometers(0), y: micrometers(0) },
+        { x: micrometers(size), y: micrometers(size) },
+        { x: micrometers(size - 1), y: micrometers(size) },
+        { x: micrometers(0), y: micrometers(1) },
+      ],
+    }
+  }
+
+  async function summarize(selection: RoiSelection) {
+    const limits: (number | undefined)[] = []
+    const loadGeneExpression = vi.fn(
+      async (
+        _url: string,
+        _bbox: unknown,
+        _genes: readonly string[],
+        options?: { readonly limit?: number },
+      ) => {
+        limits.push(options?.limit)
+        return geneExpressionBatch(['s_008um_1_1'], ['DCN'], [7])
+      },
+    )
+    const summary = await summarizeVisiumHdMagicLensSelection({
+      baseUrl: 'https://example.test/visium',
+      controls: { selectedBinSize: 8 },
+      data: {
+        currentViewportDetail: null,
+        geneExpressionBatch: null,
+        gridCells,
+        readyDatasetUrl: null,
+        selectedGenes: ['DCN'],
+      },
+      loaders: { getSpatialDataset: vi.fn(), loadGeneExpression },
+      loaderOptions: {
+        signal: new AbortController().signal,
+        scope: 'roi',
+        circleFilter: null,
+      },
+      selection,
+    })
+
+    return { summary, limit: limits[0] }
+  }
+
+  it('reads every bin of the box, not the first 25,000', async () => {
+    // 1,600 µm of 8 µm bins: up to (200 + 2)² bins meet the box.
+    const { summary, limit } = await summarize(lasso(1_600))
+
+    expect(limit).toBe(202 * 202)
+    expect(summary).toMatchObject({ cellCount: 2, hitLimit: false })
+  })
+
+  it('says the summary may be incomplete past the box cap', async () => {
+    const { summary, limit } = await summarize(lasso(8_000))
+
+    expect(limit).toBe(200_000)
+    expect(summary).toMatchObject({ hitLimit: true })
+  })
+})
+
 function matrixResult(
   ids: readonly string[],
   genes: readonly string[],
