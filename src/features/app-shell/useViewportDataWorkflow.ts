@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
+  geneExpressionReadCovers,
   geneExpressionRequestKey,
   geneExpressionWaitingKey,
   planGeneExpressionLod,
   type GeneExpressionDetailMode,
+  type GeneExpressionReadArea,
 } from '../../data/geneExpressionLod'
 import { formatGeneExpressionStageTiming } from '../../data/geneExpressionTiming'
 import {
@@ -200,6 +202,9 @@ export function useViewportDataWorkflow({
   // it is only trusted while that key is still current.
   const cellBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
   const nucleusBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
+  // Box of the last expression read, trusted only while its key is the
+  // current one (clearing the key asks for a new read).
+  const geneExpressionReadRef = useRef<GeneExpressionReadArea | null>(null)
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -346,7 +351,15 @@ export function useViewportDataWorkflow({
         selectedGenes,
       )
 
-      if (expressionKey === geneExpressionViewportKeyRef.current) {
+      if (
+        expressionKey === geneExpressionViewportKeyRef.current &&
+        geneExpressionReadCovers(
+          geneExpressionReadRef.current,
+          expressionKey,
+          expressionPlan,
+          detail.bbox,
+        )
+      ) {
         return
       }
 
@@ -356,6 +369,7 @@ export function useViewportDataWorkflow({
       })
       const expressionStartedAt = readTimestamp()
       geneExpressionViewportKeyRef.current = expressionKey
+      geneExpressionReadRef.current = { key: expressionKey, bbox: expressionPlan.bbox }
       setGeneExpressionState(
         geneExpressionLoadStarted(
           loadState.url,

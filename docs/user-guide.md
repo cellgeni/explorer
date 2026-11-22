@@ -276,12 +276,13 @@ The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,
 the default `Expression detail` under Advanced, loads expression for every
 cell in datasets of up to 500,000 cells, the same as `All cells`, which
-scores every cell on the slide. Larger datasets load the cells in view when
-zoomed in. When zoomed out they load a sample that keeps every cell expressing
-the selected genes and thins only the cells without. `Exact region` keeps the
-current viewport exact when the region is small enough, and samples the same
-way above that. Visium HD uses coarser bins when zoomed out. The default gene
-scale is Plasma.
+scores every cell on the slide. Larger datasets load the cells in view, with a
+margin around them, when zoomed in, and load again when a pan or a wider
+window leaves that area. When zoomed out they load a sample that keeps every
+cell expressing the selected genes and thins only the cells without.
+`Exact region` reads every cell of the viewport and its margin when the region
+is small enough, and samples the same way above that. Visium HD uses coarser
+bins when zoomed out. The default gene scale is Plasma.
 
 For H5AD, SpatialData, and MERSCOPE, categorical and string `obs` columns load as
 annotation sets, and numeric `obs` values appear in the Cell card for the

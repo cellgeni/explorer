@@ -440,22 +440,29 @@ All cells.
 
 - **Auto LOD**: every cell on the slide for datasets of up to 500,000 cells.
   Larger datasets: a whole-slide sample when zoomed far out or more than
-  100,000 cells are visible, the exact viewport when ≤ 50,000 are visible,
-  otherwise a sample of the padded viewport. Samples keep every cell expressing
-  the selected genes and thin only the cells without.
-- **Exact region**: exact viewport when ≤ 50,000 cells are visible, sampled the
-  same way above that.
+  100,000 cells are visible, every cell of the padded viewport when ≤ 50,000
+  are visible, otherwise a sample of the padded viewport. Samples keep every
+  cell expressing the selected genes and thin only the cells without.
+- **Exact region**: every cell of the padded viewport when ≤ 50,000 cells are
+  visible, sampled the same way above that.
 - **All cells**: every cell on the slide.
+
+The padded viewport adds a margin on each side: a quarter of the view's width
+and height for exact reads, less as the view nears 50,000 cells (so the read
+stays near 50,000 cells), and a fifth for samples. Expression is read again
+when the zoom changes (by a quarter level for samples), and when a pan or a
+wider viewer takes the view outside the area read, so every cell in view has
+its score.
 
 `Combine genes` Z-score compares each cell's mean with the mean and standard
 deviation of the cells read: all cells when the whole slide is read (Auto LOD
 up to 500,000 cells, its whole-slide sample, or All cells), otherwise the
-cells read for the viewport. Cells without expression count as 0 on every
-platform, including those a sample thins. Zoomed out, Visium HD reads 16 µm
-bins in place of finer ones, and compares those. The legend says which: "Mean
-z-score of n genes per cell, relative to all cells" or "… relative to cells in
-view". A cell's z-score can therefore change as the view moves on a large
-dataset, but not between platforms.
+cells read for the padded viewport. Cells without expression count as 0 on
+every platform, including those a sample thins. Zoomed out, Visium HD reads
+16 µm bins in place of finer ones, and compares those. The legend says which:
+"Mean z-score of n genes per cell, relative to all cells" or "… relative to
+cells in view". A cell's z-score can therefore change as the view moves on a
+large dataset, but not between platforms.
 
 A stored NaN or infinite value colours its cell as no expression. It is left
 out of the z-score's mean and standard deviation and of the Gene scale's top,
