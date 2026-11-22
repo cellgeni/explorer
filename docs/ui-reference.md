@@ -50,7 +50,8 @@ in `App.tsx` (see [architecture.md](architecture.md#section-models)).
 
 The browser tab reads "{dataset} · Spatial Omics Explorer" once a dataset has
 loaded. The name is the manifest's `name`, or else the last part of the URL
-that is not `outs`, `explorer.json` or `experiment.xenium`. The favicon is
+that is not `outs`, `explorer.json` or `experiment.xenium`, or the host for a
+dataset served from its root (`127.0.0.1:8080`). The favicon is
 `public/favicon.svg`.
 
 ## Start Screen

@@ -5,6 +5,7 @@ import {
   datasetManifestAbout,
   manifestDefaultsNotShared,
   manifestDefaultsToShareableState,
+  imageDatasetChannelIds,
   resolveMorphologyChannelSelection,
 } from './datasetManifestModel'
 
@@ -116,6 +117,23 @@ describe('resolveMorphologyChannelSelection', () => {
       ['Channel:0:0'],
     )
     expect(resolveMorphologyChannelSelection(channels, [], ['Channel:0:0'])).toEqual([])
+  })
+})
+
+describe('imageDatasetChannelIds', () => {
+  const eight = Array.from({ length: 8 }, (_, index) =>
+    channel(`Channel:0:${index}`, `Marker ${index}`),
+  )
+
+  it('opens the first six channels when nothing lists any, link or not', () => {
+    expect(imageDatasetChannelIds(eight, undefined)).toEqual(
+      eight.slice(0, 6).map((entry) => entry.info.id),
+    )
+  })
+
+  it('opens the channels a link lists, and none for an empty list', () => {
+    expect(imageDatasetChannelIds(eight, ['Channel:0:7'])).toEqual(['Channel:0:7'])
+    expect(imageDatasetChannelIds(eight, [])).toEqual([])
   })
 })
 

@@ -32,6 +32,7 @@ import {
   datasetManifestAbout,
   manifestDefaultsNotShared,
   manifestDefaultsToShareableState,
+  imageDatasetChannelIds,
   resolveMorphologyChannelSelection,
   type DatasetManifestAbout,
 } from '../dataset/datasetManifestModel'
@@ -2053,18 +2054,10 @@ export function useDatasetLifecycle({
             return
           }
 
-          const defaultChannelIds = defaultEnabledChannelIds(image.channelLoaders)
-          const channelSelection = restoreState.morphologyEnabledChannelIds
-          const enabledChannelIds =
-            channelSelection !== undefined
-              ? resolveMorphologyChannelSelection(
-                  image.channelLoaders,
-                  channelSelection,
-                  defaultChannelIds,
-                )
-              : shouldRestoreSharedState
-                ? undefined
-                : defaultChannelIds
+          const enabledChannelIds = imageDatasetChannelIds(
+            image.channelLoaders,
+            restoreState.morphologyEnabledChannelIds,
+          )
           const channelSettings = createMorphologyChannelSettings(
             image,
             enabledChannelIds === undefined ? {} : { enabledChannelIds },
