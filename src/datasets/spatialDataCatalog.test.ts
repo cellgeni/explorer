@@ -219,6 +219,29 @@ describe('SpatialData catalog', () => {
     expect(selectSpatialDataView(catalog).table?.name).toBe('table_cells')
   })
 
+  it('opens a store whose table has no placed element, under the default system', () => {
+    // Only a table, or elements whose transforms cannot be read: the table
+    // places its rows from obsm.
+    const tableOnly = catalogFixture([])
+    const unplaced = catalogFixture([element('shapes', 'spots', [])])
+
+    for (const catalog of [tableOnly, unplaced]) {
+      const view = selectSpatialDataView(catalog)
+
+      expect(view).toMatchObject({
+        coordinateSystem: 'global',
+        coordinateSystems: [],
+        table: { name: 'table' },
+        regionShapes: [],
+        regionLabels: [],
+      })
+    }
+
+    expect(() => selectSpatialDataView({ ...tableOnly, tables: [] })).toThrow(
+      'does not declare any coordinate systems',
+    )
+  })
+
   it('serves consolidated metadata without probing missing metadata keys', async () => {
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {
       const url = new URL(input instanceof Request ? input.url : String(input))

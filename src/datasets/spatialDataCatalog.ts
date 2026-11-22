@@ -263,6 +263,8 @@ export async function readSpatialDataCatalog(
   }
 }
 
+const DEFAULT_COORDINATE_SYSTEM = 'global'
+
 export function selectSpatialDataView(
   catalog: SpatialDataCatalog,
   options: {
@@ -286,11 +288,15 @@ export function selectSpatialDataView(
       element.transforms.map((transform) => transform.coordinateSystem),
     ),
   )
+  // A table can place its rows from obsm when no element is placed, so a
+  // store with a table and no coordinate system opens under spatialdata's
+  // default name.
   const coordinateSystem =
     options.coordinateSystem !== undefined &&
     coordinateSystems.includes(options.coordinateSystem)
       ? options.coordinateSystem
-      : bestCoordinateSystem(coordinateSystems, spatialElements, regionElements)
+      : (bestCoordinateSystem(coordinateSystems, spatialElements, regionElements) ??
+        (table === undefined ? undefined : DEFAULT_COORDINATE_SYSTEM))
 
   if (coordinateSystem === undefined) {
     throw new Error('SpatialData store does not declare any coordinate systems.')
