@@ -1079,7 +1079,8 @@ How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-
 - Only rows in view have pictures. A row's picture is read once the table
   has stopped scrolling for 150 ms, and its reads stop when the row leaves
   the view. The outlines of the rows in view are read together, once per
-  page, and kept for the dataset.
+  page, and kept for the dataset; a read stopped by scrolling keeps the
+  outlines it found, and the rest are read when their rows come back.
 - Pictures share one tile cache, with at most 6 image requests in flight in
   all, and read nothing outside their field; the canvas and minimap keep
   their own.
