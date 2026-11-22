@@ -71,8 +71,22 @@ export function planGeneExpressionLod(
     readonly visiumHdBinSizeMicrometers?: VisiumHdBinSizeMicrometers
   },
 ): GeneExpressionLodPlan {
+  // Zoomed out, Visium HD reads the coarser bins the map draws whatever the
+  // detail mode, so each square is coloured by its own bins.
+  const visiumHdBinSizeMicrometers =
+    options.visiumHdBinSizeMicrometers === undefined
+      ? undefined
+      : visiumHdGeneExpressionLodBinSize(
+          options.visiumHdBinSizeMicrometers,
+          detail.viewState.zoom,
+        )
+
   if (options.detailMode === 'all-cells') {
-    return allCellsPlan(detail, options)
+    return allCellsPlan(detail, {
+      slideBbox: options.slideBbox,
+      totalCellCount: options.totalCellCount,
+      ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
+    })
   }
 
   if (
@@ -87,9 +101,7 @@ export function planGeneExpressionLod(
       cellLimit: Math.max(1, options.totalCellCount),
       sampleStride: 1,
       sourceCellCount: detail.visibleCellCount,
-      ...(options.visiumHdBinSizeMicrometers === undefined
-        ? {}
-        : { visiumHdBinSizeMicrometers: options.visiumHdBinSizeMicrometers }),
+      ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
     }
   }
 
