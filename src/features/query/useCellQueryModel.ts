@@ -405,13 +405,6 @@ export function useCellQueryModel({
   // The sort, while the dataset lists its column: one kept from another
   // dataset is left out until it does, as conditions are, rather than
   // waiting on a column that never comes.
-  const activeSort =
-    sort === null ||
-    sort.columnId === CELL_QUERY_ID_COLUMN ||
-    resolveColumn(sort.columnId) !== null
-      ? sort
-      : null
-
   // Columns the conditions, table and sort use.
   const tableColumnIds = useMemo(
     () =>
@@ -421,6 +414,14 @@ export function useCellQueryModel({
       ]),
     [conditions, extraColumnIds],
   )
+  // Only on a column the table shows, so a removed condition's column does
+  // not keep ordering the rows with no arrow to say so.
+  const activeSort =
+    sort === null ||
+    sort.columnId === CELL_QUERY_ID_COLUMN ||
+    (tableColumnIds.includes(sort.columnId) && resolveColumn(sort.columnId) !== null)
+      ? sort
+      : null
   const neededColumns = useMemo(
     () =>
       uniqueStrings([
@@ -578,6 +579,7 @@ export function useCellQueryModel({
     appendDebugEvent,
   })
 
+  const placedCellIds = useMemo(() => new Set(cells.map((cell) => cell.id)), [cells])
   const columnInputs = useMemo(() => {
     const inputs = new Map<string, ColumnInput>()
     for (const column of neededColumns) {
@@ -585,6 +587,7 @@ export function useCellQueryModel({
         column.id,
         columnInput(column, {
           cells,
+          placedCellIds,
           cellColumns,
           annotations,
           datasetSetLoads,
@@ -602,6 +605,7 @@ export function useCellQueryModel({
     cellColumns,
     cells,
     datasetSetLoads,
+    placedCellIds,
     imageNeeds.overLimit,
     imageSnapshot,
     metadataTracks,
@@ -930,6 +934,16 @@ export function useCellQueryModel({
   )
   const onConditionChange = useCallback(
     (index: number, condition: CellQueryCondition) => {
+      // An image condition's threshold, level or radius makes it another
+      // column; a sort on it follows.
+      const previous = conditions[index]?.columnId
+      if (previous !== undefined && previous !== condition.columnId) {
+        setSort((current) =>
+          current?.columnId === previous
+            ? { ...current, columnId: condition.columnId }
+            : current,
+        )
+      }
       onConditionsChange(
         conditions.map((current, at) => (at === index ? condition : current)),
       )
@@ -938,9 +952,18 @@ export function useCellQueryModel({
   )
   const onRemoveCondition = useCallback(
     (index: number) => {
-      onConditionsChange(conditions.filter((_, at) => at !== index))
+      const next = conditions.filter((_, at) => at !== index)
+      const removed = conditions[index]?.columnId
+      if (
+        removed !== undefined &&
+        !next.some((condition) => condition.columnId === removed) &&
+        !extraColumnIds.includes(removed)
+      ) {
+        setSort((current) => (current?.columnId === removed ? null : current))
+      }
+      onConditionsChange(next)
     },
-    [conditions, onConditionsChange],
+    [conditions, extraColumnIds, onConditionsChange],
   )
 
   const imageMeasurementView = (
@@ -1188,6 +1211,8 @@ function sessionEntry(
 
 interface ColumnInputContext {
   readonly cells: readonly OverviewCellDatum[]
+  // The IDs on the map, which a class's count is of.
+  readonly placedCellIds: ReadonlySet<string>
   readonly cellColumns: ReturnType<typeof overviewCellColumns>
   readonly annotations: readonly Annotation<string>[]
   readonly datasetSetLoads: ReadonlyMap<
@@ -1315,6 +1340,7 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
 
     return classesInput(
       column.id,
+      context.placedCellIds,
       context.savedSelections.flatMap((saved) =>
         saved.cells.status === 'ready'
           ? [
@@ -1334,11 +1360,12 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
     const load = context.datasetSetLoads.get(groupId)
     if (load === undefined || load.status === 'loading') return { status: 'loading' }
     if (load.status === 'error') return { status: 'error', message: load.message }
-    return classesInput(column.id, setClasses(load.value))
+    return classesInput(column.id, context.placedCellIds, setClasses(load.value))
   }
 
   return classesInput(
     column.id,
+    context.placedCellIds,
     setClasses(
       context.annotations.filter(
         (annotation) => annotationSetGrouping(annotation).id === source.setId,
@@ -1357,19 +1384,31 @@ function setClasses(
   }))
 }
 
+// The key holds the labels, so a renamed selection is sent again; the count
+// is of the cells on the map, as Clusters and Plots count them.
 function classesInput(
   columnId: string,
+  placedCellIds: ReadonlySet<string>,
   classes: readonly CellQueryClassInput[],
 ): ColumnInput {
   return {
     status: 'ready',
     key: classes
-      .map((queryClass) => `${queryClass.id}#${objectId(queryClass.cellIds)}`)
+      .map(
+        (queryClass) =>
+          `${queryClass.id}#${queryClass.label}#${objectId(queryClass.cellIds)}`,
+      )
       .join('\u0000'),
     classes: classes.map((queryClass) => ({
       id: queryClass.id,
       label: queryClass.label,
-      count: queryClass.cellIds.length,
+      count:
+        placedCellIds.size === 0
+          ? queryClass.cellIds.length
+          : queryClass.cellIds.reduce(
+              (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
+              0,
+            ),
     })),
     request: () => ({ type: 'category-column', columnId, classes }),
   }
