@@ -9,6 +9,8 @@ import type { PlotSavedSelection, PlotSelectionCells } from './plotsPanelModel'
 // The cells of each saved selection, for Group by › Selections. Each outline
 // is looked up once per dataset, as the Selection card looks up the active
 // one; renaming or recolouring keeps the outline, so it reads nothing again.
+// A failed lookup is tried again when the selections are shown again, or on
+// Try again.
 
 interface SelectionCellsResults {
   readonly url: string | null
@@ -23,9 +25,12 @@ export function useSelectionCells({
   selections,
   loadCells,
   appendDebugEvent,
+  retryCount = 0,
 }: {
   // Group by › Selections is shown, so the cells are needed.
   readonly enabled: boolean
+  // Raised by Try again.
+  readonly retryCount?: number
   readonly datasetUrl: string | null
   readonly selections: readonly SavedSelection[]
   readonly loadCells: RoiCellsLoader
@@ -35,6 +40,18 @@ export function useSelectionCells({
     url: null,
     cells: new Map(),
   })
+  const [attempt, setAttempt] = useState({ enabled, retryCount })
+  if (attempt.enabled !== enabled || attempt.retryCount !== retryCount) {
+    setAttempt({ enabled, retryCount })
+    if ((enabled && !attempt.enabled) || retryCount !== attempt.retryCount) {
+      setResults((current) => ({
+        ...current,
+        cells: new Map(
+          [...current.cells].filter(([, cells]) => cells.status !== 'error'),
+        ),
+      }))
+    }
+  }
   // Lookups in flight, kept across renders so a rename does not restart one.
   const inFlightRef = useRef(new Map<RoiSelection, AbortController>())
 
