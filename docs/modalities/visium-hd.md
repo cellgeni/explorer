@@ -156,7 +156,7 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 | Tissue image               | The active tier's `tissue_hires_image.png`, drawn at `(px / tissue_hires_scalef) × microns_per_pixel`. No pyramid; `tissue_lowres_image.png` at `tissue_lowres_scalef` when the high-res PNG cannot be read.                                                                                                                                                      |
 | Embeddings                 | Per-tier `projection.csv`, then root `analysis/`                                                                                                                                                                                                                                                                                                                  |
 | ROI                        | `useVisiumHdRoiWorkflow` selects bins whose centre is inside the box/lasso (up to 50,000), then `matrix(barcodes, binSize)`; exports barcodes CSV and GeoJSON                                                                                                                                                                                                     |
-| Magic Lens                 | `useVisiumHdMagicLensSummary`: up to 25,000 bins; `matrix()` when no genes are selected, otherwise selected-gene expression for every bin of the selection's box (up to 200,000, beyond which the summary is marked incomplete), filtered to the lens                                                                                                             |
+| Magic Lens                 | `useVisiumHdMagicLensSummary`: up to 25,000 bins; `matrix()` when no genes are selected, otherwise selected-gene expression filtered to the lens                                                                                                                                                                                                                  |
 | Annotations                | `annotationGroups(binSize)` lists the tier's clusterings by `HEAD`; `annotations({ groupId })` reads one `clusters.csv` into one annotation per cluster. Bins are coloured by their barcode, and hovering one names its cluster                                                                                                                                   |
 
 Visium HD has no transcript records.
@@ -217,6 +217,12 @@ error, Diagnostics lists it under Fallbacks and in the activity log, and
 selecting the size again retries it. After a failed load, selected-gene
 overlays, ROI, Magic Lens and the Bin card read the drawn tier
 (`visiumHdActiveBinSize`); while a tier loads they read the new size.
+
+The Magic Lens reads selected-gene expression for its selection's bounding
+box and keeps the bins in the lens or ROI. It asks for every bin the box can
+hold, since a lasso can hold fewer bins than the 25,000-bin lens limit while
+its box holds more; past 200,000 the summary is marked as possibly
+incomplete.
 
 ## Caching And Workers
 
