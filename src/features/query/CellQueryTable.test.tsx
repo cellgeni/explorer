@@ -30,6 +30,7 @@ function pictureTable(
     pictures: {
       key: 'dataset',
       field: 40,
+      spots: false,
       image: { loader: null, channels: [], flatImage: null },
       readOutlines,
     },

@@ -89,7 +89,7 @@ describe('cell image measurements', () => {
 
     expect(values(result.mean)).toEqual([55, 10, 100])
     expect(values(result.above)).toEqual([50, 0, 100])
-    expect(result).toMatchObject({ cellsOutside: 0, tiles: 4 })
+    expect(result).toMatchObject({ cellsWithoutValue: 0, tiles: 4 })
   })
 
   it('uses each cell’s area for its disc, and the radius for cells without one', async () => {
@@ -108,8 +108,20 @@ describe('cell image measurements', () => {
     const result = await measure(loader, [cell(-5, 2), cell(2, 2), cell(2, 50)])
 
     expect(values(result.mean)).toEqual([null, 7, null])
-    expect(result.cellsOutside).toBe(2)
+    expect(result.cellsWithoutValue).toBe(2)
     expect(result.tiles).toBe(1)
+  })
+
+  it('counts cells inside the image with no pixel as having no value too', async () => {
+    const { loader } = fakeImage({ width: 8, height: 8, pixel: () => 7 })
+    // Radius 0.4: a cell on a pixel corner, at (4, 4), holds no pixel
+    // centre; one at (2.5, 2.5) holds one; one left of the image none.
+    const result = await measure(loader, [cell(4, 4), cell(2.5, 2.5), cell(-20, 2)], {
+      radius: 0.4,
+    })
+
+    expect(values(result.mean)).toEqual([null, 7, null])
+    expect(result.cellsWithoutValue).toBe(2)
   })
 
   it('reads a coarser level in its own pixels', async () => {
@@ -322,7 +334,7 @@ describe('cell image measurements', () => {
 
         expect(values(fromZarr.mean)).toEqual(values(fromTiff.mean))
         expect(values(fromZarr.above)).toEqual(values(fromTiff.above))
-        expect(fromZarr.cellsOutside).toBe(1)
+        expect(fromZarr.cellsWithoutValue).toBe(1)
       }
     })
 

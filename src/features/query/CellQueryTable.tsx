@@ -297,6 +297,7 @@ export function CellQueryTable({
                 key={cell.id}
                 cell={cell}
                 field={pictures.field}
+                spots={pictures.spots}
                 image={pictures.image}
                 tileStore={tileStore}
                 priority={index}

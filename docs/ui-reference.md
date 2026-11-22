@@ -1048,8 +1048,10 @@ How image columns work ([plan 26](plan/phases/26-image-channel-conditions.md)):
 - The count waits for the measurement. Up to three channels are measured at
   a time; columns of a fourth are listed but cannot be added until a
   channel is no longer used.
-- Cells outside the image get no value, never match, and a note says how
-  many there are.
+- Cells with no pixel get no value, never match, and a note says how many
+  there are: those outside the image, and at a coarse resolution or a small
+  radius those whose disc holds no pixel centre or whose pixels nearer cells
+  took.
 - NaN pixels, which mark no data in float images, are left out: a cell's
   mean and "% above" count only its pixels with data, and a cell with none
   gets no value.

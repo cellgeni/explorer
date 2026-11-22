@@ -30,6 +30,7 @@ export interface CellQueryPictureImage {
 export function CellPicture({
   cell,
   field,
+  spots = false,
   image,
   tileStore,
   priority,
@@ -39,6 +40,8 @@ export function CellPicture({
 }: {
   readonly cell: OverviewCellDatum
   readonly field: number
+  // Visium spots: their circle is their outline.
+  readonly spots?: boolean
   readonly image: CellQueryPictureImage | null
   readonly tileStore: MorphologyTileStore
   // Lower is read first: rows higher in the table.
@@ -55,7 +58,8 @@ export function CellPicture({
 
   const viewState = useMemo(() => cellPictureViewState(cell, field), [cell, field])
   // Nothing while the outline is read, so a ring does not flash first.
-  const shape = outline === undefined ? null : cellPictureShape(cell, outline, field)
+  const shape =
+    outline === undefined ? null : cellPictureShape(cell, outline, field, { spots })
 
   return (
     <div

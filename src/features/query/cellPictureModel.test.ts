@@ -94,13 +94,26 @@ describe('cell pictures (plan 23-D10)', () => {
   })
 
   it("draws a Visium spot's circle without an outline", () => {
-    expect(cellPictureShape(cell({ radiusMicrometers: 27.5 }), null, 80)).toEqual({
+    expect(
+      cellPictureShape(cell({ radiusMicrometers: 27.5 }), null, 80, { spots: true }),
+    ).toEqual({
       kind: 'circle',
       cx: 32,
       cy: 32,
       r: 22,
       fallback: false,
     })
+  })
+
+  it('rings a cell with an area but no outline, as overview cells come', () => {
+    // Overview cells carry the radius their area gives (overviewCellsToLayerData).
+    const shape = cellPictureShape(
+      cell({ cellArea: 100 * Math.PI, radiusMicrometers: 10 }),
+      null,
+      40,
+    )
+
+    expect(shape).toMatchObject({ kind: 'circle', r: 16, fallback: true })
   })
 
   it('rings a cell without an outline, as large as its area where it has one', () => {
