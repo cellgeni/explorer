@@ -295,7 +295,8 @@ or exact points.
   `cell_features/indices` and `data` in `cell_feature_matrix.zarr.zip`, four
   genes at a time, after reading `cell_features/indptr` once
   (`geneValuesFromCellFeatureMatrixZarr`, `src/data/gex.ts`). Gene names
-  match in any case, as in the gene list.
+  match in any case, as in the gene list. Where two gene features share a
+  name, Plots and the map's gene colours both read the first.
 - Row IDs are the `cell_features/cell_id` integer pairs, made text in the
   plot worker (`xeniumCellIdText`), so a selection's and a set's cell IDs
   join to matrix rows by ID. On the demo (1.4 million cells), SNAP25 by the
