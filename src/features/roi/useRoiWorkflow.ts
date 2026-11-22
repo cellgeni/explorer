@@ -786,7 +786,7 @@ export function useRoiWorkflow({
       `${slug(name)}-roi.geojson`,
       roiSelectionToGeoJson(roiState.selection, {
         roi_name: name,
-        dataset_platform: 'xenium',
+        exported_at: new Date().toISOString(),
         dataset_url: roiState.url,
         selected_cell_count: roiState.cells.length,
         hit_cell_limit: roiState.hitCellLimit,

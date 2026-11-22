@@ -495,9 +495,13 @@ describe('useRoiWorkflow', () => {
       />,
     )
 
+    // Only Date is faked: the export reads the time once, synchronously.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-22T12:34:56.789Z'))
     act(() => {
       api.handleExportRoiGeoJson()
     })
+    vi.useRealTimers()
 
     const blob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined
     const geoJson = JSON.parse((await blob?.text()) ?? '{}')
@@ -509,7 +513,7 @@ describe('useRoiWorkflow', () => {
         {
           properties: {
             roi_name: 'ROI 1',
-            dataset_platform: 'xenium',
+            exported_at: '2026-11-22T12:34:56.789Z',
             dataset_url: 'https://example.test/output',
             selected_cell_count: 1,
             hit_cell_limit: false,
