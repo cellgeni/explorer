@@ -336,7 +336,11 @@ export function useCellQueryModel({
   const [sort, setSort] = useState<CellQuerySort | null>(null)
   const [saveName, setSaveName] = useState('')
   const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
+  // A failed export, for the dataset it was of.
+  const [exportError, setExportError] = useState<{
+    readonly url: string
+    readonly message: string
+  } | null>(null)
 
   // The columns (23-D2).
   const cellColumns = useMemo(
@@ -1071,7 +1075,12 @@ export function useCellQueryModel({
       },
       (error: unknown) => {
         setExporting(false)
-        setExportError(`The CSV could not be written: ${errorMessage(error)}`)
+        // Closed by a dataset switch or the window: nothing to report.
+        if (isAbort(error)) return
+        setExportError({
+          url: datasetUrl,
+          message: `The CSV could not be written: ${errorMessage(error)}`,
+        })
       },
     )
   }, [appendDebugEvent, canExport, cells, columnKinds, datasetUrl, exportColumns, rows])
@@ -1085,11 +1094,22 @@ export function useCellQueryModel({
   const measuringColumns = usedColumnIds.some(
     (id) => isImageColumnId(id) && columnInputs.get(id)?.status === 'loading',
   )
-  const loadingColumns = conditionViews.some(
-    (view) =>
-      view.status === 'loading' &&
-      columnInputs.get(view.condition.columnId)?.status !== 'waiting',
-  )
+  // Columns added to the table, which no condition reports on.
+  const addedColumnIds = tableColumnIds.filter((id) => !conditionColumnIds.has(id))
+  const loadingColumns =
+    conditionViews.some(
+      (view) =>
+        view.status === 'loading' &&
+        columnInputs.get(view.condition.columnId)?.status !== 'waiting',
+    ) || addedColumnIds.some((id) => columnInputs.get(id)?.status === 'loading')
+  const addedColumnErrors = addedColumnIds.flatMap((id) => {
+    const input = columnInputs.get(id)
+    return input?.status === 'error'
+      ? [
+          `The ${resolveColumn(id)?.label ?? id} column could not be read, so it is blank and the CSV leaves it out: ${input.message}`,
+        ]
+      : []
+  })
   const matchCount = currentResult === null ? null : currentResult.rows.length
   const totalCount = cells.length
   // Imported sets' cells not on the map; a dataset's own columns also list
@@ -1124,7 +1144,10 @@ export function useCellQueryModel({
     ...(currentResult?.error === null || currentResult === null
       ? []
       : [currentResult.error]),
-    ...(exportError === null ? [] : [exportError]),
+    ...addedColumnErrors,
+    ...(exportError === null || exportError.url !== datasetUrl
+      ? []
+      : [exportError.message]),
   ]
 
   return {

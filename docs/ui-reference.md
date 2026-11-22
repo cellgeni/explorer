@@ -1015,7 +1015,10 @@ How it matches:
 - A cell with no value for a number column never matches a number condition,
   even over the whole range.
 - A column is read the first time a condition, table column or sort uses it,
-  and kept for the dataset. The columns and the matching live in the panel's
+  and kept for the dataset. A read that failed is tried again once nothing
+  uses the column and something uses it again. A table column that is still
+  being read keeps the window busy; one that failed says why under the
+  conditions, and the CSV leaves it out. The columns and the matching live in the panel's
   worker, so a million cells match and sort off the page's thread; edits wait
   250 ms before matching. The table reads the values of the rows in view, 64
   rows at a time.
