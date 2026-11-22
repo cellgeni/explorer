@@ -173,10 +173,6 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private readonly openZipStore: (url: string) => Promise<AteraZipStore>
   private readonly openImage: ImagePyramidOpener
   private experimentPromise: Promise<AteraExperiment> | null = null
-  // experiment.spatial is optional with a manifest, so its file paths are read
-  // once and a missing file means standard names, without refetching it on
-  // every lookup.
-  private experimentFilesPromise: Promise<AteraExperiment['files'] | null> | null = null
   private tablePromise: Promise<AteraTable> | null = null
   private overviewPromise: Promise<AteraOverview> | null = null
   private genesPromise: Promise<AteraGenes> | null = null
@@ -229,6 +225,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
+  // experiment.spatial is optional with a manifest: a missing one reads as an
+  // experiment that names no files, with the default pixel size, and is kept
+  // so it is not fetched again. Other failures are thrown and read again next
+  // time.
   async experiment(): Promise<AteraExperiment> {
     if (this.experimentPromise === null) {
       this.experimentPromise = this.readExperiment().catch((error: unknown) => {
@@ -569,12 +569,8 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       return this.resolve(ATERA_FILE_DEFAULTS.experiment)
     }
 
-    this.experimentFilesPromise ??= this.experiment().then(
-      (experiment) => experiment.files,
-      () => null,
-    )
-    const files = await this.experimentFilesPromise
-    return this.resolve(files?.[role] ?? ATERA_FILE_DEFAULTS[role])
+    const { files } = await this.experiment()
+    return this.resolve(files[role] ?? ATERA_FILE_DEFAULTS[role])
   }
 
   private async fileLabel(role: AteraFileRole): Promise<string> {
@@ -591,6 +587,12 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private async readExperiment(): Promise<AteraExperiment> {
     const url = await this.fileUrl('experiment')
     const response = await this.fetcher(url)
+
+    // Missing keys answer 403 on S3 and the Sanger buckets.
+    if (response.status === 403 || response.status === 404) {
+      await response.body?.cancel()
+      return { files: {} }
+    }
 
     if (!response.ok) {
       throw new Error(

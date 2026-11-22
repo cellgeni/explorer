@@ -75,6 +75,11 @@ order. Diagnostics range-check every role and the morphology image; a missing
 matrix or `cells.zarr.zip` fails, and a missing transcript zip or image only
 warns.
 
+A run hosted with a manifest may leave out `experiment.spatial`. A `403` or
+`404` for it is read once as an experiment that names no files: standard
+names, the default 0.2125 µm pixel, and only the images the manifest names.
+Any other failure to read it is reported, and the next lookup reads it again.
+
 | Role                   | `experiment.spatial` key                        | Standard name                      |
 | ---------------------- | ----------------------------------------------- | ---------------------------------- |
 | `experiment`           | —                                               | `experiment.spatial`               |
