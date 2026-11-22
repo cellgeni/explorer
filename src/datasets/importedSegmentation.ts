@@ -146,6 +146,11 @@ async function openLabelSegmentation(
 
 let pickedFileCount = 0
 
+// A picked file's name as it is; the last part of a URL, decoded.
+function importedSegmentationName(source: SegmentationSource): string {
+  return source.file === undefined ? segmentationSourceName(source.url) : source.url
+}
+
 // The TIFF reader keys files and their strip bands by URL, so a picked file
 // gets one of its own, even when another picked file had the same name.
 function tiffLabelUrl(source: SegmentationSource): string {
@@ -193,7 +198,7 @@ class VectorSegmentation implements ImportedSegmentation {
     placement: SegmentationPlacement,
   ) {
     this.source = source
-    this.name = segmentationSourceName(source.url)
+    this.name = importedSegmentationName(source)
     this.shapes = shapes
     this.shapeCount = shapes.ids.length
     const warning = vectorPlacementWarning(shapes, placement, source)
@@ -282,7 +287,7 @@ class LabelSegmentation implements ImportedSegmentation {
     placement: SegmentationPlacement,
   ) {
     this.source = source
-    this.name = segmentationSourceName(source.url)
+    this.name = importedSegmentationName(source)
     this.reader = reader
     const base = reader.levels[0]
     this.maskSize = { width: base?.width ?? 0, height: base?.height ?? 0 }

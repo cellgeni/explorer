@@ -44,10 +44,20 @@ export function isLabelSegmentationFormat(format: SegmentationFormat): boolean {
   return format === 'label-tiff' || format === 'label-zarr'
 }
 
-// The format a URL or file name names, or null. `.gz` text files are read
-// inflated, so the extension before it counts.
+// The format a URL names, or null. `.gz` text files are read inflated, so the
+// extension before it counts.
 export function segmentationFormatFromName(name: string): SegmentationFormat | null {
-  const path = stripQueryAndHash(name).replace(/\/+$/, '').toLowerCase()
+  return segmentationFormatFromPath(stripQueryAndHash(name))
+}
+
+// The format a picked file's name names: all of it is the name, `#`, `?` and
+// `%` included.
+export function segmentationFormatFromFileName(name: string): SegmentationFormat | null {
+  return segmentationFormatFromPath(name)
+}
+
+function segmentationFormatFromPath(value: string): SegmentationFormat | null {
+  const path = value.replace(/\/+$/, '').toLowerCase()
   const base = path.endsWith('.gz') ? path.slice(0, -3) : path
 
   if (/\.(?:ome\.)?tiff?$/.test(base)) {

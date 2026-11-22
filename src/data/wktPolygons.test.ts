@@ -47,5 +47,13 @@ describe('looksLikeWktPolygon', () => {
     expect(looksLikeWktPolygon(' SRID=1;MULTIPOLYGON (((0 0, 1 0, 1 1)))')).toBe(true)
     expect(looksLikeWktPolygon('geometry')).toBe(false)
     expect(looksLikeWktPolygon('POLYGONS')).toBe(false)
+    // A header cell named polygon, and values with dimensions or EMPTY.
+    expect(looksLikeWktPolygon('polygon')).toBe(false)
+    expect(looksLikeWktPolygon('"Polygon"')).toBe(false)
+    expect(looksLikeWktPolygon('POLYGON Z ((0 0 1, 1 0 1, 1 1 1))')).toBe(true)
+    expect(looksLikeWktPolygon('MULTIPOLYGON ZM (((0 0 1 2, 1 0 1 2, 1 1 1 2)))')).toBe(
+      true,
+    )
+    expect(looksLikeWktPolygon('POLYGON EMPTY')).toBe(true)
   })
 })

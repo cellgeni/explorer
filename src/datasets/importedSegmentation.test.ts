@@ -165,6 +165,40 @@ describe('openImportedSegmentation', () => {
     })
   })
 
+  it('names a picked file as it is named, and a URL by its decoded last part', async () => {
+    const open = (url: string, file?: Blob) =>
+      openImportedSegmentation(
+        {
+          url,
+          ...(file === undefined ? {} : { file }),
+          format: 'wkt',
+          coordinates: 'micrometers',
+        },
+        PLACEMENT,
+        {
+          readVector: async (options) =>
+            readVectorSegmentation({
+              ...options,
+              file: {
+                kind: 'file',
+                file: new Blob(['POLYGON ((0 0, 1 0, 1 1, 0 0))\n']),
+              },
+            }),
+        },
+      )
+
+    const blob = new Blob([''])
+    await expect(open('Sample#1_cells.wkt', blob)).resolves.toMatchObject({
+      name: 'Sample#1_cells.wkt',
+    })
+    await expect(open('cells%20v2.wkt', blob)).resolves.toMatchObject({
+      name: 'cells%20v2.wkt',
+    })
+    await expect(
+      open('https://example.test/seg/cells%20v2.wkt?sig=1'),
+    ).resolves.toMatchObject({ name: 'cells v2.wkt' })
+  })
+
   it('warns when a mask is not the image shape', async () => {
     clearOpenTiffFiles()
     const segmentation = await openImportedSegmentation(

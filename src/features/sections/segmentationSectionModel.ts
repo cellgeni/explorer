@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { BBox } from '../../data/coords'
 import type { ImportedSegmentation } from '../../datasets/importedSegmentation'
 import {
+  segmentationFormatFromFileName,
   segmentationFormatFromName,
   type SegmentationCoordinates,
   type SegmentationFormat,
@@ -111,7 +112,11 @@ export function useSegmentationSectionModel({
     file: File | undefined,
     options: SegmentationImportOptions,
   ): string | null => {
-    const format = options.format ?? segmentationFormatFromName(file?.name ?? url)
+    const format =
+      options.format ??
+      (file === undefined
+        ? segmentationFormatFromName(url)
+        : segmentationFormatFromFileName(file.name))
 
     if (format === null) {
       return 'The format cannot be told from the name. Choose one under Format.'

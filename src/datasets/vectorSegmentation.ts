@@ -48,20 +48,24 @@ const PROGRESS_EVERY_SHAPES = 4096
 
 // Column names that hold an element's ID, in order of preference
 // (case-insensitive).
+// Most specific first: MERSCOPE boundary files have a per-row `ID` beside the
+// cell's `EntityID`.
 const ID_COLUMN_NAMES = [
   'cell_id',
   'cellid',
   'cell',
   'label_id',
   'label',
+  'entityid',
   'id',
   'object_id',
   'objectid',
-  'entityid',
   'instance_id',
   'name',
   'barcode',
 ]
+const UNNAMED_INDEX_COLUMN = /^__index_level_\d+__$/
+
 const GEOMETRY_COLUMN_NAMES = [
   'geometry',
   'geom',
@@ -424,7 +428,14 @@ export function segmentationParquetLayout(
     typeof indexEntry === 'string' && columns.includes(indexEntry)
       ? indexEntry
       : undefined
-  const idColumn = indexColumn ?? columnNamed(ID_COLUMN_NAMES)
+  // An unnamed pandas index (`__index_level_0__`, a filtered or concatenated
+  // frame's row labels) gives way to a column named as an ID; a named index
+  // (`cell_id` set as the index) is the ID.
+  const namedIdColumn = columnNamed(ID_COLUMN_NAMES)
+  const idColumn =
+    indexColumn !== undefined && UNNAMED_INDEX_COLUMN.test(indexColumn)
+      ? (namedIdColumn ?? indexColumn)
+      : (indexColumn ?? namedIdColumn)
 
   if (geometryColumn !== undefined) {
     const range = recordOrNull(indexEntry)
