@@ -36,6 +36,7 @@ import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
+import { micrometersPerPixelY, type UnitsDescriptor } from '../../data/coords'
 import type { SlideImagesSource } from './slideImagesModel'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
@@ -70,7 +71,86 @@ export interface DatasetFactsInput {
   readonly zPlaneCount: number
   // A single RGB tissue image (Visium) rather than channels.
   readonly hasFlatImage: boolean
+  // The image's full-resolution pixels and extent; null without an image or
+  // when its size is not known (a hosted Visium PNG).
+  readonly imageSize: DatasetImageSize | null
   readonly micrometersPerPixel: number | undefined
+}
+
+export interface DatasetImageSize {
+  readonly width: number
+  readonly height: number
+  // Absent when the image's units are not known.
+  readonly widthMicrometers?: number
+  readonly heightMicrometers?: number
+}
+
+// A pyramid's level 0, or a flat tissue image (a Visium hires or lowres PNG)
+// scaled back to the full-resolution pixels its scale factor is from.
+export function datasetImageSize(
+  loader: ImagePyramidLoader | null,
+  flatImage: {
+    readonly size?: readonly [number, number]
+    readonly scaleFactor: number
+    readonly micrometersPerPixel: number
+  } | null,
+): DatasetImageSize | null {
+  if (loader !== null) {
+    // Loaders read before their units are known (and test doubles) have none.
+    const units = loader.units as UnitsDescriptor | undefined
+
+    if (!Number.isFinite(loader.imageWidth) || !Number.isFinite(loader.imageHeight)) {
+      return null
+    }
+
+    return {
+      width: loader.imageWidth,
+      height: loader.imageHeight,
+      ...(units === undefined
+        ? {}
+        : {
+            widthMicrometers: loader.imageWidth * units.micrometersPerPixel,
+            heightMicrometers: loader.imageHeight * micrometersPerPixelY(units),
+          }),
+    }
+  }
+
+  if (flatImage?.size === undefined || !(flatImage.scaleFactor > 0)) {
+    return null
+  }
+
+  const width = Math.round(flatImage.size[0] / flatImage.scaleFactor)
+  const height = Math.round(flatImage.size[1] / flatImage.scaleFactor)
+  return {
+    width,
+    height,
+    widthMicrometers: width * flatImage.micrometersPerPixel,
+    heightMicrometers: height * flatImage.micrometersPerPixel,
+  }
+}
+
+function lengthText(micrometers: number, unit: 'µm' | 'mm'): string {
+  return (unit === 'mm' ? micrometers / 1000 : micrometers).toLocaleString(undefined, {
+    maximumSignificantDigits: 3,
+  })
+}
+
+// "40,960 × 31,232 px · 8.7 × 6.64 mm", the extent only when the image is
+// calibrated (it has a pixel size).
+function imageSizeFact(size: DatasetImageSize, calibrated: boolean): string {
+  const pixels = `${size.width.toLocaleString()} × ${size.height.toLocaleString()} px`
+
+  const { widthMicrometers, heightMicrometers } = size
+
+  if (!calibrated || widthMicrometers === undefined || heightMicrometers === undefined) {
+    return pixels
+  }
+
+  const unit = Math.max(widthMicrometers, heightMicrometers) >= 1000 ? 'mm' : 'µm'
+  return `${pixels} · ${lengthText(widthMicrometers, unit)} × ${lengthText(
+    heightMicrometers,
+    unit,
+  )} ${unit}`
 }
 
 function imageFact(input: DatasetFactsInput): string {
@@ -86,7 +166,7 @@ function imageFact(input: DatasetFactsInput): string {
     : channels
 }
 
-// Platform, counts, image, pixel size and address, exact where the top bar's
+// Platform, counts, image, its size, pixel size and address, exact where the top bar's
 // summary chip rounds.
 export function datasetFacts(input: DatasetFactsInput): readonly DatasetFact[] {
   const facts: DatasetFact[] = [
@@ -105,6 +185,13 @@ export function datasetFacts(input: DatasetFactsInput): readonly DatasetFact[] {
   }
 
   facts.push({ label: 'Image', value: imageFact(input) })
+
+  if (input.imageSize !== null) {
+    facts.push({
+      label: 'Image size',
+      value: imageSizeFact(input.imageSize, input.micrometersPerPixel !== undefined),
+    })
+  }
 
   if (input.micrometersPerPixel !== undefined) {
     facts.push({
