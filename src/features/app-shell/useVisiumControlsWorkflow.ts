@@ -1,4 +1,10 @@
-import { useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { FlatMorphologyCanvasImage } from '../../components/MorphologyCanvas'
 import { parseShareableState, type ShareableState } from '../../data/shareableState'
 import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
@@ -64,6 +70,11 @@ export function useVisiumControlsWorkflow({
   readonly handleVisiumViewChange: (view: AnnDataVisiumView) => void
 } {
   const requestIdRef = useRef(0)
+  // Another dataset drops a tissue image read for the one before. In the
+  // commit, so no read that settles after it finds its request current.
+  useLayoutEffect(() => {
+    requestIdRef.current += 1
+  }, [datasetUrl])
   const handleVisiumImageChange = useCallback(
     (kind: VisiumImageKind | null) => {
       if (datasetUrl === null) {

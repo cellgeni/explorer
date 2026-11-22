@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { act, render, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import { micrometers } from '../../data/coords'
@@ -97,6 +97,72 @@ describe('useVisiumHdGridLodWorkflow', () => {
       }),
     )
     expect(setVisiumHdControlState.mock.calls[1]?.[0]).not.toHaveProperty('loadedBinSize')
+  })
+
+  it('leaves the bin switch’s counter alone, so its other reads still land', async () => {
+    const dataset = visiumDataset(visiumOverview(2, ['s_002um_000001_000002-1']))
+    const visiumHdBinRequestIdRef = { current: 4 }
+    const setSpatialGridCells = vi.fn()
+
+    render(
+      <Probe
+        currentViewportDetail={viewportDetail(3)}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        spatialGridCells={gridCellColumns(16)}
+        setLoadState={vi.fn()}
+        setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={vi.fn()}
+        visiumHdBinRequestIdRef={visiumHdBinRequestIdRef}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(setSpatialGridCells).toHaveBeenCalled()
+    })
+    expect(visiumHdBinRequestIdRef.current).toBe(4)
+  })
+
+  it('drops its bins when a bin switch starts while it reads', async () => {
+    let finishRead = () => {}
+    const overview = visiumOverview(2, ['s_002um_000001_000002-1'])
+    const dataset = {
+      ...visiumDataset(overview),
+      readBinnedOverview: vi.fn(
+        () =>
+          new Promise<VisiumHdBinnedOverview>((resolve) => {
+            finishRead = () => {
+              resolve(overview)
+            }
+          }),
+      ),
+    }
+    const visiumHdBinRequestIdRef = { current: 0 }
+    const setSpatialGridCells = vi.fn()
+
+    render(
+      <Probe
+        currentViewportDetail={viewportDetail(3)}
+        getSpatialDataset={vi.fn(async () => dataset)}
+        spatialGridCells={gridCellColumns(16)}
+        setLoadState={vi.fn()}
+        setSpatialGridCells={setSpatialGridCells}
+        setVisiumHdControlState={vi.fn()}
+        visiumHdBinRequestIdRef={visiumHdBinRequestIdRef}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(dataset.readBinnedOverview).toHaveBeenCalledWith(2)
+    })
+    // The user picks another bin size.
+    visiumHdBinRequestIdRef.current += 1
+    await act(async () => {
+      finishRead()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(setSpatialGridCells).not.toHaveBeenCalled()
   })
 
   it('keeps the 16um view in the control state while zooming in loads 2um bins', async () => {

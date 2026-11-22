@@ -96,6 +96,9 @@ export function useVisiumHdExpressionProfileWorkflow({
 
   const clearVisiumHdExpressionProfileState = useCallback(() => {
     invalidateLatestRequest({ abortRef, requestIdRef })
+    // The selected bin's profile loads again, also after a click on the
+    // bin already selected.
+    autoLoadedBinProfileKeyRef.current = null
     setExpressionProfileState((current) =>
       current.status === 'idle' ? current : IDLE_CELL_EXPRESSION_PROFILE_STATE,
     )

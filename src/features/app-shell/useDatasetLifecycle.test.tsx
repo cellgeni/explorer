@@ -855,6 +855,154 @@ describe('useDatasetLifecycle', () => {
       expect(setGenePanelState).toHaveBeenLastCalledWith({ status: 'idle' })
     })
 
+    it('puts a view change’s control back when a plain load replaces it', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef: LifecycleOptions['refs']['startDatasetLoadRef'] = {
+        current: null,
+      }
+      const overview = deferred<[]>()
+
+      render(
+        <Probe
+          refs={refs}
+          isDatasetLoaded
+          loadDatasetOverview={vi.fn(() => overview.promise)}
+          startDatasetLoadRef={startDatasetLoadRef}
+        />,
+      )
+
+      const first = { restoreControl: vi.fn() }
+      const second = { restoreControl: vi.fn() }
+      await act(async () => {
+        void startDatasetLoadRef.current?.(OPEN_URL, false, first)
+        await Promise.resolve()
+      })
+      // Another view change replaces it; that one puts the control back if
+      // it fails.
+      await act(async () => {
+        void startDatasetLoadRef.current?.(OPEN_URL, false, second)
+        await Promise.resolve()
+      })
+      expect(first.restoreControl).not.toHaveBeenCalled()
+
+      // A plain load replaces the second, which will never open.
+      await act(async () => {
+        void startDatasetLoadRef.current?.(NEXT_URL, false)
+        await Promise.resolve()
+      })
+      expect(second.restoreControl).toHaveBeenCalledTimes(1)
+    })
+
+    it('drops the summary of a SpatialData store another load replaced', async () => {
+      const STORE_URL = 'https://example.test/store.zarr'
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const summary = deferred<{
+        readonly coordinateSystem: string
+        readonly coordinateSystems: readonly string[]
+        readonly images: readonly string[]
+        readonly tables: readonly string[]
+        readonly regions: readonly string[]
+        readonly skippedElements: readonly string[]
+        readonly units: { micrometersPerUnit: number; source: string; detail: string }
+      }>()
+      const dataset = {
+        overview: vi.fn(async () => []),
+        genePanel: vi.fn(async () => []),
+        annotationGroups: vi.fn(async () => []),
+        embeddingOptions: vi.fn(async () => []),
+        metadataTracks: vi.fn(async () => []),
+        summary: vi.fn(() => summary.promise),
+      }
+      const setSpatialDataControlState = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          detectSpatialDataset={vi.fn(async (url: string) =>
+            url === STORE_URL
+              ? {
+                  platform: 'spatialdata' as const,
+                  baseUrl: url,
+                  spatialDataUrl: url,
+                  checked: [],
+                }
+              : { platform: 'xenium' as const, baseUrl: url, checked: [] },
+          )}
+          getSpatialDataset={
+            vi.fn(
+              async () => dataset,
+            ) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+          }
+          startDatasetLoadRef={startDatasetLoadRef}
+          extraSetters={{ setSpatialDataControlState }}
+        />,
+      )
+
+      let storeLoad: Promise<void> | undefined
+      await act(async () => {
+        storeLoad = startDatasetLoadRef.current?.(STORE_URL, false)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+      })
+      expect(dataset.summary).toHaveBeenCalled()
+
+      await act(async () => {
+        await startDatasetLoadRef.current?.(NEXT_URL, false)
+      })
+      await act(async () => {
+        summary.resolve({
+          coordinateSystem: 'global',
+          coordinateSystems: ['global'],
+          images: [],
+          tables: ['table'],
+          regions: [],
+          skippedElements: [],
+          units: { micrometersPerUnit: 1, source: 'unknown', detail: '' },
+        })
+        await storeLoad
+      })
+
+      expect(setSpatialDataControlState).not.toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ready' }),
+      )
+    })
+
+    it('stops the background reads of a load that fails', async () => {
+      const refs = createLifecycleRefs()
+      const startDatasetLoadRef = startLoad()
+      const panel = deferred<string[]>()
+      const setGenePanelState = vi.fn()
+      const setLoadState = vi.fn()
+
+      render(
+        <Probe
+          refs={refs}
+          loadDatasetOverview={vi.fn(async () => {
+            throw new Error('HTTP 500 reading cells.parquet')
+          })}
+          loadGenePanel={vi.fn(() => panel.promise)}
+          setGenePanelState={setGenePanelState}
+          setLoadState={setLoadState}
+          startDatasetLoadRef={startDatasetLoadRef}
+        />,
+      )
+
+      await act(async () => {
+        await startDatasetLoadRef.current?.(NEXT_URL, false)
+      })
+      expect(setLoadState).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: 'error' }),
+      )
+
+      // The gene panel read started before the failure answers after it.
+      await act(async () => {
+        panel.resolve(['EPCAM', 'KRT8'])
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(setGenePanelState).toHaveBeenLastCalledWith({ status: 'idle' })
+    })
+
     it('drops a pending load when another starts', async () => {
       const refs = createLifecycleRefs()
       const startDatasetLoadRef = startLoad()

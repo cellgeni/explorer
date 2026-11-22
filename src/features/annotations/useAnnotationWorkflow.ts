@@ -118,6 +118,10 @@ interface UseAnnotationWorkflowResult {
   // Imported cells that are not on the map, as "N of M imported cells are
   // not on the map."; null when they all are.
   readonly annotationImportNotice: string | null
+  // The URL whose labels or tracks the open dataset shows, imported by URL
+  // into it; what a link's annotationUrl= names. Null once they are cleared,
+  // replaced by a set or a file of the same name, or another dataset opens.
+  readonly linkedAnnotationUrl: string | null
   readonly handleAnnotationColorChange: (annotationId: string, color: string) => void
   readonly handleAnnotationGroupChange: (groupId: string) => void
   readonly handleClearAnnotations: () => void
@@ -183,6 +187,14 @@ export function useAnnotationWorkflow({
   const [importNotice, setImportNotice] = useState<{
     readonly url: string
     readonly message: string
+  } | null>(null)
+  // The last import by URL: the dataset it went into, the URL, and the id
+  // prefixes its labels and tracks carry.
+  const [urlImport, setUrlImport] = useState<{
+    readonly datasetUrl: string
+    readonly url: string
+    readonly annotationPrefix: string
+    readonly metadataPrefix: string
   } | null>(null)
 
   const loadAnnotationGroup = useCallback(
@@ -305,6 +317,10 @@ export function useAnnotationWorkflow({
 
       const importedPrefix = customAnnotationFilePrefix(sourceName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
+      // A file of the URL's name replaces its labels.
+      setUrlImport((current) =>
+        current?.annotationPrefix === importedPrefix ? null : current,
+      )
       const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
         cellMetadataTracks,
         importedMetadataTracks,
@@ -446,6 +462,14 @@ export function useAnnotationWorkflow({
           'Imported URL annotations',
           linkHidden,
         )
+        if (loadState.status === 'ready') {
+          setUrlImport({
+            datasetUrl: loadState.url,
+            url: url.trim(),
+            annotationPrefix: customAnnotationFilePrefix(sourceName),
+            metadataPrefix: customCellMetadataFilePrefix(sourceName),
+          })
+        }
         return true
       } catch (error) {
         if (isAbortError(error) || loadRequestIdRef.current !== requestId) {
@@ -701,8 +725,21 @@ export function useAnnotationWorkflow({
       ? importNotice.message
       : null
 
+  const linkedAnnotationUrl =
+    urlImport !== null &&
+    loadState.status === 'ready' &&
+    urlImport.datasetUrl === loadState.url &&
+    ((annotationState.status === 'ready' &&
+      annotationState.annotations.some((annotation) =>
+        annotation.id.startsWith(urlImport.annotationPrefix),
+      )) ||
+      cellMetadataTracks.some((track) => track.id.startsWith(urlImport.metadataPrefix)))
+      ? urlImport.url
+      : null
+
   return {
     annotationImportNotice,
+    linkedAnnotationUrl,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
     handleClearAnnotations,

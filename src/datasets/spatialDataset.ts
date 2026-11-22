@@ -185,6 +185,9 @@ export interface GeneExpressionBatch {
   readonly geneCounts?: readonly GeneExpressionGeneCount[]
   readonly maxCount: number
   readonly timing?: GeneExpressionBatchTiming
+  // The box the viewer read the batch for (readers leave it out): a cell or
+  // bin outside it was not read, so its score is not in the batch.
+  readonly bbox?: BBox
 }
 
 export interface GeneExpressionBatchTiming {

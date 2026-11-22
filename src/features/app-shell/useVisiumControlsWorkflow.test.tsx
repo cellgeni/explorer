@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type { ShareableState } from '../../data/shareableState'
@@ -120,6 +120,60 @@ describe('useVisiumControlsWorkflow', () => {
     expect(
       restore(visiumControlLoading(ready, { libraryId: 'lib-B', showOffTissue: false })),
     ).toEqual(ready)
+  })
+
+  it('drops a tissue image read once another dataset is on screen', async () => {
+    let finishImage: (source: unknown) => void = () => undefined
+    const imageRead = new Promise((resolve) => {
+      finishImage = resolve
+    })
+    const dataset = {
+      overview: vi.fn(),
+      genePanel: vi.fn(),
+      annotationGroups: vi.fn(),
+      embeddingOptions: vi.fn(),
+      metadataTracks: vi.fn(),
+      visiumSummary: vi.fn(),
+      meta: vi.fn(async () => ({ units: { micrometersPerPixel: 1 } })),
+      tissueImage: vi.fn(() => imageRead),
+    }
+    const setFlatMorphologyImage = vi.fn()
+    const setMorphologyState = vi.fn()
+    const { result, rerender } = renderHook(
+      ({ datasetUrl }: { readonly datasetUrl: string }) =>
+        useVisiumControlsWorkflow({
+          appendDebugEvent: vi.fn(),
+          datasetUrl,
+          getSpatialDataset: vi.fn(async () => dataset) as never,
+          readShareableState: () => SHARED,
+          setFlatMorphologyImage,
+          setMorphologyState,
+          setVisiumControlState: vi.fn(),
+          shouldLoadMorphology: true,
+          startDatasetLoadRef: { current: null },
+          visiumControlState: visiumControlReady('h5ad', SUMMARY, 'lowres'),
+        }),
+      { initialProps: { datasetUrl: DATASET_URL } },
+    )
+
+    act(() => {
+      result.current.handleVisiumImageChange('hires')
+    })
+    await waitFor(() => {
+      expect(dataset.tissueImage).toHaveBeenCalledWith('hires')
+    })
+    // Another dataset commits before the PNG arrives.
+    rerender({ datasetUrl: 'https://example.test/other.h5ad' })
+    setFlatMorphologyImage.mockClear()
+    setMorphologyState.mockClear()
+
+    await act(async () => {
+      finishImage({ kind: 'flat', url: 'blob:hires', scaleFactor: 0.25 })
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(setFlatMorphologyImage).not.toHaveBeenCalled()
+    expect(setMorphologyState).not.toHaveBeenCalled()
   })
 
   it('does nothing before a Visium dataset is ready', () => {
