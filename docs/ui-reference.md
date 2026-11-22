@@ -853,7 +853,7 @@ Embedding panel's do.
 | `Colour`              | Dot plot and heatmap. `Shared across genes`: one range for every mean. `Per gene`: each gene from its lowest to its highest mean, like Scanpy's `standard_scale='var'`, so a gene with the same mean in every group takes the lowest colour. Shared starts at 0 unless a mean is lower                                                                                                                                             |
 | `Include zeros`       | Violin, on by default: every cell, with the cells at 0. Off: only the cells expressing the gene, which the axis caption says                                                                                                                                                                                                                                                                                                       |
 | `Show numbers`        | Swaps the plot for a table of each group and gene: cells, % expressing and the mean (dot plot, heatmap) or the median and quartiles shown (violin). It is also the plot's text alternative                                                                                                                                                                                                                                         |
-| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled                                                                                                                                                                                                                                                                                                                                                                        |
+| `Cancel`, `Try again` | Stop reading genes; read again what failed or was cancelled, and look up again the saved selections whose cells could not be found                                                                                                                                                                                                                                                                                                 |
 | `Read`                | Shown when a read is over 32 MiB: reads the genes. Its title gives the size                                                                                                                                                                                                                                                                                                                                                        |
 | `Export SVG`          | The plot as `{dataset}-{plot}-{set}.svg` (`dot-plot`, `violin` or `heatmap`), drawn from the same model with its colours and font written out, so it looks the same outside the app. The heatmap's file is drawn from its model too                                                                                                                                                                                                |
 | `Export PNG`          | The same drawing as a PNG at twice its size, `{dataset}-{plot}-{set}.png`                                                                                                                                                                                                                                                                                                                                                          |
@@ -903,7 +903,8 @@ What it plots:
   are left out, with a note. Each selection's cells are looked up once, as
   the Selection card does for the active one, and again only when its outline
   changes; the plot waits for all of them. A cell in two selections counts in
-  both. A selection whose cells cannot be found is left out, with a note.
+  both. A selection whose cells cannot be found is left out, with a note, and
+  is looked up again when `Selections` is chosen again or on `Try again`.
 
 Method:
 
@@ -963,7 +964,8 @@ download.
 
 Gene values are kept in the panel's worker, up to 128 MiB, so changing
 `Plot`, `Group by`, `Scale`, `Colour` or `Include zeros` reads nothing again;
-a new gene is read once. The worker works out the quartiles and the violins'
+a new gene is read once. While the worker groups the genes anew for another `Group by`, hidden
+class or selection, the panel says "Grouping the cells…". The worker works out the quartiles and the violins'
 shapes with the means, for up to 64 groups (the heatmap's longer lists get
 means only).
 Xenium's 1.4 million row IDs go to the worker as the integers the matrix

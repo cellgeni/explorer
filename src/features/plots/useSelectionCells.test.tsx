@@ -173,4 +173,47 @@ describe('useSelectionCells', () => {
 
     expect(signal?.aborted).toBe(true)
   })
+
+  it('looks a failed outline up again when shown again, or on Try again', async () => {
+    const selection = box(0)
+    let fail = true
+    const loadCells = vi.fn<RoiCellsLoader>(async () => {
+      if (fail) throw new Error('Failed to fetch')
+      return cells('a')
+    })
+    const selections = [savedSelection('1', selection)]
+    const { result, rerender } = renderHook(
+      ({ enabled, retryCount }) =>
+        useSelectionCells({
+          enabled,
+          datasetUrl: URL,
+          selections,
+          loadCells,
+          appendDebugEvent: vi.fn(),
+          retryCount,
+        }),
+      { initialProps: { enabled: true, retryCount: 0 } },
+    )
+    await waitFor(() => {
+      expect(result.current[0]?.cells.status).toBe('error')
+    })
+
+    // Group by moves away and back.
+    rerender({ enabled: false, retryCount: 0 })
+    rerender({ enabled: true, retryCount: 0 })
+    await waitFor(() => {
+      expect(loadCells).toHaveBeenCalledTimes(2)
+    })
+    await waitFor(() => {
+      expect(result.current[0]?.cells.status).toBe('error')
+    })
+
+    // Try again, once the network is back.
+    fail = false
+    rerender({ enabled: true, retryCount: 1 })
+    await waitFor(() => {
+      expect(result.current[0]?.cells.status).toBe('ready')
+    })
+    expect(loadCells).toHaveBeenCalledTimes(3)
+  })
 })
