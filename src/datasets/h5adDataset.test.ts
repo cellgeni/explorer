@@ -243,7 +243,8 @@ describe('AnnDataH5adDataset', () => {
     expect(
       geneExpressionScores(
         sampled.elements,
-        sampled.genes,
+        // Z-scores combine two or more genes; a second leaves them as they are.
+        [...sampled.genes, 'Other'],
         'z-score',
         sampled.cellCount,
       )[2],

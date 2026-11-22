@@ -1,11 +1,16 @@
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
+import { asAnyCellId } from '../../data/cellid'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  NO_ANNOTATION_GROUP_ID,
+} from '../../data/datasetAnnotations'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
   IDLE_ANNOTATION_STATE,
   annotationGroupLoadReady,
   annotationLoadReady,
+  annotationLoadStarted,
   type AnnotationState,
 } from '../annotations/annotationModel'
 import { datasetLoadReady } from '../dataset/datasetLoadModel'
@@ -58,6 +63,7 @@ function renderWorkflow(
     annotationState,
     // Only the annotation methods are read.
     getSpatialDataset: vi.fn(async () => dataset) as unknown as SpatialDatasetLoader,
+    hiddenAnnotationIds: [] as readonly string[],
     isVisiumHdDataset: true,
     loadAnnotationGroup,
     loadState: datasetLoadReady(DATASET_URL, 54_504),
@@ -125,7 +131,7 @@ describe('useVisiumHdAnnotationSetsWorkflow', () => {
     await waitFor(() => {
       expect(loadAnnotationGroup).toHaveBeenCalledWith(
         'visium-hd-clusters:8:gene_expression_kmeans_2_clusters',
-        { switchColorMode: false },
+        { switchColorMode: false, hiddenAnnotationIds: [] },
       )
     })
     expect(setSelectedAnnotationGroupId).toHaveBeenCalledWith(
@@ -150,6 +156,97 @@ describe('useVisiumHdAnnotationSetsWorkflow', () => {
         'visium-hd-clusters:16:gene_expression_graphclust',
       ),
     ).toBe(NO_ANNOTATION_GROUP_ID)
+  })
+
+  it('reads a loaded "All" again for the new tier, keeping it selected and the classes hidden', async () => {
+    // "All" read at 16 µm: its classes name 16 µm bins.
+    const loaded = annotationLoadReady(
+      DATASET_URL,
+      [
+        {
+          id: 'analysis:gene_expression_graphclust:1',
+          label: 'graphclust: Cluster 1',
+          cellIds: [asAnyCellId('s_016um_00001_00001-1')],
+        },
+      ],
+      ALL_ANNOTATION_GROUP_ID,
+    )
+    const hidden = ['analysis:gene_expression_graphclust:1']
+    const { loadAnnotationGroup, props, rerender, setSelectedAnnotationGroupId } =
+      renderWorkflow(16, loaded)
+
+    await waitFor(() => {
+      expect(setSelectedAnnotationGroupId).toHaveBeenCalled()
+    })
+    expect(selectedFrom(setSelectedAnnotationGroupId, ALL_ANNOTATION_GROUP_ID)).toBe(
+      ALL_ANNOTATION_GROUP_ID,
+    )
+    expect(loadAnnotationGroup).not.toHaveBeenCalled()
+
+    rerender({ ...props, activeBinSize: 8, hiddenAnnotationIds: hidden })
+
+    await waitFor(() => {
+      expect(loadAnnotationGroup).toHaveBeenCalledWith(ALL_ANNOTATION_GROUP_ID, {
+        switchColorMode: false,
+        hiddenAnnotationIds: hidden,
+      })
+    })
+    expect(setSelectedAnnotationGroupId).toHaveBeenCalledWith(ALL_ANNOTATION_GROUP_ID)
+  })
+
+  it('clears a loaded "All" when the new tier has no clusterings', async () => {
+    const loaded = annotationLoadReady(
+      DATASET_URL,
+      [
+        {
+          id: 'analysis:x:1',
+          label: 'x: 1',
+          cellIds: [asAnyCellId('s_008um_00001_00001-1')],
+        },
+      ],
+      ALL_ANNOTATION_GROUP_ID,
+    )
+    const { loadAnnotationGroup, setAnnotationState, setSelectedAnnotationGroupId } =
+      renderWorkflow(2, loaded)
+
+    await waitFor(() => {
+      expect(setAnnotationState).toHaveBeenCalledWith(IDLE_ANNOTATION_STATE)
+    })
+    expect(selectedFrom(setSelectedAnnotationGroupId, ALL_ANNOTATION_GROUP_ID)).toBe(
+      NO_ANNOTATION_GROUP_ID,
+    )
+    expect(loadAnnotationGroup).not.toHaveBeenCalled()
+  })
+
+  it('reads a set again for the new tier when it lands after the switch', async () => {
+    const { loadAnnotationGroup, props, rerender, setAnnotationGroupState } =
+      renderWorkflow(16, annotationLoadStarted(DATASET_URL))
+
+    rerender({ ...props, activeBinSize: 8 })
+    await waitFor(() => {
+      expect(setAnnotationGroupState).toHaveBeenLastCalledWith(
+        annotationGroupLoadReady(DATASET_URL, GROUPS[8]),
+      )
+    })
+    expect(loadAnnotationGroup).not.toHaveBeenCalled()
+
+    // The 16 µm read started before the switch arrives.
+    rerender({
+      ...props,
+      activeBinSize: 8,
+      annotationState: annotationLoadReady(
+        DATASET_URL,
+        [],
+        'visium-hd-clusters:16:gene_expression_graphclust',
+      ),
+    })
+
+    await waitFor(() => {
+      expect(loadAnnotationGroup).toHaveBeenCalledWith(
+        'visium-hd-clusters:8:gene_expression_graphclust',
+        { switchColorMode: false, hiddenAnnotationIds: [] },
+      )
+    })
   })
 
   it('does nothing for another platform', async () => {

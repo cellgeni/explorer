@@ -1,6 +1,10 @@
-import { useEffect, useRef } from 'react'
-import { NO_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
+import { useEffect, useRef, useState } from 'react'
+import {
+  ALL_ANNOTATION_GROUP_ID,
+  NO_ANNOTATION_GROUP_ID,
+} from '../../data/datasetAnnotations'
 import type { SpatialElementId } from '../../datasets/spatialDataset'
+import { parseVisiumHdSquareBarcode } from '../../datasets/visiumHdBarcodes'
 import { parseVisiumHdClusteringGroupId } from '../../datasets/visiumHdClusters'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
@@ -58,10 +62,16 @@ interface UseVisiumHdAnnotationSetsWorkflowOptions {
   readonly activeBinSize: VisiumHdBinSizeMicrometers | undefined
   readonly annotationState: AnnotationState<StructuredLoadError>
   readonly getSpatialDataset: SpatialDatasetLoader
+  // Hidden classes, kept when a set is read again for another tier (class ids
+  // leave out the tier).
+  readonly hiddenAnnotationIds: readonly string[]
   readonly isVisiumHdDataset: boolean
   readonly loadAnnotationGroup: (
     groupId: string,
-    options?: { readonly switchColorMode?: boolean },
+    options?: {
+      readonly switchColorMode?: boolean
+      readonly hiddenAnnotationIds?: readonly string[]
+    },
   ) => Promise<void>
   readonly loadState: DatasetLoadState<StructuredLoadError>
   readonly setAnnotationGroupState: Setter<AnnotationGroupState<StructuredLoadError>>
@@ -70,14 +80,16 @@ interface UseVisiumHdAnnotationSetsWorkflowOptions {
 }
 
 // Lists the active tier's annotation sets whenever the tier changes. A set
-// loaded for another tier names bins this one does not have, so it is read
-// again for this tier when the tier has the same clustering, and cleared when
-// it does not (2 µm has none).
+// loaded for another tier names bins this one does not have, so once both the
+// set and the tier's list are in, it is read again for this tier when the tier
+// has the same clustering (or any, for "All"), and cleared when it does not
+// (2 µm has none). That includes a set still loading when the tier changed.
 export function useVisiumHdAnnotationSetsWorkflow({
   appendDebugEvent,
   activeBinSize,
   annotationState,
   getSpatialDataset,
+  hiddenAnnotationIds,
   isVisiumHdDataset,
   loadAnnotationGroup,
   loadState,
@@ -86,12 +98,17 @@ export function useVisiumHdAnnotationSetsWorkflow({
   setSelectedAnnotationGroupId,
 }: UseVisiumHdAnnotationSetsWorkflowOptions): void {
   const readyUrl = loadState.status === 'ready' ? loadState.url : null
-  // Read when the sets arrive, not when the tier changes.
-  const latestRef = useRef({ annotationState, loadAnnotationGroup })
+  // The sets listed for a tier, once they arrive.
+  const [listed, setListed] = useState<{
+    readonly url: string
+    readonly binSize: VisiumHdBinSizeMicrometers
+    readonly groups: readonly AnnotationGroupOption[]
+  } | null>(null)
+  const latestAnnotationStateRef = useRef(annotationState)
 
   useEffect(() => {
-    latestRef.current = { annotationState, loadAnnotationGroup }
-  }, [annotationState, loadAnnotationGroup])
+    latestAnnotationStateRef.current = annotationState
+  }, [annotationState])
 
   useEffect(() => {
     if (!isVisiumHdDataset || readyUrl === null || activeBinSize === undefined) {
@@ -113,39 +130,22 @@ export function useVisiumHdAnnotationSetsWorkflow({
         }
 
         setAnnotationGroupState(annotationGroupLoadReady(readyUrl, groups))
+        // "All" stays selected while it is the set shown, if this tier has any.
+        const allShown =
+          groups.length > 0 &&
+          loadedGroupId(latestAnnotationStateRef.current) === ALL_ANNOTATION_GROUP_ID
         setSelectedAnnotationGroupId((current) =>
-          groups.some((group) => group.id === current)
+          groups.some((group) => group.id === current) ||
+          (allShown && current === ALL_ANNOTATION_GROUP_ID)
             ? current
             : (sameClusteringGroupId(current, groups) ??
               defaultAnnotationGroupId(groups) ??
               NO_ANNOTATION_GROUP_ID),
         )
+        setListed({ url: readyUrl, binSize: activeBinSize, groups })
         appendDebugEvent(
           `Visium HD ${activeBinSize} µm annotation sets ready: ${groups.length.toLocaleString()}`,
         )
-
-        const { annotationState: loaded, loadAnnotationGroup: load } = latestRef.current
-        const loadedGroup =
-          loaded.status === 'ready' && loaded.groupId !== undefined
-            ? parseVisiumHdClusteringGroupId(loaded.groupId)
-            : null
-
-        if (loadedGroup === null || loadedGroup.binSizeMicrometers === activeBinSize) {
-          return
-        }
-
-        const nextGroupId = sameClusteringGroupId(
-          loaded.status === 'ready' ? loaded.groupId : undefined,
-          groups,
-        )
-
-        if (nextGroupId === undefined) {
-          setAnnotationState(IDLE_ANNOTATION_STATE)
-          return
-        }
-
-        setSelectedAnnotationGroupId(nextGroupId)
-        void load(nextGroupId, { switchColorMode: false })
       })
       .catch((error: unknown) => {
         if (isAbortError(error) || controller.signal.aborted) {
@@ -171,9 +171,83 @@ export function useVisiumHdAnnotationSetsWorkflow({
     isVisiumHdDataset,
     readyUrl,
     setAnnotationGroupState,
+    setSelectedAnnotationGroupId,
+  ])
+
+  useEffect(() => {
+    if (
+      !isVisiumHdDataset ||
+      listed === null ||
+      listed.url !== readyUrl ||
+      listed.binSize !== activeBinSize ||
+      annotationState.status !== 'ready'
+    ) {
+      return
+    }
+
+    const groupId = annotationState.groupId
+    const readBinSize = loadedSetBinSize(annotationState)
+
+    if (readBinSize === undefined || readBinSize === activeBinSize) {
+      return
+    }
+
+    const nextGroupId =
+      groupId === ALL_ANNOTATION_GROUP_ID
+        ? listed.groups.length > 0
+          ? ALL_ANNOTATION_GROUP_ID
+          : undefined
+        : sameClusteringGroupId(groupId, listed.groups)
+
+    if (nextGroupId === undefined) {
+      setAnnotationState(IDLE_ANNOTATION_STATE)
+      return
+    }
+
+    setSelectedAnnotationGroupId(nextGroupId)
+    void loadAnnotationGroup(nextGroupId, {
+      switchColorMode: false,
+      hiddenAnnotationIds,
+    })
+  }, [
+    activeBinSize,
+    annotationState,
+    hiddenAnnotationIds,
+    isVisiumHdDataset,
+    listed,
+    loadAnnotationGroup,
+    readyUrl,
     setAnnotationState,
     setSelectedAnnotationGroupId,
   ])
+}
+
+// The set a ready annotation state shows, if one was loaded.
+function loadedGroupId(state: AnnotationState<StructuredLoadError>): string | undefined {
+  return state.status === 'ready' ? state.groupId : undefined
+}
+
+// The tier whose bins a loaded set names. A set's id names its tier; "All" is
+// read for the tier active when it was read, which its bin barcodes name.
+function loadedSetBinSize(
+  state: AnnotationState<StructuredLoadError>,
+): VisiumHdBinSizeMicrometers | undefined {
+  const groupId = loadedGroupId(state)
+
+  if (state.status !== 'ready' || groupId === undefined) {
+    return undefined
+  }
+
+  if (groupId !== ALL_ANNOTATION_GROUP_ID) {
+    return parseVisiumHdClusteringGroupId(groupId)?.binSizeMicrometers
+  }
+
+  const barcode = state.annotations.find((annotation) => annotation.cellIds.length > 0)
+    ?.cellIds[0]
+
+  return barcode === undefined
+    ? undefined
+    : parseVisiumHdSquareBarcode(barcode)?.binSizeMicrometers
 }
 
 // The set in `groups` with the same clustering as `groupId`, which may be

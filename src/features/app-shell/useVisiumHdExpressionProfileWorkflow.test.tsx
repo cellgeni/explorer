@@ -154,6 +154,47 @@ describe('useVisiumHdExpressionProfileWorkflow', () => {
     void api
   })
 
+  it('loads the profile again after a click on the selected bin', async () => {
+    const matrix = vi.fn(async () => matrixResult('s_008um_1_1', 'VIM', 12))
+    const getSpatialDataset = spatialDatasetLoader({ matrix })
+    const onReady = (
+      nextApi: ReturnType<typeof useVisiumHdExpressionProfileWorkflow>,
+      nextSnapshot: Snapshot,
+    ) => {
+      api = nextApi
+      snapshot = nextSnapshot
+    }
+    const view = render(
+      <Probe
+        activeSelection={{ id: 's_008um_1_1', kind: 'bin' }}
+        getSpatialDataset={getSpatialDataset}
+        onReady={onReady}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(snapshot.state.status).toBe('ready')
+    })
+
+    // App's bin click: the profile is cleared, then the bin the viewer
+    // picked, the same one, is selected again.
+    act(() => {
+      api.clearVisiumHdExpressionProfileState()
+      view.rerender(
+        <Probe
+          activeSelection={{ id: 's_008um_1_1', kind: 'bin' }}
+          getSpatialDataset={getSpatialDataset}
+          onReady={onReady}
+        />,
+      )
+    })
+
+    await waitFor(() => {
+      expect(matrix).toHaveBeenCalledTimes(2)
+      expect(snapshot.state.status).toBe('ready')
+    })
+  })
+
   it('loads selected segmented-cell profiles from mapped Visium HD bins', async () => {
     const matrix = vi.fn(async () =>
       matrixResult(['s_008um_1_1', 's_008um_1_2'], 'DCN', 5),

@@ -594,7 +594,7 @@ export function useRoiWorkflow({
             ).toLocaleString()} of ${cells.length.toLocaleString()} cells`,
           )
 
-          // The preview first, then the comparison, then every cell.
+          // The preview first, then the comparison, then up to 10,000 cells.
           return loadRoiGeneStats(url, cells, {
             signal: request.signal,
             cellLimit: ROI_GENE_STATS_PREVIEW_CELL_LIMIT,

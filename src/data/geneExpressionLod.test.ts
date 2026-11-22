@@ -3,6 +3,7 @@ import { micrometers } from './coords'
 import {
   GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT,
   GENE_EXPRESSION_EXACT_CELL_LIMIT,
+  geneExpressionReadCovers,
   geneExpressionRequestKey,
   planGeneExpressionLod,
 } from './geneExpressionLod'
@@ -71,8 +72,14 @@ describe('gene expression LOD planner', () => {
     ).toEqual({
       kind: 'request',
       mode: 'exact-region',
-      bbox: viewportBbox,
-      cellLimit: 6_000,
+      // A quarter of the view's width and height on each side.
+      bbox: {
+        minX: micrometers(50),
+        maxX: micrometers(350),
+        minY: micrometers(150),
+        maxY: micrometers(450),
+      },
+      cellLimit: 60_000,
       sampleStride: 1,
       sourceCellCount: 6_000,
     })
@@ -194,11 +201,30 @@ describe('gene expression LOD planner', () => {
     ).toEqual({
       kind: 'request',
       mode: 'exact',
+      // A view at the exact limit gets no margin.
       bbox: viewportBbox,
-      cellLimit: GENE_EXPRESSION_EXACT_CELL_LIMIT,
+      cellLimit: 600_000,
       sampleStride: 1,
       sourceCellCount: GENE_EXPRESSION_EXACT_CELL_LIMIT,
     })
+  })
+
+  it('narrows the exact margin as the view fills up towards the exact limit', () => {
+    const plan = planGeneExpressionLod(
+      // 50,000 / 1.44: a margin of a tenth keeps the box near 50,000 cells.
+      detail({ visibleCellCount: 34_722 }),
+      { detailMode: 'auto', slideBbox, totalCellCount: 600_000 },
+    )
+
+    if (plan.kind !== 'request') {
+      throw new Error('Expected an expression request plan.')
+    }
+
+    expect(plan.mode).toBe('exact')
+    expect(plan.bbox.minX).toBeCloseTo(80, 2)
+    expect(plan.bbox.maxX).toBeCloseTo(320, 2)
+    expect(plan.bbox.minY).toBeCloseTo(180, 2)
+    expect(plan.bbox.maxY).toBeCloseTo(420, 2)
   })
 
   it('keeps Visium HD 16um expression dense at overview zooms', () => {
@@ -485,6 +511,99 @@ describe('gene expression LOD planner', () => {
         ['Actb'],
       ),
     )
+  })
+
+  it('keys exact viewport reads by zoom, not by position, and covers views inside the box read', () => {
+    const options = { detailMode: 'auto', slideBbox, totalCellCount: 600_000 } as const
+    const first = detail({ visibleCellCount: 2_000 })
+    const plan = planGeneExpressionLod(first, options)
+
+    if (plan.kind !== 'request') {
+      throw new Error('Expected an expression request plan.')
+    }
+
+    const key = geneExpressionRequestKey('https://example.test/xenium/', first, plan, [
+      'Actb',
+    ])
+    const read = { key, bbox: plan.bbox }
+    const shifted = (dx: number): BBox => ({
+      minX: micrometers(viewportBbox.minX + dx),
+      maxX: micrometers(viewportBbox.maxX + dx),
+      minY: viewportBbox.minY,
+      maxY: viewportBbox.maxY,
+    })
+    const pannedDetail = (dx: number) =>
+      detail({
+        bbox: shifted(dx),
+        visibleCellCount: 2_000,
+        viewState: { target: [150 + dx, -250, 0], zoom: 0 },
+      })
+    const keyFor = (next: GeneExpressionViewportDetail) => {
+      const nextPlan = planGeneExpressionLod(next, options)
+
+      if (nextPlan.kind !== 'request') {
+        throw new Error('Expected an expression request plan.')
+      }
+
+      return {
+        key: geneExpressionRequestKey('https://example.test/xenium/', next, nextPlan, [
+          'Actb',
+        ]),
+        plan: nextPlan,
+      }
+    }
+
+    // The margin is 50 units on each side of a 200-unit view.
+    const inside = keyFor(pannedDetail(40))
+    const outside = keyFor(pannedDetail(60))
+
+    expect(inside.key).toBe(key)
+    expect(outside.key).toBe(key)
+    expect(geneExpressionReadCovers(read, inside.key, inside.plan, shifted(40))).toBe(
+      true,
+    )
+    expect(geneExpressionReadCovers(read, outside.key, outside.plan, shifted(60))).toBe(
+      false,
+    )
+    expect(
+      keyFor(
+        detail({
+          visibleCellCount: 2_000,
+          viewState: { target: [150, -250, 0], zoom: 0.5 },
+        }),
+      ).key,
+    ).not.toBe(key)
+  })
+
+  it('covers any view with a whole-slide read under the same key', () => {
+    const overview = detail({
+      visibleCellCount: 60_000,
+      viewState: { target: [150, -250, 0], zoom: -3 },
+    })
+    const plan = planGeneExpressionLod(overview, {
+      detailMode: 'auto',
+      slideBbox,
+      totalCellCount: 600_000,
+    })
+
+    if (plan.kind !== 'request') {
+      throw new Error('Expected an expression request plan.')
+    }
+
+    const key = geneExpressionRequestKey('https://example.test/xenium/', overview, plan, [
+      'Actb',
+    ])
+    const beyondSlide: BBox = {
+      minX: micrometers(-5_000),
+      maxX: micrometers(15_000),
+      minY: micrometers(-5_000),
+      maxY: micrometers(15_000),
+    }
+
+    expect(
+      geneExpressionReadCovers({ key, bbox: plan.bbox }, key, plan, beyondSlide),
+    ).toBe(true)
+    expect(geneExpressionReadCovers(null, key, plan, beyondSlide)).toBe(false)
   })
 
   it('uses padded sampled viewport requests above the exact cap outside overview zooms', () => {

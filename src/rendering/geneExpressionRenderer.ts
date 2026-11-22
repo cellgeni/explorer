@@ -1,4 +1,5 @@
 import type { Color, Position } from '@deck.gl/core'
+import type { BBox } from '../data/coords'
 import type { GeneExpressionElement } from '../datasets/spatialDataset'
 import { geneScoreSpread, type GeneScoreSpread } from '../features/genes/geneScaleRange'
 import {
@@ -315,7 +316,9 @@ export function createGeneExpressionElementStyleIndex(
 // are `cellCount` (GeneExpressionBatch.cellCount), so the cells left out of
 // `elements` count as 0, whichever platform left them out. A non-finite count
 // (a stored NaN or infinity) keeps its value and is left out of the z-score's
-// mean and SD, so the other cells still get a score.
+// mean and SD, so the other cells still get a score. Combine genes is for two
+// or more genes: one gene is scored by its expression whatever the mode, as
+// the legend says ("Expression per cell").
 export function geneExpressionScores(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
@@ -324,7 +327,7 @@ export function geneExpressionScores(
 ): readonly number[] {
   const geneCount = Math.max(genes.length, 1)
 
-  if (scoreMode === 'sum') {
+  if (scoreMode === 'sum' || geneCount < 2) {
     return elements.map((element) => element.count)
   }
 
@@ -471,6 +474,14 @@ function positionBinKey(position: Position, binMicrometers: number): string {
 
 function pointBinKey(x: number, y: number, binMicrometers: number): string {
   return `${Math.floor(x / binMicrometers)}:${Math.floor(y / binMicrometers)}`
+}
+
+// Whether a bin's centre lies in `bbox` (data µm, y down), as a read covers it.
+export function gridCellCenterInBbox(cell: GridCellDatum, bbox: BBox): boolean {
+  const [x = 0, deckY = 0] = gridCellCenterPosition(cell)
+  const y = -deckY
+
+  return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
 }
 
 function gridCellCenterPosition(cell: GridCellDatum): Position {

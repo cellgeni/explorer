@@ -417,6 +417,60 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Imported URL annotations: 1 labels')
   })
 
+  it('links an imported URL only while its labels are shown', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    const url = 'https://example.test/labels/manual.csv'
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string) =>
+        input === url
+          ? new Response(`cell_id,label\n${cellId},Remote ROI`)
+          : new Response('', { status: 404 }),
+      ),
+    )
+    const loadAnnotations = vi.fn(async () => [
+      { id: 'analysis:cluster-a:1', label: 'cluster-a: 1', cellIds: [cellId] },
+    ])
+
+    render(
+      <Probe
+        loadAnnotations={loadAnnotations}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+    expect(api.linkedAnnotationUrl).toBeNull()
+
+    // A URL that fails to import is never linked.
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/labels/missing.csv')
+    })
+    expect(api.linkedAnnotationUrl).toBeNull()
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl(url)
+    })
+    expect(api.linkedAnnotationUrl).toBe(url)
+
+    act(() => {
+      api.handleClearAnnotations()
+    })
+    expect(api.linkedAnnotationUrl).toBeNull()
+
+    // A set loaded after the import replaces its labels.
+    await act(async () => {
+      await api.handleImportAnnotationUrl(url)
+    })
+    expect(api.linkedAnnotationUrl).toBe(url)
+    await act(async () => {
+      await api.loadAnnotationGroup('cluster-a')
+    })
+    expect(snapshot.annotationState.status).toBe('ready')
+    expect(api.linkedAnnotationUrl).toBeNull()
+  })
+
   it('refuses an annotation URL over the size limit', async () => {
     vi.stubGlobal(
       'fetch',

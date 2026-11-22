@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
   visiumHdAvailableBinSizes,
@@ -80,6 +80,11 @@ export function useVisiumHdGridLodWorkflow({
   refs: { visiumHdBinRequestIdRef },
   setters: { setLoadState, setSpatialGridCells, setVisiumHdControlState },
 }: UseVisiumHdGridLodWorkflowOptions): void {
+  // A level-of-detail read has a counter of its own: the next one replaces
+  // it, and so does a bin switch (visiumHdBinRequestIdRef), but it leaves the
+  // switch's gene panel and image reads, which check that counter, alone.
+  const lodRequestIdRef = useRef(0)
+
   useEffect(() => {
     if (
       visiumHdControlState.status !== 'ready' ||
@@ -101,9 +106,13 @@ export function useVisiumHdGridLodWorkflow({
     }
 
     const datasetUrl = loadedDatasetUrl ?? visiumHdControlState.url
-    const requestId = visiumHdBinRequestIdRef.current + 1
+    const requestId = lodRequestIdRef.current + 1
+    const switchRequestId = visiumHdBinRequestIdRef.current
+    const isCurrent = () =>
+      lodRequestIdRef.current === requestId &&
+      visiumHdBinRequestIdRef.current === switchRequestId
     const startedAt = readTimestamp()
-    visiumHdBinRequestIdRef.current = requestId
+    lodRequestIdRef.current = requestId
     setVisiumHdControlState((current) => visiumHdControlLoading(current, selectedBinSize))
     appendDebugEvent(visiumHdGridLodLoadMessage(selectedBinSize, desiredBinSize), {
       coalesceKey: 'visium-hd-grid-lod',
@@ -118,7 +127,7 @@ export function useVisiumHdGridLodWorkflow({
         return dataset.readBinnedOverview(desiredBinSize)
       })
       .then((overview) => {
-        if (visiumHdBinRequestIdRef.current !== requestId) {
+        if (!isCurrent()) {
           return
         }
 
@@ -140,7 +149,7 @@ export function useVisiumHdGridLodWorkflow({
         )
       })
       .catch((error) => {
-        if (visiumHdBinRequestIdRef.current !== requestId) {
+        if (!isCurrent()) {
           return
         }
 
