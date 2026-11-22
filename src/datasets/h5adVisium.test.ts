@@ -256,6 +256,24 @@ describe('AnnDataH5adDataset with uns/spatial', () => {
     expect(requests.filter((method) => method !== 'HEAD')).toHaveLength(2)
   })
 
+  it('makes one image URL for every view of a library, and revokes it on dispose', async () => {
+    let next = 0
+    const create = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockImplementation(() => `blob:image-${(next += 1).toString()}`)
+    const revoke = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
+    const dataset = datasetFor(await createVisiumH5ad({ inTissue: true }))
+
+    await expect(dataset.image()).resolves.toMatchObject({ url: 'blob:image-1' })
+    await expect(
+      dataset.visiumViewDataset({ showOffTissue: true }).image(),
+    ).resolves.toMatchObject({ url: 'blob:image-1' })
+    expect(create).toHaveBeenCalledTimes(1)
+
+    dataset.dispose()
+    await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith('blob:image-1'))
+  })
+
   it('places only the first library when obs names each row’s library', async () => {
     const dataset = datasetFor(await createVisiumH5ad({ secondLibrary: true }))
     const [summary, cells] = await Promise.all([
