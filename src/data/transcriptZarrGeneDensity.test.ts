@@ -115,6 +115,19 @@ const SMALL_ROWS = [
 
 let urlCount = 0
 const requestedRanges: string[] = []
+// Zip entries whose reads fail, as on a dropped connection.
+const failingEntries: string[] = []
+
+// Whether a range reads an entry: its local header (30 bytes, then the name)
+// or the data that starts after the name. Reads that reach the end of the
+// file look for the central directory, and always work.
+function coversEntry(zip: Uint8Array, start: number, end: number, name: string): boolean {
+  const nameOffset = Buffer.from(zip.buffer, zip.byteOffset, zip.length).indexOf(name)
+  const dataOffset = nameOffset + name.length
+  return (
+    nameOffset >= 0 && end < zip.length && start <= dataOffset && nameOffset - 30 < end
+  )
+}
 
 // Serves the zip at a new URL, so the metadata cache starts empty.
 function serve(zip: Uint8Array): string {
@@ -136,6 +149,9 @@ function serve(zip: Uint8Array): string {
       requestedRanges.push(range[0])
       const start = Number(range[1])
       const end = Number(range[2]) + 1
+      if (failingEntries.some((name) => coversEntry(zip, start, end, name))) {
+        throw new TypeError('Failed to fetch')
+      }
       return new Response(zip.slice(start, end), {
         status: 206,
         headers: { 'content-range': `bytes ${start}-${end - 1}/${zip.length}` },
@@ -148,6 +164,7 @@ function serve(zip: Uint8Array): string {
 afterEach(() => {
   vi.unstubAllGlobals()
   requestedRanges.length = 0
+  failingEntries.length = 0
 })
 
 describe('selected-gene transcript density', () => {
@@ -280,6 +297,46 @@ describe('selected-gene transcript density', () => {
     })
     expect(fits.overBudget).toBeUndefined()
     expect(fits.visibleTranscriptCount).toBe(2)
+  })
+
+  it('reads the gene pointers again after a failed read', async () => {
+    const url = serve(transcriptZarr({ rows: SMALL_ROWS, cols: 4, chunkSize: 2 }))
+    await loadTranscriptZarrAggregates(url, bbox(0, 0, 39, 39), { maxBins: 100 })
+    failingEntries.push('density/gene/indptr/0')
+
+    await expect(
+      loadTranscriptZarrAggregates(url, bbox(0, 0, 39, 39), {
+        featureNames: ['GENEA'],
+        maxBins: 100,
+      }),
+    ).rejects.toThrow()
+
+    failingEntries.length = 0
+    const retry = await loadTranscriptZarrAggregates(url, bbox(0, 0, 39, 39), {
+      featureNames: ['GENEA'],
+      maxBins: 100,
+    })
+    expect(retry.visibleTranscriptCount).toBe(16)
+  })
+
+  it('reads density/gene again after its metadata failed to read', async () => {
+    const url = serve(transcriptZarr({ rows: SMALL_ROWS, cols: 4, chunkSize: 2 }))
+    failingEntries.push('density/gene/.zattrs')
+
+    await expect(
+      loadTranscriptZarrAggregates(url, bbox(0, 0, 39, 39), {
+        featureNames: ['GENEA'],
+        maxBins: 100,
+      }),
+    ).rejects.toThrow()
+
+    failingEntries.length = 0
+    const retry = await loadTranscriptZarrAggregates(url, bbox(0, 0, 39, 39), {
+      featureNames: ['GENEA'],
+      maxBins: 100,
+    })
+    expect(retry.selectedFeatureNames).toEqual(['GENEA'])
+    expect(retry.visibleTranscriptCount).toBe(16)
   })
 
   it('counts all transcripts when the output has no density/gene', async () => {
