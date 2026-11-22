@@ -135,6 +135,67 @@ describe('Zarr cell feature matrix cache', () => {
     ).toHaveLength(1)
   })
 
+  it('gives two spellings of one gene arrays of their own', async () => {
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1, 3, 1]),
+      indptr: new Uint32Array([0, 1, 2, 3]),
+      featureIndptr: new Uint32Array([0, 2, 3]),
+      featureIndices: new Uint32Array([0, 2, 1]),
+      featureData: new Uint32Array([4, 6, 9]),
+    })
+    const gex = await import('./gex')
+    const [upper, missing, lower] = await gex.geneValuesFromCellFeatureMatrixZarr(
+      'https://example.test/xenium/two-spellings/cell_feature_matrix.zarr.zip',
+      ['Actb', 'Nope', 'actb'],
+    )
+
+    expect(missing).toEqual({
+      gene: 'Nope',
+      error: 'Nope is not a gene in the expression matrix.',
+    })
+    if (
+      upper === undefined ||
+      lower === undefined ||
+      'error' in upper ||
+      'error' in lower
+    ) {
+      throw new Error('Both spellings should read Actb.')
+    }
+    expect(lower).toEqual({
+      gene: 'actb',
+      rows: new Uint32Array([0, 2]),
+      values: new Float32Array([4, 6]),
+    })
+    // The Plots session transfers each gene's buffers to its worker.
+    structuredClone(upper, { transfer: [upper.rows.buffer, upper.values.buffer] })
+    expect(() =>
+      structuredClone(lower, { transfer: [lower.rows.buffer, lower.values.buffer] }),
+    ).not.toThrow()
+  })
+
+  it('reads the first feature of a name for the map and for Plots', async () => {
+    // Actb in cell 0 (4), ACTB in cell 2 (6).
+    setupZarrMatrixMock({
+      featureKeys: ['Actb', 'ACTB'],
+      cellIdPairs: new Uint32Array([1, 1, 2, 1, 3, 1]),
+      indptr: new Uint32Array([0, 1, 2, 3]),
+      featureIndptr: new Uint32Array([0, 1, 2]),
+      featureIndices: new Uint32Array([0, 2]),
+      featureData: new Uint32Array([4, 6]),
+    })
+    const gex = await import('./gex')
+    const url = 'https://example.test/xenium/duplicate-names/cell_feature_matrix.zarr.zip'
+    const map = await gex.selectedGeneRowsFromCellFeatureMatrixZarr(url, ['actb'])
+    const plots = await gex.geneValuesFromCellFeatureMatrixZarr(url, ['actb'])
+
+    expect(map?.features).toEqual([
+      { gene: 'Actb', rows: new Uint32Array([0]), counts: new Uint32Array([4]) },
+    ])
+    expect(plots).toEqual([
+      { gene: 'actb', rows: new Uint32Array([0]), values: new Float32Array([4]) },
+    ])
+  })
+
   it('returns no selected-gene rows without feature-major arrays', async () => {
     setupZarrMatrixMock({
       cellIdPairs: new Uint32Array([1, 1]),
@@ -622,6 +683,7 @@ describe('Zarr cell feature matrix cache', () => {
 })
 
 function setupZarrMatrixMock(options: {
+  readonly featureKeys?: readonly string[]
   readonly cellIdPairs: Uint32Array
   readonly indptr: Uint32Array
   readonly featureIndptr?: Uint32Array
@@ -631,9 +693,10 @@ function setupZarrMatrixMock(options: {
   readonly hasFeatureMajor?: boolean
 }): void {
   const root = node('')
+  const featureKeys = options.featureKeys ?? ['Actb', 'Gad1']
   const cellFeatures = node('cell_features', {
-    feature_keys: ['Actb', 'Gad1'],
-    feature_types: ['Gene Expression', 'Gene Expression'],
+    feature_keys: featureKeys,
+    feature_types: featureKeys.map(() => 'Gene Expression'),
   })
   const hasCellMajorCsc = options.hasCellMajorCsc ?? true
 
