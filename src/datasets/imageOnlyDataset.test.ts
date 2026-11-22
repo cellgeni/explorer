@@ -46,6 +46,27 @@ describe('ImageOnlyDataset', () => {
     ])
   })
 
+  it('opens the image again after a failed open', async () => {
+    const loader = tiffLoaderFixture({
+      imageWidth: imagePixels(400),
+      imageHeight: imagePixels(200),
+      micrometersPerPixel: 0.5,
+      channelCount: 1,
+    })
+    const openImage = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('HTTP 503'))
+      .mockResolvedValue(loader)
+    const dataset = new ImageOnlyDataset({
+      imageUrl: 'https://example.test/sample.ome.tif',
+      openImage,
+    })
+
+    await expect(dataset.image()).rejects.toThrow('HTTP 503')
+    await expect(dataset.image()).resolves.toMatchObject({ kind: 'pyramid', loader })
+    expect(openImage).toHaveBeenCalledTimes(2)
+  })
+
   it('derives metadata extent and capabilities from the TIFF loader', async () => {
     const loader = tiffLoaderFixture({
       imageWidth: imagePixels(400),

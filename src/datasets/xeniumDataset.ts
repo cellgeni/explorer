@@ -277,8 +277,18 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
       })
   }
 
+  // A failed read is not kept, so the next call reads again.
   meta(): Promise<DatasetMeta> {
-    this.metaPromise ??= this.loadMeta()
+    if (this.metaPromise === null) {
+      const promise = this.loadMeta()
+      this.metaPromise = promise
+      promise.catch(() => {
+        if (this.metaPromise === promise) {
+          this.metaPromise = null
+        }
+      })
+    }
+
     return this.metaPromise
   }
 
