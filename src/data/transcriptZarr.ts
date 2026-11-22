@@ -963,8 +963,24 @@ function selectedGeneDensityBins(
   readonly bins: readonly TranscriptAggregateBin[]
   readonly visibleTranscriptCount: number
 } {
-  const rowRange = densityRowRangeForBbox(densityGene, bbox)
-  const colRange = densityColRangeForBbox(densityGene, bbox)
+  // The whole squares the view touches: a square cut by the view's edge
+  // counts every cell in it, so its count does not change as the view pans.
+  // The cells in view give the count in view.
+  const squareSize = densityLevel.tileSizeMicrometers
+  const minBinX = Math.floor(bbox.minX / squareSize)
+  const maxBinX = Math.floor(bbox.maxX / squareSize)
+  const minBinY = Math.floor(bbox.minY / squareSize)
+  const maxBinY = Math.floor(bbox.maxY / squareSize)
+  const squares: BBox = {
+    minX: micrometers(minBinX * squareSize),
+    maxX: micrometers((maxBinX + 1) * squareSize),
+    minY: micrometers(minBinY * squareSize),
+    maxY: micrometers((maxBinY + 1) * squareSize),
+  }
+  const rowRange = densityRowRangeForBbox(densityGene, squares)
+  const colRange = densityColRangeForBbox(densityGene, squares)
+  const viewRows = densityRowRangeForBbox(densityGene, bbox)
+  const viewCols = densityColRangeForBbox(densityGene, bbox)
   const binMap: DensityBinMap = new Map()
   let visibleTranscriptCount = 0
 
@@ -981,8 +997,14 @@ function selectedGeneDensityBins(
 
     for (let row = rowRange.start; row <= rowRange.end; row += 1) {
       const y = densityGene.originY + (row + 0.5) * densityGene.gridSizeY
-      const binY = Math.floor(y / densityLevel.tileSizeMicrometers)
+      const binY = Math.floor(y / squareSize)
       const end = counts.rowStarts[row + 1] ?? 0
+
+      if (binY < minBinY || binY > maxBinY) {
+        continue
+      }
+
+      const rowInView = viewRows !== null && row >= viewRows.start && row <= viewRows.end
 
       for (let index = counts.rowStarts[row] ?? end; index < end; index += 1) {
         const col = counts.cols[index] ?? -1
@@ -993,7 +1015,12 @@ function selectedGeneDensityBins(
         }
 
         const x = densityGene.originX + (col + 0.5) * densityGene.gridSizeX
-        const binX = Math.floor(x / densityLevel.tileSizeMicrometers)
+        const binX = Math.floor(x / squareSize)
+
+        if (binX < minBinX || binX > maxBinX) {
+          continue
+        }
+
         const key = `${binX},${binY}`
         let bin = binMap.get(key)
 
@@ -1004,7 +1031,15 @@ function selectedGeneDensityBins(
 
         bin.count += count
         addTranscriptFeatureTally(bin.features, gene.name, count, x, y)
-        visibleTranscriptCount += count
+
+        if (
+          rowInView &&
+          viewCols !== null &&
+          col >= viewCols.start &&
+          col <= viewCols.end
+        ) {
+          visibleTranscriptCount += count
+        }
       }
     }
   }

@@ -221,6 +221,35 @@ describe('selected-gene transcript density', () => {
     ])
   })
 
+  it('counts every cell of a square the view cuts', async () => {
+    // One row: GENEA 1, 2, 3, 4 in columns 0–3.
+    const rows = [
+      [
+        [
+          [0, 1],
+          [1, 2],
+          [2, 3],
+          [3, 4],
+        ],
+        [],
+        [],
+      ],
+    ] as const
+    const url = serve(transcriptZarr({ rows, cols: 4, chunkSize: 2 }))
+    // From x = 15: column 0 is outside the view, inside its 20 µm square.
+    const result = await loadTranscriptZarrAggregates(url, bbox(15, 0, 39, 9), {
+      featureNames: ['GENEA'],
+      maxBins: 2,
+    })
+
+    expect(result.level.gridSizeMicrometers).toBe(20)
+    expect(result.bins.map((bin) => [bin.binX, bin.binY, bin.count])).toEqual([
+      [0, 0, 3],
+      [1, 0, 7],
+    ])
+    expect(result.visibleTranscriptCount).toBe(9)
+  })
+
   it('uses the finest bins whose occupied squares fit the limit', async () => {
     const url = serve(transcriptZarr({ rows: SMALL_ROWS, cols: 4, chunkSize: 2 }))
 

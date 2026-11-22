@@ -253,7 +253,9 @@ or exact points.
   75 MB in memory on the demo), which stays in memory.
   - Squares are the finest power-of-two multiple of 10 µm whose occupied
     squares number at most 1,500. Colours are scaled to the largest square
-    on the slide at that size, so they do not change while panning.
+    on the slide at that size, so they do not change while panning. A square
+    the view's edge cuts counts all its cells, so its count does not change
+    either; the transcript count in view counts only the cells in view.
   - Each square keeps each gene's count and the count-weighted centre of its
     10 µm cells, for the hover card and gene markers.
   - A request whose new genes span more than 32 data chunks reads nothing and
