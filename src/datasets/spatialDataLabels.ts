@@ -104,6 +104,8 @@ const MAX_CACHED_RINGS = 250_000
 // staircases are straight, so this drops most points without clipping small
 // cells.
 const RING_TOLERANCE_PIXELS = 0.25
+// Reads of one tile that another caller's cancellation may fail in a row.
+const FOREIGN_ABORT_RETRIES = 3
 
 export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (request) => {
   const { level } = request
@@ -315,6 +317,31 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     return promise
   }
 
+  // A tile's read is shared by every caller and runs under the first one's
+  // signal, so a view that joined a read another view then cancelled sees an
+  // AbortError it did not ask for. The failed read has left the cache, so the
+  // tile is read again under this caller's signal.
+  private async traceRetryingForeignAborts(
+    level: number,
+    col: number,
+    row: number,
+    signal?: AbortSignal,
+  ): Promise<SpatialDataLabelChunkTrace> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.trace(level, col, row, signal)
+      } catch (error) {
+        if (
+          (error as { readonly name?: unknown } | null)?.name !== 'AbortError' ||
+          signal?.aborted === true ||
+          attempt >= FOREIGN_ABORT_RETRIES
+        ) {
+          throw error
+        }
+      }
+    }
+  }
+
   // Outlines of labels that overlap `bounds`. Only overlapping labels are
   // joined, and joined rings are reused while their source chunks stay
   // loaded, so panning only joins labels that newly come into view.
@@ -330,7 +357,7 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     const window = this.pixelWindow(level, bounds)
     const traces = await Promise.all(
       this.chunksForBounds(level, bounds).map((chunk) =>
-        this.trace(level, chunk.col, chunk.row, options.signal),
+        this.traceRetryingForeignAborts(level, chunk.col, chunk.row, options.signal),
       ),
     )
     const visible = new Set<number>()
