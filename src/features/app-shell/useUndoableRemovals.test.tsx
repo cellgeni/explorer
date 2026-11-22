@@ -41,6 +41,12 @@ const SHAPE: GeometricAnnotationFeature = {
   },
 }
 
+// Two numeric obs columns; the second's values are read when it is shown.
+const TRACKS: AnnotationSnapshot['cellMetadataTracks'] = [
+  { id: 'obs:area', label: 'area', values: [], cellCount: 0, min: 0, max: 1 },
+  { id: 'obs:depth', label: 'depth', values: null, cellCount: 0, min: 0, max: 1 },
+]
+
 // The removals with real state, as App holds it.
 function useHarness() {
   const [annotationState, setAnnotationState] = useState(READY_ANNOTATIONS)
@@ -51,12 +57,11 @@ function useHarness() {
   const [hiddenAnnotationSetIds, setHiddenAnnotationSetIds] = useState<readonly string[]>(
     [],
   )
-  const [cellMetadataTracks, setCellMetadataTracks] = useState<
-    AnnotationSnapshot['cellMetadataTracks']
-  >([])
+  const [cellMetadataTracks, setCellMetadataTracks] =
+    useState<AnnotationSnapshot['cellMetadataTracks']>(TRACKS)
   const [selectedCellMetadataTrackId, setSelectedCellMetadataTrackId] = useState<
     string | null
-  >(null)
+  >('obs:area')
   const [observationColorMode, setObservationColorMode] =
     useState<ObservationColorMode>('annotations')
   const [shapes, setShapes] = useState<readonly GeometricAnnotationFeature[]>([SHAPE])
@@ -95,7 +100,13 @@ function useHarness() {
         )
         setAnnotationColors({})
       },
-      onRemoveTrack: vi.fn(),
+      // As App: the next track is shown in its place.
+      onRemoveTrack: (trackId) => {
+        setCellMetadataTracks((current) =>
+          current.filter((track) => track.id !== trackId),
+        )
+        setSelectedCellMetadataTrackId('obs:depth')
+      },
       onClear: () => {
         setAnnotationState({ status: 'idle' })
         setObservationColorMode('transcript-count')
@@ -118,8 +129,10 @@ function useHarness() {
     offer,
     annotationState,
     annotationColors,
+    cellMetadataTracks,
     observationColorMode,
     setAnnotationState,
+    setCellMetadataTracks,
     shapes,
   }
 }
@@ -178,11 +191,42 @@ describe('useUndoableRemovals', () => {
     act(() => {
       result.current.setAnnotationState(later)
     })
+    let refusal: unknown
     act(() => {
-      result.current.offer?.undo()
+      refusal = result.current.offer?.undo()
     })
 
     expect(result.current.annotationState).toBe(later)
+    // The toast says so in place of the offer.
+    expect(refusal).toBe(
+      'Not undone: the annotations have changed since. Removed graphclust: Cluster 2.',
+    )
+  })
+
+  it('puts back a removed track after the next track’s values are read', () => {
+    const { result } = renderHook(useHarness)
+
+    act(() => {
+      result.current.removals.handleRemoveCellMetadataTrack('obs:area')
+    })
+    // The track shown in its place reads its values.
+    act(() => {
+      result.current.setCellMetadataTracks((current) =>
+        current.map((track) =>
+          track.id === 'obs:depth' ? { ...track, values: [] } : track,
+        ),
+      )
+    })
+    let refusal: unknown
+    act(() => {
+      refusal = result.current.offer?.undo()
+    })
+
+    expect(refusal).toBeUndefined()
+    expect(result.current.cellMetadataTracks.map((track) => track.id)).toEqual([
+      'obs:area',
+      'obs:depth',
+    ])
   })
 
   it('puts back a removed shape, or all of them', () => {

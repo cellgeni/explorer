@@ -4,8 +4,8 @@ import type { UndoToastStore } from './useUndoToast'
 // "Removed graphclust: Cluster 3. Undo" for 8 s after a removal
 // (plan 15.3-C). Hovering or focusing it keeps it.
 export function UndoToast({ store }: { readonly store: UndoToastStore }) {
-  const { offer } = store
-  if (offer === null) return null
+  const { notice, offer } = store
+  if (offer === null && notice === null) return null
 
   return (
     <div
@@ -24,10 +24,16 @@ export function UndoToast({ store }: { readonly store: UndoToastStore }) {
         if (!event.currentTarget.contains(event.relatedTarget)) store.hold(false)
       }}
     >
-      <p>{offer.message}</p>
-      <Button title={`Undo: ${offer.message} (Ctrl+Z)`} onClick={store.undo}>
-        Undo
-      </Button>
+      {offer === null ? (
+        <p>{notice}</p>
+      ) : (
+        <>
+          <p>{offer.message}</p>
+          <Button title={`Undo: ${offer.message} (Ctrl+Z)`} onClick={store.undo}>
+            Undo
+          </Button>
+        </>
+      )}
       <IconButton title="Dismiss" icon={<CloseIcon />} onClick={store.dismiss} />
     </div>
   )

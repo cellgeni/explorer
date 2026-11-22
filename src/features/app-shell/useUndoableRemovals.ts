@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import type { AnnotationState } from '../annotations/annotationModel'
@@ -80,12 +80,18 @@ export function useUndoableRemovals({
     onRemoveTrack: removeTrack,
     onClear: clearAnnotations,
   } = annotations
+  // A track's values read when it is first shown are not a change Undo must
+  // keep: only the tracks themselves count.
+  const cellMetadataTrackIds = useMemo(
+    () => cellMetadataTracks.map((track) => track.id).join('\n'),
+    [cellMetadataTracks],
+  )
   const annotationCommits = useCommitCount([
     annotationState,
     annotationColors,
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
-    cellMetadataTracks,
+    cellMetadataTrackIds,
     selectedCellMetadataTrackId,
     observationColorMode,
   ])
@@ -109,7 +115,7 @@ export function useUndoableRemovals({
         undo: () => {
           if (annotationCommits.current !== expectedCommits) {
             appendDebugEvent(`Not undone: annotations changed since (${message})`)
-            return
+            return `Not undone: the annotations have changed since. ${message}.`
           }
           restoreAnnotations(snapshot)
           appendDebugEvent(`Undone: ${message}`)
@@ -169,7 +175,7 @@ export function useUndoableRemovals({
         undo: () => {
           if (shapeCommits.current !== expectedCommits) {
             appendDebugEvent(`Not undone: shapes changed since (${message})`)
-            return
+            return `Not undone: the shapes have changed since. ${message}.`
           }
           restoreShapes(snapshot)
           appendDebugEvent(`Undone: ${message}`)
