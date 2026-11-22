@@ -321,11 +321,6 @@ export function useAnnotationWorkflow({
       setUrlImport((current) =>
         current?.annotationPrefix === importedPrefix ? null : current,
       )
-      const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
-        cellMetadataTracks,
-        importedMetadataTracks,
-        importedMetadataPrefix,
-      )
 
       setAnnotationState((current) =>
         annotationLoadReady(
@@ -363,20 +358,27 @@ export function useAnnotationWorkflow({
               message: `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
             },
       )
-      setCellMetadataTracks(nextCellMetadataTracks)
+      // From the tracks as they are now: an import read by URL lands after
+      // other imports, or a dataset track's values, may have changed them.
+      setCellMetadataTracks((current) =>
+        mergeImportedCellMetadataTracks(
+          current,
+          importedMetadataTracks,
+          importedMetadataPrefix,
+        ),
+      )
+      // The selected track stays unless this import replaced it; without one
+      // the first track is shown.
       setSelectedCellMetadataTrackId((current) => {
-        if (nextCellMetadataTracks.length === 0) {
-          return null
-        }
-
         if (
           current !== null &&
-          nextCellMetadataTracks.some((track) => track.id === current)
+          (!current.startsWith(importedMetadataPrefix) ||
+            importedMetadataTracks.some((track) => track.id === current))
         ) {
           return current
         }
 
-        return importedMetadataTracks[0]?.id ?? nextCellMetadataTracks[0]?.id ?? null
+        return importedMetadataTracks[0]?.id ?? null
       })
       if (importedAnnotations.length > 0) {
         setObservationColorMode('annotations')
@@ -391,7 +393,6 @@ export function useAnnotationWorkflow({
     },
     [
       appendDebugEvent,
-      cellMetadataTracks,
       datasetCellIds,
       datasetUrl,
       loadState,

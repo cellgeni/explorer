@@ -514,6 +514,51 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Annotation URL import failed')
   })
 
+  it('keeps a file import’s tracks when a URL import started earlier lands later', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    let respond: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            respond = resolve
+          }),
+      ),
+    )
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    let urlImport: Promise<boolean> = Promise.resolve(false)
+    act(() => {
+      urlImport = api.handleImportAnnotationUrl('https://example.test/remote.csv')
+    })
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,confidence\n${cellId},0.82`], 'scores.csv', {
+          type: 'text/csv',
+        }),
+      )
+    })
+    await act(async () => {
+      respond(new Response(`cell_id,depth\n${cellId},1.5`))
+      await urlImport
+    })
+
+    expect(snapshot.cellMetadataTracks.map((track) => track.label)).toEqual([
+      'confidence',
+      'depth',
+    ])
+  })
+
   it('imports continuous CSV values as metadata tracks and activates metadata coloring', async () => {
     const cellId = asCellId('aaaaaaaa-1')
     const file = new File([`cell_id,confidence\n${cellId},0.82`], 'scores.csv', {
