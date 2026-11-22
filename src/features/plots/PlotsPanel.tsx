@@ -1,12 +1,7 @@
-import { useId } from 'react'
+import { memo, useId, useMemo } from 'react'
 import { Button, Select, Switch } from '../../components/ui'
 import { HeatmapFigure } from './HeatmapFigure'
-import {
-  PANEL_PLOT_PAINT,
-  type PlotColourMode,
-  type PlotKind,
-  type PlotTable,
-} from './plotModel'
+import { PANEL_PLOT_PAINT, type PlotColourMode, type PlotKind } from './plotModel'
 import type { PlotScale } from './plotStats'
 import { PLOT_KINDS, type PlotSetKind } from './plotsPanelModel'
 import { plotViewSvg, plotViewTable, type PlotView } from './plotViews'
@@ -33,7 +28,7 @@ export function PlotsPanel({ plots }: { readonly plots: PlotsModel }) {
             {plots.message ?? 'Reading the selected genes…'}
           </p>
         ) : plots.showNumbers ? (
-          <PlotTableView table={plotViewTable(plots.plot)} />
+          <PlotTableView plot={plots.plot} />
         ) : (
           <PlotFigure plot={plots.plot} />
         )}
@@ -132,22 +127,29 @@ function PlotsControls({ plots }: { readonly plots: PlotsModel }) {
   )
 }
 
-function PlotFigure({ plot }: { readonly plot: PlotView }) {
+// The figure and the table are drawn once per plot: App renders the panel
+// on every hover and view change, and a large violin's tree or a heatmap's
+// table takes tenths of a second to build.
+const PlotFigure = memo(function PlotFigure({ plot }: { readonly plot: PlotView }) {
   const idPrefix = useId().replaceAll(':', '')
+  const node = useMemo(
+    () =>
+      plot.kind === 'heatmap'
+        ? null
+        : plotViewSvg(plot, PANEL_PLOT_PAINT, `${plot.kind}-plot-${idPrefix}`),
+    [idPrefix, plot],
+  )
 
   if (plot.kind === 'heatmap') return <HeatmapFigure plot={plot.model} />
 
   return (
-    <div className="plots-figure">
-      <SvgTree
-        node={plotViewSvg(plot, PANEL_PLOT_PAINT, `${plot.kind}-plot-${idPrefix}`)}
-      />
-    </div>
+    <div className="plots-figure">{node === null ? null : <SvgTree node={node} />}</div>
   )
-}
+})
 
 // The plot's numbers, which is also its text alternative (22-D9).
-function PlotTableView({ table }: { readonly table: PlotTable }) {
+const PlotTableView = memo(function PlotTableView({ plot }: { readonly plot: PlotView }) {
+  const table = useMemo(() => plotViewTable(plot), [plot])
   return (
     <div className="plots-table-scroll">
       <table className="plots-table">
@@ -175,7 +177,7 @@ function PlotTableView({ table }: { readonly table: PlotTable }) {
       </table>
     </div>
   )
-}
+})
 
 function PlotsFooter({ plots }: { readonly plots: PlotsModel }) {
   const notes = [...plots.notes, ...plots.geneErrors]
