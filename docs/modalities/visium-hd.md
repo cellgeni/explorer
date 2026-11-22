@@ -135,8 +135,9 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
   coarse bins cannot be clicked or hovered.
 - **Gene expression.** `planGeneExpressionLod`
   (`src/data/geneExpressionLod.ts`) requests 16 µm data for a 2 µm selection
-  below zoom 3, and for an 8 µm selection at zoom −1.25 or lower. At zoom
-  −1.25 or lower the request covers the whole slide. A dataset with no 16 µm
+  below zoom 3, and for an 8 µm selection at zoom −1.25 or lower, in every
+  Expression detail mode, so each square the map draws is coloured by its own
+  bins. In Auto, at zoom −1.25 or lower the request covers the whole slide. A dataset with no 16 µm
   tier reads 16 µm expression for bins made from its finest tier
   (`coarsenVisiumHdBinnedOverview`): Feature Slice counts bin to any multiple
   of the spot pitch, and the bins are named as Space Ranger names 16 µm

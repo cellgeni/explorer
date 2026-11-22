@@ -464,7 +464,8 @@ deviation of the cells read: all cells when the whole slide is read (Auto LOD
 up to 500,000 cells, its whole-slide sample, or All cells), otherwise the
 cells read for the padded viewport. Cells without expression count as 0 on
 every platform, including those a sample thins. Zoomed out, Visium HD reads
-16 µm bins in place of finer ones, and compares those. The legend says which:
+16 µm bins in place of finer ones, in every Expression detail mode, and
+compares those. The legend says which:
 "Mean z-score of n genes per cell, relative to all cells" or "… relative to
 cells in view". A cell's z-score can therefore change as the view moves on a
 large dataset, but not between platforms.
