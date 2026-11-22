@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { slug } from '../../utils/slug'
 import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
@@ -1375,15 +1376,22 @@ function classesInput(
 }
 
 // A condition's dataset set that Clusters has since loaded keeps reading it
-// alone, so the condition and the link stay as they were.
+// alone, so the condition and the link stay as they were. So does a
+// condition on the set Clusters showed once Clusters shows another: the
+// loaded set's ID is `analysis:` and its name (annotationSetGrouping).
 function unlistedDatasetSetColumn(
   columnId: string,
   groups: readonly { readonly id: string; readonly label: string }[],
 ): CellQueryColumn | null {
   const prefix = setColumnId(datasetSetOptionId(''))
-  if (!columnId.startsWith(prefix)) return null
-  const groupId = columnId.slice(prefix.length)
-  const group = groups.find((candidate) => candidate.id === groupId)
+  const datasetSet = columnId.startsWith(prefix)
+  if (!datasetSet && !columnId.startsWith(setColumnId('analysis:'))) return null
+  const setId = columnId.slice(datasetSet ? prefix.length : setColumnId('').length)
+  const group = groups.find(
+    (candidate) =>
+      candidate.id === setId ||
+      (!datasetSet && `analysis:${slug(candidate.label)}` === setId),
+  )
   return group === undefined
     ? null
     : {
@@ -1391,7 +1399,7 @@ function unlistedDatasetSetColumn(
         label: group.label,
         kind: 'category',
         group: 'Classes',
-        source: { kind: 'set', setKind: 'dataset', setId: datasetSetOptionId(groupId) },
+        source: { kind: 'set', setKind: 'dataset', setId: datasetSetOptionId(group.id) },
       }
 }
 
