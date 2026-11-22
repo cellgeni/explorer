@@ -1570,9 +1570,13 @@ hash is written, the query string keeps only keys a link does not set, such as
 does not come back on reload.
 
 Opening another dataset adds a browser history entry; every other change
-replaces the current one (15.3-C). Back returns to the previous dataset, or to
-the start screen: when Back or Forward reaches an entry for another dataset,
-the page reloads that entry's link, with its view and settings.
+replaces the current one (15.3-C). The dataset a collection link (`collection=`
+without `dataset=`) opens is that link's, so it replaces the link's entry too.
+Back returns to the previous dataset, or to the start screen (or the page
+before a collection link): when Back or Forward reaches an entry for another
+dataset, the page reloads that entry's link, with its view and settings. A
+link typed or pasted into the address bar for the open dataset reloads the
+page with that link too.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
