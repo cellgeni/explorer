@@ -2501,6 +2501,39 @@ describe('App', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('keeps a link in the address until its dataset opens', async () => {
+    // The load applies the card, ROI, channels and z plane later, so a rewrite
+    // from the state before then would drop them.
+    const link = `#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&genes=Actb&card=cell%3Aaaaabbbb-1&roi=box%3A0%2C0%2C100%2C100&channels=Channel%3A1&z=2`
+    window.history.replaceState(null, '', `/${link}`)
+    const overview = deferredPromise<Awaited<ReturnType<DatasetOverviewLoader>>>()
+
+    render(<TestApp loadDatasetOverview={vi.fn(() => overview.promise)} />)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+
+    expect(window.location.hash).toBe(link)
+
+    await act(async () => {
+      overview.resolve([
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ])
+    })
+
+    // Once it has opened, the address follows the view again, and keeps the
+    // channels and plane while the image opens.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellBounds=')
+    })
+    expect(window.location.hash).toContain('channels=Channel%3A1')
+    expect(window.location.hash).toMatch(/[#&]z=2(&|$)/)
+  })
+
   it('shows the start screen again, with the reason, when the first load fails (15.3-A)', async () => {
     const loadDatasetOverview = vi.fn(async () => {
       throw new Error('HTTP 500 for cells.parquet')

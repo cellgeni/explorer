@@ -6,6 +6,7 @@ import {
   parseShareableState,
   type ShareableState,
 } from '../../data/shareableState'
+import { manifestDefaultsToShareableState } from '../dataset/datasetManifestModel'
 import { formatGeneScaleRange } from '../genes/geneScaleRange'
 import { parsePlotKind } from '../plots/plotsPanelModel'
 import { parseCellView } from '../sections/cellsSectionModel'
@@ -113,6 +114,15 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     expect(initialSettings(parseShareableState(link))).toEqual(settings)
   })
 
+  it('opens a hand-edited link inside the transcript controls’ ranges', () => {
+    // Min QV runs 0–40 and Point size 1–6.
+    expect(initialSettings(parseShareableState('#xv=2&txQv=1000&txSize=60'))).toEqual({
+      ...DEFAULT_SHAREABLE_STATE,
+      transcriptMinQv: 40,
+      transcriptPointSize: 6,
+    })
+  })
+
   it('keeps the boundary toggles, whose default depends on the platform', () => {
     // Xenium opens with nucleus outlines off unless the link turns them on.
     expect(
@@ -143,6 +153,27 @@ describe('DEFAULT_SHAREABLE_STATE', () => {
     expect(withoutShareableDefaults({ imageOpacity: 1 }, manifest)).toEqual({
       imageOpacity: 1,
     })
+  })
+
+  it('compares the colour mode with the one a manifest’s genes open in', () => {
+    // As examples/bia/S-BIAD2376.json: genes without colorCellsBy open in
+    // Gene expression.
+    const manifest = manifestDefaultsToShareableState({ genes: ['COL1A1'] }).state
+
+    expect(
+      withoutShareableDefaults(
+        { selectedGenes: ['COL1A1'], observationColorMode: 'gene-expression' },
+        manifest,
+      ),
+    ).toEqual({})
+    // Transcript count is written, or the manifest's genes would bring Gene
+    // expression back.
+    expect(
+      withoutShareableDefaults(
+        { selectedGenes: ['COL1A1'], observationColorMode: 'transcript-count' },
+        manifest,
+      ),
+    ).toEqual({ observationColorMode: 'transcript-count' })
   })
 
   it('writes the 2D view only to undo a manifest’s 3D view', () => {

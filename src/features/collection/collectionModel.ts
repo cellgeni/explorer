@@ -5,7 +5,6 @@ import type {
   DatasetCollectionEntry,
 } from '../../datasets/datasetCollection'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
-import { manifestObservationColorMode } from '../app-shell/appShellModel'
 import { datasetDisplayName } from '../app-shell/documentTitle'
 import { manifestDefaultsToShareableState } from '../dataset/datasetManifestModel'
 
@@ -83,16 +82,8 @@ export function collectionFirstOpening(
   defaults: DatasetCollectionDefaults | undefined,
 ): CollectionDatasetOpening {
   const { state, ignored } = manifestDefaultsToShareableState(defaults)
-  const observationColorMode = manifestObservationColorMode(state)
 
-  return {
-    linkState: {
-      ...state,
-      linkVersion: 2,
-      ...(observationColorMode === undefined ? {} : { observationColorMode }),
-    },
-    ignored,
-  }
+  return { linkState: { ...state, linkVersion: 2 }, ignored }
 }
 
 // The datasets of a collection share their genes and annotations, so every

@@ -852,6 +852,24 @@ export function App({ dependencies }: AppProps = {}) {
     return retainDataset(openingDatasetUrl)
   }, [openingDatasetUrl, retainDataset])
   const linkNamesDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
+  // Until the dataset the link names has opened, failed or been cancelled, or
+  // another is opening, the address keeps the link (useShareableUrlHash).
+  const [linkOpeningStage, setLinkOpeningStage] = useState<
+    'waiting' | 'loading' | 'done'
+  >(linkNamesDataset ? 'waiting' : 'done')
+  if (linkOpeningStage !== 'done') {
+    const nextStage =
+      loadState.status === 'ready' ||
+      loadState.status === 'error' ||
+      (loadState.status === 'loading' &&
+        loadState.url.trim() !== initialShareableState.datasetUrl?.trim()) ||
+      (loadState.status === 'idle' && linkOpeningStage === 'loading')
+        ? 'done'
+        : loadState.status === 'loading'
+          ? 'loading'
+          : linkOpeningStage
+    if (nextStage !== linkOpeningStage) setLinkOpeningStage(nextStage)
+  }
   // Set below, where the functions that open datasets are defined.
   const openCollectionDatasetRef = useRef<
     ((url: string, opening: CollectionDatasetOpening) => void) | null
@@ -1802,30 +1820,31 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells.length,
   )
   const magicLensLoadEnabled = magicLensAvailability.loadEnabled
+  // While the link's dataset opens its image, the link's channels and plane
+  // stay in it.
+  const linkImageOpening =
+    morphologyState.status === 'loading' &&
+    shownDatasetUrl !== null &&
+    shownDatasetUrl.trim() === initialShareableState.datasetUrl?.trim()
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
-    if (baseMorphologyChannelIds.size === 0) {
-      return undefined
-    }
-
-    if (morphologyChannelSettings.length > 0) {
+    if (baseMorphologyChannelIds.size > 0 && morphologyChannelSettings.length > 0) {
       return morphologyChannelSettings
         .filter((setting) => setting.enabled && baseMorphologyChannelIds.has(setting.id))
         .map((setting) => setting.id)
     }
 
-    return morphologyState.status === 'loading'
+    return linkImageOpening
       ? initialShareableState.morphologyEnabledChannelIds
       : undefined
   }, [
     initialShareableState.morphologyEnabledChannelIds,
     baseMorphologyChannelIds,
+    linkImageOpening,
     morphologyChannelSettings,
-    morphologyState.status,
   ])
-  // While the image opens, a shared plane stays in the link.
   const shareableMorphologyZPlane =
     morphologyImage?.zStack?.zPlane ??
-    (morphologyImage === null && morphologyState.status === 'loading'
+    (morphologyImage === null && linkImageOpening
       ? initialShareableState.morphologyZPlane
       : undefined)
   const magicLensIsCursorActive =
@@ -4001,6 +4020,7 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells,
   ])
   const currentShareUrl = useShareableUrlHash({
+    linkOpening: linkOpeningStage !== 'done',
     dataset: {
       annotationUrl: annotationImportUrl,
       customImageOpacities,
@@ -4043,6 +4063,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     layers: {
       boundaryCellLimit,
+      deviceBoundaryCellLimit: performanceBudget.boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
       cellPointScale,

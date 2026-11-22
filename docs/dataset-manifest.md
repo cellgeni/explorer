@@ -434,7 +434,8 @@ How defaults combine with other settings:
 - `colorCellsBy: "annotations"` takes effect once annotations are loaded.
 - `genes` without `colorCellsBy` colours cells by gene expression. With
   `colorCellsBy` set to another mode, the genes are selected (for transcripts,
-  or to switch to later) but cells use that mode.
+  or to switch to later) but cells use that mode. A share link that picks
+  another `Cell color` keeps it.
 
 ## Errors And Diagnostics
 

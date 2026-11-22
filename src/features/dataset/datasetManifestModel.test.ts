@@ -61,6 +61,16 @@ describe('manifestDefaultsToShareableState', () => {
     })
   })
 
+  it('opens in gene expression when genes come without colorCellsBy', () => {
+    expect(manifestDefaultsToShareableState({ genes: ['COL1A1'] }).state).toEqual({
+      selectedGenes: ['COL1A1'],
+      observationColorMode: 'gene-expression',
+    })
+    expect(manifestDefaultsToShareableState({ genes: [] }).state).toEqual({
+      selectedGenes: [],
+    })
+  })
+
   it('drops values the controls do not offer', () => {
     expect(
       manifestDefaultsToShareableState({

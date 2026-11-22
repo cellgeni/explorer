@@ -6,24 +6,29 @@ import { readShareableStateFromLocation } from './appShellModel'
 import { useShareableUrlHash } from './useShareableUrlHash'
 
 function ShareableUrlHashProbe({
+  boundaryCellLimit = 2500,
   collectionUrl,
   datasetUrl = 'https://example.test/output',
   geneSets,
   hiddenAnnotationIds,
+  linkOpening,
   selectedGenes = ['Actb', 'Gad1'],
   onHistoryDatasetChange,
   onShareUrl,
 }: {
+  readonly boundaryCellLimit?: number
   readonly collectionUrl?: string
   readonly datasetUrl?: string
   readonly geneSets?: string
   readonly hiddenAnnotationIds?: readonly string[]
+  readonly linkOpening?: boolean
   readonly selectedGenes?: readonly string[]
   readonly onHistoryDatasetChange?: () => void
   readonly onShareUrl?: (shareUrl: () => string) => void
 }) {
   const shareUrl = useShareableUrlHash({
     ...(onHistoryDatasetChange === undefined ? {} : { onHistoryDatasetChange }),
+    ...(linkOpening === undefined ? {} : { linkOpening }),
     dataset: {
       annotationUrl: 'https://example.test/annotations/manual.csv',
       customImageOpacities: [0.35],
@@ -41,7 +46,8 @@ function ShareableUrlHashProbe({
       selectedGenes,
     },
     layers: {
-      boundaryCellLimit: 2500,
+      boundaryCellLimit,
+      deviceBoundaryCellLimit: 50_000,
       cellBoundaryOpacity: 0.35,
       cellFillOpacity: 0.7,
       cellPointScale: 1,
@@ -220,6 +226,51 @@ describe('useShareableUrlHash', () => {
     expect(latest.shareUrl?.()).toBe(
       `${window.location.origin}/${window.location.hash.replace('genes=Actb%2CGad1', 'genes=Sox2')}`,
     )
+  })
+
+  it("leaves out the device's own Boundary limit, so each reader keeps theirs", () => {
+    const { rerender } = render(<ShareableUrlHashProbe boundaryCellLimit={50_000} />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).not.toContain('boundaryLimit=')
+
+    rerender(<ShareableUrlHashProbe boundaryCellLimit={2500} />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).toContain('boundaryLimit=2500')
+  })
+
+  it('keeps the link in the address while its dataset opens', () => {
+    const link =
+      '#xv=2&dataset=https%3A%2F%2Fexample.test%2Foutput&card=cell%3Aaaaa&roi=box%3A0%2C0%2C9%2C9'
+    window.history.replaceState(null, '', `/${link}`)
+    const latest: { shareUrl?: () => string } = {}
+    const onShareUrl = (next: () => string) => {
+      latest.shareUrl = next
+    }
+    const { rerender } = render(
+      <ShareableUrlHashProbe linkOpening onShareUrl={onShareUrl} />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+
+    // The load applies the card and ROI later; until then the address and
+    // Copy Link keep them.
+    expect(window.location.hash).toBe(link)
+    expect(latest.shareUrl?.()).toBe(`${window.location.origin}/${link}`)
+
+    rerender(<ShareableUrlHashProbe linkOpening={false} onShareUrl={onShareUrl} />)
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    expect(window.location.hash).toContain('card=cell%3Acell-7')
+    expect(latest.shareUrl?.()).toBe(`${window.location.origin}/${window.location.hash}`)
   })
 
   it('adds a history entry when another dataset opens (15.3-C)', () => {
