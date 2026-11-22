@@ -232,7 +232,8 @@ per pixel`.
   offered.
 - The Image section's `Tissue image` select switches between `High-res`,
   `Low-res`, and `None` in place (`useVisiumControlsWorkflow`). Each library's
-  images are encoded once.
+  images are encoded once, shared by every view of the file (off-tissue spots,
+  other libraries), and released when the file's dataset is closed.
 
 ## Load Sequence
 

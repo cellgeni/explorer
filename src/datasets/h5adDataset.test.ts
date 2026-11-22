@@ -2911,6 +2911,48 @@ describe('AnnDataH5adDataset sections', () => {
     )
   })
 
+  it('counts the sections a categorical column gives, not the categories it declares', async () => {
+    // A subset that kept unused categories: four declared, one or two used.
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://unused-categories',
+      memorySource: {
+        label: 'Memory table',
+        load: async () => ({
+          obsNames: ['c0', 'c1', 'c2', 'c3'],
+          obs: [
+            {
+              name: 'sample',
+              kind: 'categorical' as const,
+              codes: new Int8Array([2, 2, 2, 2]),
+              categories: ['s1', 's2', 's3', 's4'],
+            },
+            {
+              name: 'section',
+              kind: 'categorical' as const,
+              codes: new Int8Array([0, 3, 3, -1]),
+              categories: ['a', 'b', 'c', 'd'],
+            },
+          ],
+          varNames: ['A'],
+          X: {
+            kind: 'csr' as const,
+            data: new Float32Array([1]),
+            indices: new Int32Array([0]),
+            indptr: new Int32Array([0, 1, 1, 1, 1]),
+          },
+          obsm: {
+            spatial: { values: new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), columns: 2 },
+          },
+        }),
+      },
+    })
+
+    await expect(dataset.sectionColumns()).resolves.toEqual([
+      { column: 'section', sectionCount: 2 },
+    ])
+    await expect(dataset.sections('section')).resolves.toHaveLength(2)
+  })
+
   it('splits by a whole-number section column, as anndata stores integer IDs (EXP-041)', async () => {
     const file = await openFile({
       coordinateKey: 'spatial',

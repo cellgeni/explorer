@@ -1159,7 +1159,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     const labels = base.categoricalTracks.map((track) => ({
       column: track.id,
-      sectionCount: track.categoryCount,
+      sectionCount: usedLabelCount(track, MAX_SECTIONS),
     }))
     const numbers = base.continuousTracks
       .filter((track) => isSectionColumnName(track.id))
@@ -1505,12 +1505,17 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  // Object URLs are made once per image and kept for the dataset's lifetime.
+  // Object URLs are made once per image, shared by every Visium view of the
+  // file, and revoked when the dataset that reads the file is disposed.
   private cachedImageUrl(
     libraryId: string,
     kind: VisiumImageKind,
     create: () => Promise<string>,
   ): Promise<string> {
+    if (this.viewOf !== null) {
+      return this.viewOf.cachedImageUrl(libraryId, kind, create)
+    }
+
     const key = `${libraryId}/${kind}`
     const existing = this.tissueImageUrls.get(key)
 
@@ -1577,6 +1582,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     for (const view of this.visiumViews.values()) {
       view.dispose()
     }
+
+    for (const url of this.tissueImageUrls.values()) {
+      void url.then(revokeBlobUrl, () => undefined)
+    }
+
+    this.tissueImageUrls.clear()
 
     const base = this.baseCachePromise
     this.baseCachePromise = null
@@ -2076,6 +2087,40 @@ async function readGunzippedImageUrl(
   ).blob()
   const type = /\.jpe?g\.gz$/i.test(new URL(url).pathname) ? 'image/jpeg' : 'image/png'
   return URL.createObjectURL(new Blob([blob], { type }))
+}
+
+// Tissue images are hosted URLs or object URLs this reader made.
+function revokeBlobUrl(url: string): void {
+  if (url.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
+  }
+}
+
+// Distinct labels the rows use, up to `limit + 1`: a categorical column can
+// declare categories that no row holds after a subset.
+function usedLabelCount(track: H5adCategoricalTrack, limit: number): number {
+  if (track.values.kind !== 'codes') {
+    return track.categoryCount
+  }
+
+  const { codes, categories } = track.values
+  const seen = new Uint8Array(categories.length)
+  let count = 0
+
+  for (let row = 0; row < codes.length && count < categories.length; row += 1) {
+    const code = Number(codes[row])
+
+    if (code >= 0 && code < categories.length && seen[code] === 0) {
+      seen[code] = 1
+      count += 1
+
+      if (count > limit) {
+        break
+      }
+    }
+  }
+
+  return count
 }
 
 function visiumSpotArea(cache: H5adCache): number | undefined {

@@ -418,7 +418,8 @@ several: the rows whose obs `column` holds `value`
 - **Depths.** A section's cells keep their third obsm `spatial` column only
   when it varies within the section; cells of one plane have none.
 - **Splitting.** `sectionColumns()` lists the label columns with 2 to 500
-  values, and the number columns named like section columns
+  values that rows hold (a categorical's unused categories are not counted),
+  and the number columns named like section columns
   (`SECTION_COLUMN_NAMES`) with 2 to 500 distinct finite values, as anndata
   stores whole-number IDs, with how many sections each gives; those named like
   section columns come first. The Cells section's `Open N Sections` link
