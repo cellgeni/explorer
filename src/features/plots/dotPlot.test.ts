@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  plotGeneStatsFor,
   plotTestInput as input,
   testExportPaint as exportPaint,
 } from '../../test/plotFixtures'
@@ -41,6 +42,47 @@ describe('dot plot (plan 22-E)', () => {
 
     expect(model.colourRange).toBeNull()
     expect(gad1.map((cell) => cell.intensity)).toEqual([0, 1])
+  })
+
+  it('scales a gene expressed in every group from its lowest mean, not 0', () => {
+    // Class A holds rows 0–1, class B rows 2–3.
+    const rows = ['a1', 'a2', 'b1', 'b2']
+    const groups = { selection: null, classes: [rows.slice(0, 2), rows.slice(2)] }
+    const model = dotPlotModel({
+      ...input,
+      colour: 'per-gene',
+      scale: 'stored',
+      groups: input.groups.slice(1),
+      genes: [
+        // Means 5 and 6.
+        {
+          gene: 'Actb',
+          stats: plotGeneStatsFor('Actb', rows, groups, [
+            [0, 5],
+            [1, 5],
+            [2, 6],
+            [3, 6],
+          ]),
+        },
+        // One mean everywhere.
+        {
+          gene: 'Gapdh',
+          stats: plotGeneStatsFor('Gapdh', rows, groups, [
+            [0, 8],
+            [1, 8],
+            [2, 8],
+            [3, 8],
+          ]),
+        },
+      ],
+    })
+    const intensities = (geneIndex: number) =>
+      model.cells
+        .filter((cell) => cell.geneIndex === geneIndex)
+        .map((cell) => cell.intensity)
+
+    expect(intensities(0)).toEqual([0, 1])
+    expect(intensities(1)).toEqual([0, 0])
   })
 
   it('never rounds a share above 0 to 0%, or one below 100 to 100%', () => {

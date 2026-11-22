@@ -355,6 +355,32 @@ describe('gene expression LOD planner', () => {
     })
   })
 
+  it('reads the bins the map draws zoomed out in every Visium HD detail mode', () => {
+    for (const detailMode of ['exact-region', 'all-cells'] as const) {
+      for (const [selected, zoom, read] of [
+        [2, 1.5, 16],
+        [2, 3, 2],
+        [8, -2, 16],
+        [8, 0, 8],
+      ] as const) {
+        expect(
+          planGeneExpressionLod(
+            detail({
+              visibleCellCount: 20_000,
+              viewState: { target: [150, -250, 0], zoom },
+            }),
+            {
+              detailMode,
+              slideBbox,
+              totalCellCount: 120_000,
+              visiumHdBinSizeMicrometers: selected,
+            },
+          ),
+        ).toMatchObject({ mode: detailMode, visiumHdBinSizeMicrometers: read })
+      }
+    }
+  })
+
   it('uses exact 2um Visium HD expression at close zoom', () => {
     expect(
       planGeneExpressionLod(

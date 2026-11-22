@@ -84,9 +84,15 @@ export function plotMeans(input: PlotMeansInput): PlotMeans {
     })
   })
 
-  const colourRange = input.colour === 'shared' ? meanRange(cells) : null
+  const colourRange = input.colour === 'shared' ? meanRange(cells, true) : null
+  // Per gene runs from the gene's own lowest mean, as Scanpy's
+  // standard_scale='var' does, so a gene expressed everywhere still spans
+  // the colour bar.
   const geneRanges = input.genes.map((_, geneIndex) =>
-    meanRange(cells.filter((cell) => cell.geneIndex === geneIndex)),
+    meanRange(
+      cells.filter((cell) => cell.geneIndex === geneIndex),
+      false,
+    ),
   )
 
   return {
@@ -98,9 +104,10 @@ export function plotMeans(input: PlotMeansInput): PlotMeans {
   }
 }
 
-// From the lowest mean, or 0 if lower, to the highest.
-function meanRange(cells: readonly PlotMeanCell[]): PlotRange | null {
-  let low = 0
+// From the lowest mean to the highest; with `fromZero`, from 0 when the
+// lowest is above it.
+function meanRange(cells: readonly PlotMeanCell[], fromZero: boolean): PlotRange | null {
+  let low = fromZero ? 0 : Number.POSITIVE_INFINITY
   let high = Number.NEGATIVE_INFINITY
 
   for (const { mean } of cells) {
