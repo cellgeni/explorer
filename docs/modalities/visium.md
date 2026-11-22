@@ -114,12 +114,13 @@ The table it builds:
 
 - **Rows** are the filtered matrix barcodes that the positions file lists.
   Barcodes it does not list cannot be placed and are left out (logged).
-- **obs**: `in_tissue`, `array_row`, `array_col`, `total_counts` (UMIs per
-  spot), `n_genes_by_counts`, and `graphclust` when the clusters CSV exists.
-  The numeric columns are `Metadata` colour tracks.
+- **obs**: `in_tissue`, `array_row`, `array_col`, `total_counts` (gene
+  expression UMIs per spot), `n_genes_by_counts`, and `graphclust` when the
+  clusters CSV exists. The numeric columns are `Metadata` colour tracks.
 - **var**: feature names as the index, plus `gene_ids` and `feature_types`.
   Every feature type is kept, so Antibody Capture features appear next to
-  genes.
+  genes; `total_counts` and `n_genes_by_counts` count `Gene Expression`
+  features only, as scanpy's `read_visium` does.
 - **X**: the matrix as CSR (10x stores features × barcodes in CSC, which is
   barcodes × features in CSR), with `int64` indices narrowed to `Int32Array`.
 - **obsm**: `spatial` as (`pxl_col_in_fullres`, `pxl_row_in_fullres`), and the

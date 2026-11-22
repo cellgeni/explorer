@@ -250,8 +250,10 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
   ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
   collection pairs with an image whose pixels they are in
   ([Attached Image](#attached-image)).
-- Embedding options (`readObsmEmbeddingOptions`) are every dense 2D obsm
-  matrix with `n_obs` rows and 2+ columns, ordered `X_umap`, `umap`, `X_tsne`,
+- Embedding options (`readObsmEmbeddingOptions`) are the dense 2D obsm
+  matrices with `n_obs` rows and 2+ columns whose key starts with `X_` or is
+  `spatial`, `umap`, `tsne` or `pca` (any case), so per-cell abundance or
+  covariate matrices are left out, ordered `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`, `X_spatial`, `spatial`, then alphabetically.
 
 ### Expression (`/X`)
