@@ -99,6 +99,14 @@ describe('Visium HD clusterings', () => {
     ).rejects.toThrow('Failed to fetch')
   })
 
+  it('fails on a server error instead of listing the clustering as absent', async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 503 }))
+
+    await expect(
+      readVisiumHdClusteringGroups('https://example.test/visium', bin16, { fetcher }),
+    ).rejects.toThrow('returned HTTP 503')
+  })
+
   it('reads one annotation per cluster, in cluster order', async () => {
     const fetcher = vi.fn(
       async () =>

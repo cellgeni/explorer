@@ -165,6 +165,40 @@ describe('openImportedSegmentation', () => {
     })
   })
 
+  it('names a picked file as it is named, and a URL by its decoded last part', async () => {
+    const open = (url: string, file?: Blob) =>
+      openImportedSegmentation(
+        {
+          url,
+          ...(file === undefined ? {} : { file }),
+          format: 'wkt',
+          coordinates: 'micrometers',
+        },
+        PLACEMENT,
+        {
+          readVector: async (options) =>
+            readVectorSegmentation({
+              ...options,
+              file: {
+                kind: 'file',
+                file: new Blob(['POLYGON ((0 0, 1 0, 1 1, 0 0))\n']),
+              },
+            }),
+        },
+      )
+
+    const blob = new Blob([''])
+    await expect(open('Sample#1_cells.wkt', blob)).resolves.toMatchObject({
+      name: 'Sample#1_cells.wkt',
+    })
+    await expect(open('cells%20v2.wkt', blob)).resolves.toMatchObject({
+      name: 'cells%20v2.wkt',
+    })
+    await expect(
+      open('https://example.test/seg/cells%20v2.wkt?sig=1'),
+    ).resolves.toMatchObject({ name: 'cells v2.wkt' })
+  })
+
   it('warns when a mask is not the image shape', async () => {
     clearOpenTiffFiles()
     const segmentation = await openImportedSegmentation(
@@ -178,6 +212,32 @@ describe('openImportedSegmentation', () => {
     )
 
     expect(segmentation.warning).toContain('stretched to cover the image')
+  })
+
+  it('places polygons and masks by the pixel width and height', async () => {
+    // 0.5 µm wide and 0.25 µm tall pixels: the 8 x 8 image is 4 x 2 µm.
+    const placement = { ...PLACEMENT, yMicrometersPerPixel: 0.25 }
+    const polygons = await openImportedSegmentation(
+      wktSource('POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))\n', 'pixels'),
+      placement,
+      { readVector: readVectorSegmentation },
+    )
+    const polygonBatch = await polygons.outlines(bbox(0, 0, 4, 2))
+    expect(polygonBatch.elements.map(polygonBounds)).toEqual([[2, 1, 4, 2]])
+
+    clearOpenTiffFiles()
+    const mask = await openImportedSegmentation(
+      {
+        url: 'mask.tif',
+        file: new Blob([maskTiff('tiled')]),
+        format: 'label-tiff',
+        coordinates: 'pixels',
+      },
+      placement,
+    )
+    const maskBatch = await mask.outlines(bbox(0, 0, 4, 2))
+    const label2 = maskBatch.elements.find((element) => element.id === '2')
+    expect(label2 === undefined ? [] : polygonBounds(label2)).toEqual([2, 1, 4, 2])
   })
 
   it('refuses a picked Zarr label image', async () => {

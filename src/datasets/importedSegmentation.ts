@@ -19,6 +19,9 @@ import type { VectorSegmentationReader } from './vectorSegmentationWorker'
 // The image the segmentation was drawn on, which places it.
 export interface SegmentationPlacement {
   readonly micrometersPerPixel: number
+  // The pixel height, when it differs from the width (OME-Zarr can declare
+  // non-square pixels).
+  readonly yMicrometersPerPixel?: number
   // Full-resolution size in pixels.
   readonly imageWidth: number
   readonly imageHeight: number
@@ -87,6 +90,10 @@ export async function openImportedSegmentation(
     format: source.format as 'geojson' | 'wkt' | 'parquet',
     micrometersPerUnit:
       source.coordinates === 'micrometers' ? 1 : placement.micrometersPerPixel,
+    ...(source.coordinates === 'micrometers' ||
+    placement.yMicrometersPerPixel === undefined
+      ? {}
+      : { yMicrometersPerUnit: placement.yMicrometersPerPixel }),
     ...(options.signal === undefined ? {} : { signal: options.signal }),
     ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
   })
@@ -139,6 +146,11 @@ async function openLabelSegmentation(
 
 let pickedFileCount = 0
 
+// A picked file's name as it is; the last part of a URL, decoded.
+function importedSegmentationName(source: SegmentationSource): string {
+  return source.file === undefined ? segmentationSourceName(source.url) : source.url
+}
+
 // The TIFF reader keys files and their strip bands by URL, so a picked file
 // gets one of its own, even when another picked file had the same name.
 function tiffLabelUrl(source: SegmentationSource): string {
@@ -148,6 +160,10 @@ function tiffLabelUrl(source: SegmentationSource): string {
 
   pickedFileCount += 1
   return `picked-file://${pickedFileCount.toString()}/${encodeURIComponent(source.url)}`
+}
+
+function placementPixelHeight(placement: SegmentationPlacement): number {
+  return placement.yMicrometersPerPixel ?? placement.micrometersPerPixel
 }
 
 // Mask pixels -> µm: the mask covers the image, so a mask on the image's own
@@ -162,7 +178,7 @@ function maskToMicrometers(
     b: 0,
     c: 0,
     d: 0,
-    e: (placement.micrometersPerPixel * placement.imageHeight) / maskHeight,
+    e: (placementPixelHeight(placement) * placement.imageHeight) / maskHeight,
     f: 0,
   }
 }
@@ -182,7 +198,7 @@ class VectorSegmentation implements ImportedSegmentation {
     placement: SegmentationPlacement,
   ) {
     this.source = source
-    this.name = segmentationSourceName(source.url)
+    this.name = importedSegmentationName(source)
     this.shapes = shapes
     this.shapeCount = shapes.ids.length
     const warning = vectorPlacementWarning(shapes, placement, source)
@@ -271,7 +287,7 @@ class LabelSegmentation implements ImportedSegmentation {
     placement: SegmentationPlacement,
   ) {
     this.source = source
-    this.name = segmentationSourceName(source.url)
+    this.name = importedSegmentationName(source)
     this.reader = reader
     const base = reader.levels[0]
     this.maskSize = { width: base?.width ?? 0, height: base?.height ?? 0 }
@@ -279,7 +295,7 @@ class LabelSegmentation implements ImportedSegmentation {
       minX: micrometers(0),
       minY: micrometers(0),
       maxX: micrometers(placement.imageWidth * placement.micrometersPerPixel),
-      maxY: micrometers(placement.imageHeight * placement.micrometersPerPixel),
+      maxY: micrometers(placement.imageHeight * placementPixelHeight(placement)),
     }
     const warning = maskPlacementWarning(this.maskSize, placement)
 
@@ -384,7 +400,7 @@ function vectorPlacementWarning(
   }
 
   const width = placement.imageWidth * placement.micrometersPerPixel
-  const height = placement.imageHeight * placement.micrometersPerPixel
+  const height = placement.imageHeight * placementPixelHeight(placement)
   const other = source.coordinates === 'pixels' ? 'Micrometres' : 'Pixels'
 
   if (maxX > width * 1.05 || maxY > height * 1.05) {

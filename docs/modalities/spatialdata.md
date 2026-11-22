@@ -114,7 +114,9 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
    number of the table's region elements placed in the system, then whether it
    holds an image, then total elements, then whether it is named `global`, then
    declaration order. The `Coordinate system` select in the info drawer's View
-   options overrides it (`sdCs` in the shareable URL).
+   options overrides it (`sdCs` in the shareable URL). A store with a table but
+   no element placed in any system opens under `global`, and the table's rows
+   are placed from `obsm`.
 3. **Region shapes / labels**: region elements placed in that system.
 4. **Image**: images placed with an affine that only scales, flips, or swaps
    x and y (`axisPermutingAffine`); rotated and sheared images are skipped.
@@ -163,7 +165,9 @@ coordinate system.
 
 `points` (transcripts), extra images, and extra tables are not read. Label
 chunks in view are decoded and traced into cell outlines in the Zarr decode
-worker when you zoom in below `Boundary limit`.
+worker when you zoom in below `Boundary limit`. Views share a chunk's read; if
+the view that started it is panned away and cancels it, a view still waiting
+reads the chunk again.
 
 ## Table
 
@@ -186,7 +190,8 @@ table annotates regions in the chosen coordinate system:
   `EntityID`s, are not rounded together. Before 2026-11 they were, and such a
   table placed no row.
 - Rows annotating a labels region use their `obsm` spatial point mapped through
-  the labels element's affine.
+  the labels element's affine. Traced label values are exact up to 2^53, as
+  the table's ids are, so 32- and 64-bit ids find their rows.
 - Rows that match nothing get `NaN` coordinates and are hidden. If no row is
   placed, the load fails.
 - Without region elements in the chosen system, the H5AD `obsm` key order is
@@ -219,7 +224,7 @@ thread keeps no object or typed array per shape.
   GeoJSON-shaped values are still accepted.
 - Instance ids: the first pandas `index_columns` entry, or a `RangeIndex`
   start/step.
-- Points become circles with diameter from the `radius` column (default 1)
+- Points become circles whose radius is the `radius` column (default 1)
   times the affine scale.
 - Polygons keep only the outer ring of their largest polygon, as interleaved
   x, y in the shared ring buffer. A 598,222-cell Xenium `cell_boundaries`
@@ -235,6 +240,9 @@ thread keeps no object or typed array per shape.
 - Otherwise (for example Xenium `cell_circles` as the region) the first
   boundary candidate is drawn, matched to cells through the region instance
   ids. If no id matches, it falls back to the region geometry.
+- A table that annotates labels instead has every labels region with rows
+  traced, so a table over one labels element per field of view (spatialdata-io
+  CosMx) is outlined in every field.
 
 `readBoundaryIndex` keeps, per cell, the index of its shape in the shape
 columns and its bounds in µm; `elements(bbox)` is a linear bounds filter over

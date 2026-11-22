@@ -87,8 +87,18 @@ export class ImageOnlyDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
+  // A failed open is not kept, so asking again opens the image again.
   private loader(): Promise<ImagePyramidLoader> {
-    this.loaderPromise ??= this.openSourceImage(this.imageUrl)
+    if (this.loaderPromise === null) {
+      const promise = this.openSourceImage(this.imageUrl)
+      this.loaderPromise = promise
+      promise.catch(() => {
+        if (this.loaderPromise === promise) {
+          this.loaderPromise = null
+        }
+      })
+    }
+
     return this.loaderPromise
   }
 

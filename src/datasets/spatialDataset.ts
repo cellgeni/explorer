@@ -197,6 +197,7 @@ export interface GeneExpressionBatchTiming {
 }
 
 export interface GeneExpressionQueryOptions {
+  // Most cells (or bins) to read from the box; without one, every cell in it.
   readonly limit?: number
   // Keeps every Nth cell without expression; cells with expression are always
   // kept. A reader that lists only cells with expression ('expressing') has

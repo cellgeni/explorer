@@ -76,6 +76,30 @@ function makeDataset(
 }
 
 describe('XeniumDataset', () => {
+  it('reads its metadata again after a failed read', async () => {
+    const conn = new FakeConnection([
+      [{ minX: 1, maxX: 20, minY: 2, maxY: 30 }],
+      [{ minX: 1, maxX: 20, minY: 2, maxY: 30 }],
+    ])
+    let failures = 1
+    const dataset = makeDataset(conn, {
+      fetcher: async () => {
+        if (failures > 0) {
+          failures -= 1
+          throw new TypeError('Failed to fetch')
+        }
+
+        return new Response(JSON.stringify({ pixel_size: 0.5 }))
+      },
+    })
+
+    await expect(dataset.meta()).rejects.toThrow('Failed to fetch')
+    await expect(dataset.meta()).resolves.toMatchObject({
+      platform: 'xenium',
+      units: { micrometersPerPixel: micrometers(0.5) },
+    })
+  })
+
   it('loads metadata with capability flags and cell extent', async () => {
     const conn = new FakeConnection([[{ minX: 1, maxX: 20, minY: 2, maxY: 30 }]])
     const dataset = makeDataset(conn)
@@ -1553,5 +1577,63 @@ describe('XeniumDataset', () => {
       micrometers(20),
       100,
     ])
+  })
+
+  // Whole-section previews ask with no limit, and must score every cell.
+  it('reads every cell in the box when no limit is given', async () => {
+    const box = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(20),
+    }
+    const cellId = intToCellId(1, 2)
+    const rowsConn = new FakeConnection([
+      [
+        {
+          cell_feature_matrix_row: 0,
+          x_centroid: 4,
+          y_centroid: 6,
+          transcript_counts: 12,
+          cell_area: 18,
+        },
+      ],
+      [{ cell_feature_matrix_row: 0, cell_id: cellId }],
+    ])
+    const byRows = makeDataset(rowsConn, {
+      baseUrl: 'https://example.test/xenium-rows/',
+      selectedGeneRowsReader: async () => ({
+        nCells: 1,
+        features: [
+          { gene: 'Actb', rows: new Uint32Array([0]), counts: new Uint32Array([2]) },
+        ],
+        cellIdForRow: () => cellId,
+      }),
+    })
+    const perCellConn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 4,
+          y_centroid: 6,
+          transcript_counts: 12,
+          cell_area: 18,
+        },
+      ],
+    ])
+    const perCell = makeDataset(perCellConn, {
+      matrixReader: async (_url: string, ids: readonly CellId[]): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map(ids.map((id) => [id, { geneNames: ['Actb'], counts: [2] }])),
+      }),
+    })
+
+    await byRows.geneExpression(box, ['Actb'])
+    await perCell.geneExpression(box, ['Actb'])
+
+    for (const conn of [rowsConn, perCellConn]) {
+      expect(conn.preparedSql[0]).not.toContain('LIMIT')
+      expect(conn.statements[0]?.params).toHaveLength(5)
+    }
   })
 })

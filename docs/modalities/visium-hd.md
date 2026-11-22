@@ -148,7 +148,7 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 | Feature                    | Path                                                                                                                                                                                                                                                                                                                                                              |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Selected-gene overlay      | `geneExpression(bbox, genes)` reads `feature_slice.h5` in a worker, sums counts into the active bin size (`floor(row / (binSize / spot_pitch))`), and colours bins. There is no fallback to the filtered matrix.                                                                                                                                                  |
-| Bin card: assignment       | `useGridCellAssignmentWorkflow` reads the row groups of `barcode_mappings.parquet` that can hold the bin and finds its segmented cell                                                                                                                                                                                                                             |
+| Bin card: assignment       | `useGridCellAssignmentWorkflow` reads the row groups of `barcode_mappings.parquet` that can hold the bin; an 8 or 16 µm bin has a row per 2 µm barcode, so the card names the cell holding most of them, with that share and how many cells the bin touches                                                                                                       |
 | Bin card: all-gene profile | `useVisiumHdExpressionProfileWorkflow` calls `matrix([barcode], binSize)` on the tier's filtered matrix                                                                                                                                                                                                                                                           |
 | Segmented-cell profile     | DuckDB-WASM query on `barcode_mappings.parquet` for one `cell_id`, then `matrix()` over those bins at the active size. The segmented `filtered_feature_cell_matrix.h5` is not used.                                                                                                                                                                               |
 | Cell/nucleus boundaries    | `elements(bbox)` / `segmentationElements('nucleus', bbox)`. Each GeoJSON is read once into a columnar index; each viewport selects the polygons whose bounds meet its box. A nucleus's `cell_id` is kept in its own index column, so nuclei name their cell. Loading is gated by the boundary viewport rule (see [Xenium](./xenium.md#viewport-cell-boundaries)). |
@@ -157,7 +157,7 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 | Embeddings                 | Per-tier `projection.csv`, then root `analysis/`                                                                                                                                                                                                                                                                                                                  |
 | ROI                        | `useVisiumHdRoiWorkflow` selects bins whose centre is inside the box/lasso (up to 50,000), then `matrix(barcodes, binSize)`; exports barcodes CSV and GeoJSON                                                                                                                                                                                                     |
 | Magic Lens                 | `useVisiumHdMagicLensSummary`: up to 25,000 bins; `matrix()` when no genes are selected, otherwise selected-gene expression filtered to the lens                                                                                                                                                                                                                  |
-| Annotations                | `annotationGroups(binSize)` lists the tier's clusterings by `HEAD`; `annotations({ groupId })` reads one `clusters.csv` into one annotation per cluster. Bins are coloured by their barcode, and hovering one names its cluster                                                                                                                                   |
+| Annotations                | `annotationGroups(binSize)` lists the tier's clusterings by `HEAD` (a `403`, `404` or a request that fails outright means absent; another status fails the list, which is asked for again next time); `annotations({ groupId })` reads one `clusters.csv` into one annotation per cluster. Bins are coloured by their barcode, and hovering one names its cluster |
 
 Visium HD has no transcript records.
 
@@ -217,6 +217,12 @@ error, Diagnostics lists it under Fallbacks and in the activity log, and
 selecting the size again retries it. After a failed load, selected-gene
 overlays, ROI, Magic Lens and the Bin card read the drawn tier
 (`visiumHdActiveBinSize`); while a tier loads they read the new size.
+
+The Magic Lens reads selected-gene expression for its selection's bounding
+box and keeps the bins in the lens or ROI. It asks for every bin the box can
+hold, since a lasso can hold fewer bins than the 25,000-bin lens limit while
+its box holds more; past 200,000 the summary is marked as possibly
+incomplete.
 
 ## Caching And Workers
 

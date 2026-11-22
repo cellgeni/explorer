@@ -301,8 +301,8 @@ once per dataset and selection, like a gene.
   levels across sections; each preview then shows its highest score
   (`max 92`).
 - **What is read.** A preview reads every cell's position once per dataset,
-  then the selected genes' scores, or the annotation set's classes, whenever
-  the selection changes. Positions
+  then the selected genes' scores for every cell, or the annotation set's
+  classes, whenever the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
 - **Grid.** `Expand` (the arrows next to "Collection" in the bar) lays the previews out as a grid over the

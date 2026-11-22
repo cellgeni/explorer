@@ -7,8 +7,9 @@
 export const LABEL_OUTLINE_MAX_PIXELS = 16_000_000
 
 export interface PackedLabelTrace {
-  // One entry per label with pixels in the chunk window.
-  readonly labels: Int32Array
+  // One entry per label with pixels in the chunk window. Float64 holds every
+  // id exactly up to 2^53, as the tables that name them do.
+  readonly labels: Float64Array
   // Edges of label `i` are `edges[edgeOffsets[i] .. edgeOffsets[i + 1]]`.
   readonly edgeOffsets: Uint32Array
   readonly edges: Float64Array
@@ -22,9 +23,9 @@ const DOWN = 1
 const LEFT = 2
 const UP = 3
 
-// Copies the 2D x/y window of a decoded chunk into Int32 labels. 64-bit label
-// arrays are read through their low 32-bit words, which hold every label id a
-// segmentation realistically uses.
+// Copies the 2D x/y window of a decoded chunk into labels. 64-bit label arrays
+// are read through their low 32-bit words while the high word is 0, which is
+// faster than reading each value as a bigint.
 export function labelWindow(
   data: ArrayLike<number | bigint>,
   stride: readonly number[],
@@ -32,8 +33,8 @@ export function labelWindow(
   yAxis: number,
   width: number,
   height: number,
-): Int32Array {
-  const output = new Int32Array(width * height)
+): Float64Array {
+  const output = new Float64Array(width * height)
   const strideX = stride[xAxis] ?? 1
   const strideY = stride[yAxis] ?? width
   const words = int64LowWords(data)
@@ -63,7 +64,7 @@ export function labelWindow(
 // Emits directed pixel edges (interior on the right, y pointing down) for
 // every non-zero label, with per-label bounds and pixel counts.
 export function traceLabelEdges(
-  labels: Int32Array,
+  labels: ArrayLike<number>,
   width: number,
   height: number,
   x0: number,
@@ -126,10 +127,11 @@ export function traceLabelEdges(
         continue
       }
 
-      const up = y > 0 ? labels[row - width + x] : -1
-      const down = y < height - 1 ? labels[row + width + x] : -1
-      const left = x > 0 ? labels[row + x - 1] : -1
-      const right = x < width - 1 ? labels[row + x + 1] : -1
+      // Outside the window: no label equals NaN.
+      const up = y > 0 ? labels[row - width + x] : Number.NaN
+      const down = y < height - 1 ? labels[row + width + x] : Number.NaN
+      const left = x > 0 ? labels[row + x - 1] : Number.NaN
+      const right = x < width - 1 ? labels[row + x + 1] : Number.NaN
 
       if (up === label && down === label && left === label && right === label) {
         continue
@@ -191,7 +193,7 @@ export function traceLabelEdges(
   })
 
   return {
-    labels: Int32Array.from(slotLabels),
+    labels: Float64Array.from(slotLabels),
     edgeOffsets,
     edges,
     bounds: Int32Array.from(slotBounds, (value) => (Number.isFinite(value) ? value : 0)),
@@ -421,9 +423,9 @@ function ringArea(flat: readonly number[]): number {
   return area / 2
 }
 
-function int64LowWords(data: ArrayLike<number | bigint>): Int32Array | null {
+function int64LowWords(data: ArrayLike<number | bigint>): Uint32Array | null {
   if (data instanceof BigInt64Array || data instanceof BigUint64Array) {
-    return new Int32Array(data.buffer, data.byteOffset, data.length * 2)
+    return new Uint32Array(data.buffer, data.byteOffset, data.length * 2)
   }
 
   return null

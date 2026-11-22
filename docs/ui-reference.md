@@ -763,7 +763,9 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
   (`CellGeneExpressionList.tsx`).
 - Bin, Visium HD (`src/features/cells/GridCellInfoPanel.tsx`): barcode, bin
   size, tissue, array row/column, image pixel position; cell assignment from
-  `barcode_mappings.parquet`; selected-gene score; and a bin expression profile
+  `barcode_mappings.parquet` (for 8 and 16 µm bins, the cell holding most of
+  the bin's 2 µm bins, how many, and how many cells the bin touches);
+  selected-gene score; and a bin expression profile
   with `Load Bin GEX` / `Refresh Bin GEX` and a gene filter.
 - Cell, Visium HD segmentation boundary
   (`src/features/cells/BoundaryCellInfoPanel.tsx`): cell ID, annotation,

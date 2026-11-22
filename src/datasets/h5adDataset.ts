@@ -8,7 +8,12 @@ import {
 import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
 import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { getWholeArray } from '../zarr/zarrWholeArray'
-import { micrometers, type BBox, type DataPoint } from '../data/coords'
+import {
+  micrometers,
+  micrometersPerPixelY,
+  type BBox,
+  type DataPoint,
+} from '../data/coords'
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import {
   normalizeRoiSelection,
@@ -961,8 +966,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
     const cache = await this.cache()
 
-    return cache.categoricalTracks.map((track) => ({
-      id: h5adAnnotationGroupId(track),
+    const ids = h5adAnnotationGroupIds(cache.categoricalTracks)
+
+    return cache.categoricalTracks.map((track, index) => ({
+      id: ids[index] ?? '',
       label: track.label,
       groupingName: track.id,
       groupCount: track.categoryCount,
@@ -975,15 +982,20 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     throwIfAborted(options.signal)
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const selectedTracks =
-      options.groupId === undefined || options.groupId === 'all'
-        ? cache.categoricalTracks
-        : cache.categoricalTracks.filter(
-            (track) => h5adAnnotationGroupId(track) === options.groupId,
-          )
+    const groupIds = h5adAnnotationGroupIds(cache.categoricalTracks)
     const annotations: Annotation<SpatialElementId>[] = []
 
-    for (const track of selectedTracks) {
+    for (const [trackIndex, track] of cache.categoricalTracks.entries()) {
+      const groupId = groupIds[trackIndex] ?? ''
+
+      if (
+        options.groupId !== undefined &&
+        options.groupId !== 'all' &&
+        groupId !== options.groupId
+      ) {
+        continue
+      }
+
       // A categorical column's classes come in its categories' order, as
       // scanpy colours them, so they keep their colours in every dataset with
       // the same categories. Classes without cells are left out below.
@@ -1015,11 +1027,15 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         cellIdsByLabel.set(label, cellIds)
       }
 
-      for (const [label, cellIds] of cellIdsByLabel) {
+      const labels = [...cellIdsByLabel.keys()]
+      const classIds = uniqueSlugIds(labels.map((label) => `${groupId}:${slug(label)}`))
+
+      for (const [labelIndex, label] of labels.entries()) {
+        const cellIds = cellIdsByLabel.get(label) ?? []
         if (cellIds.length === 0) continue
         const color = colorByLabel.get(label)
         annotations.push({
-          id: `analysis:${slug(track.label)}:${slug(label)}`,
+          id: classIds[labelIndex] ?? '',
           label: `${track.label}: ${label}`,
           cellIds,
           ...(color === undefined ? {} : { color }),
@@ -1034,9 +1050,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   // for every column at load. `metadataTrackValues` builds one column on demand.
   async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
     const cache = await this.cache()
+    const ids = h5adMetadataTrackIds(cache.continuousTracks)
 
-    return cache.continuousTracks.map((track) => ({
-      id: h5adMetadataTrackId(track),
+    return cache.continuousTracks.map((track, index) => ({
+      id: ids[index] ?? '',
       label: track.label,
       values: null,
       ...(cache.visium === null
@@ -1052,9 +1069,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     throwIfAborted(options.signal)
     const cache = await this.cache()
     throwIfAborted(options.signal)
-    const track = cache.continuousTracks.find(
-      (candidate) => h5adMetadataTrackId(candidate) === trackId,
-    )
+    const track =
+      cache.continuousTracks[
+        h5adMetadataTrackIds(cache.continuousTracks).indexOf(trackId)
+      ]
 
     if (track === undefined) {
       throw new Error(`H5AD metadata track ${trackId} does not exist.`)
@@ -1141,7 +1159,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     const labels = base.categoricalTracks.map((track) => ({
       column: track.id,
-      sectionCount: track.categoryCount,
+      sectionCount: usedLabelCount(track, MAX_SECTIONS),
     }))
     const numbers = base.continuousTracks
       .filter((track) => isSectionColumnName(track.id))
@@ -1363,9 +1381,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       return []
     }
 
-    const micrometersPerPixel = image.units.micrometersPerPixel
-    const scaleX = (micrometersPerPixel * image.imageWidth) / labels.width
-    const scaleY = (micrometersPerPixel * image.imageHeight) / labels.height
+    const scaleX = (image.units.micrometersPerPixel * image.imageWidth) / labels.width
+    const scaleY = (micrometersPerPixelY(image.units) * image.imageHeight) / labels.height
     const outlines = await reader.outlines(
       {
         minX: bbox.minX / scaleX,
@@ -1410,12 +1427,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
-  // Micrometres per coordinate unit: the attached image's pixel size when the
-  // coordinates are its pixels, else 1. An image that cannot be opened leaves
-  // the coordinates as they are; image() reports the failure.
-  private async coordinateScale(): Promise<number> {
+  // Micrometres per coordinate unit along x and y: the attached image's pixel
+  // width and height when the coordinates are its pixels, else 1. An image
+  // that cannot be opened leaves the coordinates as they are; image() reports
+  // the failure.
+  private async coordinateScale(): Promise<CoordinateScale> {
     if (this.attachedImage?.coordinates !== 'image-pixels') {
-      return 1
+      return UNIT_COORDINATE_SCALE
     }
 
     const loader = await this.attachedImageLoaderOrNull()
@@ -1424,10 +1442,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.onProgress?.(
         'Attached image could not be opened, so cell coordinates are read as micrometres',
       )
-      return 1
+      return UNIT_COORDINATE_SCALE
     }
 
-    return loader.units.micrometersPerPixel
+    return { x: loader.units.micrometersPerPixel, y: micrometersPerPixelY(loader.units) }
   }
 
   // A Visium tissue image placed with its `tissue_<kind>_scalef`. Images held
@@ -1487,12 +1505,17 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  // Object URLs are made once per image and kept for the dataset's lifetime.
+  // Object URLs are made once per image, shared by every Visium view of the
+  // file, and revoked when the dataset that reads the file is disposed.
   private cachedImageUrl(
     libraryId: string,
     kind: VisiumImageKind,
     create: () => Promise<string>,
   ): Promise<string> {
+    if (this.viewOf !== null) {
+      return this.viewOf.cachedImageUrl(libraryId, kind, create)
+    }
+
     const key = `${libraryId}/${kind}`
     const existing = this.tissueImageUrls.get(key)
 
@@ -1559,6 +1582,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     for (const view of this.visiumViews.values()) {
       view.dispose()
     }
+
+    for (const url of this.tissueImageUrls.values()) {
+      void url.then(revokeBlobUrl, () => undefined)
+    }
+
+    this.tissueImageUrls.clear()
 
     const base = this.baseCachePromise
     this.baseCachePromise = null
@@ -1731,17 +1760,25 @@ async function readSpatialDataInstanceKey(
   }
 }
 
-function withCoordinateScale(base: H5adCache, scale: number): H5adCache {
-  if (scale === 1) {
+interface CoordinateScale {
+  readonly x: number
+  readonly y: number
+}
+
+const UNIT_COORDINATE_SCALE: CoordinateScale = { x: 1, y: 1 }
+
+// Depths in image pixels are scaled by the pixel width.
+function withCoordinateScale(base: H5adCache, scale: CoordinateScale): H5adCache {
+  if (scale.x === 1 && scale.y === 1) {
     return base
   }
 
   const coordinates = base.coordinates.map((point) =>
     isFinitePoint(point)
-      ? { x: micrometers(point.x * scale), y: micrometers(point.y * scale) }
+      ? { x: micrometers(point.x * scale.x), y: micrometers(point.y * scale.y) }
       : point,
   )
-  const depths = base.depths?.map((z) => z * scale) ?? null
+  const depths = base.depths?.map((z) => z * scale.x) ?? null
 
   return { ...base, coordinates, depths, extent: bboxForPoints(coordinates) }
 }
@@ -2050,6 +2087,40 @@ async function readGunzippedImageUrl(
   ).blob()
   const type = /\.jpe?g\.gz$/i.test(new URL(url).pathname) ? 'image/jpeg' : 'image/png'
   return URL.createObjectURL(new Blob([blob], { type }))
+}
+
+// Tissue images are hosted URLs or object URLs this reader made.
+function revokeBlobUrl(url: string): void {
+  if (url.startsWith('blob:')) {
+    URL.revokeObjectURL(url)
+  }
+}
+
+// Distinct labels the rows use, up to `limit + 1`: a categorical column can
+// declare categories that no row holds after a subset.
+function usedLabelCount(track: H5adCategoricalTrack, limit: number): number {
+  if (track.values.kind !== 'codes') {
+    return track.categoryCount
+  }
+
+  const { codes, categories } = track.values
+  const seen = new Uint8Array(categories.length)
+  let count = 0
+
+  for (let row = 0; row < codes.length && count < categories.length; row += 1) {
+    const code = Number(codes[row])
+
+    if (code >= 0 && code < categories.length && seen[code] === 0) {
+      seen[code] = 1
+      count += 1
+
+      if (count > limit) {
+        break
+      }
+    }
+  }
+
+  return count
 }
 
 function visiumSpotArea(cache: H5adCache): number | undefined {
@@ -4933,12 +5004,52 @@ function h5adCellMetadata(cache: H5adCache, row: number): CellMetadata {
   return metadata
 }
 
-function h5adAnnotationGroupId(track: H5adCategoricalTrack): string {
-  return `analysis:${slug(track.label)}`
+// Set, class and track IDs are slugs of their names, which share links and
+// collections keep. Names that slug alike (`Cell Type` and `cell_type`,
+// `CD4+ T` and `CD4- T`, or any two in a script other than Latin) are told
+// apart by a `-2`, `-3`, … on the later ones; the first keeps the plain slug.
+export function uniqueSlugIds(bases: readonly string[]): string[] {
+  const names = new Set(bases)
+  const used = new Set<string>()
+
+  return bases.map((base) => {
+    let id = base
+
+    // A suffixed ID that is another name's own slug is left for that name.
+    for (let suffix = 2; used.has(id) || (id !== base && names.has(id)); suffix += 1) {
+      id = `${base}-${suffix.toString()}`
+    }
+
+    used.add(id)
+    return id
+  })
 }
 
-function h5adMetadataTrackId(track: H5adContinuousTrack): string {
-  return `h5ad:${slug(track.id)}`
+const groupIdsByTracks = new WeakMap<readonly H5adCategoricalTrack[], readonly string[]>()
+const trackIdsByTracks = new WeakMap<readonly H5adContinuousTrack[], readonly string[]>()
+
+function h5adAnnotationGroupIds(
+  tracks: readonly H5adCategoricalTrack[],
+): readonly string[] {
+  let ids = groupIdsByTracks.get(tracks)
+
+  if (ids === undefined) {
+    ids = uniqueSlugIds(tracks.map((track) => `analysis:${slug(track.label)}`))
+    groupIdsByTracks.set(tracks, ids)
+  }
+
+  return ids
+}
+
+function h5adMetadataTrackIds(tracks: readonly H5adContinuousTrack[]): readonly string[] {
+  let ids = trackIdsByTracks.get(tracks)
+
+  if (ids === undefined) {
+    ids = uniqueSlugIds(tracks.map((track) => `h5ad:${slug(track.id)}`))
+    trackIdsByTracks.set(tracks, ids)
+  }
+
+  return ids
 }
 
 // A Visium track's count and range over the spots on the map. Spots off the

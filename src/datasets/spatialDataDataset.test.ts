@@ -456,6 +456,27 @@ describe('SpatialDataDataset nucleus boundaries', () => {
   })
 })
 
+describe('SpatialDataDataset with a table and no spatial element', () => {
+  it('places the rows from obsm', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(tableOnlyStoreFixture()),
+    })
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => [cell.cellId, cell.position])).toEqual([
+      ['cell-a', { x: 1, y: 2 }],
+      ['cell-b', { x: 3, y: 4 }],
+      ['cell-c', { x: 5, y: 6 }],
+    ])
+    await expect(dataset.summary()).resolves.toMatchObject({
+      coordinateSystem: 'global',
+      coordinateSystems: [],
+      table: 'table',
+    })
+  })
+})
+
 describe('SpatialDataDataset units and labels', () => {
   it('scales placements, boundaries, and the image by the µm-per-unit override', async () => {
     const openImage = imageOpenerFixture()
@@ -593,6 +614,38 @@ describe('SpatialDataDataset units and labels', () => {
     // Label 1 spans both chunks and is drawn as one outline.
     expect(bounds.get('cell-a')).toEqual([0, 8, 0, 4])
     expect(bounds.get('cell-b')).toEqual([10, 12, 2, 6])
+  })
+})
+
+describe('SpatialDataDataset with one labels element per field of view', () => {
+  it('traces the outlines of every labels region the table annotates', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(fieldOfViewLabelsStoreFixture()),
+    })
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => [cell.cellId, cell.position])).toEqual([
+      ['cell-a', { x: 2, y: 2 }],
+      ['cell-b', { x: 102, y: 2 }],
+    ])
+    await expect(dataset.summary()).resolves.toMatchObject({
+      regions: ['fov1', 'fov2'],
+      boundaries: 'fov1, fov2',
+    })
+    await expect(dataset.meta()).resolves.toMatchObject({
+      segmentations: [
+        { kind: 'cell', label: 'Cell boundaries (fov1, fov2)', sourceKind: 'zarr' },
+      ],
+    })
+
+    const { elements } = await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(110),
+      minY: micrometers(0),
+      maxY: micrometers(4),
+    })
+    expect(elements.map((element) => element.id).sort()).toEqual(['cell-a', 'cell-b'])
   })
 })
 
@@ -1168,6 +1221,97 @@ function labelsStoreFixture(
   ])
 }
 
+// Two 4 x 4 labels elements, as spatialdata-io writes one per CosMx field of
+// view, the second 100 units right of the first, annotated by one table. Each
+// holds label 1 on the 2 x 2 block at x 1-2, y 1-2.
+function fieldOfViewLabelsStoreFixture(): ReadonlyMap<string, Uint8Array> {
+  const YX = { name: 'yx', axes: [{ name: 'y' }, { name: 'x' }] }
+  const labelsElement = (translateX: number) => ({
+    'image-label': { version: '0.4' },
+    multiscales: [
+      {
+        axes: YX.axes,
+        datasets: [
+          { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 1] }] },
+        ],
+        coordinateTransformations: [
+          {
+            type: 'translation',
+            translation: [0, translateX],
+            input: YX,
+            output: { name: 'global', axes: YX.axes },
+          },
+        ],
+      },
+    ],
+  })
+  const metadata: Record<string, unknown> = {
+    '.zgroup': { zarr_format: 2 },
+    '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    'labels/.zgroup': { zarr_format: 2 },
+    'labels/fov1/.zgroup': { zarr_format: 2 },
+    'labels/fov1/.zattrs': labelsElement(0),
+    'labels/fov1/0/.zarray': arrayMeta([4, 4], '<i4'),
+    'labels/fov2/.zgroup': { zarr_format: 2 },
+    'labels/fov2/.zattrs': labelsElement(100),
+    'labels/fov2/0/.zarray': arrayMeta([4, 4], '<i4'),
+    'tables/.zgroup': { zarr_format: 2 },
+    'tables/table/.zgroup': { zarr_format: 2 },
+    'tables/table/.zattrs': {
+      'encoding-type': 'anndata',
+      region: ['fov1', 'fov2'],
+      region_key: 'region',
+      instance_key: 'cell_ID',
+    },
+    'tables/table/obs/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/.zattrs': {
+      _index: '_index',
+      'column-order': ['region', 'cell_ID'],
+      'encoding-type': 'dataframe',
+    },
+    'tables/table/obs/_index/.zarray': arrayMeta([2], '|S6'),
+    'tables/table/obs/cell_ID/.zarray': arrayMeta([2], '<i8'),
+    'tables/table/obs/region/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/region/.zattrs': { 'encoding-type': 'categorical' },
+    'tables/table/obs/region/codes/.zarray': arrayMeta([2], '|i1'),
+    'tables/table/obs/region/categories/.zarray': arrayMeta([2], '|S4'),
+    'tables/table/obsm/.zgroup': { zarr_format: 2 },
+    'tables/table/obsm/spatial/.zarray': arrayMeta([2, 2], '<f8'),
+    'tables/table/var/.zgroup': { zarr_format: 2 },
+    'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
+    'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
+    'tables/table/X/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zattrs': { 'encoding-type': 'csr_matrix', shape: [2, 1] },
+    'tables/table/X/data/.zarray': arrayMeta([1], '<f4'),
+    'tables/table/X/indices/.zarray': arrayMeta([1], '<i4'),
+    'tables/table/X/indptr/.zarray': arrayMeta([3], '<i4'),
+  }
+  const raster = new Int32Array(16)
+
+  for (const index of [5, 6, 9, 10]) {
+    raster[index] = 1
+  }
+
+  return new Map<string, Uint8Array>([
+    [
+      '/zmetadata',
+      new TextEncoder().encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
+    ],
+    ['/labels/fov1/0/0.0', bytes(raster)],
+    ['/labels/fov2/0/0.0', bytes(raster)],
+    ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b'], 6)],
+    ['/tables/table/obs/cell_ID/0', bytes(new BigInt64Array([1n, 1n]))],
+    ['/tables/table/obs/region/codes/0', bytes(new Int8Array([0, 1]))],
+    ['/tables/table/obs/region/categories/0', fixedStrings(['fov1', 'fov2'], 4)],
+    // Label-pixel centroids of the block in each field of view.
+    ['/tables/table/obsm/spatial/0.0', bytes(new Float64Array([2, 2, 2, 2]))],
+    ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
+    ['/tables/table/X/data/0', bytes(new Float32Array([1]))],
+    ['/tables/table/X/indices/0', bytes(new Int32Array([0]))],
+    ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 1]))],
+  ])
+}
+
 function polygonRows(): readonly Record<string, unknown>[] {
   const square = (x: number) => [
     [
@@ -1182,6 +1326,47 @@ function polygonRows(): readonly Record<string, unknown>[] {
     { geometry: { type: 'Polygon', coordinates: square(0) }, id: 10n },
     { geometry: { type: 'Polygon', coordinates: square(2) }, id: 11n },
   ]
+}
+
+// A store whose only element is a table, placed by its obsm/spatial.
+function tableOnlyStoreFixture(): ReadonlyMap<string, Uint8Array> {
+  const metadata: Record<string, unknown> = {
+    '.zgroup': { zarr_format: 2 },
+    '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    'tables/.zgroup': { zarr_format: 2 },
+    'tables/table/.zgroup': { zarr_format: 2 },
+    'tables/table/.zattrs': { 'encoding-type': 'anndata' },
+    'tables/table/obs/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/.zattrs': {
+      _index: '_index',
+      'column-order': [],
+      'encoding-type': 'dataframe',
+    },
+    'tables/table/obs/_index/.zarray': arrayMeta([3], '|S6'),
+    'tables/table/var/.zgroup': { zarr_format: 2 },
+    'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
+    'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
+    'tables/table/obsm/.zgroup': { zarr_format: 2 },
+    'tables/table/obsm/spatial/.zarray': arrayMeta([3, 2], '<f8'),
+    'tables/table/X/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zattrs': { 'encoding-type': 'csr_matrix', shape: [3, 1] },
+    'tables/table/X/data/.zarray': arrayMeta([1], '<f4'),
+    'tables/table/X/indices/.zarray': arrayMeta([1], '<i4'),
+    'tables/table/X/indptr/.zarray': arrayMeta([4], '<i4'),
+  }
+
+  return new Map<string, Uint8Array>([
+    [
+      '/zmetadata',
+      new TextEncoder().encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
+    ],
+    ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b', 'cell-c'], 6)],
+    ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
+    ['/tables/table/obsm/spatial/0.0', bytes(new Float64Array([1, 2, 3, 4, 5, 6]))],
+    ['/tables/table/X/data/0', bytes(new Float32Array([1]))],
+    ['/tables/table/X/indices/0', bytes(new Int32Array([0]))],
+    ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 1, 1]))],
+  ])
 }
 
 function shapesReaderFixture(

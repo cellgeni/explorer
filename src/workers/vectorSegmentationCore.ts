@@ -25,6 +25,9 @@ export function vectorSegmentationHandler(
       file: request.file,
       format: request.format,
       micrometersPerUnit: request.micrometersPerUnit,
+      ...(request.yMicrometersPerUnit === undefined
+        ? {}
+        : { yMicrometersPerUnit: request.yMicrometersPerUnit }),
       onProgress: (shapeCount) => {
         const time = now()
 

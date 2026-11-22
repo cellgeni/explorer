@@ -25,18 +25,17 @@ import {
   gridCellAssignmentMissing,
   gridCellAssignmentReady,
   gridCellAssignmentUnavailable,
+  summarizeGridCellAssignments,
   type GridCellAssignmentState,
+  type GridCellBarcodeAssignment,
 } from './gridCellAssignmentModel'
 
 interface MutableRef<T> {
   current: T
 }
 
-interface VisiumHdBarcodeMappingCellAssignment {
+interface VisiumHdBarcodeMappingCellAssignment extends GridCellBarcodeAssignment {
   readonly binId: SpatialElementId
-  readonly cellId: string
-  readonly inNucleus: boolean
-  readonly inCell: boolean
 }
 
 interface VisiumHdBarcodeAssignmentDataset {
@@ -166,18 +165,17 @@ export function useGridCellAssignmentWorkflow({
         return
       }
 
-      const assignment = assignments[0]
+      // One row per 2 µm barcode in the bin.
+      const assignment = summarizeGridCellAssignments(assignments)
 
-      if (assignment === undefined) {
+      if (assignment === null) {
         setGridCellAssignmentState(
           gridCellAssignmentMissing(selectedGridCell.id, rowBudget),
         )
       } else {
         setGridCellAssignmentState(
           gridCellAssignmentReady(selectedGridCell.id, {
-            cellId: assignment.cellId,
-            inNucleus: assignment.inNucleus,
-            inCell: assignment.inCell,
+            ...assignment,
             ...(rowBudget === undefined ? {} : { rowBudget }),
           }),
         )

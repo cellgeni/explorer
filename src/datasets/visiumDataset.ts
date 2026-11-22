@@ -52,6 +52,7 @@ type MexMatrixReader = (
 ) => Promise<FeatureBarcodeMatrix>
 
 const DEFAULT_LIBRARY_ID = 'visium'
+const GENE_EXPRESSION_FEATURE_TYPE = 'Gene Expression'
 const EMBEDDING_OBSM_KEYS: Readonly<
   Record<Exclude<VisiumAnalysisFileKey, 'clusters'>, string>
 > = {
@@ -207,19 +208,31 @@ export function visiumAnnDataTable(input: {
   const totalCounts = new Float64Array(rowCount)
   const genesDetected = new Int32Array(rowCount)
   const spatial = new Float64Array(rowCount * 2)
+  // The QC columns count gene expression only, as scanpy's read_visium keeps
+  // it alone: Antibody Capture features (CytAssist Gene and Protein
+  // Expression) stay in X but are not UMIs of the spot's transcripts.
+  const isGene = Uint8Array.from(matrix.featureTypes, (type) =>
+    type === GENE_EXPRESSION_FEATURE_TYPE ? 1 : 0,
+  )
   let offset = 0
 
   rows.forEach((row, index) => {
     const start = matrix.indptr[row.matrixRow] ?? 0
     const end = matrix.indptr[row.matrixRow + 1] ?? start
     let total = 0
+    let genes = 0
 
     for (let source = start; source < end; source += 1) {
       const value = matrix.data[source] ?? 0
+      const feature = matrix.indices[source] ?? 0
       data[offset] = value
-      indices[offset] = matrix.indices[source] ?? 0
-      total += value
+      indices[offset] = feature
       offset += 1
+
+      if (isGene[feature] === 1) {
+        total += value
+        genes += 1
+      }
     }
 
     indptr[index + 1] = offset
@@ -227,7 +240,7 @@ export function visiumAnnDataTable(input: {
     arrayRow[index] = positions.arrayRows[row.position] ?? 0
     arrayCol[index] = positions.arrayCols[row.position] ?? 0
     totalCounts[index] = total
-    genesDetected[index] = end - start
+    genesDetected[index] = genes
     spatial[index * 2] = positions.pixelX[row.position] ?? Number.NaN
     spatial[index * 2 + 1] = positions.pixelY[row.position] ?? Number.NaN
   })

@@ -70,6 +70,63 @@ describe('SpatialDataLabelsReader', () => {
     expect(tracer).toHaveBeenCalledTimes(2)
   })
 
+  it('reads a tile again when the view whose read it joined is cancelled', async () => {
+    // Each read waits until released, and fails if its own signal is aborted.
+    const pending: (() => void)[] = []
+    const tracer = vi.fn<SpatialDataLabelTracer>(
+      (request) =>
+        new Promise((resolve, reject) => {
+          request.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          )
+          pending.push(() =>
+            resolve(
+              traceLabelEdges(
+                CHUNKS[request.coords[1] ?? 0] ?? new Int32Array(0),
+                request.width,
+                request.height,
+                request.x0,
+                request.y0,
+                request.level.width,
+              ),
+            ),
+          )
+        }),
+    )
+    const level: SpatialDataLabelLevel = {
+      array: { shape: [2, 12] } as unknown as zarr.Array<zarr.DataType, zarr.Readable>,
+      width: 12,
+      height: 2,
+      chunkWidth: 6,
+      chunkHeight: 2,
+      xAxis: 1,
+      yAxis: 0,
+      scaleX: 1,
+      scaleY: 1,
+    }
+    const reader = new SpatialDataLabelsReader(
+      [level],
+      { a: 1, b: 0, c: 0, d: 0, e: 1, f: 0 },
+      { tracer },
+    )
+    const bounds = { minX: 0, maxX: 5, minY: 0, maxY: 2 }
+    const earlier = new AbortController()
+    const first = reader.outlines(bounds, { maxPixels: 1_000, signal: earlier.signal })
+    const second = reader.outlines(bounds, {
+      maxPixels: 1_000,
+      signal: new AbortController().signal,
+    })
+
+    // The second view joined the first one's read; the first view is cancelled.
+    earlier.abort()
+    await expect(first).rejects.toMatchObject({ name: 'AbortError' })
+    await vi.waitFor(() => expect(tracer).toHaveBeenCalledTimes(2))
+    pending.at(-1)?.()
+
+    const outlines = await second
+    expect(outlines.map((outline) => outline.label).sort()).toEqual([1, 2])
+  })
+
   it('opens the first series of a bioformats2raw label store', async () => {
     // A 5D (t, c, z, y, x) big-endian uint16 mask, 4 x 2 pixels:
     //   1 1 0 2

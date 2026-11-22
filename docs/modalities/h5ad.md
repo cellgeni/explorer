@@ -250,8 +250,10 @@ is shown (see [Feature Read Paths](#feature-read-paths)).
   ([Units And Coordinates](./visium.md#units-and-coordinates)), and tables a
   collection pairs with an image whose pixels they are in
   ([Attached Image](#attached-image)).
-- Embedding options (`readObsmEmbeddingOptions`) are every dense 2D obsm
-  matrix with `n_obs` rows and 2+ columns, ordered `X_umap`, `umap`, `X_tsne`,
+- Embedding options (`readObsmEmbeddingOptions`) are the dense 2D obsm
+  matrices with `n_obs` rows and 2+ columns whose key starts with `X_` or is
+  `spatial`, `umap`, `tsne` or `pca` (any case), so per-cell abundance or
+  covariate matrices are left out, ordered `X_umap`, `umap`, `X_tsne`,
   `X_tSNE`, `tsne`, `X_pca`, `X_spatial`, `spatial`, then alphabetically.
 
 ### Expression (`/X`)
@@ -289,6 +291,13 @@ values with gaps up to 262,144 values (`csrLazyRowBatches`).
 | `embeddingOptions()` | obsm keys usable as embeddings; the first one is selected                                |
 | `metadataTracks()`   | One `h5ad:<column>` `Metadata` track per continuous obs column, without per-cell values  |
 
+The `<column>` in these IDs, and the `<class>` in a class's
+`analysis:<column>:<class>`, are slugs: lowercase, with every run of other
+characters turned into `-`. Names that slug alike (`Cell Type` and
+`cell_type`, `CD4+ T` and `CD4- T`, or labels in a script other than Latin)
+get `-2`, `-3`, … on the later ones, so each keeps its own colour, visibility
+and values.
+
 `overview()` is built once for each placement (a Visium library or off-tissue
 choice places the rows again) and returned to every caller. Its points carry
 `readMetadata` instead of a metadata object: building an object per cell with
@@ -324,8 +333,10 @@ SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
   collection is read.
 - **Placement.** With `coordinates: "image-pixels"`, the dataset opens the
   image (`attachedImageLoader`, once per instance) before placing its cells
-  and multiplies the obsm coordinates by the image's micrometres per pixel, so
-  the cells, the image, the scale bar and every distance are in micrometres.
+  and multiplies the obsm coordinates by the image's micrometres per pixel
+  (its pixel width for x and height for y, which differ for some OME-Zarr
+  images), so the cells, the image, the scale bar and every distance are in
+  micrometres.
   With `micrometers`, the default, the coordinates are used as they are and
   the image is placed by its own pixel size. If the image cannot be opened,
   the coordinates are used as they are, with a line in the log.
@@ -409,7 +420,8 @@ several: the rows whose obs `column` holds `value`
 - **Depths.** A section's cells keep their third obsm `spatial` column only
   when it varies within the section; cells of one plane have none.
 - **Splitting.** `sectionColumns()` lists the label columns with 2 to 500
-  values, and the number columns named like section columns
+  values that rows hold (a categorical's unused categories are not counted),
+  and the number columns named like section columns
   (`SECTION_COLUMN_NAMES`) with 2 to 500 distinct finite values, as anndata
   stores whole-number IDs, with how many sections each gives; those named like
   section columns come first. The Cells section's `Open N Sections` link

@@ -139,7 +139,7 @@ interface AteraCellsStore {
   readonly store: zarr.AsyncReadable
   readonly bboxes: Float32Array
   readonly maxExtent: number
-  readonly grids: Readonly<Record<AteraSegmentationKind, AteraPolygonGrid | null>>
+  readonly cellGrid: AteraPolygonGrid
   readonly segmentationMethods: readonly string[]
 }
 
@@ -173,15 +173,12 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private readonly openZipStore: (url: string) => Promise<AteraZipStore>
   private readonly openImage: ImagePyramidOpener
   private experimentPromise: Promise<AteraExperiment> | null = null
-  // experiment.spatial is optional with a manifest, so its file paths are read
-  // once and a missing file means standard names, without refetching it on
-  // every lookup.
-  private experimentFilesPromise: Promise<AteraExperiment['files'] | null> | null = null
   private tablePromise: Promise<AteraTable> | null = null
   private overviewPromise: Promise<AteraOverview> | null = null
   private genesPromise: Promise<AteraGenes> | null = null
   private cscPromise: Promise<AteraCscMatrix> | null = null
   private cellsPromise: Promise<AteraCellsStore> | null = null
+  private nucleusGridPromise: Promise<AteraPolygonGrid | null> | null = null
   private imagePromise: Promise<ImagePyramidLoader | null> | null = null
   private transcriptReader: AteraTranscripts | null = null
   private readonly geneColumns = new Map<string, Promise<AteraGeneColumn>>()
@@ -229,6 +226,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
+  // experiment.spatial is optional with a manifest: a missing one reads as an
+  // experiment that names no files, with the default pixel size, and is kept
+  // so it is not fetched again. Other failures are thrown and read again next
+  // time.
   async experiment(): Promise<AteraExperiment> {
     if (this.experimentPromise === null) {
       this.experimentPromise = this.readExperiment().catch((error: unknown) => {
@@ -249,7 +250,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     bbox: BBox,
   ): Promise<readonly SpatialElement[]> {
     const [cells, overview] = await Promise.all([this.cellsStore(), this.overviewIndex()])
-    const grid = cells.grids[kind]
+    const grid = kind === 'cell' ? cells.cellGrid : await this.nucleusGrid(cells)
 
     if (grid === null) {
       return []
@@ -569,12 +570,8 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       return this.resolve(ATERA_FILE_DEFAULTS.experiment)
     }
 
-    this.experimentFilesPromise ??= this.experiment().then(
-      (experiment) => experiment.files,
-      () => null,
-    )
-    const files = await this.experimentFilesPromise
-    return this.resolve(files?.[role] ?? ATERA_FILE_DEFAULTS[role])
+    const { files } = await this.experiment()
+    return this.resolve(files[role] ?? ATERA_FILE_DEFAULTS[role])
   }
 
   private async fileLabel(role: AteraFileRole): Promise<string> {
@@ -591,6 +588,12 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private async readExperiment(): Promise<AteraExperiment> {
     const url = await this.fileUrl('experiment')
     const response = await this.fetcher(url)
+
+    // Missing keys answer 403 on S3 and the Sanger buckets.
+    if (response.status === 403 || response.status === 404) {
+      await response.body?.cancel()
+      return { files: {} }
+    }
 
     if (!response.ok) {
       throw new Error(
@@ -861,21 +864,7 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       zarr.open.v2(root, { kind: 'group' }),
       zarr.open.v2(root.resolve('bboxes'), { kind: 'array' }),
     ])
-    const grids = await Promise.all(
-      (['nucleus', 'cell'] as const).map(async (kind) => {
-        try {
-          const group = await zarr.open.v2(
-            root.resolve(`gridded_polygon_sets/${POLYGON_SET_INDEX[kind]}`),
-            { kind: 'group' },
-          )
-          return parseAteraPolygonGridAttrs(group.attrs)
-        } catch {
-          return null
-        }
-      }),
-    )
-
-    const [nucleusGrid = null, cellGrid = null] = grids
+    const cellGrid = await readPolygonGrid(store, 'cell')
 
     if (cellGrid === null) {
       throw new Error(`${label} has no gridded cell polygons.`)
@@ -890,11 +879,27 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
       store,
       bboxes,
       maxExtent: ateraMaxPolygonExtent(bboxes),
-      grids: { nucleus: nucleusGrid, cell: cellGrid },
+      cellGrid,
       segmentationMethods: Array.isArray(methods)
         ? methods.map((method) => String(method))
         : [],
     }
+  }
+
+  // Read apart from the cell polygons, so a failed read leaves those drawn,
+  // and is read again on the next request.
+  private nucleusGrid(cells: AteraCellsStore): Promise<AteraPolygonGrid | null> {
+    if (this.nucleusGridPromise === null) {
+      const promise = readPolygonGrid(cells.store, 'nucleus')
+      this.nucleusGridPromise = promise
+      promise.catch(() => {
+        if (this.nucleusGridPromise === promise) {
+          this.nucleusGridPromise = null
+        }
+      })
+    }
+
+    return this.nucleusGridPromise
   }
 
   // Per-row nucleus count (cell_summary column 7) and cell segmentation
@@ -1123,6 +1128,27 @@ async function readCategoricalColumn(
   )
 
   return codes.map((code) => (code < 0 ? null : (labels[code] ?? null)))
+}
+
+// A polygon set's grid, or null when the run has no such set. Other failures
+// are thrown.
+async function readPolygonGrid(
+  store: zarr.AsyncReadable,
+  kind: AteraSegmentationKind,
+): Promise<AteraPolygonGrid | null> {
+  try {
+    const group = await zarr.open.v2(
+      zarr.root(store).resolve(`gridded_polygon_sets/${POLYGON_SET_INDEX[kind]}`),
+      { kind: 'group' },
+    )
+    return parseAteraPolygonGridAttrs(group.attrs)
+  } catch (error) {
+    if (zarr.isZarritaError(error, 'NotFoundError')) {
+      return null
+    }
+
+    throw error
+  }
 }
 
 function ateraUnits(experiment: AteraExperiment): UnitsDescriptor {

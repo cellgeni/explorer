@@ -7,11 +7,13 @@ import {
   icechunkFixtureFetcher,
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
+import type { AnnDataMemoryTable } from './annDataMemory'
 import { loadDatasetCollection } from './annDataSectionCollection'
 import {
   AnnDataH5adDataset,
   type AnnDataH5adDatasetOptions,
   type AnnDataLabelsOpener,
+  uniqueSlugIds,
 } from './h5adDataset'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import {
@@ -1516,6 +1518,83 @@ describe('AnnDataH5adDataset', () => {
   })
 })
 
+describe('AnnDataH5adDataset attached image with non-square pixels', () => {
+  // Pixels 0.5 µm wide and 2 µm tall.
+  const loader = {
+    url: 'https://example.test/he.zarr',
+    imageWidth: 100,
+    imageHeight: 100,
+    units: {
+      dataUnit: 'micrometer',
+      imageUnit: 'pixel',
+      micrometersPerPixel: micrometers(0.5),
+      yMicrometersPerPixel: micrometers(2),
+      origin: 'top-left',
+      imageYAxis: 'down',
+    },
+    channels: [],
+  } as unknown as ImagePyramidLoader
+  const memorySource = {
+    label: 'Memory table',
+    load: async () => ({
+      obsNames: ['1', '2'],
+      obs: [],
+      varNames: ['A'],
+      X: {
+        kind: 'csr' as const,
+        data: new Float32Array([1, 2]),
+        indices: new Int32Array([0, 0]),
+        indptr: new Int32Array([0, 1, 2]),
+      },
+      // Image pixels (x, y).
+      obsm: { spatial: { values: new Float32Array([20, 10, 60, 40]), columns: 2 } },
+    }),
+  }
+
+  it('places image-pixel coordinates by the pixel width and height', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://anisotropic',
+      memorySource,
+      image: { url: loader.url, coordinates: 'image-pixels' },
+      openImage: vi.fn().mockResolvedValue(loader),
+    })
+    const overview = await dataset.overview()
+
+    expect(overview.map((point) => point.position)).toEqual([
+      { x: micrometers(10), y: micrometers(20) },
+      { x: micrometers(30), y: micrometers(80) },
+    ])
+  })
+
+  it('converts the view to label pixels by the pixel height', async () => {
+    // 50 x 50 label pixels over the 100 x 100 image: each 1 µm wide, 4 µm tall.
+    const outlines = vi.fn(async () => [])
+    const openLabels = vi.fn(async () => ({
+      levels: [{ width: 50, height: 50 }],
+      outlines,
+    })) as unknown as AnnDataLabelsOpener
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://anisotropic-labels',
+      memorySource,
+      image: { url: loader.url, coordinates: 'micrometers', labelsUrl: 'labels.zarr' },
+      openImage: vi.fn().mockResolvedValue(loader),
+      openLabels,
+    })
+
+    await dataset.elements({
+      minX: micrometers(0),
+      maxX: micrometers(100),
+      minY: micrometers(0),
+      maxY: micrometers(100),
+    })
+
+    expect(outlines).toHaveBeenCalledWith(
+      { minX: 0, minY: 0, maxX: 100, maxY: 25 },
+      expect.anything(),
+    )
+  })
+})
+
 describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
   // The tiny fixture's matrix, cells by genes (Actb, Gad1, Gapdh).
   const expected = {
@@ -2832,6 +2911,48 @@ describe('AnnDataH5adDataset sections', () => {
     )
   })
 
+  it('counts the sections a categorical column gives, not the categories it declares', async () => {
+    // A subset that kept unused categories: four declared, one or two used.
+    const dataset = new AnnDataH5adDataset({
+      url: 'memory://unused-categories',
+      memorySource: {
+        label: 'Memory table',
+        load: async () => ({
+          obsNames: ['c0', 'c1', 'c2', 'c3'],
+          obs: [
+            {
+              name: 'sample',
+              kind: 'categorical' as const,
+              codes: new Int8Array([2, 2, 2, 2]),
+              categories: ['s1', 's2', 's3', 's4'],
+            },
+            {
+              name: 'section',
+              kind: 'categorical' as const,
+              codes: new Int8Array([0, 3, 3, -1]),
+              categories: ['a', 'b', 'c', 'd'],
+            },
+          ],
+          varNames: ['A'],
+          X: {
+            kind: 'csr' as const,
+            data: new Float32Array([1]),
+            indices: new Int32Array([0]),
+            indptr: new Int32Array([0, 1, 1, 1, 1]),
+          },
+          obsm: {
+            spatial: { values: new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), columns: 2 },
+          },
+        }),
+      },
+    })
+
+    await expect(dataset.sectionColumns()).resolves.toEqual([
+      { column: 'section', sectionCount: 2 },
+    ])
+    await expect(dataset.sections('section')).resolves.toHaveLength(2)
+  })
+
   it('splits by a whole-number section column, as anndata stores integer IDs (EXP-041)', async () => {
     const file = await openFile({
       coordinateKey: 'spatial',
@@ -2989,5 +3110,80 @@ describe('AnnDataH5adDataset sections', () => {
       'obs column "section" has no cells with the value "s9".',
     )
     expect(release).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AnnData set, class and track IDs', () => {
+  function memoryDataset(obs: AnnDataMemoryTable['obs']): AnnDataH5adDataset {
+    return new AnnDataH5adDataset({
+      url: 'memory://unique-ids',
+      memorySource: {
+        label: 'Memory table',
+        load: async () => ({
+          obsNames: ['c0', 'c1', 'c2', 'c3'],
+          obs,
+          varNames: ['A'],
+          X: {
+            kind: 'csr',
+            data: new Float32Array([1]),
+            indices: new Int32Array([0]),
+            indptr: new Int32Array([0, 1, 1, 1, 1]),
+          },
+          obsm: {
+            spatial: { values: new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), columns: 2 },
+          },
+        }),
+      },
+    })
+  }
+
+  it('suffixes names that slug alike, and keeps the plain slug for the first', () => {
+    expect(uniqueSlugIds(['a', 'b', 'a', 'a'])).toEqual(['a', 'b', 'a-2', 'a-3'])
+    // `a-2` is another name's own slug, so the repeat skips it.
+    expect(uniqueSlugIds(['a', 'a', 'a-2'])).toEqual(['a', 'a-3', 'a-2'])
+  })
+
+  it('gives classes, sets and tracks whose names slug alike their own IDs', async () => {
+    const dataset = memoryDataset([
+      {
+        name: 'Cell Type',
+        kind: 'categorical',
+        codes: new Int8Array([0, 1, 0, 1]),
+        categories: ['CD4+ T cell', 'CD4- T cell'],
+      },
+      {
+        name: 'cell_type',
+        kind: 'categorical',
+        codes: new Int8Array([1, 1, 0, 0]),
+        categories: ['神经元', '星形胶质细胞'],
+      },
+      { name: 'S_score', kind: 'numeric', values: new Float32Array([1, 2, 3, 4]) },
+      { name: 'S.score', kind: 'numeric', values: new Float32Array([10, 20, 30, 40]) },
+    ])
+
+    const groups = await dataset.annotationGroups()
+    expect(groups.map((group) => [group.groupingName, group.id])).toEqual([
+      ['Cell Type', 'analysis:cell-type'],
+      ['cell_type', 'analysis:cell-type-2'],
+    ])
+    await expect(dataset.annotations()).resolves.toMatchObject([
+      { id: 'analysis:cell-type:cd4-t-cell', label: 'Cell Type: CD4+ T cell' },
+      { id: 'analysis:cell-type:cd4-t-cell-2', label: 'Cell Type: CD4- T cell' },
+      { id: 'analysis:cell-type-2:annotation', label: 'cell_type: 神经元' },
+      { id: 'analysis:cell-type-2:annotation-2', label: 'cell_type: 星形胶质细胞' },
+    ])
+    const second = await dataset.annotations({ groupId: 'analysis:cell-type-2' })
+    expect(second.map((annotation) => annotation.label)).toEqual([
+      'cell_type: 神经元',
+      'cell_type: 星形胶质细胞',
+    ])
+
+    const tracks = await dataset.metadataTracks()
+    expect(tracks.map((track) => [track.label, track.id])).toEqual([
+      ['S_score', 'h5ad:s-score'],
+      ['S.score', 'h5ad:s-score-2'],
+    ])
+    const values = await dataset.metadataTrackValues('h5ad:s-score-2')
+    expect(values.map((value) => value.value)).toEqual([10, 20, 30, 40])
   })
 })

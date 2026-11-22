@@ -110,6 +110,20 @@ describe('readVectorSegmentation', () => {
     expect(tsv.ids).toEqual(['12', '13'])
   })
 
+  it('reads a header that names the geometry column polygon as a header', async () => {
+    const single = await read(
+      'wkt',
+      'polygon\n"POLYGON ((0 0, 1 0, 1 1, 0 0))"\n"POLYGON ((2 2, 3 2, 3 3, 2 2))"\n',
+    )
+    const named = await read(
+      'wkt',
+      'class,cell_id,polygon\ntumor,c1,"POLYGON ((0 0, 1 0, 1 1, 0 0))"\ntumor,c2,"POLYGON ((2 2, 3 2, 3 3, 2 2))"\n',
+    )
+
+    expect(single.ids).toEqual(['0', '1'])
+    expect(named.ids).toEqual(['c1', 'c2'])
+  })
+
   it('reports a table without WKT', async () => {
     await expect(read('wkt', 'id,x,y\n1,2,3\n')).rejects.toThrow(
       'No WKT POLYGON or MULTIPOLYGON column was found',
@@ -123,6 +137,28 @@ describe('readVectorSegmentation', () => {
     )
 
     expect(shapes.ids).toEqual(['aaaa-1', 'aaab-1', 'aaac-1', 'aaad-1'])
+  })
+
+  it('takes a named ID column over an unnamed pandas index', async () => {
+    // MERSCOPE boundaries: `ID` (a row number), `EntityID`, `ZIndex`,
+    // `Geometry` and `__index_level_0__`, seven planes per cell.
+    const shapes = await read(
+      'parquet',
+      new Uint8Array(
+        readFileSync(
+          join(process.cwd(), 'src/test/fixtures/merscope/cell_boundaries.parquet'),
+        ),
+      ),
+    )
+
+    expect(new Set(shapes.ids)).toEqual(
+      new Set([
+        '1577590100000000000',
+        '1577590100000000001',
+        '1577590100000000002',
+        '1577590100000000099',
+      ]),
+    )
   })
 
   it('reads one row per vertex across row groups, as Xenium writes', async () => {
