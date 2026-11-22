@@ -21,7 +21,24 @@ export interface ContinuousCellMetadataTrack {
 export interface CustomAnnotationImport {
   readonly annotations: readonly Annotation[]
   readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
+  // Columns of a table left out because they name cells rather than group
+  // them, with how many classes they would have made.
+  readonly skippedColumns?: readonly SkippedAnnotationColumn[]
 }
+
+export interface SkippedAnnotationColumn {
+  readonly name: string
+  readonly classCount: number
+}
+
+// More classes than this, and a column of a table labels cells rather than
+// grouping them (a barcode, a cell name), as the dataset's own sets are
+// judged (annotationModel.ts). Each class would be a row in Clusters.
+export const IMPORTED_COLUMN_CLASS_LIMIT = 500
+
+// A column is a metadata track when at least this share of its values are
+// numbers; the rest (a spreadsheet error, a stray word) have no value.
+const CONTINUOUS_COLUMN_NUMERIC_SHARE = 0.95
 
 export function parseCustomAnnotations(
   text: string,
@@ -214,6 +231,7 @@ function parseCsvWideAnnotations(
 
   const annotations: CustomAnnotationEntry[] = []
   const metadataTracks: ContinuousCellMetadataTrack[] = []
+  const skippedColumns: SkippedAnnotationColumn[] = []
   const usedMetadataTrackIds = new Set<string>()
 
   for (const { index, name } of annotationColumns) {
@@ -258,6 +276,11 @@ function parseCsvWideAnnotations(
       appendGroupedCell(grouped, label, asAnyCellId(cellId))
     }
 
+    if (grouped.size > IMPORTED_COLUMN_CLASS_LIMIT) {
+      skippedColumns.push({ name, classCount: grouped.size })
+      continue
+    }
+
     annotations.push(
       ...annotationEntriesFromGroupedCells(grouped).map((entry) => ({
         ...entry,
@@ -266,10 +289,31 @@ function parseCsvWideAnnotations(
     )
   }
 
+  if (
+    annotations.length === 0 &&
+    metadataTracks.length === 0 &&
+    skippedColumns.length > 0
+  ) {
+    throw new Error(
+      `No column groups the cells: ${skippedColumnsText(skippedColumns)} would each have more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes.`,
+    )
+  }
+
   return {
     annotations: createCustomAnnotations(fileName, annotations),
     metadataTracks,
+    ...(skippedColumns.length === 0 ? {} : { skippedColumns }),
   }
+}
+
+// "barcode (20,000 classes) and name (19,998 classes)".
+export function skippedColumnsText(columns: readonly SkippedAnnotationColumn[]): string {
+  const parts = columns.map(
+    ({ name, classCount }) => `${name} (${classCount.toLocaleString()} classes)`,
+  )
+  return parts.length <= 1
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1) ?? ''}`
 }
 
 function createContinuousMetadataTrack(
@@ -291,7 +335,8 @@ function createContinuousMetadataTrack(
       cellId === undefined ||
       cellId.length === 0 ||
       rawValue === undefined ||
-      isMissingCsvValue(rawValue)
+      isMissingCsvValue(rawValue) ||
+      isNoNumberText(rawValue)
     ) {
       continue
     }
@@ -332,20 +377,24 @@ function uniqueContinuousMetadataTrack(
 }
 
 function isContinuousCsvColumn(values: readonly string[]): boolean {
-  if (values.length === 0) {
+  const finiteValues = values.filter((value) => !isNoNumberText(value))
+
+  if (finiteValues.length === 0) {
     return false
   }
 
   const numericValues: number[] = []
 
-  for (const value of values) {
+  for (const value of finiteValues) {
     const parsedValue = parseContinuousValue(value)
 
-    if (parsedValue === null) {
-      return false
+    if (parsedValue !== null) {
+      numericValues.push(parsedValue)
     }
+  }
 
-    numericValues.push(parsedValue)
+  if (numericValues.length < finiteValues.length * CONTINUOUS_COLUMN_NUMERIC_SHARE) {
+    return false
   }
 
   const uniqueValues = new Set(numericValues)
@@ -362,6 +411,15 @@ function parseContinuousValue(value: string): number | null {
 
 function isMissingCsvValue(value: string): boolean {
   return ['', 'na', 'n/a', 'nan', 'null', 'none'].includes(value.trim().toLowerCase())
+}
+
+// Values with no place on a numeric scale: Excel's `#N/A` and `-`, and
+// infinities (pandas `inf`, R `Inf`). In a column of classes they are labels.
+function isNoNumberText(value: string): boolean {
+  return (
+    ['#n/a', '-'].includes(value.trim().toLowerCase()) ||
+    /^[+-]?inf(?:inity)?$/i.test(value.trim())
+  )
 }
 
 // Drops the `'` our CSV exports put before a field a spreadsheet would run as a

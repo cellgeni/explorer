@@ -555,6 +555,37 @@ describe('useAnnotationWorkflow', () => {
     )
   })
 
+  it('says which table columns were left out for having too many classes', async () => {
+    const rows = ['cell_id,barcode,cell_type']
+    for (let index = 0; index < 600; index += 1) {
+      rows.push(`aaaaaaaa-${index},BC${index},${index % 2 === 0 ? 'T' : 'B'}`)
+    }
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([rows.join('\n')], 'obs.csv', { type: 'text/csv' }),
+      )
+    })
+
+    expect(snapshot.annotationState).toMatchObject({
+      status: 'ready',
+      annotations: [expect.anything(), expect.anything()],
+    })
+    expect(api.annotationImportNotice).toBe(
+      'Left out barcode (600 classes): a column of more than 500 classes names cells rather than grouping them.',
+    )
+  })
+
   it('imports Visium barcodes and says how many cells are not on the map', async () => {
     const file = new File(
       [
