@@ -175,8 +175,11 @@ clustering's barcodes are one tier's bins, so:
   the tier changes.
 - **A loaded set follows the tier.** After a bin-size switch, a set loaded for
   the old tier is read again for the new one when it has the same clustering,
-  keeping the colour mode, and cleared when it does not (2 µm). Imported
-  labels loaded with it are dropped.
+  keeping the colour mode and the hidden classes, and cleared when it does not
+  (2 µm). "All" is read again as "All" and stays selected. A set still loading
+  during the switch follows once it lands: a set's id names its tier, and
+  "All" names it in its bin barcodes. Imported labels loaded with it are
+  dropped.
 - **Classes keep their colours.** Annotation ids are
   `analysis:<clustering>:<cluster>`, without the tier, so a class's colour and
   visibility carry across tiers. The panel lists them under the set name, as

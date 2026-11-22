@@ -549,8 +549,9 @@ view shows 16 µm bins until you zoom in past zoom level 3. The 3.4 million
 
 Bins › Clusters lists Space Ranger's graph-based and k-means clusterings of
 the 8 µm and 16 µm bins; `graphclust` is chosen. A clustering belongs to its
-bin size, so after you switch sizes, a loaded clustering is read again for the
-new size, and cleared at 2 µm, which has none.
+bin size, so after you switch sizes, a loaded clustering (or All) is read
+again for the new size, with the same classes hidden, and cleared at 2 µm,
+which has none.
 
 When segmented outputs are present, `Cell boundaries` and `Nucleus boundaries`
 load viewport-scoped segmentation overlays. Annotated segmentation GeoJSON
