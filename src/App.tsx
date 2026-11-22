@@ -2815,6 +2815,9 @@ export function App({ dependencies }: AppProps = {}) {
   const handleBeforeDatasetLoad = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
+    // The lifecycle clears the selected cell and bin; an outline picked
+    // without an overview point (segmentations) goes too.
+    setSelectedBoundaryCell(null)
     setGeometricAnnotations([])
     setGeometricAnnotationImportMessage(null)
     setFallbackNotices([])
@@ -2824,6 +2827,7 @@ export function App({ dependencies }: AppProps = {}) {
     setFallbackNotices,
     setGeometricAnnotationImportMessage,
     setGeometricAnnotations,
+    setSelectedBoundaryCell,
   ])
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
@@ -3546,9 +3550,16 @@ export function App({ dependencies }: AppProps = {}) {
     const customImageOpacities = initialCustomImageOpacitiesRef.current
     initialCustomImageUrlsRef.current = []
     initialCustomImageOpacitiesRef.current = []
+    const requestId = loadRequestId.current
 
     void (async () => {
       for (const [index, customImageUrl] of customImageUrls.entries()) {
+        // The layers are the link's dataset's: another dataset opened while
+        // one loaded takes none of the rest.
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
         const loaded = await handleLoadCustomLayer(customImageUrl)
         const opacity = customImageOpacities[index]
 
@@ -3568,6 +3579,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleCustomImageLayerOpacityChange,
     handleLoadCustomLayer,
     initialShareableState.datasetUrl,
+    loadRequestId,
     loadedDatasetUrl,
   ])
 

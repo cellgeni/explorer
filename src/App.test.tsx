@@ -2115,6 +2115,164 @@ describe('App', () => {
     ).toBeNull()
   })
 
+  it('loads a link’s custom image layers only onto the link’s dataset', async () => {
+    const datasetA = 'https://example.test/xenium-a'
+    const datasetB = 'https://example.test/xenium-b'
+    const layer1 = 'https://example.test/layers/he-1.ome.tif'
+    const layer2 = 'https://example.test/layers/he-2.ome.tif'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(datasetA)}&customImageUrl=${encodeURIComponent(layer1)}&customImageUrl=${encodeURIComponent(layer2)}`,
+    )
+    const loader = {} as TiffPyramidLoader
+    const channel = {
+      id: 'Channel:0',
+      index: 0,
+      name: 'H&E',
+      color: [255, 255, 255] as const,
+      contrast: { min: 0, max: 255 },
+    }
+    const firstLayer = deferredPromise<void>()
+    const loadCustomMorphologyLayer: ReturnType<
+      typeof vi.fn<CustomMorphologyLayerLoader>
+    > = vi.fn(async (url) => {
+      if (url === layer1) await firstLayer.promise
+      return {
+        url,
+        loader,
+        channels: [channel],
+        channelLoaders: [{ info: channel, loader }],
+      }
+    })
+
+    render(
+      <TestApp
+        detectSpatialDataset={vi.fn(async (baseUrl: string) => ({
+          platform: 'xenium' as const,
+          baseUrl,
+          checked: [],
+        }))}
+        loadAnnotationGroups={vi.fn(async () => [])}
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+      />,
+    )
+    await waitFor(() => {
+      expect(loadCustomMorphologyLayer).toHaveBeenCalledWith(layer1, expect.anything())
+    })
+
+    // Another dataset opens while the first layer reads.
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: datasetB },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await waitFor(() => {
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('dataset')).toBe(
+        datasetB,
+      )
+    })
+    await act(async () => {
+      firstLayer.resolve()
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+    expect(loadCustomMorphologyLayer.mock.calls.map(([url]) => url)).toEqual([layer1])
+  })
+
+  it('drops a selected outline when another dataset opens', async () => {
+    const viewport = installAppViewportFixture(
+      appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+    )
+    const datasetA = 'https://example.test/xenium-a'
+    const datasetB = 'https://example.test/xenium-b'
+    useViewerStore.setState({ ...initialViewerState, datasetUrl: datasetA })
+    // An outline whose cell is not an overview point (a segmentation).
+    const loadBoundaryElements: ReturnType<typeof vi.fn<BoundaryElementsLoader>> = vi.fn(
+      async (baseUrl: string) => ({
+        elements:
+          baseUrl === datasetA
+            ? [
+                {
+                  id: 'outline-only-a',
+                  geometry: {
+                    kind: 'polygon' as const,
+                    rings: [
+                      [
+                        { x: micrometers(-2), y: micrometers(-2) },
+                        { x: micrometers(2), y: micrometers(-2) },
+                        { x: micrometers(2), y: micrometers(2) },
+                        { x: micrometers(-2), y: micrometers(2) },
+                      ],
+                    ],
+                  },
+                },
+              ]
+            : [],
+      }),
+    )
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={vi.fn(async (baseUrl: string) => ({
+            platform: 'xenium' as const,
+            baseUrl,
+            checked: [],
+          }))}
+          loadAnnotationGroups={vi.fn(async () => [])}
+          loadBoundaryElements={loadBoundaryElements}
+          loadDatasetOverview={vi.fn(async () => [
+            {
+              cellId: intToCellId(1, 1),
+              position: { x: micrometers(0), y: micrometers(0) },
+              transcriptCount: 8,
+            },
+          ])}
+        />,
+      )
+      openControls('open-dataset')
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      const hitAreas = await screen.findByTestId('deck-layer-cell-boundary-hit-areas')
+      await waitFor(() => {
+        expect(hitAreas).toHaveAttribute('data-count', '1')
+      })
+      fireEvent.click(hitAreas)
+      await waitFor(() => {
+        expect(new URLSearchParams(window.location.hash.slice(1)).get('card')).toBe(
+          'boundary:outline-only-a',
+        )
+      })
+
+      openControls('open-dataset')
+      fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+        target: { value: datasetB },
+      })
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+      await waitFor(() => {
+        expect(new URLSearchParams(window.location.hash.slice(1)).get('dataset')).toBe(
+          datasetB,
+        )
+      })
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 300))
+      })
+
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('card')).toBeNull()
+      expect(document.querySelector('.viewer-selection-overlay')).toBeNull()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('shares the chosen transcript filter, not All features shown without genes', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
