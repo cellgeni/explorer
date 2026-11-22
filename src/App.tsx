@@ -2864,6 +2864,7 @@ export function App({ dependencies }: AppProps = {}) {
     activeBinSize: activeVisiumHdBinSize,
     annotationState,
     getSpatialDataset,
+    hiddenAnnotationIds,
     isVisiumHdDataset,
     loadAnnotationGroup,
     loadState,
