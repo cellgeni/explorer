@@ -7,11 +7,13 @@ import {
   icechunkFixtureFetcher,
   type IcechunkFixtureRequest,
 } from '../test/icechunkFixtures'
+import type { AnnDataMemoryTable } from './annDataMemory'
 import { loadDatasetCollection } from './annDataSectionCollection'
 import {
   AnnDataH5adDataset,
   type AnnDataH5adDatasetOptions,
   type AnnDataLabelsOpener,
+  uniqueSlugIds,
 } from './h5adDataset'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import {
@@ -2989,5 +2991,80 @@ describe('AnnDataH5adDataset sections', () => {
       'obs column "section" has no cells with the value "s9".',
     )
     expect(release).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AnnData set, class and track IDs', () => {
+  function memoryDataset(obs: AnnDataMemoryTable['obs']): AnnDataH5adDataset {
+    return new AnnDataH5adDataset({
+      url: 'memory://unique-ids',
+      memorySource: {
+        label: 'Memory table',
+        load: async () => ({
+          obsNames: ['c0', 'c1', 'c2', 'c3'],
+          obs,
+          varNames: ['A'],
+          X: {
+            kind: 'csr',
+            data: new Float32Array([1]),
+            indices: new Int32Array([0]),
+            indptr: new Int32Array([0, 1, 1, 1, 1]),
+          },
+          obsm: {
+            spatial: { values: new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]), columns: 2 },
+          },
+        }),
+      },
+    })
+  }
+
+  it('suffixes names that slug alike, and keeps the plain slug for the first', () => {
+    expect(uniqueSlugIds(['a', 'b', 'a', 'a'])).toEqual(['a', 'b', 'a-2', 'a-3'])
+    // `a-2` is another name's own slug, so the repeat skips it.
+    expect(uniqueSlugIds(['a', 'a', 'a-2'])).toEqual(['a', 'a-3', 'a-2'])
+  })
+
+  it('gives classes, sets and tracks whose names slug alike their own IDs', async () => {
+    const dataset = memoryDataset([
+      {
+        name: 'Cell Type',
+        kind: 'categorical',
+        codes: new Int8Array([0, 1, 0, 1]),
+        categories: ['CD4+ T cell', 'CD4- T cell'],
+      },
+      {
+        name: 'cell_type',
+        kind: 'categorical',
+        codes: new Int8Array([1, 1, 0, 0]),
+        categories: ['神经元', '星形胶质细胞'],
+      },
+      { name: 'S_score', kind: 'numeric', values: new Float32Array([1, 2, 3, 4]) },
+      { name: 'S.score', kind: 'numeric', values: new Float32Array([10, 20, 30, 40]) },
+    ])
+
+    const groups = await dataset.annotationGroups()
+    expect(groups.map((group) => [group.groupingName, group.id])).toEqual([
+      ['Cell Type', 'analysis:cell-type'],
+      ['cell_type', 'analysis:cell-type-2'],
+    ])
+    await expect(dataset.annotations()).resolves.toMatchObject([
+      { id: 'analysis:cell-type:cd4-t-cell', label: 'Cell Type: CD4+ T cell' },
+      { id: 'analysis:cell-type:cd4-t-cell-2', label: 'Cell Type: CD4- T cell' },
+      { id: 'analysis:cell-type-2:annotation', label: 'cell_type: 神经元' },
+      { id: 'analysis:cell-type-2:annotation-2', label: 'cell_type: 星形胶质细胞' },
+    ])
+    const second = await dataset.annotations({ groupId: 'analysis:cell-type-2' })
+    expect(second.map((annotation) => annotation.label)).toEqual([
+      'cell_type: 神经元',
+      'cell_type: 星形胶质细胞',
+    ])
+
+    const tracks = await dataset.metadataTracks()
+    expect(tracks.map((track) => [track.label, track.id])).toEqual([
+      ['S_score', 'h5ad:s-score'],
+      ['S.score', 'h5ad:s-score-2'],
+    ])
+    const values = await dataset.metadataTrackValues('h5ad:s-score-2')
+    expect(values.map((value) => value.value)).toEqual([10, 20, 30, 40])
   })
 })
