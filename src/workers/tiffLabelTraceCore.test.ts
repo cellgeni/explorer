@@ -18,6 +18,26 @@ describe('tiffLabelWindow', () => {
         tiffLabelWindow(uint32, { ...window, bitsPerSample: [32], tileWidth: 2 }),
       ),
     ).toEqual([70_000, 0, 0, 1])
+
+    // Above 2^31 a uint32 label keeps its value.
+    const large = new Uint32Array([3_000_000_000, 0, 0, 4_294_967_295]).buffer
+    expect(
+      Array.from(
+        tiffLabelWindow(large, { ...window, bitsPerSample: [32], tileWidth: 2 }),
+      ),
+    ).toEqual([3_000_000_000, 0, 0, 4_294_967_295])
+    const bigEndian = new DataView(new ArrayBuffer(16))
+    bigEndian.setUint32(0, 3_000_000_000, false)
+    expect(
+      Array.from(
+        tiffLabelWindow(bigEndian.buffer, {
+          ...window,
+          bitsPerSample: [32],
+          tileWidth: 2,
+          littleEndian: false,
+        }),
+      ),
+    ).toEqual([3_000_000_000, 0, 0, 0])
   })
 
   it('reads big-endian, signed and float labels', () => {

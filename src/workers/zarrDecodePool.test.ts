@@ -45,7 +45,7 @@ class FakeWorker implements ZarrDecodeWorkerLike {
         type: 'labels',
         id: message.id,
         trace: {
-          labels: Int32Array.from([5]),
+          labels: Float64Array.from([5]),
           edgeOffsets: Uint32Array.from([0, 0]),
           edges: new Float64Array(0),
           bounds: new Int32Array(4),
@@ -278,7 +278,7 @@ describe('ZarrDecodePool', () => {
         levelY0: 0,
         levelWidth: 2,
       }),
-    ).resolves.toMatchObject({ labels: Int32Array.from([5]) })
+    ).resolves.toMatchObject({ labels: Float64Array.from([5]) })
 
     worker.postMessage = () => {
       queueMicrotask(() => {

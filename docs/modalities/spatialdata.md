@@ -163,7 +163,8 @@ coordinate system.
 
 `points` (transcripts), extra images, and extra tables are not read. Label
 chunks in view are decoded and traced into cell outlines in the Zarr decode
-worker when you zoom in below `Boundary limit`.
+worker when you zoom in below `Boundary limit`. Label values are kept exact up
+to 2^53, as the table's ids are, so 32- and 64-bit ids match their rows.
 
 ## Table
 
