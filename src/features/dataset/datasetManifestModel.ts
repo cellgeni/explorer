@@ -5,6 +5,7 @@ import type {
 } from '../../datasets/datasetManifest'
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
+import { defaultEnabledChannelIds } from '../morphology/morphologyChannels'
 import {
   manifestObservationColorMode,
   parseObservationColorMode,
@@ -164,6 +165,19 @@ export function manifestDefaultsNotShared(
       ([key]) => shared[key as keyof ShareableState] === undefined,
     ),
   )
+}
+
+// The channels an image-only dataset opens with: those a link or manifest
+// lists, else the first few, as the form opens it, link or not.
+export function imageDatasetChannelIds(
+  channels: readonly MorphologyImageChannel[],
+  selection: readonly string[] | undefined,
+): readonly string[] | undefined {
+  const defaultIds = defaultEnabledChannelIds(channels)
+
+  return selection === undefined
+    ? defaultIds
+    : resolveMorphologyChannelSelection(channels, selection, defaultIds)
 }
 
 // Channel IDs to enable for a selection of IDs (share URLs) or names

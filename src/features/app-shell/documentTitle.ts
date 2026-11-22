@@ -6,7 +6,7 @@ const APP_NAME = 'Spatial Omics Explorer'
 const GENERIC_SEGMENTS = new Set(['outs', 'explorer.json', 'experiment.xenium'])
 
 // A short name for the loaded dataset: the manifest's name, or the last
-// meaningful part of its URL.
+// meaningful part of its URL, or its host.
 export function datasetDisplayName(
   url: string | null,
   manifestName: string | undefined,
@@ -16,8 +16,12 @@ export function datasetDisplayName(
   if (url === null) return null
 
   let path = url.trim()
+  // A dataset served from the root of a host has no path to name it.
+  let host: string | null = null
   try {
-    path = new URL(path).pathname
+    const parsed = new URL(path)
+    path = parsed.pathname
+    host = parsed.host === '' ? null : parsed.host
   } catch {
     path = path.split(/[?#]/)[0] ?? ''
   }
@@ -40,7 +44,7 @@ export function datasetDisplayName(
     segments.pop()
   }
 
-  const file = segments.at(-1) ?? null
+  const file = segments.at(-1) ?? host
   const section = parseAnnDataSectionUrl(url.trim())
 
   // One section of a table: "table.h5ad · section_01".

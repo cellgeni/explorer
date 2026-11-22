@@ -135,8 +135,9 @@ interface UseShareableUrlHashOptions {
   readonly genes: ShareableGeneHashOptions
   readonly transcripts: ShareableTranscriptHashOptions
   readonly magicLens: ShareableMagicLensHashOptions
-  // Back or Forward reached an entry for another dataset. Reloading opens
-  // that entry's link, with its view and settings.
+  // Back or Forward reached an entry for another dataset, or the address
+  // took a link this page did not write (one pasted for the open dataset).
+  // Reloading opens that link, with its view and settings.
   readonly onHistoryDatasetChange?: () => void
   // True while the dataset the address names is opening. The load applies the
   // link's card, ROI, channels and z plane later, so until then the address
@@ -151,6 +152,20 @@ function reloadPage(): void {
 // The dataset the address names: the hash's, or else the query string's.
 function linkedDatasetUrl(): string {
   return readShareableStateFromLocation().datasetUrl?.trim() ?? ''
+}
+
+// Whether writing `datasetUrl` opens another dataset than the address names,
+// which adds a history entry. A collection link names no dataset: the
+// dataset the collection opens is that link's, as a dataset= link's is.
+function opensAnotherDataset(datasetUrl: string): boolean {
+  const linked = readShareableStateFromLocation()
+  const linkedDataset = linked.datasetUrl?.trim() ?? ''
+
+  return (
+    datasetUrl !== '' &&
+    datasetUrl !== linkedDataset &&
+    !(linkedDataset === '' && linked.collectionUrl !== undefined)
+  )
 }
 
 // The query string without the link's values: once the hash is written it is
@@ -180,7 +195,8 @@ function searchWithoutLinkState(search: string): string {
 
 // Writes the view to the address (15.1-L). Opening another dataset adds a
 // history entry, so Back returns to the previous dataset or to the start
-// screen (15.3-C); every other change replaces the current entry. The write
+// screen (15.3-C); every other change, and the dataset a collection link opens,
+// replaces the current entry. The write
 // waits 160 ms for changes to settle; the returned function gives the link
 // for the current state at once, for Copy Link.
 export function useShareableUrlHash({
@@ -285,21 +301,33 @@ export function useShareableUrlHash({
   const leavingRef = useRef(false)
   // The hash for the current state, ahead of the address.
   const hashRef = useRef<string | null>(null)
+  // The hash this page left in the address: the link it loaded from, then
+  // each write. Any other hash came from outside.
+  const addressHashRef = useRef(typeof window === 'undefined' ? '' : window.location.hash)
 
   useEffect(() => {
     datasetUrlRef.current = datasetUrl
   }, [datasetUrl])
 
   useEffect(() => {
-    function handlePopState() {
-      if (linkedDatasetUrl() === datasetUrlRef.current.trim()) return
+    // Back, Forward, or a link typed or pasted into the address bar.
+    function handleAddressChange() {
+      if (leavingRef.current) return
+      if (
+        linkedDatasetUrl() === datasetUrlRef.current.trim() &&
+        window.location.hash === addressHashRef.current
+      ) {
+        return
+      }
       leavingRef.current = true
       onHistoryDatasetChange()
     }
 
-    window.addEventListener('popstate', handlePopState)
+    window.addEventListener('popstate', handleAddressChange)
+    window.addEventListener('hashchange', handleAddressChange)
     return () => {
-      window.removeEventListener('popstate', handlePopState)
+      window.removeEventListener('popstate', handleAddressChange)
+      window.removeEventListener('hashchange', handleAddressChange)
     }
   }, [onHistoryDatasetChange])
 
@@ -407,14 +435,14 @@ export function useShareableUrlHash({
 
       if (window.location.hash !== hash) {
         const url = `${window.location.pathname}${searchWithoutLinkState(window.location.search)}${hash}`
-        const nextDatasetUrl = datasetUrl.trim()
 
-        if (nextDatasetUrl !== '' && nextDatasetUrl !== linkedDatasetUrl()) {
+        if (opensAnotherDataset(datasetUrl.trim())) {
           window.history.pushState(null, '', url)
         } else {
           window.history.replaceState(null, '', url)
         }
       }
+      addressHashRef.current = window.location.hash
     }, 160)
 
     return () => {

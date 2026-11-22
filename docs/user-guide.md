@@ -114,8 +114,9 @@ Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays. The same goes for a
 change of the open dataset's view (a Visium library, a SpatialData table,
-coordinate system or image, an Atera or MERSCOPE image): if it is cancelled
-or cannot be opened, the view on screen stays, and so do its control and link.
+coordinate system or image, an Atera or MERSCOPE image): if it is cancelled,
+cannot be opened or is replaced by loading another dataset, the view on screen
+stays, and so do its control and link.
 
 Work in progress is listed at the bottom left of the view. Loading a dataset,
 diagnostics, transcripts, Magic Lens scans, embeddings, cell details and ROI
@@ -276,12 +277,13 @@ The Cells section's Genes picker supports individual gene selection and
 multi-gene signatures for Xenium, Visium HD, H5AD, and SpatialData. `Auto LOD`,
 the default `Expression detail` under Advanced, loads expression for every
 cell in datasets of up to 500,000 cells, the same as `All cells`, which
-scores every cell on the slide. Larger datasets load the cells in view when
-zoomed in. When zoomed out they load a sample that keeps every cell expressing
-the selected genes and thins only the cells without. `Exact region` keeps the
-current viewport exact when the region is small enough, and samples the same
-way above that. Visium HD uses coarser bins when zoomed out. The default gene
-scale is Plasma.
+scores every cell on the slide. Larger datasets load the cells in view, with a
+margin around them, when zoomed in, and load again when a pan or a wider
+window leaves that area. When zoomed out they load a sample that keeps every
+cell expressing the selected genes and thins only the cells without.
+`Exact region` reads every cell of the viewport and its margin when the region
+is small enough, and samples the same way above that. Visium HD uses coarser
+bins when zoomed out. The default gene scale is Plasma.
 
 For H5AD, SpatialData, and MERSCOPE, categorical and string `obs` columns load as
 annotation sets, and numeric `obs` values appear in the Cell card for the
@@ -548,8 +550,9 @@ view shows 16 µm bins until you zoom in past zoom level 3. The 3.4 million
 
 Bins › Clusters lists Space Ranger's graph-based and k-means clusterings of
 the 8 µm and 16 µm bins; `graphclust` is chosen. A clustering belongs to its
-bin size, so after you switch sizes, a loaded clustering is read again for the
-new size, and cleared at 2 µm, which has none.
+bin size, so after you switch sizes, a loaded clustering (or All) is read
+again for the new size, with the same classes hidden, and cleared at 2 µm,
+which has none.
 
 When segmented outputs are present, `Cell boundaries` and `Nucleus boundaries`
 load viewport-scoped segmentation overlays. Annotated segmentation GeoJSON

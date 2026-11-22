@@ -32,6 +32,7 @@ import {
   datasetManifestAbout,
   manifestDefaultsNotShared,
   manifestDefaultsToShareableState,
+  imageDatasetChannelIds,
   resolveMorphologyChannelSelection,
   type DatasetManifestAbout,
 } from '../dataset/datasetManifestModel'
@@ -330,7 +331,8 @@ interface AteraMorphologyDataset {
 interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
-  readonly onBeforeDatasetLoad?: () => void
+  // A load commits: the dataset it opens replaces the one on screen.
+  readonly onBeforeDatasetLoad?: (datasetUrl: string) => void
   readonly queueAutoContrast: QueueAutoContrast
   readonly recordTelemetry: (event: TelemetryEvent) => void
 }
@@ -931,7 +933,14 @@ export function useDatasetLifecycle({
         initialShareableStateRef.current = null
       }
       appendDebugEvent(`Loading dataset ${shortDatasetLabel(requestedUrl)}`)
-      pendingLoadRef.current?.controller.abort()
+      const replacedLoad = pendingLoadRef.current
+      replacedLoad?.controller.abort()
+      // A view change this load replaces never opens, so its control goes
+      // back to the view on screen, unless this load is itself a view change,
+      // which puts the control back if it fails.
+      if (replacedLoad !== null && viewChange === undefined) {
+        dropPendingLoad(replacedLoad)
+      }
       const load: PendingDatasetLoad = {
         url: requestedUrl,
         controller: new AbortController(),
@@ -1078,7 +1087,7 @@ export function useDatasetLifecycle({
         }
         const clearOpenDataset = () => {
           setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
-          onBeforeDatasetLoad?.()
+          onBeforeDatasetLoad?.(requestedUrl)
           invalidateLatestRequest({
             abortRef: datasetWarmupAbortRef,
             requestIdRef: datasetWarmupRequestIdRef,
@@ -1723,6 +1732,10 @@ export function useDatasetLifecycle({
             ...(spatialDataSelection === undefined ? {} : { spatialDataSelection }),
           })
 
+          if (!isCurrentDatasetLoad()) {
+            return
+          }
+
           // The image needs only the store's metadata and units, not the
           // shapes that place the table's rows, so it opens alongside them.
           if (loadImage) {
@@ -1731,6 +1744,13 @@ export function useDatasetLifecycle({
 
           if (isSpatialDataSummaryDataset(dataset)) {
             const summary = await dataset.summary()
+
+            // The summary can read the table; another load may have
+            // replaced this one meanwhile.
+            if (!isCurrentDatasetLoad()) {
+              return
+            }
+
             const selection = spatialDataSelectionFor(
               detection.baseUrl,
               spatialDataSelection,
@@ -2036,18 +2056,10 @@ export function useDatasetLifecycle({
             return
           }
 
-          const defaultChannelIds = defaultEnabledChannelIds(image.channelLoaders)
-          const channelSelection = restoreState.morphologyEnabledChannelIds
-          const enabledChannelIds =
-            channelSelection !== undefined
-              ? resolveMorphologyChannelSelection(
-                  image.channelLoaders,
-                  channelSelection,
-                  defaultChannelIds,
-                )
-              : shouldRestoreSharedState
-                ? undefined
-                : defaultChannelIds
+          const enabledChannelIds = imageDatasetChannelIds(
+            image.channelLoaders,
+            restoreState.morphologyEnabledChannelIds,
+          )
           const channelSettings = createMorphologyChannelSettings(
             image,
             enabledChannelIds === undefined ? {} : { enabledChannelIds },
@@ -2346,6 +2358,9 @@ export function useDatasetLifecycle({
         const loadError = createStructuredLoadError('Dataset overview', error, {
           url: requestedUrl,
         })
+        // Reads the load started in the background (gene panel, annotation
+        // sets) stop, so none lands after the failure.
+        load.controller.abort()
 
         // The dataset on screen stays; the failed load is reported instead.
         if (load.datasetRequestId === null) {

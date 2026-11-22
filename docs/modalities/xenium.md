@@ -107,10 +107,16 @@ default), then:
 `shouldLoadBoundaryPolygons` (`src/rendering/boundaryViewport.ts`) loads
 polygons when zoom ≥ −0.25 or the visible overview cell count is below
 `Boundary limit` (1–100,000; default 2,500 on compact devices, 50,000
-otherwise). Requests are keyed by the bbox quantized to 50 µm. One DuckDB
-query selects cells whose centroid is within the bbox ± 75 µm and their
-vertices within the bbox ± max(5% of its width, 150 µm), then rings with
-fewer than 3 vertices are dropped.
+otherwise). A request covers the view plus up to a quarter of its width and
+height on each side, less when the padded box would hold more cells than the
+limit (`paddedBoundaryBbox`). `boundaryRequestCovers` reads nothing while the
+view stays inside that box and is not zoomed in by a level or more, and reads
+again otherwise; the box quantized to 50 µm only names the request. A reader
+that finds the padded box over the limit (a label mask) while the view is
+under it is asked for the view's own box. One DuckDB query selects cells whose
+centroid is within the bbox ± 75 µm and their vertices within the bbox ±
+max(5% of its width, 150 µm), then rings with fewer than 3 vertices are
+dropped.
 
 `vertex_x` and `vertex_y` are FLOAT, so the vertex bounds are cast to FLOAT
 (`betweenSql`, `src/data/gexSelection.ts`). DuckDB casts a FLOAT column
@@ -185,12 +191,18 @@ the FLOAT-cast vertex bounds prune row groups.
 1. `planGeneExpressionLod` (`src/data/geneExpressionLod.ts`) picks a mode from
    the `Expression detail` control and the viewport:
    - `all-cells`: whole slide, every cell.
-   - `exact-region`: the viewport, when ≤ 50,000 cells are visible.
+   - `exact-region`: the padded viewport, when ≤ 50,000 cells are visible.
    - Auto: `all-cells` for datasets of up to 500,000 cells. Larger datasets
      use `overview-sampled` (whole slide) when zoomed far out or more than
      100,000 cells are visible, `exact` when ≤ 50,000 are visible, otherwise
-     `sampled` (padded viewport). Only cells with expression are returned, so
-     sampled requests read every cell in the box.
+     `sampled`. Only cells with expression are returned, so sampled requests
+     read every cell in the box.
+   - Viewport reads are padded: `exact` and `exact-region` by up to a quarter
+     of the view on each side (less as the view nears 50,000 cells), `sampled`
+     by a fifth. The box bounds the read, with no cell limit. The request key
+     (`geneExpressionRequestKey`) leaves out the view's position, and
+     `geneExpressionReadCovers` reads again only when the view leaves the box
+     read.
 2. `loadDatasetGeneExpression` (`src/data/geneExpression.ts`) range-probes the
    matrix. For up to 32 genes it first lists the genes' expressing rows from
    the feature-major arrays (`selectedGeneRowsFromCellFeatureMatrixZarr`), then

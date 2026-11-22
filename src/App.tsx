@@ -223,6 +223,7 @@ import {
 import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
+import { useSelectedGridCellScore } from './features/cells/useSelectedGridCellScore'
 import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
@@ -247,7 +248,7 @@ import {
   defaultRoiName,
   summarizeRoiCells,
 } from './features/roi/roiModel'
-import { summarizeRoiGeneExpression } from './data/roiGeneStats'
+import { roiGeneStatsCells, summarizeRoiGeneExpression } from './data/roiGeneStats'
 import { geneExpressionZScoreCells } from './data/geneExpressionLod'
 import {
   gridCellDatumDeckCenter,
@@ -483,10 +484,24 @@ export function App({ dependencies }: AppProps = {}) {
       ? (initialShareableState.collectionUrl ?? null)
       : null,
   )
-  // The view kept when a registered section opens in place of another.
+  // The view kept when a registered section opens in place of another, for
+  // that opening only.
   const [carriedView, setCarriedView] = useState<{
     readonly url: string
     readonly view: InitialViewStateOverride
+  } | null>(null)
+  // What an opened collection entry brings (the sections beside it, the view
+  // it keeps, whether the 3D stack closes), applied when its load commits:
+  // until then, and for good if it fails or is cancelled, the open dataset
+  // keeps its own.
+  const pendingCollectionLayoutRef = useRef<{
+    readonly url: string
+    readonly carriedView: {
+      readonly url: string
+      readonly view: InitialViewStateOverride
+    } | null
+    readonly compareUrls: readonly string[]
+    readonly closesStack: boolean
   } | null>(null)
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
@@ -930,6 +945,12 @@ export function App({ dependencies }: AppProps = {}) {
     loadedDatasetUrl !== initialShareableState.datasetUrl?.trim()
   ) {
     setLinkViewApplies(false)
+  }
+  // It opens that dataset once: a later load of it (a view change, or Load
+  // Dataset again) opens as any load does.
+  const [linkViewOpened, setLinkViewOpened] = useState(false)
+  if (linkViewApplies && !linkViewOpened && loadState.status === 'ready') {
+    setLinkViewOpened(true)
   }
   useEffect(() => {
     document.title = documentTitle(loadedDatasetName)
@@ -1411,7 +1432,7 @@ export function App({ dependencies }: AppProps = {}) {
     }
     return max
   }, [observationColorMode, overviewCells])
-  const activeSelectedGridCell = useMemo(() => {
+  const scoredSelectedGridCell = useMemo(() => {
     if (selectedGridCell === null) {
       return null
     }
@@ -1449,6 +1470,13 @@ export function App({ dependencies }: AppProps = {}) {
     styleGridCell,
     styledGeneExpressionElements,
   ])
+  const { cell: activeSelectedGridCell, outsideRead: selectedGridCellOutsideRead } =
+    useSelectedGridCellScore({
+      selected: selectedGridCell,
+      scored: scoredSelectedGridCell,
+      readBox: isVisiumHdDataset ? geneExpressionBatch?.bbox : undefined,
+      selectedGenes,
+    })
   const activeVisiumHdExpressionProfileSelection = useMemo(
     () =>
       platformExpressionProfileSelection(
@@ -1507,7 +1535,13 @@ export function App({ dependencies }: AppProps = {}) {
   const selectedGridCellExpressionStatus =
     activeSelectedGridCell !== null &&
     activeSelectedGridCell.expressionCount === undefined
-      ? selectedGeneExpressionStatus
+      ? selectedGridCellOutsideRead && geneExpressionState.status === 'ready'
+        ? {
+            status: 'unavailable' as const,
+            message:
+              'This bin is outside the area read for the view. Pan back to it to score it.',
+          }
+        : selectedGeneExpressionStatus
       : undefined
   const selectedBoundaryCellExpressionStatus = useMemo(
     () =>
@@ -2324,7 +2358,7 @@ export function App({ dependencies }: AppProps = {}) {
       }
 
       const h5adDataset: H5adExpressionDataset = dataset
-      const sampledCells = h5adSampleCells(cells, options.cellLimit)
+      const sampledCells = roiGeneStatsCells(cells, options)
       const sampledCellIds = sampledCells.map((cell) => cell.id as SpatialElementId)
       const matrix = await h5adDataset.matrix(sampledCellIds)
 
@@ -2817,19 +2851,43 @@ export function App({ dependencies }: AppProps = {}) {
       setVisiumHdRoiState,
     },
   })
-  const handleBeforeDatasetLoad = useCallback(() => {
-    clearVisiumHdRoiState()
-    clearVisiumHdExpressionProfileState()
-    setGeometricAnnotations([])
-    setGeometricAnnotationImportMessage(null)
-    setFallbackNotices([])
-  }, [
-    clearVisiumHdExpressionProfileState,
-    clearVisiumHdRoiState,
-    setFallbackNotices,
-    setGeometricAnnotationImportMessage,
-    setGeometricAnnotations,
-  ])
+  const handleBeforeDatasetLoad = useCallback(
+    (datasetUrl: string) => {
+      clearVisiumHdRoiState()
+      clearVisiumHdExpressionProfileState()
+      // The lifecycle clears the selected cell and bin; an outline picked
+      // without an overview point (segmentations) goes too.
+      setSelectedBoundaryCell(null)
+      if (linkViewOpened) {
+        setLinkViewApplies(false)
+      }
+      // The opened collection entry's layout; any other load carries no view.
+      const layout = pendingCollectionLayoutRef.current
+      pendingCollectionLayoutRef.current = null
+      if (layout?.url === datasetUrl) {
+        setCarriedView(layout.carriedView)
+        setCompareUrls(layout.compareUrls)
+        if (layout.closesStack) {
+          setSectionStackCollectionUrl(null)
+        }
+      } else {
+        setCarriedView(null)
+      }
+      setGeometricAnnotations([])
+      setGeometricAnnotationImportMessage(null)
+      setFallbackNotices([])
+    },
+    [
+      clearVisiumHdExpressionProfileState,
+      clearVisiumHdRoiState,
+      linkViewOpened,
+      setCompareUrls,
+      setFallbackNotices,
+      setGeometricAnnotationImportMessage,
+      setGeometricAnnotations,
+      setSelectedBoundaryCell,
+    ],
+  )
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
@@ -2844,6 +2902,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
+    linkedAnnotationUrl,
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
@@ -2883,6 +2942,7 @@ export function App({ dependencies }: AppProps = {}) {
     activeBinSize: activeVisiumHdBinSize,
     annotationState,
     getSpatialDataset,
+    hiddenAnnotationIds,
     isVisiumHdDataset,
     loadAnnotationGroup,
     loadState,
@@ -3104,6 +3164,18 @@ export function App({ dependencies }: AppProps = {}) {
       return
     }
 
+    // The labels are the link's dataset's: another dataset, opened after
+    // the link's failed or was cancelled, does not take them.
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+
+    if (
+      initialDatasetUrl !== undefined &&
+      initialDatasetUrl !== '' &&
+      initialDatasetUrl !== loadedDatasetUrl
+    ) {
+      return
+    }
+
     // Loading a set replaces the labels shown, so an import that finished
     // first was lost. The link's labels were made with the set loaded
     // first, so its import waits for the set: while the dataset lists its
@@ -3143,6 +3215,7 @@ export function App({ dependencies }: AppProps = {}) {
     }
   }, [
     annotationGroupState.status,
+    initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
     loadRequestId,
@@ -3536,9 +3609,16 @@ export function App({ dependencies }: AppProps = {}) {
     const customImageOpacities = initialCustomImageOpacitiesRef.current
     initialCustomImageUrlsRef.current = []
     initialCustomImageOpacitiesRef.current = []
+    const requestId = loadRequestId.current
 
     void (async () => {
       for (const [index, customImageUrl] of customImageUrls.entries()) {
+        // The layers are the link's dataset's: another dataset opened while
+        // one loaded takes none of the rest.
+        if (loadRequestId.current !== requestId) {
+          return
+        }
+
         const loaded = await handleLoadCustomLayer(customImageUrl)
         const opacity = customImageOpacities[index]
 
@@ -3558,6 +3638,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleCustomImageLayerOpacityChange,
     handleLoadCustomLayer,
     initialShareableState.datasetUrl,
+    loadRequestId,
     loadedDatasetUrl,
   ])
 
@@ -4048,7 +4129,7 @@ export function App({ dependencies }: AppProps = {}) {
   const currentShareUrl = useShareableUrlHash({
     linkOpening: linkOpeningStage !== 'done',
     dataset: {
-      annotationUrl: annotationImportUrl,
+      annotationUrl: linkedAnnotationUrl ?? '',
       customImageOpacities,
       customImageUrls,
       segmentation: segmentationLinkFor(
@@ -4466,26 +4547,24 @@ export function App({ dependencies }: AppProps = {}) {
   const handleSelectCollectionEntry = (entry: DatasetCollectionEntry) => {
     const view = linkedViewChannel.getView()
 
-    setCarriedView(
-      view !== null && keepsViewOnOpening(readyCollection, loadedDatasetUrl, entry.url)
-        ? {
-            url: entry.url,
-            view: { target: [view.target[0], view.target[1], 0], zoom: view.zoom },
-          }
-        : null,
-    )
-    setCompareUrls(
-      compareUrlsAfterOpening(
+    pendingCollectionLayoutRef.current = {
+      url: entry.url,
+      carriedView:
+        view !== null && keepsViewOnOpening(readyCollection, loadedDatasetUrl, entry.url)
+          ? {
+              url: entry.url,
+              view: { target: [view.target[0], view.target[1], 0], zoom: view.zoom },
+            }
+          : null,
+      compareUrls: compareUrlsAfterOpening(
         readyCollection,
         loadedDatasetUrl,
         linkedSections,
         entry.url,
       ),
-    )
-    // A section of another stack keeps the 3D view; any other dataset opens
-    // in 2D.
-    if (stackSections(readyCollection, entry.url).length === 0) {
-      setSectionStackCollectionUrl(null)
+      // A section of another stack keeps the 3D view; any other dataset
+      // opens in 2D.
+      closesStack: stackSections(readyCollection, entry.url).length === 0,
     }
     handleOpenCollectionDataset(
       entry.url,
@@ -5538,18 +5617,6 @@ function hasFunction<T extends string>(
     key in value &&
     typeof (value as Record<T, unknown>)[key] === 'function'
   )
-}
-
-function h5adSampleCells(
-  cells: readonly DatasetCell[],
-  limit: number | undefined,
-): readonly DatasetCell[] {
-  const normalizedLimit =
-    limit === undefined || !Number.isFinite(limit)
-      ? cells.length
-      : Math.max(1, Math.floor(limit))
-
-  return cells.length <= normalizedLimit ? cells : cells.slice(0, normalizedLimit)
 }
 
 function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox | null {

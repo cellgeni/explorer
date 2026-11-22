@@ -380,7 +380,7 @@ and the image row shows about 2.7 s after the link opens.
 | Metadata colouring      | `metadataTrackValues(trackId)` for the selected track when `Cell color` is Metadata (`useCellMetadataTrackValues`), including a shared link that opens that way                                                                  |
 | Selected-cell profile   | `matrix([cellId])` over all genes, summarized by `summarizeRoiGeneExpression`                                                                                                                                                    |
 | ROI cells               | `cells(bbox)` bbox scan plus point-in-polygon for lassos                                                                                                                                                                         |
-| ROI gene stats          | 32-cell preview, then a refinement over every ROI cell                                                                                                                                                                           |
+| ROI gene stats          | 32-cell preview, then up to 10,000 cells (an even sample of a larger ROI)                                                                                                                                                        |
 | Plots panel             | `geneValues(genes)`: every cell of each gene. In memory, one scan; over HTTP or by range, a CSC column per gene, the dense chunks that hold the gene (all of a dense `.h5ad` `/X`, in bands of whole cells), or all of a CSR `X` |
 
 Transcripts, Magic Lens, nucleus boundaries, and ROI transcript export are
