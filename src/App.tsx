@@ -4019,6 +4019,32 @@ export function App({ dependencies }: AppProps = {}) {
     selectedGridCell,
     spatialGridCells,
   ])
+  // After the link's dataset opens, the link keeps its card and ROI until they
+  // are applied: a bin or outline once it loads in view, the ROI once ROI
+  // queries can run (after dataset preparation). Another selection, or
+  // another dataset, drops them, as linkedCardRef and useSelectionList do.
+  const linkDatasetLoaded =
+    loadedDatasetUrl === null
+      ? null
+      : loadedDatasetUrl === initialShareableState.datasetUrl?.trim()
+  const [linkCardPending, setLinkCardPending] = useState(
+    () => cardFromLink(initialShareableState) !== null,
+  )
+  if (
+    linkCardPending &&
+    (selectedCell !== null ||
+      selectedGridCell !== null ||
+      selectedBoundaryCell !== null ||
+      linkDatasetLoaded === false ||
+      (linkDatasetLoaded === true &&
+        cardFromLink(initialShareableState)?.kind === 'cell' &&
+        overviewCells.length > 0))
+  ) {
+    setLinkCardPending(false)
+  }
+  const [linkRoiPending, setLinkRoiPending] = useState(
+    () => initialShareableState.roiSelection !== undefined,
+  )
   const currentShareUrl = useShareableUrlHash({
     linkOpening: linkOpeningStage !== 'done',
     dataset: {
@@ -4109,14 +4135,17 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     view: {
-      activeRoiSelection,
+      activeRoiSelection:
+        activeRoiSelection ??
+        (linkRoiPending ? (initialShareableState.roiSelection ?? null) : null),
       shareableViewState,
       panels: sharedPanels,
-      card: cardForLink({
-        cellId: selectedCell?.id,
-        binId: selectedGridCell?.id,
-        boundaryId: selectedBoundaryCell?.id,
-      }),
+      card:
+        cardForLink({
+          cellId: selectedCell?.id,
+          binId: selectedGridCell?.id,
+          boundaryId: selectedBoundaryCell?.id,
+        }) ?? (linkCardPending ? initialShareableState.card : undefined),
       tool: activeTool,
       plot: plotKind,
       query: formatCellQueryLink(queryConditions),
@@ -4169,6 +4198,17 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     zoomToBbox,
   })
+  // The link's ROI is applied once it is in the list (as "Shared ROI", or as
+  // the saved selection with its outline), which a drawn one also ends.
+  // Image datasets take no selections.
+  if (
+    linkRoiPending &&
+    (selectionList.selections.length > 0 ||
+      linkDatasetLoaded === false ||
+      (linkDatasetLoaded === true && platformAdapter.kind === 'image'))
+  ) {
+    setLinkRoiPending(false)
+  }
   const viewerSelectionOutlines = useMemo(
     () =>
       selectionOutlines(

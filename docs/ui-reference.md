@@ -1565,9 +1565,12 @@ state, which the address shows up to 160 ms later, and say "Link copied".
 Until the dataset a link names has opened, failed or been cancelled, or
 another dataset is opening, the address and the copied link stay the link it
 was opened with: the load applies its `card`, `roi`, `channels` and `z`
-later. A link names the dataset's full address, so the link to a presigned
-dataset carries its signature or token: anyone with the link can read the
-dataset until the signature expires.
+later. After that the link keeps those until they apply: `channels` and `z`
+while the image opens, a bin or outline `card` until it loads in view, and
+`roi` until ROI queries can run. Another selection or dataset drops them. A
+link names the dataset's full address, so the link to a presigned dataset
+carries its signature or token: anyone with the link can read the dataset
+until the signature expires.
 
 The query string is read on startup too, except under a version 2 hash,
 which is the whole link; under any other hash, the hash's values win. Once the
