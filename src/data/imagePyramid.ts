@@ -7,6 +7,7 @@ import {
   placeFrameBbox,
   type BBox,
   type ImageFramePlacement,
+  type ImagePixelFrame,
   type ImagePixels,
   type TileIndex,
   type UnitsDescriptor,
@@ -274,6 +275,20 @@ export function placedImageExtent(loader: ImagePyramidLoader): BBox {
   }
 
   return loader.placement === undefined ? frame : placeFrameBbox(loader.placement, frame)
+}
+
+// The image's full-resolution pixels in the dataset, as placedImageExtent
+// places its frame.
+export function imagePixelFrame(loader: ImagePyramidLoader): ImagePixelFrame {
+  const origin = loader.tileBounds(0, 0, 0)
+
+  return {
+    originX: origin.minX,
+    originY: origin.minY,
+    micrometersPerPixelX: loader.units.micrometersPerPixel,
+    micrometersPerPixelY: micrometersPerPixelY(loader.units),
+    placement: loader.placement,
+  }
 }
 
 // An associated image (see ImagePyramidLoader.associatedImages): a one-level

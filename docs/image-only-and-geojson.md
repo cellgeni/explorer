@@ -98,30 +98,60 @@ IDs, bins, molecules, or expression matrix:
 ## GeoJSON Shape Import
 
 Open the layer panel's Annotations section and use `Import GeoJSON`. The
-importer accepts a GeoJSON `Feature` or `FeatureCollection` with Polygon or
-MultiPolygon geometry. Each imported feature becomes a geometric annotation
-with label, color, visibility, and remove controls. Features with `null`
-geometry are skipped; any other geometry type (Point, LineString, …) rejects
-the whole file. When an import adds no shapes, a message under the buttons says
-why (for example "Could not import region.geojson. GeoJSON geometry must be
-Polygon or MultiPolygon.", or that the file is not valid JSON or has no
-polygons). The next import, or loading another dataset, clears it.
+importer accepts a GeoJSON `FeatureCollection`, a `Feature`, a bare array of
+features (as QuPath exports objects without `FEATURE_COLLECTION`), or a bare
+geometry. Each Polygon or MultiPolygon feature, and the polygons of a
+GeometryCollection, becomes a geometric annotation with label, color,
+visibility, and remove controls; holes are kept.
+
+Other features are skipped: points, lines, features with `null` geometry, and
+QuPath detections, cells, tiles and TMA cores (open detections and cells in
+the [Segmentation section](#imported-segmentations) to draw them as
+outlines). A message under the buttons says how many of each were skipped,
+or, when an import adds no shapes, why (for example "region.geojson has no
+Polygon or MultiPolygon shapes. Skipped 2 points." or that the file is not
+valid JSON). A polygon ring with fewer than three distinct points rejects the
+whole file. The next import, or loading another dataset, clears the message.
 
 The importer reads these optional properties:
 
-- `label`, `name`, or `title` for the shape label (default `Shape N`).
-- `color`, `stroke`, or `fill` for the initial color. The first non-empty one
-  is used and must be a `#rrggbb` hex value; anything else falls back to the
-  palette.
+- `label`, `name`, or `title` for the shape label, then the class name
+  (default `Shape N`).
+- `color`, `stroke`, or `fill` as a `#rrggbb` hex value, or `color` as
+  QuPath writes it (`[r, g, b]` or a packed RGB integer), for the initial
+  color. Without one, the class colour, then the palette.
+- `classification`, QuPath's class: `{ "name": "Tumor", "color": [200, 0, 0] }`,
+  a derived class `{ "names": ["Tumor", "Positive"], "color": … }`, QuPath
+  0.2's `{ "name": …, "colorRGB": … }`, or a string such as
+  `"Tumor: Positive"`. The shape list shows it beside the geometry.
+- `objectType`: QuPath's `annotation` is imported (as is a feature without
+  one); `detection`, `cell`, `tile` and `tmaCore` are skipped. QuPath 0.2's
+  type names in the feature `id` (`PathDetectionObject`, …) are read too.
 - `coordinate_unit` or `coordinateUnit` set to `pixel`, `pixels`, `px`,
   `micrometer`, `micrometers`, or `um` (case-insensitive).
 
-`id` and `visible` properties are not imported.
+The feature's `id`, such as QuPath's UUID, or else an `id` property, is kept
+as the shape's identity; a shape without one, or drawn in the viewer, gets a
+new UUID. Other properties, such as QuPath's `measurements`, `metadata` and
+`isLocked`, are kept and written back on export. `visible` is not imported,
+and QuPath's `plane` and `isEllipse` geometry members are not kept, so a
+shape on another z plane shows on every plane.
 
-For image-only sources, coordinates default to pixels and are converted through
-the image micrometers-per-pixel scale. For other platforms, coordinates default
-to micrometers. Set `properties.coordinate_unit = "micrometer"` when the
-coordinates are already in viewer coordinates.
+### Shape Coordinates
+
+`Shape coordinates`, shown when the dataset has an image, chooses the units of
+imported features without `coordinate_unit`, and of exported shapes:
+
+- `Image pixels`: the image's full-resolution pixels, from its top-left
+  corner, as QuPath writes and reads them. They are placed as the image is:
+  by its pixel size, its origin (a MERSCOPE mosaic's stage position, say), and
+  any flip or axis swap a SpatialData image has.
+- `Micrometres`: the viewer's own coordinates.
+
+It starts on Image pixels for image-only sources and on Micrometres
+otherwise. Without an image, coordinates are micrometres. To exchange
+annotations of a Xenium or other slide with QuPath, choose Image pixels and
+open the image the viewer shows in QuPath, so both use its pixels.
 
 ## Imported Segmentations
 
@@ -230,6 +260,11 @@ image. Completing the drawing saves the geometry as a GeoJSON shape in the
 Annotations section instead of querying cells or genes.
 
 Use `Export GeoJSON` in the Annotations section to download all loaded
-geometric annotations as `geometric-annotations.geojson`. Exported features use
-`coordinate_unit = "micrometer"` (also for image-only sources) so they
-round-trip in viewer coordinates.
+geometric annotations as `geometric-annotations.geojson`, in the units
+`Shape coordinates` names, with `coordinate_unit` set so the file imports
+back the same way. Each feature is written as QuPath reads an annotation: the
+shape's UUID as the feature `id`, `objectType: "annotation"`, the label as
+`name`, its class as `classification` (always with a colour, which QuPath
+requires), and its colour as `color` `[r, g, b]` unless it is the class
+colour. Exported in Image pixels, the file opens in QuPath over the same
+image.

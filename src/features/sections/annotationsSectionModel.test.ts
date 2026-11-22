@@ -19,7 +19,9 @@ function input(
     annotationState: { status: 'idle' },
     cellMetadataTracks: [],
     elementNoun: 'cells',
-    geometricAnnotationImportError: null,
+    geometricAnnotationDefaultUnit: 'micrometer',
+    geometricAnnotationImportMessage: null,
+    geometricAnnotationPixelsAvailable: false,
     geometricAnnotations: [],
     geometricAnnotationsEnabled: false,
     handleAnnotationColorChange: vi.fn(),
@@ -142,14 +144,21 @@ describe('useAnnotationsSectionModel', () => {
     expect(withTracks.result.current.sets.canClear).toBe(true)
   })
 
-  it('passes the GeoJSON import error to the shapes', () => {
+  it('passes the GeoJSON import message and coordinate units to the shapes', () => {
+    const message = { tone: 'error', text: 'Could not import a.geojson.' } as const
     const { result } = renderHook(() =>
       useAnnotationsSectionModel(
-        input({ geometricAnnotationImportError: 'Could not import a.geojson.' }),
+        input({
+          geometricAnnotationDefaultUnit: 'pixel',
+          geometricAnnotationImportMessage: message,
+          geometricAnnotationPixelsAvailable: true,
+        }),
       ),
     )
 
-    expect(result.current.shapes.importError).toBe('Could not import a.geojson.')
+    expect(result.current.shapes.importMessage).toBe(message)
+    expect(result.current.shapes.defaultCoordinateUnit).toBe('pixel')
+    expect(result.current.shapes.pixelCoordinatesAvailable).toBe(true)
   })
 
   it('passes file imports to the async handlers', () => {
@@ -158,9 +167,9 @@ describe('useAnnotationsSectionModel', () => {
     const file = new File(['id,label'], 'labels.csv')
 
     result.current.sets.onImportFile(file)
-    result.current.shapes.onImportFile(null)
+    result.current.shapes.onImportFile(null, 'pixel')
 
     expect(options.handleImportAnnotations).toHaveBeenCalledWith(file)
-    expect(options.handleImportGeometricAnnotations).toHaveBeenCalledWith(null)
+    expect(options.handleImportGeometricAnnotations).toHaveBeenCalledWith(null, 'pixel')
   })
 })

@@ -24,6 +24,7 @@ const READY_ANNOTATIONS: AnnotationState<StructuredLoadError> = {
 
 const SHAPE: GeometricAnnotationFeature = {
   id: 'geometry:1:tumour',
+  objectId: '0c6c3a39-4c0b-4d43-9c4f-8f4d6b8a1e01',
   label: 'Tumour',
   color: '#ff0000',
   visible: true,

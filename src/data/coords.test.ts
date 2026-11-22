@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
+  dataToImagePixel,
   dataToScreen,
+  imagePixelToData,
   imagePixels,
   imagePixelsToMicrometers,
   micrometers,
@@ -260,5 +262,41 @@ describe('image frame placement', () => {
     })
     expect(unplaceFrameBbox(swapped, placeFrameBbox(swapped, frame))).toEqual(frame)
     expect(unplaceFrameBbox(flipped, placeFrameBbox(flipped, frame))).toEqual(frame)
+  })
+})
+
+describe('image pixel frames', () => {
+  it('places pixels by origin, pixel size and placement, and back', () => {
+    // Axes swapped, then y flipped: x' = y + 100, y' = -x + 220.
+    const frame = {
+      originX: 10,
+      originY: 20,
+      micrometersPerPixelX: 0.5,
+      micrometersPerPixelY: 2,
+      placement: {
+        a: 0,
+        b: 1,
+        c: micrometers(100),
+        d: -1,
+        e: 0,
+        f: micrometers(220),
+      },
+    }
+    const point = imagePixelToData(frame, 4, 3)
+
+    // Frame point (12, 26).
+    expect(point).toEqual({ x: 126, y: 208 })
+    expect(dataToImagePixel(frame, point)).toEqual({ x: 4, y: 3 })
+    expect(
+      dataToImagePixel(
+        {
+          originX: 0,
+          originY: 0,
+          micrometersPerPixelX: 0.25,
+          micrometersPerPixelY: 0.25,
+        },
+        { x: micrometers(1), y: micrometers(2) },
+      ),
+    ).toEqual({ x: 4, y: 8 })
   })
 })

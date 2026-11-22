@@ -384,9 +384,12 @@ the classes left stand out against a faint outline of the tissue.
 
 The layer panel's Annotations section lists your selections and exposes
 `GeoJSON shapes` when geometric annotations are available. Import GeoJSON
-`Feature` or `FeatureCollection` files containing Polygon or MultiPolygon
-geometry, edit shape colors and visibility, remove shapes, or export the
-current shapes as GeoJSON.
+files containing Polygon or MultiPolygon geometry, such as QuPath annotations
+with their classes, edit shape colors and visibility, remove shapes, or export
+the current shapes as GeoJSON that QuPath imports. `Shape coordinates` sets
+whether files are in the image's pixels, as QuPath writes them, or in
+micrometres. See
+[GeoJSON Shape Import](./image-only-and-geojson.md#geojson-shape-import).
 
 Use the Box selection (`R`) or Lasso selection (`L`) tool to draw box or lasso
 regions. Each drawing is kept as a selection, named "ROI 1", "ROI 2" and so on,

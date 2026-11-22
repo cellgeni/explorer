@@ -7,7 +7,7 @@ import {
   type CSSProperties,
   type FormEvent,
 } from 'react'
-import { EyeIcon, EyeOffIcon, IconButton } from '../../components/ui'
+import { EyeIcon, EyeOffIcon, IconButton, Select } from '../../components/ui'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -21,7 +21,11 @@ import {
   type AnnotationSizePlot,
   type PlacedCellIds,
 } from '../annotations/annotationModel'
-import type { GeometricAnnotationFeature } from '../annotations/geometricAnnotationModel'
+import {
+  classificationName,
+  type GeoJsonCoordinateUnit,
+  type GeometricAnnotationFeature,
+} from '../annotations/geometricAnnotationModel'
 import type {
   AnnotationSetsModel,
   GeometricShapesModel,
@@ -31,6 +35,13 @@ import type { Annotation } from '../../data/annotation'
 
 // Sets with more classes than this get a search box.
 const ANNOTATION_SET_SEARCH_MIN_ROWS = 8
+const SHAPE_COORDINATE_OPTIONS: readonly {
+  readonly value: GeoJsonCoordinateUnit
+  readonly label: string
+}[] = [
+  { value: 'pixel', label: 'Image pixels' },
+  { value: 'micrometer', label: 'Micrometres' },
+]
 
 // The annotation set choice, Load, Clear and Export, and label import from
 // a file or URL.
@@ -240,7 +251,12 @@ export function GeometricShapesPanel({
   readonly shapes: GeometricShapesModel
 }) {
   const importInputId = useId()
+  const [chosenUnit, setChosenUnit] = useState<GeoJsonCoordinateUnit | null>(null)
   const { shapes } = model
+  // Without an image, coordinates are micrometres.
+  const unit = model.pixelCoordinatesAvailable
+    ? (chosenUnit ?? model.defaultCoordinateUnit)
+    : 'micrometer'
 
   return (
     <section
@@ -267,7 +283,7 @@ export function GeometricShapesPanel({
           disabled={!model.enabled}
           onChange={(event) => {
             const file = event.currentTarget.files?.[0] ?? null
-            model.onImportFile(file)
+            model.onImportFile(file, unit)
             event.currentTarget.value = ''
           }}
         />
@@ -276,7 +292,9 @@ export function GeometricShapesPanel({
           className="secondary-action"
           disabled={shapes.length === 0}
           title="Export GeoJSON"
-          onClick={model.onExport}
+          onClick={() => {
+            model.onExport(unit)
+          }}
         >
           Export GeoJSON
         </button>
@@ -290,9 +308,23 @@ export function GeometricShapesPanel({
           Clear GeoJSON
         </button>
       </div>
-      {model.importError === null ? null : (
+      {model.pixelCoordinatesAvailable ? (
+        <Select<GeoJsonCoordinateUnit>
+          className="ui-field--inline"
+          label="Shape coordinates"
+          title="Units of exported shapes, and of imported ones whose file does not say; QuPath uses image pixels"
+          value={unit}
+          options={SHAPE_COORDINATE_OPTIONS}
+          onChange={setChosenUnit}
+        />
+      ) : null}
+      {model.importMessage === null ? null : model.importMessage.tone === 'error' ? (
         <p className="annotation-import-error" role="alert">
-          {model.importError}
+          {model.importMessage.text}
+        </p>
+      ) : (
+        <p className="annotation-import-notice" role="status">
+          {model.importMessage.text}
         </p>
       )}
       {shapes.length > 0 ? (
@@ -368,12 +400,16 @@ function GeometricAnnotationList({
   )
 }
 
+// The shape's class, when it has one, and its geometry.
 function geometryTypeLabel(annotation: GeometricAnnotationFeature): string {
-  if (annotation.geometry.type === 'Polygon') {
-    return 'Polygon'
-  }
+  const geometry =
+    annotation.geometry.type === 'Polygon'
+      ? 'Polygon'
+      : `${annotation.geometry.coordinates.length.toLocaleString()} polygons`
 
-  return `${annotation.geometry.coordinates.length.toLocaleString()} polygons`
+  return annotation.classification === undefined
+    ? geometry
+    : `${classificationName(annotation.classification)} · ${geometry}`
 }
 
 // One list per annotation set (15.1-I): each label's swatch, visibility, name

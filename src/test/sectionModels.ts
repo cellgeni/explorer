@@ -394,7 +394,9 @@ export function testAnnotationsSectionModel(
     shapes: {
       enabled: true,
       shapes: [],
-      importError: null,
+      importMessage: null,
+      pixelCoordinatesAvailable: false,
+      defaultCoordinateUnit: 'micrometer',
       onImportFile: vi.fn(),
       onExport: vi.fn(),
       onClear: vi.fn(),
