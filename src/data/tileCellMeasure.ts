@@ -3,7 +3,8 @@
 // pixels of an image whose pixels are not square. A pixel counts for a cell
 // when the pixel's centre is inside its disc; a pixel inside several discs
 // counts for the cell whose centre is nearest relative to its radius, so
-// neighbours do not share pixels. Workers and the main thread share this.
+// neighbours do not share pixels. NaN pixels (no data) count for no cell.
+// Workers and the main thread share this.
 
 // The cells whose discs touch a tile, in the tile's pixels: pixel i's centre
 // is at i + 0.5. The radius is in pixel widths. On ties the cell listed
@@ -129,6 +130,12 @@ export function measureTileCells(
       }
 
       const value = pixels === null ? 0 : (pixels[pixelRowStart + px] ?? 0)
+
+      // NaN marks no data in float images, as auto-contrast reads it.
+      if (value !== value) {
+        continue
+      }
+
       sum[cell] = (sum[cell] ?? 0) + value
       count[cell] = (count[cell] ?? 0) + 1
 

@@ -1043,6 +1043,9 @@ How image columns work ([plan 26](plan/phases/26-image-channel-conditions.md)):
   channel is no longer used.
 - Cells outside the image get no value, never match, and a note says how
   many there are.
+- NaN pixels, which mark no data in float images, are left out: a cell's
+  mean and "% above" count only its pixels with data, and a cell with none
+  gets no value.
 - Measuring reads the image's tiles in its own workers, 6 requests at a
   time, and leaves the byte-range cache as it was. An OME-Zarr image is
   read chunk by chunk instead, each chunk once, however many tiles the
