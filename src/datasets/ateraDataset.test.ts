@@ -171,6 +171,8 @@ function createDataset(
     readonly experiment?: unknown
     readonly files?: ConstructorParameters<typeof AteraDataset>[0]['files']
     readonly openImage?: ConstructorParameters<typeof AteraDataset>[0]['openImage']
+    // Store reads under this prefix fail as a dropped connection while `on`.
+    readonly failing?: { on: boolean; readonly prefix: string }
   } = {},
 ) {
   const stores = new Map<string, Map<string, Uint8Array>>([
@@ -193,6 +195,14 @@ function createDataset(
       store: {
         get: async (key: string) => {
           requestedKeys.push(`${url.split('/').pop()}:${key}`)
+
+          if (
+            options.failing?.on === true &&
+            key.replace(/^\//, '').startsWith(options.failing.prefix)
+          ) {
+            throw new TypeError('Failed to fetch')
+          }
+
           return entries.get(key.replace(/^\//, ''))
         },
       },
@@ -362,6 +372,43 @@ describe('AteraDataset', () => {
       geneNames: ['GENEA', 'NegControlProbe_1'],
       counts: [3, 4],
     })
+  })
+
+  it('reads the nucleus polygons again after a failed read, and keeps the cells', async () => {
+    const failing = { on: true, prefix: 'gridded_polygon_sets/0/' }
+    const { dataset } = createDataset({ failing })
+    const box: BBox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(40),
+      maxY: micrometers(40),
+    }
+
+    await expect(dataset.segmentationElements('cell', box)).resolves.toHaveLength(2)
+    await expect(dataset.segmentationElements('nucleus', box)).rejects.toThrow(
+      'Failed to fetch',
+    )
+
+    failing.on = false
+    // Cell aaaaaaab-1 has two nuclei.
+    await expect(dataset.segmentationElements('nucleus', box)).resolves.toHaveLength(3)
+  })
+
+  it('reports a failed read of the cell polygons as that, not as a missing set', async () => {
+    const failing = { on: true, prefix: 'gridded_polygon_sets/1/' }
+    const { dataset } = createDataset({ failing })
+    const box: BBox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(40),
+      maxY: micrometers(40),
+    }
+
+    await expect(dataset.segmentationElements('cell', box)).rejects.toThrow(
+      'Failed to fetch',
+    )
+    failing.on = false
+    await expect(dataset.segmentationElements('cell', box)).resolves.toHaveLength(2)
   })
 
   it('decodes cell and nucleus polygons with matrix barcodes as ids', async () => {

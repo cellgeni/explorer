@@ -61,7 +61,10 @@ export function parseVisiumHdClusteringGroupId(
   return { binSizeMicrometers, clustering }
 }
 
-// The tier's clusterings that exist, found with a HEAD request each.
+// The tier's clusterings that exist, found with a HEAD request each. A 403 or
+// 404 (missing keys answer 403 on S3), or a request that fails outright (hosts
+// that send no CORS headers with errors), means the clustering is absent. Any
+// other status fails the call, so the list is not kept and is read again.
 export async function readVisiumHdClusteringGroups(
   baseUrl: string,
   bin: VisiumHdBinDescriptor,
@@ -72,14 +75,14 @@ export async function readVisiumHdClusteringGroups(
     VISIUM_HD_CLUSTERINGS.map(async (clustering) => {
       const url = datasetFileUrl(baseUrl, visiumHdClusteringPath(bin, clustering))
 
+      let response: Response
+
       try {
-        const response = await fetchHead(
+        response = await fetchHead(
           fetcher,
           url,
           options.signal === undefined ? {} : { signal: options.signal },
         )
-        noteReadableResponse(url, response.status)
-        return response.ok
       } catch (error) {
         if (options.signal?.aborted === true) {
           throw error
@@ -87,6 +90,16 @@ export async function readVisiumHdClusteringGroups(
 
         return false
       }
+
+      noteReadableResponse(url, response.status)
+
+      if (response.ok || response.status === 403 || response.status === 404) {
+        return response.ok
+      }
+
+      throw new Error(
+        `${visiumHdClusteringPath(bin, clustering)} returned HTTP ${response.status.toString()}.`,
+      )
     }),
   )
 

@@ -76,6 +76,30 @@ function makeDataset(
 }
 
 describe('XeniumDataset', () => {
+  it('reads its metadata again after a failed read', async () => {
+    const conn = new FakeConnection([
+      [{ minX: 1, maxX: 20, minY: 2, maxY: 30 }],
+      [{ minX: 1, maxX: 20, minY: 2, maxY: 30 }],
+    ])
+    let failures = 1
+    const dataset = makeDataset(conn, {
+      fetcher: async () => {
+        if (failures > 0) {
+          failures -= 1
+          throw new TypeError('Failed to fetch')
+        }
+
+        return new Response(JSON.stringify({ pixel_size: 0.5 }))
+      },
+    })
+
+    await expect(dataset.meta()).rejects.toThrow('Failed to fetch')
+    await expect(dataset.meta()).resolves.toMatchObject({
+      platform: 'xenium',
+      units: { micrometersPerPixel: micrometers(0.5) },
+    })
+  })
+
   it('loads metadata with capability flags and cell extent', async () => {
     const conn = new FakeConnection([[{ minX: 1, maxX: 20, minY: 2, maxY: 30 }]])
     const dataset = makeDataset(conn)
