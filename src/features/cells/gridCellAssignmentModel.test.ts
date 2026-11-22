@@ -8,6 +8,7 @@ import {
   gridCellAssignmentReady,
   gridCellAssignmentStatusLabel,
   gridCellAssignmentUnavailable,
+  summarizeGridCellAssignments,
 } from './gridCellAssignmentModel'
 
 describe('gridCellAssignmentModel', () => {
@@ -52,6 +53,50 @@ describe('gridCellAssignmentModel', () => {
       binId: 'BC-1',
       error,
     })
+  })
+
+  it('gives a bin the cell holding most of its 2 µm barcodes', () => {
+    const outside = { cellId: null, inNucleus: false, inCell: false }
+    const inCell = (cellId: string, inNucleus = false) => ({
+      cellId,
+      inNucleus,
+      inCell: true,
+    })
+
+    // The first barcode is outside every cell; cell B holds most of the bin.
+    expect(
+      summarizeGridCellAssignments([
+        outside,
+        inCell('A'),
+        inCell('B'),
+        inCell('B', true),
+        inCell('B'),
+        inCell('A'),
+      ]),
+    ).toEqual({
+      cellId: 'B',
+      inNucleus: true,
+      inCell: true,
+      barcodeCount: 3,
+      mappedBarcodeCount: 6,
+      cellCount: 2,
+    })
+    // A tie goes to the first cell seen.
+    expect(summarizeGridCellAssignments([inCell('A'), inCell('B')])).toMatchObject({
+      cellId: 'A',
+      barcodeCount: 1,
+    })
+    expect(summarizeGridCellAssignments([outside, outside])).toEqual({
+      cellId: null,
+      inNucleus: false,
+      inCell: false,
+      barcodeCount: 0,
+      mappedBarcodeCount: 2,
+      cellCount: 0,
+    })
+    // A 2 µm bin is its own single row.
+    expect(summarizeGridCellAssignments([inCell('A')])).toEqual(inCell('A'))
+    expect(summarizeGridCellAssignments([])).toBeNull()
   })
 
   it('formats assignment status and location labels', () => {

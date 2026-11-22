@@ -15,7 +15,7 @@ interface Snapshot {
 
 interface SnapshotAssignment {
   readonly binId: string
-  readonly cellId: string
+  readonly cellId: string | null
   readonly inNucleus: boolean
   readonly inCell: boolean
 }
@@ -127,6 +127,51 @@ describe('useGridCellAssignmentWorkflow', () => {
         cellId: 'cellid_000000001-1',
         inNucleus: false,
         inCell: true,
+      },
+    })
+  })
+
+  it("names the cell holding most of a coarse bin's 2 µm barcodes", async () => {
+    // A 16 µm bin's first 2 µm barcode is outside every cell.
+    const barcodeMappingAssignments = vi.fn(async () => [
+      { binId: 'BC-1', cellId: null, inNucleus: false, inCell: false },
+      { binId: 'BC-1', cellId: 'cell-a', inNucleus: false, inCell: true },
+      { binId: 'BC-1', cellId: 'cell-b', inNucleus: true, inCell: true },
+      { binId: 'BC-1', cellId: 'cell-b', inNucleus: false, inCell: true },
+    ])
+    const getSpatialDataset: SpatialDatasetLoader = vi.fn(
+      async () =>
+        ({
+          barcodeMappingAssignments,
+        }) as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+    const snapshots: Snapshot[] = []
+
+    render(
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        rowBudget={undefined}
+        onReady={(nextSnapshot) => {
+          snapshots.push(nextSnapshot)
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(snapshots.at(-1)?.assignmentState).toEqual({
+      status: 'ready',
+      binId: 'BC-1',
+      assignment: {
+        cellId: 'cell-b',
+        inNucleus: true,
+        inCell: true,
+        barcodeCount: 2,
+        mappedBarcodeCount: 4,
+        cellCount: 2,
       },
     })
   })
