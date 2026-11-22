@@ -263,6 +263,8 @@ or exact points.
     ms. A chunk pair is about 2.3 MB, so the limit is about 75 MB, or about
     30 genes.
   - Outputs without `density/gene` show all-transcript squares and say so.
+    A `density/gene` read that fails is an error, not a missing
+    `density/gene`, and the next view reads it again.
   - Auto still switches to exact points on the all-transcript estimate,
     because exact reads scan every transcript in the view whatever the
     filter.
@@ -271,7 +273,9 @@ or exact points.
     hidden in June 2026.
 - **Exact.** `loadTranscriptZarrViewport` reads the level-0 tiles that
   intersect the viewport and filters by `valid`, `Min QV`, bbox,
-  `Gene-only calls`, and the feature filter, stopping at the budget. Cell IDs
+  `Gene-only calls`, and the feature filter, stopping at the budget. A tile
+  without `valid` or `codeword_identity` is read without them; a failed read
+  of either fails the view. Cell IDs
   are then added from `transcripts.parquet` (1.5 s deadline), matching each
   point to the row in the same field of view whose `transcript_id` has the
   same low 32 bits. The Zarr's `id` holds those bits and the index of the

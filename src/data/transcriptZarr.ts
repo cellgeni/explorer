@@ -877,17 +877,26 @@ function boundedDensityRange(
 async function readDensityGeneIndptr(
   densityGene: TranscriptDensityGeneMetadata,
 ): Promise<Uint32Array> {
-  densityGene.indptrDataPromise ??= readWholeZarrArray(densityGene.indptr).then(
-    (matrix) => {
-      if (!(matrix.data instanceof Uint32Array)) {
-        throw new Error('transcripts.zarr.zip density/gene indptr must be uint32.')
-      }
+  if (densityGene.indptrDataPromise !== undefined) {
+    return densityGene.indptrDataPromise
+  }
 
-      return matrix.data
-    },
-  )
+  const promise = readWholeZarrArray(densityGene.indptr).then((matrix) => {
+    if (!(matrix.data instanceof Uint32Array)) {
+      throw new Error('transcripts.zarr.zip density/gene indptr must be uint32.')
+    }
 
-  return densityGene.indptrDataPromise
+    return matrix.data
+  })
+  densityGene.indptrDataPromise = promise
+  // A failed read is read again by the next request.
+  promise.catch(() => {
+    if (densityGene.indptrDataPromise === promise) {
+      delete densityGene.indptrDataPromise
+    }
+  })
+
+  return promise
 }
 
 function densityGeneChunkCount(
@@ -1302,18 +1311,28 @@ async function loadTranscriptZarrMetadata(url: string): Promise<TranscriptZarrMe
   }
 }
 
+// Selected-gene density, when the file has a usable `density/gene`. A read
+// that fails is thrown, so that the metadata is read again later rather
+// than kept as "no density/gene" for the session.
 async function loadDensityGeneMetadata(
   root: zarr.Group<ZipFileStore>,
 ): Promise<TranscriptDensityGeneMetadata | null> {
+  let opened
   try {
-    const densityGene = await zarr.open(root.resolve('density/gene'), {
-      kind: 'group',
-    })
-    const [data, indices, indptr] = await Promise.all([
+    opened = await Promise.all([
+      zarr.open(root.resolve('density/gene'), { kind: 'group' }),
       openZarrArray(root, 'density/gene/data'),
       openZarrArray(root, 'density/gene/indices'),
       openZarrArray(root, 'density/gene/indptr'),
     ])
+  } catch (error) {
+    if (isZarrNodeMissing(error)) return null
+    throw error
+  }
+
+  const [densityGene, data, indices, indptr] = opened
+
+  try {
     const gridSize = readGridSizePair(densityGene.attrs, 'grid_size')
     const origin = readOrigin(densityGene.attrs)
 
@@ -1331,6 +1350,7 @@ async function loadDensityGeneMetadata(
       geneCache: { genes: new Map(), entryCount: 0, scaleMaxes: new Map() },
     }
   } catch {
+    // Attributes the reader cannot use: the all-transcripts squares instead.
     return null
   }
 }
@@ -1435,12 +1455,23 @@ async function openZarrArray(root: zarr.Group<ZipFileStore>, path: string) {
   return zarr.open(root.resolve(path), { kind: 'array' })
 }
 
+// Null for an array the file does not have; a read that fails is thrown.
 async function openOptionalZarrArray(root: zarr.Group<ZipFileStore>, path: string) {
   try {
     return await openZarrArray(root, path)
-  } catch {
-    return null
+  } catch (error) {
+    if (isZarrNodeMissing(error)) return null
+    throw error
   }
+}
+
+// A node the store does not have, or whose metadata is not Zarr's, as
+// zarrita reports them (by name: its classes are not exported).
+function isZarrNodeMissing(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.name === 'NotFoundError' || error.name === 'InvalidMetadataError')
+  )
 }
 
 async function readWholeZarrArray(array: Awaited<ReturnType<typeof openZarrArray>>) {
