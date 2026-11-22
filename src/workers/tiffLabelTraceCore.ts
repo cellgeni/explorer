@@ -23,7 +23,7 @@ export async function traceTiffLabelTile(
   const labels =
     // A tile the file leaves out is background.
     bytes.byteLength === 0
-      ? new Int32Array(options.width * options.height)
+      ? new Float64Array(options.width * options.height)
       : tiffLabelWindow(await decodeTiffChunkSamples(bytes, options), options)
 
   return traceLabelEdges(
@@ -37,12 +37,11 @@ export async function traceTiffLabelTile(
 }
 
 // The tile's `width` by `height` window of label values. Unsigned 8-, 16- and
-// 32-bit samples, signed ones and float labels are read; 32-bit values keep
-// their bits, which holds every label a segmentation realistically uses.
+// 32-bit samples, signed ones and float labels are read, each as its value.
 export function tiffLabelWindow(
   buffer: ArrayBufferLike,
   options: TiffLabelTraceOptions,
-): Int32Array {
+): Float64Array {
   const bits = options.bitsPerSample?.[0] ?? 8
   const samplesPerPixel = options.samplesPerPixel ?? options.bitsPerSample?.length ?? 1
   const sampleFormat = options.sampleFormat ?? 1
@@ -67,7 +66,7 @@ export function tiffLabelWindow(
 
   const bytesPerSample = bits / 8
   const view = new DataView(buffer)
-  const output = new Int32Array(options.width * options.height)
+  const output = new Float64Array(options.width * options.height)
   const rowBytes = tileWidth * bytesPerSample
 
   if (
@@ -89,7 +88,9 @@ export function tiffLabelWindow(
           ? sampleFormat === SAMPLE_FORMAT_SIGNED
             ? new Int16Array(buffer, 0, Math.floor(buffer.byteLength / 2))
             : new Uint16Array(buffer, 0, Math.floor(buffer.byteLength / 2))
-          : new Int32Array(buffer, 0, Math.floor(buffer.byteLength / 4))
+          : sampleFormat === SAMPLE_FORMAT_SIGNED
+            ? new Int32Array(buffer, 0, Math.floor(buffer.byteLength / 4))
+            : new Uint32Array(buffer, 0, Math.floor(buffer.byteLength / 4))
 
     for (let y = 0; y < options.height; y += 1) {
       output.set(
@@ -112,7 +113,9 @@ export function tiffLabelWindow(
           : (offset: number) => view.getUint16(offset, littleEndian)
         : sampleFormat === SAMPLE_FORMAT_FLOAT
           ? (offset: number) => Math.round(view.getFloat32(offset, littleEndian))
-          : (offset: number) => view.getInt32(offset, littleEndian)
+          : sampleFormat === SAMPLE_FORMAT_SIGNED
+            ? (offset: number) => view.getInt32(offset, littleEndian)
+            : (offset: number) => view.getUint32(offset, littleEndian)
 
   for (let y = 0; y < options.height; y += 1) {
     const rowOffset = y * rowBytes

@@ -530,7 +530,7 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
       row,
       approximateBytes:
         packed.edges.byteLength +
-        packed.labels.byteLength * 4 +
+        packed.labels.length * 16 +
         packed.bounds.byteLength +
         packed.labels.length * 64,
     }

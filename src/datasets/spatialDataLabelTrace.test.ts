@@ -13,6 +13,40 @@ describe('SpatialData label tracing', () => {
     expect(Array.from(labelWindow(data, [3, 1], 1, 0, 2, 2))).toEqual([0, 7, 2, 0])
   })
 
+  it('keeps label ids from 2^31 to 2^53 exact', () => {
+    // uint32 above 2^31, and 64-bit ids whose high word is set.
+    expect(
+      Array.from(
+        labelWindow(new Uint32Array([3_000_000_000, 4_294_967_295]), [1], 0, 0, 2, 1),
+      ),
+    ).toEqual([3_000_000_000, 4_294_967_295])
+    expect(
+      Array.from(
+        labelWindow(
+          new BigUint64Array([3_000_000_000n, 2n ** 32n, 2n ** 32n + 5n, 5n]),
+          [1],
+          0,
+          0,
+          4,
+          1,
+        ),
+      ),
+    ).toEqual([3_000_000_000, 2 ** 32, 2 ** 32 + 5, 5])
+
+    // 2^32 + 5 and 5 stay two labels, and 2^32 is not background.
+    const trace = traceLabelEdges(
+      Float64Array.from([2 ** 32 + 5, 5, 2 ** 32, 4_294_967_295]),
+      4,
+      1,
+      0,
+      0,
+      4,
+    )
+    expect(Array.from(trace.labels)).toEqual([2 ** 32 + 5, 5, 2 ** 32, 4_294_967_295])
+    // Each one-pixel label is closed by its four sides, also at the window edge.
+    expect(Array.from(trace.edgeOffsets)).toEqual([0, 4, 8, 12, 16])
+  })
+
   it('packs edges, bounds, and pixel counts per label', () => {
     const trace = traceLabelEdges(Int32Array.from([1, 1, 0, 1, 2, 2]), 3, 2, 10, 20, 100)
 

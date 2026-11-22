@@ -188,7 +188,8 @@ table annotates regions in the chosen coordinate system:
   `EntityID`s, are not rounded together. Before 2026-11 they were, and such a
   table placed no row.
 - Rows annotating a labels region use their `obsm` spatial point mapped through
-  the labels element's affine.
+  the labels element's affine. Traced label values are exact up to 2^53, as
+  the table's ids are, so 32- and 64-bit ids find their rows.
 - Rows that match nothing get `NaN` coordinates and are hidden. If no row is
   placed, the load fails.
 - Without region elements in the chosen system, the H5AD `obsm` key order is
