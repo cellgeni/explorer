@@ -3198,10 +3198,15 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
+      // As for the link's sets: the commit applied the link's colour mode,
+      // which a version 2 link leaves out when it is the default.
       void handleImportAnnotationUrlRef
         .current(initialAnnotationUrl, {
           hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
           hiddenAnnotationSetIds: initialShareableState.hiddenAnnotationSetIds,
+          switchColorMode:
+            initialShareableState.linkVersion === undefined &&
+            initialShareableState.observationColorMode === undefined,
         })
         .then((imported) => {
           if (imported) {
@@ -3221,6 +3226,8 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
+    initialShareableState.linkVersion,
+    initialShareableState.observationColorMode,
     loadRequestId,
     loadedDatasetUrl,
     setAnnotationImportUrl,

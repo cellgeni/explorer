@@ -162,6 +162,29 @@ ${cellC},T cell,0,,0.9`,
     ).toEqual([])
   })
 
+  it('reads the other columns of a file with a label column', () => {
+    const imported = parseCustomAnnotationImport(
+      [
+        'annotation_id,cell_id,label,score,cell_type',
+        'custom:x:a,c1,A,0.5,T',
+        'custom:x:a,c2,A,1.5,B',
+        'custom:x:b,c3,B,2.25,T',
+      ].join('\n'),
+      'labels.csv',
+    )
+
+    expect(imported.annotations.map((annotation) => annotation.label)).toEqual([
+      'A',
+      'B',
+      'cell_type: T',
+      'cell_type: B',
+    ])
+    expect(imported.annotations[0]?.id).toBe('custom:labels-csv:a')
+    expect(imported.metadataTracks).toEqual([
+      expect.objectContaining({ label: 'score', cellCount: 3, min: 0.5, max: 2.25 }),
+    ])
+  })
+
   it('reads JSON label-to-cells objects', () => {
     const cellA = intToCellId(1, 1)
 

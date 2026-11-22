@@ -23,6 +23,39 @@ export interface CustomAnnotationImport {
   readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
 }
 
+// The import with only the cells `onMap` holds. Classes and tracks lose the
+// other cells, a track's count and range are over the cells kept, and
+// classes and tracks left with no cell are dropped. An imported file can
+// cover other samples than the open one.
+export function customAnnotationImportOnMap(
+  imported: CustomAnnotationImport,
+  onMap: { has(cellId: string): boolean },
+): CustomAnnotationImport {
+  const annotations = imported.annotations.flatMap((annotation) => {
+    const cellIds = annotation.cellIds.filter((cellId) => onMap.has(cellId))
+    return cellIds.length === 0 ? [] : [{ ...annotation, cellIds }]
+  })
+  const metadataTracks = imported.metadataTracks.flatMap((track) => {
+    const values = track.values?.filter((value) => onMap.has(value.cellId)) ?? []
+
+    if (values.length === 0) {
+      return []
+    }
+
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    for (const { value } of values) {
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    }
+
+    return [{ ...track, values, cellCount: values.length, min, max }]
+  })
+
+  return { ...imported, annotations, metadataTracks }
+}
+
 export function parseCustomAnnotations(
   text: string,
   fileName = 'annotations',
@@ -156,27 +189,21 @@ function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationIm
     throw new Error('CSV annotations need a cell_id column.')
   }
 
-  if (labelIndex >= 0) {
-    return {
-      annotations: parseCsvSingleLabelAnnotations(
-        rows,
-        cellIdIndex,
-        labelIndex,
-        fileName,
-      ),
-      metadataTracks: [],
-    }
-  }
-
-  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName)
+  return parseCsvWideAnnotations(
+    rows,
+    header,
+    cellIdIndex,
+    fileName,
+    labelIndex < 0 ? undefined : labelIndex,
+  )
 }
 
-function parseCsvSingleLabelAnnotations(
+// The label column's classes, as one set of labels.
+function csvLabelColumnEntries(
   rows: readonly (readonly string[])[],
   cellIdIndex: number,
   labelIndex: number,
-  fileName: string,
-): readonly Annotation[] {
+): readonly CustomAnnotationEntry[] {
   const grouped = new Map<string, CellId[]>()
 
   for (const row of rows.slice(1)) {
@@ -195,24 +222,37 @@ function parseCsvSingleLabelAnnotations(
     appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
-  return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
+  return annotationEntriesFromGroupedCells(grouped)
 }
 
+// Each column other than the cell ID is a set of classes or a metadata track.
+// With a label column, that column's classes come first, and the other
+// columns are read the same way; an export's `annotation_id` is left out.
 function parseCsvWideAnnotations(
   rows: readonly (readonly string[])[],
   header: readonly string[],
   cellIdIndex: number,
   fileName: string,
+  labelIndex?: number,
 ): CustomAnnotationImport {
   const annotationColumns = header
     .map((column, index) => ({ index, name: column.trim() }))
-    .filter(({ index, name }) => index !== cellIdIndex && name.length > 0)
+    .filter(
+      ({ index, name }) =>
+        index !== cellIdIndex &&
+        index !== labelIndex &&
+        name.length > 0 &&
+        !(labelIndex !== undefined && name.toLowerCase() === 'annotation_id'),
+    )
 
-  if (annotationColumns.length === 0) {
+  if (annotationColumns.length === 0 && labelIndex === undefined) {
     throw new Error('CSV annotations need cell_id plus label or annotation columns.')
   }
 
-  const annotations: CustomAnnotationEntry[] = []
+  const annotations: CustomAnnotationEntry[] =
+    labelIndex === undefined
+      ? []
+      : [...csvLabelColumnEntries(rows, cellIdIndex, labelIndex)]
   const metadataTracks: ContinuousCellMetadataTrack[] = []
   const usedMetadataTrackIds = new Set<string>()
 

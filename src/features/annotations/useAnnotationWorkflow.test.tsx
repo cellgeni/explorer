@@ -586,7 +586,7 @@ AAACAGAGCGACTCCT-1,Stroma`,
       snapshot.annotationState.status === 'ready'
         ? snapshot.annotationState.annotations.map((annotation) => annotation.cellIds)
         : [],
-    ).toEqual([['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1'], ['AAACAGAGCGACTCCT-1']])
+    ).toEqual([['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1']])
     expect(api.annotationImportNotice).toBe('1 of 3 imported cells are not on the map.')
 
     act(() => {
@@ -594,6 +594,71 @@ AAACAGAGCGACTCCT-1,Stroma`,
     })
 
     expect(api.annotationImportNotice).toBeNull()
+  })
+
+  it('keeps only the cells on the map in imported tracks and their range', async () => {
+    const file = new File(
+      ['cell_id,score\nc1,1\nc2,2.5\nother-sample-1,1000\nother-sample-2,-50'],
+      'scores.csv',
+      { type: 'text/csv' },
+    )
+
+    render(
+      <Probe
+        datasetCellIds={new Set(['c1', 'c2'])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(file)
+    })
+
+    expect(snapshot.cellMetadataTracks).toEqual([
+      expect.objectContaining({
+        label: 'score',
+        cellCount: 2,
+        min: 1,
+        max: 2.5,
+        values: [
+          { cellId: 'c1', value: 1 },
+          { cellId: 'c2', value: 2.5 },
+        ],
+      }),
+    ])
+    expect(api.annotationImportNotice).toBe('2 of 4 imported cells are not on the map.')
+  })
+
+  it('keeps the colour mode when asked to, as for a link', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('cell_id,label\naaaaaaaa-1,Tumour')),
+    )
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+    const before = snapshot.observationColorMode
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/labels.csv', {
+        switchColorMode: false,
+      })
+    })
+
+    expect(snapshot.annotationState).toMatchObject({ status: 'ready' })
+    expect(snapshot.observationColorMode).toBe(before)
+    expect(before).not.toBe('annotations')
   })
 
   it('fails an import when none of its cells are on the map', async () => {
