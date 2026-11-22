@@ -364,7 +364,7 @@ export function useVisiumHdRoiWorkflow({
       `${slug(name)}-roi.geojson`,
       roiSelectionToGeoJson(activeRoiState.selection, {
         roi_name: name,
-        dataset_platform: 'visium_hd',
+        exported_at: new Date().toISOString(),
         dataset_url: activeRoiState.url,
         selected_barcode_count: activeRoiState.bins.length,
         hit_barcode_limit: activeRoiState.hitBinLimit,

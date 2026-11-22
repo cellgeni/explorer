@@ -725,8 +725,10 @@ Method:
   not independent. Use exported cells for a proper differential expression
   analysis.
 
-Exports: `Export GeoJSON` (`{name}-roi.geojson`, whose `hit_cell_limit` is
-true when Xenium stopped at 50,000 cells), `Export Cells` (`{name}-cells.csv`:
+Exports: `Export GeoJSON` (`{name}-roi.geojson`: the selection's polygon with
+its name, the dataset URL, the cell or barcode count and the time of export,
+`exported_at`, in UTC; `hit_cell_limit` is true when Xenium stopped at 50,000
+cells), `Export Cells` (`{name}-cells.csv`:
 the cells read, so up to 50,000 on Xenium and every cell elsewhere),
 `Export Transcripts`
 (`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, the selected

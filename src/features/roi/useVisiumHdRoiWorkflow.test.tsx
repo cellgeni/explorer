@@ -396,9 +396,13 @@ describe('useVisiumHdRoiWorkflow', () => {
       />,
     )
 
+    // Only Date is faked: the export reads the time once, synchronously.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-22T12:34:56.789Z'))
     act(() => {
       api.handleExportVisiumHdRoiGeoJson()
     })
+    vi.useRealTimers()
 
     const blob = createObjectUrl.mock.calls[0]?.[0] as Blob | undefined
     const geoJson = JSON.parse((await blob?.text()) ?? '{}')
@@ -407,7 +411,7 @@ describe('useVisiumHdRoiWorkflow', () => {
     expect(geoJson.features[0]).toMatchObject({
       properties: {
         roi_name: 'Tumor ROI',
-        dataset_platform: 'visium_hd',
+        exported_at: '2026-11-22T12:34:56.789Z',
         dataset_url: 'https://example.test/visium',
         selected_barcode_count: 1,
         hit_barcode_limit: false,
