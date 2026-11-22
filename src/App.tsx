@@ -223,6 +223,7 @@ import {
 import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressionStatus'
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
+import { useSelectedGridCellScore } from './features/cells/useSelectedGridCellScore'
 import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
@@ -1393,7 +1394,7 @@ export function App({ dependencies }: AppProps = {}) {
     }
     return max
   }, [observationColorMode, overviewCells])
-  const activeSelectedGridCell = useMemo(() => {
+  const scoredSelectedGridCell = useMemo(() => {
     if (selectedGridCell === null) {
       return null
     }
@@ -1431,6 +1432,13 @@ export function App({ dependencies }: AppProps = {}) {
     styleGridCell,
     styledGeneExpressionElements,
   ])
+  const { cell: activeSelectedGridCell, outsideRead: selectedGridCellOutsideRead } =
+    useSelectedGridCellScore({
+      selected: selectedGridCell,
+      scored: scoredSelectedGridCell,
+      readBox: isVisiumHdDataset ? geneExpressionBatch?.bbox : undefined,
+      selectedGenes,
+    })
   const activeVisiumHdExpressionProfileSelection = useMemo(
     () =>
       platformExpressionProfileSelection(
@@ -1489,7 +1497,13 @@ export function App({ dependencies }: AppProps = {}) {
   const selectedGridCellExpressionStatus =
     activeSelectedGridCell !== null &&
     activeSelectedGridCell.expressionCount === undefined
-      ? selectedGeneExpressionStatus
+      ? selectedGridCellOutsideRead && geneExpressionState.status === 'ready'
+        ? {
+            status: 'unavailable' as const,
+            message:
+              'This bin is outside the area read for the view. Pan back to it to score it.',
+          }
+        : selectedGeneExpressionStatus
       : undefined
   const selectedBoundaryCellExpressionStatus = useMemo(
     () =>

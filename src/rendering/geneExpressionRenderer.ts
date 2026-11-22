@@ -1,4 +1,5 @@
 import type { Color, Position } from '@deck.gl/core'
+import type { BBox } from '../data/coords'
 import type { GeneExpressionElement } from '../datasets/spatialDataset'
 import { geneScoreSpread, type GeneScoreSpread } from '../features/genes/geneScaleRange'
 import {
@@ -471,6 +472,14 @@ function positionBinKey(position: Position, binMicrometers: number): string {
 
 function pointBinKey(x: number, y: number, binMicrometers: number): string {
   return `${Math.floor(x / binMicrometers)}:${Math.floor(y / binMicrometers)}`
+}
+
+// Whether a bin's centre lies in `bbox` (data µm, y down), as a read covers it.
+export function gridCellCenterInBbox(cell: GridCellDatum, bbox: BBox): boolean {
+  const [x = 0, deckY = 0] = gridCellCenterPosition(cell)
+  const y = -deckY
+
+  return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
 }
 
 function gridCellCenterPosition(cell: GridCellDatum): Position {

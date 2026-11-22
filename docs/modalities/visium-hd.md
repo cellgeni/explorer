@@ -252,6 +252,11 @@ incomplete.
   their own. Until 2026-11-17 App copied every bin for each expression batch,
   which at 2 µm (3.4 million) blocked for about 10 s and ran the tab out of
   memory.
+- Above zoom -1.25 a batch is read for the view, so it has no score for a
+  selected bin the view has left. The Bin card then keeps the score of the
+  last batch read over the bin, for the same genes
+  (`useSelectedGridCellScore`), or says the bin is outside the area read,
+  rather than showing Score 0.
 - Segmentation GeoJSON is fetched on the main thread, so custom fetchers and
   the full-file budget apply, and its body is piped chunk by chunk to a
   short-lived worker that parses each feature and transfers the columns back
