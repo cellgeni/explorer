@@ -2064,6 +2064,57 @@ describe('App', () => {
     ).toHaveLength(1)
   })
 
+  it('imports a link’s labels only into the link’s dataset', async () => {
+    const datasetA = 'https://example.test/xenium-a'
+    const datasetB = 'https://example.test/xenium-b'
+    const annotationUrl = 'https://example.test/annotations/manual.csv'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(datasetA)}&annotationUrl=${encodeURIComponent(annotationUrl)}`,
+    )
+    const fetchAnnotations = vi.fn(async (input: RequestInfo | URL) =>
+      String(input) === annotationUrl
+        ? new Response(`cell_id,label\n${intToCellId(1, 1)},Manual annotation`)
+        : offlineFetch(input),
+    )
+    vi.stubGlobal('fetch', fetchAnnotations)
+
+    // The link's dataset cannot be read; another one is opened instead.
+    render(
+      <TestApp
+        detectSpatialDataset={vi.fn(async (baseUrl: string) => {
+          if (baseUrl === datasetA) throw new Error(`Cannot read ${baseUrl}`)
+          return { platform: 'xenium' as const, baseUrl, checked: [] }
+        })}
+        loadAnnotationGroups={vi.fn(async () => [])}
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+      />,
+    )
+    await screen.findByRole('heading', { name: 'Open a dataset' })
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: datasetB },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByTestId('deckgl')
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+
+    expect(
+      fetchAnnotations.mock.calls.filter(([input]) => String(input) === annotationUrl),
+    ).toHaveLength(0)
+    expect(
+      new URLSearchParams(window.location.hash.slice(1)).get('annotationUrl'),
+    ).toBeNull()
+  })
+
   it('shares the chosen transcript filter, not All features shown without genes', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
