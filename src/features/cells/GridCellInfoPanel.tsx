@@ -124,12 +124,27 @@ function GridCellAssignmentDetail({
       <dl className="cell-info-list">
         <div>
           <dt>Cell ID</dt>
-          <dd>{state.assignment.cellId}</dd>
+          <dd>{state.assignment.cellId ?? 'None'}</dd>
         </div>
         <div>
           <dt>Location</dt>
           <dd>{gridCellAssignmentLocationLabel(state.assignment)}</dd>
         </div>
+        {state.assignment.mappedBarcodeCount === undefined ? null : (
+          <div>
+            <dt>2 µm bins in cell</dt>
+            <dd>
+              {(state.assignment.barcodeCount ?? 0).toLocaleString()} of{' '}
+              {state.assignment.mappedBarcodeCount.toLocaleString()}
+            </dd>
+          </div>
+        )}
+        {(state.assignment.cellCount ?? 0) > 1 ? (
+          <div>
+            <dt>Cells in bin</dt>
+            <dd>{(state.assignment.cellCount ?? 0).toLocaleString()}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Rows</dt>
           <dd>{formatMappingRowsScope(state.assignment.rowBudget)}</dd>
