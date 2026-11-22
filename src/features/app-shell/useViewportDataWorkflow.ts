@@ -23,6 +23,7 @@ import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
   boundaryRequestCovers,
   boundaryViewportKey,
+  normalizeBoundaryCellLimit,
   paddedBoundaryBbox,
   shouldLoadBoundaryPolygons,
   type BoundaryRequestArea,
@@ -200,6 +201,11 @@ export function useViewportDataWorkflow({
   // it is only trusted while that key is still current.
   const cellBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
   const nucleusBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
+  // The expression read that failed, with the view it was made for.
+  const failedGeneExpressionReadRef = useRef<{
+    readonly key: string
+    readonly detail: ViewerViewportDetail
+  } | null>(null)
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -306,6 +312,19 @@ export function useViewportDataWorkflow({
           return current.status === 'idle' ? current : IDLE_GENE_EXPRESSION_STATE
         })
         return
+      }
+
+      // A failed read is tried again for another view, not for the same view
+      // replayed when an input changes.
+      const failedRead = failedGeneExpressionReadRef.current
+
+      if (
+        failedRead !== null &&
+        failedRead.key === geneExpressionViewportKeyRef.current &&
+        failedRead.detail !== detail
+      ) {
+        failedGeneExpressionReadRef.current = null
+        geneExpressionViewportKeyRef.current = null
       }
 
       const expressionPlan = planGeneExpressionLod(detail, {
@@ -471,6 +490,9 @@ export function useViewportDataWorkflow({
             return
           }
 
+          // The next view the viewer reports reads again, also under a key
+          // that does not depend on the view (the whole slide).
+          failedGeneExpressionReadRef.current = { key: expressionKey, detail }
           setGeneExpressionBatch(null)
           setGeneExpressionState(
             geneExpressionLoadFailed(
@@ -651,8 +673,10 @@ function pauseBoundaryLayer(layer: BoundaryLayer): void {
 function requestBoundaryLayer(
   layer: BoundaryLayer,
   detail: ViewerViewportDetail,
-  { appendDebugEvent, baseUrl, boundaryCellLimit, recordTelemetry }: BoundaryLayerContext,
+  context: BoundaryLayerContext,
+  { padded = true }: { readonly padded?: boolean } = {},
 ): void {
+  const { appendDebugEvent, baseUrl, boundaryCellLimit, recordTelemetry } = context
   const { boundaryViewportKeyRef } = layer.requests
   const copy = BOUNDARY_LAYER_COPY[layer.kind]
   const lastArea = layer.areaRef.current
@@ -667,7 +691,9 @@ function requestBoundaryLayer(
     return
   }
 
-  const requestBbox = paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
+  const requestBbox = padded
+    ? paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
+    : detail.bbox
   const requestKey = boundaryViewportKey(baseUrl, requestBbox)
   const requestArea: BoundaryRequestAreaWithKey = {
     key: requestKey,
@@ -702,6 +728,16 @@ function requestBoundaryLayer(
         // Nothing was drawn here, so any zoom or pan asks again.
         layer.areaRef.current = null
         boundaryViewportKeyRef.current = null
+
+        // The margin held more outlines than the limit, but the view holds
+        // fewer: read the view alone.
+        if (
+          requestBbox !== detail.bbox &&
+          detail.visibleCellCount < normalizeBoundaryCellLimit(boundaryCellLimit)
+        ) {
+          requestBoundaryLayer(layer, detail, context, { padded: false })
+          return
+        }
       }
 
       layer.setElements(batch.elements)
