@@ -41,4 +41,15 @@ describe('document title', () => {
     expect(datasetDisplayName('/visium-smoke/', undefined)).toBe('visium-smoke')
     expect(datasetDisplayName(null, undefined)).toBeNull()
   })
+
+  it('names a dataset served from the root of a host by the host', () => {
+    // As `npx http-server <folder>` serves it (docs/host-your-own-data.md).
+    expect(datasetDisplayName('http://127.0.0.1:8080/', undefined)).toBe('127.0.0.1:8080')
+    expect(datasetDisplayName('https://data.example.org', undefined)).toBe(
+      'data.example.org',
+    )
+    expect(documentTitle(datasetDisplayName('http://localhost:3000/', undefined))).toBe(
+      'localhost:3000 · Spatial Omics Explorer',
+    )
+  })
 })
