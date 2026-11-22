@@ -61,6 +61,25 @@ describe('useUndoToast', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
   })
 
+  it('says why an Undo did nothing, with no Undo of its own', () => {
+    undoSpy.mockReturnValueOnce('Not undone: the annotations have changed since.')
+    render(<Probe />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Not undone: the annotations have changed since.',
+    )
+    expect(screen.queryByRole('button', { name: 'Undo' })).not.toBeInTheDocument()
+    // Ctrl+Z has nothing to undo now.
+    fireEvent.keyDown(document, { key: 'z', ctrlKey: true })
+    expect(undoSpy).toHaveBeenCalledTimes(1)
+    act(() => {
+      vi.advanceTimersByTime(UNDO_TIMEOUT_MS)
+    })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
   it('stays while hovered or focused, then has its full time again', () => {
     render(<Probe />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))

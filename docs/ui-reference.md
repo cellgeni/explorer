@@ -1328,8 +1328,11 @@ except in a text field. A newer removal or another dataset replaces it.
 
 Undo puts back what the removal took only while nothing it covers has changed
 since (`useUndoableRemovals`): after, say, loading another annotation set, it
-does nothing rather than undo that work. A deleted selection always goes back
-in the list, since nothing drawn later is lost.
+does nothing rather than undo that work, and the toast says so ("Not undone:
+the annotations have changed since. …") with only `Dismiss`. Values read for a
+metadata track when it is first shown do not count as a change, so removing
+the shown track can be undone after the next one's values arrive. A deleted
+selection always goes back in the list, since nothing drawn later is lost.
 
 ## Info Drawer
 

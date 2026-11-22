@@ -9,11 +9,14 @@ export const UNDO_TIMEOUT_MS = 8_000
 export interface UndoOffer {
   // What was done, such as "Removed graphclust: Cluster 3".
   readonly message: string
-  readonly undo: () => void
+  // Undoes it, or returns why it cannot, which the toast then says instead.
+  readonly undo: () => string | undefined | void
 }
 
 export interface UndoToastStore {
   readonly offer: UndoOffer | null
+  // Why the last Undo did nothing, shown until dismissed or timed out.
+  readonly notice: string | null
   // Replaces any earlier offer.
   readonly offerUndo: (offer: UndoOffer) => void
   readonly undo: () => void
@@ -24,7 +27,9 @@ export interface UndoToastStore {
 }
 
 interface ShownOffer {
-  readonly offer: UndoOffer
+  // An offer to undo, or a notice that Undo could not.
+  readonly offer: UndoOffer | null
+  readonly notice?: string
   // Restarts the timer for each offer, even with the same text.
   readonly id: number
 }
@@ -55,7 +60,12 @@ export function useUndoToast(timeoutMs = UNDO_TIMEOUT_MS): UndoToastStore {
   const undo = useCallback(() => {
     const current = shownRef.current
     show(null)
-    current?.offer.undo()
+    const refusal = current?.offer?.undo()
+
+    if (typeof refusal === 'string') {
+      nextOfferId += 1
+      show({ offer: null, notice: refusal, id: nextOfferId })
+    }
   }, [show])
 
   useEffect(() => {
@@ -70,7 +80,7 @@ export function useUndoToast(timeoutMs = UNDO_TIMEOUT_MS): UndoToastStore {
   // it undoes typing.
   const handleUndoKey = useEffectEvent((event: KeyboardEvent) => {
     if (
-      shown === null ||
+      shown?.offer == null ||
       event.defaultPrevented ||
       event.key.toLowerCase() !== 'z' ||
       !(event.ctrlKey || event.metaKey) ||
@@ -96,5 +106,12 @@ export function useUndoToast(timeoutMs = UNDO_TIMEOUT_MS): UndoToastStore {
     }
   }, [shown])
 
-  return { offer: shown?.offer ?? null, offerUndo, undo, dismiss, hold: setHeld }
+  return {
+    offer: shown?.offer ?? null,
+    notice: shown?.notice ?? null,
+    offerUndo,
+    undo,
+    dismiss,
+    hold: setHeld,
+  }
 }
