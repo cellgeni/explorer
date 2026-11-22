@@ -162,6 +162,51 @@ ${cellC},T cell,0,,0.9`,
     ).toEqual([])
   })
 
+  it('reads a quote inside an unquoted field as written', () => {
+    const annotations = parseCustomAnnotations(
+      ['cell_id,label', 'c1,5" slide', 'c2,"quoted, with comma"', 'c3,Stroma'].join('\n'),
+      'labels.csv',
+    )
+
+    expect(annotations.map(({ label, cellIds }) => [label, cellIds])).toEqual([
+      ['5" slide', ['c1']],
+      ['quoted, with comma', ['c2']],
+      ['Stroma', ['c3']],
+    ])
+  })
+
+  it('reads tab- and semicolon-separated files', () => {
+    for (const delimiter of ['\t', ';']) {
+      const annotations = parseCustomAnnotations(
+        [
+          `cell_id${delimiter}label`,
+          `c1${delimiter}T cell`,
+          `c2${delimiter}B, naive`,
+        ].join('\n'),
+        'labels.tsv',
+      )
+
+      expect(annotations.map((annotation) => annotation.label)).toEqual([
+        'T cell',
+        'B, naive',
+      ])
+    }
+  })
+
+  it('reads JSON rows whose cluster or cell ID is a number', () => {
+    const annotations = parseCustomAnnotations(
+      JSON.stringify([
+        { cell_id: 17, cluster: 3 },
+        { cell_id: '18', cluster: 3 },
+      ]),
+      'clusters.json',
+    )
+
+    expect(annotations).toEqual([
+      expect.objectContaining({ label: '3', cellIds: ['17', '18'] }),
+    ])
+  })
+
   it('reads JSON label-to-cells objects', () => {
     const cellA = intToCellId(1, 1)
 
