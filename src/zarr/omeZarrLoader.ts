@@ -790,6 +790,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       chunkWidth: meta.chunkWidth,
       chunkHeight: meta.chunkHeight,
       chunkBytes: elements * dataTypeBytes(meta.array.dtype),
+      micrometersPerPixel: meta.xMicrometersPerPixel,
+      micrometersPerPixelY: meta.yMicrometersPerPixel,
     }
   }
 

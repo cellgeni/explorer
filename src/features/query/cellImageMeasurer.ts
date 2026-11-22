@@ -145,6 +145,8 @@ function levelGeometry(loader: CellImageLoader, level: number): LevelGeometry {
   if (chunks !== undefined) {
     return {
       ...placed,
+      micrometersPerPixel: chunks.micrometersPerPixel,
+      micrometersPerPixelY: chunks.micrometersPerPixelY,
       tileWidth: chunks.chunkWidth,
       tileHeight: chunks.chunkHeight,
       cols: Math.ceil(width / chunks.chunkWidth),
@@ -377,7 +379,9 @@ export interface CellImageMeasurement {
   readonly mean: Float64Array
   // Percent of the cell's pixels at or above the threshold.
   readonly above: Float64Array
-  readonly cellsOutside: number
+  // Cells with no pixel: outside the image, on no pixel centre at this
+  // resolution, or whose pixels nearer cells took. NaN pixels are not counted.
+  readonly cellsWithoutValue: number
   readonly tiles: number
   readonly bytes: number
 }
@@ -563,9 +567,11 @@ export async function runCellImageMeasurement(
 
   const mean = new Float64Array(plan.cellCount)
   const share = new Float64Array(plan.cellCount)
+  let cellsWithoutValue = 0
 
   for (let cell = 0; cell < plan.cellCount; cell += 1) {
     const pixels = count[cell] ?? 0
+    if (pixels === 0) cellsWithoutValue += 1
     mean[cell] = pixels === 0 ? Number.NaN : (sum[cell] ?? 0) / pixels
     share[cell] = pixels === 0 ? Number.NaN : ((above[cell] ?? 0) * 100) / pixels
   }
@@ -573,7 +579,7 @@ export async function runCellImageMeasurement(
   return {
     mean,
     above: share,
-    cellsOutside: plan.cellsOutside,
+    cellsWithoutValue,
     tiles: tiles.length,
     bytes: bytesRead,
   }

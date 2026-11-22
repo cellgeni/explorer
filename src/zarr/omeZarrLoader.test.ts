@@ -842,7 +842,13 @@ describe('OME-Zarr image loader', () => {
       { fetcher, decodePool: null },
     )
 
-    expect(loader.chunkGrid(0)).toEqual({ chunkWidth: 2, chunkHeight: 2, chunkBytes: 4 })
+    expect(loader.chunkGrid(0)).toEqual({
+      chunkWidth: 2,
+      chunkHeight: 2,
+      chunkBytes: 4,
+      micrometersPerPixel: 1,
+      micrometersPerPixelY: 1,
+    })
     const chunk = await loader.readChunk(0, 0, 0)
 
     expect(chunk.source).toMatchObject({ chunkKey: '1.2.0.0', coords: [1, 2, 0, 0] })

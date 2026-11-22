@@ -36,9 +36,12 @@ export class CellOutlineReader {
       const batch = wanted.slice(start, start + this.batchSize)
       const elements = await this.load(batch, signal)
 
-      // Kept even for a page that has scrolled away: they were read.
+      // Kept even for a page that has scrolled away: they were read. A
+      // read stopped part-way returns what it found, so a cell missing from
+      // it is not known to have no outline, and is read again later.
       for (const cell of batch) {
         const element = elements.get(cell.id)
+        if (element === undefined && signal.aborted) continue
         const outline = element === undefined ? null : cellPictureOutline(element)
         this.outlines.set(cell.id, outline)
         if (!signal.aborted) onOutline(cell.id, outline)

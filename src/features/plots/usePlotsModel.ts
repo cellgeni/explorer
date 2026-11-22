@@ -168,6 +168,7 @@ export function usePlotsModel({
     loadAnnotations: loadSetAnnotations,
     appendDebugEvent,
   })
+  const [selectionRetryCount, setSelectionRetryCount] = useState(0)
   const savedSelections = useSelectionCells({
     enabled:
       active &&
@@ -176,6 +177,7 @@ export function usePlotsModel({
     selections: savedSelectionList,
     loadCells: loadSelectionCells,
     appendDebugEvent,
+    retryCount: selectionRetryCount,
   })
 
   const panel = useMemo(
@@ -239,12 +241,20 @@ export function usePlotsModel({
     [current, data.stats, panel.genes],
   )
   const loadedStats = genes.flatMap(({ stats }) => (stats === null ? [] : [stats]))
-  const log1pAvailable = loadedStats.every((stats) => !stats.negative)
-  const wholeNumbers = loadedStats.every((stats) => stats.wholeNumbers)
+  // While new groups are sent to the worker, the genes' last statistics
+  // still say how their values look, which no group changes.
+  const knownStats = panel.genes.flatMap((gene) => {
+    const stats = data.stats.get(gene)
+    return stats === undefined ? [] : [stats]
+  })
+  const regrouping =
+    groupsRequest !== null && !current && data.status === 'ready' && knownStats.length > 0
+  const log1pAvailable = knownStats.every((stats) => !stats.negative)
+  const wholeNumbers = knownStats.every((stats) => stats.wholeNumbers)
   const scale: PlotScale = !log1pAvailable
     ? 'stored'
     : (chosenScale ?? (wholeNumbers ? 'log1p' : 'stored'))
-  const storedLabel = wholeNumbers && loadedStats.length > 0 ? 'counts' : 'X'
+  const storedLabel = wholeNumbers && knownStats.length > 0 ? 'counts' : 'X'
   const valueLabel = scale === 'log1p' ? `log1p(${storedLabel})` : storedLabel
 
   const plot = useMemo((): PlotView | null => {
@@ -282,6 +292,8 @@ export function usePlotsModel({
       : plotFileName(datasetUrl, kindInfo.fileName, panel.setLabel, extension)
   const plotName = kindInfo.label.toLowerCase()
 
+  // A PNG that could not be drawn, until the next export.
+  const [exportError, setExportError] = useState<string | null>(null)
   const largeRead = largeReadNotice(data)
   const message = plotsMessage({
     available,
@@ -296,6 +308,7 @@ export function usePlotsModel({
         ? null
         : `${panel.setLabel ?? 'The set'} could not be read: ${panel.datasetSetError}`,
     hasPlot: plot !== null,
+    regrouping,
     platformLabel,
     elementNoun,
     largeRead,
@@ -305,6 +318,7 @@ export function usePlotsModel({
     ...(plot !== null && largeRead !== null ? [largeRead] : []),
     ...plotsNotes(panel, data, elementNoun, log1pAvailable, plotKind),
     ...plotNonFiniteNotes(loadedStats, elementNoun),
+    ...(exportError === null ? [] : [exportError]),
   ]
   const geneErrors = panel.genes.flatMap((gene) => {
     const error = data.geneErrors.get(gene)
@@ -314,7 +328,8 @@ export function usePlotsModel({
 
   return {
     status: plotsStatus(panel, data),
-    loading: reading || panel.pendingSelectionCount > 0 || panel.pendingDatasetSet,
+    loading:
+      reading || regrouping || panel.pendingSelectionCount > 0 || panel.pendingDatasetSet,
     plotKind,
     onPlotKindChange: (kind) => {
       onPlotKindChange(kind)
@@ -350,11 +365,18 @@ export function usePlotsModel({
       appendDebugEvent('Plots: read allowed')
     },
     canRetry:
-      data.status === 'cancelled' || data.status === 'error' || geneErrors.length > 0,
-    onRetry: data.retry,
+      data.status === 'cancelled' ||
+      data.status === 'error' ||
+      geneErrors.length > 0 ||
+      savedSelections.some((saved) => saved.cells.status === 'error'),
+    onRetry: () => {
+      data.retry()
+      setSelectionRetryCount((count) => count + 1)
+    },
     onExportSvg: () => {
       const name = fileName('svg')
       if (plot === null || name === null) return
+      setExportError(null)
       downloadTextFile(
         name,
         svgDocument(plotViewSvg(plot, documentPlotPaint(), plot.kind)),
@@ -367,21 +389,23 @@ export function usePlotsModel({
       if (plot === null || name === null) return
       const svg = plotViewSvg(plot, documentPlotPaint(), plot.kind)
       const { width, height } = svgSize(svg)
+      setExportError(null)
       svgPngBlob(svgDocument(svg), width, height).then(
         (blob) => {
           downloadBlob(name, blob)
           appendDebugEvent(`Plots: exported the ${plotName} as PNG`)
         },
         (error: unknown) => {
-          appendDebugEvent(
-            `Plots: PNG export failed: ${error instanceof Error ? error.message : String(error)}`,
-          )
+          const message = error instanceof Error ? error.message : String(error)
+          setExportError(`The PNG could not be drawn: ${message}`)
+          appendDebugEvent(`Plots: PNG export failed: ${message}`)
         },
       )
     },
     onExportCsv: () => {
       const name = fileName('csv')
       if (plot === null || name === null) return
+      setExportError(null)
       downloadTextFile(
         name,
         plotStatsCsv({
@@ -433,6 +457,7 @@ function plotsMessage({
   pendingSetLabel,
   datasetSetError,
   hasPlot,
+  regrouping,
   platformLabel,
   elementNoun,
   largeRead,
@@ -447,6 +472,8 @@ function plotsMessage({
   readonly pendingSetLabel: string | null
   readonly datasetSetError: string | null
   readonly hasPlot: boolean
+  // Genes are read, and the worker is grouping them anew.
+  readonly regrouping: boolean
   readonly platformLabel: string
   readonly elementNoun: string
   readonly largeRead: string | null
@@ -465,6 +492,7 @@ function plotsMessage({
   }
   if (data.status === 'error') return `Plots failed: ${data.message ?? 'unknown error'}`
   if (hasPlot) return null
+  if (regrouping) return `Grouping the ${elementNoun}…`
   if (largeRead !== null) return largeRead
   if (data.status === 'cancelled') return 'Reading cancelled.'
   return data.status === 'ready'

@@ -127,6 +127,26 @@ describe('measureTileCells', () => {
     })
   })
 
+  it('leaves NaN pixels, no data in a float image, out of every sum', () => {
+    // The same disc as above over float pixels, with column 1 NaN: its three
+    // pixels in the disc (1, 5 and 9) are left out.
+    const pixels = Float32Array.from({ length: 12 }, (_, index) =>
+      index % 4 === 1 ? Number.NaN : index,
+    )
+    const sums = measureTileCells(pixels, 4, 3, discs([{ x: 2, y: 1.5, radius: 1.5 }]), {
+      width: 4,
+      height: 3,
+      threshold: 6,
+      yScale: 1,
+    })
+
+    expect(plain(sums)).toEqual({
+      sum: [2 + 4 + 6 + 7 + 10],
+      count: [5],
+      above: [3],
+    })
+  })
+
   it('measures an ellipse in pixels where pixels are twice as tall as wide', () => {
     // 5 x 5, values 0 to 24 row by row; pixels 0.5 µm wide and 1 µm tall, so
     // a disc of 1 µm is 2 pixel widths across and 1 pixel height down.

@@ -280,7 +280,9 @@ cell in datasets of up to 500,000 cells, the same as `All cells`, which
 scores every cell on the slide. Larger datasets load the cells in view, with a
 margin around them, when zoomed in, and load again when a pan or a wider
 window leaves that area. When zoomed out they load a sample that keeps every
-cell expressing the selected genes and thins only the cells without.
+cell expressing the selected genes and thins only the cells without. Visium
+HD loads every bin on the slide only when zoomed far out, and otherwise the
+bins in view with their margin, whatever its number of bins.
 `Exact region` reads every cell of the viewport and its margin when the region
 is small enough, and samples the same way above that. Visium HD uses coarser
 bins when zoomed out. The default gene scale is Plasma.

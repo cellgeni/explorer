@@ -577,6 +577,13 @@ function gaussianSmooth(histogram: Float64Array, sigma: number): Float64Array {
     }
   }
 
+  // A sample's mirror image meets it at an end, which the loop above counts
+  // once: the reflected density there takes both.
+  if (steps > 1) {
+    smoothed[0] = (smoothed[0] ?? 0) * 2
+    smoothed[steps - 1] = (smoothed[steps - 1] ?? 0) * 2
+  }
+
   return smoothed
 }
 

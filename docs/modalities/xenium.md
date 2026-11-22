@@ -197,6 +197,9 @@ the FLOAT-cast vertex bounds prune row groups.
      100,000 cells are visible, `exact` when ≤ 50,000 are visible, otherwise
      `sampled`. Only cells with expression are returned, so sampled requests
      read every cell in the box.
+   - Auto on Visium HD (`planVisiumHdGeneExpressionLod`), at any size:
+     `all-cells` at zoom −1.25 or lower, otherwise `exact` over the padded
+     viewport, never sampled.
    - Viewport reads are padded: `exact` and `exact-region` by up to a quarter
      of the view on each side (less as the view nears 50,000 cells), `sampled`
      by a fifth. The box bounds the read, with no cell limit. The request key
@@ -253,7 +256,9 @@ or exact points.
   75 MB in memory on the demo), which stays in memory.
   - Squares are the finest power-of-two multiple of 10 µm whose occupied
     squares number at most 1,500. Colours are scaled to the largest square
-    on the slide at that size, so they do not change while panning.
+    on the slide at that size, so they do not change while panning. A square
+    the view's edge cuts counts all its cells, so its count does not change
+    either; the transcript count in view counts only the cells in view.
   - Each square keeps each gene's count and the count-weighted centre of its
     10 µm cells, for the hover card and gene markers.
   - A request whose new genes span more than 32 data chunks reads nothing and
@@ -263,6 +268,8 @@ or exact points.
     ms. A chunk pair is about 2.3 MB, so the limit is about 75 MB, or about
     30 genes.
   - Outputs without `density/gene` show all-transcript squares and say so.
+    A `density/gene` read that fails is an error, not a missing
+    `density/gene`, and the next view reads it again.
   - Auto still switches to exact points on the all-transcript estimate,
     because exact reads scan every transcript in the view whatever the
     filter.
@@ -271,7 +278,9 @@ or exact points.
     hidden in June 2026.
 - **Exact.** `loadTranscriptZarrViewport` reads the level-0 tiles that
   intersect the viewport and filters by `valid`, `Min QV`, bbox,
-  `Gene-only calls`, and the feature filter, stopping at the budget. Cell IDs
+  `Gene-only calls`, and the feature filter, stopping at the budget. A tile
+  without `valid` or `codeword_identity` is read without them; a failed read
+  of either fails the view. Cell IDs
   are then added from `transcripts.parquet` (1.5 s deadline), matching each
   point to the row in the same field of view whose `transcript_id` has the
   same low 32 bits. The Zarr's `id` holds those bits and the index of the
@@ -295,7 +304,8 @@ or exact points.
   `cell_features/indices` and `data` in `cell_feature_matrix.zarr.zip`, four
   genes at a time, after reading `cell_features/indptr` once
   (`geneValuesFromCellFeatureMatrixZarr`, `src/data/gex.ts`). Gene names
-  match in any case, as in the gene list.
+  match in any case, as in the gene list. Where two gene features share a
+  name, Plots and the map's gene colours both read the first.
 - Row IDs are the `cell_features/cell_id` integer pairs, made text in the
   plot worker (`xeniumCellIdText`), so a selection's and a set's cell IDs
   join to matrix rows by ID. On the demo (1.4 million cells), SNAP25 by the

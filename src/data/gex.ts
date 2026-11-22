@@ -723,10 +723,12 @@ export async function geneValuesFromCellFeatureMatrixZarr(
     found,
     { signal: options.signal, concurrency: FEATURE_MAJOR_READ_CONCURRENCY },
   )
-  const byFeature = new Map(found.map((feature, index) => [feature, columns[index]]))
+  // One column per ask, in order: two spellings of one gene get arrays of
+  // their own, which the Plots session transfers one by one.
+  let next = 0
 
   return genes.map((gene, index) => {
-    const column = byFeature.get(features[index] ?? -1)
+    const column = features[index] === undefined ? undefined : columns[next++]
     return column === undefined
       ? { gene, error: `${gene} is not a gene in the expression matrix.` }
       : { gene, ...column }
@@ -1215,8 +1217,16 @@ function selectedFeatureRows(
   for (let index = 0; index < geneNames.length; index += 1) {
     const gene = geneNames[index]
 
-    if (gene !== undefined && geneFeatureIndices.has(index)) {
-      geneNameToIndex.set(gene.toLowerCase(), { gene, index })
+    const key = gene?.toLowerCase()
+
+    // The first feature of a name, as Plots and the gene list read it.
+    if (
+      gene !== undefined &&
+      key !== undefined &&
+      geneFeatureIndices.has(index) &&
+      !geneNameToIndex.has(key)
+    ) {
+      geneNameToIndex.set(key, { gene, index })
     }
   }
 

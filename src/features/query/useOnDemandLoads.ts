@@ -3,8 +3,9 @@ import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 
 // Values the Cell Query window reads the first time a condition or column
 // uses them (plan 23-D2), such as a dataset set Clusters has not loaded or a
-// metadata track's values, kept for the dataset. Another dataset starts
-// empty and stops the reads in flight.
+// metadata track's values, kept for the dataset. A failed read is kept only
+// while it is needed: once no condition or column uses it, using it again
+// reads it again. Another dataset starts empty and stops the reads in flight.
 
 export type OnDemandLoad<T> =
   | { readonly status: 'loading' }
@@ -36,6 +37,25 @@ export function useOnDemandLoads<T>({
   }>({ url: null, loads: new Map() })
   const inFlightRef = useRef(new Map<string, AbortController>())
   const keysKey = keys.join('\u0000')
+  const [shownKeys, setShownKeys] = useState(keysKey)
+  if (shownKeys !== keysKey) {
+    setShownKeys(keysKey)
+    const needed = new Set(keys)
+    if (
+      [...results.loads].some(
+        ([key, load]) => load.status === 'error' && !needed.has(key),
+      )
+    ) {
+      setResults((current) => ({
+        ...current,
+        loads: new Map(
+          [...current.loads].filter(
+            ([key, load]) => load.status !== 'error' || needed.has(key),
+          ),
+        ),
+      }))
+    }
+  }
 
   // Another dataset stops the reads for this one.
   useEffect(() => {

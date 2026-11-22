@@ -1,12 +1,18 @@
 import { describe, expect, it } from 'vitest'
 import {
+  plotGeneStatsFor,
   plotTestInput as input,
   testExportPaint as exportPaint,
 } from '../../test/plotFixtures'
 import { dotPlotModel, dotPlotSvg, dotRadius, meansPlotTable } from './dotPlot'
 import { heatmapModel, heatmapRowHeight, heatmapSvg } from './heatmap'
 import { plotFileName, plotStatsCsv } from './plotExport'
-import { PANEL_PLOT_PAINT, truncateLabel } from './plotModel'
+import {
+  formatCellCount,
+  formatPercent,
+  PANEL_PLOT_PAINT,
+  truncateLabel,
+} from './plotModel'
 import { svgDocument, svgMarkup } from './svgMarkup'
 
 function parse(markup: string): Document {
@@ -36,6 +42,61 @@ describe('dot plot (plan 22-E)', () => {
 
     expect(model.colourRange).toBeNull()
     expect(gad1.map((cell) => cell.intensity)).toEqual([0, 1])
+  })
+
+  it('scales a gene expressed in every group from its lowest mean, not 0', () => {
+    // Class A holds rows 0–1, class B rows 2–3.
+    const rows = ['a1', 'a2', 'b1', 'b2']
+    const groups = { selection: null, classes: [rows.slice(0, 2), rows.slice(2)] }
+    const model = dotPlotModel({
+      ...input,
+      colour: 'per-gene',
+      scale: 'stored',
+      groups: input.groups.slice(1),
+      genes: [
+        // Means 5 and 6.
+        {
+          gene: 'Actb',
+          stats: plotGeneStatsFor('Actb', rows, groups, [
+            [0, 5],
+            [1, 5],
+            [2, 6],
+            [3, 6],
+          ]),
+        },
+        // One mean everywhere.
+        {
+          gene: 'Gapdh',
+          stats: plotGeneStatsFor('Gapdh', rows, groups, [
+            [0, 8],
+            [1, 8],
+            [2, 8],
+            [3, 8],
+          ]),
+        },
+      ],
+    })
+    const intensities = (geneIndex: number) =>
+      model.cells
+        .filter((cell) => cell.geneIndex === geneIndex)
+        .map((cell) => cell.intensity)
+
+    expect(intensities(0)).toEqual([0, 1])
+    expect(intensities(1)).toEqual([0, 0])
+  })
+
+  it('never rounds a share above 0 to 0%, or one below 100 to 100%', () => {
+    expect(formatPercent(0.01)).toBe('<0.1%')
+    expect(formatPercent(99.99)).toBe('>99.9%')
+    expect([0, 0.05, 50, 99.9, 100].map(formatPercent)).toEqual([
+      '0%',
+      '0.1%',
+      '50%',
+      '99.9%',
+      '100%',
+    ])
+    expect(formatCellCount(1)).toBe('1 cell')
+    expect(formatCellCount(1_000)).toBe('1,000 cells')
   })
 
   it('draws a dot per group and gene with cells expressing, each with a title', () => {
@@ -155,5 +216,45 @@ describe('plot exports (plan 22-H)', () => {
     expect(plotFileName('https://example.test/run/', 'violin', null, 'png')).toBe(
       'run-violin.png',
     )
+  })
+
+  it('names files from the decoded file name, keeping versions and any script', () => {
+    expect(
+      plotFileName(
+        'https://example.test/data/Brain%20section%201.h5ad',
+        'dot-plot',
+        'Cell type',
+        'svg',
+      ),
+    ).toBe('brain-section-1-dot-plot-cell-type.svg')
+    expect(
+      plotFileName('https://example.test/atlas.v2.h5ad', 'violin', null, 'csv'),
+    ).toBe('atlas-v2-violin.csv')
+    expect(
+      plotFileName('https://example.test/run.sdata.zarr.zip', 'heatmap', 'Leiden', 'png'),
+    ).toBe('run-heatmap-leiden.png')
+    expect(
+      plotFileName('https://example.test/%E8%82%BA.h5ad', 'dot-plot', '细胞类型', 'svg'),
+    ).toBe('肺-dot-plot-细胞类型.svg')
+    expect(plotFileName('https://example.test/data/x.h5ad', 'violin', '***', 'csv')).toBe(
+      'x-violin-set.csv',
+    )
+  })
+
+  it('writes a file that parses when a name holds a character XML does not allow', () => {
+    const svg = dotPlotSvg(
+      dotPlotModel({
+        ...input,
+        groups: input.groups.map((group, index) =>
+          index === 1 ? { ...group, label: 'A\u000B\u0000\uFFFE' } : group,
+        ),
+      }),
+      PANEL_PLOT_PAINT,
+      'test',
+    )
+    const document = parse(svgDocument(svg))
+
+    expect(document.querySelector('parsererror')).toBeNull()
+    expect(document.documentElement.textContent).toContain('A\uFFFD\uFFFD\uFFFD')
   })
 })

@@ -89,7 +89,7 @@ describe('cell image measurements', () => {
 
     expect(values(result.mean)).toEqual([55, 10, 100])
     expect(values(result.above)).toEqual([50, 0, 100])
-    expect(result).toMatchObject({ cellsOutside: 0, tiles: 4 })
+    expect(result).toMatchObject({ cellsWithoutValue: 0, tiles: 4 })
   })
 
   it('uses each cell’s area for its disc, and the radius for cells without one', async () => {
@@ -108,8 +108,20 @@ describe('cell image measurements', () => {
     const result = await measure(loader, [cell(-5, 2), cell(2, 2), cell(2, 50)])
 
     expect(values(result.mean)).toEqual([null, 7, null])
-    expect(result.cellsOutside).toBe(2)
+    expect(result.cellsWithoutValue).toBe(2)
     expect(result.tiles).toBe(1)
+  })
+
+  it('counts cells inside the image with no pixel as having no value too', async () => {
+    const { loader } = fakeImage({ width: 8, height: 8, pixel: () => 7 })
+    // Radius 0.4: a cell on a pixel corner, at (4, 4), holds no pixel
+    // centre; one at (2.5, 2.5) holds one; one left of the image none.
+    const result = await measure(loader, [cell(4, 4), cell(2.5, 2.5), cell(-20, 2)], {
+      radius: 0.4,
+    })
+
+    expect(values(result.mean)).toEqual([null, 7, null])
+    expect(result.cellsWithoutValue).toBe(2)
   })
 
   it('reads a coarser level in its own pixels', async () => {
@@ -322,7 +334,7 @@ describe('cell image measurements', () => {
 
         expect(values(fromZarr.mean)).toEqual(values(fromTiff.mean))
         expect(values(fromZarr.above)).toEqual(values(fromTiff.above))
-        expect(fromZarr.cellsOutside).toBe(1)
+        expect(fromZarr.cellsWithoutValue).toBe(1)
       }
     })
 
@@ -363,6 +375,26 @@ describe('cell image measurements', () => {
       const result = await measure(loader, [cell(2, 2), cell(6, 2)])
 
       expect(values(result.mean)).toEqual([20, 7])
+    })
+
+    it('reads a level one chunk wide at its own scale', async () => {
+      // 9 pixels at 1 µm; level 1 is 5 pixels at 2 µm, its last pixel past
+      // the image's 9 µm.
+      const { loader } = await fakeOmeZarrCellImage({
+        width: 9,
+        height: 9,
+        levels: 2,
+        chunkSize: 16,
+        pixel: (x) => x * 10,
+      })
+
+      expect(cellImageLevels(loader).map((level) => level.micrometersPerPixel)).toEqual([
+        1, 2,
+      ])
+      // x = 7.4 µm is in level 1’s pixel 3, which holds level 0’s pixel 6.
+      const result = await measure(loader, [cell(7.4, 5)], { level: 1, radius: 0.9 })
+
+      expect(values(result.mean)).toEqual([60])
     })
 
     it('sizes the read as the chunks decoded, at most', async () => {
