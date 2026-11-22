@@ -114,7 +114,9 @@ element's coordinate transforms (`src/datasets/spatialDataTransforms.ts`).
    number of the table's region elements placed in the system, then whether it
    holds an image, then total elements, then whether it is named `global`, then
    declaration order. The `Coordinate system` select in the info drawer's View
-   options overrides it (`sdCs` in the shareable URL).
+   options overrides it (`sdCs` in the shareable URL). A store with a table but
+   no element placed in any system opens under `global`, and the table's rows
+   are placed from `obsm`.
 3. **Region shapes / labels**: region elements placed in that system.
 4. **Image**: images placed with an affine that only scales, flips, or swaps
    x and y (`axisPermutingAffine`); rotated and sheared images are skipped.

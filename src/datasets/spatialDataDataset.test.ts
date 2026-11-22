@@ -456,6 +456,27 @@ describe('SpatialDataDataset nucleus boundaries', () => {
   })
 })
 
+describe('SpatialDataDataset with a table and no spatial element', () => {
+  it('places the rows from obsm', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(tableOnlyStoreFixture()),
+    })
+
+    const overview = await dataset.overview()
+    expect(overview.map((cell) => [cell.cellId, cell.position])).toEqual([
+      ['cell-a', { x: 1, y: 2 }],
+      ['cell-b', { x: 3, y: 4 }],
+      ['cell-c', { x: 5, y: 6 }],
+    ])
+    await expect(dataset.summary()).resolves.toMatchObject({
+      coordinateSystem: 'global',
+      coordinateSystems: [],
+      table: 'table',
+    })
+  })
+})
+
 describe('SpatialDataDataset units and labels', () => {
   it('scales placements, boundaries, and the image by the µm-per-unit override', async () => {
     const openImage = imageOpenerFixture()
@@ -1305,6 +1326,47 @@ function polygonRows(): readonly Record<string, unknown>[] {
     { geometry: { type: 'Polygon', coordinates: square(0) }, id: 10n },
     { geometry: { type: 'Polygon', coordinates: square(2) }, id: 11n },
   ]
+}
+
+// A store whose only element is a table, placed by its obsm/spatial.
+function tableOnlyStoreFixture(): ReadonlyMap<string, Uint8Array> {
+  const metadata: Record<string, unknown> = {
+    '.zgroup': { zarr_format: 2 },
+    '.zattrs': { spatialdata_attrs: { version: '0.1' } },
+    'tables/.zgroup': { zarr_format: 2 },
+    'tables/table/.zgroup': { zarr_format: 2 },
+    'tables/table/.zattrs': { 'encoding-type': 'anndata' },
+    'tables/table/obs/.zgroup': { zarr_format: 2 },
+    'tables/table/obs/.zattrs': {
+      _index: '_index',
+      'column-order': [],
+      'encoding-type': 'dataframe',
+    },
+    'tables/table/obs/_index/.zarray': arrayMeta([3], '|S6'),
+    'tables/table/var/.zgroup': { zarr_format: 2 },
+    'tables/table/var/.zattrs': { _index: '_index', 'encoding-type': 'dataframe' },
+    'tables/table/var/_index/.zarray': arrayMeta([1], '|S4'),
+    'tables/table/obsm/.zgroup': { zarr_format: 2 },
+    'tables/table/obsm/spatial/.zarray': arrayMeta([3, 2], '<f8'),
+    'tables/table/X/.zgroup': { zarr_format: 2 },
+    'tables/table/X/.zattrs': { 'encoding-type': 'csr_matrix', shape: [3, 1] },
+    'tables/table/X/data/.zarray': arrayMeta([1], '<f4'),
+    'tables/table/X/indices/.zarray': arrayMeta([1], '<i4'),
+    'tables/table/X/indptr/.zarray': arrayMeta([4], '<i4'),
+  }
+
+  return new Map<string, Uint8Array>([
+    [
+      '/zmetadata',
+      new TextEncoder().encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
+    ],
+    ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b', 'cell-c'], 6)],
+    ['/tables/table/var/_index/0', fixedStrings(['Actb'], 4)],
+    ['/tables/table/obsm/spatial/0.0', bytes(new Float64Array([1, 2, 3, 4, 5, 6]))],
+    ['/tables/table/X/data/0', bytes(new Float32Array([1]))],
+    ['/tables/table/X/indices/0', bytes(new Int32Array([0]))],
+    ['/tables/table/X/indptr/0', bytes(new Int32Array([0, 1, 1, 1]))],
+  ])
 }
 
 function shapesReaderFixture(
