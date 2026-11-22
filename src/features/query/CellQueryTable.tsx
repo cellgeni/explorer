@@ -252,7 +252,12 @@ export function CellQueryTable({
   } as CSSProperties
   const pictureOutlines =
     pictures !== null && outlines.key === pictures.key ? outlines.outlines : null
-  const focusIndex = Math.min(activeIndex, Math.max(0, rowCount - 1))
+  // The row Tab enters the table at: the active one, or while it is scrolled
+  // out of the drawn rows, the nearest drawn one, so the rows stay reachable.
+  const focusIndex = Math.max(
+    start,
+    Math.min(activeIndex, Math.max(0, rowCount - 1), Math.max(start, end - 1)),
+  )
   const rows = Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
     const index = start + offset
     const cellId = table.cellIdAt(index)
