@@ -629,7 +629,7 @@ the same view (a Visium off-tissue toggle) keeps them.
 | Swatch              | `{name} color`. New selections take the next of 8 bright colours; the outline on the canvas uses it                       |
 | Checkbox            | `{name} visible`. Hidden selections are not outlined; the one in the card always is                                       |
 | Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                 |
-| Area                | µm², from the box or lasso                                                                                                |
+| Area                | µm², from the box or lasso; a lasso that crosses itself counts each lobe it selects                                       |
 | `Go to {name}`      | Fits the view to it                                                                                                       |
 | `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too |
 | `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                            |
