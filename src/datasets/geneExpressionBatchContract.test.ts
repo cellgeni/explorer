@@ -128,9 +128,11 @@ describe.each(READERS)('GeneExpressionBatch from $name', ({ open }) => {
       const deviation = Math.sqrt(
         values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length,
       )
+      // A z-score combines two or more genes; the batch's counts are the
+      // sum, and halving every count leaves each z-score as it is.
       const scores = geneExpressionScores(
         batch.elements,
-        batch.genes,
+        [...batch.genes, 'Other'],
         'z-score',
         batch.cellCount,
       )

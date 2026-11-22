@@ -1934,7 +1934,7 @@ describe('deck layer factory', () => {
           count: 8,
         },
       ],
-      ['Gad1'],
+      ['Gad1', 'Sst'],
       'gold',
       'z-score',
     )
@@ -1945,6 +1945,26 @@ describe('deck layer factory', () => {
     expect(data[2]?.fillColor).toEqual([255, 221, 99, 245])
   })
 
+  it.each(['mean', 'z-score'] as const)(
+    'scores one gene by its expression under Combine genes %s',
+    (scoreMode) => {
+      const counts = [0, 1, 2, 3, 4, 40]
+      const elements = counts.map((count, index) => ({
+        id: intToCellId(1, index + 1),
+        position: { x: micrometers(index), y: micrometers(0) },
+        count,
+      }))
+
+      expect(geneExpressionScores(elements, ['Snap25'], scoreMode)).toEqual(counts)
+      expect(
+        geneExpressionElementsToLayerData(elements, ['Snap25'], 'gold', scoreMode).map(
+          (cell) => cell.expressionCount,
+        ),
+      ).toEqual(counts)
+      expect(geneExpressionScoreSpread(elements, ['Snap25'], scoreMode).highest).toBe(40)
+    },
+  )
+
   it('leaves a stored NaN or infinity out of z-scores and the scale', () => {
     const counts = [0, 1, 1, Number.NaN, 0, 2, Number.POSITIVE_INFINITY]
     const elements = counts.map((count, index) => ({
@@ -1954,7 +1974,7 @@ describe('deck layer factory', () => {
     }))
     // By hand over the five finite cells: 0, 1, 1, 0 and 2 have mean 0.8 and
     // SD 0.748, so the cell with 2 is +1.604.
-    const zScores = geneExpressionScores(elements, ['Nan'], 'z-score')
+    const zScores = geneExpressionScores(elements, ['Nan', 'Inf'], 'z-score')
     expect(zScores[5]).toBeCloseTo(1.604, 3)
     expect(zScores.filter(Number.isFinite)).toHaveLength(5)
     expect(zScores[3]).toBeNaN()

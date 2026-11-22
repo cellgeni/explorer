@@ -454,6 +454,10 @@ when the zoom changes (by a quarter level for samples), and when a pan or a
 wider viewer takes the view outside the area read, so every cell in view has
 its score.
 
+`Combine genes` applies to two or more genes. With one gene, cells show its
+expression whatever the control was set to, so removing a gene from a Z-score
+pair shows the other's expression, and adding one back brings Z-score back.
+
 `Combine genes` Z-score compares each cell's mean with the mean and standard
 deviation of the cells read: all cells when the whole slide is read (Auto LOD
 up to 500,000 cells, its whole-slide sample, or All cells), otherwise the
