@@ -160,8 +160,10 @@ interface SpatialDataState {
 }
 
 type BoundarySource =
-  | { readonly kind: 'shapes'; readonly entry: SpatialDataPlacedElement }
-  | { readonly kind: 'labels'; readonly entry: SpatialDataPlacedElement }
+  | { readonly kind: 'shapes'; readonly entries: readonly [SpatialDataPlacedElement] }
+  // Every labels region with rows, such as one labels element per field of
+  // view annotated by one table.
+  | { readonly kind: 'labels'; readonly entries: readonly SpatialDataPlacedElement[] }
 
 // Per-row placement in coordinate-system units, before unit scaling.
 type RawPlacement =
@@ -310,7 +312,11 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       regions: [...view.regionShapes, ...view.regionLabels].map(
         (entry) => entry.element.name,
       ),
-      ...(boundaries === null ? {} : { boundaries: boundaries.entry.element.name }),
+      ...(boundaries === null
+        ? {}
+        : {
+            boundaries: boundaries.entries.map((entry) => entry.element.name).join(', '),
+          }),
       ...(view.nucleusCandidates[0] === undefined
         ? {}
         : { nuclei: view.nucleusCandidates[0].element.name }),
@@ -376,10 +382,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
             segmentations: [
               ...(boundaries === null
                 ? []
-                : [segmentationInfo('cell', boundaries.kind, boundaries.entry)]),
+                : [segmentationInfo('cell', boundaries.kind, boundaries.entries)]),
               ...(nuclei === undefined
                 ? []
-                : [segmentationInfo('nucleus', 'shapes', nuclei)]),
+                : [segmentationInfo('nucleus', 'shapes', [nuclei])]),
             ],
           }),
       ...(loader === null
@@ -400,7 +406,10 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     const source = await this.boundarySource()
 
     if (source?.kind === 'labels') {
-      return { elements: await this.labelElements(source.entry, bbox) }
+      const regions = await Promise.all(
+        source.entries.map((entry) => this.labelElements(entry, bbox)),
+      )
+      return { elements: regions.flat() }
     }
 
     this.shapeElements = viewportElements(
@@ -1149,11 +1158,11 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     await table.cellIds()
 
     if (view.regionShapes.length === 0) {
-      const entry = view.regionLabels.find(
+      const entries = view.regionLabels.filter(
         (candidate) =>
           (this.labelCellIdsByRegion.get(candidate.element.name)?.size ?? 0) > 0,
       )
-      return entry === undefined ? null : { kind: 'labels', entry }
+      return entries.length === 0 ? null : { kind: 'labels', entries }
     }
 
     // Region circles (for example Xenium cell_circles) are replaced by a
@@ -1163,7 +1172,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         ? view.regionShapes[0]
         : (view.boundaryCandidates[0] ?? view.regionShapes[0])
 
-    return entry === undefined ? null : { kind: 'shapes', entry }
+    return entry === undefined ? null : { kind: 'shapes', entries: [entry] }
   }
 
   private boundaryIndex(): Promise<BoundaryIndex> {
@@ -1185,7 +1194,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
       return boundaryIndexOf([], [], [], [])
     }
 
-    const boundary = source.entry
+    const [boundary] = source.entries
 
     if (view.regionShapes.some((entry) => entry.element === boundary.element)) {
       return this.regionBoundaryIndex()
@@ -1596,17 +1605,22 @@ function boundaryElement(
 function segmentationInfo(
   kind: 'cell' | 'nucleus',
   sourceKind: 'shapes' | 'labels',
-  entry: SpatialDataPlacedElement,
+  entries: readonly SpatialDataPlacedElement[],
 ): SegmentationInfo {
+  const names = entries.map((entry) => entry.element.name).join(', ')
+
   return {
     id: kind,
     kind,
-    label: `${kind === 'cell' ? 'Cell' : 'Nucleus'} boundaries (${entry.element.name})`,
+    label: `${kind === 'cell' ? 'Cell' : 'Nucleus'} boundaries (${names})`,
     sourceKind: sourceKind === 'shapes' ? 'parquet' : 'zarr',
-    path:
-      sourceKind === 'shapes'
-        ? `${entry.element.path}/shapes.parquet`
-        : entry.element.path,
+    path: entries
+      .map((entry) =>
+        sourceKind === 'shapes'
+          ? `${entry.element.path}/shapes.parquet`
+          : entry.element.path,
+      )
+      .join(', '),
   }
 }
 

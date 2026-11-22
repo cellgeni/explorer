@@ -235,6 +235,9 @@ thread keeps no object or typed array per shape.
 - Otherwise (for example Xenium `cell_circles` as the region) the first
   boundary candidate is drawn, matched to cells through the region instance
   ids. If no id matches, it falls back to the region geometry.
+- A table that annotates labels instead has every labels region with rows
+  traced, so a table over one labels element per field of view (spatialdata-io
+  CosMx) is outlined in every field.
 
 `readBoundaryIndex` keeps, per cell, the index of its shape in the shape
 columns and its bounds in µm; `elements(bbox)` is a linear bounds filter over
