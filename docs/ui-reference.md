@@ -922,7 +922,9 @@ Method:
   rule, as scipy's `gaussian_kde` behind seaborn's and Scanpy's violins does.
   The kernel is reflected at the ends, so a spike of zeros keeps its size.
 - "% expressing" is the share of a group's cells with a stored value above 0,
-  as in the Selection card. A group's mean counts its cells without a stored
+  as in the Selection card, shown to one decimal: a share above 0 that would
+  round to 0% reads "<0.1%", and one below 100 that would round to 100% reads
+  ">99.9%". The CSV keeps the number. A group's mean counts its cells without a stored
   value as 0.
 - A cell that two classes of an imported set both list counts in both, and
   IDs that match no matrix row are left out; a note says how many of each.

@@ -7,7 +7,12 @@ import {
 import { dotPlotModel, dotPlotSvg, dotRadius, meansPlotTable } from './dotPlot'
 import { heatmapModel, heatmapRowHeight, heatmapSvg } from './heatmap'
 import { plotFileName, plotStatsCsv } from './plotExport'
-import { PANEL_PLOT_PAINT, truncateLabel } from './plotModel'
+import {
+  formatCellCount,
+  formatPercent,
+  PANEL_PLOT_PAINT,
+  truncateLabel,
+} from './plotModel'
 import { svgDocument, svgMarkup } from './svgMarkup'
 
 function parse(markup: string): Document {
@@ -78,6 +83,20 @@ describe('dot plot (plan 22-E)', () => {
 
     expect(intensities(0)).toEqual([0, 1])
     expect(intensities(1)).toEqual([0, 0])
+  })
+
+  it('never rounds a share above 0 to 0%, or one below 100 to 100%', () => {
+    expect(formatPercent(0.01)).toBe('<0.1%')
+    expect(formatPercent(99.99)).toBe('>99.9%')
+    expect([0, 0.05, 50, 99.9, 100].map(formatPercent)).toEqual([
+      '0%',
+      '0.1%',
+      '50%',
+      '99.9%',
+      '100%',
+    ])
+    expect(formatCellCount(1)).toBe('1 cell')
+    expect(formatCellCount(1_000)).toBe('1,000 cells')
   })
 
   it('draws a dot per group and gene with cells expressing, each with a title', () => {
