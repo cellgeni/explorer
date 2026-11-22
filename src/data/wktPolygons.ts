@@ -4,7 +4,10 @@
 // SpatialData shapes: holes are dropped, and a MULTIPOLYGON keeps its largest
 // polygon.
 
-const WKT_KEYWORD = /^\s*"?\s*(?:SRID=\d+;)?\s*(?:MULTI)?POLYGON\b/i
+// The keyword, an optional Z, M or ZM, then `(` or EMPTY, so that a header
+// cell named `polygon` is not taken for a value.
+const WKT_KEYWORD =
+  /^\s*"?\s*(?:SRID=\d+;)?\s*(?:MULTI)?POLYGON\s*(?:ZM|Z|M)?\s*(?:\(|EMPTY\b)/i
 const POW10 = Array.from({ length: 23 }, (_value, exponent) => 10 ** exponent)
 
 // Whether `text` starts like a WKT polygon (a quote before it is allowed, as

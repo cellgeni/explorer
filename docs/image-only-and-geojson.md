@@ -150,10 +150,12 @@ label value, or for polygons the first of these that the file has:
 - GeoJSON: the `cell_id`, `cellId`, `label`, `label_id` or `id` property,
   then the feature's own `id` (QuPath's UUID), then `object_id`, `objectId`
   or `name`.
-- Tables and Parquet: the pandas index column, or a column named `cell_id`,
-  `cell`, `label_id`, `label`, `id`, `object_id`, `entityid`, `instance_id`,
-  `name` or `barcode` (any case). A CSV's unnamed first column is pandas'
-  index.
+- Tables and Parquet: a named pandas index column, or a column named
+  `cell_id`, `cell`, `label_id`, `label`, `entityid`, `id`, `object_id`,
+  `instance_id`, `name` or `barcode` (any case), in that order, else an
+  unnamed pandas index (`__index_level_0__`, the row labels of a filtered
+  frame). A CSV's unnamed first column is pandas' index. A header cell named
+  `polygon` or `geometry` is a header, not a value.
 - Otherwise the row or feature number, from 0.
 
 ### Placement

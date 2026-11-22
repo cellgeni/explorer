@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  segmentationFormatFromFileName,
   segmentationFormatFromName,
   segmentationLinkFor,
   segmentationSourceFromLink,
@@ -19,6 +20,12 @@ describe('segmentationFormatFromName', () => {
     expect(segmentationFormatFromName('cells.parquet')).toBe('parquet')
     expect(segmentationFormatFromName('cells.csv.gz')).toBe('wkt')
     expect(segmentationFormatFromName('cells.wkt')).toBe('wkt')
+  })
+
+  it("reads a picked file's whole name, # and ? included", () => {
+    expect(segmentationFormatFromFileName('Sample#1_cp_masks.tif')).toBe('label-tiff')
+    expect(segmentationFormatFromFileName('cells?v2.geojson')).toBe('geojson')
+    expect(segmentationFormatFromFileName('cells.wkt#old')).toBeNull()
   })
 
   it('refuses gzipped binary formats and unknown names', () => {
