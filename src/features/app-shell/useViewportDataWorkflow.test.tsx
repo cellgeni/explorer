@@ -675,6 +675,61 @@ describe('useViewportDataWorkflow', () => {
       elements: [],
       overLimit: { count: 250_000 },
     }))
+    // Zoomed in to cell scale with more cells in view than the limit of 10.
+    const overLimitDetail: ViewerViewportDetail = { ...detail, visibleCellCount: 20 }
+
+    render(
+      <Probe
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={vi.fn(async () => batch)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        selectedGenes={[]}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(overLimitDetail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(snapshot.boundaryState).toEqual({
+      status: 'ready',
+      url: 'https://example.test/output',
+      cellCount: 0,
+      overLimit: { count: 250_000 },
+    })
+
+    // The same view would be covered by a drawn request; this one drew
+    // nothing, so it is asked for again.
+    act(() => {
+      api.handleViewportChange(overLimitDetail)
+    })
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(2)
+  })
+
+  it('reads the view alone when its margin holds more outlines than the limit', async () => {
+    // Over the limit of 10 for the padded box, under it for the view.
+    const loadBoundaryElements = vi.fn(async (_url: string, box: BBox) =>
+      box.minX < bbox.minX
+        ? { elements: [], overLimit: { count: 12 } }
+        : {
+            elements: [
+              {
+                id: 'boundary-1',
+                geometry: {
+                  kind: 'polygon' as const,
+                  rings: [[{ x: micrometers(1), y: micrometers(2) }]],
+                },
+              },
+            ],
+          },
+    )
 
     render(
       <Probe
@@ -694,21 +749,16 @@ describe('useViewportDataWorkflow', () => {
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
+      await Promise.resolve()
     })
 
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(2)
+    expect(loadBoundaryElements.mock.calls[1]?.[1]).toEqual(bbox)
     expect(snapshot.boundaryState).toEqual({
       status: 'ready',
       url: 'https://example.test/output',
-      cellCount: 0,
-      overLimit: { count: 250_000 },
+      cellCount: 1,
     })
-
-    // The same view would be covered by a drawn request; this one drew
-    // nothing, so it is asked for again.
-    act(() => {
-      api.handleViewportChange(detail)
-    })
-    expect(loadBoundaryElements).toHaveBeenCalledTimes(2)
   })
 
   it('retries retryable gene expression load failures once', async () => {
@@ -769,6 +819,46 @@ describe('useViewportDataWorkflow', () => {
 
     expect(loadGeneExpression).toHaveBeenCalledTimes(1)
     expect(snapshot.geneExpressionState.status).toBe('error')
+  })
+
+  it('reads a failed whole-slide expression again for the next view, not the same one', async () => {
+    const loadGeneExpression = vi
+      .fn<() => Promise<GeneExpressionBatch>>()
+      .mockRejectedValueOnce(new Error('matrix unavailable'))
+      .mockResolvedValue(batch)
+
+    render(
+      <Probe
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detailWithoutBoundaryLoad)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    // The Probe replays the same view on each render; that reads nothing.
+    expect(loadGeneExpression).toHaveBeenCalledTimes(1)
+    expect(snapshot.geneExpressionState.status).toBe('error')
+
+    // The viewer reports a view again (a pan): the whole slide is read again.
+    act(() => {
+      api.handleViewportChange({ ...detailWithoutBoundaryLoad })
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(loadGeneExpression).toHaveBeenCalledTimes(2)
+    expect(snapshot.geneExpressionState.status).toBe('ready')
   })
 
   it('clears gene expression state when no genes are selected', () => {
