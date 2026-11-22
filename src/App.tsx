@@ -2825,6 +2825,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
+    linkedAnnotationUrl,
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
@@ -3086,6 +3087,18 @@ export function App({ dependencies }: AppProps = {}) {
       return
     }
 
+    // The labels are the link's dataset's: another dataset, opened after
+    // the link's failed or was cancelled, does not take them.
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+
+    if (
+      initialDatasetUrl !== undefined &&
+      initialDatasetUrl !== '' &&
+      initialDatasetUrl !== loadedDatasetUrl
+    ) {
+      return
+    }
+
     // Loading a set replaces the labels shown, so an import that finished
     // first was lost. The link's labels were made with the set loaded
     // first, so its import waits for the set: while the dataset lists its
@@ -3125,6 +3138,7 @@ export function App({ dependencies }: AppProps = {}) {
     }
   }, [
     annotationGroupState.status,
+    initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
     loadRequestId,
@@ -4003,7 +4017,7 @@ export function App({ dependencies }: AppProps = {}) {
   ])
   const currentShareUrl = useShareableUrlHash({
     dataset: {
-      annotationUrl: annotationImportUrl,
+      annotationUrl: linkedAnnotationUrl ?? '',
       customImageOpacities,
       customImageUrls,
       segmentation: segmentationLinkFor(
