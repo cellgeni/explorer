@@ -6,7 +6,10 @@ import type {
 import type { MorphologyImageChannel } from '../../data/morphologyImage'
 import { normalizeCellPointScale } from '../../rendering/cellPointStyle'
 import { defaultEnabledChannelIds } from '../morphology/morphologyChannels'
-import { parseObservationColorMode } from '../app-shell/appShellModel'
+import {
+  manifestObservationColorMode,
+  parseObservationColorMode,
+} from '../app-shell/appShellModel'
 import {
   parseGeneExpressionColorScale,
   parseGeneExpressionScoreMode,
@@ -54,7 +57,10 @@ export interface ManifestDefaultsState {
 }
 
 // Maps a manifest's `defaults` onto share-URL fields, so they follow the same
-// restore path as a shared link (which takes precedence over them).
+// restore path as a shared link (which takes precedence over them). The colour
+// mode is the one the manifest opens in, so genes without `colorCellsBy` give
+// gene expression: a link compares its colour mode with it, and one that names
+// another mode keeps it.
 export function manifestDefaultsToShareableState(
   defaults: DatasetManifestDefaults | undefined,
 ): ManifestDefaultsState {
@@ -81,11 +87,14 @@ export function manifestDefaultsToShareableState(
     return parsed
   }
 
-  const observationColorMode = enumValue(
-    'colorCellsBy',
-    defaults.colorCellsBy,
-    parseObservationColorMode,
-  )
+  const observationColorMode = manifestObservationColorMode({
+    observationColorMode: enumValue(
+      'colorCellsBy',
+      defaults.colorCellsBy,
+      parseObservationColorMode,
+    ),
+    selectedGenes: defaults.genes,
+  })
   const geneExpressionColorScale = enumValue(
     'geneColorScale',
     defaults.geneColorScale,

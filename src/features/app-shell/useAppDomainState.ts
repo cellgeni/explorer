@@ -134,6 +134,8 @@ import {
 import {
   IDLE_TRANSCRIPT_CAPABILITY_STATE,
   IDLE_TRANSCRIPT_LAYER_STATE,
+  normalizeTranscriptMinQv,
+  normalizeTranscriptPointSize,
   parseTranscriptDensityColorScale,
   parseTranscriptDetailMode,
   parseTranscriptFeatureFilterMode,
@@ -326,8 +328,11 @@ export function useAppDomainState({
       parseTranscriptDetailMode(initialShareableState.transcriptDetailMode) ??
       DEFAULT_SHAREABLE_STATE.transcriptDetailMode,
   )
-  const [transcriptMinQv, setTranscriptMinQv] = useState(
-    initialShareableState.transcriptMinQv ?? DEFAULT_SHAREABLE_STATE.transcriptMinQv,
+  // A hand-edited link can name values the controls do not have.
+  const [transcriptMinQv, setTranscriptMinQv] = useState(() =>
+    normalizeTranscriptMinQv(
+      initialShareableState.transcriptMinQv ?? DEFAULT_SHAREABLE_STATE.transcriptMinQv,
+    ),
   )
   const [transcriptGeneOnly, setTranscriptGeneOnly] = useState(
     initialShareableState.transcriptGeneOnly ??
@@ -362,9 +367,11 @@ export function useAppDomainState({
   const [transcriptOpacity, setTranscriptOpacity] = useState(
     initialShareableState.transcriptOpacity ?? DEFAULT_SHAREABLE_STATE.transcriptOpacity,
   )
-  const [transcriptPointSize, setTranscriptPointSize] = useState(
-    initialShareableState.transcriptPointSize ??
-      DEFAULT_SHAREABLE_STATE.transcriptPointSize,
+  const [transcriptPointSize, setTranscriptPointSize] = useState(() =>
+    normalizeTranscriptPointSize(
+      initialShareableState.transcriptPointSize ??
+        DEFAULT_SHAREABLE_STATE.transcriptPointSize,
+    ),
   )
   // The transcript gene legend (15.4-C): edited colours, and genes whose
   // points are hidden; with Point color on Gene set, the same by set ID.

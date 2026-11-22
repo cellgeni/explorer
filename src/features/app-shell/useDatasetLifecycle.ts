@@ -154,7 +154,7 @@ import {
   startLatestRequest,
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
-import { manifestObservationColorMode, sharedObservationColorMode } from './appShellModel'
+import { parseObservationColorMode, sharedObservationColorMode } from './appShellModel'
 import {
   IDLE_BOUNDARY_LOAD_STATE,
   IDLE_CELL_FEATURE_MATRIX_CAPABILITY_STATE,
@@ -849,7 +849,9 @@ export function useDatasetLifecycle({
   // Boundary toggles and image channels are applied with the platform's own
   // defaults instead.
   function applyManifestDefaults(defaults: ShareableState) {
-    const observationColorMode = manifestObservationColorMode(defaults)
+    // Already the mode the manifest's genes imply (manifestDefaultsToShareableState),
+    // and left out when the link names one.
+    const observationColorMode = parseObservationColorMode(defaults.observationColorMode)
     const geneExpressionColorScale = parseGeneExpressionColorScale(
       defaults.geneExpressionColorScale,
     )

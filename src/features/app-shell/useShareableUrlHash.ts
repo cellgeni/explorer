@@ -74,6 +74,9 @@ interface ShareableViewHashOptions {
 
 interface ShareableLayerHashOptions {
   readonly boundaryCellLimit: number
+  // The device's own Boundary limit (its performance budget). The link leaves
+  // the limit out at this value, so each reader keeps their device's.
+  readonly deviceBoundaryCellLimit: number
   readonly coordinateUnit: string
   readonly imageOpacity: number
   readonly cellFillOpacity: number
@@ -136,6 +139,10 @@ interface UseShareableUrlHashOptions {
   // took a link this page did not write (one pasted for the open dataset).
   // Reloading opens that link, with its view and settings.
   readonly onHistoryDatasetChange?: () => void
+  // True while the dataset the address names is opening. The load applies the
+  // link's card, ROI, channels and z plane later, so until then the address
+  // keeps the link, and so does Copy Link.
+  readonly linkOpening?: boolean
 }
 
 function reloadPage(): void {
@@ -200,6 +207,7 @@ export function useShareableUrlHash({
   transcripts,
   view,
   onHistoryDatasetChange = reloadPage,
+  linkOpening = false,
 }: UseShareableUrlHashOptions): () => string {
   const {
     annotationGroupIds,
@@ -243,6 +251,7 @@ export function useShareableUrlHash({
   } = view
   const {
     boundaryCellLimit,
+    deviceBoundaryCellLimit,
     cellMetadataTrackId,
     cellBoundaryOpacity,
     cellFillOpacity,
@@ -368,7 +377,7 @@ export function useShareableUrlHash({
           coordinateUnit,
           measurementUnit,
           shouldLoadMorphology,
-          boundaryCellLimit,
+          ...(boundaryCellLimit === deviceBoundaryCellLimit ? {} : { boundaryCellLimit }),
           imageOpacity,
           cellFillOpacity,
           cellPointScale,
@@ -416,7 +425,10 @@ export function useShareableUrlHash({
         datasetDefaults,
       ),
     )
-    hashRef.current = hash
+    // Until the link's dataset opens, the address and Copy Link keep the link.
+    hashRef.current = linkOpening ? null : hash
+
+    if (linkOpening) return
 
     const timeout = window.setTimeout(() => {
       if (leavingRef.current) return
@@ -454,6 +466,7 @@ export function useShareableUrlHash({
     compareKey,
     sectionView,
     boundaryCellLimit,
+    deviceBoundaryCellLimit,
     cellMetadataTrackId,
     coordinateUnit,
     customImageOpacities,
@@ -484,6 +497,7 @@ export function useShareableUrlHash({
     morphologyZPlane,
     imageView,
     cellView,
+    linkOpening,
     magicLensRadiusMicrometers,
     magicLensScope,
     measurementUnit,

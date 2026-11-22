@@ -2710,6 +2710,98 @@ describe('App', () => {
     ).not.toBeInTheDocument()
   })
 
+  it('keeps a link in the address until its dataset opens and applies it', async () => {
+    // The load applies the card, ROI, channels and z plane later, so a rewrite
+    // from the state before then would drop them.
+    const link = `#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&genes=Actb&card=boundary%3Aaaaabbbb-1&roi=box%3A0%2C0%2C100%2C100&channels=Channel%3A1&z=2`
+    window.history.replaceState(null, '', `/${link}`)
+    const overview = deferredPromise<Awaited<ReturnType<DatasetOverviewLoader>>>()
+    const warmup = deferredPromise<Awaited<ReturnType<DatasetWarmupLoader>>>()
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(() => overview.promise)}
+        warmDatasetForRoi={vi.fn(() => warmup.promise)}
+      />,
+    )
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+    })
+
+    expect(window.location.hash).toBe(link)
+
+    await act(async () => {
+      overview.resolve([
+        {
+          cellId: intToCellId(1, 1),
+          position: { x: micrometers(10), y: micrometers(20) },
+          transcriptCount: 8,
+        },
+      ])
+    })
+
+    // Once it has opened, the address follows the view again. It keeps the
+    // channels and plane while the image opens, the outline's card until the
+    // outline loads, and the ROI while the dataset prepares.
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellBounds=')
+    })
+    expect(window.location.hash).toContain('channels=Channel%3A1')
+    expect(window.location.hash).toMatch(/[#&]z=2(&|$)/)
+    expect(window.location.hash).toContain('card=boundary%3Aaaaabbbb-1')
+    expect(window.location.hash).toContain('roi=box%3A0%2C0%2C100%2C100')
+
+    // Prepared: the ROI is restored, and stays in the link as the selection.
+    await act(async () => {
+      warmup.resolve()
+    })
+    expect(await screen.findByRole('region', { name: 'Shared ROI' })).toBeInTheDocument()
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    })
+    expect(window.location.hash).toContain('roi=box%3A0%2C0%2C100%2C100')
+  })
+
+  it('drops a link’s pending card and ROI when another dataset opens', async () => {
+    const datasetB = 'https://example.test/xenium-b'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(DEMO_DATASET_URL)}&card=boundary%3Aaaaabbbb-1&roi=box%3A0%2C0%2C100%2C100`,
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+        warmDatasetForRoi={vi.fn(() => pendingPromise<never>())}
+      />,
+    )
+    await waitFor(() => {
+      expect(window.location.hash).toContain('cellBounds=')
+    })
+    expect(window.location.hash).toContain('roi=')
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: datasetB },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await waitFor(() => {
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('dataset')).toBe(
+        datasetB,
+      )
+    })
+
+    expect(window.location.hash).not.toContain('card=')
+    expect(window.location.hash).not.toContain('roi=')
+  })
+
   it('shows the start screen again, with the reason, when the first load fails (15.3-A)', async () => {
     const loadDatasetOverview = vi.fn(async () => {
       throw new Error('HTTP 500 for cells.parquet')

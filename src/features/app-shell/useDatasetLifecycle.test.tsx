@@ -1186,6 +1186,50 @@ describe('useDatasetLifecycle', () => {
     )
   })
 
+  it('keeps a link’s colour mode over the gene expression a manifest’s genes open in', async () => {
+    const refs = createLifecycleRefs()
+    const datasetUrl = 'https://example.test/xenium'
+    // As examples/bia/S-BIAD2376.json: genes without colorCellsBy.
+    const detectSpatialDataset = vi.fn(async () => ({
+      platform: 'xenium' as const,
+      baseUrl: datasetUrl,
+      manifest: {
+        platform: 'xenium' as const,
+        url: `${datasetUrl}/explorer.json`,
+        rootUrl: datasetUrl,
+        files: {},
+        defaults: { genes: ['COL1A1'] },
+      },
+      checked: [],
+    }))
+    const setObservationColorMode = vi.fn()
+    const setSelectedGenes = vi.fn()
+    const setLoadState = vi.fn()
+
+    // The link leaves the manifest's gene out and names Transcript count.
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={detectSpatialDataset}
+        extraSetters={{ setObservationColorMode, setSelectedGenes }}
+        initialShareableState={{
+          linkVersion: 2,
+          datasetUrl,
+          observationColorMode: 'transcript-count',
+        }}
+        setLoadState={setLoadState}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(setLoadState).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ready', url: datasetUrl }),
+      )
+    })
+    expect(setSelectedGenes).toHaveBeenLastCalledWith(['COL1A1'])
+    expect(setObservationColorMode).toHaveBeenLastCalledWith('transcript-count')
+  })
+
   it('loads SpatialData tables through AnnData readers and shows boundaries', async () => {
     const refs = createLifecycleRefs()
     const startDatasetLoadRef = {

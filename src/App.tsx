@@ -867,6 +867,24 @@ export function App({ dependencies }: AppProps = {}) {
     return retainDataset(openingDatasetUrl)
   }, [openingDatasetUrl, retainDataset])
   const linkNamesDataset = (initialShareableState.datasetUrl?.trim() ?? '') !== ''
+  // Until the dataset the link names has opened, failed or been cancelled, or
+  // another is opening, the address keeps the link (useShareableUrlHash).
+  const [linkOpeningStage, setLinkOpeningStage] = useState<
+    'waiting' | 'loading' | 'done'
+  >(linkNamesDataset ? 'waiting' : 'done')
+  if (linkOpeningStage !== 'done') {
+    const nextStage =
+      loadState.status === 'ready' ||
+      loadState.status === 'error' ||
+      (loadState.status === 'loading' &&
+        loadState.url.trim() !== initialShareableState.datasetUrl?.trim()) ||
+      (loadState.status === 'idle' && linkOpeningStage === 'loading')
+        ? 'done'
+        : loadState.status === 'loading'
+          ? 'loading'
+          : linkOpeningStage
+    if (nextStage !== linkOpeningStage) setLinkOpeningStage(nextStage)
+  }
   // Set below, where the functions that open datasets are defined.
   const openCollectionDatasetRef = useRef<
     ((url: string, opening: CollectionDatasetOpening) => void) | null
@@ -1836,30 +1854,31 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells.length,
   )
   const magicLensLoadEnabled = magicLensAvailability.loadEnabled
+  // While the link's dataset opens its image, the link's channels and plane
+  // stay in it.
+  const linkImageOpening =
+    morphologyState.status === 'loading' &&
+    shownDatasetUrl !== null &&
+    shownDatasetUrl.trim() === initialShareableState.datasetUrl?.trim()
   const shareableMorphologyEnabledChannelIds = useMemo(() => {
-    if (baseMorphologyChannelIds.size === 0) {
-      return undefined
-    }
-
-    if (morphologyChannelSettings.length > 0) {
+    if (baseMorphologyChannelIds.size > 0 && morphologyChannelSettings.length > 0) {
       return morphologyChannelSettings
         .filter((setting) => setting.enabled && baseMorphologyChannelIds.has(setting.id))
         .map((setting) => setting.id)
     }
 
-    return morphologyState.status === 'loading'
+    return linkImageOpening
       ? initialShareableState.morphologyEnabledChannelIds
       : undefined
   }, [
     initialShareableState.morphologyEnabledChannelIds,
     baseMorphologyChannelIds,
+    linkImageOpening,
     morphologyChannelSettings,
-    morphologyState.status,
   ])
-  // While the image opens, a shared plane stays in the link.
   const shareableMorphologyZPlane =
     morphologyImage?.zStack?.zPlane ??
-    (morphologyImage === null && morphologyState.status === 'loading'
+    (morphologyImage === null && linkImageOpening
       ? initialShareableState.morphologyZPlane
       : undefined)
   const magicLensIsCursorActive =
@@ -4081,7 +4100,34 @@ export function App({ dependencies }: AppProps = {}) {
     selectedGridCell,
     spatialGridCells,
   ])
+  // After the link's dataset opens, the link keeps its card and ROI until they
+  // are applied: a bin or outline once it loads in view, the ROI once ROI
+  // queries can run (after dataset preparation). Another selection, or
+  // another dataset, drops them, as linkedCardRef and useSelectionList do.
+  const linkDatasetLoaded =
+    loadedDatasetUrl === null
+      ? null
+      : loadedDatasetUrl === initialShareableState.datasetUrl?.trim()
+  const [linkCardPending, setLinkCardPending] = useState(
+    () => cardFromLink(initialShareableState) !== null,
+  )
+  if (
+    linkCardPending &&
+    (selectedCell !== null ||
+      selectedGridCell !== null ||
+      selectedBoundaryCell !== null ||
+      linkDatasetLoaded === false ||
+      (linkDatasetLoaded === true &&
+        cardFromLink(initialShareableState)?.kind === 'cell' &&
+        overviewCells.length > 0))
+  ) {
+    setLinkCardPending(false)
+  }
+  const [linkRoiPending, setLinkRoiPending] = useState(
+    () => initialShareableState.roiSelection !== undefined,
+  )
   const currentShareUrl = useShareableUrlHash({
+    linkOpening: linkOpeningStage !== 'done',
     dataset: {
       annotationUrl: linkedAnnotationUrl ?? '',
       customImageOpacities,
@@ -4124,6 +4170,7 @@ export function App({ dependencies }: AppProps = {}) {
     },
     layers: {
       boundaryCellLimit,
+      deviceBoundaryCellLimit: performanceBudget.boundaryCellLimit,
       cellBoundaryOpacity,
       cellFillOpacity,
       cellPointScale,
@@ -4169,14 +4216,17 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     view: {
-      activeRoiSelection,
+      activeRoiSelection:
+        activeRoiSelection ??
+        (linkRoiPending ? (initialShareableState.roiSelection ?? null) : null),
       shareableViewState,
       panels: sharedPanels,
-      card: cardForLink({
-        cellId: selectedCell?.id,
-        binId: selectedGridCell?.id,
-        boundaryId: selectedBoundaryCell?.id,
-      }),
+      card:
+        cardForLink({
+          cellId: selectedCell?.id,
+          binId: selectedGridCell?.id,
+          boundaryId: selectedBoundaryCell?.id,
+        }) ?? (linkCardPending ? initialShareableState.card : undefined),
       tool: activeTool,
       plot: plotKind,
       query: formatCellQueryLink(queryConditions),
@@ -4229,6 +4279,17 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     zoomToBbox,
   })
+  // The link's ROI is applied once it is in the list (as "Shared ROI", or as
+  // the saved selection with its outline), which a drawn one also ends.
+  // Image datasets take no selections.
+  if (
+    linkRoiPending &&
+    (selectionList.selections.length > 0 ||
+      linkDatasetLoaded === false ||
+      (linkDatasetLoaded === true && platformAdapter.kind === 'image'))
+  ) {
+    setLinkRoiPending(false)
+  }
   const viewerSelectionOutlines = useMemo(
     () =>
       selectionOutlines(
