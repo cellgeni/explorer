@@ -247,7 +247,7 @@ import {
   defaultRoiName,
   summarizeRoiCells,
 } from './features/roi/roiModel'
-import { summarizeRoiGeneExpression } from './data/roiGeneStats'
+import { roiGeneStatsCells, summarizeRoiGeneExpression } from './data/roiGeneStats'
 import { geneExpressionZScoreCells } from './data/geneExpressionLod'
 import {
   gridCellDatumDeckCenter,
@@ -2305,7 +2305,7 @@ export function App({ dependencies }: AppProps = {}) {
       }
 
       const h5adDataset: H5adExpressionDataset = dataset
-      const sampledCells = h5adSampleCells(cells, options.cellLimit)
+      const sampledCells = roiGeneStatsCells(cells, options)
       const sampledCellIds = sampledCells.map((cell) => cell.id as SpatialElementId)
       const matrix = await h5adDataset.matrix(sampledCellIds)
 
@@ -5477,18 +5477,6 @@ function hasFunction<T extends string>(
     key in value &&
     typeof (value as Record<T, unknown>)[key] === 'function'
   )
-}
-
-function h5adSampleCells(
-  cells: readonly DatasetCell[],
-  limit: number | undefined,
-): readonly DatasetCell[] {
-  const normalizedLimit =
-    limit === undefined || !Number.isFinite(limit)
-      ? cells.length
-      : Math.max(1, Math.floor(limit))
-
-  return cells.length <= normalizedLimit ? cells : cells.slice(0, normalizedLimit)
 }
 
 function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox | null {
