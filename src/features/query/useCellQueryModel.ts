@@ -6,6 +6,7 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react'
+import { slug } from '../../utils/slug'
 import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
@@ -335,7 +336,11 @@ export function useCellQueryModel({
   const [sort, setSort] = useState<CellQuerySort | null>(null)
   const [saveName, setSaveName] = useState('')
   const [exporting, setExporting] = useState(false)
-  const [exportError, setExportError] = useState<string | null>(null)
+  // A failed export, for the dataset it was of.
+  const [exportError, setExportError] = useState<{
+    readonly url: string
+    readonly message: string
+  } | null>(null)
 
   // The columns (23-D2).
   const cellColumns = useMemo(
@@ -404,13 +409,6 @@ export function useCellQueryModel({
   // The sort, while the dataset lists its column: one kept from another
   // dataset is left out until it does, as conditions are, rather than
   // waiting on a column that never comes.
-  const activeSort =
-    sort === null ||
-    sort.columnId === CELL_QUERY_ID_COLUMN ||
-    resolveColumn(sort.columnId) !== null
-      ? sort
-      : null
-
   // Columns the conditions, table and sort use.
   const tableColumnIds = useMemo(
     () =>
@@ -420,6 +418,14 @@ export function useCellQueryModel({
       ]),
     [conditions, extraColumnIds],
   )
+  // Only on a column the table shows, so a removed condition's column does
+  // not keep ordering the rows with no arrow to say so.
+  const activeSort =
+    sort === null ||
+    sort.columnId === CELL_QUERY_ID_COLUMN ||
+    (tableColumnIds.includes(sort.columnId) && resolveColumn(sort.columnId) !== null)
+      ? sort
+      : null
   const neededColumns = useMemo(
     () =>
       uniqueStrings([
@@ -577,6 +583,7 @@ export function useCellQueryModel({
     appendDebugEvent,
   })
 
+  const placedCellIds = useMemo(() => new Set(cells.map((cell) => cell.id)), [cells])
   const columnInputs = useMemo(() => {
     const inputs = new Map<string, ColumnInput>()
     for (const column of neededColumns) {
@@ -584,6 +591,7 @@ export function useCellQueryModel({
         column.id,
         columnInput(column, {
           cells,
+          placedCellIds,
           cellColumns,
           annotations,
           datasetSetLoads,
@@ -601,6 +609,7 @@ export function useCellQueryModel({
     cellColumns,
     cells,
     datasetSetLoads,
+    placedCellIds,
     imageNeeds.overLimit,
     imageSnapshot,
     metadataTracks,
@@ -929,6 +938,16 @@ export function useCellQueryModel({
   )
   const onConditionChange = useCallback(
     (index: number, condition: CellQueryCondition) => {
+      // An image condition's threshold, level or radius makes it another
+      // column; a sort on it follows.
+      const previous = conditions[index]?.columnId
+      if (previous !== undefined && previous !== condition.columnId) {
+        setSort((current) =>
+          current?.columnId === previous
+            ? { ...current, columnId: condition.columnId }
+            : current,
+        )
+      }
       onConditionsChange(
         conditions.map((current, at) => (at === index ? condition : current)),
       )
@@ -937,9 +956,18 @@ export function useCellQueryModel({
   )
   const onRemoveCondition = useCallback(
     (index: number) => {
-      onConditionsChange(conditions.filter((_, at) => at !== index))
+      const next = conditions.filter((_, at) => at !== index)
+      const removed = conditions[index]?.columnId
+      if (
+        removed !== undefined &&
+        !next.some((condition) => condition.columnId === removed) &&
+        !extraColumnIds.includes(removed)
+      ) {
+        setSort((current) => (current?.columnId === removed ? null : current))
+      }
+      onConditionsChange(next)
     },
-    [conditions, onConditionsChange],
+    [conditions, extraColumnIds, onConditionsChange],
   )
 
   const imageMeasurementView = (
@@ -1047,7 +1075,12 @@ export function useCellQueryModel({
       },
       (error: unknown) => {
         setExporting(false)
-        setExportError(`The CSV could not be written: ${errorMessage(error)}`)
+        // Closed by a dataset switch or the window: nothing to report.
+        if (isAbort(error)) return
+        setExportError({
+          url: datasetUrl,
+          message: `The CSV could not be written: ${errorMessage(error)}`,
+        })
       },
     )
   }, [appendDebugEvent, canExport, cells, columnKinds, datasetUrl, exportColumns, rows])
@@ -1061,11 +1094,22 @@ export function useCellQueryModel({
   const measuringColumns = usedColumnIds.some(
     (id) => isImageColumnId(id) && columnInputs.get(id)?.status === 'loading',
   )
-  const loadingColumns = conditionViews.some(
-    (view) =>
-      view.status === 'loading' &&
-      columnInputs.get(view.condition.columnId)?.status !== 'waiting',
-  )
+  // Columns added to the table, which no condition reports on.
+  const addedColumnIds = tableColumnIds.filter((id) => !conditionColumnIds.has(id))
+  const loadingColumns =
+    conditionViews.some(
+      (view) =>
+        view.status === 'loading' &&
+        columnInputs.get(view.condition.columnId)?.status !== 'waiting',
+    ) || addedColumnIds.some((id) => columnInputs.get(id)?.status === 'loading')
+  const addedColumnErrors = addedColumnIds.flatMap((id) => {
+    const input = columnInputs.get(id)
+    return input?.status === 'error'
+      ? [
+          `The ${resolveColumn(id)?.label ?? id} column could not be read, so it is blank and the CSV leaves it out: ${input.message}`,
+        ]
+      : []
+  })
   const matchCount = currentResult === null ? null : currentResult.rows.length
   const totalCount = cells.length
   // Imported sets' cells not on the map; a dataset's own columns also list
@@ -1100,7 +1144,10 @@ export function useCellQueryModel({
     ...(currentResult?.error === null || currentResult === null
       ? []
       : [currentResult.error]),
-    ...(exportError === null ? [] : [exportError]),
+    ...addedColumnErrors,
+    ...(exportError === null || exportError.url !== datasetUrl
+      ? []
+      : [exportError.message]),
   ]
 
   return {
@@ -1187,6 +1234,8 @@ function sessionEntry(
 
 interface ColumnInputContext {
   readonly cells: readonly OverviewCellDatum[]
+  // The IDs on the map, which a class's count is of.
+  readonly placedCellIds: ReadonlySet<string>
   readonly cellColumns: ReturnType<typeof overviewCellColumns>
   readonly annotations: readonly Annotation<string>[]
   readonly datasetSetLoads: ReadonlyMap<
@@ -1314,6 +1363,7 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
 
     return classesInput(
       column.id,
+      context.placedCellIds,
       context.savedSelections.flatMap((saved) =>
         saved.cells.status === 'ready'
           ? [
@@ -1333,11 +1383,12 @@ function columnInput(column: CellQueryColumn, context: ColumnInputContext): Colu
     const load = context.datasetSetLoads.get(groupId)
     if (load === undefined || load.status === 'loading') return { status: 'loading' }
     if (load.status === 'error') return { status: 'error', message: load.message }
-    return classesInput(column.id, setClasses(load.value))
+    return classesInput(column.id, context.placedCellIds, setClasses(load.value))
   }
 
   return classesInput(
     column.id,
+    context.placedCellIds,
     setClasses(
       context.annotations.filter(
         (annotation) => annotationSetGrouping(annotation).id === source.setId,
@@ -1356,34 +1407,53 @@ function setClasses(
   }))
 }
 
+// The key holds the labels, so a renamed selection is sent again; the count
+// is of the cells on the map, as Clusters and Plots count them.
 function classesInput(
   columnId: string,
+  placedCellIds: ReadonlySet<string>,
   classes: readonly CellQueryClassInput[],
 ): ColumnInput {
   return {
     status: 'ready',
     key: classes
-      .map((queryClass) => `${queryClass.id}#${objectId(queryClass.cellIds)}`)
+      .map(
+        (queryClass) =>
+          `${queryClass.id}#${queryClass.label}#${objectId(queryClass.cellIds)}`,
+      )
       .join('\u0000'),
     classes: classes.map((queryClass) => ({
       id: queryClass.id,
       label: queryClass.label,
-      count: queryClass.cellIds.length,
+      count:
+        placedCellIds.size === 0
+          ? queryClass.cellIds.length
+          : queryClass.cellIds.reduce(
+              (count, cellId) => (placedCellIds.has(cellId) ? count + 1 : count),
+              0,
+            ),
     })),
     request: () => ({ type: 'category-column', columnId, classes }),
   }
 }
 
 // A condition's dataset set that Clusters has since loaded keeps reading it
-// alone, so the condition and the link stay as they were.
+// alone, so the condition and the link stay as they were. So does a
+// condition on the set Clusters showed once Clusters shows another: the
+// loaded set's ID is `analysis:` and its name (annotationSetGrouping).
 function unlistedDatasetSetColumn(
   columnId: string,
   groups: readonly { readonly id: string; readonly label: string }[],
 ): CellQueryColumn | null {
   const prefix = setColumnId(datasetSetOptionId(''))
-  if (!columnId.startsWith(prefix)) return null
-  const groupId = columnId.slice(prefix.length)
-  const group = groups.find((candidate) => candidate.id === groupId)
+  const datasetSet = columnId.startsWith(prefix)
+  if (!datasetSet && !columnId.startsWith(setColumnId('analysis:'))) return null
+  const setId = columnId.slice(datasetSet ? prefix.length : setColumnId('').length)
+  const group = groups.find(
+    (candidate) =>
+      candidate.id === setId ||
+      (!datasetSet && `analysis:${slug(candidate.label)}` === setId),
+  )
   return group === undefined
     ? null
     : {
@@ -1391,7 +1461,7 @@ function unlistedDatasetSetColumn(
         label: group.label,
         kind: 'category',
         group: 'Classes',
-        source: { kind: 'set', setKind: 'dataset', setId: datasetSetOptionId(groupId) },
+        source: { kind: 'set', setKind: 'dataset', setId: datasetSetOptionId(group.id) },
       }
 }
 

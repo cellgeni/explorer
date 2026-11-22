@@ -309,6 +309,58 @@ describe('plot statistics (plan 22-B, 22-C)', () => {
     expect(distributions?.stored.expressing[1]).toBeNull()
   })
 
+  it("gives a violin's ends the reflected density, as a direct kernel sum does", () => {
+    // 60 of 100 cells at 0, the rest spread over 1 to 7: a spike at the
+    // lowest value, as a sparse gene has.
+    const values = Array.from({ length: 100 }, (_, index) =>
+      index < 60 ? 0 : 1 + ((index - 60) * 6) / 39,
+    )
+    const rows = values.map((_, index) => `c${index.toString()}`)
+    const store = new PlotStatsStore()
+    store.setRows(rows)
+    store.setGroups({ classes: [rows], selection: null })
+    store.addGene({
+      gene: 'G',
+      rows: Uint32Array.from({ length: 40 }, (_, index) => 60 + index),
+      values: Float32Array.from(values.slice(60)),
+    })
+    const density =
+      store.stats(['G']).stats[0]?.distributions.stored.all[0]?.density ?? []
+
+    // Scott's bandwidth on the population, each value and its mirror images
+    // at both ends, summed on the 128 steps and scaled to sum 1.
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length
+    const sd = Math.sqrt(
+      values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length,
+    )
+    const bandwidth = sd * values.length ** -0.2
+    const grid = Array.from(
+      { length: PLOT_DENSITY_STEPS },
+      (_, step) => (7 * step) / (PLOT_DENSITY_STEPS - 1),
+    )
+    const direct = grid.map((x) =>
+      values.reduce(
+        (sum, value) =>
+          sum +
+          [value, -value, 14 - value].reduce(
+            (inner, centre) => inner + Math.exp(-0.5 * ((x - centre) / bandwidth) ** 2),
+            0,
+          ),
+        0,
+      ),
+    )
+    const total = direct.reduce((sum, value) => sum + value, 0)
+    const peak = Math.max(...direct) / total
+
+    // The binned shape is within a few percent of the peak everywhere,
+    // its ends included.
+    for (const step of [0, 1, 64, PLOT_DENSITY_STEPS - 2, PLOT_DENSITY_STEPS - 1]) {
+      expect(Math.abs((density[step] ?? 0) - (direct[step] ?? 0) / total)).toBeLessThan(
+        0.05 * peak,
+      )
+    }
+  })
+
   it('makes densities only for as many groups as a violin shows', () => {
     const rows = Array.from(
       { length: PLOT_DENSITY_MAX_GROUPS + 1 },

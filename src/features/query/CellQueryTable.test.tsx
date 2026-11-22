@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import { testCellQueryModel } from '../../test/sectionModels'
 import { CELL_PICTURE_ROW_HEIGHT, CELL_PICTURE_SETTLE_MS } from './cellPictureModel'
-import { CELL_QUERY_ROW_HEIGHT, CellQueryTable } from './CellQueryTable'
+import {
+  CELL_QUERY_MAX_BODY_HEIGHT,
+  CELL_QUERY_ROW_HEIGHT,
+  CellQueryTable,
+} from './CellQueryTable'
 import type { CellQueryPictures, CellQueryTableModel } from './useCellQueryModel'
 
 function cell(index: number): OverviewCellDatum {
@@ -80,6 +84,38 @@ describe('Cell Query table pictures (plan 23-D12)', () => {
     // The first page's read was stopped when its rows left the view.
     const firstSignal = (readOutlines.mock.calls[0] as unknown[])[2] as AbortSignal
     expect(firstSignal.aborted).toBe(true)
+  })
+})
+
+describe('Cell Query table with more rows than a browser lays out', () => {
+  it('keeps the body under the layout limit and reaches the last row', () => {
+    const rowCount = 1_400_000
+    const { table } = testCellQueryModel({ rowCount })
+    render(<CellQueryTable table={table} noun="cells" />)
+    const scroller = screen.getByRole('table', { name: 'Matching cells' })
+    const body = scroller.querySelector<HTMLElement>('.cell-query-body')
+
+    // 1.4 million rows of 28 px are 39.2 million px, past Chromium's
+    // 33.5 million px.
+    expect(Number.parseFloat(body?.style.height ?? '')).toBe(CELL_QUERY_MAX_BODY_HEIGHT)
+
+    // The end of the scroll bar is the last row (jsdom's body is 240 px).
+    scroller.scrollTop = CELL_QUERY_MAX_BODY_HEIGHT - 240
+    fireEvent.scroll(scroller)
+    const last = scroller.querySelector(`[data-row-index="${(rowCount - 1).toString()}"]`)
+    expect(last?.closest('[role="row"]')).toHaveAttribute(
+      'aria-rowindex',
+      String(rowCount + 1),
+    )
+
+    // Home and End move there by keyboard too.
+    scroller.scrollTop = 0
+    fireEvent.scroll(scroller)
+    const first = scroller.querySelector<HTMLButtonElement>('[data-row-index="0"]')
+    fireEvent.keyDown(first!, { key: 'End' })
+    expect(
+      scroller.querySelector(`[data-row-index="${(rowCount - 1).toString()}"]`),
+    ).toHaveFocus()
   })
 })
 

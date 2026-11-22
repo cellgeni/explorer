@@ -1,4 +1,5 @@
 import {
+  formatCellCount,
   formatPercent,
   formatPlotNumber,
   plotSummary,
@@ -416,12 +417,12 @@ function violinTitle(
   if (cell.percent === null) return `${group}, ${gene}: no cells`
   const share = `${formatPercent(cell.percent)} expressing`
   if (distribution === null) {
-    return `${group}, ${gene}: ${cell.cells.toLocaleString()} cells, none expressing`
+    return `${group}, ${gene}: ${formatCellCount(cell.cells)}, none expressing`
   }
 
   const counted = model.includeZeros
-    ? `${cell.cells.toLocaleString()} cells, ${share}`
-    : `${distribution.count.toLocaleString()} expressing cells of ${cell.cells.toLocaleString()}`
+    ? `${formatCellCount(cell.cells)}, ${share}`
+    : `${distribution.count.toLocaleString()} expressing ${distribution.count === 1 ? 'cell' : 'cells'} of ${cell.cells.toLocaleString()}`
   return `${group}, ${gene}: ${counted}, median ${model.distributionLabel} ${formatPlotNumber(distribution.median)}, quartiles ${formatPlotNumber(distribution.q1)} to ${formatPlotNumber(distribution.q3)}`
 }
 

@@ -1,5 +1,4 @@
 import { formatCsv } from '../../utils/csv'
-import { slug } from '../../utils/slug'
 import type { PlotGene, PlotPaint } from './plotModel'
 import {
   plotGroupMean,
@@ -128,30 +127,54 @@ function csvNumber(value: number): string {
   return String(Number(value.toPrecision(6)))
 }
 
-// `{dataset}-{plot}-{set}.{ext}`, each part slugged.
+// `{dataset}-{plot}-{set}.{ext}`, each part made a file name: lower case,
+// letters and digits of any script kept, the rest joined by hyphens.
 export function plotFileName(
   datasetUrl: string,
   plot: string,
   setLabel: string | null,
   extension: string,
 ): string {
-  const parts = [datasetStem(datasetUrl), plot, ...(setLabel === null ? [] : [setLabel])]
-  return `${parts.map(slug).join('-')}.${extension}`
+  const parts = [
+    fileNamePart(datasetStem(datasetUrl), 'dataset'),
+    fileNamePart(plot, 'plot'),
+    ...(setLabel === null ? [] : [fileNamePart(setLabel, 'set')]),
+  ]
+  return `${parts.join('-')}.${extension}`
 }
 
-// The URL's last path segment without its extension.
+function fileNamePart(value: string, fallback: string): string {
+  const part = value
+    .normalize('NFKD')
+    .replace(/\p{M}+/gu, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+  return part === '' ? fallback : part
+}
+
+// The extensions of the data the app opens, which a dataset's name drops;
+// any other dot, as in `atlas.v1`, is part of the name.
+const DATA_EXTENSIONS =
+  /(\.(?:h5ad|h5|hdf5|zarr|sdata|icechunk|zip|gz|tar|tgz|json|csv|tsv|parquet|ome|tiff?|qptiff|svs|ndpi|vzg))+$/i
+
+// The URL's last path segment, decoded, without its data extensions.
 function datasetStem(url: string): string {
-  const segment = urlLastSegment(url)
-  const stem = segment.replace(/(\.[a-z0-9]+)+$/i, '')
-  return stem === '' ? 'dataset' : stem
+  return urlLastSegment(url).replace(DATA_EXTENSIONS, '')
 }
 
 function urlLastSegment(url: string): string {
+  let segment: string
   try {
     const parsed = new URL(url)
-    return parsed.pathname.split('/').filter(Boolean).at(-1) ?? parsed.host
+    segment = parsed.pathname.split('/').filter(Boolean).at(-1) ?? parsed.host
   } catch {
-    return url.split('/').filter(Boolean).at(-1) ?? url
+    segment = url.split('/').filter(Boolean).at(-1) ?? url
+  }
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
   }
 }
 
