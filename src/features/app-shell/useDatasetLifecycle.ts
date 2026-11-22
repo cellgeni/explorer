@@ -330,7 +330,8 @@ interface AteraMorphologyDataset {
 interface UseDatasetLifecycleCallbacks {
   readonly appendDebugEvent: (message: string, options?: DebugLogAppendOptions) => void
   readonly appendFallbackNotice: FallbackNotifier
-  readonly onBeforeDatasetLoad?: () => void
+  // A load commits: the dataset it opens replaces the one on screen.
+  readonly onBeforeDatasetLoad?: (datasetUrl: string) => void
   readonly queueAutoContrast: QueueAutoContrast
   readonly recordTelemetry: (event: TelemetryEvent) => void
 }
@@ -1076,7 +1077,7 @@ export function useDatasetLifecycle({
         }
         const clearOpenDataset = () => {
           setPendingDatasetLoadState(IDLE_DATASET_LOAD_STATE)
-          onBeforeDatasetLoad?.()
+          onBeforeDatasetLoad?.(requestedUrl)
           invalidateLatestRequest({
             abortRef: datasetWarmupAbortRef,
             requestIdRef: datasetWarmupRequestIdRef,
