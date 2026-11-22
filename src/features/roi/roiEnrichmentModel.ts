@@ -101,12 +101,17 @@ export function referenceOutsideSelection<Element>(
   )
 }
 
+// A scaled (zero-centred) matrix has negative means, which would make the
+// ratio negative and its log NaN. A mean below 0 is taken as 0, so a gene
+// high inside and below average outside ranks by how high it is inside.
 export function log2FoldChange(
   meanInside: number,
   meanOutside: number,
   pseudocount = ENRICHMENT_PSEUDOCOUNT,
 ): number {
-  return Math.log2((meanInside + pseudocount) / (meanOutside + pseudocount))
+  return Math.log2(
+    (Math.max(meanInside, 0) + pseudocount) / (Math.max(meanOutside, 0) + pseudocount),
+  )
 }
 
 export interface RankedRoiGene {
