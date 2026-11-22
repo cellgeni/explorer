@@ -448,7 +448,7 @@ export function useViewportDataWorkflow({
             batch,
             geneExpressionScoreMode,
           )
-          setGeneExpressionBatch(batch)
+          setGeneExpressionBatch({ ...batch, bbox: expressionPlan.bbox })
           setGeneExpressionState(
             geneExpressionLoadReady(
               loadState.url,

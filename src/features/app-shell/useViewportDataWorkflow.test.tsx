@@ -352,7 +352,7 @@ describe('useViewportDataWorkflow', () => {
     })
     expect(snapshot.boundaryElements).toEqual([element])
     expect(snapshot.geneExpressionState.status).toBe('ready')
-    expect(snapshot.geneExpressionBatch).toBe(batch)
+    expect(snapshot.geneExpressionBatch).toEqual({ ...batch, bbox })
     expect(snapshot.telemetryEvents).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -739,7 +739,7 @@ describe('useViewportDataWorkflow', () => {
 
     expect(loadGeneExpression).toHaveBeenCalledTimes(2)
     expect(snapshot.geneExpressionState.status).toBe('ready')
-    expect(snapshot.geneExpressionBatch).toBe(batch)
+    expect(snapshot.geneExpressionBatch).toEqual({ ...batch, bbox })
     expect(snapshot.debugMessages).toContain('Gene expression load failed; retrying')
   })
 
