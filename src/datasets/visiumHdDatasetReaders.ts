@@ -1209,7 +1209,8 @@ async function readVisiumHdGeneExpression(options: {
   // Only bins with expression are listed, so `sampleStride` has nothing to
   // thin: every bin in the box is read, so that no expressing bin is lost. A
   // feature slice is read a gene at a time, so more bins cost no more reads.
-  const limit = queryOptions.limit ?? 5_000
+  // Without a limit, that is every bin in the box.
+  const limit = queryOptions.limit ?? null
   throwIfAborted(queryOptions.signal)
   const viewportBinsStartedAt = Date.now()
   const overview = await options.readBinnedOverview(queryOptions.binSizeMicrometers)
@@ -1219,7 +1220,7 @@ async function readVisiumHdGeneExpression(options: {
     stage: 'viewport-cells',
     label: 'Viewport bin query',
     durationMs: viewportCellsMs,
-    detail: `${viewportBins.length.toLocaleString()} bins, limit ${limit.toLocaleString()}`,
+    detail: `${viewportBins.length.toLocaleString()} bins, ${limit === null ? 'no limit' : `limit ${limit.toLocaleString()}`}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -1319,9 +1320,9 @@ async function readVisiumHdGeneExpression(options: {
 function selectExpressionBinsInBbox(
   overview: VisiumHdBinnedOverview,
   bbox: BBox,
-  maxBins: number,
+  maxBins: number | null,
 ): readonly VisiumHdExpressionBin[] {
-  const limit = normalizeLimit(maxBins)
+  const limit = maxBins === null ? Number.POSITIVE_INFINITY : normalizeLimit(maxBins)
 
   if (limit === 0) {
     return []

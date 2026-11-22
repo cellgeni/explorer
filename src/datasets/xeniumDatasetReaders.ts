@@ -626,8 +626,8 @@ export async function readXeniumGeneExpression(options: {
 
   // Only cells with expression are returned, so `sampleStride` has nothing to
   // thin: every cell in the box is considered so that no expressing cell is
-  // lost.
-  const limit = queryOptions.limit ?? 5_000
+  // lost. Without a limit (whole-section previews), that is every cell.
+  const limit = queryOptions.limit ?? null
   throwIfAborted(queryOptions.signal)
 
   if (options.selectedGeneRowsReader !== undefined) {
@@ -655,7 +655,7 @@ export async function readXeniumGeneExpression(options: {
     stage: 'viewport-cells',
     label: 'Viewport cell query',
     durationMs: viewportCellsMs,
-    detail: `${viewportCells.length.toLocaleString()} cells, limit ${limit.toLocaleString()}`,
+    detail: `${viewportCells.length.toLocaleString()} cells, ${limitDetail(limit)}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -753,7 +753,7 @@ async function readXeniumGeneExpressionByMatrixRows(options: {
   readonly matrixUrl: string
   readonly bbox: BBox
   readonly genes: readonly string[]
-  readonly limit: number
+  readonly limit: number | null
   readonly reader: XeniumSelectedGeneRowsReader
   readonly queryOptions: GeneExpressionQueryOptions
   readonly totalStartedAt: number
@@ -785,7 +785,7 @@ async function readXeniumGeneExpressionByMatrixRows(options: {
     stage: 'viewport-cells',
     label: 'Viewport cell query',
     durationMs: viewportCellsMs,
-    detail: `${cells.rows.length.toLocaleString()} cells, limit ${options.limit.toLocaleString()}`,
+    detail: `${cells.rows.length.toLocaleString()} cells, ${limitDetail(options.limit)}`,
   })
   throwIfAborted(queryOptions.signal)
 
@@ -889,7 +889,7 @@ async function readXeniumCellColumnsInBbox(
   conn: XeniumDuckDbConnection,
   cellsUrl: string,
   bbox: BBox,
-  limit: number,
+  limit: number | null,
 ): Promise<XeniumCellColumns> {
   const stmt = await conn.prepare(`
 SELECT CAST(file_row_number AS INTEGER) AS cell_feature_matrix_row,
@@ -901,7 +901,7 @@ FROM read_parquet( ? )
 WHERE x_centroid BETWEEN ? AND ?
   AND y_centroid BETWEEN ? AND ?
 ORDER BY file_row_number
-LIMIT ?
+${limit === null ? '' : 'LIMIT ?'}
 `)
   const table = await stmt.query(
     cellsUrl,
@@ -909,7 +909,7 @@ LIMIT ?
     bbox.maxX,
     bbox.minY,
     bbox.maxY,
-    limit,
+    ...(limit === null ? [] : [limit]),
   )
 
   return {
@@ -1074,11 +1074,12 @@ ORDER BY file_row_number
   })
 }
 
+// Without a limit, every cell in the box.
 async function readXeniumCellsInBbox(
   conn: XeniumDuckDbConnection,
   cellsUrl: string,
   bbox: BBox,
-  limit: number,
+  limit: number | null,
 ): Promise<readonly DatasetCell[]> {
   const stmt = await conn.prepare(`
 SELECT cell_id,
@@ -1091,7 +1092,7 @@ FROM read_parquet( ? )
 WHERE x_centroid BETWEEN ? AND ?
   AND y_centroid BETWEEN ? AND ?
 ORDER BY file_row_number
-LIMIT ?
+${limit === null ? '' : 'LIMIT ?'}
 `)
   const result = await stmt.query(
     cellsUrl,
@@ -1099,7 +1100,7 @@ LIMIT ?
     bbox.maxX,
     bbox.minY,
     bbox.maxY,
-    limit,
+    ...(limit === null ? [] : [limit]),
   )
 
   return result.toArray().map(parseViewportCellRow)
@@ -1127,6 +1128,10 @@ LIMIT ?
   const result = await stmt.query(cellsUrl, ...fragment.params, limit)
 
   return result.toArray().map(parseViewportCellRow)
+}
+
+function limitDetail(limit: number | null): string {
+  return limit === null ? 'no limit' : `limit ${limit.toLocaleString()}`
 }
 
 function elapsedMs(startedAt: number): number {

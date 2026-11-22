@@ -1554,4 +1554,62 @@ describe('XeniumDataset', () => {
       100,
     ])
   })
+
+  // Whole-section previews ask with no limit, and must score every cell.
+  it('reads every cell in the box when no limit is given', async () => {
+    const box = {
+      minX: micrometers(0),
+      maxX: micrometers(10),
+      minY: micrometers(0),
+      maxY: micrometers(20),
+    }
+    const cellId = intToCellId(1, 2)
+    const rowsConn = new FakeConnection([
+      [
+        {
+          cell_feature_matrix_row: 0,
+          x_centroid: 4,
+          y_centroid: 6,
+          transcript_counts: 12,
+          cell_area: 18,
+        },
+      ],
+      [{ cell_feature_matrix_row: 0, cell_id: cellId }],
+    ])
+    const byRows = makeDataset(rowsConn, {
+      baseUrl: 'https://example.test/xenium-rows/',
+      selectedGeneRowsReader: async () => ({
+        nCells: 1,
+        features: [
+          { gene: 'Actb', rows: new Uint32Array([0]), counts: new Uint32Array([2]) },
+        ],
+        cellIdForRow: () => cellId,
+      }),
+    })
+    const perCellConn = new FakeConnection([
+      [
+        {
+          cell_id: cellId,
+          x_centroid: 4,
+          y_centroid: 6,
+          transcript_counts: 12,
+          cell_area: 18,
+        },
+      ],
+    ])
+    const perCell = makeDataset(perCellConn, {
+      matrixReader: async (_url: string, ids: readonly CellId[]): Promise<GexResult> => ({
+        geneNames: ['Actb'],
+        cells: new Map(ids.map((id) => [id, { geneNames: ['Actb'], counts: [2] }])),
+      }),
+    })
+
+    await byRows.geneExpression(box, ['Actb'])
+    await perCell.geneExpression(box, ['Actb'])
+
+    for (const conn of [rowsConn, perCellConn]) {
+      expect(conn.preparedSql[0]).not.toContain('LIMIT')
+      expect(conn.statements[0]?.params).toHaveLength(5)
+    }
+  })
 })
