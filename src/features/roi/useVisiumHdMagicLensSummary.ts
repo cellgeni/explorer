@@ -1,9 +1,11 @@
 import { useCallback } from 'react'
-import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import type { BBox } from '../../data/coords'
 import type { RoiSelectionInput } from '../../data/roiSelection'
 import { normalizeRoiSelection } from '../../data/roiSelection'
-import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
+import type {
+  GeneExpressionBatch,
+  GeneExpressionGeneCount,
+} from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { GridCellColumns } from '../../rendering/gridCellColumns'
 import { cellExpressionSummaryFromGexCells } from '../cells/cellExpressionProfileModel'
@@ -32,7 +34,6 @@ interface UseVisiumHdMagicLensSummaryControls {
 }
 
 interface UseVisiumHdMagicLensSummaryData {
-  readonly currentViewportDetail: ViewerViewportDetail | null
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly gridCells: GridCellColumns
   readonly loadState: DatasetLoadState<StructuredLoadError>
@@ -60,7 +61,6 @@ interface SummarizeVisiumHdMagicLensSelectionOptions {
 }
 
 interface SummarizeVisiumHdMagicLensSelectionData {
-  readonly currentViewportDetail: ViewerViewportDetail | null
   readonly geneExpressionBatch: GeneExpressionBatch | null
   readonly gridCells: GridCellColumns
   readonly readyDatasetUrl: string | null
@@ -69,13 +69,7 @@ interface SummarizeVisiumHdMagicLensSelectionData {
 
 export function useVisiumHdMagicLensSummary({
   controls: { selectedBinSize },
-  data: {
-    currentViewportDetail,
-    geneExpressionBatch,
-    gridCells,
-    loadState,
-    selectedGenes,
-  },
+  data: { geneExpressionBatch, gridCells, loadState, selectedGenes },
   loaders: { getSpatialDataset, loadGeneExpression },
 }: UseVisiumHdMagicLensSummaryOptions): MagicLensSummaryLoader {
   const readyDatasetUrl = loadState.status === 'ready' ? loadState.url : null
@@ -86,7 +80,6 @@ export function useVisiumHdMagicLensSummary({
         baseUrl,
         controls: { selectedBinSize },
         data: {
-          currentViewportDetail,
           geneExpressionBatch,
           gridCells,
           readyDatasetUrl,
@@ -100,7 +93,6 @@ export function useVisiumHdMagicLensSummary({
         selection,
       }),
     [
-      currentViewportDetail,
       geneExpressionBatch,
       getSpatialDataset,
       gridCells,
@@ -115,13 +107,7 @@ export function useVisiumHdMagicLensSummary({
 export async function summarizeVisiumHdMagicLensSelection({
   baseUrl,
   controls: { selectedBinSize },
-  data: {
-    currentViewportDetail,
-    geneExpressionBatch,
-    gridCells,
-    readyDatasetUrl,
-    selectedGenes,
-  },
+  data: { geneExpressionBatch, gridCells, readyDatasetUrl, selectedGenes },
   loaders: { getSpatialDataset, loadGeneExpression },
   loaderOptions,
   selection,
@@ -161,7 +147,12 @@ export async function summarizeVisiumHdMagicLensSelection({
     const matrix = await profileDataset.matrix(selectedBinBarcodes, selectedBinSize, {
       signal: loaderOptions.signal,
     })
-    const expression = cellExpressionSummaryFromGexCells(matrix, selectedBinBarcodes)
+    // Every gene, so the card can count them; it lists the top ones.
+    const expression = cellExpressionSummaryFromGexCells(
+      matrix,
+      selectedBinBarcodes,
+      Number.MAX_SAFE_INTEGER,
+    )
 
     return summarizeMagicLensExpressionProfile(
       selectedBins.length,
@@ -173,12 +164,16 @@ export async function summarizeVisiumHdMagicLensSelection({
     )
   }
 
+  // The app's batch stands for the view only when it was read for a box
+  // holding the view and for the bins drawn: zoomed out with 8 µm selected it
+  // holds 16 µm bins, and just after a pan it holds the old view's.
   const reusableExpressionBatch =
     loaderOptions.scope === 'viewport' &&
     geneExpressionBatch !== null &&
-    currentViewportDetail !== null &&
-    sameBbox(normalizedSelection.bbox, currentViewportDetail.bbox) &&
-    sameGeneSet(geneExpressionBatch.genes, selectedGenes)
+    sameGeneSet(geneExpressionBatch.genes, selectedGenes) &&
+    geneExpressionBatch.bbox !== undefined &&
+    bboxContains(geneExpressionBatch.bbox, normalizedSelection.bbox) &&
+    batchHoldsBinSize(geneExpressionBatch, gridCells.binSizeMicrometers)
       ? geneExpressionBatch
       : null
   // Expression is read for the selection's bounding box, and the reader keeps
@@ -206,18 +201,27 @@ export async function summarizeVisiumHdMagicLensSelection({
     (maxCount, element) => Math.max(maxCount, element.count),
     0,
   )
-  const filteredExpressionBatch =
+  // The reader's per-gene counts are for the whole box. When the circle
+  // leaves some of its bins out, two or more genes are counted again over the
+  // bins kept; one gene's count is the bins' total.
+  const geneCounts =
     filteredExpressionElements.length === expressionBatch.elements.length
-      ? {
-          ...expressionBatch,
-          elements: filteredExpressionElements,
-          maxCount: filteredMaxCount,
-        }
-      : {
-          elements: filteredExpressionElements,
-          genes: expressionBatch.genes,
-          maxCount: filteredMaxCount,
-        }
+      ? expressionBatch.geneCounts
+      : selectedGenes.length > 1 && filteredExpressionElements.length > 0
+        ? await selectedGeneCounts(
+            await getSpatialDataset(datasetUrl),
+            filteredExpressionElements.map((element) => element.id),
+            selectedGenes,
+            selectedBinSize,
+            loaderOptions.signal,
+          )
+        : undefined
+  const filteredExpressionBatch = {
+    elements: filteredExpressionElements,
+    genes: expressionBatch.genes,
+    maxCount: filteredMaxCount,
+    ...(geneCounts === undefined ? {} : { geneCounts }),
+  }
 
   return summarizeMagicLensExpressionBins(
     selectedBins.length,
@@ -250,13 +254,73 @@ function boxBinCapacity(
   return Math.ceil(columns * rows)
 }
 
-function sameBbox(left: BBox, right: BBox): boolean {
+function bboxContains(outer: BBox, inner: BBox): boolean {
   return (
-    left.minX === right.minX &&
-    left.maxX === right.maxX &&
-    left.minY === right.minY &&
-    left.maxY === right.maxY
+    outer.minX <= inner.minX &&
+    outer.maxX >= inner.maxX &&
+    outer.minY <= inner.minY &&
+    outer.maxY >= inner.maxY
   )
+}
+
+function batchHoldsBinSize(
+  batch: GeneExpressionBatch,
+  binSizeMicrometers: number | undefined,
+): boolean {
+  return (
+    binSizeMicrometers !== undefined &&
+    batch.elements.length > 0 &&
+    batch.elements.every((element) => element.binSizeMicrometers === binSizeMicrometers)
+  )
+}
+
+// Each selected gene's count over `barcodes`, from their expression profiles.
+async function selectedGeneCounts(
+  dataset: unknown,
+  barcodes: readonly string[],
+  selectedGenes: readonly string[],
+  binSize: VisiumHdBinSizeMicrometers | undefined,
+  signal: AbortSignal,
+): Promise<readonly GeneExpressionGeneCount[] | undefined> {
+  if (!isVisiumHdExpressionProfileDataset(dataset)) {
+    return undefined
+  }
+
+  const matrix = await (dataset as VisiumHdExpressionProfileDataset).matrix(
+    barcodes,
+    binSize,
+    { signal },
+  )
+  const counts = new Map(selectedGenes.map((gene) => [gene.toLocaleLowerCase(), 0]))
+
+  for (const barcode of barcodes) {
+    const cell = matrix.cells.get(barcode)
+
+    if (cell === undefined) {
+      continue
+    }
+
+    for (let index = 0; index < cell.geneNames.length; index += 1) {
+      const key = cell.geneNames[index]?.toLocaleLowerCase()
+      const count = cell.counts[index] ?? 0
+
+      if (key === undefined || !Number.isFinite(count)) {
+        continue
+      }
+
+      const total = counts.get(key)
+
+      if (total !== undefined) {
+        counts.set(key, total + count)
+      }
+    }
+  }
+
+  return selectedGenes
+    .map((gene) => ({ gene, count: counts.get(gene.toLocaleLowerCase()) ?? 0 }))
+    .sort(
+      (left, right) => right.count - left.count || left.gene.localeCompare(right.gene),
+    )
 }
 
 function sameGeneSet(left: readonly string[], right: readonly string[]): boolean {
