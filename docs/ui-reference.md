@@ -440,12 +440,19 @@ All cells.
 
 - **Auto LOD**: every cell on the slide for datasets of up to 500,000 cells.
   Larger datasets: a whole-slide sample when zoomed far out or more than
-  100,000 cells are visible, the exact viewport when ≤ 50,000 are visible,
-  otherwise a sample of the padded viewport. Samples keep every cell expressing
-  the selected genes and thin only the cells without.
-- **Exact region**: exact viewport when ≤ 50,000 cells are visible, sampled the
-  same way above that.
+  100,000 cells are visible, every cell of the padded viewport when ≤ 50,000
+  are visible, otherwise a sample of the padded viewport. Samples keep every
+  cell expressing the selected genes and thin only the cells without.
+- **Exact region**: every cell of the padded viewport when ≤ 50,000 cells are
+  visible, sampled the same way above that.
 - **All cells**: every cell on the slide.
+
+The padded viewport adds a margin on each side: a quarter of the view's width
+and height for exact reads, less as the view nears 50,000 cells (so the read
+stays near 50,000 cells), and a fifth for samples. Expression is read again
+when the zoom changes (by a quarter level for samples), and when a pan or a
+wider viewer takes the view outside the area read, so every cell in view has
+its score.
 
 `Combine genes` applies to two or more genes. With one gene, cells show its
 expression whatever the control was set to, so removing a gene from a Z-score
@@ -454,12 +461,12 @@ pair shows the other's expression, and adding one back brings Z-score back.
 `Combine genes` Z-score compares each cell's mean with the mean and standard
 deviation of the cells read: all cells when the whole slide is read (Auto LOD
 up to 500,000 cells, its whole-slide sample, or All cells), otherwise the
-cells read for the viewport. Cells without expression count as 0 on every
-platform, including those a sample thins. Zoomed out, Visium HD reads 16 µm
-bins in place of finer ones, and compares those. The legend says which: "Mean
-z-score of n genes per cell, relative to all cells" or "… relative to cells in
-view". A cell's z-score can therefore change as the view moves on a large
-dataset, but not between platforms.
+cells read for the padded viewport. Cells without expression count as 0 on
+every platform, including those a sample thins. Zoomed out, Visium HD reads
+16 µm bins in place of finer ones, and compares those. The legend says which:
+"Mean z-score of n genes per cell, relative to all cells" or "… relative to
+cells in view". A cell's z-score can therefore change as the view moves on a
+large dataset, but not between platforms.
 
 A stored NaN or infinite value colours its cell as no expression. It is left
 out of the z-score's mean and standard deviation and of the Gene scale's top,
@@ -1574,9 +1581,13 @@ hash is written, the query string keeps only keys a link does not set, such as
 does not come back on reload.
 
 Opening another dataset adds a browser history entry; every other change
-replaces the current one (15.3-C). Back returns to the previous dataset, or to
-the start screen: when Back or Forward reaches an entry for another dataset,
-the page reloads that entry's link, with its view and settings.
+replaces the current one (15.3-C). The dataset a collection link (`collection=`
+without `dataset=`) opens is that link's, so it replaces the link's entry too.
+Back returns to the previous dataset, or to the start screen (or the page
+before a collection link): when Back or Forward reaches an entry for another
+dataset, the page reloads that entry's link, with its view and settings. A
+link typed or pasted into the address bar for the open dataset reloads the
+page with that link too.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1586,7 +1597,7 @@ the page reloads that entry's link, with its view and settings.
 | `compare`                                                                                                 | A section shown [side by side](#sections-side-by-side) with the open dataset, by its URL as in `dataset`; repeatable, in the panels' order. Once the collection is read and its dataset open, only the first three other sections in the open dataset's `coordinateSystem` stay. Written only with `collection`                                                                        |
 | `sectionView`                                                                                             | `3d` while the collection's serial sections are stacked in 3D (the collection bar's `Stack in 3D`; see [3D Stack](dataset-collections.md#3d-stack))                                                                                                                                                                                                                                    |
 | `dataset`                                                                                                 | The loaded dataset's URL (loaded automatically). Typing in the address box does not change it until that dataset loads                                                                                                                                                                                                                                                                 |
-| `annotationUrl`                                                                                           | Annotation import URL (imported automatically; with `groups`, after the set loads, whose labels it adds to)                                                                                                                                                                                                                                                                            |
+| `annotationUrl`                                                                                           | The URL of labels imported by URL into the open dataset, while they are shown; imported automatically into the link's dataset (with `groups`, after the set loads, whose labels it adds to)                                                                                                                                                                                            |
 | `groups`                                                                                                  | The dataset's own annotation set that was loaded, such as `analysis:0` (loaded automatically, keeping the link's `cellColor`; a hand-written link without `xv` or `cellColor` colours cells by it). Until it loads, a link for the same dataset keeps the opening link's `groups`; another dataset's link leaves it out                                                                |
 | `customImageUrl`, `customImageOpacity`                                                                    | Custom image layers (repeatable, in order)                                                                                                                                                                                                                                                                                                                                             |
 | `segmentation`, `segmentationFormat`, `segmentationUnits`                                                 | An image's [imported segmentation](./image-only-and-geojson.md#imported-segmentations), by URL (a picked file is not written). `segmentationFormat` (`label-tiff`, `label-zarr`, `geojson`, `wkt`, `parquet`) only when the name does not tell it; `segmentationUnits=micrometers` for polygons in micrometres. Opened over the link's dataset in place of a manifest's segmentation   |

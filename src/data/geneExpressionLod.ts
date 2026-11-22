@@ -8,6 +8,11 @@ export const GENE_EXPRESSION_EXACT_CELL_LIMIT = GENE_EXPRESSION_EXACT_REGION_CEL
 export const GENE_EXPRESSION_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_OVERVIEW_SAMPLE_CELL_LIMIT = 15_000
 export const GENE_EXPRESSION_SAMPLE_BBOX_PADDING_RATIO = 0.2
+// Exact reads cover the view plus up to this fraction of its width and height
+// on each side, so short pans and a wider viewer stay inside the cells read.
+// Dense views get less, so the box holds about GENE_EXPRESSION_EXACT_CELL_LIMIT
+// cells.
+export const GENE_EXPRESSION_EXACT_BBOX_PADDING_RATIO = 0.25
 export const GENE_EXPRESSION_OVERVIEW_ZOOM_MAX = -1.25
 export const GENE_EXPRESSION_OVERVIEW_VISIBLE_CELL_MIN = 100_000
 // Auto loads every cell up to this many. Larger datasets fall back to
@@ -77,13 +82,9 @@ export function planGeneExpressionLod(
     return {
       kind: 'request',
       mode: 'exact-region',
-      bbox: detail.bbox,
-      cellLimit: Math.max(
-        1,
-        options.visiumHdBinSizeMicrometers === undefined
-          ? detail.visibleCellCount
-          : options.totalCellCount,
-      ),
+      bbox: paddedExactBbox(detail),
+      // The box bounds the read, so its margin is never cut short.
+      cellLimit: Math.max(1, options.totalCellCount),
       sampleStride: 1,
       sourceCellCount: detail.visibleCellCount,
       ...(options.visiumHdBinSizeMicrometers === undefined
@@ -133,8 +134,8 @@ export function planGeneExpressionLod(
     return {
       kind: 'request',
       mode: 'exact',
-      bbox: detail.bbox,
-      cellLimit: GENE_EXPRESSION_EXACT_CELL_LIMIT,
+      bbox: paddedExactBbox(detail),
+      cellLimit: Math.max(1, options.totalCellCount),
       sampleStride: 1,
       sourceCellCount: detail.visibleCellCount,
     }
@@ -200,13 +201,8 @@ export function geneExpressionRequestKey(
     ].join(':')
   }
 
-  const [targetX = 0, targetY = 0] = detail.viewState.target
-  const viewportSpan = Math.max(
-    detail.bbox.maxX - detail.bbox.minX,
-    detail.bbox.maxY - detail.bbox.minY,
-    1,
-  )
-  const targetBucket = plan.mode === 'sampled' ? Math.max(500, viewportSpan / 6) : 100
+  // Viewport reads leave the view's position out: a pan reads again only when
+  // it leaves the box read (geneExpressionReadCovers).
   const zoomBucket = plan.mode === 'sampled' ? 0.25 : 0.001
   const roundedZoom =
     Math.round(Math.round(detail.viewState.zoom / zoomBucket) * zoomBucket * 1000) / 1000
@@ -214,14 +210,42 @@ export function geneExpressionRequestKey(
   return [
     baseUrl.replace(/\/+$/, ''),
     visiumBinKey,
-    Math.round(targetX / targetBucket) * targetBucket,
-    Math.round(targetY / targetBucket) * targetBucket,
     roundedZoom,
     plan.mode,
     plan.cellLimit,
     plan.sampleStride,
     genes.join('|'),
   ].join(':')
+}
+
+// The box an expression read covered, under its request key.
+export interface GeneExpressionReadArea {
+  readonly key: string
+  readonly bbox: BBox
+}
+
+// True when the read made under `key` still serves the view: a whole-slide
+// read whatever the view, a viewport read while its box holds the whole view.
+export function geneExpressionReadCovers(
+  read: GeneExpressionReadArea | null,
+  key: string,
+  plan: Extract<GeneExpressionLodPlan, { readonly kind: 'request' }>,
+  view: BBox,
+): boolean {
+  if (read === null || read.key !== key) {
+    return false
+  }
+
+  if (plan.mode === 'all-cells' || plan.mode === 'overview-sampled') {
+    return true
+  }
+
+  return (
+    read.bbox.minX <= view.minX &&
+    read.bbox.maxX >= view.maxX &&
+    read.bbox.minY <= view.minY &&
+    read.bbox.maxY >= view.maxY
+  )
 }
 
 export function geneExpressionWaitingKey(
@@ -262,7 +286,9 @@ function planVisiumHdGeneExpressionLod(
     detail.viewState.zoom <= GENE_EXPRESSION_OVERVIEW_ZOOM_MAX
   const sourceCellCount = useSlideBbox ? options.totalCellCount : detail.visibleCellCount
   const requestBbox =
-    useSlideBbox && options.slideBbox !== null ? options.slideBbox : detail.bbox
+    useSlideBbox && options.slideBbox !== null
+      ? options.slideBbox
+      : paddedExactBbox(detail)
   const mode: GeneExpressionLoadMode = useSlideBbox
     ? 'all-cells'
     : options.detailMode === 'exact-region'
@@ -296,6 +322,24 @@ function visiumHdGeneExpressionLodBinSize(
   }
 
   return activeBinSizeMicrometers
+}
+
+// The view's box with the exact-read margin, which shrinks as the view fills
+// up towards the exact limit (as the boundary layer's does).
+function paddedExactBbox(detail: GeneExpressionViewportDetail): BBox {
+  const areaHeadroom =
+    detail.visibleCellCount > 0
+      ? GENE_EXPRESSION_EXACT_CELL_LIMIT / detail.visibleCellCount
+      : Infinity
+  const ratio = Math.max(
+    0,
+    Math.min(
+      GENE_EXPRESSION_EXACT_BBOX_PADDING_RATIO,
+      (Math.sqrt(Math.max(1, areaHeadroom)) - 1) / 2,
+    ),
+  )
+
+  return ratio === 0 ? detail.bbox : padBbox(detail.bbox, ratio)
 }
 
 function padBbox(bbox: BBox, ratio: number): BBox {

@@ -67,12 +67,7 @@ export async function loadDatasetRoiGeneStats(
   cells: readonly DatasetCell[],
   options: LoadDatasetRoiGeneStatsOptions = {},
 ): Promise<RoiGeneStats> {
-  const cellLimit = normalizeLimit(options.cellLimit, ROI_GENE_STATS_CELL_LIMIT)
-  const sampledCells = sampleRoiCells(
-    cells,
-    cellLimit,
-    options.sampleStrategy ?? 'stratified',
-  )
+  const sampledCells = roiGeneStatsCells(cells, options)
 
   if (sampledCells.length === 0) {
     return emptyRoiGeneStats(cells.length)
@@ -282,11 +277,19 @@ async function assertH5RangeRead(
   throwIfAborted(options.signal)
 }
 
-function sampleRoiCells(
+// The cells ROI gene stats read, on every platform: up to `cellLimit`
+// (10,000 by default), an even sample of a larger selection, or its first
+// cells with the 'head' strategy.
+export function roiGeneStatsCells(
   cells: readonly DatasetCell[],
-  cellLimit: number,
-  strategy: RoiGeneStatsSampleStrategy,
+  options: {
+    readonly cellLimit?: number
+    readonly sampleStrategy?: RoiGeneStatsSampleStrategy
+  } = {},
 ): readonly DatasetCell[] {
+  const cellLimit = normalizeLimit(options.cellLimit, ROI_GENE_STATS_CELL_LIMIT)
+  const strategy = options.sampleStrategy ?? 'stratified'
+
   if (cells.length <= cellLimit) {
     return cells
   }

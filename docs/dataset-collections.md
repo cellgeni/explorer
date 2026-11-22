@@ -267,7 +267,8 @@ each class the same colour even when opened on their own or from a link. A
 class that only the next dataset has takes the next free colour.
 
 Each switch adds a browser history entry, so Back returns to the previous
-dataset of the collection.
+dataset of the collection. The first dataset a collection link opens replaces
+the link's entry, so Back from it leaves the collection.
 
 ## Previews
 

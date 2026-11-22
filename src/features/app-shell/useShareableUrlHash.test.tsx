@@ -346,6 +346,84 @@ describe('useShareableUrlHash', () => {
     expect(readShareableStateFromLocation().selectedGenes).toBeUndefined()
   })
 
+  it('replaces a collection link with the dataset it opens, so Back leaves the page', () => {
+    window.history.replaceState(null, '', '/previous-page')
+    window.history.pushState(null, '', '/?collection=https%3A%2F%2Fexample.test%2Fc.json')
+    const startLength = window.history.length
+    const { rerender } = render(
+      <ShareableUrlHashProbe collectionUrl="https://example.test/c.json" datasetUrl="" />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+
+    // The collection opens its first dataset: that is the link's own dataset.
+    rerender(
+      <ShareableUrlHashProbe
+        collectionUrl="https://example.test/c.json"
+        datasetUrl="https://example.test/a"
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.history.length).toBe(startLength)
+    expect(window.location.hash).toContain('dataset=https%3A%2F%2Fexample.test%2Fa')
+
+    // Another of its datasets adds an entry, as any other dataset does.
+    rerender(
+      <ShareableUrlHashProbe
+        collectionUrl="https://example.test/c.json"
+        datasetUrl="https://example.test/b"
+      />,
+    )
+    act(() => {
+      vi.advanceTimersByTime(160)
+    })
+    expect(window.history.length).toBe(startLength + 1)
+  })
+
+  it.each(['popstate', 'hashchange'] as const)(
+    'reloads for a link pasted for the open dataset (%s)',
+    (eventName) => {
+      const onHistoryDatasetChange = vi.fn()
+      const { rerender } = render(
+        <ShareableUrlHashProbe
+          datasetUrl="https://example.test/a"
+          selectedGenes={['Actb']}
+          onHistoryDatasetChange={onHistoryDatasetChange}
+        />,
+      )
+      act(() => {
+        vi.advanceTimersByTime(160)
+      })
+
+      // A colleague's link: the same dataset, another gene.
+      window.history.pushState(
+        null,
+        '',
+        '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fa&genes=Gad1',
+      )
+      act(() => {
+        window.dispatchEvent(new Event(eventName))
+      })
+      expect(onHistoryDatasetChange).toHaveBeenCalledTimes(1)
+
+      // The pasted link stays for the reload to read.
+      rerender(
+        <ShareableUrlHashProbe
+          datasetUrl="https://example.test/a"
+          selectedGenes={['Sox2']}
+          onHistoryDatasetChange={onHistoryDatasetChange}
+        />,
+      )
+      act(() => {
+        vi.advanceTimersByTime(160)
+      })
+      expect(window.location.hash).toContain('genes=Gad1')
+    },
+  )
+
   it('reloads when Back reaches another dataset, and writes nothing more', () => {
     const onHistoryDatasetChange = vi.fn()
     const { rerender } = render(

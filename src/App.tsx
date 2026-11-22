@@ -247,7 +247,7 @@ import {
   defaultRoiName,
   summarizeRoiCells,
 } from './features/roi/roiModel'
-import { summarizeRoiGeneExpression } from './data/roiGeneStats'
+import { roiGeneStatsCells, summarizeRoiGeneExpression } from './data/roiGeneStats'
 import { geneExpressionZScoreCells } from './data/geneExpressionLod'
 import {
   gridCellDatumDeckCenter,
@@ -2305,7 +2305,7 @@ export function App({ dependencies }: AppProps = {}) {
       }
 
       const h5adDataset: H5adExpressionDataset = dataset
-      const sampledCells = h5adSampleCells(cells, options.cellLimit)
+      const sampledCells = roiGeneStatsCells(cells, options)
       const sampledCellIds = sampledCells.map((cell) => cell.id as SpatialElementId)
       const matrix = await h5adDataset.matrix(sampledCellIds)
 
@@ -2825,6 +2825,7 @@ export function App({ dependencies }: AppProps = {}) {
     handleImportAnnotationUrl,
     handleImportAnnotations,
     handleLoadAnnotations,
+    linkedAnnotationUrl,
     handleRemoveCellMetadataTrack,
     handleRemoveAnnotation,
     handleSaveRoiAnnotation,
@@ -2864,6 +2865,7 @@ export function App({ dependencies }: AppProps = {}) {
     activeBinSize: activeVisiumHdBinSize,
     annotationState,
     getSpatialDataset,
+    hiddenAnnotationIds,
     isVisiumHdDataset,
     loadAnnotationGroup,
     loadState,
@@ -3085,6 +3087,18 @@ export function App({ dependencies }: AppProps = {}) {
       return
     }
 
+    // The labels are the link's dataset's: another dataset, opened after
+    // the link's failed or was cancelled, does not take them.
+    const initialDatasetUrl = initialShareableState.datasetUrl?.trim()
+
+    if (
+      initialDatasetUrl !== undefined &&
+      initialDatasetUrl !== '' &&
+      initialDatasetUrl !== loadedDatasetUrl
+    ) {
+      return
+    }
+
     // Loading a set replaces the labels shown, so an import that finished
     // first was lost. The link's labels were made with the set loaded
     // first, so its import waits for the set: while the dataset lists its
@@ -3124,6 +3138,7 @@ export function App({ dependencies }: AppProps = {}) {
     }
   }, [
     annotationGroupState.status,
+    initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
     loadRequestId,
@@ -4002,7 +4017,7 @@ export function App({ dependencies }: AppProps = {}) {
   ])
   const currentShareUrl = useShareableUrlHash({
     dataset: {
-      annotationUrl: annotationImportUrl,
+      annotationUrl: linkedAnnotationUrl ?? '',
       customImageOpacities,
       customImageUrls,
       segmentation: segmentationLinkFor(
@@ -5477,18 +5492,6 @@ function hasFunction<T extends string>(
     key in value &&
     typeof (value as Record<T, unknown>)[key] === 'function'
   )
-}
-
-function h5adSampleCells(
-  cells: readonly DatasetCell[],
-  limit: number | undefined,
-): readonly DatasetCell[] {
-  const normalizedLimit =
-    limit === undefined || !Number.isFinite(limit)
-      ? cells.length
-      : Math.max(1, Math.floor(limit))
-
-  return cells.length <= normalizedLimit ? cells : cells.slice(0, normalizedLimit)
 }
 
 function imageFitExtentFromMorphologyImage(image: MorphologyImage | null): BBox | null {
