@@ -36,7 +36,7 @@ import type { MerscopeImageChoice } from '../../datasets/merscopeDataset'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 import type { ImagePyramidLoader } from '../../data/imagePyramid'
-import { micrometersPerPixelY } from '../../data/coords'
+import { micrometersPerPixelY, type UnitsDescriptor } from '../../data/coords'
 import type { SlideImagesSource } from './slideImagesModel'
 
 // The dataset itself: opening one, sharing it, what it is, its view options
@@ -80,8 +80,9 @@ export interface DatasetFactsInput {
 export interface DatasetImageSize {
   readonly width: number
   readonly height: number
-  readonly widthMicrometers: number
-  readonly heightMicrometers: number
+  // Absent when the image's units are not known.
+  readonly widthMicrometers?: number
+  readonly heightMicrometers?: number
 }
 
 // A pyramid's level 0, or a flat tissue image (a Visium hires or lowres PNG)
@@ -95,11 +96,22 @@ export function datasetImageSize(
   } | null,
 ): DatasetImageSize | null {
   if (loader !== null) {
+    // Loaders read before their units are known (and test doubles) have none.
+    const units = loader.units as UnitsDescriptor | undefined
+
+    if (!Number.isFinite(loader.imageWidth) || !Number.isFinite(loader.imageHeight)) {
+      return null
+    }
+
     return {
       width: loader.imageWidth,
       height: loader.imageHeight,
-      widthMicrometers: loader.imageWidth * loader.units.micrometersPerPixel,
-      heightMicrometers: loader.imageHeight * micrometersPerPixelY(loader.units),
+      ...(units === undefined
+        ? {}
+        : {
+            widthMicrometers: loader.imageWidth * units.micrometersPerPixel,
+            heightMicrometers: loader.imageHeight * micrometersPerPixelY(units),
+          }),
     }
   }
 
@@ -128,14 +140,15 @@ function lengthText(micrometers: number, unit: 'µm' | 'mm'): string {
 function imageSizeFact(size: DatasetImageSize, calibrated: boolean): string {
   const pixels = `${size.width.toLocaleString()} × ${size.height.toLocaleString()} px`
 
-  if (!calibrated) {
+  const { widthMicrometers, heightMicrometers } = size
+
+  if (!calibrated || widthMicrometers === undefined || heightMicrometers === undefined) {
     return pixels
   }
 
-  const unit =
-    Math.max(size.widthMicrometers, size.heightMicrometers) >= 1000 ? 'mm' : 'µm'
-  return `${pixels} · ${lengthText(size.widthMicrometers, unit)} × ${lengthText(
-    size.heightMicrometers,
+  const unit = Math.max(widthMicrometers, heightMicrometers) >= 1000 ? 'mm' : 'µm'
+  return `${pixels} · ${lengthText(widthMicrometers, unit)} × ${lengthText(
+    heightMicrometers,
     unit,
   )} ${unit}`
 }

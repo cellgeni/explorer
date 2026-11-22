@@ -279,6 +279,12 @@ describe('datasetFacts', () => {
       datasetImageSize(null, { scaleFactor: 0.08, micrometersPerPixel: 0.3236 }),
     ).toBeNull()
     expect(datasetImageSize(null, null)).toBeNull()
+    expect(
+      datasetImageSize(
+        { imageWidth: 1000, imageHeight: 500 } as unknown as ImagePyramidLoader,
+        null,
+      ),
+    ).toEqual({ width: 1000, height: 500 })
   })
 
   it('is empty in the model until a dataset is ready', () => {
