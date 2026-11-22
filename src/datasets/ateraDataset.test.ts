@@ -535,7 +535,49 @@ describe('AteraDataset', () => {
     await dataset.fileUrl('transcripts')
 
     expect(fetcher).toHaveBeenCalledTimes(1)
-    await expect(dataset.morphologyUrl()).rejects.toThrow('experiment.spatial')
+    // A run hosted with a manifest only: nothing names an image, and the
+    // default pixel size applies.
+    await expect(dataset.morphologyUrl()).resolves.toBeNull()
+    await expect(dataset.morphology3dUrl()).resolves.toBeNull()
+    await expect(dataset.meta()).resolves.toMatchObject({
+      platform: 'atera',
+      units: { micrometersPerPixel: 0.2125 },
+    })
+    expect(fetcher).toHaveBeenCalledTimes(1)
+  })
+
+  it('reads the images a manifest names without experiment.spatial', async () => {
+    const { dataset } = createDataset({
+      experiment: null,
+      files: { morphology: 'https://images.example.test/he.ome.tif' },
+    })
+
+    await expect(dataset.morphologyUrl()).resolves.toBe(
+      'https://images.example.test/he.ome.tif',
+    )
+    await expect(dataset.morphology3dUrl()).resolves.toBeNull()
+  })
+
+  it('reads experiment.spatial again after a failed read', async () => {
+    let failures = 1
+    const fetcher = vi.fn(async () => {
+      if (failures > 0) {
+        failures -= 1
+        throw new TypeError('Failed to fetch')
+      }
+
+      return Response.json({
+        explorer_files: { cells_zarr_filepath: 'run_7/cells.zarr.zip' },
+      })
+    }) as unknown as typeof fetch
+    const dataset = new AteraDataset({ baseUrl: BASE_URL, fetcher })
+
+    // A network failure is not taken for a missing file, which would mean
+    // standard names for the rest of the session.
+    await expect(dataset.fileUrl('cells')).rejects.toThrow('Failed to fetch')
+    await expect(dataset.fileUrl('cells')).resolves.toBe(
+      `${BASE_URL}/run_7/cells.zarr.zip`,
+    )
   })
 
   it('rejects a CSC matrix whose feature count differs from the matrix', async () => {
