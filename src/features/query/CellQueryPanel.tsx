@@ -452,7 +452,8 @@ function ThresholdHistogram({
   readonly threshold: number | undefined
   readonly label: string
 }) {
-  const range = Math.max(1, histogram.max - histogram.min)
+  // As the histogram's bars span it: a float window can be narrower than 1.
+  const range = histogram.max > histogram.min ? histogram.max - histogram.min : 1
   const at =
     threshold === undefined
       ? null

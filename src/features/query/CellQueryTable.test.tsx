@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OverviewCellDatum } from '../../rendering/deckLayerTypes'
 import { testCellQueryModel } from '../../test/sectionModels'
 import { CELL_PICTURE_ROW_HEIGHT, CELL_PICTURE_SETTLE_MS } from './cellPictureModel'
-import { CELL_QUERY_MAX_BODY_HEIGHT, CellQueryTable } from './CellQueryTable'
+import {
+  CELL_QUERY_MAX_BODY_HEIGHT,
+  CELL_QUERY_ROW_HEIGHT,
+  CellQueryTable,
+} from './CellQueryTable'
 import type { CellQueryPictures, CellQueryTableModel } from './useCellQueryModel'
 
 function cell(index: number): OverviewCellDatum {
@@ -112,5 +116,22 @@ describe('Cell Query table with more rows than a browser lays out', () => {
     expect(
       scroller.querySelector(`[data-row-index="${(rowCount - 1).toString()}"]`),
     ).toHaveFocus()
+  })
+})
+
+describe('Cell Query table keyboard entry', () => {
+  it('keeps a drawn row in the tab order once the active row scrolls away', () => {
+    const { table } = testCellQueryModel({ rowCount: 1000 })
+    render(<CellQueryTable table={table} noun="cells" />)
+    fireEvent.click(screen.getByRole('button', { name: 'c3' }))
+    const scroller = screen.getByRole('table', { name: 'Matching cells' })
+
+    scroller.scrollTop = 500 * CELL_QUERY_ROW_HEIGHT
+    fireEvent.scroll(scroller)
+
+    const tabbable = screen
+      .getAllByRole('button', { name: /^c\d+$/ })
+      .filter((button) => button.getAttribute('tabindex') === '0')
+    expect(tabbable).toHaveLength(1)
   })
 })
