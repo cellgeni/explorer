@@ -90,4 +90,41 @@ describe('cell outline reader (plan 23-H)', () => {
       expect.objectContaining({ kind: 'circle' }),
     )
   })
+
+  it('reads again the cells a stopped read did not reach', async () => {
+    // As the box readers do: a stop ends the read with what it found so far.
+    const controller = new AbortController()
+    const load = vi.fn(async (cells: readonly CellOutlineRequest[]) => {
+      controller.abort()
+      return new Map(cells.slice(0, 1).map((cell) => [cell.id, element(cell.id)]))
+    })
+    const reader = new CellOutlineReader(load, 3)
+
+    await reader.read(
+      [request('a'), request('b'), request('c')],
+      controller.signal,
+      vi.fn(),
+    )
+
+    // a was read; b and c were not, so they are read when they come back.
+    load.mockImplementation(
+      async (cells) => new Map(cells.map((cell) => [cell.id, element(cell.id)])),
+    )
+    const onOutline = vi.fn()
+    await reader.read(
+      [request('a'), request('b'), request('c')],
+      new AbortController().signal,
+      onOutline,
+    )
+
+    expect(load.mock.calls.at(-1)?.[0].map((cell) => cell.id)).toEqual(['b', 'c'])
+    expect(onOutline).toHaveBeenCalledWith(
+      'b',
+      expect.objectContaining({ kind: 'circle' }),
+    )
+    expect(onOutline).toHaveBeenCalledWith(
+      'c',
+      expect.objectContaining({ kind: 'circle' }),
+    )
+  })
 })
