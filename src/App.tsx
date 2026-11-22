@@ -2142,6 +2142,9 @@ export function App({ dependencies }: AppProps = {}) {
       ? null
       : {
           micrometersPerPixel: loader.units.micrometersPerPixel,
+          ...(loader.units.yMicrometersPerPixel === undefined
+            ? {}
+            : { yMicrometersPerPixel: loader.units.yMicrometersPerPixel }),
           imageWidth: loader.imageWidth,
           imageHeight: loader.imageHeight,
         }

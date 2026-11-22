@@ -180,6 +180,32 @@ describe('openImportedSegmentation', () => {
     expect(segmentation.warning).toContain('stretched to cover the image')
   })
 
+  it('places polygons and masks by the pixel width and height', async () => {
+    // 0.5 µm wide and 0.25 µm tall pixels: the 8 x 8 image is 4 x 2 µm.
+    const placement = { ...PLACEMENT, yMicrometersPerPixel: 0.25 }
+    const polygons = await openImportedSegmentation(
+      wktSource('POLYGON ((4 4, 8 4, 8 8, 4 8, 4 4))\n', 'pixels'),
+      placement,
+      { readVector: readVectorSegmentation },
+    )
+    const polygonBatch = await polygons.outlines(bbox(0, 0, 4, 2))
+    expect(polygonBatch.elements.map(polygonBounds)).toEqual([[2, 1, 4, 2]])
+
+    clearOpenTiffFiles()
+    const mask = await openImportedSegmentation(
+      {
+        url: 'mask.tif',
+        file: new Blob([maskTiff('tiled')]),
+        format: 'label-tiff',
+        coordinates: 'pixels',
+      },
+      placement,
+    )
+    const maskBatch = await mask.outlines(bbox(0, 0, 4, 2))
+    const label2 = maskBatch.elements.find((element) => element.id === '2')
+    expect(label2 === undefined ? [] : polygonBounds(label2)).toEqual([2, 1, 4, 2])
+  })
+
   it('refuses a picked Zarr label image', async () => {
     await expect(
       openImportedSegmentation(

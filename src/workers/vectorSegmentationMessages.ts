@@ -13,6 +13,7 @@ export interface VectorSegmentationWorkerRequest {
   readonly file: VectorSegmentationFile
   readonly format: VectorSegmentationFormat
   readonly micrometersPerUnit: number
+  readonly yMicrometersPerUnit?: number
 }
 
 export type VectorSegmentationWorkerResponse =

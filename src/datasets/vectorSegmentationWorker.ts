@@ -44,6 +44,9 @@ export function vectorSegmentationWorkerReader(
             file: options.file,
             format: options.format,
             micrometersPerUnit: options.micrometersPerUnit,
+            ...(options.yMicrometersPerUnit === undefined
+              ? {}
+              : { yMicrometersPerUnit: options.yMicrometersPerUnit }),
           },
           {
             signal: options.signal,
