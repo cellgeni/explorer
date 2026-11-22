@@ -15,6 +15,7 @@ import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { BoundaryLoadState, DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { GeneExpressionState } from '../genes/geneControlsModel'
+import type { GeneExpressionLoader } from './appDependencies'
 import { deferredPromise } from '../../test/appTestHarness'
 import { useViewportDataWorkflow } from './useViewportDataWorkflow'
 
@@ -96,11 +97,13 @@ let snapshot: Snapshot
 
 function Probe({
   cellBoundaryLoadingEnabled = true,
+  geneExpressionDetailMode = 'auto',
   geneExpressionDisabledMessage,
   geneExpressionLoadingEnabled = true,
   loadBoundaryElements,
   loadGeneExpression,
   loadNucleusBoundaryElements,
+  loadState = readyLoadState,
   onReady,
   selectedGenes = ['Actb'],
   viewportCellCount,
@@ -110,6 +113,7 @@ function Probe({
     typeof useViewportDataWorkflow
   >[0]['loaders']['boundaryElements']
   readonly cellBoundaryLoadingEnabled?: boolean
+  readonly geneExpressionDetailMode?: 'auto' | 'exact-region' | 'all-cells'
   readonly geneExpressionDisabledMessage?: string
   readonly geneExpressionLoadingEnabled?: boolean
   readonly loadGeneExpression: Parameters<
@@ -118,6 +122,7 @@ function Probe({
   readonly loadNucleusBoundaryElements?: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loaders']['boundaryElements']
+  readonly loadState?: DatasetLoadState<StructuredLoadError>
   readonly onReady: (
     nextApi: ReturnType<typeof useViewportDataWorkflow>,
     nextSnapshot: Snapshot,
@@ -177,7 +182,7 @@ function Probe({
     controls: {
       boundaryCellLimit: 10,
       cellBoundaryLoadingEnabled,
-      geneExpressionDetailMode: 'auto',
+      geneExpressionDetailMode,
       geneExpressionDisabledMessage,
       geneExpressionLoadingEnabled,
       geneExpressionScaleKey: 'scale-key',
@@ -186,7 +191,7 @@ function Probe({
       viewportCellCount,
     },
     data: {
-      loadState: readyLoadState,
+      loadState,
       overviewExtent: bbox,
       selectedGenes: selectedGenes ?? defaultSelectedGenes,
     },
@@ -450,7 +455,13 @@ describe('useViewportDataWorkflow', () => {
 
       expect(loadGeneExpression).toHaveBeenCalledWith(
         'https://example.test/output',
-        bbox,
+        // The view and a quarter of its size on each side.
+        {
+          minX: micrometers(-25),
+          minY: micrometers(-25),
+          maxX: micrometers(125),
+          maxY: micrometers(125),
+        },
         ['Actb'],
         expect.objectContaining({
           limit: readyLoadState.cellCount,
@@ -462,6 +473,93 @@ describe('useViewportDataWorkflow', () => {
       expect(snapshot.geneExpressionState.status).toBe('ready')
     },
   )
+
+  describe('expression reads for the view of a large dataset', () => {
+    const largeLoadState: DatasetLoadState<StructuredLoadError> = {
+      status: 'ready',
+      url: 'https://example.test/xenium-1m',
+      cellCount: 1_000_000,
+    }
+
+    // 150 x 90 units around (cx, 5,000) at zoom 3 with 20,000 cells in view,
+    // so the exact read pads it by a quarter on each side.
+    function view(cx: number, width = 150): ViewerViewportDetail {
+      return {
+        bbox: {
+          minX: micrometers(cx - width / 2),
+          maxX: micrometers(cx + width / 2),
+          minY: micrometers(4_955),
+          maxY: micrometers(5_045),
+        },
+        visibleCellCount: 20_000,
+        viewState: { target: [cx, 5_000, 0], zoom: 3, minZoom: -8, maxZoom: 8 },
+      }
+    }
+
+    function covers(outer: BBox, inner: BBox): boolean {
+      return (
+        outer.minX <= inner.minX &&
+        outer.maxX >= inner.maxX &&
+        outer.minY <= inner.minY &&
+        outer.maxY >= inner.maxY
+      )
+    }
+
+    async function showViews(
+      details: readonly ViewerViewportDetail[],
+      detailMode: 'auto' | 'exact-region' = 'auto',
+    ) {
+      const loadGeneExpression = vi.fn<GeneExpressionLoader>(async () => batch)
+
+      render(
+        <Probe
+          geneExpressionDetailMode={detailMode}
+          loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+          loadGeneExpression={loadGeneExpression}
+          loadState={largeLoadState}
+          onReady={(nextApi, nextSnapshot) => {
+            api = nextApi
+            snapshot = nextSnapshot
+          }}
+        />,
+      )
+
+      for (const next of details) {
+        await act(async () => {
+          api.handleViewportChange(next)
+          await Promise.resolve()
+          await Promise.resolve()
+        })
+      }
+
+      return loadGeneExpression.mock.calls.map(([, requested]) => requested)
+    }
+
+    it('reads nothing for a pan inside the margin and reads again once the view leaves it', async () => {
+      const requested = await showViews([view(5_000), view(5_030), view(5_045)])
+
+      // The first box runs from 4,887.5 to 5,112.5: a 30-unit pan stays in
+      // it, a 45-unit one does not (though its centre rounds to the same 100).
+      expect(requested).toHaveLength(2)
+      expect(covers(requested[1]!, view(5_045).bbox)).toBe(true)
+      expect(snapshot.geneExpressionState.status).toBe('ready')
+    })
+
+    it('reads again when the viewer widens at the same centre and zoom', async () => {
+      const requested = await showViews([view(5_000), view(5_000, 250)])
+
+      expect(requested).toHaveLength(2)
+      expect(covers(requested[1]!, view(5_000, 250).bbox)).toBe(true)
+    })
+
+    it('keeps an Exact region read for a pan inside its margin', async () => {
+      const panned = { ...view(5_030), visibleCellCount: 19_000 }
+      const requested = await showViews([view(5_000), panned], 'exact-region')
+
+      expect(requested).toHaveLength(1)
+      expect(covers(requested[0]!, panned.bbox)).toBe(true)
+    })
+  })
 
   it('reports when true boundary polygons are deferred by viewport density', async () => {
     const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
