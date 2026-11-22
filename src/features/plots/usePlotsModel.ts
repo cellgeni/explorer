@@ -292,6 +292,8 @@ export function usePlotsModel({
       : plotFileName(datasetUrl, kindInfo.fileName, panel.setLabel, extension)
   const plotName = kindInfo.label.toLowerCase()
 
+  // A PNG that could not be drawn, until the next export.
+  const [exportError, setExportError] = useState<string | null>(null)
   const largeRead = largeReadNotice(data)
   const message = plotsMessage({
     available,
@@ -316,6 +318,7 @@ export function usePlotsModel({
     ...(plot !== null && largeRead !== null ? [largeRead] : []),
     ...plotsNotes(panel, data, elementNoun, log1pAvailable, plotKind),
     ...plotNonFiniteNotes(loadedStats, elementNoun),
+    ...(exportError === null ? [] : [exportError]),
   ]
   const geneErrors = panel.genes.flatMap((gene) => {
     const error = data.geneErrors.get(gene)
@@ -373,6 +376,7 @@ export function usePlotsModel({
     onExportSvg: () => {
       const name = fileName('svg')
       if (plot === null || name === null) return
+      setExportError(null)
       downloadTextFile(
         name,
         svgDocument(plotViewSvg(plot, documentPlotPaint(), plot.kind)),
@@ -385,21 +389,23 @@ export function usePlotsModel({
       if (plot === null || name === null) return
       const svg = plotViewSvg(plot, documentPlotPaint(), plot.kind)
       const { width, height } = svgSize(svg)
+      setExportError(null)
       svgPngBlob(svgDocument(svg), width, height).then(
         (blob) => {
           downloadBlob(name, blob)
           appendDebugEvent(`Plots: exported the ${plotName} as PNG`)
         },
         (error: unknown) => {
-          appendDebugEvent(
-            `Plots: PNG export failed: ${error instanceof Error ? error.message : String(error)}`,
-          )
+          const message = error instanceof Error ? error.message : String(error)
+          setExportError(`The PNG could not be drawn: ${message}`)
+          appendDebugEvent(`Plots: PNG export failed: ${message}`)
         },
       )
     },
     onExportCsv: () => {
       const name = fileName('csv')
       if (plot === null || name === null) return
+      setExportError(null)
       downloadTextFile(
         name,
         plotStatsCsv({
