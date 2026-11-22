@@ -102,7 +102,14 @@ export function cellPictureShape(
   cell: OverviewCellDatum,
   outline: CellPictureOutline | null,
   field: number,
-  size = CELL_PICTURE_SIZE,
+  {
+    spots = false,
+    size = CELL_PICTURE_SIZE,
+  }: {
+    // The dataset's elements are spots, whose circle is their outline.
+    readonly spots?: boolean
+    readonly size?: number
+  } = {},
 ): CellPictureShape {
   const [x = 0, deckY = 0] = cell.position
   const scale = size / field
@@ -134,7 +141,7 @@ export function cellPictureShape(
     return { kind: 'circle', cx, cy, r: outline.radius * scale, fallback: false }
   }
 
-  if (cell.radiusMicrometers !== undefined && cell.radiusMicrometers > 0) {
+  if (spots && cell.radiusMicrometers !== undefined && cell.radiusMicrometers > 0) {
     return {
       kind: 'circle',
       cx: size / 2,

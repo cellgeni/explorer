@@ -159,6 +159,8 @@ export interface CellQueryPictures {
   // Changes with the dataset, whose tiles and outlines are dropped.
   readonly key: string
   readonly field: number
+  // The elements are Visium spots, drawn as their circles.
+  readonly spots: boolean
   // Null for a dataset without an image: outlines alone.
   readonly image: CellQueryPictureImage | null
   // Tells the outline of each cell in rows start to end, at once for those
@@ -822,6 +824,7 @@ export function useCellQueryModel({
         : {
             key: datasetUrl,
             field: pictureField,
+            spots: elementNoun === 'spots',
             image: pictureImage,
             readOutlines: async (start, end, signal, onOutline) => {
               const requests = Array.from(rows?.slice(start, end) ?? [], (row) => {
@@ -847,6 +850,7 @@ export function useCellQueryModel({
       appendDebugEvent,
       cells,
       datasetUrl,
+      elementNoun,
       outlineReader,
       pictureField,
       pictureImage,
@@ -1484,13 +1488,13 @@ function imageOutsideNotes(
     const source = columns.get(id)?.source
     if (source?.kind !== 'image' || notes.has(source.spec.channelId)) continue
     const state = imageMeasurementState(snapshot, id)
-    if (state?.status !== 'ready' || state.result.cellsOutside === 0) continue
+    if (state?.status !== 'ready' || state.result.cellsWithoutValue === 0) continue
     const name =
       channels.find((channel) => channel.id === source.spec.channelId)?.name ??
       source.spec.channelId
     notes.set(
       source.spec.channelId,
-      `${state.result.cellsOutside.toLocaleString()} ${noun} are outside the image and have no ${name} values.`,
+      `${state.result.cellsWithoutValue.toLocaleString()} ${noun} have no ${name} value: they are outside the image, or cover no pixel at this resolution.`,
     )
   }
   return [...notes.values()]
