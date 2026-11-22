@@ -197,15 +197,15 @@ export function useViewportDataWorkflow({
     setNucleusBoundaryState,
     setShareableViewState,
   } = setters
-  // Area of each layer's boundary request identified by its viewport key ref;
-  // it is only trusted while that key is still current.
-  const cellBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
-  const nucleusBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
   // The expression read that failed, with the view it was made for.
   const failedGeneExpressionReadRef = useRef<{
     readonly key: string
     readonly detail: ViewerViewportDetail
   } | null>(null)
+  // Area of each layer's boundary request identified by its viewport key ref;
+  // it is only trusted while that key is still current.
+  const cellBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
+  const nucleusBoundaryAreaRef = useRef<BoundaryRequestAreaWithKey | null>(null)
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
