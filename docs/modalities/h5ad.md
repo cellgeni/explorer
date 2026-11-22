@@ -289,6 +289,13 @@ values with gaps up to 262,144 values (`csrLazyRowBatches`).
 | `embeddingOptions()` | obsm keys usable as embeddings; the first one is selected                                |
 | `metadataTracks()`   | One `h5ad:<column>` `Metadata` track per continuous obs column, without per-cell values  |
 
+The `<column>` in these IDs, and the `<class>` in a class's
+`analysis:<column>:<class>`, are slugs: lowercase, with every run of other
+characters turned into `-`. Names that slug alike (`Cell Type` and
+`cell_type`, `CD4+ T` and `CD4- T`, or labels in a script other than Latin)
+get `-2`, `-3`, … on the later ones, so each keeps its own colour, visibility
+and values.
+
 `overview()` is built once for each placement (a Visium library or off-tissue
 choice places the rows again) and returned to every caller. Its points carry
 `readMetadata` instead of a metadata object: building an object per cell with
