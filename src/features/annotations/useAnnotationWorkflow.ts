@@ -9,10 +9,7 @@ import {
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
 import type { CellId } from '../../data/cellid'
-import {
-  annotationPaletteColor,
-  normalizeAnnotationColor,
-} from '../../rendering/annotationPalette'
+import { normalizeAnnotationColor } from '../../rendering/annotationPalette'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import { slug } from '../../utils/slug'
 import type { AnnotationLoader } from '../app-shell/appDependencies'
@@ -40,6 +37,7 @@ import {
   customAnnotationFilePrefix,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
+  nextAnnotationColor,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
   removeHiddenAnnotationIdsByPrefix,
@@ -664,7 +662,7 @@ export function useAnnotationWorkflow({
     )
     setAnnotationColors((current) => ({
       ...current,
-      [annotation.id]: annotationPaletteColor(Object.keys(current).length),
+      [annotation.id]: nextAnnotationColor(current),
     }))
     setObservationColorMode('annotations')
   }, [
@@ -701,7 +699,7 @@ export function useAnnotationWorkflow({
       )
       setAnnotationColors((colors) => ({
         ...colors,
-        [annotation.id]: annotationPaletteColor(Object.keys(colors).length),
+        [annotation.id]: nextAnnotationColor(colors),
       }))
       setObservationColorMode('annotations')
     },
