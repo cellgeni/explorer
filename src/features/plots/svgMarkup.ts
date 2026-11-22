@@ -45,8 +45,28 @@ function formatAttribute(value: string | number): string {
   return typeof value === 'number' ? String(Math.round(value * 100) / 100) : value
 }
 
+// Characters XML 1.0 allows (its Char production), even as references: no
+// C0 control but tab, line feed and carriage return; no U+FFFE, U+FFFF or
+// unpaired surrogate. A name from an imported file can hold the others,
+// which become U+FFFD.
+function xmlCharacters(text: string): string {
+  let result = ''
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0
+    const allowed =
+      code === 0x9 ||
+      code === 0xa ||
+      code === 0xd ||
+      (code >= 0x20 && code <= 0xd7ff) ||
+      (code >= 0xe000 && code <= 0xfffd) ||
+      code >= 0x10000
+    result += allowed ? character : '\uFFFD'
+  }
+  return result
+}
+
 function escapeXml(text: string): string {
-  return text
+  return xmlCharacters(text)
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;')

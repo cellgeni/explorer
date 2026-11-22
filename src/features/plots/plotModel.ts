@@ -84,9 +84,15 @@ export function plotMeans(input: PlotMeansInput): PlotMeans {
     })
   })
 
-  const colourRange = input.colour === 'shared' ? meanRange(cells) : null
+  const colourRange = input.colour === 'shared' ? meanRange(cells, true) : null
+  // Per gene runs from the gene's own lowest mean, as Scanpy's
+  // standard_scale='var' does, so a gene expressed everywhere still spans
+  // the colour bar.
   const geneRanges = input.genes.map((_, geneIndex) =>
-    meanRange(cells.filter((cell) => cell.geneIndex === geneIndex)),
+    meanRange(
+      cells.filter((cell) => cell.geneIndex === geneIndex),
+      false,
+    ),
   )
 
   return {
@@ -98,9 +104,10 @@ export function plotMeans(input: PlotMeansInput): PlotMeans {
   }
 }
 
-// From the lowest mean, or 0 if lower, to the highest.
-function meanRange(cells: readonly PlotMeanCell[]): PlotRange | null {
-  let low = 0
+// From the lowest mean to the highest; with `fromZero`, from 0 when the
+// lowest is above it.
+function meanRange(cells: readonly PlotMeanCell[], fromZero: boolean): PlotRange | null {
+  let low = fromZero ? 0 : Number.POSITIVE_INFINITY
   let high = Number.NEGATIVE_INFINITY
 
   for (const { mean } of cells) {
@@ -146,7 +153,7 @@ export function meanCellTitle(
   valueLabel: string,
 ): string {
   if (cell.percent === null) return `${group}, ${gene}: no cells`
-  return `${group}, ${gene}: ${cell.cells.toLocaleString()} cells, ${formatPercent(cell.percent)} expressing, mean ${valueLabel} ${formatPlotNumber(cell.mean ?? 0)}`
+  return `${group}, ${gene}: ${formatCellCount(cell.cells)}, ${formatPercent(cell.percent)} expressing, mean ${valueLabel} ${formatPlotNumber(cell.mean ?? 0)}`
 }
 
 export function selectionGroupTitle(label: string): string {
@@ -222,6 +229,15 @@ export function formatPlotNumber(value: number): string {
   return PLOT_NUMBER.format(value)
 }
 
+// To one decimal, except that a share above 0 never reads 0%, nor one below
+// 100 read 100%: one expressing cell in 10,000 is "<0.1%".
 export function formatPercent(percent: number): string {
+  if (percent > 0 && percent < 0.05) return '<0.1%'
+  if (percent < 100 && percent >= 99.95) return '>99.9%'
   return `${percent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+}
+
+// "1 cell", "2 cells".
+export function formatCellCount(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? 'cell' : 'cells'}`
 }

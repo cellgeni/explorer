@@ -40,6 +40,11 @@ const ID_COLUMN_WIDTH = 150
 const PAGE_SIZE = 64
 const VALUE_COLUMN_WIDTH = 120
 const PICTURE_COLUMN_WIDTH = CELL_PICTURE_SIZE + 8
+// The tallest body laid out. Browsers stop laying out an element at about
+// 33.5 million px (Chromium, Safari) or 17.9 million (Firefox), which a
+// million rows pass; past this height the scroll bar maps onto every row
+// instead of one pixel per pixel.
+export const CELL_QUERY_MAX_BODY_HEIGHT = 8_000_000
 
 export function CellQueryTable({
   table,
@@ -106,7 +111,15 @@ export function CellQueryTable({
     }
   }, [scrollTop, settledTop])
 
-  const bodyTop = Math.max(0, scrollTop)
+  // Where the rows in view start, in the rows' own pixels: the scroll bar's
+  // position scaled onto them when they are taller than the body.
+  const rowsHeight = rowCount * rowHeight
+  const bodyHeight = Math.min(rowsHeight, CELL_QUERY_MAX_BODY_HEIGHT)
+  const scrollScale =
+    rowsHeight > bodyHeight && bodyHeight > viewportHeight
+      ? (rowsHeight - viewportHeight) / (bodyHeight - viewportHeight)
+      : 1
+  const bodyTop = Math.max(0, scrollTop) * scrollScale
   const firstInView = Math.floor(bodyTop / rowHeight)
   const lastInView = Math.min(
     rowCount - 1,
@@ -204,10 +217,11 @@ export function CellQueryTable({
     if (element !== null) {
       const top = target * rowHeight
       const bottom = top + rowHeight
-      const height = element.clientHeight - HEADER_HEIGHT
-      if (top < element.scrollTop) element.scrollTop = top
-      else if (height > 0 && bottom > element.scrollTop + height) {
-        element.scrollTop = bottom - height
+      const height = viewportHeight
+      const shownTop = element.scrollTop * scrollScale
+      if (top < shownTop) element.scrollTop = top / scrollScale
+      else if (height > 0 && bottom > shownTop + height) {
+        element.scrollTop = (bottom - height) / scrollScale
       }
       setScrollTop(element.scrollTop)
     }
@@ -252,7 +266,12 @@ export function CellQueryTable({
   } as CSSProperties
   const pictureOutlines =
     pictures !== null && outlines.key === pictures.key ? outlines.outlines : null
-  const focusIndex = Math.min(activeIndex, Math.max(0, rowCount - 1))
+  // The row Tab enters the table at: the active one, or while it is scrolled
+  // out of the drawn rows, the nearest drawn one, so the rows stay reachable.
+  const focusIndex = Math.max(
+    start,
+    Math.min(activeIndex, Math.max(0, rowCount - 1), Math.max(start, end - 1)),
+  )
   const rows = Array.from({ length: Math.max(0, end - start) }, (_, offset) => {
     const index = start + offset
     const cellId = table.cellIdAt(index)
@@ -266,7 +285,10 @@ export function CellQueryTable({
         role="row"
         aria-rowindex={index + 2}
         className={selected ? 'cell-query-row is-selected' : 'cell-query-row'}
-        style={{ top: `${index * rowHeight}px`, height: `${rowHeight}px` }}
+        style={{
+          top: `${index * rowHeight - bodyTop + Math.max(0, scrollTop)}px`,
+          height: `${rowHeight}px`,
+        }}
       >
         {pictures === null ? null : (
           <div role="cell" className="cell-query-cell cell-query-picture-cell">
@@ -371,7 +393,7 @@ export function CellQueryTable({
         <div
           role="rowgroup"
           className="cell-query-body"
-          style={{ ...gridStyle, height: `${rowCount * rowHeight}px` }}
+          style={{ ...gridStyle, height: `${bodyHeight}px` }}
           onKeyDown={handleKeyDown}
         >
           {rows}
