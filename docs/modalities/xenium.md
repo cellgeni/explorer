@@ -197,6 +197,9 @@ the FLOAT-cast vertex bounds prune row groups.
      100,000 cells are visible, `exact` when ≤ 50,000 are visible, otherwise
      `sampled`. Only cells with expression are returned, so sampled requests
      read every cell in the box.
+   - Auto on Visium HD (`planVisiumHdGeneExpressionLod`), at any size:
+     `all-cells` at zoom −1.25 or lower, otherwise `exact` over the padded
+     viewport, never sampled.
    - Viewport reads are padded: `exact` and `exact-region` by up to a quarter
      of the view on each side (less as the view nears 50,000 cells), `sampled`
      by a fifth. The box bounds the read, with no cell limit. The request key
