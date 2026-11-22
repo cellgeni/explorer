@@ -146,7 +146,7 @@ export function meanCellTitle(
   valueLabel: string,
 ): string {
   if (cell.percent === null) return `${group}, ${gene}: no cells`
-  return `${group}, ${gene}: ${cell.cells.toLocaleString()} cells, ${formatPercent(cell.percent)} expressing, mean ${valueLabel} ${formatPlotNumber(cell.mean ?? 0)}`
+  return `${group}, ${gene}: ${formatCellCount(cell.cells)}, ${formatPercent(cell.percent)} expressing, mean ${valueLabel} ${formatPlotNumber(cell.mean ?? 0)}`
 }
 
 export function selectionGroupTitle(label: string): string {
@@ -222,6 +222,15 @@ export function formatPlotNumber(value: number): string {
   return PLOT_NUMBER.format(value)
 }
 
+// To one decimal, except that a share above 0 never reads 0%, nor one below
+// 100 read 100%: one expressing cell in 10,000 is "<0.1%".
 export function formatPercent(percent: number): string {
+  if (percent > 0 && percent < 0.05) return '<0.1%'
+  if (percent < 100 && percent >= 99.95) return '>99.9%'
   return `${percent.toLocaleString('en-US', { maximumFractionDigits: 1 })}%`
+}
+
+// "1 cell", "2 cells".
+export function formatCellCount(count: number): string {
+  return `${count.toLocaleString()} ${count === 1 ? 'cell' : 'cells'}`
 }
