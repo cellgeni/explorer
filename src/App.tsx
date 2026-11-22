@@ -200,6 +200,7 @@ import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVi
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import { formatMappingRowsScope } from './features/app-shell/visiumHdAppController'
+import { gridCellLayerBinSize } from './features/app-shell/visiumHdGridLayerData'
 import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
@@ -1043,6 +1044,7 @@ export function App({ dependencies }: AppProps = {}) {
   const activeVisiumHdRoiState = activeVisiumHdRoiStateForPlatform({
     activeBinSize: activeVisiumHdBinSize,
     adapter: platformAdapter,
+    drawnBinSize: gridCellLayerBinSize(spatialGridCells) ?? undefined,
     loadState,
     state: visiumHdRoiState,
   })
