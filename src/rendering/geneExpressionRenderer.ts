@@ -315,7 +315,9 @@ export function createGeneExpressionElementStyleIndex(
 // are `cellCount` (GeneExpressionBatch.cellCount), so the cells left out of
 // `elements` count as 0, whichever platform left them out. A non-finite count
 // (a stored NaN or infinity) keeps its value and is left out of the z-score's
-// mean and SD, so the other cells still get a score.
+// mean and SD, so the other cells still get a score. Combine genes is for two
+// or more genes: one gene is scored by its expression whatever the mode, as
+// the legend says ("Expression per cell").
 export function geneExpressionScores(
   elements: readonly GeneExpressionElement[],
   genes: readonly string[],
@@ -324,7 +326,7 @@ export function geneExpressionScores(
 ): readonly number[] {
   const geneCount = Math.max(genes.length, 1)
 
-  if (scoreMode === 'sum') {
+  if (scoreMode === 'sum' || geneCount < 2) {
     return elements.map((element) => element.count)
   }
 
