@@ -94,6 +94,32 @@ describe('roiEnrichmentModel', () => {
     expect(log2FoldChange(0.7, 0)).toBeCloseTo(3)
   })
 
+  it('takes a negative mean as 0, so scaled data never gives NaN', () => {
+    // A scaled marker: 1 in 50 cells inside, -50/450 in 450 cells outside.
+    expect(log2FoldChange(1, -50 / 450)).toBeCloseTo(Math.log2(1.1 / 0.1))
+    expect(log2FoldChange(-0.4, 0.3)).toBeCloseTo(Math.log2(0.1 / 0.4))
+    expect(log2FoldChange(-2, -3)).toBe(0)
+
+    // Means as summarizeRoiGeneExpression gives them for scaled values: sums
+    // over the sampled cells divided by their number.
+    const inside = stats(50, [
+      { ...stat('MARKER', 50, 50, 50), meanPerCell: 1 },
+      { ...stat('MILD', 10, 50, 50), meanPerCell: 0.2 },
+    ])
+    const outside = stats(450, [
+      { ...stat('MARKER', -50, 0, 450), meanPerCell: -50 / 450 },
+      { ...stat('MILD', -10, 0, 450), meanPerCell: -10 / 450 },
+    ])
+    const ranked = rankRoiGenes(inside, outside, {
+      sort: 'enriched',
+      minPercentInside: 0,
+    })
+
+    expect(ranked.map((gene) => gene.gene)).toEqual(['MARKER', 'MILD'])
+    expect(ranked.every((gene) => Number.isFinite(gene.log2FoldChange))).toBe(true)
+    expect(formatLog2FoldChange(ranked[0]?.log2FoldChange ?? Number.NaN)).toBe('+3.5')
+  })
+
   it('ranks by fold change, filtered by the share of cells expressing inside', () => {
     const inside = stats(10, [
       stat('ACTB', 100, 10, 10),

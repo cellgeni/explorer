@@ -200,6 +200,7 @@ import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVi
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import { formatMappingRowsScope } from './features/app-shell/visiumHdAppController'
+import { gridCellLayerBinSize } from './features/app-shell/visiumHdGridLayerData'
 import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
@@ -1044,6 +1045,7 @@ export function App({ dependencies }: AppProps = {}) {
   const activeVisiumHdRoiState = activeVisiumHdRoiStateForPlatform({
     activeBinSize: activeVisiumHdBinSize,
     adapter: platformAdapter,
+    drawnBinSize: gridCellLayerBinSize(spatialGridCells) ?? undefined,
     loadState,
     state: visiumHdRoiState,
   })
@@ -2416,7 +2418,6 @@ export function App({ dependencies }: AppProps = {}) {
       selectedBinSize: activeVisiumHdBinSize,
     },
     data: {
-      currentViewportDetail,
       geneExpressionBatch,
       gridCells: spatialGridCells,
       loadState,
@@ -2898,6 +2899,7 @@ export function App({ dependencies }: AppProps = {}) {
   }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
 
   const {
+    annotationImportError,
     annotationImportNotice,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
@@ -3200,11 +3202,16 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
+      // As for the link's sets: the commit applied the link's colour mode,
+      // which a version 2 link leaves out when it is the default.
       void handleImportAnnotationUrlRef
         .current(initialAnnotationUrl, {
           hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
           shownAnnotationIds: initialShareableState.shownAnnotationIds,
           hiddenAnnotationSetIds: initialShareableState.hiddenAnnotationSetIds,
+          switchColorMode:
+            initialShareableState.linkVersion === undefined &&
+            initialShareableState.observationColorMode === undefined,
         })
         .then((imported) => {
           if (imported) {
@@ -3224,6 +3231,8 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
+    initialShareableState.linkVersion,
+    initialShareableState.observationColorMode,
     initialShareableState.shownAnnotationIds,
     loadRequestId,
     loadedDatasetUrl,
@@ -4362,10 +4371,19 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  // A failed label import keeps the labels, so its error is listed apart.
+  const issueErrors = useMemo(
+    () =>
+      annotationImportError === null
+        ? activeErrors
+        : [...activeErrors, annotationImportError],
+    [activeErrors, annotationImportError],
+  )
+
   // The section models (plan 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
   const datasetInfo = useDatasetInfoModel({
-    activeErrors,
+    activeErrors: issueErrors,
     appendDebugEvent,
     boundaryCellLimit,
     cellFeatureMatrixCapabilityState,
@@ -4777,6 +4795,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationGroupOptions,
     annotationGroupState,
     annotationHeaderCopy,
+    annotationImportError,
     annotationImportNotice,
     annotationImportUrl,
     annotationPlacedCellIds,

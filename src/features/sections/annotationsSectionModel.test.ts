@@ -13,6 +13,7 @@ function input(
     annotationGroupOptions: [],
     annotationGroupState: { status: 'idle' },
     annotationHeaderCopy: 'Idle',
+    annotationImportError: null,
     annotationImportNotice: null,
     annotationImportUrl: '',
     annotationPlacedCellIds: null,

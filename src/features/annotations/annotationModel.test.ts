@@ -18,6 +18,7 @@ import {
   annotationsToCsv,
   annotationIdsHiddenByLink,
   colorsForAnnotations,
+  nextAnnotationColor,
   compactHiddenAnnotationIds,
   customAnnotationFilePrefix,
   filterAnnotationsByVisibleClasses,
@@ -303,8 +304,13 @@ describe('annotationModel', () => {
       { id: 'custom:file:new', label: 'New', cellIds: [] },
     ])
 
+    // The first palette colour no class has: a user's own colour leaves it free.
     expect(colorsForAnnotations(annotations, { a: '#abcdef' })).toEqual({
       a: '#abcdef',
+      b: '#1f77b4',
+    })
+    expect(colorsForAnnotations(annotations, { a: '#1f77b4' })).toEqual({
+      a: '#1f77b4',
       b: '#ff7f0e',
     })
     // Stored colours seed new classes; colours already set, and malformed
@@ -318,7 +324,15 @@ describe('annotationModel', () => {
         ],
         { a: '#abcdef' },
       ),
-    ).toEqual({ a: '#abcdef', b: '#8e00f8', c: '#2ca02c' })
+    ).toEqual({ a: '#abcdef', b: '#8e00f8', c: '#1f77b4' })
+    // A colour freed by a removal is used again before a later one.
+    expect(
+      colorsForAnnotations([{ id: 'd' }], {
+        a: '#1f77b4',
+        c: '#2ca02c',
+      }),
+    ).toEqual({ a: '#1f77b4', c: '#2ca02c', d: '#ff7f0e' })
+    expect(nextAnnotationColor({ a: '#1f77b4', c: '#2ca02c' })).toBe('#ff7f0e')
   })
 
   it('writes a mostly hidden set by its shown classes, and reads it back', () => {
