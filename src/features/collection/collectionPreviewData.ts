@@ -79,6 +79,40 @@ export interface PreviewClasses {
   // Each drawn cell's class, as an index into classes, or -1 for none. A
   // cell in several classes takes the first, as in the main view.
   readonly classOf: Int32Array
+  // Each class's drawn cells, as indexes into the cells.
+  readonly members: readonly Uint32Array[]
+}
+
+const shownClassOfCache = new WeakMap<
+  PreviewClasses,
+  { readonly key: string; readonly classOf: Int32Array }
+>()
+
+// Each drawn cell's class among those not hidden: the first class listing it
+// that is shown, as the main view colours a cell, or -1. A cell in a hidden
+// class and a shown one (the `All` set, overlapping labels) takes the shown
+// one. With no class hidden, this is classOf itself.
+export function shownClassOf(
+  classes: PreviewClasses,
+  hiddenIds: ReadonlySet<string>,
+): Int32Array {
+  const hidden = classes.classes.filter(({ id }) => hiddenIds.has(id))
+  if (hidden.length === 0) return classes.classOf
+
+  const key = hidden.map(({ id }) => id).join('\u0000')
+  const cached = shownClassOfCache.get(classes)
+  if (cached?.key === key) return cached.classOf
+
+  const classOf = new Int32Array(classes.classOf.length).fill(-1)
+  classes.classes.forEach(({ id }, classIndex) => {
+    if (hiddenIds.has(id)) return
+    for (const cell of classes.members[classIndex] ?? []) {
+      if (classOf[cell] === -1) classOf[cell] = classIndex
+    }
+  })
+
+  shownClassOfCache.set(classes, { key, classOf })
+  return classOf
 }
 
 export interface PreviewSource {
@@ -390,12 +424,15 @@ function previewClasses(
 
   const cellIndex = previewCellIndex(cells)
   const classOf = new Int32Array(cells.cellIds.length).fill(-1)
-
-  annotations.forEach((annotation, classIndex) => {
+  const members = annotations.map((annotation, classIndex) => {
+    const drawn: number[] = []
     for (const cellId of annotation.cellIds) {
       const index = cellIndex.get(cellId)
-      if (index !== undefined && classOf[index] === -1) classOf[index] = classIndex
+      if (index === undefined) continue
+      drawn.push(index)
+      if (classOf[index] === -1) classOf[index] = classIndex
     }
+    return Uint32Array.from(drawn)
   })
 
   return {
@@ -406,6 +443,7 @@ function previewClasses(
       cellCount: cellIds.length,
     })),
     classOf,
+    members,
   }
 }
 

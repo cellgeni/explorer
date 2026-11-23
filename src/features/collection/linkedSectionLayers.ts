@@ -8,7 +8,11 @@ import {
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import type { CollectionBarAnnotations } from './CollectionBar'
-import type { PreviewCells, PreviewScores } from './collectionPreviewData'
+import {
+  shownClassOf,
+  type PreviewCells,
+  type PreviewScores,
+} from './collectionPreviewData'
 import { hexRgb, type PreviewOverlay } from './collectionPreviewRaster'
 import type { PreviewEntry } from './collectionPreviewStore'
 
@@ -79,7 +83,7 @@ export function sectionOverlay(
     const colors = coloring.classColors
     return {
       kind: 'classes',
-      classOf: classes.classOf,
+      classOf: shownClassOf(classes, annotations.hiddenIds),
       colors: classes.classes.map(({ id }) =>
         annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
       ),

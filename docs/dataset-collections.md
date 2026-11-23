@@ -287,7 +287,9 @@ order the previews read the classes. It has that one colour in every
 preview, panel beside the main view and the 3D stack. Hidden classes fade
 to a faint grey, as in the main view, so hiding all but one cell type (Alt-click its checkbox in the legend
 or in Cells › Clusters) shows where it is in every section;
-each preview then counts the cells of the shown classes (`1,204 cells`). The
+each preview then counts the cells of the shown classes (`1,204 cells`),
+each once. A cell in a hidden class and a shown one (the `All` set) is
+drawn in the shown one, as in the main view. The
 bar's left side names the set and how many classes are hidden. A set is read
 once per dataset and selection, like a gene. While a switch loads the next
 dataset's set, previews show the tissue only; the classes they read are kept,
@@ -314,6 +316,8 @@ so they are coloured again, without another read, once it loads.
   every cell that scores and every cell of a small shown class is, so a rare
   cell type still shows. A stored NaN or infinite score counts as none, as in
   the main view.
+  A preview that could not be read is tried again when it comes back into
+  view.
 - **Grid.** `Expand` (the arrows next to "Collection" in the bar) lays the previews out as a grid over the
   view, larger, with groups side by side where they fit, so a collection
   of about twenty sections fits on one screen. The layer panel stays open

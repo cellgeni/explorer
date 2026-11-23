@@ -339,7 +339,11 @@ function hoverText(
   if (layerId !== LINKED_CELLS_LAYER_ID) return null
 
   const cellId = preview.cells.cellIds[info.index] ?? ''
-  const classIndex = preview.classes?.classOf[info.index] ?? -1
+  // The class it is drawn in, else its first, hidden, class.
+  const shownClass =
+    overlay?.kind === 'classes' ? (overlay.classOf[info.index] ?? -1) : -1
+  const classIndex =
+    shownClass >= 0 ? shownClass : (preview.classes?.classOf[info.index] ?? -1)
   const classLabel =
     overlay?.kind === 'classes' ? preview.classes?.classes[classIndex]?.label : undefined
   const parts = [cellId, classLabel].filter(
