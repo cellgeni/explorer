@@ -142,7 +142,13 @@ function describeH5Node(node: H5StructureNode): StructureNodeLabel {
     kind: h5KindLabel(node),
     badges: [
       ...(role === null ? [] : [{ text: role }]),
-      ...(node.kind === 'soft-link' ? [{ text: 'missing target', warning: true }] : []),
+      ...(node.kind === 'soft-link'
+        ? [
+            node.link?.enclosing === true
+              ? { text: 'loop, not followed' }
+              : { text: 'missing target', warning: true },
+          ]
+        : []),
       ...(node.unlisted === true ? [{ text: 'not listed', warning: true }] : []),
     ],
     meta: h5NodeSummary(node),
@@ -183,7 +189,11 @@ function H5NodeDetails({
             )}
             <Fact label="Target">
               <code>{node.link.target}</code>
-              {node.kind === 'soft-link' ? ' (missing)' : null}
+              {node.kind !== 'soft-link'
+                ? null
+                : node.link.enclosing === true
+                  ? ', a group this link is in, so it is not followed'
+                  : ' (missing)'}
             </Fact>
           </>
         )}

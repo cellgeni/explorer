@@ -133,11 +133,13 @@ file.
 - `Values`: the first 100 values of a 1D dataset, or the first 100 rows and
   20 columns of a 2D one. They are read when the dataset is selected if that
   reads at most about 4 MB; otherwise the panel says how much it may read and
-  waits for `Read Values`. Datasets compressed with an HDF5 plugin (LZF,
+  waits for `Read Values`. A ragged array, read whole, always waits.
+  Datasets compressed with an HDF5 plugin (LZF,
   Blosc, bitshuffle, Zstandard) cannot be read here, and the panel says so.
 
-The walk stops after 5,000 objects and marks the groups it did not finish as
-`not listed`.
+The walk lists the groups near the root first, stops after 5,000 objects and
+marks the groups it did not finish as `not listed`. A soft link to a group it
+is in is listed, not followed.
 
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is

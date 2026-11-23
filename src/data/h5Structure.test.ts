@@ -96,6 +96,94 @@ describe('readH5Structure', () => {
     }
   })
 
+  // HDF5 resolves at most 16 soft links in one path, so a link back to a
+  // group above failed the whole walk before the 32-level limit (EXP-258).
+  it('lists a soft link to a group above it without following it', async () => {
+    const bytes = await createH5Bytes((file) => {
+      const a = file.create_group('a')
+      a.create_group('b')
+      a.create_soft_link('/', 'to_root')
+      a.create_soft_link('/a', 'to_self')
+      file.create_soft_link('/a/b', 'to_b')
+    })
+    const structure = await readH5Structure(URL_, {
+      open: async () => openH5WorkerFile(bytes),
+    })
+
+    try {
+      expect(structure.truncated).toBe(false)
+      expect(nodeAt(structure, 'a/to_root')).toMatchObject({
+        kind: 'soft-link',
+        link: { target: '/', enclosing: true },
+      })
+      expect(nodeAt(structure, 'a/to_self')).toMatchObject({
+        kind: 'soft-link',
+        link: { target: '/a', enclosing: true },
+      })
+      // A soft link elsewhere is still walked as its target.
+      expect(nodeAt(structure, 'to_b').kind).toBe('group')
+    } finally {
+      structure.close()
+    }
+  })
+
+  // The walk went depth first with one budget, so two hard links back to the
+  // root spent it all in the first and left the root's later children out
+  // (EXP-271).
+  it("lists the root's children before going deeper", async () => {
+    const bytes = await createH5Bytes((file) => {
+      file.create_group('a1')
+      file.create_hard_link('/', 'loop')
+      file.create_hard_link('/', 'loop2')
+      file.create_dataset({ name: 'zzz', data: [1, 2, 3] })
+    })
+    const structure = await readH5Structure(URL_, {
+      open: async () => openH5WorkerFile(bytes),
+      maxNodes: 50,
+    })
+
+    try {
+      expect(structure.truncated).toBe(true)
+      expect(structure.root.children.map((child) => child.name).sort()).toEqual([
+        'a1',
+        'loop',
+        'loop2',
+        'zzz',
+      ])
+      expect(structure.root.unlisted).toBeUndefined()
+    } finally {
+      structure.close()
+    }
+  })
+
+  // HDF5 allocates each variable-length string; they were never freed, so
+  // each read of long strings grew the worker's heap (EXP-271).
+  it('frees the strings a block of variable-length strings is read into', async () => {
+    const h5wasm = (await import('h5wasm')).default
+    const module = await h5wasm.ready
+    const strings = 32
+    const note = 'x'.repeat(512 * 1024)
+    const bytes = await createH5Bytes((file) => {
+      file.create_dataset({
+        name: 'notes',
+        data: Array.from({ length: strings }, () => note),
+      })
+    })
+    const structure = await readH5Structure(URL_, {
+      open: async () => openH5WorkerFile(bytes.slice()),
+    })
+
+    try {
+      const read = () => structure.readValues('notes', new AbortController().signal)
+      expect((await read()).values).toHaveLength(strings)
+      const afterFirst = module.HEAPU8.byteLength
+      for (let index = 0; index < 3; index += 1) await read()
+      expect(module.HEAPU8.byteLength - afterFirst).toBeLessThan(strings * note.length)
+    } finally {
+      structure.close()
+    }
+  }, 60_000)
+
   it('reads the first values of a dataset', async () => {
     const structure = await readH5Structure(URL_, { open: openFixture })
 
