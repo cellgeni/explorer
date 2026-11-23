@@ -226,7 +226,9 @@ any other `Min QV` the squares come from `transcripts.zarr.zip` instead
    are added up from `gene_offset`. Over `ATERA_QV_DENSITY_ROW_LIMIT`
    (2,000,000 rows, about 28 MB of `location` and `quality_score`), the
    binned QV ≥ 20 squares are shown instead, and the panel message names
-   the row count and asks for a closer view or fewer genes.
+   the row count and asks for a closer view or fewer genes. When
+   `transcripts.zarr.zip` cannot be opened at all, the QV ≥ 20 squares are
+   shown too, and the message says why `Min QV` was not applied.
 3. Otherwise each range's `location` and `quality_score` are read whole
    (both cached), and transcripts at `Min QV` or above are counted into the
    squares; those inside the view are the estimate.

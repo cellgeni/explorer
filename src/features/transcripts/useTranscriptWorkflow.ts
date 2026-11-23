@@ -585,6 +585,7 @@ export function useTranscriptWorkflow({
                   sourceFile: result.sourceFile,
                   minQv: result.minQv,
                   qvOverBudget: result.qvOverBudget,
+                  qvUnavailable: result.qvUnavailable,
                 }),
                 visibleTranscriptEstimate: geneEstimate,
                 scaleMax: result.scaleMax,
