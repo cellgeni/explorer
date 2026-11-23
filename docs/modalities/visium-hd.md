@@ -227,7 +227,12 @@ The Magic Lens reads selected-gene expression for its selection's bounding
 box and keeps the bins in the lens or ROI. It asks for every bin the box can
 hold, since a lasso can hold fewer bins than the 25,000-bin lens limit while
 its box holds more; past 200,000 the summary is marked as possibly
-incomplete.
+incomplete. `Summarise View` uses the viewport's expression instead when it
+was read for a box holding the view and for the bins drawn. The reader's
+per-gene counts are for the whole box, so when the lens or ROI keeps only
+some of its bins and two or more genes are selected, each gene is counted
+again over the bins kept, from their profiles (`matrix()`). The card's gene
+count is every gene detected, not only the 8 it lists.
 
 ## Caching And Workers
 

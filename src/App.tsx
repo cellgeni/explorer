@@ -2417,7 +2417,6 @@ export function App({ dependencies }: AppProps = {}) {
       selectedBinSize: activeVisiumHdBinSize,
     },
     data: {
-      currentViewportDetail,
       geneExpressionBatch,
       gridCells: spatialGridCells,
       loadState,
