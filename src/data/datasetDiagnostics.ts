@@ -334,6 +334,18 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'image') {
+    checks.push(await checkImage(detection, options))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'spatialdata') {
     checks.push(...(await runSpatialDataDiagnostics(detection, options)))
 
@@ -1833,6 +1845,56 @@ async function checkDirectRangeFile(
   }
 }
 
+const IMAGE_KIND_LABELS = {
+  tiff: 'TIFF image',
+  qptiff: 'QPTIFF image',
+  svs: 'SVS slide',
+  ndpi: 'NDPI slide',
+  'ome-zarr': 'OME-Zarr image',
+} as const
+
+// An image-only dataset: a TIFF is read by byte ranges, as its tiles are; an
+// OME-Zarr image's multiscale metadata is read as the viewer opens it.
+async function checkImage(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'image' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const label = IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']
+
+  if (detection.imageKind !== 'ome-zarr') {
+    return checkDirectRangeFile(detection.imageUrl, 'image-file', label, true, options)
+  }
+
+  const startedAt = Date.now()
+  try {
+    const { openOmeZarrMultiscaleGroup } = await import('../zarr/omeZarrLoader')
+    await openOmeZarrMultiscaleGroup(detection.imageUrl, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'pass',
+      message: 'Multiscale image metadata readable',
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'fail',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
 // A GET for a check. On a host that hides its error responses (EBI FTP), a
 // missing file looks like a network failure; it is reported as most likely
 // missing, as the HEAD and Range checks report it.
@@ -2076,7 +2138,9 @@ function detectionDiagnosticCheck(
                 ? 'Detected Atera'
                 : detection.platform === 'merscope'
                   ? 'Detected MERSCOPE'
-                  : 'Detected Xenium',
+                  : detection.platform === 'image'
+                    ? `Detected ${IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']}`
+                    : 'Detected Xenium',
     startedAt,
   })
 }
