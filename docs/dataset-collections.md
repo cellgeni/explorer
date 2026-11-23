@@ -289,7 +289,9 @@ to a faint grey, as in the main view, so hiding all but one cell type (Alt-click
 or in Cells › Clusters) shows where it is in every section;
 each preview then counts the cells of the shown classes (`1,204 cells`). The
 bar's left side names the set and how many classes are hidden. A set is read
-once per dataset and selection, like a gene.
+once per dataset and selection, like a gene. While a switch loads the next
+dataset's set, previews show the tissue only; the classes they read are kept,
+so they are coloured again, without another read, once it loads.
 
 - **Each its own scale, or one.** On Auto, or with a percentile top
   (`geneRange=,p95`), each preview runs from 0 to its own 99th (or that)
