@@ -113,6 +113,25 @@ describe('selectionListModel', () => {
     expect(activateSelection(state, 'missing')).toBe(state)
   })
 
+  it('gives a new selection a colour no other selection in the list has', () => {
+    const state = listWith(box(0, 0, 1, 1), box(2, 2, 3, 3), box(4, 4, 5, 5))
+    const { state: removedState } = removeSelection(state, 'selection-1')
+    const added = addSelection(removedState, box(6, 6, 7, 7)).added
+
+    // ROI 3 has the third colour; the fourth selection takes the first, freed.
+    expect(added.color).toBe(SELECTION_PALETTE[0])
+    expect(
+      new Set([...removedState.selections, added].map((selection) => selection.color))
+        .size,
+    ).toBe(3)
+
+    // With all 8 colours taken they repeat in turn.
+    const full = listWith(
+      ...Array.from({ length: 9 }, (_, index) => box(index, 0, index + 1, 1)),
+    )
+    expect(full.selections[8]?.color).toBe(SELECTION_PALETTE[0])
+  })
+
   it('removes a selection and puts it back at its index', () => {
     const state = listWith(box(0, 0, 1, 1), box(2, 2, 3, 3), box(4, 4, 5, 5))
     const { state: removedState, removed } = removeSelection(state, 'selection-2')

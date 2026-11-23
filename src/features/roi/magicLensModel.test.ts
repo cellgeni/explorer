@@ -159,7 +159,15 @@ describe('magicLensModel', () => {
         },
         ['Gad1', 'actb'],
       ),
-    ).toBe('2:4:44:actb,gad1')
+    ).toBe('4:8:44:actb,gad1')
+    // A 10 µm lens moved 3.8 µm is scanned again.
+    const key = (x: number) =>
+      magicLensDetailQueryKey(
+        { center: { x: micrometers(x), y: micrometers(0) }, radiusMicrometers: 10 },
+        [],
+      )
+    expect(key(1.9)).not.toBe(key(-1.9))
+    expect(key(1.9)).toBe(key(2.1))
     expect(normalizeMagicLensRadius(Number.NaN)).toBe(80)
     expect(normalizeMagicLensRadius(1_000)).toBe(500)
   })

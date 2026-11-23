@@ -336,6 +336,25 @@ describe('platformAdapter', () => {
         state: visiumHdRoiState,
       }),
     ).toBe(IDLE_VISIUM_HD_ROI_STATE)
+    // Drawn on the 16 µm squares that stand in for a finer selected size.
+    expect(
+      activeVisiumHdRoiStateForPlatform({
+        activeBinSize: 2,
+        adapter: visiumHd,
+        drawnBinSize: 16,
+        loadState: readyLoadState,
+        state: visiumHdRoiState,
+      }),
+    ).toBe(visiumHdRoiState)
+    expect(
+      activeVisiumHdRoiStateForPlatform({
+        activeBinSize: 2,
+        adapter: visiumHd,
+        drawnBinSize: 8,
+        loadState: readyLoadState,
+        state: visiumHdRoiState,
+      }),
+    ).toBe(IDLE_VISIUM_HD_ROI_STATE)
     expect(platformRoiElementIds(xenium, roiState, visiumHdRoiState)).toEqual([
       'aaaaaaaa-1',
     ])

@@ -81,9 +81,11 @@ export const IDLE_ROI_TRANSCRIPT_EXPORT_STATE: RoiTranscriptExportState<never> =
   status: 'idle',
 }
 
+// Means over the cells that carry the value; undefined when none does, as on
+// platforms whose ROI cells hold only their ID and position.
 export interface RoiSummary {
   readonly cellCount: number
-  readonly meanTranscriptCount: number
+  readonly meanTranscriptCount: number | undefined
   readonly meanCellArea: number | undefined
 }
 
@@ -216,17 +218,21 @@ export function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
   if (cells.length === 0) {
     return {
       cellCount: 0,
-      meanTranscriptCount: 0,
+      meanTranscriptCount: undefined,
       meanCellArea: undefined,
     }
   }
 
   let transcriptTotal = 0
+  let transcriptCellCount = 0
   let cellAreaTotal = 0
   let cellAreaCount = 0
 
   for (const cell of cells) {
-    transcriptTotal += cell.transcriptCount ?? 0
+    if (cell.transcriptCount !== undefined) {
+      transcriptTotal += cell.transcriptCount
+      transcriptCellCount += 1
+    }
 
     if (cell.cellArea !== undefined) {
       cellAreaTotal += cell.cellArea
@@ -236,7 +242,8 @@ export function summarizeRoiCells(cells: readonly DatasetCell[]): RoiSummary {
 
   return {
     cellCount: cells.length,
-    meanTranscriptCount: transcriptTotal / cells.length,
+    meanTranscriptCount:
+      transcriptCellCount === 0 ? undefined : transcriptTotal / transcriptCellCount,
     meanCellArea: cellAreaCount === 0 ? undefined : cellAreaTotal / cellAreaCount,
   }
 }
@@ -326,6 +333,10 @@ export function roiSelectionToGeoJson(
     properties: {
       roi_kind: selection.kind,
       coordinate_unit: 'micrometer',
+      // QuPath and Import GeoJSON read a shape's name from `name`.
+      ...(typeof properties.roi_name === 'string'
+        ? { name: properties.roi_name, objectType: 'annotation' }
+        : {}),
       ...properties,
     },
     geometry: {

@@ -121,6 +121,24 @@ describe('selection card', () => {
     ).toEqual(['Export GeoJSON', 'Export Cells', 'Export Transcripts'])
   })
 
+  it('leaves out means the cells carry no value for', () => {
+    const card = cellsSelectionCard({
+      ...cellsInput({
+        status: 'ready',
+        url: 'https://example.test',
+        bbox: BBOX,
+        selection: SELECTION,
+        cells: [],
+        hitCellLimit: false,
+      }),
+      summary: { cellCount: 12, meanTranscriptCount: undefined, meanCellArea: undefined },
+    })
+
+    expect(card?.variant === 'geometry' ? [] : card?.stats).toEqual([
+      { label: 'Cells', value: '12' },
+    ])
+  })
+
   it('goes to the whole selection', () => {
     const input = cellsInput({
       status: 'ready',

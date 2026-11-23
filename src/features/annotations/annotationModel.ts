@@ -1,7 +1,7 @@
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import {
-  annotationPaletteColor,
   normalizeAnnotationColor,
+  unusedAnnotationPaletteColors,
 } from '../../rendering/annotationPalette'
 import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
@@ -166,6 +166,84 @@ export function annotationSetIdForAnnotation(annotation: Annotation): string {
   return annotationSizeGrouping(annotation).id
 }
 
+// A link's hidden classes, written the short way per set: a set with more
+// classes hidden than shown lists the shown ones (`shownClasses=`) instead,
+// so "only this class" in a 150-class set is one ID, not 149. Hidden IDs that
+// are not loaded, such as a link's own before its set loads, are kept.
+export function compactHiddenAnnotationIds(
+  annotations: readonly Annotation[],
+  hiddenIds: readonly string[],
+): { readonly hidden: readonly string[]; readonly shown: readonly string[] } {
+  if (hiddenIds.length === 0) {
+    return { hidden: hiddenIds, shown: [] }
+  }
+
+  const hiddenSet = new Set(hiddenIds)
+  const classesBySet = new Map<string, Annotation[]>()
+
+  for (const annotation of annotations) {
+    const setId = annotationSetIdForAnnotation(annotation)
+    const classes = classesBySet.get(setId)
+
+    if (classes === undefined) {
+      classesBySet.set(setId, [annotation])
+    } else {
+      classes.push(annotation)
+    }
+  }
+
+  const listedByShown = new Set<string>()
+  const shown: string[] = []
+
+  for (const classes of classesBySet.values()) {
+    const shownClasses = classes.filter((annotation) => !hiddenSet.has(annotation.id))
+
+    if (
+      shownClasses.length > 0 &&
+      shownClasses.length < classes.length - shownClasses.length
+    ) {
+      shown.push(...shownClasses.map((annotation) => annotation.id))
+      for (const annotation of classes) {
+        listedByShown.add(annotation.id)
+      }
+    }
+  }
+
+  return {
+    hidden: hiddenIds.filter((id) => !listedByShown.has(id)),
+    shown,
+  }
+}
+
+// The loaded classes a link hides: those `hiddenIds` names, and every other
+// class of a set `shownIds` lists classes of.
+export function annotationIdsHiddenByLink(
+  annotations: readonly Annotation[],
+  hiddenIds: readonly string[],
+  shownIds: readonly string[],
+): readonly string[] {
+  if (hiddenIds.length === 0 && shownIds.length === 0) {
+    return []
+  }
+
+  const hiddenSet = new Set(hiddenIds)
+  const shownSet = new Set(shownIds)
+  const shownSetIds = new Set(
+    annotations
+      .filter((annotation) => shownSet.has(annotation.id))
+      .map(annotationSetIdForAnnotation),
+  )
+
+  return annotations
+    .filter(
+      (annotation) =>
+        hiddenSet.has(annotation.id) ||
+        (!shownSet.has(annotation.id) &&
+          shownSetIds.has(annotationSetIdForAnnotation(annotation))),
+    )
+    .map((annotation) => annotation.id)
+}
+
 // The set a class belongs to, as the Clusters lists show it: its id and
 // name, and the class's name within it.
 export function annotationSetGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
@@ -272,27 +350,41 @@ export function mergeImportedAnnotations(
   ]
 }
 
-// New annotations take the colour their dataset stores, else the next palette
-// colour; colours already set, including the user's, are kept.
+// New annotations take the colour their dataset stores, else the first
+// palette colour no other class has; colours already set, including the
+// user's, are kept.
 export function colorsForAnnotations(
   annotations: readonly Pick<Annotation, 'id' | 'color'>[],
   currentColors: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const nextColors: Record<string, string> = { ...currentColors }
-  let colorIndex = Object.keys(nextColors).length
+  const storedColor = (annotation: Pick<Annotation, 'color'>) =>
+    annotation.color === undefined ? null : normalizeAnnotationColor(annotation.color)
+  const nextPaletteColor = unusedAnnotationPaletteColors(
+    [
+      ...Object.values(currentColors),
+      ...annotations.flatMap((annotation) => storedColor(annotation) ?? []),
+    ],
+    Object.keys(currentColors).length,
+  )
 
   for (const annotation of annotations) {
     if (nextColors[annotation.id] !== undefined) {
       continue
     }
 
-    const storedColor =
-      annotation.color === undefined ? null : normalizeAnnotationColor(annotation.color)
-    nextColors[annotation.id] = storedColor ?? annotationPaletteColor(colorIndex)
-    colorIndex += 1
+    nextColors[annotation.id] = storedColor(annotation) ?? nextPaletteColor()
   }
 
   return nextColors
+}
+
+// One new class's colour (Save ROI, Save As Class).
+export function nextAnnotationColor(colors: Readonly<Record<string, string>>): string {
+  return unusedAnnotationPaletteColors(
+    Object.values(colors),
+    Object.keys(colors).length,
+  )()
 }
 
 export function removeAnnotationColor(

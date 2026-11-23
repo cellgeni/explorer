@@ -200,6 +200,7 @@ import { useVisiumHdExpressionProfileWorkflow } from './features/app-shell/useVi
 import { useViewportDataWorkflow } from './features/app-shell/useViewportDataWorkflow'
 import { useShareableUrlHash } from './features/app-shell/useShareableUrlHash'
 import { formatMappingRowsScope } from './features/app-shell/visiumHdAppController'
+import { gridCellLayerBinSize } from './features/app-shell/visiumHdGridLayerData'
 import {
   appendFallbackNoticeEntry,
   appendDebugLogEntry,
@@ -262,6 +263,7 @@ import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDataset
 import {
   annotationLabelsForCell,
   annotationStatusCopy,
+  compactHiddenAnnotationIds,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   linkAnnotationGroupId,
@@ -1043,6 +1045,7 @@ export function App({ dependencies }: AppProps = {}) {
   const activeVisiumHdRoiState = activeVisiumHdRoiStateForPlatform({
     activeBinSize: activeVisiumHdBinSize,
     adapter: platformAdapter,
+    drawnBinSize: gridCellLayerBinSize(spatialGridCells) ?? undefined,
     loadState,
     state: visiumHdRoiState,
   })
@@ -2415,7 +2418,6 @@ export function App({ dependencies }: AppProps = {}) {
       selectedBinSize: activeVisiumHdBinSize,
     },
     data: {
-      currentViewportDetail,
       geneExpressionBatch,
       gridCells: spatialGridCells,
       loadState,
@@ -2897,6 +2899,7 @@ export function App({ dependencies }: AppProps = {}) {
   }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
 
   const {
+    annotationImportError,
     annotationImportNotice,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
@@ -3140,6 +3143,7 @@ export function App({ dependencies }: AppProps = {}) {
       const load = loadAnnotationGroup(groupId, {
         switchColorMode: pending.switchColorMode,
         hiddenAnnotationIds: pending.hiddenAnnotationIds,
+        shownAnnotationIds: pending.shownAnnotationIds,
         hiddenAnnotationSetIds: pending.hiddenAnnotationSetIds,
       })
       linkAnnotationSetLoadRef.current = load
@@ -3198,10 +3202,16 @@ export function App({ dependencies }: AppProps = {}) {
         return
       }
 
+      // As for the link's sets: the commit applied the link's colour mode,
+      // which a version 2 link leaves out when it is the default.
       void handleImportAnnotationUrlRef
         .current(initialAnnotationUrl, {
           hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
+          shownAnnotationIds: initialShareableState.shownAnnotationIds,
           hiddenAnnotationSetIds: initialShareableState.hiddenAnnotationSetIds,
+          switchColorMode:
+            initialShareableState.linkVersion === undefined &&
+            initialShareableState.observationColorMode === undefined,
         })
         .then((imported) => {
           if (imported) {
@@ -3221,6 +3231,9 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
+    initialShareableState.linkVersion,
+    initialShareableState.observationColorMode,
+    initialShareableState.shownAnnotationIds,
     loadRequestId,
     loadedDatasetUrl,
     setAnnotationImportUrl,
@@ -4036,10 +4049,25 @@ export function App({ dependencies }: AppProps = {}) {
   )
   // Hidden classes and sets: until the link's set loads, the link keeps the
   // ones it was opened with, as it keeps its sets.
-  const sharedHiddenAnnotationIds =
-    linkAnnotationGroupIds === null
-      ? hiddenAnnotationIds
-      : (initialShareableState.hiddenAnnotationIds ?? hiddenAnnotationIds)
+  // A set with most classes hidden is written by the classes shown.
+  const compactedHiddenAnnotationIds = useMemo(
+    () =>
+      compactHiddenAnnotationIds(
+        annotationState.status === 'ready' ? annotationState.annotations : [],
+        hiddenAnnotationIds,
+      ),
+    [annotationState, hiddenAnnotationIds],
+  )
+  const linkHiddenClassesPending =
+    linkAnnotationGroupIds !== null &&
+    (initialShareableState.hiddenAnnotationIds !== undefined ||
+      initialShareableState.shownAnnotationIds !== undefined)
+  const sharedHiddenAnnotationIds = linkHiddenClassesPending
+    ? (initialShareableState.hiddenAnnotationIds ?? [])
+    : compactedHiddenAnnotationIds.hidden
+  const sharedShownAnnotationIds = linkHiddenClassesPending
+    ? (initialShareableState.shownAnnotationIds ?? [])
+    : compactedHiddenAnnotationIds.shown
   const sharedHiddenAnnotationSetIds =
     linkAnnotationGroupIds === null
       ? hiddenAnnotationSetIds
@@ -4157,6 +4185,7 @@ export function App({ dependencies }: AppProps = {}) {
       datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
       hiddenAnnotationIds: sharedHiddenAnnotationIds,
+      shownAnnotationIds: sharedShownAnnotationIds,
       hiddenAnnotationSetIds: sharedHiddenAnnotationSetIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
@@ -4342,10 +4371,19 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  // A failed label import keeps the labels, so its error is listed apart.
+  const issueErrors = useMemo(
+    () =>
+      annotationImportError === null
+        ? activeErrors
+        : [...activeErrors, annotationImportError],
+    [activeErrors, annotationImportError],
+  )
+
   // The section models (plan 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
   const datasetInfo = useDatasetInfoModel({
-    activeErrors,
+    activeErrors: issueErrors,
     appendDebugEvent,
     boundaryCellLimit,
     cellFeatureMatrixCapabilityState,
@@ -4757,6 +4795,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationGroupOptions,
     annotationGroupState,
     annotationHeaderCopy,
+    annotationImportError,
     annotationImportNotice,
     annotationImportUrl,
     annotationPlacedCellIds,
@@ -5651,6 +5690,7 @@ interface PendingAnnotationGroups {
   readonly openUrl: string | null
   readonly groupIds: readonly string[]
   readonly hiddenAnnotationIds: readonly string[] | undefined
+  readonly shownAnnotationIds: readonly string[] | undefined
   readonly hiddenAnnotationSetIds: readonly string[] | undefined
   readonly switchColorMode: boolean
 }
@@ -5664,6 +5704,7 @@ function pendingAnnotationGroupsFor(
     openUrl,
     groupIds: state.annotationGroupIds ?? [],
     hiddenAnnotationIds: state.hiddenAnnotationIds,
+    shownAnnotationIds: state.shownAnnotationIds,
     hiddenAnnotationSetIds: state.hiddenAnnotationSetIds,
     switchColorMode:
       state.linkVersion === undefined && state.observationColorMode === undefined,

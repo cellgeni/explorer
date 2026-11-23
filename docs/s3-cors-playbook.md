@@ -92,7 +92,10 @@ The app works around this in two ways:
 - **Likely missing files.** Without an index page, a request that fails with
   no response on a host that has answered other requests, but has never
   answered with a readable error status, is reported as "File most likely
-  missing" rather than as a CORS or Range problem.
+  missing" rather than as a CORS or Range problem. Detection counts such a
+  probe, such as the dotfile requests an index page leaves, as a missing file,
+  so a folder with no dataset is "Dataset not found" rather than "Request
+  blocked".
 
 If you control the host, send CORS headers on every response instead.
 

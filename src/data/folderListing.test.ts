@@ -97,6 +97,20 @@ describe('folder index pages', () => {
     )
   })
 
+  it('puts the slash before a query and drops a fragment (EXP-201)', async () => {
+    const fetcher = vi.fn(async () => new Response(APACHE_INDEX, { status: 200 }))
+
+    await expect(
+      readFolderListing(`${FOLDER}?token=abc#notes`, {
+        fetcher: fetcher as unknown as typeof fetch,
+      }),
+    ).resolves.toMatchObject({ folderUrl: `${FOLDER}/?token=abc` })
+    expect(fetcher).toHaveBeenCalledWith(
+      `${FOLDER}/?token=abc`,
+      expect.objectContaining({ cache: 'no-cache' }),
+    )
+  })
+
   it('returns null when the host serves no readable index page', async () => {
     const notFound = vi.fn(async () => new Response('missing', { status: 404 }))
     const failed = vi.fn(async () => {
