@@ -160,8 +160,12 @@ the canvas, a `nav` named "Collection":
   (`role="alert"`).
 
 `useDatasetCollection` (`src/features/collection/useDatasetCollection.ts`)
-reads the collection, opens its first dataset when the link names none, and
-closes the collection when a dataset outside it loads. The top bar shows the
+reads the collection, opens its first dataset when the link names none
+(unless one was opened while it was read, which stays open), and closes the
+collection when a dataset outside it loads. Addresses are compared as the
+browser reads them, so `sham b.zarr` and `sham%20b.zarr`, or a host in
+capitals, are one entry. The dataset marked as loading is the one being
+opened, whatever the address field holds meanwhile. The top bar shows the
 entry's `name` when the dataset has no manifest name.
 
 Previews are read by `CollectionPreviewStore`

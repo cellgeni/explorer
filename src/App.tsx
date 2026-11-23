@@ -5461,7 +5461,8 @@ export function App({ dependencies }: AppProps = {}) {
             <CollectionBar
               state={datasetCollection.state}
               loadedUrl={loadedDatasetUrl}
-              pendingUrl={isLoading ? datasetUrl : null}
+              // The dataset being loaded, not what the address field holds.
+              pendingUrl={loadingDatasetUrl}
               onSelect={handleSelectCollectionEntry}
               onClose={datasetCollection.close}
               view={collectionView}

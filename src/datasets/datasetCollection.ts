@@ -312,8 +312,20 @@ export function collectionEntryFor(
     return undefined
   }
 
-  const key = trimTrailingSlashes(url)
-  return collection.datasets.find((entry) => trimTrailingSlashes(entry.url) === key)
+  const key = entryUrlKey(url)
+  return collection.datasets.find((entry) => entryUrlKey(entry.url) === key)
+}
+
+// An address as the browser reads it, so spellings of one address (a space
+// or `%20`, a host in capitals) find one entry.
+function entryUrlKey(url: string): string {
+  const trimmed = trimTrailingSlashes(url.trim())
+
+  try {
+    return trimTrailingSlashes(new URL(trimmed).href)
+  } catch {
+    return trimmed
+  }
 }
 
 export interface CollectionGroup {
