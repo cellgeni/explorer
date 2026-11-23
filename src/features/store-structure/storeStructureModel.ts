@@ -119,7 +119,11 @@ const ENCODING_ROLES: Readonly<Record<string, string>> = {
 
 // What a node is in the format that wrote it, from its attributes: an AnnData
 // encoding, an OME-NGFF image, a SpatialData element. Null for plain nodes.
-export function nodeRole(node: ZarrStructureNode): string | null {
+// HDF5 nodes carry the same AnnData attributes.
+export function nodeRole(node: {
+  readonly path: string
+  readonly attributes: Readonly<Record<string, unknown>>
+}): string | null {
   const attrs = node.attributes
   const ome = recordOrNull(attrs.ome) ?? attrs
   const encoding = attrs['encoding-type']

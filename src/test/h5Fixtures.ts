@@ -174,3 +174,46 @@ export function writeTinyFeatureSlice(file: H5wasmFile): void {
   negative.create_dataset({ name: 'col', data: new Int32Array([0]) })
   negative.create_dataset({ name: 'data', data: new Int32Array([99]) })
 }
+
+// A small AnnData-like H5AD for Browse File: encoded groups, a chunked gzip
+// CSR matrix, variable-length strings, a 2D array, a scalar, and the links
+// HDF5 allows.
+export function writeBrowsableH5ad(file: H5wasmFile): void {
+  file.create_attribute('encoding-type', 'anndata')
+  file.create_attribute('encoding-version', '0.1.0')
+
+  const obs = file.create_group('obs')
+  obs.create_attribute('encoding-type', 'dataframe')
+  obs.create_attribute('_index', '_index')
+  obs.create_dataset({
+    name: '_index',
+    data: Array.from({ length: 250 }, (_, index) => `cell-${index}`),
+  })
+
+  const x = file.create_group('X')
+  x.create_attribute('encoding-type', 'csr_matrix')
+  x.create_attribute('shape', new BigInt64Array([250n, 30n]))
+  x.create_dataset({
+    name: 'data',
+    data: new Float32Array(Array.from({ length: 1000 }, (_, index) => index / 2)),
+    chunks: [256],
+    compression: 'gzip',
+    compression_opts: 4,
+  })
+  x.create_dataset({ name: 'indptr', data: new BigInt64Array(251) })
+
+  const obsm = file.create_group('obsm')
+  obsm.create_dataset({
+    name: 'X_umap',
+    data: new Float64Array(Array.from({ length: 150 * 30 }, (_, index) => index)),
+    shape: [150, 30],
+  })
+
+  const uns = file.create_group('uns')
+  uns.create_dataset({ name: 'pi', data: 3.5 })
+  uns.create_group('empty')
+
+  file.create_soft_link('/obsm/X_umap', 'umap_link')
+  file.create_soft_link('/missing', 'broken_link')
+  file.create_external_link('other.h5', '/data', 'external_link')
+}

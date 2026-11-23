@@ -1,6 +1,7 @@
 /* Browse Store and Browse File: the button beside Load Dataset, and the
    structure drawer over the right of the canvas, with the tree of a Zarr
-   store or a Parquet file's schema above the selected node's details. */
+   store, a Parquet file's schema or an HDF5 file's groups above the selected
+   node's details. */
 
 .dataset-form-actions {
   display: grid;
@@ -383,14 +384,16 @@
 }
 
 .store-structure-row-groups,
-.store-structure-key-values {
+.store-structure-key-values,
+.store-structure-values {
   display: grid;
   gap: var(--space-1);
   min-width: 0;
 }
 
 .store-structure-row-groups > h4,
-.store-structure-key-values > h4 {
+.store-structure-key-values > h4,
+.store-structure-values > h4 {
   margin: 0;
   font-size: var(--font-control);
   font-weight: 650;
@@ -418,6 +421,36 @@
 .store-structure-table th {
   color: var(--text-2);
   font-weight: 600;
+}
+
+/* An HDF5 dataset's first values, in its details. */
+.store-structure-values-ask {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-1);
+}
+
+.store-structure-values > [role='status'] {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+}
+
+.store-structure-values .store-structure-rows {
+  max-height: 240px;
+  min-height: 0;
+}
+
+.store-structure-value {
+  margin: 0;
+  padding: var(--space-2);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  background: var(--surface-0);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: var(--font-control);
+  white-space: pre-wrap;
 }
 
 /* A Parquet file's Columns / Rows switch, and its first rows. */

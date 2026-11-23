@@ -42,12 +42,26 @@ and [`docs/ui-reference.md`](../../ui-reference.md) (Store Structure Drawer).
       parallel with `cache: 'no-store'`; nested columns use the offset index.
       A row group over 8 MB waits for `Read Rows`.
 
+- [x] **Browse File for HDF5** (2026-11-23) for `.h5`, `.h5ad`, `.hdf5`,
+      `.loom` and `.he5` addresses, shown as "HDF5 file".
+      `readH5Structure` (`src/data/h5Structure.ts`) opens the file by range
+      in an H5 file worker, which walks every group, dataset, committed
+      datatype and link with attributes (`src/workers/h5StructureCore.ts`,
+      5,000 objects, 32 levels) and reports progress. Details show numpy-style
+      dtypes, chunks, filters and AnnData, 10x and Loom roles. `Values` reads
+      a 100 × 20 block from the origin, at once when it costs 4 MB or less;
+      variable-length strings are read by hyperslab without h5wasm 0.10's
+      whole-dataspace reclaim, which aborts its module after a slice.
+
 Measured live:
 
 - The hindlimb AnnData store (no consolidated metadata) walks to 33 groups
   and 130 arrays in about 10 s with the bucket's S3 listing.
 - The Xenium demo's `cells.parquet` footer: a `HEAD` and one 512 KB range,
   about 0.4 s.
+- HDF5 structure: the CELLxGENE Visium heart H5AD (333 MB, 55 groups,
+  254 datasets) in 6.5 s, reading 10 MB in 18 requests; the Xenium demo's
+  `cell_feature_matrix.h5` (433 MB) in 2.1 s, 3.2 MB in 4 requests.
 - Rows of the AU14 ovary `shapes.parquet` (pyarrow, 14.1 MB row group):
   1.34 MB in 0.8 s. The Xenium `cells.parquet` (fastparquet, one page per
   column chunk) asks first, then reads its 18.9 MB row group in about 3 s.
@@ -64,3 +78,7 @@ Measured live:
       whole row group for Rows.
 - [ ] In a narrow window the drawer covers the open-dataset form until it is
       closed.
+- [ ] HDF5 files are browsed from the dataset field only: not from a store's
+      tree, inside a zip (Xenium and Atera outs), or as a local file.
+- [ ] HDF5 plugin filters (LZF, Blosc, bitshuffle, Zstandard) have no
+      decoder here, so those datasets show no values.

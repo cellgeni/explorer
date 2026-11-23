@@ -12,8 +12,8 @@ overlays, transcript density/exact overlays, segmentations imported onto an
 image (label masks, GeoJSON, WKT, Parquet), annotations, ROI queries,
 cell queries by class and value, shareable view state, and dataset
 diagnostics without a server-side data service. `Browse Store` and `Browse
-File` show what a Zarr store or Parquet file holds without opening it as a
-dataset.
+File` show what a Zarr store, Parquet file or HDF5 file holds without opening
+it as a dataset.
 
 The implementation is a Vite + React application. It uses deck.gl for spatial
 rendering, DuckDB WASM and Hyparquet for browser-side Parquet queries, GeoTIFF,
@@ -190,7 +190,9 @@ zipped store, or an Icechunk repository), `Browse Store` next to
 `Load Dataset` lists its groups and arrays with their shapes, data types,
 chunking, codecs and attributes. For a Parquet file, `Browse File` shows
 its schema, row groups, metadata and first rows, read from the footer and the
-first pages. Neither loads the dataset, so both work for stores and files the
+first pages. For an HDF5 file (`.h5`, `.h5ad`, `.loom`), it shows the groups,
+datasets, filters and attributes, and each dataset's first values, read by
+range. None of these loads the dataset, so they work for stores and files the
 viewer cannot open.
 
 ## Examples

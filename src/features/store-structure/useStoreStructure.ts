@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
+  readH5Structure,
+  type H5Structure,
+  type ReadH5StructureOptions,
+} from '../../data/h5Structure'
+import {
   readParquetRows,
   type ParquetRowPreview,
   type ReadParquetRowsOptions,
@@ -19,6 +24,7 @@ import {
   createStructuredLoadError,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
+import { isH5Url, sameH5File } from './h5StructureModel'
 import { isParquetUrl, sameParquetFile } from './parquetStructureModel'
 
 export type StructureReadState<Target, Value> =
@@ -34,21 +40,27 @@ export type StructureReadState<Target, Value> =
 // A Zarr store by address; progress counts the nodes read.
 export type StoreStructureState = StructureReadState<string, ZarrStructure>
 export type ParquetFileState = StructureReadState<ParquetFileRef, ParquetStructure>
+// An HDF5 file by address; progress counts the objects read.
+export type H5FileState = StructureReadState<string, H5Structure>
+
+export type StructureView = 'store' | 'file' | 'h5'
 
 // The structure drawer: Browse Store or Browse File opens it on an address,
 // and Browse File in the store's tree opens a Parquet file the store holds.
 // It keeps what it read while closed, so reopening it on the same address
-// shows the same tree.
+// shows the same tree; an HDF5 file's worker stays open for its values until
+// another file replaces it.
 export interface StoreStructureStore {
   readonly store: StoreStructureState
   readonly file: ParquetFileState
+  readonly h5: H5FileState
   // What the drawer shows.
-  readonly view: 'store' | 'file'
+  readonly view: StructureView
   // The file was opened from the store's tree, so Back returns there.
   readonly fileFromStore: boolean
   readonly open: boolean
-  // Opens the drawer on a Zarr store or a Parquet file, and reads it unless
-  // the drawer holds it already.
+  // Opens the drawer on a Zarr store, a Parquet file or an HDF5 file, and
+  // reads it unless the drawer holds it already.
   readonly browse: (url: string) => void
   // Opens a Parquet file from the store's tree.
   readonly browseFile: (file: ParquetFileRef) => void
@@ -76,6 +88,7 @@ interface UseStoreStructureOptions {
     structure: ParquetStructure,
     options: ReadParquetRowsOptions,
   ) => Promise<ParquetRowPreview>
+  readonly readH5?: (url: string, options: ReadH5StructureOptions) => Promise<H5Structure>
   readonly fetcher?: typeof fetch
 }
 
@@ -83,10 +96,11 @@ export function useStoreStructure({
   read = readZarrStructure,
   readParquet = readParquetStructure,
   readParquetRows: readRowsOf = readParquetRows,
+  readH5 = readH5Structure,
   fetcher,
 }: UseStoreStructureOptions = {}): StoreStructureStore {
   const [open, setOpen] = useState(false)
-  const [view, setView] = useState<'store' | 'file'>('store')
+  const [view, setView] = useState<StructureView>('store')
   const [fileFromStore, setFileFromStore] = useState(false)
   const readStore = useCallback(
     (url: string, signal: AbortSignal, onProgress: (count: number) => void) =>
@@ -103,10 +117,19 @@ export function useStoreStructure({
       readRowsOf(structure, { signal, ...(fetcher === undefined ? {} : { fetcher }) }),
     [fetcher, readRowsOf],
   )
+  // The worker reads the file itself, so `fetcher` does not apply.
+  const readH5File = useCallback(
+    (url: string, signal: AbortSignal, onProgress: (count: number) => void) =>
+      readH5(url, { signal, onProgress }),
+    [readH5],
+  )
   const store = useStructureRead(readStore, sameStore)
   const file = useStructureRead(readFile, sameParquetFile)
+  const h5 = useStructureRead(readH5File, sameH5File)
   const { ensure: ensureStore, retry: retryStore, stop: stopStore } = store
   const { ensure: ensureFile, retry: retryFile, stop: stopFile } = file
+  const { ensure: ensureH5, retry: retryH5, stop: stopH5 } = h5
+  useCloseReplaced(h5.state)
 
   const openFile = useCallback(
     (target: ParquetFileRef) => {
@@ -125,11 +148,18 @@ export function useStoreStructure({
         return
       }
 
+      if (isH5Url(url)) {
+        setOpen(true)
+        setView('h5')
+        ensureH5(url)
+        return
+      }
+
       setOpen(true)
       setView('store')
       ensureStore(url)
     },
-    [ensureStore, openFile],
+    [ensureH5, ensureStore, openFile],
   )
 
   const browseFile = useCallback(
@@ -148,16 +178,19 @@ export function useStoreStructure({
     setOpen(false)
     stopStore()
     stopFile()
-  }, [stopFile, stopStore])
+    stopH5()
+  }, [stopFile, stopH5, stopStore])
 
   const retry = useCallback(() => {
     if (view === 'file') retryFile()
+    else if (view === 'h5') retryH5()
     else retryStore()
-  }, [retryFile, retryStore, view])
+  }, [retryFile, retryH5, retryStore, view])
 
   return {
     store: store.state,
     file: file.state,
+    h5: h5.state,
     view,
     fileFromStore,
     open,
@@ -172,6 +205,26 @@ export function useStoreStructure({
 
 function sameStore(a: string, b: string): boolean {
   return a === b
+}
+
+// Closes an HDF5 file's worker once the drawer no longer holds its structure:
+// another file or a retry replaced it, or the drawer went away.
+function useCloseReplaced(state: H5FileState): void {
+  const heldRef = useRef<H5Structure | null>(null)
+  const current = state.status === 'ready' ? state.value : null
+
+  useEffect(() => {
+    const held = heldRef.current
+    if (held !== null && held !== current) held.close()
+    heldRef.current = current
+  }, [current])
+
+  useEffect(() => {
+    return () => {
+      heldRef.current?.close()
+      heldRef.current = null
+    }
+  }, [])
 }
 
 // Progress is shown at most this often, so a walk of thousands of nodes does

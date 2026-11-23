@@ -6,6 +6,7 @@ import type {
   ZarrStructureNode,
   ZarrStructureNodeKind,
 } from '../../zarr/zarrStructure'
+import { H5FileView } from './H5StructureView'
 import { ParquetFileView } from './ParquetStructureView'
 import {
   formatBytes,
@@ -32,37 +33,44 @@ import {
 } from './StructureBrowser'
 import type { StoreStructureState, StoreStructureStore } from './useStoreStructure'
 
-// The drawer of Browse Store and Browse File: the groups and arrays of the
-// Zarr store, or the columns of the Parquet file, at the address in the
-// dataset field, read without opening it as a dataset. A Parquet file in the
-// store opens in its place, with a way back. It sits over the right of the
-// canvas and is not modal.
-export function StoreStructureDrawer({ store }: { readonly store: StoreStructureStore }) {
-  const showingFile = store.view === 'file'
+const DRAWER_TITLES = {
+  store: 'Store structure',
+  file: 'Parquet file',
+  h5: 'HDF5 file',
+} as const
 
+// The drawer of Browse Store and Browse File: the groups and arrays of the
+// Zarr store, the columns of the Parquet file, or the groups and datasets of
+// the HDF5 file, at the address in the dataset field, read without opening it
+// as a dataset. A Parquet file in the store opens in its place, with a way
+// back. It sits over the right of the canvas and is not modal.
+export function StoreStructureDrawer({ store }: { readonly store: StoreStructureStore }) {
   return (
     <Drawer
-      title={showingFile ? 'Parquet file' : 'Store structure'}
+      title={DRAWER_TITLES[store.view]}
       side="right"
       open={store.open}
       onClose={store.close}
       className="store-structure-drawer"
     >
       {/* Both stay mounted, so going back keeps the store's open groups. */}
-      <div className="store-structure-view" hidden={showingFile}>
+      <div className="store-structure-view" hidden={store.view !== 'store'}>
         <StoreStructureView
           state={store.store}
           onRetry={store.retry}
           onBrowseFile={store.browseFile}
         />
       </div>
-      <div className="store-structure-view" hidden={!showingFile}>
+      <div className="store-structure-view" hidden={store.view !== 'file'}>
         <ParquetFileView
           state={store.file}
           readRows={store.readRows}
           onRetry={store.retry}
           {...(store.fileFromStore ? { onBack: store.back } : {})}
         />
+      </div>
+      <div className="store-structure-view" hidden={store.view !== 'h5'}>
+        <H5FileView state={store.h5} onRetry={store.retry} />
       </div>
     </Drawer>
   )

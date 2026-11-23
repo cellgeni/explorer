@@ -1,3 +1,4 @@
+import type { H5StructureWalk, H5ValuePreview } from '../data/h5StructureTypes'
 import type { VisiumFeatureSliceMetadata } from '../data/visiumFeatureSliceH5'
 
 // An H5 file worker holds one HDF5 file, opened with h5wasm from bytes the main
@@ -30,6 +31,8 @@ export type H5FileWorkerRequest =
   | H5FileFeatureSliceRequest
   | H5FileFeatureSliceMetadataRequest
   | H5FileStatsRequest
+  | H5FileStructureRequest
+  | H5FilePreviewRequest
 
 export interface H5FileOpenRequest {
   readonly id: number
@@ -84,6 +87,23 @@ export interface H5FileRangeStats {
   readonly fetchedBytes: number
 }
 
+// Every group, dataset, committed datatype and link, with attributes, for
+// Browse File. The worker sends `progress` replies as it walks.
+export interface H5FileStructureRequest {
+  readonly id: number
+  readonly op: 'structure'
+  // Names the root node.
+  readonly rootName: string
+  readonly maxNodes?: number
+}
+
+// The first values of a dataset (see `H5ValuePreview`).
+export interface H5FilePreviewRequest {
+  readonly id: number
+  readonly op: 'preview'
+  readonly path: string
+}
+
 // Rows of a 10x feature-barcode matrix (`/matrix`), by barcode.
 export interface H5FileMatrixCellsRequest {
   readonly id: number
@@ -121,6 +141,9 @@ export type H5FileWorkerResponse =
   | H5FileFeatureSliceResponse
   | H5FileFeatureSliceMetadataResponse
   | H5FileStatsResponse
+  | H5FileStructureResponse
+  | H5FilePreviewResponse
+  | H5FileProgressResponse
   | H5FileWorkerFailure
 
 export interface H5FileOpenResponse {
@@ -137,6 +160,29 @@ export interface H5FileStatsResponse {
   readonly ok: true
   readonly op: 'stats'
   readonly range: H5FileRangeStats | null
+}
+
+export interface H5FileStructureResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'structure'
+  readonly structure: H5StructureWalk
+}
+
+export interface H5FilePreviewResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'preview'
+  readonly preview: H5ValuePreview
+}
+
+// Sent while a request runs, before its reply: the objects a structure walk
+// has read so far.
+export interface H5FileProgressResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'progress'
+  readonly count: number
 }
 
 export interface H5FileReadResponse {

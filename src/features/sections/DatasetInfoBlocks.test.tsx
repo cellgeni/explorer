@@ -82,6 +82,19 @@ describe('OpenDatasetForm', () => {
     )
   })
 
+  it('offers Browse File for HDF5 file addresses', () => {
+    const { open } = testDatasetInfoModel({
+      open: { datasetUrl: 'https://bucket.test/run/sample.h5ad' },
+    })
+    render(<OpenDatasetForm open={open} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Browse File' }))
+
+    expect(open.onBrowseStructure).toHaveBeenCalledWith(
+      'https://bucket.test/run/sample.h5ad',
+    )
+  })
+
   it('leaves the browse buttons out for other addresses', () => {
     render(
       <OpenDatasetForm
