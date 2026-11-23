@@ -35,6 +35,7 @@ import {
   useVisiumHdExpressionProjectionWorkflow,
   type VisiumHdExpressionProjectionState,
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
+import { projectedBoundaryCellCount } from './features/genes/visiumHdExpressionProjection'
 import { useAnnotationsSectionModel } from './features/sections/annotationsSectionModel'
 import { useCellsSectionModel } from './features/sections/cellsSectionModel'
 import {
@@ -1308,12 +1309,33 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells.length,
   )
   const activeSelectedBoundaryCell = useMemo(() => {
-    return platformActiveBoundaryCell(
+    const cell = platformActiveBoundaryCell(
       platformAdapter,
       selectedBoundaryCell,
       expressionStyledBoundaryLayerData,
     )
-  }, [expressionStyledBoundaryLayerData, platformAdapter, selectedBoundaryCell])
+
+    // Expression is read by bins, which no segmented cell's ID matches, so a
+    // cell's selected-gene score is its share of its bins' counts (EXP-254).
+    if (
+      cell === null ||
+      cell.expressionCount !== undefined ||
+      visiumHdExpressionProjectionState.status !== 'ready'
+    ) {
+      return cell
+    }
+
+    const expressionCount = projectedBoundaryCellCount(
+      visiumHdExpressionProjectionState.batch,
+      cell.id,
+    )
+    return expressionCount === undefined ? cell : { ...cell, expressionCount }
+  }, [
+    expressionStyledBoundaryLayerData,
+    platformAdapter,
+    selectedBoundaryCell,
+    visiumHdExpressionProjectionState,
+  ])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   // GeoJSON pixel coordinates are the image's full-resolution pixels, as

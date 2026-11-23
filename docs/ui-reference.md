@@ -805,7 +805,9 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
 - Cell, Visium HD segmentation boundary
   (`src/features/cells/BoundaryCellInfoPanel.tsx`): cell ID, annotation,
   segmentation, vertices, area, the cell's nuclei in view, selected-gene score
-  and `Load Cell GEX`.
+  and `Load Cell GEX`. Expression is read by bins, so at 8 and 16 µm the score
+  and the profile are the cell's share of its bins' counts, by the share of
+  each bin's 2 µm barcodes it holds.
 
 ### Transcript
 

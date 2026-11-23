@@ -4,6 +4,7 @@ import type {
   GeneExpressionElement,
   SpatialElementId,
 } from '../../datasets/spatialDataset'
+import { visiumHdSegmentationCellId } from '../../datasets/visiumHdSegmentationIndex'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 
 export interface VisiumHdExpressionCellAssignment {
@@ -64,56 +65,23 @@ export function projectVisiumHdExpressionToBoundaryCells(
 
   const boundaryCellIds = new Set(boundaryCells.map((cell) => cell.id))
   const expressionByBinId = expressionBinsById(batch.elements)
-  const assignmentWeightsByBinId = new Map<
-    SpatialElementId,
-    Map<SpatialElementId, number>
-  >()
-
-  for (const assignment of assignments) {
-    if (
-      assignment.cellId === null ||
-      (!assignment.inCell && !assignment.inNucleus) ||
-      !expressionByBinId.has(assignment.binId)
-    ) {
-      continue
-    }
-
-    let cellWeights = assignmentWeightsByBinId.get(assignment.binId)
-
-    if (cellWeights === undefined) {
-      cellWeights = new Map<SpatialElementId, number>()
-      assignmentWeightsByBinId.set(assignment.binId, cellWeights)
-    }
-
-    cellWeights.set(assignment.cellId, (cellWeights.get(assignment.cellId) ?? 0) + 1)
-  }
-
+  const sharesByBinId = visiumHdBinBarcodeShares(assignments, expressionByBinId)
   const expressionByElementId = new Map<SpatialElementId, CellExpressionAccumulator>()
   const mappedCellIds = new Set<SpatialElementId>()
 
-  for (const [binId, cellWeights] of assignmentWeightsByBinId) {
+  for (const [binId, shares] of sharesByBinId) {
     const expressionBin = expressionByBinId.get(binId)
 
     if (expressionBin === undefined) {
       continue
     }
 
-    let totalWeight = 0
-
-    for (const weight of cellWeights.values()) {
-      totalWeight += weight
-    }
-
-    if (totalWeight <= 0) {
-      continue
-    }
-
-    for (const [cellId, weight] of cellWeights) {
+    for (const [cellId, barcodeCount] of shares.cells) {
       if (!boundaryCellIds.has(cellId)) {
         continue
       }
 
-      const count = (expressionBin.count * weight) / totalWeight
+      const count = (expressionBin.count * barcodeCount) / shares.barcodeCount
       const accumulator = expressionByElementId.get(cellId)
 
       mappedCellIds.add(cellId)
@@ -150,9 +118,71 @@ export function projectVisiumHdExpressionToBoundaryCells(
       maxCount,
       ...(batch.timing === undefined ? {} : { timing: batch.timing }),
     },
-    mappedBinCount: assignmentWeightsByBinId.size,
+    mappedBinCount: [...sharesByBinId.values()].filter((shares) => shares.cells.size > 0)
+      .length,
     mappedCellCount: mappedCellIds.size,
   }
+}
+
+export interface VisiumHdBinBarcodeShares {
+  // The bin's 2 µm barcodes listed in barcode_mappings.parquet.
+  readonly barcodeCount: number
+  // How many of them each cell holds, in the cell or its nucleus.
+  readonly cells: ReadonlyMap<SpatialElementId, number>
+}
+
+// Each bin's barcodes and its cells' part of them. A bin's counts are shared
+// among its cells by that part: a cell holding 20 of a 16 µm bin's 64
+// barcodes takes 20/64 of each count, as it would if the bin's transcripts
+// were spread evenly over it. The part outside every cell goes to no cell.
+// At 2 µm a bin is one barcode, so its cell takes all of it.
+export function visiumHdBinBarcodeShares(
+  assignments: readonly VisiumHdExpressionCellAssignment[],
+  binIds?: { has(binId: SpatialElementId): boolean },
+): ReadonlyMap<SpatialElementId, VisiumHdBinBarcodeShares> {
+  const shares = new Map<
+    SpatialElementId,
+    { barcodeCount: number; cells: Map<SpatialElementId, number> }
+  >()
+
+  for (const assignment of assignments) {
+    if (binIds !== undefined && !binIds.has(assignment.binId)) {
+      continue
+    }
+
+    let binShares = shares.get(assignment.binId)
+
+    if (binShares === undefined) {
+      binShares = { barcodeCount: 0, cells: new Map() }
+      shares.set(assignment.binId, binShares)
+    }
+
+    binShares.barcodeCount += 1
+
+    if (assignment.cellId !== null && (assignment.inCell || assignment.inNucleus)) {
+      binShares.cells.set(
+        assignment.cellId,
+        (binShares.cells.get(assignment.cellId) ?? 0) + 1,
+      )
+    }
+  }
+
+  return shares
+}
+
+// A segmented cell's projected count in a projected batch. A MultiPolygon
+// cell's later parts (`<cell_id>#2`) share their cell's count, which the
+// batch gives the cell's first part.
+export function projectedBoundaryCellCount(
+  batch: GeneExpressionBatch,
+  boundaryId: SpatialElementId,
+): number | undefined {
+  const cellId = visiumHdSegmentationCellId(boundaryId)
+
+  return (
+    batch.elements.find((element) => element.id === boundaryId)?.count ??
+    batch.elements.find((element) => element.id === cellId)?.count
+  )
 }
 
 function expressionBinsById(
