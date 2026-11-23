@@ -1968,7 +1968,10 @@ function ViewerSurface({
       const selection =
         roiDraft.kind === 'box'
           ? roiSelectionFromBox(roiDraft.start, point)
-          : roiSelectionFromLasso([...roiDraft.points, point])
+          : roiSelectionFromLasso(
+              [...roiDraft.points, point],
+              1 / scaleFromZoom(viewState.zoom),
+            )
 
       setRoiDraft(null)
 
