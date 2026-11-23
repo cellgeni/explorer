@@ -170,6 +170,51 @@ describe('readParquetRows', () => {
     expect(values(rows, '__index_level_0__')).toEqual([7n, 8n, 9n])
   })
 
+  // A deflated entry is inflated whole on its first read; the rows read
+  // opened the entry again and fetched it all a second time (EXP-257).
+  it('reads a deflated zip entry from the network once, for its footer and rows', async () => {
+    const url = 'https://bucket.test/deflated.zarr.zip'
+    const requests: ByteRangeRequest[] = []
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          url,
+          zipArchive([
+            { name: 's.zarr/.zgroup', data: new TextEncoder().encode('{}') },
+            {
+              name: 's.zarr/shapes/circles/shapes.parquet',
+              data: spatialDataShapesFixtureBytes('cell_circles.parquet'),
+              deflate: true,
+            },
+          ]),
+        ],
+      ]),
+      requests,
+    )
+    const structure = await readParquetStructure(
+      { url, zipPath: 'shapes/circles/shapes.parquet' },
+      { fetcher },
+    )
+    const afterFooter = requests.length
+    const rows = await readParquetRows(structure, { fetcher })
+
+    expect(values(rows, 'radius')).toEqual([1, 2, 1.5])
+    expect(requests.slice(afterFooter)).toEqual([])
+  })
+
+  it('reads the columns it is asked for, in that order', async () => {
+    const bytes = parquetFixture('pages.parquet')
+    const fetcher = rangeFetcher(bytes)
+    const structure = await readParquetStructure(
+      { url: 'https://bucket.test/file.parquet' },
+      { fetcher },
+    )
+    const rows = await readParquetRows(structure, { fetcher, columns: ['flag', 'id'] })
+
+    expect(rows.columns.map((column) => column.name)).toEqual(['flag', 'id'])
+    expect(values(rows, 'id')?.slice(0, 2)).toEqual([0n, 1n])
+  })
+
   it('stops when aborted', async () => {
     const bytes = parquetFixture('pages.parquet')
     const fetcher = rangeFetcher(bytes)
