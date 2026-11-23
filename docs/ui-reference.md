@@ -735,7 +735,9 @@ Method:
 - **log2 fold change** = log2((mean inside + 0.1) / (mean outside + 0.1)). The
   pseudocount of 0.1 per cell keeps genes absent outside finite and damps
   genes with a few counts in a small selection; the minimum % filter does
-  the rest. Ties go to the higher mean inside.
+  the rest. Ties go to the higher mean inside. A mean below 0, as a scaled
+  matrix gives, is taken as 0, so a gene high inside and below average
+  outside ranks by its mean inside.
 - This ranks genes for a look; it is not a test. There are no p-values, the
   reference is a fixed sample of up to 512 cells, and neighbouring cells are
   not independent. Use exported cells for a proper differential expression
