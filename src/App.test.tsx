@@ -2048,7 +2048,14 @@ describe('App', () => {
       />,
     )
 
+    // A label query walks the whole page for each labelled control, so one
+    // rerun on every change during the load slows the load past the wait.
+    // Wait for the set's read and its rows by cheaper queries first.
+    await waitFor(() => {
+      expect(loadAnnotations).toHaveBeenCalled()
+    })
     openControls('clusters')
+    await screen.findByTitle(/^kmeans 3: Cluster 3 visible/)
     await waitFor(() => {
       expect(screen.getByLabelText('kmeans 3: Cluster 1 visible')).not.toBeChecked()
     })
