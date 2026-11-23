@@ -104,6 +104,29 @@ describe('visiumHdRoiModel', () => {
     ])
   })
 
+  it('counts every bin in the selection past the limit it keeps', () => {
+    const result = selectVisiumHdGridCellsInRoi(
+      roiBins([
+        { id: 'BC-1', row: 0, col: 0 },
+        { id: 'BC-2', row: 0, col: 1 },
+        { id: 'BC-3', row: 1, col: 0 },
+      ]),
+      {
+        kind: 'box',
+        bbox: {
+          minX: micrometers(0),
+          maxX: micrometers(100),
+          minY: micrometers(0),
+          maxY: micrometers(100),
+        },
+      },
+      2,
+    )
+
+    expect(result).toMatchObject({ selectedCount: 3, hitBinLimit: true })
+    expect(result.bins).toHaveLength(2)
+  })
+
   it('styles only the bins it selects, for their expression scores', () => {
     const styled: string[] = []
     const result = selectVisiumHdGridCellsInRoi(

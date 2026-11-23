@@ -715,7 +715,8 @@ Method:
 
 - **Inside.** The selection's cells, read as for the old top genes: a
   32-cell preview first, then up to 10,000 cells (an even sample when there
-  are more); Visium HD reads every selected bin. Values are as the matrix
+  are more); Visium HD reads the selection's first 50,000 bins in grid order,
+  and past that the heading says "50,000 sampled". Values are as the matrix
   stores them: counts for Xenium, Atera and Visium HD, and `X` for H5AD,
   Visium and SpatialData, which may already be normalised, log-transformed or
   scaled. A scaled matrix's negative values count in sums and means.
