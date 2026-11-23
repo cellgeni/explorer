@@ -39,6 +39,41 @@ describe('useEmbeddingModel', () => {
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Embedding view: tsne')
   })
 
+  // Picking PCA with UMAP loaded snapped the select back to UMAP, while the
+  // next Load read PCA (EXP-252).
+  it('shows the view picked while it is listed, not the one loaded', () => {
+    const umap = {
+      kind: 'X_umap',
+      label: 'UMAP',
+      sourcePath: 'obsm/X_umap',
+      points: [{ id: 'c1', x: 0, y: 0 }],
+    }
+    const options = [
+      { kind: 'X_umap', label: 'UMAP', sourcePath: 'obsm/X_umap' },
+      { kind: 'X_pca', label: 'PCA', sourcePath: 'obsm/X_pca' },
+    ]
+    const shown = (selectedKind: string) =>
+      renderHook(() =>
+        useEmbeddingModel(
+          input({
+            activeEmbedding: umap,
+            analysisEmbeddingState: {
+              status: 'ready',
+              url: 'https://example.test',
+              embeddings: [umap],
+              options,
+            },
+            selectedKind,
+          }),
+        ),
+      ).result.current.selectedKind
+
+    expect(shown('X_pca')).toBe('X_pca')
+    expect(shown('X_umap')).toBe('X_umap')
+    // A kind the dataset does not list shows the one plotted.
+    expect(shown('tsne')).toBe('X_umap')
+  })
+
   it('loads only once a dataset is ready and not while loading', () => {
     const load = (overrides: Partial<EmbeddingModelInput>) =>
       renderHook(() => useEmbeddingModel(input(overrides))).result.current.canLoad
