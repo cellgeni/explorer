@@ -3,7 +3,11 @@ import { describe, expect, it } from 'vitest'
 import { asCellId } from '../../data/cellid'
 import { testAnnotationsSectionModel } from '../../test/sectionModels'
 import type { AnnotationSetsModel } from './annotationsSectionModel'
-import { AnnotationLabelLists, MetadataTracksPanel } from './AnnotationsSectionBlocks'
+import {
+  AnnotationLabelLists,
+  AnnotationSetControls,
+  MetadataTracksPanel,
+} from './AnnotationsSectionBlocks'
 import type { Annotation } from '../../data/annotation'
 
 // 30 classes of one set, the largest first.
@@ -26,6 +30,23 @@ function renderLists(overrides: Partial<AnnotationSetsModel> = {}) {
   render(<AnnotationLabelLists sets={sets} />)
   return sets
 }
+
+describe('AnnotationSetControls', () => {
+  it('shows a failed import as an alert beside the controls, keeping the labels', () => {
+    const { sets } = testAnnotationsSectionModel({
+      sets: {
+        state: { status: 'ready', url: 'https://example.test', annotations: ANNOTATIONS },
+        importError: 'Unexpected load error: Annotation URL returned HTTP 404.',
+      },
+    })
+    render(<AnnotationSetControls sets={sets} />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Annotation URL returned HTTP 404.',
+    )
+    expect(screen.getByRole('button', { name: 'Export Annotations' })).toBeEnabled()
+  })
+})
 
 describe('AnnotationLabelLists', () => {
   it('lists every class of a set', () => {

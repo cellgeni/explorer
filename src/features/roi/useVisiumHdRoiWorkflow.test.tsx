@@ -83,6 +83,7 @@ afterEach(() => {
 })
 
 function Probe({
+  activeBinSize = 8,
   clearRoi = vi.fn(),
   getSpatialDataset = defaultSpatialDatasetLoader(),
   initialVisiumHdRoiState = IDLE_VISIUM_HD_ROI_STATE,
@@ -92,6 +93,7 @@ function Probe({
   referenceBins,
   roiName: initialRoiName = 'ROI 1',
 }: {
+  readonly activeBinSize?: 2 | 8 | 16
   readonly clearRoi?: () => void
   readonly getSpatialDataset?: SpatialDatasetLoader
   readonly initialVisiumHdRoiState?: VisiumHdRoiState
@@ -126,7 +128,7 @@ function Probe({
       clearRoi,
     },
     controls: {
-      activeBinSize: 8,
+      activeBinSize,
       isVisiumHdDataset,
       roiName,
     },
@@ -244,6 +246,54 @@ describe('useVisiumHdRoiWorkflow', () => {
         sampledCellCount: 1,
         totalCount: 9,
       },
+    })
+  })
+
+  it('reads the drawn tier when it stands in for the selected size', async () => {
+    // 2 µm selected, zoomed out: the map draws the 8 µm tier in its place.
+    const matrix = vi.fn(async () => ({
+      geneNames: ['A2M'],
+      cells: new Map([['s_008um_1_1', { geneNames: ['A2M'], counts: [7] }]]),
+    }))
+    const getSpatialDataset = vi.fn(async () => ({
+      matrix,
+    })) as unknown as SpatialDatasetLoader
+
+    render(
+      <Probe
+        activeBinSize={2}
+        getSpatialDataset={getSpatialDataset}
+        referenceBins={selectedGridCells}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleVisiumHdRoiComplete(selection)
+    })
+
+    expect(snapshot.visiumHdRoiState).toMatchObject({ binSizeMicrometers: 8 })
+    await waitFor(() => {
+      expect(snapshot.roiReferenceState.status).toBe('ready')
+    })
+    expect(matrix).toHaveBeenNthCalledWith(
+      1,
+      ['s_008um_1_1'],
+      8,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(matrix).toHaveBeenNthCalledWith(
+      2,
+      ['s_008um_9_9'],
+      8,
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(snapshot.roiGeneStatsState).toMatchObject({
+      status: 'ready',
+      stats: { totalCount: 7 },
     })
   })
 
