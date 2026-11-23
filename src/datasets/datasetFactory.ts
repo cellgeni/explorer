@@ -11,10 +11,20 @@ import {
   readFolderListing,
   setFolderListing,
 } from '../data/folderListing'
-import { fetchHead, noteReadableResponse } from '../data/hostResponses'
+import {
+  fetchHead,
+  likelyMissingFileError,
+  noteReadableResponse,
+} from '../data/hostResponses'
 import { readZipDirectory, ZIP_METHOD_STORED } from '../data/zipArchive'
 import { registerZipFolder, zipFolderFor, zipFolderRoot } from '../data/zipFolder'
-import { DatasetDetectionError, datasetDetectionError } from './datasetDetectionError'
+import {
+  DatasetDetectionError,
+  PROBE_HIDDEN_ERROR,
+  PROBE_NOT_LISTED,
+  datasetDetectionError,
+  isTimedOutProbe,
+} from './datasetDetectionError'
 import { parseAnnDataSectionUrl, type AnnDataSectionRef } from './annDataSections'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
 import { omeZarrImageRootUrl } from '../zarr/omeZarrLoader'
@@ -329,7 +339,7 @@ const DATASET_PROBE_TIMEOUT_MS = 15_000
 // The folder index only saves requests, so a slow one is not waited for long.
 const FOLDER_LISTING_TIMEOUT_MS = 5_000
 // Probe error for a file the folder's index page does not list.
-const NOT_LISTED = 'not in the folder listing'
+const NOT_LISTED = PROBE_NOT_LISTED
 
 export async function detectSpatialDataset(
   baseUrl: string,
@@ -504,6 +514,12 @@ async function detectSpatialDatasetLayout(
       baseUrl: normalizedBaseUrl,
       checked,
     }
+  }
+
+  // A host that answered none of the first requests in time will not answer
+  // the later stages either, each of which would wait out its own timeout.
+  if (checked.every(isTimedOutProbe)) {
+    return { platform: 'unknown', baseUrl: normalizedBaseUrl, checked }
   }
 
   const zarrMetadataProbes = await probeZarrMetadata(normalizedBaseUrl, options)
@@ -891,7 +907,7 @@ async function readDatasetManifest(
       DATASET_PROBE_TIMEOUT_MS,
     )
   } catch (cause) {
-    const error = cause instanceof Error ? cause.message : String(cause)
+    const error = probeError(url, cause)
 
     if (options.signal?.aborted === true) {
       throw cause
@@ -1911,13 +1927,18 @@ async function probeDirectDatasetUrl(
         : {}),
     }
   } catch (cause) {
-    return {
-      path,
-      url,
-      ok: false,
-      error: cause instanceof Error ? cause.message : String(cause),
-    }
+    return { path, url, ok: false, error: probeError(url, cause) }
   }
+}
+
+// A failed fetch on a host that hides its error responses is a likely missing
+// file, which detection counts as not found.
+function probeError(url: string, cause: unknown): string {
+  return likelyMissingFileError(url, url, cause) === undefined
+    ? cause instanceof Error
+      ? cause.message
+      : String(cause)
+    : PROBE_HIDDEN_ERROR
 }
 
 // A Zarr group is a SpatialData store when its root attributes carry

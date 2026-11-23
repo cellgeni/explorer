@@ -1,22 +1,39 @@
 import type { DatasetProbeResult } from './datasetFactory'
 
-// Why detection found no dataset it can read (plan 15.1-E):
-// - not-found: every file answered 404, or 403 as buckets that deny listing
-//   do for missing files, or was missing from the folder listing;
+// Why detection found no dataset it can read (plan 15.1-E). Probes that show
+// a file is absent rule it out: a 404, a 403 as buckets that deny listing send
+// for missing files, a file missing from the folder listing, or a failed fetch
+// on a host that hides its error responses. When every probe rules its file
+// out, the kind is not-found; otherwise the probes left open name the cause:
 // - access-denied: the host asked for credentials (401);
-// - blocked: no response at all, which in a browser is a CORS block or a
-//   network failure;
 // - server-error: the host failed (5xx);
 // - refused: the host answered with another client error, such as 400, 405
 //   or 429 (15.5-B; these were reported as blocked);
+// - timeout: no answer before the probe timeout;
+// - blocked: no response at all, which in a browser is a CORS block or a
+//   network failure;
 // - unsupported: some files were readable but form no layout the app knows.
 export type DatasetDetectionErrorKind =
   | 'not-found'
   | 'access-denied'
   | 'blocked'
+  | 'timeout'
   | 'server-error'
   | 'refused'
   | 'unsupported'
+
+// Probe errors detection records without a status.
+export const PROBE_NOT_LISTED = 'not in the folder listing'
+// A fetch that failed without a response on a host that has answered other
+// requests readably, never with an error status: the host hides its error
+// responses (src/data/hostResponses.ts), so the file is most likely missing.
+export const PROBE_HIDDEN_ERROR = 'no readable response, most likely missing'
+
+const TIMED_OUT = /^Request timed out\b/
+
+export function isTimedOutProbe(probe: DatasetProbeResult): boolean {
+  return probe.status === undefined && TIMED_OUT.test(probe.error ?? '')
+}
 
 export const DATASET_DETECTION_ERROR_NAME = 'DatasetDetectionError'
 
@@ -43,21 +60,31 @@ export function classifyDatasetDetection(
 ): DatasetDetectionErrorKind {
   if (checked.length === 0 || checked.some((probe) => probe.ok)) return 'unsupported'
 
-  const statuses = checked.flatMap((probe) =>
+  const open = openProbes(checked)
+
+  if (open.length === 0) return 'not-found'
+
+  const statuses = open.flatMap((probe) =>
     probe.status === undefined ? [] : [probe.status],
   )
 
   if (statuses.some((status) => status === 401)) return 'access-denied'
-  if (statuses.length > 0 && statuses.every((status) => status >= 500)) {
-    return 'server-error'
+  if (statuses.length > 0) {
+    return statuses.every((status) => status >= 500) ? 'server-error' : 'refused'
   }
-  if (statuses.some((status) => status === 403 || status === 404)) return 'not-found'
-  if (statuses.length > 0) return 'refused'
-  // Without any status every request failed before a response arrived. Files
-  // that a folder listing ruled out were never requested.
-  return checked.every((probe) => probe.error === 'not in the folder listing')
-    ? 'not-found'
-    : 'blocked'
+
+  return open.every(isTimedOutProbe) ? 'timeout' : 'blocked'
+}
+
+// The probes that leave their file's presence open.
+function openProbes(checked: readonly DatasetProbeResult[]): DatasetProbeResult[] {
+  return checked.filter(
+    (probe) =>
+      probe.status !== 403 &&
+      probe.status !== 404 &&
+      probe.error !== PROBE_NOT_LISTED &&
+      probe.error !== PROBE_HIDDEN_ERROR,
+  )
 }
 
 // The error thrown when detection returns no platform.
@@ -72,17 +99,32 @@ function detectionMessage(
   kind: DatasetDetectionErrorKind,
   checked: readonly DatasetProbeResult[],
 ): string {
+  const open = openProbes(checked)
+  // "for 3 of the 32 expected files", or "for the expected files"
+  const share =
+    open.length < checked.length
+      ? `${open.length.toLocaleString()} of the ${checked.length.toLocaleString()} expected files`
+      : 'the expected files'
+
   switch (kind) {
     case 'not-found':
       return `None of the ${checked.length.toLocaleString()} expected files were found at this address.`
     case 'access-denied':
       return 'The host asked for credentials, which the browser cannot send here.'
     case 'blocked':
-      return 'The browser got no response. The host may not allow cross-origin requests (CORS), or the network is down.'
+      return open.length < checked.length
+        ? `The browser got no response for ${share}, so they may be there. The host may not allow cross-origin requests (CORS) for them, or the network dropped them.`
+        : 'The browser got no response. The host may not allow cross-origin requests (CORS), or the network is down.'
+    case 'timeout': {
+      const timeoutMs = /after ([\d,]+) ms/.exec(open[0]?.error ?? '')?.[1]
+      const seconds =
+        timeoutMs === undefined ? undefined : Number(timeoutMs.replace(/,/g, '')) / 1000
+      return `The host did not answer the requests for ${share} ${seconds === undefined ? 'in time' : `within ${seconds.toLocaleString()} s`}.`
+    }
     case 'server-error':
-      return 'The host returned server errors for the expected files.'
+      return `The host returned server errors for ${share} (${listStatuses(open)}).`
     case 'refused':
-      return `The host refused the requests for the expected files (${listStatuses(checked)}).`
+      return `The host refused the requests for ${share} (${listStatuses(open)}).`
     case 'unsupported': {
       const found = checked.filter((probe) => probe.ok).map((probe) => probe.path)
       return found.length === 0

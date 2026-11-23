@@ -459,6 +459,15 @@ describe('loadErrorModel', () => {
       ),
     ).toMatchObject({ code: 'http', title: 'Request refused' })
 
+    const timedOut = createStructuredLoadError(
+      'Dataset overview',
+      datasetDetectionError([
+        { path: 'a', url: 'u', ok: false, error: 'Request timed out after 15,000 ms.' },
+      ]),
+    )
+    expect(timedOut).toMatchObject({ code: 'network', title: 'Host not responding' })
+    expect(timedOut.message).toContain('within 15 s')
+
     expect(
       createStructuredLoadError(
         'Dataset overview',

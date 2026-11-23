@@ -22,6 +22,7 @@ import {
 import { AteraDataset } from './ateraDataset'
 import { dropDatasets } from './datasetCache'
 import { parseDatasetCollection } from './datasetCollection'
+import { PROBE_HIDDEN_ERROR, datasetDetectionError } from './datasetDetectionError'
 import { DatasetManifestError } from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
@@ -832,6 +833,38 @@ describe('spatial dataset detection', () => {
           },
         ],
       })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops after the first folder stage when no request was answered (EXP-207)', async () => {
+    vi.useFakeTimers()
+    const fetcher = vi.fn(
+      (_input: RequestInfo | URL, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => {
+            reject(new DOMException('aborted', 'AbortError'))
+          })
+        }),
+    ) as unknown as typeof fetch
+
+    try {
+      let settled = false
+      const detection = detectSpatialDataset('https://hanging.test/run', { fetcher })
+      void detection.finally(() => {
+        settled = true
+      })
+
+      // The listing's 5 s, then the first stage's 15 s.
+      await vi.advanceTimersByTimeAsync(20_000)
+
+      expect(settled).toBe(true)
+      const { platform, checked } = await detection
+      expect(platform).toBe('unknown')
+      // The listing, explorer.json, experiment.xenium and experiment.spatial.
+      expect(fetcher).toHaveBeenCalledTimes(4)
+      expect(datasetDetectionError(checked)).toMatchObject({ kind: 'timeout' })
     } finally {
       vi.useRealTimers()
     }
@@ -1655,6 +1688,32 @@ describe('folder index pages', () => {
       expect(isListedAsMissing('https://example.test/bia/transcripts.parquet')).toBe(true)
     } finally {
       clearFolderListings()
+    }
+  })
+
+  it('counts a dotfile hidden by the host as missing, not blocked (EXP-203)', async () => {
+    // The host sends no CORS headers with its 404s, so the browser reports a
+    // missing file as a failed fetch.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      if (new URL(String(input)).pathname === '/bia/') {
+        return index('notes.txt')()
+      }
+
+      throw new TypeError('Failed to fetch')
+    }) as unknown as typeof fetch
+
+    try {
+      const { checked } = await detectSpatialDataset('https://hidden-errors.test/bia/', {
+        fetcher,
+      })
+
+      expect(checked.find((probe) => probe.path === '.zattrs')).toMatchObject({
+        error: PROBE_HIDDEN_ERROR,
+      })
+      expect(datasetDetectionError(checked)).toMatchObject({ kind: 'not-found' })
+    } finally {
+      clearFolderListings()
+      clearHostResponses()
     }
   })
 
