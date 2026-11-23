@@ -61,6 +61,7 @@ interface LinkedSectionsProps {
 }
 
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
+const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}
 // Points can be a pixel or two across, so hovering picks the nearest within
 // this distance.
 const PICKING_RADIUS_PIXELS = 6
@@ -77,6 +78,10 @@ export function LinkedSections({
   onClose,
 }: LinkedSectionsProps) {
   useCollectionPreviewUpdates(store)
+  const classColors =
+    coloring.annotations === null
+      ? NO_CLASS_COLORS
+      : (store?.classColors(coloring.annotations.colors) ?? coloring.annotations.colors)
 
   return (
     <>
@@ -87,6 +92,7 @@ export function LinkedSections({
           preview={store?.entry(entry.url) ?? null}
           channel={channel}
           coloring={coloring}
+          classColors={classColors}
           cellPointScale={cellPointScale}
           pointSizeFullViewScale={pointSizeFullViewScale}
           hoverTooltips={hoverTooltips}
@@ -103,6 +109,7 @@ interface LinkedSectionPanelProps {
   readonly preview: PreviewEntry | null
   readonly channel: LinkedViewChannel
   readonly coloring: LinkedSectionsColoring
+  readonly classColors: Readonly<Record<string, string>>
   readonly cellPointScale: number
   readonly pointSizeFullViewScale: number
   readonly hoverTooltips: boolean
@@ -121,6 +128,7 @@ function LinkedSectionPanel({
   preview,
   channel,
   coloring,
+  classColors,
   cellPointScale,
   pointSizeFullViewScale,
   hoverTooltips,
@@ -156,8 +164,12 @@ function LinkedSectionPanel({
     }
   }, [cells, linkedView])
   const overlay = useMemo(
-    () => sectionOverlay({ scores, classes }, { genes: coloring.genes, annotations }),
-    [annotations, classes, coloring.genes, scores],
+    () =>
+      sectionOverlay(
+        { scores, classes },
+        { genes: coloring.genes, annotations, classColors },
+      ),
+    [annotations, classColors, classes, coloring.genes, scores],
   )
   // On Auto or a percentile top, each section tops out at that percentile of
   // its own scores above 0, as the main view does; a typed top is shared.
