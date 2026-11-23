@@ -90,6 +90,43 @@ describe('useSelectedGridCellScore', () => {
     expect(view.result.current.cell?.id).toBe('BC-1')
   })
 
+  // A bin the batch does not list is styled with a 0 and no genes (EXP-221).
+  it('keeps the 0 of a bin the batch does not list, for the selected genes', () => {
+    const unlisted: GridCellDatum = { ...BIN, expressionCount: 0 }
+    const view = renderHook((props) => useSelectedGridCellScore(props), {
+      initialProps: {
+        selected: BIN,
+        scored: unlisted,
+        readBox: AROUND_BIN,
+        selectedGenes: ['A2M'] as readonly string[],
+      },
+    })
+    expect(view.result.current).toEqual({ cell: unlisted, outsideRead: false })
+
+    view.rerender({
+      selected: BIN,
+      scored: unlisted,
+      readBox: FAR_CORNER,
+      selectedGenes: ['A2M'],
+    })
+    expect(view.result.current).toEqual({ cell: scored(0), outsideRead: true })
+  })
+
+  // The readers score every bin the box touches, not only those centred in it
+  // (EXP-238).
+  it('takes a bin across the read box edge as read', () => {
+    const { result } = renderHook(() =>
+      useSelectedGridCellScore({
+        selected: BIN,
+        scored: scored(4),
+        readBox: box(0, 9, 0, 20),
+        selectedGenes: ['A2M'],
+      }),
+    )
+
+    expect(result.current).toEqual({ cell: scored(4), outsideRead: false })
+  })
+
   it('scores from the latest batch when it was read for no view', () => {
     const { result } = renderHook(() =>
       useSelectedGridCellScore({

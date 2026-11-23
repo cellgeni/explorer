@@ -18,6 +18,7 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import { datasetDetectionError } from '../datasets/datasetDetectionError'
 import {
   DatasetManifestError,
   type DatasetFileRole,
@@ -334,6 +335,18 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'image') {
+    checks.push(await checkImage(detection, options))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'spatialdata') {
     checks.push(...(await runSpatialDataDiagnostics(detection, options)))
 
@@ -397,12 +410,14 @@ export function summarizeDatasetDiagnostics(report: DatasetDiagnosticsReport): s
   const failed = report.checks.filter((check) => check.status === 'fail').length
   const warnings = report.checks.filter((check) => check.status === 'warning').length
 
+  const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`
+
   if (failed > 0) {
-    return `${failed} failed, ${warnings} warnings`
+    return `${failed} failed, ${warningText}`
   }
 
   if (warnings > 0) {
-    return `${warnings} warnings`
+    return warningText
   }
 
   return 'All checks passed'
@@ -455,10 +470,7 @@ async function checkManifest(
   const failed = required ? 'fail' : 'warning'
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, 'Experiment manifest', options)
 
     if (!response.ok) {
       discardBody(response)
@@ -677,10 +689,7 @@ async function runAteraDiagnostics(
   const checks: DatasetDiagnosticCheck[] = []
 
   try {
-    const response = await (options.fetcher ?? fetch)(experimentUrl, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(experimentUrl, 'Experiment manifest', options)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
@@ -694,17 +703,18 @@ async function runAteraDiagnostics(
         url: experimentUrl,
         required: true,
         status: 'pass',
-        message: [
-          experiment.panelName,
-          experiment.cellCount === undefined
-            ? undefined
-            : `${experiment.cellCount.toLocaleString()} cells`,
-          experiment.micrometersPerPixel === undefined
-            ? undefined
-            : `${experiment.micrometersPerPixel} µm/px`,
-        ]
-          .filter((part) => part !== undefined)
-          .join('; '),
+        message:
+          [
+            experiment.panelName,
+            experiment.cellCount === undefined
+              ? undefined
+              : `${experiment.cellCount.toLocaleString()} cells`,
+            experiment.micrometersPerPixel === undefined
+              ? undefined
+              : `${experiment.micrometersPerPixel} µm/px`,
+          ]
+            .filter((part) => part !== undefined)
+            .join('; ') || 'Readable',
         startedAt,
       }),
     )
@@ -1892,6 +1902,79 @@ async function checkDirectRangeFile(
   }
 }
 
+const IMAGE_KIND_LABELS = {
+  tiff: 'TIFF image',
+  qptiff: 'QPTIFF image',
+  svs: 'SVS slide',
+  ndpi: 'NDPI slide',
+  'ome-zarr': 'OME-Zarr image',
+} as const
+
+// An image-only dataset: a TIFF is read by byte ranges, as its tiles are; an
+// OME-Zarr image's multiscale metadata is read as the viewer opens it.
+async function checkImage(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'image' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const label = IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']
+
+  if (detection.imageKind !== 'ome-zarr') {
+    return checkDirectRangeFile(detection.imageUrl, 'image-file', label, true, options)
+  }
+
+  const startedAt = Date.now()
+  try {
+    const { openOmeZarrMultiscaleGroup } = await import('../zarr/omeZarrLoader')
+    await openOmeZarrMultiscaleGroup(detection.imageUrl, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'pass',
+      message: 'Multiscale image metadata readable',
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'fail',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
+// A GET for a check. On a host that hides its error responses (EBI FTP), a
+// missing file looks like a network failure; it is reported as most likely
+// missing, as the HEAD and Range checks report it.
+async function getForCheck(
+  url: string,
+  label: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<Response> {
+  let response: Response
+
+  try {
+    response = await (options.fetcher ?? fetch)(url, {
+      method: 'GET',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+  } catch (cause) {
+    throw likelyMissingFileError(label, url, cause) ?? cause
+  }
+
+  noteReadableResponse(url, response.status)
+  return response
+}
+
 // GET for small files read whole. Only the status is used, so the body is
 // cancelled rather than downloaded.
 async function checkReadableFile(
@@ -1904,10 +1987,7 @@ async function checkReadableFile(
   const startedAt = Date.now()
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, file.label, options)
     discardBody(response)
 
     if (!response.ok) {
@@ -2076,6 +2156,8 @@ function detectionDiagnosticCheck(
 ): DatasetDiagnosticCheck {
   const label = 'Dataset layout'
 
+  // Why detection found nothing, as a failed load says it: no file found,
+  // no response, an error status, or files that are no layout the app reads.
   if (detection.platform === 'unknown') {
     return diagnosticCheck({
       id: 'dataset-layout',
@@ -2083,7 +2165,7 @@ function detectionDiagnosticCheck(
       url: detection.baseUrl,
       required: true,
       status: 'fail',
-      message: 'Unsupported dataset layout',
+      message: datasetDetectionError(detection.checked).message,
       startedAt,
     })
   }
@@ -2104,14 +2186,18 @@ function detectionDiagnosticCheck(
           : detection.platform === 'h5ad'
             ? detection.source === 'zarr'
               ? 'Detected AnnData Zarr store'
-              : 'Detected H5AD'
+              : detection.source === 'icechunk'
+                ? 'Detected AnnData Icechunk repository'
+                : 'Detected H5AD'
             : detection.platform === 'spatialdata'
               ? 'Detected SpatialData'
               : detection.platform === 'atera'
                 ? 'Detected Atera'
                 : detection.platform === 'merscope'
                   ? 'Detected MERSCOPE'
-                  : 'Detected Xenium',
+                  : detection.platform === 'image'
+                    ? `Detected ${IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']}`
+                    : 'Detected Xenium',
     startedAt,
   })
 }

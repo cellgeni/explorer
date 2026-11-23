@@ -90,7 +90,7 @@ export {
   expressingElementsByScore,
   geneExpressionElementsToLayerData,
   geneExpressionScoreSpread,
-  gridCellCenterInBbox,
+  gridCellOverlapsBbox,
   nonFiniteScoreCount,
   styleCellsByGeneExpression,
   styleGeneExpressionElementsByScale,

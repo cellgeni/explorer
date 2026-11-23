@@ -533,7 +533,9 @@ and GeoJSON shape annotation import/export available.
 ## Quick Validation
 
 Use the app's `Diagnose Dataset` button against the hosted source before sharing
-the link. For command-line validation, run a one-byte Range check against a key
+the link. For an image-only dataset it reads a TIFF, QPTIFF, SVS or NDPI file
+by a one-byte Range request, as its tiles are read, and an OME-Zarr image's
+multiscale metadata. For command-line validation, run a one-byte Range check against a key
 large file. This example checks Xenium `cells.parquet`; substitute a Visium HD
 positions Parquet, H5AD file, SpatialData `shapes.parquet`, image TIFF, or
 other large asset for other source types:
