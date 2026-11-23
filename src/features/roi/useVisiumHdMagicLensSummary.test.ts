@@ -169,6 +169,7 @@ describe('summarizeVisiumHdMagicLensSelection', () => {
       {
         limit: 25_000,
         signal,
+        visiumHdBinSizeMicrometers: 8,
       },
     )
     expect(summary).toMatchObject({
@@ -177,6 +178,53 @@ describe('summarizeVisiumHdMagicLensSelection', () => {
       cellCount: 1,
       selectedGeneTranscriptCount: 7,
     })
+  })
+
+  it('reads the drawn tier when it stands in for the selected size', async () => {
+    // 2 µm selected, zoomed out: the lens is over the 8 µm bins drawn instead.
+    const signal = new AbortController().signal
+    const matrix = vi.fn(async () =>
+      matrixResult(['s_008um_1_1', 's_008um_1_2'], ['VIM', 'DCN'], [6, 4]),
+    )
+    const loadGeneExpression = vi.fn(async () =>
+      geneExpressionBatch(['s_008um_1_1', 's_008um_1_2'], ['VIM'], [6, 4]),
+    )
+    const options = (selectedGenes: readonly string[]) => ({
+      baseUrl: 'https://example.test/ready',
+      controls: { selectedBinSize: 2 as const },
+      data: {
+        currentViewportDetail: null,
+        geneExpressionBatch: null,
+        gridCells,
+        readyDatasetUrl: 'https://example.test/ready',
+        selectedGenes,
+      },
+      loaders: {
+        getSpatialDataset: vi.fn(async () => ({
+          matrix,
+        })) as unknown as SpatialDatasetLoader,
+        loadGeneExpression,
+      },
+      loaderOptions: { signal, scope: 'roi' as const, circleFilter: null },
+      selection,
+    })
+
+    await expect(summarizeVisiumHdMagicLensSelection(options([]))).resolves.toMatchObject(
+      {
+        transcriptCount: 20,
+      },
+    )
+    expect(matrix).toHaveBeenCalledWith(['s_008um_1_1', 's_008um_1_2'], 8, { signal })
+
+    await expect(
+      summarizeVisiumHdMagicLensSelection(options(['VIM'])),
+    ).resolves.toMatchObject({ transcriptCount: 10 })
+    expect(loadGeneExpression).toHaveBeenCalledWith(
+      'https://example.test/ready',
+      selection.bbox,
+      ['VIM'],
+      expect.objectContaining({ visiumHdBinSizeMicrometers: 8 }),
+    )
   })
 })
 

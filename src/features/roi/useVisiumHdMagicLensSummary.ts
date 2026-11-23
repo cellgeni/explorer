@@ -15,6 +15,7 @@ import {
   isVisiumHdExpressionProfileDataset,
   type VisiumHdExpressionProfileDataset,
 } from '../app-shell/visiumHdAppController'
+import { visiumHdDrawnBinSize } from '../app-shell/visiumHdGridLayerData'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import {
@@ -148,6 +149,9 @@ export async function summarizeVisiumHdMagicLensSelection({
 
   const selectedBinIds = new Set(selectedBins.map((bin) => bin.barcode))
   const datasetUrl = readyDatasetUrl ?? baseUrl
+  // The bins under the lens are the drawn tier's, which is not the selected
+  // size zoomed out with 2 µm selected or while a switch loads.
+  const binSize = visiumHdDrawnBinSize(gridCells, selectedBinSize)
 
   if (selectedGenes.length === 0) {
     const dataset = await getSpatialDataset(datasetUrl)
@@ -158,7 +162,7 @@ export async function summarizeVisiumHdMagicLensSelection({
 
     const profileDataset = dataset as VisiumHdExpressionProfileDataset
     const selectedBinBarcodes = selectedBins.map((bin) => bin.barcode)
-    const matrix = await profileDataset.matrix(selectedBinBarcodes, selectedBinSize, {
+    const matrix = await profileDataset.matrix(selectedBinBarcodes, binSize, {
       signal: loaderOptions.signal,
     })
     const expression = cellExpressionSummaryFromGexCells(matrix, selectedBinBarcodes)
@@ -185,10 +189,7 @@ export async function summarizeVisiumHdMagicLensSelection({
   // the first `limit` bins of it. A lasso can hold fewer bins than the lens
   // limit while its box holds more, so the limit covers every bin the box can
   // hold, up to a cap; past the cap the summary says it may be incomplete.
-  const boxBins = boxBinCapacity(
-    normalizedSelection.bbox,
-    selectedBinSize ?? gridCells.binSizeMicrometers,
-  )
+  const boxBins = boxBinCapacity(normalizedSelection.bbox, binSize)
   const boxLimit = Math.min(
     Math.max(MAGIC_LENS_CELL_LIMIT, boxBins ?? 0),
     MAGIC_LENS_BOX_BIN_LIMIT,
@@ -198,6 +199,7 @@ export async function summarizeVisiumHdMagicLensSelection({
     (await loadGeneExpression(datasetUrl, normalizedSelection.bbox, selectedGenes, {
       limit: boxLimit,
       signal: loaderOptions.signal,
+      ...(binSize === undefined ? {} : { visiumHdBinSizeMicrometers: binSize }),
     }))
   const filteredExpressionElements = expressionBatch.elements.filter((element) =>
     selectedBinIds.has(element.id),

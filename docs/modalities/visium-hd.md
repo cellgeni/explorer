@@ -219,8 +219,9 @@ screen until the new one is ready, and the `Active bins` row names it, as in
 failed load leaves the dataset open on that tier: the bin control shows the
 error, Diagnostics lists it under Fallbacks and in the activity log, and
 selecting the size again retries it. After a failed load, selected-gene
-overlays, ROI, Magic Lens and the Bin card read the drawn tier
-(`visiumHdActiveBinSize`); while a tier loads they read the new size.
+overlays and the Bin card read the drawn tier (`visiumHdActiveBinSize`);
+while a tier loads they read the new size. ROI and Magic Lens always read
+the tier drawn, whose bins they hold (`visiumHdDrawnBinSize`).
 
 The Magic Lens reads selected-gene expression for its selection's bounding
 box and keeps the bins in the lens or ROI. It asks for every bin the box can
@@ -317,13 +318,11 @@ incomplete.
   Space Ranger's barcodes encode the row and column, so they could be made
   when needed instead.
 - Diagnostics do not check the clustering files.
-- With 2 µm selected below zoom 3, ROI and Magic Lens receive the 16 µm
-  stand-in bins but query the 2 µm matrix (found by reading the code; not
-  reproduced).
-- While a tier loads, the old tier stays drawn but reads use the new size. Its
-  bins have no selected-gene colour until the new tier is drawn, and an ROI,
-  Magic Lens scan or Bin card on them reads the new tier's data, which does
-  not hold their barcodes.
+- While a tier loads, the old tier stays drawn but selected-gene reads use the
+  new size. Its bins have no selected-gene colour until the new tier is
+  drawn, and a Bin card on them reads the new tier's data, which does not
+  hold their barcodes. An ROI or Magic Lens scan reads the tier drawn, as it
+  does over the 16 µm stand-in bins with 2 µm selected below zoom 3.
 - Bins are drawn above cell and nucleus outlines and take the pointer, so
   outlines cannot be hovered or clicked where bins are drawn. Nuclei from
   `nucleus_segmentations.geojson` name their cell (`cell_id`), so a nucleus

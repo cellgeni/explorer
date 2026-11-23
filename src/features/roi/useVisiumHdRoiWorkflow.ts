@@ -18,6 +18,7 @@ import {
   isVisiumHdExpressionProfileDataset,
   type VisiumHdExpressionProfileDataset,
 } from '../app-shell/visiumHdAppController'
+import { visiumHdDrawnBinSize } from '../app-shell/visiumHdGridLayerData'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import {
   createStructuredLoadError,
@@ -169,7 +170,9 @@ export function useVisiumHdRoiWorkflow({
         styleGridCell,
       )
       const barcodes = result.bins.map((bin) => bin.barcode)
-      const binSize = activeBinSize
+      // The selected bins are the drawn tier's, which is not the selected
+      // size zoomed out with 2 µm selected or while a switch loads.
+      const binSize = visiumHdDrawnBinSize(gridCells, activeBinSize)
 
       setRoiMode('idle')
       setRoiName((current) => current.trim() || defaultRoiName(roiIdRef.current + 1))
@@ -177,7 +180,7 @@ export function useVisiumHdRoiWorkflow({
       setVisiumHdRoiState(
         visiumHdRoiReady({
           url: readyDatasetUrl,
-          ...(activeBinSize === undefined ? {} : { binSizeMicrometers: activeBinSize }),
+          ...(binSize === undefined ? {} : { binSizeMicrometers: binSize }),
           bbox: selection.bbox,
           selection,
           bins: result.bins,
