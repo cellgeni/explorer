@@ -1,7 +1,7 @@
 import { ALL_ANNOTATION_GROUP_ID } from '../../data/datasetAnnotations'
 import {
-  annotationPaletteColor,
   normalizeAnnotationColor,
+  unusedAnnotationPaletteColors,
 } from '../../rendering/annotationPalette'
 import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
@@ -272,27 +272,41 @@ export function mergeImportedAnnotations(
   ]
 }
 
-// New annotations take the colour their dataset stores, else the next palette
-// colour; colours already set, including the user's, are kept.
+// New annotations take the colour their dataset stores, else the first
+// palette colour no other class has; colours already set, including the
+// user's, are kept.
 export function colorsForAnnotations(
   annotations: readonly Pick<Annotation, 'id' | 'color'>[],
   currentColors: Readonly<Record<string, string>>,
 ): Readonly<Record<string, string>> {
   const nextColors: Record<string, string> = { ...currentColors }
-  let colorIndex = Object.keys(nextColors).length
+  const storedColor = (annotation: Pick<Annotation, 'color'>) =>
+    annotation.color === undefined ? null : normalizeAnnotationColor(annotation.color)
+  const nextPaletteColor = unusedAnnotationPaletteColors(
+    [
+      ...Object.values(currentColors),
+      ...annotations.flatMap((annotation) => storedColor(annotation) ?? []),
+    ],
+    Object.keys(currentColors).length,
+  )
 
   for (const annotation of annotations) {
     if (nextColors[annotation.id] !== undefined) {
       continue
     }
 
-    const storedColor =
-      annotation.color === undefined ? null : normalizeAnnotationColor(annotation.color)
-    nextColors[annotation.id] = storedColor ?? annotationPaletteColor(colorIndex)
-    colorIndex += 1
+    nextColors[annotation.id] = storedColor(annotation) ?? nextPaletteColor()
   }
 
   return nextColors
+}
+
+// One new class's colour (Save ROI, Save As Class).
+export function nextAnnotationColor(colors: Readonly<Record<string, string>>): string {
+  return unusedAnnotationPaletteColors(
+    Object.values(colors),
+    Object.keys(colors).length,
+  )()
 }
 
 export function removeAnnotationColor(

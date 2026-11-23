@@ -426,7 +426,7 @@ Loaded state:
   it; the all-classes checkbox then checks or unchecks only those, so
   unchecking all and searching shows one family of classes. Escape clears it. Each row has a colour
   picker (the colour the dataset stores for the class, such as Atera's
-  Azimuth colours, else the next palette colour), a visibility checkbox, the label without the set prefix, a bar of
+  Azimuth colours, else the first palette colour no other class has, so a removed class's colour is used again), a visibility checkbox, the label without the set prefix, a bar of
   its size, its cell count and share of the set, and `×`. With the eye shut,
   cells, previews and the legend go back to the default colouring; with
   every class unchecked, all cells fade. Visium spots hidden off the tissue
@@ -627,15 +627,15 @@ Visium library, or the SpatialData coordinate system and scale): another
 dataset or frame, or coming back to one, starts with none, while a reload of
 the same view (a Visium off-tissue toggle) keeps them.
 
-| Control             | Notes                                                                                                                     |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Swatch              | `{name} color`. New selections take the next of 8 bright colours; the outline on the canvas uses it                       |
-| Checkbox            | `{name} visible`. Hidden selections are not outlined; the one in the card always is                                       |
-| Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                 |
-| Area                | µm², from the box or lasso; a lasso that crosses itself counts each lobe it selects                                       |
-| `Go to {name}`      | Fits the view to it                                                                                                       |
-| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too |
-| `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                            |
+| Control             | Notes                                                                                                                                                       |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Swatch              | `{name} color`. New selections take the first of 8 bright colours no other selection has, repeating once all 8 are taken; the outline on the canvas uses it |
+| Checkbox            | `{name} visible`. Hidden selections are not outlined; the one in the card always is                                                                         |
+| Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                                                   |
+| Area                | µm², from the box or lasso; a lasso that crosses itself counts each lobe it selects                                                                         |
+| `Go to {name}`      | Fits the view to it                                                                                                                                         |
+| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too                                   |
+| `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                                                              |
 
 On the canvas, the card's selection is drawn solid with a light fill in its
 colour; the other visible selections are dashed outlines. Hiding the

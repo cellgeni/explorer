@@ -282,6 +282,29 @@ ${cellC},T cell,0,,0.9`,
     ])
   })
 
+  it('counts a cell listed twice once, in a class and in a track', () => {
+    const imported = parseCustomAnnotationImport(
+      [
+        'cell_id,cell_type,score',
+        'a,Tumour,0.5',
+        'a,Tumour,0.7',
+        'b,Tumour,1.5',
+        'c,Stroma,2.5',
+      ].join('\n'),
+      'repeats.csv',
+    )
+
+    expect(imported.annotations.map(({ label, cellIds }) => [label, cellIds])).toEqual([
+      ['cell_type: Tumour', ['a', 'b']],
+      ['cell_type: Stroma', ['c']],
+    ])
+    expect(imported.metadataTracks[0]).toMatchObject({ cellCount: 3, min: 0.5, max: 2.5 })
+    expect(parseCustomAnnotations('{"Tumour": ["a", "a", "b"]}')[0]?.cellIds).toEqual([
+      'a',
+      'b',
+    ])
+  })
+
   it('reads JSON label-to-cells objects', () => {
     const cellA = intToCellId(1, 1)
 

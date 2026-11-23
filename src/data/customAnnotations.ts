@@ -143,7 +143,7 @@ function annotationsFromJsonRows(
   rows: readonly unknown[],
   fileName: string,
 ): readonly Annotation[] {
-  const grouped = new Map<string, CellId[]>()
+  const grouped = new Map<string, Set<CellId>>()
   const directAnnotations: CustomAnnotationEntry[] = []
 
   for (const row of rows) {
@@ -191,13 +191,17 @@ function annotationsFromJsonRecord(
 
     annotations.push({
       label,
-      cellIds: value.map((cellId) => {
-        if (typeof cellId !== 'string') {
-          throw new AnnotationFileFormatError('JSON annotation cell ids must be strings.')
-        }
+      cellIds: uniqueCellIds(
+        value.map((cellId) => {
+          if (typeof cellId !== 'string') {
+            throw new AnnotationFileFormatError(
+              'JSON annotation cell ids must be strings.',
+            )
+          }
 
-        return asAnyCellId(cellId)
-      }),
+          return asAnyCellId(cellId)
+        }),
+      ),
     })
   }
 
@@ -241,7 +245,7 @@ function csvLabelColumnEntries(
   cellIdIndex: number,
   labelIndex: number,
 ): readonly CustomAnnotationEntry[] {
-  const grouped = new Map<string, CellId[]>()
+  const grouped = new Map<string, Set<CellId>>()
 
   for (const row of rows.slice(1)) {
     const cellId = row[cellIdIndex]?.trim()
@@ -320,7 +324,7 @@ function parseCsvWideAnnotations(
       continue
     }
 
-    const grouped = new Map<string, CellId[]>()
+    const grouped = new Map<string, Set<CellId>>()
 
     for (const row of rows.slice(1)) {
       const cellId = row[cellIdIndex]?.trim()
@@ -386,6 +390,8 @@ function createContinuousMetadataTrack(
   label: string,
 ): ContinuousCellMetadataTrack | null {
   const values: ContinuousCellMetadataValue[] = []
+  // A cell listed twice keeps its first value.
+  const seenCellIds = new Set<string>()
   let min = Number.POSITIVE_INFINITY
   let max = Number.NEGATIVE_INFINITY
 
@@ -405,10 +411,11 @@ function createContinuousMetadataTrack(
 
     const value = parseContinuousValue(rawValue)
 
-    if (value === null) {
+    if (value === null || seenCellIds.has(cellId)) {
       continue
     }
 
+    seenCellIds.add(cellId)
     values.push({ cellId: asAnyCellId(cellId), value })
     min = Math.min(min, value)
     max = Math.max(max, value)
@@ -562,9 +569,12 @@ function parseCsvRows(text: string, delimiter = ','): readonly (readonly string[
 }
 
 function annotationEntriesFromGroupedCells(
-  grouped: ReadonlyMap<string, readonly CellId[]>,
+  grouped: ReadonlyMap<string, ReadonlySet<CellId>>,
 ): readonly CustomAnnotationEntry[] {
-  return [...grouped.entries()].map(([label, cellIds]) => ({ label, cellIds }))
+  return [...grouped.entries()].map(([label, cellIds]) => ({
+    label,
+    cellIds: [...cellIds],
+  }))
 }
 
 function createCustomAnnotations(
@@ -608,14 +618,23 @@ function uniqueAnnotationId(baseId: string, usedIds: ReadonlySet<string>): strin
   return `${baseId}-${suffix}`
 }
 
+function uniqueCellIds(cellIds: readonly CellId[]): readonly CellId[] {
+  return [...new Set(cellIds)]
+}
+
+// A cell listed twice under one label is in the class once.
 function appendGroupedCell(
-  grouped: Map<string, CellId[]>,
+  grouped: Map<string, Set<CellId>>,
   label: string,
   cellId: CellId,
 ): void {
-  const existing = grouped.get(label) ?? []
-  existing.push(cellId)
-  grouped.set(label, existing)
+  const existing = grouped.get(label)
+
+  if (existing === undefined) {
+    grouped.set(label, new Set([cellId]))
+  } else {
+    existing.add(cellId)
+  }
 }
 
 // Text, or a number written as text (cluster 3, instance ID 17).
@@ -653,7 +672,7 @@ function readCellIdArrayField(
       throw new AnnotationFileFormatError(`${key} must be an array of cell-id strings.`)
     }
 
-    return value.map((cellId) => asAnyCellId(cellId))
+    return uniqueCellIds(value.map((cellId) => asAnyCellId(cellId)))
   }
 
   return undefined
