@@ -273,7 +273,9 @@ count is every gene detected, not only the 8 it lists.
   selected bin the view has left. The Bin card then keeps the score of the
   last batch read over the bin, for the same genes
   (`useSelectedGridCellScore`), or says the bin is outside the area read,
-  rather than showing Score 0.
+  rather than showing Score 0. A bin is in the area read when any part of it
+  is, as the readers select bins. A batch lists only bins that express a
+  selected gene, so a bin it leaves out scores 0 for those genes.
 - Segmentation GeoJSON is fetched on the main thread, so custom fetchers and
   the full-file budget apply, and its body is piped chunk by chunk to a
   short-lived worker that parses each feature and transfers the columns back
