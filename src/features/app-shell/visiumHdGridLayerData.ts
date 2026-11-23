@@ -30,6 +30,16 @@ export function gridCellLayerBinSize(
     : null
 }
 
+// The bin size that reads for the drawn bins use: the drawn tier's, which is
+// a coarser stand-in zoomed out with 2 µm selected, or the old tier while a
+// switch loads; else the selected size.
+export function visiumHdDrawnBinSize(
+  cells: GridCellColumns,
+  selectedBinSize: VisiumHdBinSizeMicrometers | undefined,
+): VisiumHdBinSizeMicrometers | undefined {
+  return gridCellLayerBinSize(cells) ?? selectedBinSize
+}
+
 function isVisiumHdBinSizeMicrometers(
   binSizeMicrometers: number | undefined,
 ): binSizeMicrometers is VisiumHdBinSizeMicrometers {

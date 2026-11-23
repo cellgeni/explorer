@@ -32,6 +32,13 @@ describe('readAnnotationUrlText', () => {
     )
   })
 
+  it('says a file just over the limit is over it', () => {
+    expect(
+      new AnnotationUrlTooLargeError('labels.csv', 104_900_000, 100 * 1024 * 1024)
+        .message,
+    ).toBe('labels.csv is 100.04 MiB, above the 100 MiB limit for annotation URLs.')
+  })
+
   it('refuses a file whose Content-Length is over the limit without reading it', async () => {
     const { body, stream } = chunkedBody([new Uint8Array(10)])
     const response = new Response(body, {
@@ -39,7 +46,7 @@ describe('readAnnotationUrlText', () => {
     })
 
     await expect(readAnnotationUrlText(response, 'labels.csv')).rejects.toThrow(
-      'labels.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
+      'labels.csv is 250.5 MiB, above the 100 MiB limit for annotation URLs.',
     )
     expect(stream.cancel).toHaveBeenCalled()
     expect(stream.pulled).toBeLessThanOrEqual(1)
