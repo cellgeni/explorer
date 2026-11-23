@@ -202,6 +202,74 @@ describe('spatial dataset detection', () => {
     ).toBe(false)
   })
 
+  // A host that answers the folder itself, as one serving its index page at
+  // /visium does: a probe put inside the query or fragment found every file.
+  it.each([
+    'https://example.test/visium?utm_source=mail',
+    'https://example.test/visium/#notes',
+  ])('probes the folder %s by path, not inside its query (EXP-201)', async (url) => {
+    const fetcher = fetcherForOkPaths([
+      '/visium',
+      '/visium/',
+      '/visium/spatial/tissue_positions.csv',
+      '/visium/spatial/scalefactors_json.json',
+      '/visium/filtered_feature_bc_matrix.h5',
+    ])
+
+    await expect(detectSpatialDataset(url, { fetcher })).resolves.toMatchObject({
+      platform: 'visium',
+    })
+    const requested = vi.mocked(fetcher).mock.calls.map(([input]) => String(input))
+    expect(requested).toContain(
+      url.includes('?')
+        ? 'https://example.test/visium/spatial/scalefactors_json.json?utm_source=mail'
+        : 'https://example.test/visium/spatial/scalefactors_json.json',
+    )
+    expect(requested.filter((input) => /[?#][^/]*\//.test(input))).toEqual([])
+  })
+
+  it('keeps a folder token on every probe and file (EXP-201)', async () => {
+    // A host that grants the folder's objects by the query, as an Azure SAS
+    // token does.
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const { pathname, search } = new URL(String(input))
+      const ok = search === '?token=abc' && pathname === '/run/experiment.xenium'
+      return new Response(null, { status: ok ? 200 : 404 })
+    }) as unknown as typeof fetch
+    const url = 'https://example.test/run?token=abc'
+
+    await expect(detectSpatialDataset(url, { fetcher })).resolves.toMatchObject({
+      platform: 'xenium',
+    })
+    expect(datasetFileUrlFor(url, 'cells')).toBe(
+      'https://example.test/run/cells.parquet?token=abc',
+    )
+  })
+
+  it.each([
+    'data.example.org/xenium/run-1',
+    'data.example.org/sample.h5ad',
+    'data.example.org/slides/he.ome.tif',
+    'ftp://data.example.org/run-1',
+  ])('requests nothing for %s, which is not a web address (EXP-209)', async (url) => {
+    const fetcher = fetcherForOkPaths([])
+
+    await expect(detectSpatialDataset(url, { fetcher })).rejects.toMatchObject({
+      name: 'DatasetAddressError',
+    })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it("reads an .h5ad at a path on the viewer's own host", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 200 }))
+
+    await expect(
+      detectSpatialDataset('/h5ad-smoke.h5ad', {
+        fetcher: fetcher as unknown as typeof fetch,
+      }),
+    ).resolves.toMatchObject({ platform: 'h5ad' })
+  })
+
   it("creates a dataset from the load's detection without probing again (EXP-024)", async () => {
     const fetcher = fetcherForOkPaths([
       '/visium/spatial/tissue_positions.csv',
