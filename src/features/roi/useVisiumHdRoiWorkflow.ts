@@ -5,7 +5,8 @@ import type { RoiSelection } from '../../data/roiSelection'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import type { GridCellColumns } from '../../rendering/gridCellColumns'
-import { slug } from '../../utils/slug'
+import { fileNamePart } from '../../utils/fileName'
+import { urlWithoutCredentials } from '../../utils/urlCredentials'
 import {
   downloadTextFile,
   invalidateLatestRequest,
@@ -350,7 +351,7 @@ export function useVisiumHdRoiWorkflow({
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
 
     downloadTextFile(
-      `${slug(name)}-barcodes.csv`,
+      `${fileNamePart(name, 'selection')}-barcodes.csv`,
       visiumHdRoiBinsToCsv(activeRoiState.bins),
     )
     appendDebugEvent(`Exported ROI barcodes ${name}`)
@@ -364,11 +365,12 @@ export function useVisiumHdRoiWorkflow({
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
 
     downloadTextFile(
-      `${slug(name)}-roi.geojson`,
+      `${fileNamePart(name, 'selection')}-roi.geojson`,
       roiSelectionToGeoJson(activeRoiState.selection, {
         roi_name: name,
         exported_at: new Date().toISOString(),
-        dataset_url: activeRoiState.url,
+        // Without a presigned URL's signature, as in the recent list.
+        dataset_url: urlWithoutCredentials(activeRoiState.url).url,
         selected_barcode_count: activeRoiState.bins.length,
         hit_barcode_limit: activeRoiState.hitBinLimit,
         bin_size_um: activeRoiState.binSizeMicrometers ?? null,

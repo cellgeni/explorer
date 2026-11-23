@@ -333,6 +333,10 @@ export function roiSelectionToGeoJson(
     properties: {
       roi_kind: selection.kind,
       coordinate_unit: 'micrometer',
+      // QuPath and Import GeoJSON read a shape's name from `name`.
+      ...(typeof properties.roi_name === 'string'
+        ? { name: properties.roi_name, objectType: 'annotation' }
+        : {}),
       ...properties,
     },
     geometry: {
