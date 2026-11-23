@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { BBox } from '../../data/coords'
-import { gridCellCenterInBbox, unscoredGridCell } from '../../rendering/deckLayers'
+import { gridCellOverlapsBbox, unscoredGridCell } from '../../rendering/deckLayers'
 import type { GridCellDatum } from '../../rendering/deckLayerTypes'
 
 interface SelectedGridCellScoreOptions {
@@ -30,15 +30,18 @@ export function useSelectedGridCellScore({
   selectedGenes,
 }: SelectedGridCellScoreOptions): SelectedGridCellScore {
   const outsideRead =
-    selected !== null && readBox !== undefined && !gridCellCenterInBbox(selected, readBox)
+    selected !== null && readBox !== undefined && !gridCellOverlapsBbox(selected, readBox)
   const [lastRead, setLastRead] = useState<GridCellDatum | null>(null)
 
+  // A bin the batch does not list is styled with a 0 and no genes: its score
+  // is for the selected genes. Stored with them, the same score compares
+  // equal on the next render, which this update during render relies on.
   if (
     !outsideRead &&
     scored?.expressionCount !== undefined &&
-    !sameScore(lastRead, scored)
+    !sameScore(lastRead, scored, selectedGenes)
   ) {
-    setLastRead(scored)
+    setLastRead({ ...scored, expressionGenes: scored.expressionGenes ?? selectedGenes })
   }
 
   const cell = useMemo(() => {
@@ -55,12 +58,16 @@ export function useSelectedGridCellScore({
   return { cell, outsideRead }
 }
 
-function sameScore(last: GridCellDatum | null, next: GridCellDatum): boolean {
+function sameScore(
+  last: GridCellDatum | null,
+  next: GridCellDatum,
+  selectedGenes: readonly string[],
+): boolean {
   return (
     last !== null &&
     last.id === next.id &&
     last.expressionCount === next.expressionCount &&
-    sameGeneList(last.expressionGenes, next.expressionGenes ?? [])
+    sameGeneList(last.expressionGenes, next.expressionGenes ?? selectedGenes)
   )
 }
 
