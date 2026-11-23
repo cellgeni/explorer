@@ -14,6 +14,34 @@ import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechun
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
+  // Range checks shared the session's probe cache, so a second run reported
+  // a file that had since gone as byte-range readable (EXP-230).
+  it('probes byte ranges again on each run', async () => {
+    const h5adUrl = 'https://example.test/fresh-probe.h5ad'
+    const status = { current: 206 }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(null, { status: status.current })),
+    )
+    const detectDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+
+    try {
+      const first = await runDatasetDiagnostics(h5adUrl, { detectDataset })
+      expect(first.checks.at(-1)).toMatchObject({ id: 'h5ad-file', status: 'pass' })
+
+      status.current = 404
+      const second = await runDatasetDiagnostics(h5adUrl, { detectDataset })
+      expect(second.checks.at(-1)).toMatchObject({ id: 'h5ad-file', status: 'fail' })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
     const report = await runDatasetDiagnostics(
       `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,

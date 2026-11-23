@@ -11,7 +11,7 @@ import {
 } from './datasetFiles'
 import { fetchHead, likelyMissingFileError, noteReadableResponse } from './hostResponses'
 import { morphologyImagePathsFromExperiment } from './morphologyImage'
-import { assertHttpRangeSupport } from './rangeSupport'
+import { assertHttpRangeSupportUncached } from './rangeSupport'
 import {
   detectSpatialDataset,
   spatialDataSelectionFor,
@@ -1769,7 +1769,7 @@ async function checkRangeFile(
   const startedAt = Date.now()
 
   try {
-    await (options.rangeValidator ?? assertHttpRangeSupport)(url, {
+    await (options.rangeValidator ?? assertHttpRangeSupportUncached)(url, {
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       label: file.label,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
@@ -1807,7 +1807,7 @@ async function checkDirectRangeFile(
   const startedAt = Date.now()
 
   try {
-    await (options.rangeValidator ?? assertHttpRangeSupport)(url, {
+    await (options.rangeValidator ?? assertHttpRangeSupportUncached)(url, {
       ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
       label,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
