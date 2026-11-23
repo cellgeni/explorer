@@ -7,7 +7,6 @@ import {
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
-import { colorsForAnnotations } from '../annotations/annotationModel'
 import type { CollectionBarAnnotations } from './CollectionBar'
 import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 import { hexRgb, type PreviewOverlay } from './collectionPreviewRaster'
@@ -59,14 +58,16 @@ export interface LinkedScoredCells {
   readonly order: Uint32Array
 }
 
-// What a section's cells are coloured by: the annotation set's classes, the
-// hidden ones faded, or else the genes' scores. Null draws the cells only,
-// as while what they are coloured by is read.
+// What a section's cells are coloured by: the annotation set's classes in
+// `classColors` (the preview store's, one per class across the collection),
+// the hidden ones faded, or else the genes' scores. Null draws the cells
+// only, as while what they are coloured by is read.
 export function sectionOverlay(
   preview: Pick<PreviewEntry, 'scores' | 'classes'> | null,
   coloring: {
     readonly genes: readonly string[]
     readonly annotations: CollectionBarAnnotations | null
+    readonly classColors: Readonly<Record<string, string>>
   },
 ): PreviewOverlay | null {
   const { annotations } = coloring
@@ -75,7 +76,7 @@ export function sectionOverlay(
     const classes = preview?.classes ?? null
     if (classes === null) return null
 
-    const colors = colorsForAnnotations(classes.classes, annotations.colors)
+    const colors = coloring.classColors
     return {
       kind: 'classes',
       classOf: classes.classOf,
