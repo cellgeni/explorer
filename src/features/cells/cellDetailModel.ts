@@ -232,16 +232,32 @@ export async function loadSelectedCellBoundary(
   }
 }
 
+// A stored NaN or infinite value is no count: the gene is left out, and the
+// total and shares are taken without it, as the bin and cell profiles do.
+// One NaN in a dense X row made every gene read "NaN% total".
 export function cellExpressionSummaryFromStats(
   stats: RoiGeneStats,
 ): CellGeneExpressionSummary {
+  const genes = stats.genes.filter((gene) => Number.isFinite(gene.count))
+  const totalFinite = Number.isFinite(stats.totalCount)
+  let totalCount = stats.totalCount
+
+  if (!totalFinite) {
+    totalCount = 0
+    for (const gene of genes) totalCount += gene.count
+  }
+
   return {
-    genes: stats.genes.map((gene) => ({
+    genes: genes.map((gene) => ({
       gene: gene.gene,
       count: gene.count,
-      percentTotal: gene.percentTotal,
+      percentTotal: totalFinite
+        ? gene.percentTotal
+        : totalCount === 0
+          ? 0
+          : (gene.count / totalCount) * 100,
     })),
-    totalCount: stats.totalCount,
+    totalCount,
     hitGeneLimit: stats.genes.length >= CELL_GENE_EXPRESSION_LIMIT,
   }
 }

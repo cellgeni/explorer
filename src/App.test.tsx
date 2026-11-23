@@ -4873,7 +4873,7 @@ describe('App', () => {
       expect(
         await screen.findByLabelText('Cell transcript z-axis distribution'),
       ).toHaveTextContent('8 z records')
-      expect(screen.getByText('Z location (um)')).toBeInTheDocument()
+      expect(screen.getByText('Z location (µm)')).toBeInTheDocument()
       expect(expressionList).toHaveTextContent('Actb')
       expect(expressionList).toHaveTextContent('Gad1')
       expect(screen.getByText('10 counts')).toBeInTheDocument()
