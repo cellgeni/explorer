@@ -50,11 +50,18 @@ export function useDatasetCollection({
   })
   const [opensFirstDataset] = useState(!linkOpensDataset)
   const [seenLoadedUrl, setSeenLoadedUrl] = useState(loadedDatasetUrl)
+  // A dataset the user opened while the collection was read, when the link
+  // named none: it stays open, and closes the collection if not in it.
+  const [openedWhileReading, setOpenedWhileReading] = useState<string | null>(null)
   const openDataset = useEffectEvent(onOpenDataset)
   const loadingUrl = state.status === 'loading' ? state.url : null
 
   if (loadedDatasetUrl !== seenLoadedUrl) {
     setSeenLoadedUrl(loadedDatasetUrl)
+
+    if (state.status === 'loading' && opensFirstDataset && loadedDatasetUrl !== null) {
+      setOpenedWhileReading(loadedDatasetUrl)
+    }
 
     if (
       loadedDatasetUrl !== null &&
@@ -66,6 +73,25 @@ export function useDatasetCollection({
     }
   }
 
+  const collectionRead = useEffectEvent((url: string, collection: DatasetCollection) => {
+    if (
+      openedWhileReading !== null &&
+      collectionEntryFor(collection, openedWhileReading) === undefined
+    ) {
+      setState(IDLE_COLLECTION_STATE)
+      return
+    }
+
+    // Before any of its datasets opens, previews included.
+    registerCollectionImages(collection)
+    setState({ status: 'ready', url, collection })
+    const first = collection.datasets[0]
+
+    if (opensFirstDataset && openedWhileReading === null && first !== undefined) {
+      openDataset(first.url, collectionFirstOpening(collection.defaults))
+    }
+  })
+
   useEffect(() => {
     if (loadingUrl === null) return
 
@@ -74,15 +100,7 @@ export function useDatasetCollection({
     loadCollection(loadingUrl, { signal: controller.signal }).then(
       (collection) => {
         if (controller.signal.aborted) return
-
-        // Before any of its datasets opens, previews included.
-        registerCollectionImages(collection)
-        setState({ status: 'ready', url: loadingUrl, collection })
-        const first = collection.datasets[0]
-
-        if (opensFirstDataset && first !== undefined) {
-          openDataset(first.url, collectionFirstOpening(collection.defaults))
-        }
+        collectionRead(loadingUrl, collection)
       },
       (error: unknown) => {
         if (controller.signal.aborted) return

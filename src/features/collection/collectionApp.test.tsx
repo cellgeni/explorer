@@ -320,6 +320,57 @@ describe('App with a dataset collection', () => {
     })
   })
 
+  // The bar marked as loading whatever the address field held, and then
+  // ignored clicks on it (EXP-244).
+  it('marks as loading the dataset being opened, not what the address field holds', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&collection=${encodeURIComponent(COLLECTION_URL)}&dataset=${encodeURIComponent(SHAM_A)}`,
+    )
+    // From the click on, 1 dpi A never answers, as a slow server.
+    let hold = false
+    const detect: SpatialDatasetDetector = async (baseUrl) =>
+      hold && baseUrl === DPI_A ? pendingPromise() : detectSpatialDataset(baseUrl)
+
+    render(
+      <TestApp
+        loadCollection={async () => COLLECTION}
+        detectSpatialDataset={detect}
+        getSpatialDataset={createSpatialDatasetLoaderMock(h5adDataset())}
+      />,
+    )
+
+    const bar = await screen.findByRole('navigation', { name: 'Collection' })
+    await waitFor(() => {
+      expect(within(bar).getByRole('button', { name: 'Sham A' })).toHaveAttribute(
+        'aria-current',
+        'true',
+      )
+    })
+    hold = true
+    fireEvent.click(within(bar).getByRole('button', { name: '1 dpi A' }))
+    await waitFor(() => {
+      expect(within(bar).getByRole('button', { name: '1 dpi A' })).toHaveAttribute(
+        'aria-busy',
+        'true',
+      )
+    })
+
+    openControls('open-dataset')
+    fireEvent.change(screen.getByLabelText('Dataset or image URL'), {
+      target: { value: SHAM_A },
+    })
+
+    expect(within(bar).getByRole('button', { name: 'Sham A' })).not.toHaveAttribute(
+      'aria-busy',
+    )
+    expect(within(bar).getByRole('button', { name: '1 dpi A' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+  })
+
   it("keeps the bar's grid, its preview size and previews in the address", async () => {
     window.history.replaceState(
       null,
