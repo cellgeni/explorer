@@ -1,7 +1,11 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import {
+  AnnotationFileFormatError,
+  customAnnotationImportOnMap,
   customCellMetadataFilePrefix,
+  IMPORTED_COLUMN_CLASS_LIMIT,
   parseCustomAnnotationImport,
+  skippedColumnsText,
   type ContinuousCellMetadataTrack,
 } from '../../data/customAnnotations'
 import {
@@ -9,10 +13,7 @@ import {
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
 import type { CellId } from '../../data/cellid'
-import {
-  annotationPaletteColor,
-  normalizeAnnotationColor,
-} from '../../rendering/annotationPalette'
+import { normalizeAnnotationColor } from '../../rendering/annotationPalette'
 import type { ObservationColorMode } from '../../rendering/cellStyling'
 import { slug } from '../../utils/slug'
 import type { AnnotationLoader } from '../app-shell/appDependencies'
@@ -40,6 +41,7 @@ import {
   customAnnotationFilePrefix,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
+  nextAnnotationColor,
   removeAnnotationColor,
   removeAnnotationColorsByPrefix,
   removeHiddenAnnotationIdsByPrefix,
@@ -108,16 +110,22 @@ interface UseAnnotationWorkflowOptions {
 }
 
 // Classes and sets a link hides (hiddenClasses=, hiddenSets=). Those in the
-// loaded labels stay hidden once they load; the rest are dropped.
+// loaded labels stay hidden once they load; the rest are dropped. An import
+// colours cells by what it brought, unless switchColorMode is false (a
+// link's labels, under the link's own colour mode).
 interface LinkHiddenAnnotationOptions {
   readonly hiddenAnnotationIds?: readonly string[] | undefined
   readonly hiddenAnnotationSetIds?: readonly string[] | undefined
+  readonly switchColorMode?: boolean
 }
 
 interface UseAnnotationWorkflowResult {
   // Imported cells that are not on the map, as "N of M imported cells are
   // not on the map."; null when they all are.
   readonly annotationImportNotice: string | null
+  // Why the last import into the open dataset failed; null after one that
+  // worked. A failed import leaves the labels and tracks already loaded.
+  readonly annotationImportError: StructuredLoadError | null
   // The URL whose labels or tracks the open dataset shows, imported by URL
   // into it; what a link's annotationUrl= names. Null once they are cleared,
   // replaced by a set or a file of the same name, or another dataset opens.
@@ -191,6 +199,11 @@ export function useAnnotationWorkflow({
     readonly annotationPrefix: string
     readonly metadataPrefix: string
   } | null>(null)
+  // The last failed import, for the dataset it was imported into.
+  const [importError, setImportError] = useState<{
+    readonly url: string
+    readonly error: StructuredLoadError
+  } | null>(null)
   // The last import by URL: the dataset it went into, the URL, and the id
   // prefixes its labels and tracks carry.
   const [urlImport, setUrlImport] = useState<{
@@ -245,6 +258,7 @@ export function useAnnotationWorkflow({
           )
           // The set replaces the imported labels.
           setImportNotice(null)
+          setImportError(null)
           if (switchColorMode && annotations.length > 0) {
             setObservationColorMode('annotations')
           }
@@ -300,13 +314,14 @@ export function useAnnotationWorkflow({
       {
         hiddenAnnotationIds: linkHiddenAnnotationIds = [],
         hiddenAnnotationSetIds: linkHiddenAnnotationSetIds = [],
+        switchColorMode = true,
       }: LinkHiddenAnnotationOptions = {},
     ) => {
-      const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
-        parseCustomAnnotationImport(text, sourceName)
+      const parsed = parseCustomAnnotationImport(text, sourceName)
+      const skippedColumns = parsed.skippedColumns ?? []
       const cellCheck = checkImportedCellIds(
-        importedAnnotations,
-        importedMetadataTracks,
+        parsed.annotations,
+        parsed.metadataTracks,
         datasetCellIds,
       )
 
@@ -318,16 +333,18 @@ export function useAnnotationWorkflow({
         )
       }
 
+      // Cells of other samples would count in classes, tracks' ranges and
+      // exports; the notice says how many were left out.
+      const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
+        cellCheck.missing === 0
+          ? parsed
+          : customAnnotationImportOnMap(parsed, datasetCellIds)
+
       const importedPrefix = customAnnotationFilePrefix(sourceName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
       // A file of the URL's name replaces its labels.
       setUrlImport((current) =>
         current?.annotationPrefix === importedPrefix ? null : current,
-      )
-      const nextCellMetadataTracks = mergeImportedCellMetadataTracks(
-        cellMetadataTracks,
-        importedMetadataTracks,
-        importedMetadataPrefix,
       )
 
       setAnnotationState((current) =>
@@ -358,34 +375,54 @@ export function useAnnotationWorkflow({
           linkHiddenAnnotationSetIds,
         ),
       )
+      setImportError(null)
+      const noticeParts = [
+        ...(cellCheck.missing === 0
+          ? []
+          : [
+              `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
+            ]),
+        ...(skippedColumns.length === 0
+          ? []
+          : [
+              `Left out ${skippedColumnsText(skippedColumns)}: a column of more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes names cells rather than grouping them.`,
+            ]),
+      ]
       setImportNotice(
-        cellCheck.missing === 0
+        noticeParts.length === 0
           ? null
           : {
               url: loadState.status === 'ready' ? loadState.url : datasetUrl,
               annotationPrefix: importedPrefix,
               metadataPrefix: importedMetadataPrefix,
-              message: `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
+              message: noticeParts.join(' '),
             },
       )
-      setCellMetadataTracks(nextCellMetadataTracks)
+      // From the tracks as they are now: an import read by URL lands after
+      // other imports, or a dataset track's values, may have changed them.
+      setCellMetadataTracks((current) =>
+        mergeImportedCellMetadataTracks(
+          current,
+          importedMetadataTracks,
+          importedMetadataPrefix,
+        ),
+      )
+      // The selected track stays unless this import replaced it; without one
+      // the first track is shown.
       setSelectedCellMetadataTrackId((current) => {
-        if (nextCellMetadataTracks.length === 0) {
-          return null
-        }
-
         if (
           current !== null &&
-          nextCellMetadataTracks.some((track) => track.id === current)
+          (!current.startsWith(importedMetadataPrefix) ||
+            importedMetadataTracks.some((track) => track.id === current))
         ) {
           return current
         }
 
-        return importedMetadataTracks[0]?.id ?? nextCellMetadataTracks[0]?.id ?? null
+        return importedMetadataTracks[0]?.id ?? null
       })
-      if (importedAnnotations.length > 0) {
+      if (switchColorMode && importedAnnotations.length > 0) {
         setObservationColorMode('annotations')
-      } else if (importedMetadataTracks.length > 0) {
+      } else if (switchColorMode && importedMetadataTracks.length > 0) {
         setObservationColorMode('metadata')
       }
       appendDebugEvent(
@@ -396,7 +433,6 @@ export function useAnnotationWorkflow({
     },
     [
       appendDebugEvent,
-      cellMetadataTracks,
       datasetCellIds,
       datasetUrl,
       loadState,
@@ -420,22 +456,14 @@ export function useAnnotationWorkflow({
         importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
       } catch (error) {
         setImportNotice(null)
-        setAnnotationState(
-          annotationLoadFailed(
-            loadState.status === 'ready' ? loadState.url : datasetUrl,
-            annotationImportError(error),
-          ),
-        )
+        setImportError({
+          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+          error: annotationImportError(error),
+        })
         appendDebugEvent('Annotation import failed')
       }
     },
-    [
-      appendDebugEvent,
-      datasetUrl,
-      importCustomAnnotationText,
-      loadState,
-      setAnnotationState,
-    ],
+    [appendDebugEvent, datasetUrl, importCustomAnnotationText, loadState],
   )
 
   const handleImportAnnotationUrl = useCallback(
@@ -482,12 +510,10 @@ export function useAnnotationWorkflow({
         }
 
         setImportNotice(null)
-        setAnnotationState(
-          annotationLoadFailed(
-            loadState.status === 'ready' ? loadState.url : datasetUrl,
-            annotationImportError(error),
-          ),
-        )
+        setImportError({
+          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+          error: annotationImportError(error),
+        })
         appendDebugEvent('Annotation URL import failed')
         return false
       }
@@ -499,7 +525,6 @@ export function useAnnotationWorkflow({
       importCustomAnnotationText,
       loadRequestIdRef,
       loadState,
-      setAnnotationState,
     ],
   )
 
@@ -618,6 +643,7 @@ export function useAnnotationWorkflow({
     setHiddenAnnotationIds([])
     setHiddenAnnotationSetIds([])
     setImportNotice(null)
+    setImportError(null)
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
     setObservationColorMode((current) =>
@@ -672,7 +698,7 @@ export function useAnnotationWorkflow({
     )
     setAnnotationColors((current) => ({
       ...current,
-      [annotation.id]: annotationPaletteColor(Object.keys(current).length),
+      [annotation.id]: nextAnnotationColor(current),
     }))
     setObservationColorMode('annotations')
   }, [
@@ -709,7 +735,7 @@ export function useAnnotationWorkflow({
       )
       setAnnotationColors((colors) => ({
         ...colors,
-        [annotation.id]: annotationPaletteColor(Object.keys(colors).length),
+        [annotation.id]: nextAnnotationColor(colors),
       }))
       setObservationColorMode('annotations')
     },
@@ -739,6 +765,12 @@ export function useAnnotationWorkflow({
       ? importNotice.message
       : null
 
+  const openDatasetImportError =
+    importError !== null &&
+    importError.url === (loadState.status === 'ready' ? loadState.url : datasetUrl)
+      ? importError.error
+      : null
+
   const linkedAnnotationUrl =
     urlImport !== null &&
     loadState.status === 'ready' &&
@@ -752,6 +784,7 @@ export function useAnnotationWorkflow({
       : null
 
   return {
+    annotationImportError: openDatasetImportError,
     annotationImportNotice,
     linkedAnnotationUrl,
     handleAnnotationColorChange,
@@ -796,7 +829,18 @@ function annotationImportError(error: unknown): StructuredLoadError {
       title: 'Annotation file too large',
       message: error.message,
       action:
-        'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
+        'The file was not read. Use a file of 100 MiB or smaller, such as one with fewer columns, or split the labels into several files.',
+    }
+  }
+
+  if (error instanceof AnnotationFileFormatError) {
+    return {
+      source: 'Annotations',
+      code: 'unsupported',
+      title: 'Annotation file not read',
+      message: error.message,
+      action:
+        'Check the file: CSV or TSV with a cell_id column and a label column or columns of classes, or JSON rows or {label: [cell IDs]}.',
     }
   }
 
@@ -914,10 +958,9 @@ function normalizeAnnotationFetchUrl(url: URL): URL {
     return url
   }
 
+  // The segments of `url.pathname` are already percent-encoded.
   return new URL(
-    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathParts
-      .map(encodeURIComponent)
-      .join('/')}`,
+    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathParts.join('/')}`,
   )
 }
 

@@ -101,7 +101,13 @@ export function useCellMetadataTrackValues({
           return
         }
 
-        appendDebugEvent(`Metadata track failed: ${label}`)
+        // Read again when the track is chosen again.
+        if (requestedKeyRef.current === requestKey) {
+          requestedKeyRef.current = null
+        }
+        appendDebugEvent(
+          `Metadata track failed: ${label}: ${error instanceof Error ? error.message : String(error)}`,
+        )
       })
   }, [
     appendDebugEvent,

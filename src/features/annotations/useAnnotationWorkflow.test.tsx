@@ -482,6 +482,58 @@ describe('useAnnotationWorkflow', () => {
     }
   })
 
+  it('fetches a GitHub file whose path has a space or accent at its raw address', async () => {
+    const fetcher = vi.fn(async () => new Response('cell_id,label\naaaaaaaa-1,A'))
+    vi.stubGlobal('fetch', fetcher)
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl(
+        'https://github.com/o/r/blob/main/labels/my labels é.csv',
+      )
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://raw.githubusercontent.com/o/r/main/labels/my%20labels%20%C3%A9.csv',
+      expect.anything(),
+    )
+  })
+
+  it('names a file it cannot read as labels, not the address', async () => {
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File(['barcode,label\nx,A'], 'wrong.csv', { type: 'text/csv' }),
+      )
+    })
+
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toMatchObject({
+      code: 'unsupported',
+      title: 'Annotation file not read',
+      message:
+        'CSV annotations need a cell_id, cellid or cell column; wrong.csv has "barcode", "label".',
+    })
+  })
+
   it('imports custom annotations from a URL', async () => {
     const cellId = asCellId('aaaaaaaa-1')
     const fetcher = vi.fn(async () => new Response(`cell_id,label\n${cellId},Remote ROI`))
@@ -606,19 +658,61 @@ describe('useAnnotationWorkflow', () => {
       expect(imported).toBe(false)
     })
 
-    expect(snapshot.annotationState).toEqual({
-      status: 'error',
-      url: 'https://example.test/output',
-      error: {
-        source: 'Annotations',
-        code: 'size-limit',
-        title: 'Annotation file too large',
-        message: 'all-cells.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
-        action:
-          'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
-      },
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toEqual({
+      source: 'Annotations',
+      code: 'size-limit',
+      title: 'Annotation file too large',
+      message: 'all-cells.csv is 250.5 MiB, above the 100 MiB limit for annotation URLs.',
+      action:
+        'The file was not read. Use a file of 100 MiB or smaller, such as one with fewer columns, or split the labels into several files.',
     })
     expect(snapshot.debugMessages).toContain('Annotation URL import failed')
+  })
+
+  it('keeps a file import’s tracks when a URL import started earlier lands later', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    let respond: (response: Response) => void = () => undefined
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            respond = resolve
+          }),
+      ),
+    )
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    let urlImport: Promise<boolean> = Promise.resolve(false)
+    act(() => {
+      urlImport = api.handleImportAnnotationUrl('https://example.test/remote.csv')
+    })
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,confidence\n${cellId},0.82`], 'scores.csv', {
+          type: 'text/csv',
+        }),
+      )
+    })
+    await act(async () => {
+      respond(new Response(`cell_id,depth\n${cellId},1.5`))
+      await urlImport
+    })
+
+    expect(snapshot.cellMetadataTracks.map((track) => track.label)).toEqual([
+      'confidence',
+      'depth',
+    ])
   })
 
   it('imports continuous CSV values as metadata tracks and activates metadata coloring', async () => {
@@ -662,6 +756,37 @@ describe('useAnnotationWorkflow', () => {
     )
   })
 
+  it('says which table columns were left out for having too many classes', async () => {
+    const rows = ['cell_id,barcode,cell_type']
+    for (let index = 0; index < 600; index += 1) {
+      rows.push(`aaaaaaaa-${index},BC${index},${index % 2 === 0 ? 'T' : 'B'}`)
+    }
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([rows.join('\n')], 'obs.csv', { type: 'text/csv' }),
+      )
+    })
+
+    expect(snapshot.annotationState).toMatchObject({
+      status: 'ready',
+      annotations: [expect.anything(), expect.anything()],
+    })
+    expect(api.annotationImportNotice).toBe(
+      'Left out barcode (600 classes): a column of more than 500 classes names cells rather than grouping them.',
+    )
+  })
+
   it('imports Visium barcodes and says how many cells are not on the map', async () => {
     const file = new File(
       [
@@ -693,7 +818,7 @@ AAACAGAGCGACTCCT-1,Stroma`,
       snapshot.annotationState.status === 'ready'
         ? snapshot.annotationState.annotations.map((annotation) => annotation.cellIds)
         : [],
-    ).toEqual([['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1'], ['AAACAGAGCGACTCCT-1']])
+    ).toEqual([['AAACAAGTATCTCCCA-1', 'AAACACCAATAACTGC-1']])
     expect(api.annotationImportNotice).toBe('1 of 3 imported cells are not on the map.')
 
     act(() => {
@@ -701,6 +826,71 @@ AAACAGAGCGACTCCT-1,Stroma`,
     })
 
     expect(api.annotationImportNotice).toBeNull()
+  })
+
+  it('keeps only the cells on the map in imported tracks and their range', async () => {
+    const file = new File(
+      ['cell_id,score\nc1,1\nc2,2.5\nother-sample-1,1000\nother-sample-2,-50'],
+      'scores.csv',
+      { type: 'text/csv' },
+    )
+
+    render(
+      <Probe
+        datasetCellIds={new Set(['c1', 'c2'])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(file)
+    })
+
+    expect(snapshot.cellMetadataTracks).toEqual([
+      expect.objectContaining({
+        label: 'score',
+        cellCount: 2,
+        min: 1,
+        max: 2.5,
+        values: [
+          { cellId: 'c1', value: 1 },
+          { cellId: 'c2', value: 2.5 },
+        ],
+      }),
+    ])
+    expect(api.annotationImportNotice).toBe('2 of 4 imported cells are not on the map.')
+  })
+
+  it('keeps the colour mode when asked to, as for a link', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('cell_id,label\naaaaaaaa-1,Tumour')),
+    )
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+    const before = snapshot.observationColorMode
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/labels.csv', {
+        switchColorMode: false,
+      })
+    })
+
+    expect(snapshot.annotationState).toMatchObject({ status: 'ready' })
+    expect(snapshot.observationColorMode).toBe(before)
+    expect(before).not.toBe('annotations')
   })
 
   it('fails an import when none of its cells are on the map', async () => {
@@ -723,19 +913,72 @@ AAACAGAGCGACTCCT-1,Stroma`,
       await api.handleImportAnnotations(file)
     })
 
-    expect(snapshot.annotationState).toEqual({
-      status: 'error',
-      url: 'https://example.test/output',
-      error: {
-        source: 'Annotations',
-        code: 'unknown',
-        title: 'Imported cells not found',
-        message: 'None of the 2 imported cells are on the map.',
-        action: "Check that the file's cell IDs come from this dataset.",
-      },
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toEqual({
+      source: 'Annotations',
+      code: 'unknown',
+      title: 'Imported cells not found',
+      message: 'None of the 2 imported cells are on the map.',
+      action: "Check that the file's cell IDs come from this dataset.",
     })
     expect(api.annotationImportNotice).toBeNull()
     expect(snapshot.debugMessages).toContain('Annotation import failed')
+  })
+
+  it('keeps the loaded labels when an import fails, and clears the error on the next', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Not found', { status: 404 })),
+    )
+
+    render(
+      <Probe
+        datasetCellIds={new Set([cellId])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,label\n${cellId},Tumour`], 'saved.csv', { type: 'text/csv' }),
+      )
+    })
+    const loaded = snapshot.annotationState
+    expect(loaded).toMatchObject({ status: 'ready' })
+
+    // A typo'd URL, then a file without a cell_id column.
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/labels/typo.csv')
+    })
+    expect(snapshot.annotationState).toBe(loaded)
+    expect(api.annotationImportError?.message).toContain('HTTP 404')
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File(['barcode,label\nx,A'], 'wrong.csv', { type: 'text/csv' }),
+      )
+    })
+    expect(snapshot.annotationState).toBe(loaded)
+    expect(api.annotationImportError?.message).toContain('cell_id')
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,label\n${cellId},Stroma`], 'more.csv', { type: 'text/csv' }),
+      )
+    })
+    expect(api.annotationImportError).toBeNull()
+    expect(snapshot.annotationState).toMatchObject({
+      status: 'ready',
+      annotations: expect.arrayContaining([
+        expect.objectContaining({ label: 'Tumour' }),
+        expect.objectContaining({ label: 'Stroma' }),
+      ]),
+    })
   })
 
   it('keeps the classes a link hides once its set loads, if the set has them', async () => {

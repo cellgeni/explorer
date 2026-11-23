@@ -21,6 +21,65 @@ export interface ContinuousCellMetadataTrack {
 export interface CustomAnnotationImport {
   readonly annotations: readonly Annotation[]
   readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
+  // Columns of a table left out because they name cells rather than group
+  // them, with how many classes they would have made.
+  readonly skippedColumns?: readonly SkippedAnnotationColumn[]
+}
+
+export interface SkippedAnnotationColumn {
+  readonly name: string
+  readonly classCount: number
+}
+
+// More classes than this, and a column of a table labels cells rather than
+// grouping them (a barcode, a cell name), as the dataset's own sets are
+// judged (annotationModel.ts). Each class would be a row in Clusters.
+export const IMPORTED_COLUMN_CLASS_LIMIT = 500
+
+// A column is a metadata track when at least this share of its values are
+// numbers; the rest (a spreadsheet error, a stray word) have no value.
+const CONTINUOUS_COLUMN_NUMERIC_SHARE = 0.95
+
+// The import with only the cells `onMap` holds. Classes and tracks lose the
+// other cells, a track's count and range are over the cells kept, and
+// classes and tracks left with no cell are dropped. An imported file can
+// cover other samples than the open one.
+export function customAnnotationImportOnMap(
+  imported: CustomAnnotationImport,
+  onMap: { has(cellId: string): boolean },
+): CustomAnnotationImport {
+  const annotations = imported.annotations.flatMap((annotation) => {
+    const cellIds = annotation.cellIds.filter((cellId) => onMap.has(cellId))
+    return cellIds.length === 0 ? [] : [{ ...annotation, cellIds }]
+  })
+  const metadataTracks = imported.metadataTracks.flatMap((track) => {
+    const values = track.values?.filter((value) => onMap.has(value.cellId)) ?? []
+
+    if (values.length === 0) {
+      return []
+    }
+
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    for (const { value } of values) {
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    }
+
+    return [{ ...track, values, cellCount: values.length, min, max }]
+  })
+
+  return { ...imported, annotations, metadataTracks }
+}
+
+// A file the importer cannot read as labels: its format or columns, not the
+// address it came from.
+export class AnnotationFileFormatError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'AnnotationFileFormatError'
+  }
 }
 
 export function parseCustomAnnotations(
@@ -55,7 +114,13 @@ interface CustomAnnotationEntry {
 }
 
 function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationImport {
-  const value: unknown = JSON.parse(text)
+  let value: unknown
+
+  try {
+    value = JSON.parse(text)
+  } catch (cause) {
+    throw new AnnotationFileFormatError(`${fileName} is not valid JSON.`, { cause })
+  }
 
   if (Array.isArray(value)) {
     return {
@@ -71,19 +136,19 @@ function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationI
     }
   }
 
-  throw new Error('JSON annotations must be an array or an object.')
+  throw new AnnotationFileFormatError('JSON annotations must be an array or an object.')
 }
 
 function annotationsFromJsonRows(
   rows: readonly unknown[],
   fileName: string,
 ): readonly Annotation[] {
-  const grouped = new Map<string, CellId[]>()
+  const grouped = new Map<string, Set<CellId>>()
   const directAnnotations: CustomAnnotationEntry[] = []
 
   for (const row of rows) {
     if (!isRecord(row)) {
-      throw new Error('JSON annotation rows must be objects.')
+      throw new AnnotationFileFormatError('JSON annotation rows must be objects.')
     }
 
     const label = readStringField(row, ['label', 'annotation', 'group', 'cluster'])
@@ -97,7 +162,7 @@ function annotationsFromJsonRows(
     const cellId = readStringField(row, ['cell_id', 'cellId', 'cell'])
 
     if (label === undefined || cellId === undefined) {
-      throw new Error(
+      throw new AnnotationFileFormatError(
         'JSON annotation rows need label plus cell_id, or label plus cellIds.',
       )
     }
@@ -119,18 +184,24 @@ function annotationsFromJsonRecord(
 
   for (const [label, value] of Object.entries(record)) {
     if (!Array.isArray(value)) {
-      throw new Error('JSON annotation object values must be cell-id arrays.')
+      throw new AnnotationFileFormatError(
+        'JSON annotation object values must be cell-id arrays.',
+      )
     }
 
     annotations.push({
       label,
-      cellIds: value.map((cellId) => {
-        if (typeof cellId !== 'string') {
-          throw new Error('JSON annotation cell ids must be strings.')
-        }
+      cellIds: uniqueCellIds(
+        value.map((cellId) => {
+          if (typeof cellId !== 'string') {
+            throw new AnnotationFileFormatError(
+              'JSON annotation cell ids must be strings.',
+            )
+          }
 
-        return asAnyCellId(cellId)
-      }),
+          return asAnyCellId(cellId)
+        }),
+      ),
     })
   }
 
@@ -138,46 +209,43 @@ function annotationsFromJsonRecord(
 }
 
 function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationImport {
-  const rows = parseCsvRows(text)
+  const rows = parseCsvRows(text, csvDelimiter(text))
   const header = rows[0]
 
   if (header === undefined) {
     return { annotations: [], metadataTracks: [] }
   }
 
-  const cellIdIndex = header.findIndex((column) =>
-    ['cell_id', 'cellid', 'cell'].includes(column.trim().toLowerCase()),
-  )
+  const cellIdIndex = header.findIndex(isCellIdColumn)
   const labelIndex = header.findIndex((column) =>
     ['label', 'annotation', 'group', 'cluster'].includes(column.trim().toLowerCase()),
   )
 
   if (cellIdIndex < 0) {
-    throw new Error('CSV annotations need a cell_id column.')
+    throw new AnnotationFileFormatError(
+      `CSV annotations need a cell_id, cellid or cell column; ${fileName} has ${header
+        .slice(0, 8)
+        .map((column) => `"${column.trim()}"`)
+        .join(', ')}${header.length > 8 ? ', …' : ''}.`,
+    )
   }
 
-  if (labelIndex >= 0) {
-    return {
-      annotations: parseCsvSingleLabelAnnotations(
-        rows,
-        cellIdIndex,
-        labelIndex,
-        fileName,
-      ),
-      metadataTracks: [],
-    }
-  }
-
-  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName)
+  return parseCsvWideAnnotations(
+    rows,
+    header,
+    cellIdIndex,
+    fileName,
+    labelIndex < 0 ? undefined : labelIndex,
+  )
 }
 
-function parseCsvSingleLabelAnnotations(
+// The label column's classes, as one set of labels.
+function csvLabelColumnEntries(
   rows: readonly (readonly string[])[],
   cellIdIndex: number,
   labelIndex: number,
-  fileName: string,
-): readonly Annotation[] {
-  const grouped = new Map<string, CellId[]>()
+): readonly CustomAnnotationEntry[] {
+  const grouped = new Map<string, Set<CellId>>()
 
   for (const row of rows.slice(1)) {
     const cellId = row[cellIdIndex]?.trim()
@@ -195,25 +263,41 @@ function parseCsvSingleLabelAnnotations(
     appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
-  return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
+  return annotationEntriesFromGroupedCells(grouped)
 }
 
+// Each column other than the cell ID is a set of classes or a metadata track.
+// With a label column, that column's classes come first, and the other
+// columns are read the same way; an export's `annotation_id` is left out.
 function parseCsvWideAnnotations(
   rows: readonly (readonly string[])[],
   header: readonly string[],
   cellIdIndex: number,
   fileName: string,
+  labelIndex?: number,
 ): CustomAnnotationImport {
   const annotationColumns = header
     .map((column, index) => ({ index, name: column.trim() }))
-    .filter(({ index, name }) => index !== cellIdIndex && name.length > 0)
+    .filter(
+      ({ index, name }) =>
+        index !== cellIdIndex &&
+        index !== labelIndex &&
+        name.length > 0 &&
+        !(labelIndex !== undefined && name.toLowerCase() === 'annotation_id'),
+    )
 
-  if (annotationColumns.length === 0) {
-    throw new Error('CSV annotations need cell_id plus label or annotation columns.')
+  if (annotationColumns.length === 0 && labelIndex === undefined) {
+    throw new AnnotationFileFormatError(
+      'CSV annotations need cell_id plus label or annotation columns.',
+    )
   }
 
-  const annotations: CustomAnnotationEntry[] = []
+  const annotations: CustomAnnotationEntry[] =
+    labelIndex === undefined
+      ? []
+      : [...csvLabelColumnEntries(rows, cellIdIndex, labelIndex)]
   const metadataTracks: ContinuousCellMetadataTrack[] = []
+  const skippedColumns: SkippedAnnotationColumn[] = []
   const usedMetadataTrackIds = new Set<string>()
 
   for (const { index, name } of annotationColumns) {
@@ -240,7 +324,7 @@ function parseCsvWideAnnotations(
       continue
     }
 
-    const grouped = new Map<string, CellId[]>()
+    const grouped = new Map<string, Set<CellId>>()
 
     for (const row of rows.slice(1)) {
       const cellId = row[cellIdIndex]?.trim()
@@ -258,6 +342,11 @@ function parseCsvWideAnnotations(
       appendGroupedCell(grouped, label, asAnyCellId(cellId))
     }
 
+    if (grouped.size > IMPORTED_COLUMN_CLASS_LIMIT) {
+      skippedColumns.push({ name, classCount: grouped.size })
+      continue
+    }
+
     annotations.push(
       ...annotationEntriesFromGroupedCells(grouped).map((entry) => ({
         ...entry,
@@ -266,10 +355,31 @@ function parseCsvWideAnnotations(
     )
   }
 
+  if (
+    annotations.length === 0 &&
+    metadataTracks.length === 0 &&
+    skippedColumns.length > 0
+  ) {
+    throw new AnnotationFileFormatError(
+      `No column groups the cells: ${skippedColumnsText(skippedColumns)} would each have more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes.`,
+    )
+  }
+
   return {
     annotations: createCustomAnnotations(fileName, annotations),
     metadataTracks,
+    ...(skippedColumns.length === 0 ? {} : { skippedColumns }),
   }
+}
+
+// "barcode (20,000 classes) and name (19,998 classes)".
+export function skippedColumnsText(columns: readonly SkippedAnnotationColumn[]): string {
+  const parts = columns.map(
+    ({ name, classCount }) => `${name} (${classCount.toLocaleString()} classes)`,
+  )
+  return parts.length <= 1
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1) ?? ''}`
 }
 
 function createContinuousMetadataTrack(
@@ -280,6 +390,8 @@ function createContinuousMetadataTrack(
   label: string,
 ): ContinuousCellMetadataTrack | null {
   const values: ContinuousCellMetadataValue[] = []
+  // A cell listed twice keeps its first value.
+  const seenCellIds = new Set<string>()
   let min = Number.POSITIVE_INFINITY
   let max = Number.NEGATIVE_INFINITY
 
@@ -291,17 +403,19 @@ function createContinuousMetadataTrack(
       cellId === undefined ||
       cellId.length === 0 ||
       rawValue === undefined ||
-      isMissingCsvValue(rawValue)
+      isMissingCsvValue(rawValue) ||
+      isNoNumberText(rawValue)
     ) {
       continue
     }
 
     const value = parseContinuousValue(rawValue)
 
-    if (value === null) {
+    if (value === null || seenCellIds.has(cellId)) {
       continue
     }
 
+    seenCellIds.add(cellId)
     values.push({ cellId: asAnyCellId(cellId), value })
     min = Math.min(min, value)
     max = Math.max(max, value)
@@ -332,20 +446,24 @@ function uniqueContinuousMetadataTrack(
 }
 
 function isContinuousCsvColumn(values: readonly string[]): boolean {
-  if (values.length === 0) {
+  const finiteValues = values.filter((value) => !isNoNumberText(value))
+
+  if (finiteValues.length === 0) {
     return false
   }
 
   const numericValues: number[] = []
 
-  for (const value of values) {
+  for (const value of finiteValues) {
     const parsedValue = parseContinuousValue(value)
 
-    if (parsedValue === null) {
-      return false
+    if (parsedValue !== null) {
+      numericValues.push(parsedValue)
     }
+  }
 
-    numericValues.push(parsedValue)
+  if (numericValues.length < finiteValues.length * CONTINUOUS_COLUMN_NUMERIC_SHARE) {
+    return false
   }
 
   const uniqueValues = new Set(numericValues)
@@ -364,9 +482,39 @@ function isMissingCsvValue(value: string): boolean {
   return ['', 'na', 'n/a', 'nan', 'null', 'none'].includes(value.trim().toLowerCase())
 }
 
-// Drops the `'` our CSV exports put before a field a spreadsheet would run as a
-// formula (`formatCsv`), so an exported file imports as it was.
-function parseCsvRows(text: string): readonly (readonly string[])[] {
+// Values with no place on a numeric scale: Excel's `#N/A` and `-`, and
+// infinities (pandas `inf`, R `Inf`). In a column of classes they are labels.
+function isNoNumberText(value: string): boolean {
+  return (
+    ['#n/a', '-'].includes(value.trim().toLowerCase()) ||
+    /^[+-]?inf(?:inity)?$/i.test(value.trim())
+  )
+}
+
+function isCellIdColumn(column: string): boolean {
+  return ['cell_id', 'cellid', 'cell'].includes(column.trim().toLowerCase())
+}
+
+// Comma, else a tab or semicolon when the header splits on one into a cell ID
+// column (tab-separated files, and spreadsheets saved where `,` is the
+// decimal mark).
+function csvDelimiter(text: string): string {
+  const header = text.slice(0, text.search(/\r|\n|$/))
+
+  return (
+    [',', '\t', ';'].find((delimiter) =>
+      header
+        .split(delimiter)
+        .some((column) => isCellIdColumn(column.replace(/^"|"$/g, ''))),
+    ) ?? ','
+  )
+}
+
+// RFC 4180: a `"` opens a quoted field only at its start, so `5" slide` is
+// read as written. Drops the `'` our CSV exports put before a field a
+// spreadsheet would run as a formula (`formatCsv`), so an exported file
+// imports as it was.
+function parseCsvRows(text: string, delimiter = ','): readonly (readonly string[])[] {
   const rows: string[][] = []
   let row: string[] = []
   let field = ''
@@ -376,24 +524,30 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
     const char = text[index]
     const nextChar = text[index + 1]
 
-    if (char === '"' && inQuotes && nextChar === '"') {
-      field += '"'
-      index += 1
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        field += '"'
+        index += 1
+      } else if (char === '"') {
+        inQuotes = false
+      } else {
+        field += char
+      }
       continue
     }
 
-    if (char === '"') {
-      inQuotes = !inQuotes
+    if (char === '"' && field.length === 0) {
+      inQuotes = true
       continue
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter) {
       row.push(withoutCsvFormulaGuard(field))
       field = ''
       continue
     }
 
-    if ((char === '\n' || char === '\r') && !inQuotes) {
+    if (char === '\n' || char === '\r') {
       if (char === '\r' && nextChar === '\n') {
         index += 1
       }
@@ -415,9 +569,12 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
 }
 
 function annotationEntriesFromGroupedCells(
-  grouped: ReadonlyMap<string, readonly CellId[]>,
+  grouped: ReadonlyMap<string, ReadonlySet<CellId>>,
 ): readonly CustomAnnotationEntry[] {
-  return [...grouped.entries()].map(([label, cellIds]) => ({ label, cellIds }))
+  return [...grouped.entries()].map(([label, cellIds]) => ({
+    label,
+    cellIds: [...cellIds],
+  }))
 }
 
 function createCustomAnnotations(
@@ -461,16 +618,26 @@ function uniqueAnnotationId(baseId: string, usedIds: ReadonlySet<string>): strin
   return `${baseId}-${suffix}`
 }
 
+function uniqueCellIds(cellIds: readonly CellId[]): readonly CellId[] {
+  return [...new Set(cellIds)]
+}
+
+// A cell listed twice under one label is in the class once.
 function appendGroupedCell(
-  grouped: Map<string, CellId[]>,
+  grouped: Map<string, Set<CellId>>,
   label: string,
   cellId: CellId,
 ): void {
-  const existing = grouped.get(label) ?? []
-  existing.push(cellId)
-  grouped.set(label, existing)
+  const existing = grouped.get(label)
+
+  if (existing === undefined) {
+    grouped.set(label, new Set([cellId]))
+  } else {
+    existing.add(cellId)
+  }
 }
 
+// Text, or a number written as text (cluster 3, instance ID 17).
 function readStringField(
   record: Readonly<Record<string, unknown>>,
   keys: readonly string[],
@@ -480,6 +647,10 @@ function readStringField(
 
     if (typeof value === 'string') {
       return value
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value)
     }
   }
 
@@ -498,10 +669,10 @@ function readCellIdArrayField(
     }
 
     if (!Array.isArray(value) || !value.every((cellId) => typeof cellId === 'string')) {
-      throw new Error(`${key} must be an array of cell-id strings.`)
+      throw new AnnotationFileFormatError(`${key} must be an array of cell-id strings.`)
     }
 
-    return value.map((cellId) => asAnyCellId(cellId))
+    return uniqueCellIds(value.map((cellId) => asAnyCellId(cellId)))
   }
 
   return undefined
