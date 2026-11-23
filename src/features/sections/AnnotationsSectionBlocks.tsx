@@ -189,6 +189,11 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
           </button>
         </div>
       </form>
+      {sets.importError === null ? null : (
+        <p className="annotation-import-error" role="alert">
+          {sets.importError}
+        </p>
+      )}
       {sets.importNotice === null ? null : (
         <p className="annotation-import-notice" role="status">
           {sets.importNotice}

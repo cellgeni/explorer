@@ -21,6 +21,56 @@ export interface ContinuousCellMetadataTrack {
 export interface CustomAnnotationImport {
   readonly annotations: readonly Annotation[]
   readonly metadataTracks: readonly ContinuousCellMetadataTrack[]
+  // Columns of a table left out because they name cells rather than group
+  // them, with how many classes they would have made.
+  readonly skippedColumns?: readonly SkippedAnnotationColumn[]
+}
+
+export interface SkippedAnnotationColumn {
+  readonly name: string
+  readonly classCount: number
+}
+
+// More classes than this, and a column of a table labels cells rather than
+// grouping them (a barcode, a cell name), as the dataset's own sets are
+// judged (annotationModel.ts). Each class would be a row in Clusters.
+export const IMPORTED_COLUMN_CLASS_LIMIT = 500
+
+// A column is a metadata track when at least this share of its values are
+// numbers; the rest (a spreadsheet error, a stray word) have no value.
+const CONTINUOUS_COLUMN_NUMERIC_SHARE = 0.95
+
+// The import with only the cells `onMap` holds. Classes and tracks lose the
+// other cells, a track's count and range are over the cells kept, and
+// classes and tracks left with no cell are dropped. An imported file can
+// cover other samples than the open one.
+export function customAnnotationImportOnMap(
+  imported: CustomAnnotationImport,
+  onMap: { has(cellId: string): boolean },
+): CustomAnnotationImport {
+  const annotations = imported.annotations.flatMap((annotation) => {
+    const cellIds = annotation.cellIds.filter((cellId) => onMap.has(cellId))
+    return cellIds.length === 0 ? [] : [{ ...annotation, cellIds }]
+  })
+  const metadataTracks = imported.metadataTracks.flatMap((track) => {
+    const values = track.values?.filter((value) => onMap.has(value.cellId)) ?? []
+
+    if (values.length === 0) {
+      return []
+    }
+
+    let min = Number.POSITIVE_INFINITY
+    let max = Number.NEGATIVE_INFINITY
+
+    for (const { value } of values) {
+      min = Math.min(min, value)
+      max = Math.max(max, value)
+    }
+
+    return [{ ...track, values, cellCount: values.length, min, max }]
+  })
+
+  return { ...imported, annotations, metadataTracks }
 }
 
 // A file the importer cannot read as labels: its format or columns, not the
@@ -176,27 +226,21 @@ function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationIm
     )
   }
 
-  if (labelIndex >= 0) {
-    return {
-      annotations: parseCsvSingleLabelAnnotations(
-        rows,
-        cellIdIndex,
-        labelIndex,
-        fileName,
-      ),
-      metadataTracks: [],
-    }
-  }
-
-  return parseCsvWideAnnotations(rows, header, cellIdIndex, fileName)
+  return parseCsvWideAnnotations(
+    rows,
+    header,
+    cellIdIndex,
+    fileName,
+    labelIndex < 0 ? undefined : labelIndex,
+  )
 }
 
-function parseCsvSingleLabelAnnotations(
+// The label column's classes, as one set of labels.
+function csvLabelColumnEntries(
   rows: readonly (readonly string[])[],
   cellIdIndex: number,
   labelIndex: number,
-  fileName: string,
-): readonly Annotation[] {
+): readonly CustomAnnotationEntry[] {
   const grouped = new Map<string, CellId[]>()
 
   for (const row of rows.slice(1)) {
@@ -215,27 +259,41 @@ function parseCsvSingleLabelAnnotations(
     appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
-  return createCustomAnnotations(fileName, annotationEntriesFromGroupedCells(grouped))
+  return annotationEntriesFromGroupedCells(grouped)
 }
 
+// Each column other than the cell ID is a set of classes or a metadata track.
+// With a label column, that column's classes come first, and the other
+// columns are read the same way; an export's `annotation_id` is left out.
 function parseCsvWideAnnotations(
   rows: readonly (readonly string[])[],
   header: readonly string[],
   cellIdIndex: number,
   fileName: string,
+  labelIndex?: number,
 ): CustomAnnotationImport {
   const annotationColumns = header
     .map((column, index) => ({ index, name: column.trim() }))
-    .filter(({ index, name }) => index !== cellIdIndex && name.length > 0)
+    .filter(
+      ({ index, name }) =>
+        index !== cellIdIndex &&
+        index !== labelIndex &&
+        name.length > 0 &&
+        !(labelIndex !== undefined && name.toLowerCase() === 'annotation_id'),
+    )
 
-  if (annotationColumns.length === 0) {
+  if (annotationColumns.length === 0 && labelIndex === undefined) {
     throw new AnnotationFileFormatError(
       'CSV annotations need cell_id plus label or annotation columns.',
     )
   }
 
-  const annotations: CustomAnnotationEntry[] = []
+  const annotations: CustomAnnotationEntry[] =
+    labelIndex === undefined
+      ? []
+      : [...csvLabelColumnEntries(rows, cellIdIndex, labelIndex)]
   const metadataTracks: ContinuousCellMetadataTrack[] = []
+  const skippedColumns: SkippedAnnotationColumn[] = []
   const usedMetadataTrackIds = new Set<string>()
 
   for (const { index, name } of annotationColumns) {
@@ -280,6 +338,11 @@ function parseCsvWideAnnotations(
       appendGroupedCell(grouped, label, asAnyCellId(cellId))
     }
 
+    if (grouped.size > IMPORTED_COLUMN_CLASS_LIMIT) {
+      skippedColumns.push({ name, classCount: grouped.size })
+      continue
+    }
+
     annotations.push(
       ...annotationEntriesFromGroupedCells(grouped).map((entry) => ({
         ...entry,
@@ -288,10 +351,31 @@ function parseCsvWideAnnotations(
     )
   }
 
+  if (
+    annotations.length === 0 &&
+    metadataTracks.length === 0 &&
+    skippedColumns.length > 0
+  ) {
+    throw new AnnotationFileFormatError(
+      `No column groups the cells: ${skippedColumnsText(skippedColumns)} would each have more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes.`,
+    )
+  }
+
   return {
     annotations: createCustomAnnotations(fileName, annotations),
     metadataTracks,
+    ...(skippedColumns.length === 0 ? {} : { skippedColumns }),
   }
+}
+
+// "barcode (20,000 classes) and name (19,998 classes)".
+export function skippedColumnsText(columns: readonly SkippedAnnotationColumn[]): string {
+  const parts = columns.map(
+    ({ name, classCount }) => `${name} (${classCount.toLocaleString()} classes)`,
+  )
+  return parts.length <= 1
+    ? (parts[0] ?? '')
+    : `${parts.slice(0, -1).join(', ')} and ${parts.at(-1) ?? ''}`
 }
 
 function createContinuousMetadataTrack(
@@ -313,7 +397,8 @@ function createContinuousMetadataTrack(
       cellId === undefined ||
       cellId.length === 0 ||
       rawValue === undefined ||
-      isMissingCsvValue(rawValue)
+      isMissingCsvValue(rawValue) ||
+      isNoNumberText(rawValue)
     ) {
       continue
     }
@@ -354,20 +439,24 @@ function uniqueContinuousMetadataTrack(
 }
 
 function isContinuousCsvColumn(values: readonly string[]): boolean {
-  if (values.length === 0) {
+  const finiteValues = values.filter((value) => !isNoNumberText(value))
+
+  if (finiteValues.length === 0) {
     return false
   }
 
   const numericValues: number[] = []
 
-  for (const value of values) {
+  for (const value of finiteValues) {
     const parsedValue = parseContinuousValue(value)
 
-    if (parsedValue === null) {
-      return false
+    if (parsedValue !== null) {
+      numericValues.push(parsedValue)
     }
+  }
 
-    numericValues.push(parsedValue)
+  if (numericValues.length < finiteValues.length * CONTINUOUS_COLUMN_NUMERIC_SHARE) {
+    return false
   }
 
   const uniqueValues = new Set(numericValues)
@@ -384,6 +473,15 @@ function parseContinuousValue(value: string): number | null {
 
 function isMissingCsvValue(value: string): boolean {
   return ['', 'na', 'n/a', 'nan', 'null', 'none'].includes(value.trim().toLowerCase())
+}
+
+// Values with no place on a numeric scale: Excel's `#N/A` and `-`, and
+// infinities (pandas `inf`, R `Inf`). In a column of classes they are labels.
+function isNoNumberText(value: string): boolean {
+  return (
+    ['#n/a', '-'].includes(value.trim().toLowerCase()) ||
+    /^[+-]?inf(?:inity)?$/i.test(value.trim())
+  )
 }
 
 function isCellIdColumn(column: string): boolean {

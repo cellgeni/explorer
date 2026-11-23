@@ -162,6 +162,81 @@ ${cellC},T cell,0,,0.9`,
     ).toEqual([])
   })
 
+  it('reads spreadsheet and pandas missing tokens in a numeric column as no value', () => {
+    const rows = ['cell_id,log_ratio']
+    for (let index = 0; index < 100; index += 1) {
+      rows.push(`c${index},${(index / 7).toFixed(4)}`)
+    }
+    rows.push('c-inf,inf', 'c-Inf,-Inf', 'c-na,#N/A', 'c-dash,-', 'c-div,#DIV/0!')
+
+    const imported = parseCustomAnnotationImport(rows.join('\n'), 'ratio.csv')
+
+    expect(imported.annotations).toEqual([])
+    expect(imported.metadataTracks).toHaveLength(1)
+    expect(imported.metadataTracks[0]).toMatchObject({
+      label: 'log_ratio',
+      cellCount: 100,
+      min: 0,
+      max: Number((99 / 7).toFixed(4)),
+    })
+  })
+
+  it('keeps a column with more than one value in twenty that are not numbers as classes', () => {
+    const rows = ['cell_id,stage']
+    for (let index = 0; index < 20; index += 1) {
+      rows.push(`c${index},${index < 18 ? String(index + 0.5) : 'late'}`)
+    }
+
+    const imported = parseCustomAnnotationImport(rows.join('\n'), 'stage.csv')
+
+    expect(imported.metadataTracks).toEqual([])
+    expect(imported.annotations).toHaveLength(19)
+  })
+
+  it('leaves out a table column with more than 500 classes, and says which', () => {
+    const rows = ['cell_id,barcode,cell_type']
+    for (let index = 0; index < 2_000; index += 1) {
+      rows.push(`c${index},BC${index},${index % 2 === 0 ? 'T' : 'B'}`)
+    }
+
+    const imported = parseCustomAnnotationImport(rows.join('\n'), 'obs.csv')
+
+    expect(imported.annotations.map((annotation) => annotation.label).sort()).toEqual([
+      'cell_type: B',
+      'cell_type: T',
+    ])
+    expect(imported.skippedColumns).toEqual([{ name: 'barcode', classCount: 2_000 }])
+    expect(() =>
+      parseCustomAnnotationImport(
+        rows.map((row) => row.split(',').slice(0, 2).join(',')).join('\n'),
+        'obs.csv',
+      ),
+    ).toThrow('No column groups the cells: barcode (2,000 classes)')
+  })
+
+  it('reads the other columns of a file with a label column', () => {
+    const imported = parseCustomAnnotationImport(
+      [
+        'annotation_id,cell_id,label,score,cell_type',
+        'custom:x:a,c1,A,0.5,T',
+        'custom:x:a,c2,A,1.5,B',
+        'custom:x:b,c3,B,2.25,T',
+      ].join('\n'),
+      'labels.csv',
+    )
+
+    expect(imported.annotations.map((annotation) => annotation.label)).toEqual([
+      'A',
+      'B',
+      'cell_type: T',
+      'cell_type: B',
+    ])
+    expect(imported.annotations[0]?.id).toBe('custom:labels-csv:a')
+    expect(imported.metadataTracks).toEqual([
+      expect.objectContaining({ label: 'score', cellCount: 3, min: 0.5, max: 2.25 }),
+    ])
+  })
+
   it('reads a quote inside an unquoted field as written', () => {
     const annotations = parseCustomAnnotations(
       ['cell_id,label', 'c1,5" slide', 'c2,"quoted, with comma"', 'c3,Stroma'].join('\n'),
