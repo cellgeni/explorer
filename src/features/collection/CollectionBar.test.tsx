@@ -256,6 +256,24 @@ describe('CollectionBar', () => {
     expect(button).toHaveFocus()
   })
 
+  // The name was shown as the address encodes it (EXP-246).
+  it('names a collection without a name by its file name as it reads', () => {
+    render(
+      <Bar
+        state={{
+          status: 'loading',
+          url: 'https://example.test/My%20Study/spinal%20cord.json',
+        }}
+        loadedUrl={null}
+        pendingUrl={null}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('spinal cord.json')).toBeTruthy()
+  })
+
   it('says when the collection is being read or cannot be opened', () => {
     const onClose = vi.fn()
     const { rerender } = render(

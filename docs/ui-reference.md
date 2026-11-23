@@ -127,7 +127,7 @@ the canvas, a `nav` named "Collection":
   or all share the Gene scale's range when its top is a score. When it is annotations, the cells of each class in its
   colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
-  MB file, read when opened" (a plain `.h5ad` over 64 MiB), or "Preview
+  MiB file, read when opened" (a plain `.h5ad` over 64 MiB), or "Preview
   failed" with the reason as its tooltip.
 - `Expand` (arrows out, `aria-expanded`), next to "Collection", lays the
   previews out as a grid over the canvas, with the heading and buttons
@@ -153,8 +153,8 @@ the canvas, a `nav` named "Collection":
   main view, or closes it. Disabled, with a tooltip saying so, while three
   are shown. A shown section's button has an accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
-  `collectionView=`, `collectionPreviewSize=` and `compare=` from the
-  address; the open dataset stays.
+  `collectionView=`, `collectionPreviewSize=`, `compare=` and
+  `sectionView=` from the address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).

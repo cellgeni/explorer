@@ -483,6 +483,7 @@ function hasMethod(value: unknown, name: string): value is Record<string, unknow
   )
 }
 
+// In MiB, the unit the 64 MiB limit is in (EXP-033).
 function formatMegabytes(byteLength: number): string {
-  return `${Math.round(byteLength / (1024 * 1024)).toLocaleString()} MB`
+  return `${Math.round(byteLength / (1024 * 1024)).toLocaleString()} MiB`
 }
