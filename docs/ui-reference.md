@@ -72,7 +72,9 @@ from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
   carries a signature or token (S3 or Google Cloud presigned, CloudFront or
   Azure SAS signatures, `token=`) is kept without its query string and listed
   without a link, marked "signed address not kept": open it again from its
-  full address.
+  full address. This holds for addresses on the viewer's own site
+  (`/data/run.h5ad?token=…`) too. Opening a listed dataset again by a signed
+  address keeps its entry openable.
 - **Examples**: a card per entry of `examples/index.json` with name,
   platform, description, and source and licence (the source links to the
   repository). A collection's card says `Collection of {n} datasets` in place
@@ -1528,7 +1530,8 @@ deposit, followed by the licence and citation.
 `Diagnose Dataset` runs `runDatasetDiagnostics` for the URL; the download icon
 saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
 `generatedAt` in UTC to the second with `-` for `:` (for example
-`diagnostics-2026-11-17T14-05-09Z.json`). Then
+`diagnostics-2026-11-17T14-05-09Z.json`). A signed address loses its query
+wherever the dump has it, the page address's `#dataset=` included. Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
