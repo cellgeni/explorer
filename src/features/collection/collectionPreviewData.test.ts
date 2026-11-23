@@ -88,6 +88,22 @@ describe('openPreviewSource', () => {
     const scores = await source.scores(cells, ['Aqp4', 'Gfap'], 'mean')
     expect([...scores.scores]).toEqual([1, 3])
     expect(scores.maxScore).toBe(3)
+
+    // A stored NaN is no score, so the highest is that of the others
+    // (EXP-241).
+    geneExpression.mockResolvedValueOnce({
+      genes: ['Aqp4'],
+      maxCount: 5,
+      elements: [
+        {
+          id: 'a',
+          position: { x: micrometers(0), y: micrometers(0) },
+          count: Number.NaN,
+        },
+        { id: 'b', position: { x: micrometers(10), y: micrometers(4) }, count: 5 },
+      ],
+    })
+    expect((await source.scores(cells, ['Aqp4'], 'sum')).maxScore).toBe(5)
     // Every cell: the query box is the cells' bounds and a little more.
     const [bbox, genes] = geneExpression.mock.calls[0] as unknown as [
       { minX: number; maxX: number; minY: number; maxY: number },

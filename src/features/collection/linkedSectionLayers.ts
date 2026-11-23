@@ -211,8 +211,9 @@ export function scoredCells(
 
   const indices: number[] = []
 
+  // A stored NaN or infinity is no score, as in the main view.
   scores.scores.forEach((score, index) => {
-    if (score > 0) indices.push(index)
+    if (Number.isFinite(score) && score > 0) indices.push(index)
   })
   indices.sort((left, right) => (scores.scores[left] ?? 0) - (scores.scores[right] ?? 0))
 

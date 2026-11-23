@@ -204,6 +204,70 @@ describe('rasterizePreview', () => {
     expect(pixel(scored.pixels, 0, 1)[3]).toBeGreaterThan(0)
   })
 
+  // A section of one cell went to a corner (EXP-245).
+  it('centres a section of one cell', () => {
+    const { pixels } = rasterizePreview(cells([[5000.5, 3000.25]]), null, OPTIONS)
+
+    expect(pixel(pixels, 4, 4)[3]).toBeGreaterThan(0)
+    expect(pixel(pixels, 0, 0)[3]).toBe(0)
+  })
+
+  it('draws no cell without a position', () => {
+    const corners = cells([
+      [9, 0],
+      [0, 9],
+    ])
+    const { pixels } = rasterizePreview(
+      { ...corners, positions: new Float32Array([9, 0, Number.NaN, Number.NaN, 0, 9]) },
+      null,
+      OPTIONS,
+    )
+
+    expect(pixel(pixels, 0, 0)[3]).toBe(0)
+    expect(pixel(pixels, 9, 0)[3]).toBeGreaterThan(0)
+  })
+
+  it('draws a small shown class whole beyond the drawn-cell limit', () => {
+    // As above, the stride is 2 past the limit; the class's only cell is on
+    // an odd row.
+    const count = PREVIEW_MAX_DRAWN_CELLS + 1
+    const points = Array.from(
+      { length: count },
+      (_value, index) => [0, index % 10] as const,
+    )
+    const many = cells([...points, [9, 0]])
+    const classOf = new Int32Array(count + 1).fill(-1)
+    classOf[1] = 0
+    const { pixels } = rasterizePreview(
+      many,
+      { kind: 'classes', classOf, colors: ['#ff8000'] },
+      OPTIONS,
+    )
+
+    expect(pixel(pixels, 0, 1)).toEqual([255, 128, 0, 255])
+  })
+
+  // The main view leaves non-finite scores out (EXP-241).
+  it('draws no stored NaN or infinite score', () => {
+    const { pixels } = rasterizePreview(
+      square,
+      {
+        kind: 'scores',
+        scores: {
+          positions: new Float32Array([0, 0, 9, 9, 9, 0]),
+          scores: new Float32Array([Number.POSITIVE_INFINITY, Number.NaN, 4]),
+          maxScore: 4,
+        },
+      },
+      OPTIONS,
+    )
+
+    expect(pixel(pixels, 0, 0)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 9, 9)).toEqual([92, 88, 76, 200])
+    expect(pixel(pixels, 9, 0)[3]).toBeGreaterThanOrEqual(200)
+    expect(pixel(pixels, 9, 0)).not.toEqual([92, 88, 76, 200])
+  })
+
   it('leaves a preview without room empty', () => {
     expect(rasterizePreview(square, null, { ...OPTIONS, width: 0 }).pixels).toHaveLength(
       0,
