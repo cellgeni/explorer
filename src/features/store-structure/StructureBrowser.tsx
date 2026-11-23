@@ -9,10 +9,10 @@ import {
   type StructureTreeNode,
 } from './structureTree'
 
-// The parts the structure drawer's Zarr and Parquet views share: a filtered
+// The parts the structure drawer's Zarr, Parquet and HDF5 views share: a filtered
 // tree beside the selected node's details.
 
-export type StructureIconKind = 'group' | 'array' | 'folder' | 'file' | 'column'
+export type StructureIconKind = 'group' | 'array' | 'folder' | 'file' | 'column' | 'link'
 
 // How a node shows in the tree.
 export interface StructureNodeLabel {
@@ -275,6 +275,8 @@ function NodeIcon({
           <path d="M2.5 2.5h11v11h-11zM2.5 6.2h11M2.5 9.8h11M6.2 2.5v11M9.8 2.5v11" />
         ) : kind === 'column' ? (
           <path d="M5.5 2.5h5v11h-5zM5.5 6.2h5M5.5 9.8h5" />
+        ) : kind === 'link' ? (
+          <path d="M7 9l2-2M6.2 5.4l1.3-1.3a2.3 2.3 0 0 1 3.3 3.3L9.5 8.7M9.8 10.6l-1.3 1.3a2.3 2.3 0 0 1-3.3-3.3l1.3-1.3" />
         ) : kind === 'file' ? (
           <path d="M4 1.8h5l3 3v9.4H4zM9 1.8v3h3" />
         ) : (

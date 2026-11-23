@@ -61,7 +61,7 @@ Until a dataset opens, the canvas shows the start screen
 
 - The `Dataset or image URL` field, `Morphology image` and `Load Dataset`,
   with `Browse Store` beside it for a Zarr store address, or `Browse File`
-  for a Parquet file. The field starts
+  for a Parquet or HDF5 file. The field starts
   empty. The boundary limit is in Settings.
 - "What can I open?", a link to [Loading data](user-guide.md#loading-data)
   in the user guide.
@@ -1403,7 +1403,7 @@ Examples below it, and shows on the [start screen](#start-screen)
 | `Boundary limit` (under Advanced)                            | Number    | As in [Settings](#settings)            | Not on the start screen                                                                                                                                                                   |
 | `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then, or until the load is cancelled |
 | `Browse Store`                                               | Button    |                                        | Only for a Zarr store address (`isZarrStoreUrl`). Opens the [Store structure drawer](#store-structure-drawer) on it without loading it; from the dataset menu, the menu closes            |
-| `Browse File`                                                | Button    |                                        | Only for a Parquet file address (`isParquetUrl`). Opens the drawer on the file, as [Parquet file](#parquet-file-view), without loading it                                                 |
+| `Browse File`                                                | Button    |                                        | Only for a Parquet file address (`isParquetUrl`) or an HDF5 file address (`isH5Url`). Opens the drawer on the file, as [Parquet file](#parquet-file-view) or [HDF5 file](#hdf5-file-view) |
 
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,
@@ -1490,6 +1490,47 @@ parallel with `cache: 'no-store'`, and the footer is not read again.
 | Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                              |
 | Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                  |
 | Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON)              |
+
+#### HDF5 File View
+
+"HDF5 file" (`H5StructureView.tsx`) shows an `.h5`, `.h5ad`, `.hdf5`,
+`.loom` or `.he5` file from `Browse File` on the start screen.
+`readH5Structure` (`src/data/h5Structure.ts`) opens the file in an H5 file
+worker that reads it by range (`rangeOnly`), and the worker walks it
+(`walkH5Structure`, `src/workers/h5StructureCore.ts`), sending progress as it
+goes. Soft links to objects that exist are shown as those objects; the walk
+stops after 5,000 objects or 32 levels. The worker stays open for `Values`
+until another file or a retry replaces it. While reading, it says "Reading
+the file's groups and datasets… N objects read". Failures show "No HDF5 file
+at this address" (an HTTP error), "Not an HDF5 file", or "The file cannot be
+read in parts" (the server ignores Range or hides the file's size), with
+`Retry`. Once read, it has the same filter, `Expand All`, `Collapse All` and
+tree as the store view:
+
+| Part    | Shows                                                                                                                                                                                                                                  |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Summary | Format `HDF5`, "Written as" (AnnData with its encoding version, or before encoding versions; 10x feature-barcode matrix; Loom), groups · datasets · datatypes · links, size, bytes and requests read                                   |
+| Notes   | When the walk stopped, and when the file has external links (not followed)                                                                                                                                                             |
+| Tree    | Groups, datasets, committed datatypes and links in HDF5's order. Role badges from AnnData attributes (`encoding-type`, or `h5sparse_format` before 0.7) and 10x `matrix` groups; `missing target` for a broken soft link; `not listed` |
+| Group   | Path, kind, role, what it holds, attributes (as JSON; over 10,000 values, or unreadable, named under "Not shown"), and for the root the address with `Copy`                                                                            |
+| Dataset | Path, kind, role, shape, max shape (when it differs; `unlimited`), data type, byte order, chunks and chunk count, filters (gzip level, plugins by ID), decoded size, `Values`, attributes                                              |
+| Link    | Target, and for an external link its file                                                                                                                                                                                              |
+
+`Values` reads a block from the dataset's origin: up to 100 along the first
+dimension, 20 along the second and 1 along any other (`h5PreviewBlock`).
+Variable-length strings are read by hyperslab without h5wasm's whole-dataspace
+reclaim, which aborts its module after a slice; other variable-length types
+are read whole up to 10,000 elements. Booleans show as `True`/`False`, enums
+by name, compounds as `{name: value}` (1D compounds get a column per member),
+and float32 as numpy prints it.
+
+| State       | Shows                                                                                                                                                                               |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unavailable | Why: no dataspace, an HDF5 plugin filter, or variable-length elements in a dataset too large to read whole                                                                          |
+| Asking      | When the chunks touched, or the span of a contiguous dataset, are over 4 MB (`AUTO_READ_VALUES_BYTES`): how much it may read, and `Read Values`. Smaller datasets read on selection |
+| Reading     | "Reading the first values…" (`role="status"`)                                                                                                                                       |
+| Failed      | The error's title and message (`role="alert"`), with `Retry`                                                                                                                        |
+| Read        | "All N values." or "The first R × C, of shape.", and a table "Values" with indices                                                                                                  |
 
 ### View Options
 

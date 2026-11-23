@@ -3,6 +3,7 @@ import { transferablesOf } from '../workers/h5FileTransfer'
 import { unpackGexResult } from '../workers/h5MatrixCellsPayload'
 import type { SharedLoad } from '../utils/sharedLoad'
 import type { GexResult } from './gexTypes'
+import type { H5StructureWalk, H5ValuePreview } from './h5StructureTypes'
 import type { VisiumFeatureSliceMetadata } from './visiumFeatureSliceH5'
 import type {
   H5FileFeatureSliceTarget,
@@ -75,10 +76,26 @@ export interface H5WorkerFile {
   ): Promise<GexResult<ElementId>>
   // A Visium HD feature_slice.h5's metadata, without its feature names.
   featureSliceMetadata(signal?: AbortSignal): Promise<VisiumFeatureSliceMetadata>
+  // Every group, dataset and link, with attributes, for Browse File.
+  structure(options: H5WorkerFileStructureOptions): Promise<H5StructureWalk>
+  // The first values of a dataset.
+  preview(path: string, signal?: AbortSignal): Promise<H5ValuePreview>
   close(): void
 }
 
-type H5FileWorkerSuccess = Extract<H5FileWorkerResponse, { readonly ok: true }>
+type H5FileWorkerSuccess = Exclude<
+  Extract<H5FileWorkerResponse, { readonly ok: true }>,
+  { readonly op: 'progress' }
+>
+
+export interface H5WorkerFileStructureOptions {
+  // Names the root node.
+  readonly rootName: string
+  readonly maxNodes?: number
+  // The objects read so far, as the walk goes.
+  readonly onProgress?: (count: number) => void
+  readonly signal?: AbortSignal
+}
 
 // The node at a slash-separated path below `group`, or undefined.
 export function h5TreeNodeAt(group: H5TreeGroup, path: string): H5TreeNode | undefined {
@@ -265,6 +282,40 @@ function createH5WorkerFile(
 
       return response.metadata
     },
+    async structure({ rootName, maxNodes, onProgress, signal }) {
+      const response = await connection.request(
+        (id) => ({
+          id,
+          op: 'structure',
+          rootName,
+          ...(maxNodes === undefined ? {} : { maxNodes }),
+        }),
+        [],
+        signal,
+        onProgress,
+      )
+
+      if (response.op !== 'structure') {
+        throw new Error(
+          'The H5 file worker answered a structure read with another reply.',
+        )
+      }
+
+      return response.structure
+    },
+    async preview(path, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'preview', path }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'preview') {
+        throw new Error('The H5 file worker answered a preview with another reply.')
+      }
+
+      return response.preview
+    },
     close() {
       workerRegistry?.unregister(file)
       connection.terminate()
@@ -278,6 +329,7 @@ function createH5WorkerFile(
 interface QueuedRequest {
   readonly message: (id: number) => H5FileWorkerRequest
   readonly transfer: Transferable[]
+  readonly onProgress: ((count: number) => void) | undefined
   readonly resolve: (response: H5FileWorkerSuccess) => void
   readonly reject: (error: Error) => void
 }
@@ -304,6 +356,11 @@ class H5WorkerConnection {
         return
       }
 
+      if (response.ok && response.op === 'progress') {
+        sent.request?.onProgress?.(response.count)
+        return
+      }
+
       this.sent = null
 
       if (response.ok) {
@@ -325,6 +382,7 @@ class H5WorkerConnection {
     message: (id: number) => H5FileWorkerRequest,
     transfer: Transferable[],
     signal?: AbortSignal,
+    onProgress?: (count: number) => void,
   ): Promise<H5FileWorkerSuccess> {
     if (this.failure !== null) {
       return Promise.reject(this.failure)
@@ -355,6 +413,7 @@ class H5WorkerConnection {
       const request: QueuedRequest = {
         message,
         transfer,
+        onProgress,
         resolve: (response) => {
           cleanup()
           resolve(response)

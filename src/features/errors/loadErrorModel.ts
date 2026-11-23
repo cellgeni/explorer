@@ -231,6 +231,49 @@ export function createStructuredLoadError(
     )
   }
 
+  // Thrown by Browse File for HDF5 files (src/data/h5Structure.ts).
+  if (error instanceof Error && error.name === 'H5FileNotFoundError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'not-found',
+        title: 'No HDF5 file at this address',
+        message,
+        action:
+          'Check the address and that the file is publicly readable. Buckets that deny listing answer HTTP 403 for missing files.',
+      },
+      detail,
+    )
+  }
+
+  if (error instanceof Error && error.name === 'NotH5FileError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'decode',
+        title: 'Not an HDF5 file',
+        message,
+        action:
+          'HDF5 found no file signature in it. Check that the address is the file itself, not a page about it.',
+      },
+      detail,
+    )
+  }
+
+  if (error instanceof Error && error.name === 'H5RangeRequiredError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'range-not-supported',
+        title: 'The file cannot be read in parts',
+        message,
+        action:
+          'Browse File reads HDF5 files by range. Host the file where range requests are answered and Content-Range or Content-Length is readable across origins.',
+      },
+      detail,
+    )
+  }
+
   if (error instanceof Error && error.name === 'LikelyMissingFileError') {
     return withOptionalDetail(
       {

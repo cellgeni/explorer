@@ -8,6 +8,7 @@ import {
 } from '../../components/AppStatusPanels'
 import { Disclosure, InfoTip, Select } from '../../components/ui'
 import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
+import { isH5Url } from '../store-structure/h5StructureModel'
 import { isParquetUrl } from '../store-structure/parquetStructureModel'
 import { isZarrStoreUrl } from '../store-structure/storeStructureModel'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
@@ -128,6 +129,17 @@ export function OpenDatasetForm({
             type="button"
             className="dataset-browse"
             title="Browse the columns, row groups and metadata of this Parquet file without loading it"
+            onClick={() => {
+              open.onBrowseStructure(open.datasetUrl.trim())
+            }}
+          >
+            Browse File
+          </button>
+        ) : isH5Url(open.datasetUrl) ? (
+          <button
+            type="button"
+            className="dataset-browse"
+            title="Browse the groups, datasets and attributes of this HDF5 file without loading it"
             onClick={() => {
               open.onBrowseStructure(open.datasetUrl.trim())
             }}

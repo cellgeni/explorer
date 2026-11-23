@@ -110,6 +110,35 @@ that store each column chunk as one page, as fastparquet does, make that the
 whole row group, so when the row group is over 8 MB the view says how much it
 may read and waits for `Read Rows`.
 
+### Browsing An HDF5 File
+
+When the address is an HDF5 file (ending in `.h5`, `.h5ad`, `.hdf5`, `.loom`
+or `.he5`), `Browse File` opens the drawer as "HDF5 file". The file is read by
+range in a worker, so only the object headers are fetched: a 333 MB H5AD with
+309 groups and datasets takes about 10 MB in 18 requests, and a 433 MB Xenium
+`cell_feature_matrix.h5` about 3 MB in 4. The server has to answer range
+requests; one that does not gets an error rather than a download of the whole
+file.
+
+- A summary: what the file was written as (`AnnData (encoding 0.1.0)`, a 10x
+  feature-barcode matrix, Loom), how many groups, datasets and links it
+  holds, its size, and what reading its structure took.
+- A tree of groups and datasets, with the same AnnData role badges as a Zarr
+  store (`dataframe`, `CSR matrix`, `categorical`), each dataset's data type
+  and shape, and links whose target is missing or in another file.
+- The selected dataset's details: shape and max shape, data type (as numpy
+  names it: `float32`, `bool`, `string (UTF-8, variable length)`,
+  `compound {x: int32, y: float64}`), byte order, chunks, filters
+  (`shuffle → gzip (level 4)`), decoded size and attributes.
+- `Values`: the first 100 values of a 1D dataset, or the first 100 rows and
+  20 columns of a 2D one. They are read when the dataset is selected if that
+  reads at most about 4 MB; otherwise the panel says how much it may read and
+  waits for `Read Values`. Datasets compressed with an HDF5 plugin (LZF,
+  Blosc, bitshuffle, Zstandard) cannot be read here, and the panel says so.
+
+The walk stops after 5,000 objects and marks the groups it did not finish as
+`not listed`.
+
 Loading another dataset keeps the current one open until the new one is
 ready. If the new one cannot be opened, for example because the address is
 wrong, a message says why and the current dataset stays. The same goes for a

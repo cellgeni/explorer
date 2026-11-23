@@ -5,6 +5,13 @@ import {
   annDataZarrFixtureFetcher,
 } from '../../test/annDataZarrFixtures'
 import {
+  readH5Structure,
+  type H5Structure,
+  type ReadH5StructureOptions,
+} from '../../data/h5Structure'
+import { openH5WorkerFile } from '../../data/h5WorkerFile'
+import { createH5Bytes, writeBrowsableH5ad } from '../../test/h5Fixtures'
+import {
   readParquetStructure,
   type ParquetFileRef,
   type ParquetStructure,
@@ -38,22 +45,27 @@ type ParquetReader = (
   options: ReadParquetStructureOptions,
 ) => Promise<ParquetStructure>
 
+type H5Reader = (url: string, options: ReadH5StructureOptions) => Promise<H5Structure>
+
 function Harness({
   url = STORE_URL,
   read,
   readParquet,
   readParquetRows,
+  readH5,
 }: {
   readonly url?: string
   readonly read?: Reader
   readonly readParquet?: ParquetReader
   readonly readParquetRows?: RowsReader
+  readonly readH5?: H5Reader
 }) {
   const store = useStoreStructure({
     fetcher: fixtureFetcher,
     ...(read === undefined ? {} : { read }),
     ...(readParquet === undefined ? {} : { readParquet }),
     ...(readParquetRows === undefined ? {} : { readParquetRows }),
+    ...(readH5 === undefined ? {} : { readH5 }),
   })
 
   return (
@@ -351,5 +363,54 @@ describe('StoreStructureDrawer', () => {
     const table = await within(dialog).findByRole('table', { name: 'First rows' })
     expect(within(table).getAllByRole('row')).toHaveLength(5)
     expect(within(table).getAllByText('null')).toHaveLength(1)
+  })
+
+  it('reads an HDF5 file and shows its datasets and first values', async () => {
+    const bytes = await createH5Bytes(writeBrowsableH5ad)
+    const closes: (() => void)[] = []
+    const readH5 = vi.fn<H5Reader>(async (url, options) => {
+      const structure = await readH5Structure(url, {
+        ...options,
+        open: () => openH5WorkerFile(bytes.slice()),
+      })
+      const close = vi.fn(structure.close)
+      closes.push(close)
+      return { ...structure, close }
+    })
+    const { unmount } = render(
+      <Harness url="https://bucket.test/run/sample.h5ad" readH5={readH5} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Browse' }))
+
+    const dialog = screen.getByRole('dialog', { name: 'HDF5 file' })
+    expect(
+      await within(dialog).findByText('AnnData (encoding 0.1.0)'),
+    ).toBeInTheDocument()
+    expect(
+      within(dialog).getByText('6 groups · 6 datasets · 2 links'),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByText('missing target')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Show details of X/data'))
+    const data = screen.getByRole('region', { name: 'data' })
+    expect(within(data).getByText('gzip (level 4)')).toBeInTheDocument()
+    expect(within(data).getByText('256 · 4 chunks')).toBeInTheDocument()
+    expect(within(data).getByText('float32')).toBeInTheDocument()
+
+    // Cheap to read, so read at once.
+    fireEvent.click(screen.getByTitle('Show details of obs/_index'))
+    const index = screen.getByRole('region', { name: '_index' })
+    const table = await within(index).findByRole('table', { name: 'Values' })
+    expect(within(table).getByText('cell-99')).toBeInTheDocument()
+    expect(within(index).getByText('The first 100, of 250.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTitle('Show details of uns/pi'))
+    const scalar = screen.getByRole('region', { name: 'pi' })
+    expect(await within(scalar).findByText('3.5')).toBeInTheDocument()
+
+    // The worker closes with the drawer's owner.
+    unmount()
+    expect(closes).toHaveLength(1)
+    expect(closes[0]).toHaveBeenCalledTimes(1)
   })
 })

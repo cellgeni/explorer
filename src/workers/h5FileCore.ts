@@ -10,6 +10,7 @@ import {
   type VisiumFeatureSliceCache,
 } from '../data/visiumFeatureSliceH5'
 import { transferablesOf } from './h5FileTransfer'
+import { previewH5Dataset, walkH5Structure } from './h5StructureCore'
 import { gexPayloadTransferables, packGexResult } from './h5MatrixCellsPayload'
 import {
   contentRangeSize,
@@ -148,6 +149,40 @@ export function createH5FileHandler(
               : entity.slice(h5wasmRanges(request.slice))
           throwRangeError(current)
           respond({ id: request.id, ok: true, op: 'read', value }, transferablesOf(value))
+          return
+        }
+        case 'structure': {
+          const current = expectOpen()
+          const structure = walkH5Structure(
+            current.h5wasm,
+            current.file,
+            request.rootName,
+            {
+              ...(request.maxNodes === undefined ? {} : { maxNodes: request.maxNodes }),
+              onProgress: (count) => {
+                respond({ id: request.id, ok: true, op: 'progress', count }, [])
+              },
+              check: () => {
+                throwRangeError(current)
+              },
+            },
+          )
+          respond({ id: request.id, ok: true, op: 'structure', structure }, [])
+          return
+        }
+        case 'preview': {
+          const current = expectOpen()
+          const entity = current.file.get(request.path)
+          throwRangeError(current)
+
+          if (!(entity instanceof current.h5wasm.Dataset)) {
+            throw new Error(`H5 path ${request.path} is not a dataset.`)
+          }
+
+          const preview = previewH5Dataset(await current.h5wasm.ready, entity, () => {
+            throwRangeError(current)
+          })
+          respond({ id: request.id, ok: true, op: 'preview', preview }, [])
           return
         }
         case 'stats': {

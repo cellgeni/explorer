@@ -47,7 +47,7 @@ Some dependencies are patched on install by `patch-package` (`patches/`):
 | `src/features/start/`                   | The start screen (15.3-A): the example gallery read from `examples/index.json` at runtime, recent datasets in `localStorage`, and the lists the dataset menu shares                      |
 | `src/features/collection/`              | [Dataset collections](./dataset-collections.md) (`collection=`): the collection bar and its previews, and registered sections shown side by side in panels sharing one camera            |
 | `src/features/segmentation/`            | An image's [imported segmentation](./image-only-and-geojson.md#imported-segmentations) (`segmentation=`): reading it against the image and its state                                     |
-| `src/features/store-structure/`         | The Store structure drawer that `Browse Store` and `Browse File` open: a Zarr store's groups and arrays, or a Parquet file's schema, row groups and first rows                           |
+| `src/features/store-structure/`         | The drawer `Browse Store` and `Browse File` open: a Zarr store's groups and arrays, a Parquet file's schema and first rows, or an HDF5 file's groups, datasets and first values          |
 | `src/components/`                       | `ViewerCore` (deck.gl view and interactions), `MorphologyCanvas`, overlays, status panels, error boundary; interface primitives (buttons, fields, popover, card, drawer, sheet) in `ui/` |
 | `src/rendering/`                        | deck.gl layer factories, colour scales, styling, aggregation, boundary viewport rules                                                                                                    |
 | `src/tiff/`, `src/codecs/`, `src/zarr/` | Image pyramid loaders and tile codecs; Zarr stores (HTTP, zipped, Icechunk), `Browse Store`'s reader (`zarrStructure.ts`) and its folder lister (`zarrFolderLister.ts`)                  |
@@ -566,6 +566,12 @@ go to a worker one at a time, so a request still waiting is dropped when it is
 cancelled, and after a failed read the next one opens the file in a new
 worker. Where there is no `Worker` (Vitest's jsdom), the same handler runs on
 the main thread.
+
+`Browse File` on an HDF5 file opens its own worker by range only, and asks it
+for the file's structure (`walkH5Structure`, `h5StructureCore.ts`), which the
+worker answers with `progress` messages before its reply, then for each
+dataset's first values. That worker ends when the drawer reads another file
+or retries.
 
 A cells overview worker fetches `cells.parquet` and decodes the overview
 columns from hyparquet's column chunks, without an object per row. The columns
