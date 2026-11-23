@@ -466,8 +466,10 @@ The schema catches blank names and paths, unknown fields and values, a
 need (such as `options.labelColumn` without `files.labels`), a segmentation
 whose extension the viewer does not read without
 `options.segmentationFormat`, a `zchunkstore` with an OME-Zarr image, an
-`options.binSize` not in `files.bins`, and a bin size listed twice. The
-viewer checks more when it opens the manifest: a `geneRange` maximum at or
+`options.binSize` not in `files.bins`, and a bin size listed twice. Like the
+viewer, it allows spaces around strings, such as `" mean"`. A file for a newer
+`version` is refused for its version first, before any field this viewer does
+not know. The viewer checks more when it opens the manifest: a `geneRange` maximum at or
 below its minimum, and numbers too large to be finite, such as `1e400`. A
 manifest the schema passes can still stop the load, with a message naming the
 field.

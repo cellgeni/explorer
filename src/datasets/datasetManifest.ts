@@ -357,8 +357,8 @@ export function parseDatasetManifest(
     )
   }
 
-  checkKeys(json, DATASET_MANIFEST_TOP_LEVEL_KEYS, '', fail)
-
+  // Before the field check: a newer version's fields are unknown here, and
+  // the version is what the author can act on (EXP-215).
   if (json.version !== DATASET_MANIFEST_VERSION) {
     return fail(
       json.version === undefined
@@ -366,6 +366,8 @@ export function parseDatasetManifest(
         : `"version" ${JSON.stringify(json.version)} is not supported; this viewer reads version ${DATASET_MANIFEST_VERSION}.`,
     )
   }
+
+  checkKeys(json, DATASET_MANIFEST_TOP_LEVEL_KEYS, '', fail)
 
   const platform = json.platform
 

@@ -37,6 +37,8 @@ interface SchemaNode {
   readonly properties?: Readonly<Record<string, SchemaNode>>
   readonly items?: SchemaNode
   readonly enum?: readonly unknown[]
+  readonly anyOf?: readonly SchemaNode[]
+  readonly pattern?: string
   readonly $defs?: Readonly<Record<string, SchemaNode>>
   readonly allOf?: readonly SchemaNode[]
   readonly if?: SchemaNode
@@ -50,6 +52,12 @@ function keys(node: SchemaNode | undefined): readonly string[] {
 
 function definition(name: string): SchemaNode | undefined {
   return schema.$defs?.[name]
+}
+
+// A value the parser trims lists its values in an anyOf, beside the pattern
+// that allows them padded.
+function enumValues(node: SchemaNode | undefined): readonly unknown[] | undefined {
+  return node?.enum ?? node?.anyOf?.find((branch) => branch.enum !== undefined)?.enum
 }
 
 describe('dataset manifest JSON Schema', () => {
@@ -117,7 +125,7 @@ describe('dataset manifest JSON Schema', () => {
     expect(keys(defaults)).toEqual([...DATASET_MANIFEST_DEFAULT_KEYS].sort())
 
     for (const key of ['colorCellsBy', 'geneColorScale', 'geneScoreMode'] as const) {
-      const values = defaults?.properties?.[key]?.enum ?? []
+      const values = enumValues(defaults?.properties?.[key]) ?? []
       expect(values.length).toBeGreaterThan(0)
 
       for (const value of values) {
@@ -254,6 +262,7 @@ describe('dataset manifest JSON Schema rules', () => {
       'cells.tsv#top',
       'https://example.test/cells.csv',
       'cells.csv?f=a.tif.x',
+      'cells.geojson ',
     ]) {
       expect(opensWithout(name), name).toBe(true)
       expect(recognised.test(name), name).toBe(true)
@@ -282,6 +291,7 @@ describe('dataset manifest JSON Schema rules', () => {
       'img.ome.zarr.zip',
       'img.ome.zarr.zip/',
       'https://example.test/img.zarr',
+      'img.ome.zarr ',
     ]) {
       expect(zarrImage.test(image), image).toBe(true)
       expect(opensWith(image), image).toBe(false)
@@ -290,6 +300,47 @@ describe('dataset manifest JSON Schema rules', () => {
       expect(zarrImage.test(image), image).toBe(false)
       expect(opensWith(image), image).toBe(true)
     }
+  })
+
+  it('allows the padded values the parser trims (EXP-216)', () => {
+    const trimmed: SchemaNode[] = []
+    const walk = (node: unknown): void => {
+      if (typeof node !== 'object' || node === null) return
+      const record = node as SchemaNode
+      if (record.anyOf?.some((branch) => branch.enum !== undefined)) trimmed.push(record)
+      Object.values(record).forEach(walk)
+    }
+    walk(schema)
+
+    // segmentationFormat, segmentationCoordinates and five defaults.
+    expect(trimmed).toHaveLength(7)
+    for (const node of trimmed) {
+      const values = enumValues(node) ?? []
+      const padded = new RegExp(
+        node.anyOf?.find((branch) => branch.pattern !== undefined)?.pattern ?? '$^',
+        'u',
+      )
+
+      for (const value of values) {
+        expect(padded.test(` ${String(value)} `), String(value)).toBe(true)
+      }
+      expect(padded.test(` ${String(values[0])}x `)).toBe(false)
+    }
+
+    expect(
+      opens({
+        platform: 'image',
+        source: { url: ' https://example.test/deposit' },
+        files: { image: 'slide.ome.tif', segmentation: 'cells.dat' },
+        options: { segmentationFormat: ' geojson' },
+        defaults: { geneScoreMode: ' mean', colorCellsBy: 'annotations ' },
+      }),
+    ).toBe(true)
+    expect(
+      pattern(['$defs', 'source', 'properties', 'url', 'pattern']).test(
+        ' https://a.test',
+      ),
+    ).toBe(true)
   })
 
   it('checks options.binSize and each bin size once, for every size', () => {

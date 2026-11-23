@@ -133,6 +133,10 @@ describe('parseDatasetCollection', () => {
     expect(parseError({ version: 1, datasets: [{ dataset: 'a', url: 'b' }] })).toMatch(
       /unknown field "datasets\[0\]\.url"/,
     )
+    // A newer version is named before its unknown fields (EXP-215).
+    expect(parseError({ version: 2, groupsFirst: true, datasets: [] })).toBe(
+      'collection.json: "version" 2 is not supported; this viewer reads version 1.',
+    )
     expect(parseError({ version: 1, datasets: [{ dataset: 's3://bucket/a' }] })).toBe(
       'collection.json: "datasets[0].dataset" must be a relative path or an http(s) URL.',
     )
@@ -430,6 +434,49 @@ describe('fetchDatasetCollection', () => {
     await expect(
       fetchDatasetCollection(COLLECTION_URL, { fetchImpl, timeoutMs: 10 }),
     ).rejects.toThrow('collection.json: the file did not answer within 0.01 s.')
+  })
+
+  it('tells a body that stalls or breaks off from one that is not JSON (EXP-214)', async () => {
+    // Headers at once, then part of the body; the rest never comes, or the
+    // connection drops.
+    const partialBody =
+      (drop: boolean) => (_url: RequestInfo | URL, init?: RequestInit) =>
+        Promise.resolve(
+          new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.enqueue(
+                  new TextEncoder().encode('{"version": 1, "datasets": ['),
+                )
+                if (drop) controller.error(new TypeError('network error'))
+                init?.signal?.addEventListener('abort', () => {
+                  controller.error(new DOMException('Aborted', 'AbortError'))
+                })
+              },
+            }),
+          ),
+        )
+
+    await expect(
+      fetchDatasetCollection(COLLECTION_URL, {
+        fetchImpl: partialBody(false),
+        timeoutMs: 10,
+      }),
+    ).rejects.toThrow('collection.json: the file did not answer within 0.01 s.')
+    await expect(
+      fetchDatasetCollection(COLLECTION_URL, { fetchImpl: partialBody(true) }),
+    ).rejects.toThrow('collection.json: the file broke off before it was read whole.')
+  })
+
+  it('does not start a read for a caller that has already aborted', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const fetchImpl = vi.fn()
+
+    await expect(
+      fetchDatasetCollection(COLLECTION_URL, { fetchImpl, signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('passes a caller abort through unchanged', async () => {

@@ -591,7 +591,10 @@ as you type.
 
 The schema catches blank names and paths, unknown fields, an entry listed
 twice word for word, and options without what they need (such as `z` without
-`coordinateSystem`). The viewer checks more when it opens the collection: the
+`coordinateSystem`). A collection for a newer `version` is refused for its
+version first, as a manifest is. A collection file that does not answer
+within 15 s, headers and body together, is reported as such, and one whose
+body breaks off as broken off, not as "not JSON". The viewer checks more when it opens the collection: the
 same dataset in two spellings (`a` and `./a/`), sections of one coordinate
 system with and without `z`, and numbers too large to be finite, such as
 `1e400`. A collection the schema passes can still stop the load, with a

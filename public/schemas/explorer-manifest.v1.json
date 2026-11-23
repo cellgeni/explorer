@@ -284,7 +284,7 @@
                     "segmentation": {
                       "type": "string",
                       "not": {
-                        "pattern": "^[^?#]*(?:\\.(?:[Oo][Mm][Ee]\\.)?[Tt][Ii][Ff][Ff]?|\\.[Zz][Aa][Rr][Rr]|/\\.[Zz][Aa][Tt][Tt][Rr][Ss]|\\.(?:[Gg][Ee][Oo])?[Jj][Ss][Oo][Nn]|\\.(?:[Gg][Ee][Oo])?[Pp][Aa][Rr][Qq][Uu][Ee][Tt]|\\.[Pp][Qq]|\\.(?:[Ww][Kk][Tt]|[Cc][Ss][Vv]|[Tt][Ss][Vv]|[Tt][Xx][Tt]))(?:\\.[Gg][Zz])?/*(?:[?#][\\s\\S]*)?$"
+                        "pattern": "^[^?#]*(?:\\.(?:[Oo][Mm][Ee]\\.)?[Tt][Ii][Ff][Ff]?|\\.[Zz][Aa][Rr][Rr]|/\\.[Zz][Aa][Tt][Tt][Rr][Ss]|\\.(?:[Gg][Ee][Oo])?[Jj][Ss][Oo][Nn]|\\.(?:[Gg][Ee][Oo])?[Pp][Aa][Rr][Qq][Uu][Ee][Tt]|\\.[Pp][Qq]|\\.(?:[Ww][Kk][Tt]|[Cc][Ss][Vv]|[Tt][Ss][Vv]|[Tt][Xx][Tt]))(?:\\.[Gg][Zz])?/*\\s*(?:[?#][\\s\\S]*)?$"
                       }
                     }
                   }
@@ -304,7 +304,7 @@
                   "properties": {
                     "image": {
                       "type": "string",
-                      "pattern": "^[^?#]*(?:\\.zarr/*|(?:^|/)(?:zarr\\.json|\\.zattrs)/*|\\.zarr/(?:[^/]+/)*[^/.]+/*|\\.icechunk/*|\\.zip/*)$"
+                      "pattern": "^[^?#]*(?:\\.zarr/*|(?:^|/)(?:zarr\\.json|\\.zattrs)/*|\\.zarr/(?:[^/]+/)*[^/.]+/*|\\.icechunk/*|\\.zip/*)\\s*$"
                     }
                   }
                 }
@@ -339,11 +339,20 @@
             "type": "object",
             "properties": {
               "segmentationFormat": {
-                "enum": ["label-tiff", "label-zarr", "geojson", "wkt", "parquet"],
+                "anyOf": [
+                  { "enum": ["label-tiff", "label-zarr", "geojson", "wkt", "parquet"] },
+                  {
+                    "type": "string",
+                    "pattern": "^\\s*(?:label-tiff|label-zarr|geojson|wkt|parquet)\\s*$"
+                  }
+                ],
                 "description": "The format of `files.segmentation` when its extension does not tell it."
               },
               "segmentationCoordinates": {
-                "enum": ["pixels", "micrometers"],
+                "anyOf": [
+                  { "enum": ["pixels", "micrometers"] },
+                  { "type": "string", "pattern": "^\\s*(?:pixels|micrometers)\\s*$" }
+                ],
                 "description": "What the polygon coordinates of `files.segmentation` are in. Default `pixels` (full-resolution image pixels). Label masks are placed over the image whatever this says."
               }
             },
@@ -378,7 +387,7 @@
         },
         "url": {
           "type": "string",
-          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^/]",
+          "pattern": "^\\s*[Hh][Tt][Tt][Pp][Ss]?://[^/]",
           "description": "Landing page for the deposit."
         },
         "license": {
@@ -502,11 +511,11 @@
       "properties": {
         "cellByGene": {
           "$ref": "#/$defs/path",
-          "description": "Cell-by-gene counts CSV, gzip allowed. Default cell_by_gene.csv. Read whole, up to 300 MB."
+          "description": "Cell-by-gene counts CSV, gzip allowed. Default cell_by_gene.csv. Read whole, up to 300 MiB."
         },
         "cellMetadata": {
           "$ref": "#/$defs/path",
-          "description": "Cell metadata CSV with center_x and center_y in micrometres, gzip allowed. Default cell_metadata.csv. Read whole, up to 300 MB."
+          "description": "Cell metadata CSV with center_x and center_y in micrometres, gzip allowed. Default cell_metadata.csv. Read whole, up to 300 MiB."
         },
         "cellBoundaries": {
           "$ref": "#/$defs/path",
@@ -533,7 +542,7 @@
         },
         "filteredMatrix": {
           "$ref": "#/$defs/path",
-          "description": "Default filtered_feature_bc_matrix.h5, then the MEX filtered_feature_bc_matrix/matrix.mtx.gz. A .mtx or .mtx.gz file (Matrix Market) is read with its barcode and feature lists. Up to 300 MB."
+          "description": "Default filtered_feature_bc_matrix.h5, then the MEX filtered_feature_bc_matrix/matrix.mtx.gz. A .mtx or .mtx.gz file (Matrix Market) is read with its barcode and feature lists. Up to 300 MiB."
         },
         "filteredMatrixBarcodes": {
           "$ref": "#/$defs/path",
@@ -692,25 +701,41 @@
           "description": "Genes to select. Names must match the gene panel exactly."
         },
         "colorCellsBy": {
-          "enum": [
-            "gene-expression",
-            "transcript-count",
-            "cell-area",
-            "annotations",
-            "metadata"
+          "anyOf": [
+            {
+              "enum": [
+                "gene-expression",
+                "transcript-count",
+                "cell-area",
+                "annotations",
+                "metadata"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(?:gene-expression|transcript-count|cell-area|annotations|metadata)\\s*$"
+            }
           ],
           "description": "The Cell color control. Without it, genes colour cells by gene expression."
         },
         "geneColorScale": {
-          "enum": [
-            "gold",
-            "magma",
-            "viridis",
-            "plasma",
-            "cividis",
-            "teal",
-            "rose",
-            "glasbey"
+          "anyOf": [
+            {
+              "enum": [
+                "gold",
+                "magma",
+                "viridis",
+                "plasma",
+                "cividis",
+                "teal",
+                "rose",
+                "glasbey"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(?:gold|magma|viridis|plasma|cividis|teal|rose|glasbey)\\s*$"
+            }
           ],
           "description": "The Gene scale control."
         },
@@ -733,8 +758,11 @@
           "description": "The Gene scale range, [min, max]. null leaves that end on Auto (0 at the bottom, the 99th percentile of the scores above 0 at the top); max must be above min. max may also be a percentile of each dataset's scores above 0, from \"p1\" to \"p100\", such as \"p95\". Kept when the next dataset sets no range."
         },
         "geneScoreMode": {
-          "enum": ["sum", "mean", "z-score"],
-          "description": "The Signature score control."
+          "anyOf": [
+            { "enum": ["sum", "mean", "z-score"] },
+            { "type": "string", "pattern": "^\\s*(?:sum|mean|z-score)\\s*$" }
+          ],
+          "description": "The Combine genes control."
         },
         "cellBoundaries": { "type": "boolean" },
         "nucleusBoundaries": { "type": "boolean" },
@@ -756,11 +784,17 @@
           "description": "Show the transcript overlay (Xenium, Atera)."
         },
         "imageView": {
-          "enum": ["2d", "3d"],
+          "anyOf": [
+            { "enum": ["2d", "3d"] },
+            { "type": "string", "pattern": "^\\s*(?:2d|3d)\\s*$" }
+          ],
           "description": "The Image section's View: 3d opens an OME-Zarr z-stack in the 3D view."
         },
         "cellView": {
-          "enum": ["2d", "3d"],
+          "anyOf": [
+            { "enum": ["2d", "3d"] },
+            { "type": "string", "pattern": "^\\s*(?:2d|3d)\\s*$" }
+          ],
           "description": "The Cells section's View: 3d shows cells placed in 3D (a third column of AnnData obsm spatial) in the 3D view."
         }
       },
