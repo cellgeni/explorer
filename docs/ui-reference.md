@@ -746,7 +746,8 @@ Method:
   analysis.
 
 Exports: `{name}` in a file name is the selection's name with its letters and
-digits in any script, accents dropped. `Export GeoJSON` (`{name}-roi.geojson`:
+digits in any script, accents on Latin, Greek and Cyrillic letters dropped;
+other scripts keep the marks that are part of their letters (`がん`, `हिन्दी`). `Export GeoJSON` (`{name}-roi.geojson`:
 the selection's polygon with its name in `name`, as QuPath and Import GeoJSON
 read it, and `objectType` `annotation`; the dataset URL, without a presigned
 URL's signature; the cell or barcode count and the time of export,
