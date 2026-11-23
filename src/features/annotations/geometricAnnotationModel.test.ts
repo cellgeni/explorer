@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   micrometers,
   scaledImagePixelFrame,
@@ -52,6 +52,38 @@ describe('geometricAnnotationModel', () => {
         pixelFrame: scaledImagePixelFrame(0.5),
       }),
     ).toEqual({ annotations: [], skipped: {} })
+  })
+
+  it('names shapes of one class in turn, in time that grows with their number', () => {
+    const feature = (name: string, x: number) => ({
+      type: 'Feature',
+      properties: { classification: { name, color: [255, 0, 0] } },
+      geometry: { type: 'Polygon', coordinates: square(x, 0, 1) },
+    })
+    // A shape named like a numbered one comes first, then 3,000 of one class.
+    const features = [
+      feature('Tumor 3', 0),
+      ...Array.from({ length: 3_000 }, (_, index) => feature('Tumor', index)),
+    ]
+    const has = vi.spyOn(Set.prototype, 'has')
+
+    const { annotations } = parseGeometricAnnotationsGeoJson(
+      JSON.stringify({ type: 'FeatureCollection', features }),
+      { defaultCoordinateUnit: 'micrometer', pixelFrame: scaledImagePixelFrame(1) },
+    )
+    const lookups = has.mock.calls.length
+    has.mockRestore()
+
+    expect(annotations.slice(0, 5).map((annotation) => annotation.id)).toEqual([
+      'geojson:tumor-3',
+      'geojson:tumor',
+      'geojson:tumor-2',
+      'geojson:tumor-4',
+      'geojson:tumor-5',
+    ])
+    expect(new Set(annotations.map((annotation) => annotation.id)).size).toBe(3_001)
+    // Quadratic probing made about 4.5 million lookups for this file.
+    expect(lookups).toBeLessThan(100_000)
   })
 
   it('imports Polygon features using pixel coordinates by default', () => {
