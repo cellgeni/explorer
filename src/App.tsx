@@ -2898,6 +2898,7 @@ export function App({ dependencies }: AppProps = {}) {
   }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
 
   const {
+    annotationImportError,
     annotationImportNotice,
     handleAnnotationColorChange,
     handleAnnotationGroupChange,
@@ -4343,10 +4344,19 @@ export function App({ dependencies }: AppProps = {}) {
     },
   })
 
+  // A failed label import keeps the labels, so its error is listed apart.
+  const issueErrors = useMemo(
+    () =>
+      annotationImportError === null
+        ? activeErrors
+        : [...activeErrors, annotationImportError],
+    [activeErrors, annotationImportError],
+  )
+
   // The section models (plan 15.2-A): the layer panel, info
   // drawer and top bar take these instead of separate props.
   const datasetInfo = useDatasetInfoModel({
-    activeErrors,
+    activeErrors: issueErrors,
     appendDebugEvent,
     boundaryCellLimit,
     cellFeatureMatrixCapabilityState,
@@ -4758,6 +4768,7 @@ export function App({ dependencies }: AppProps = {}) {
     annotationGroupOptions,
     annotationGroupState,
     annotationHeaderCopy,
+    annotationImportError,
     annotationImportNotice,
     annotationImportUrl,
     annotationPlacedCellIds,

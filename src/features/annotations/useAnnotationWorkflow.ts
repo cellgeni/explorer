@@ -118,6 +118,9 @@ interface UseAnnotationWorkflowResult {
   // Imported cells that are not on the map, as "N of M imported cells are
   // not on the map."; null when they all are.
   readonly annotationImportNotice: string | null
+  // Why the last import into the open dataset failed; null after one that
+  // worked. A failed import leaves the labels and tracks already loaded.
+  readonly annotationImportError: StructuredLoadError | null
   // The URL whose labels or tracks the open dataset shows, imported by URL
   // into it; what a link's annotationUrl= names. Null once they are cleared,
   // replaced by a set or a file of the same name, or another dataset opens.
@@ -188,6 +191,11 @@ export function useAnnotationWorkflow({
     readonly url: string
     readonly message: string
   } | null>(null)
+  // The last failed import, for the dataset it was imported into.
+  const [importError, setImportError] = useState<{
+    readonly url: string
+    readonly error: StructuredLoadError
+  } | null>(null)
   // The last import by URL: the dataset it went into, the URL, and the id
   // prefixes its labels and tracks carry.
   const [urlImport, setUrlImport] = useState<{
@@ -242,6 +250,7 @@ export function useAnnotationWorkflow({
           )
           // The set replaces the imported labels.
           setImportNotice(null)
+          setImportError(null)
           if (switchColorMode && annotations.length > 0) {
             setObservationColorMode('annotations')
           }
@@ -355,6 +364,7 @@ export function useAnnotationWorkflow({
           linkHiddenAnnotationSetIds,
         ),
       )
+      setImportError(null)
       setImportNotice(
         cellCheck.missing === 0
           ? null
@@ -415,22 +425,14 @@ export function useAnnotationWorkflow({
         importCustomAnnotationText(await file.text(), file.name, 'Imported annotations')
       } catch (error) {
         setImportNotice(null)
-        setAnnotationState(
-          annotationLoadFailed(
-            loadState.status === 'ready' ? loadState.url : datasetUrl,
-            annotationImportError(error),
-          ),
-        )
+        setImportError({
+          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+          error: annotationImportError(error),
+        })
         appendDebugEvent('Annotation import failed')
       }
     },
-    [
-      appendDebugEvent,
-      datasetUrl,
-      importCustomAnnotationText,
-      loadState,
-      setAnnotationState,
-    ],
+    [appendDebugEvent, datasetUrl, importCustomAnnotationText, loadState],
   )
 
   const handleImportAnnotationUrl = useCallback(
@@ -477,12 +479,10 @@ export function useAnnotationWorkflow({
         }
 
         setImportNotice(null)
-        setAnnotationState(
-          annotationLoadFailed(
-            loadState.status === 'ready' ? loadState.url : datasetUrl,
-            annotationImportError(error),
-          ),
-        )
+        setImportError({
+          url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+          error: annotationImportError(error),
+        })
         appendDebugEvent('Annotation URL import failed')
         return false
       }
@@ -494,7 +494,6 @@ export function useAnnotationWorkflow({
       importCustomAnnotationText,
       loadRequestIdRef,
       loadState,
-      setAnnotationState,
     ],
   )
 
@@ -613,6 +612,7 @@ export function useAnnotationWorkflow({
     setHiddenAnnotationIds([])
     setHiddenAnnotationSetIds([])
     setImportNotice(null)
+    setImportError(null)
     setCellMetadataTracks([])
     setSelectedCellMetadataTrackId(null)
     setObservationColorMode((current) =>
@@ -725,6 +725,12 @@ export function useAnnotationWorkflow({
       ? importNotice.message
       : null
 
+  const openDatasetImportError =
+    importError !== null &&
+    importError.url === (loadState.status === 'ready' ? loadState.url : datasetUrl)
+      ? importError.error
+      : null
+
   const linkedAnnotationUrl =
     urlImport !== null &&
     loadState.status === 'ready' &&
@@ -738,6 +744,7 @@ export function useAnnotationWorkflow({
       : null
 
   return {
+    annotationImportError: openDatasetImportError,
     annotationImportNotice,
     linkedAnnotationUrl,
     handleAnnotationColorChange,
