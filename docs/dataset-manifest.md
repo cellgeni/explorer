@@ -118,6 +118,9 @@ such as a host with a space.
 A `root` with a query string, such as a token that grants the folder, keeps
 the query on each file resolved under it:
 `https://host/run-7?token=abc` reads `https://host/run-7/cells.parquet?token=abc`.
+So does a manifest found in a folder opened with a query, such as an Azure SAS
+token: without a `root` of its own, or with a relative one, its files keep the
+folder's query.
 
 ## Source
 

@@ -471,6 +471,31 @@ describe('parseDatasetManifest', () => {
     })
   })
 
+  // Detection reads explorer.json with the folder's query, as for every
+  // file; the manifest's folder dropped it (EXP-235).
+  it('keeps the query of a manifest read with one on the files it resolves', () => {
+    const signedManifestUrl =
+      'https://acct.blob.core.windows.net/c/xenium/explorer.json?sv=2024&sig=abc'
+    const inFolder = parseDatasetManifest(
+      { version: 1, platform: 'xenium', files: { cells: 'cells.parquet' } },
+      signedManifestUrl,
+    )
+    const underRoot = parseDatasetManifest(
+      { version: 1, platform: 'xenium', root: 'outs', files: { cells: 'cells.parquet' } },
+      signedManifestUrl,
+    )
+
+    expect(inFolder.rootUrl).toBe(
+      'https://acct.blob.core.windows.net/c/xenium?sv=2024&sig=abc',
+    )
+    expect(inFolder.platform === 'xenium' && inFolder.files.cells?.url).toBe(
+      'https://acct.blob.core.windows.net/c/xenium/cells.parquet?sv=2024&sig=abc',
+    )
+    expect(underRoot.platform === 'xenium' && underRoot.files.cells?.url).toBe(
+      'https://acct.blob.core.windows.net/c/xenium/outs/cells.parquet?sv=2024&sig=abc',
+    )
+  })
+
   it('requires the source file for single-file platforms', () => {
     expect(parseError({ version: 1, platform: 'h5ad' })).toContain(
       '"files.h5ad" is required for platform "h5ad"',
