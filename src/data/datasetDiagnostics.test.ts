@@ -14,6 +14,89 @@ import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechun
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
+  // Image-only datasets fell through to the Xenium checks (EXP-225).
+  it('checks a TIFF image by byte ranges, not as a Xenium run', async () => {
+    const imageUrl = 'https://example.test/slides/section-1.ome.tif'
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }))
+    const rangeValidator = vi.fn(async () => undefined)
+
+    const report = await runDatasetDiagnostics(imageUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'image' as const,
+        baseUrl: imageUrl,
+        imageUrl,
+        imageKind: 'tiff' as const,
+        checked: [],
+      })),
+      fetcher: fetcher as unknown as typeof fetch,
+      rangeValidator,
+    })
+
+    expect(report.platform).toBe('image')
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected TIFF image'],
+        ['image-file', 'pass', 'Byte-range readable'],
+      ],
+    )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      imageUrl,
+      expect.objectContaining({ label: 'TIFF image' }),
+    )
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('reads the multiscale metadata of an OME-Zarr image', async () => {
+    const imageUrl = 'https://example.test/images/section.ome.zarr'
+    const files: Record<string, unknown> = {
+      '.zgroup': { zarr_format: 2 },
+      '.zattrs': {
+        multiscales: [
+          {
+            version: '0.4',
+            axes: [
+              { name: 'y', type: 'space' },
+              { name: 'x', type: 'space' },
+            ],
+            datasets: [
+              {
+                path: '0',
+                coordinateTransformations: [{ type: 'scale', scale: [1, 1] }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    // The Zarr store fetches Requests.
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = input instanceof Request ? input.url : String(input)
+      const path = url.slice(imageUrl.length + 1)
+      return path in files
+        ? new Response(JSON.stringify(files[path]))
+        : new Response(null, { status: 404 })
+    }) as unknown as typeof fetch
+    const detectDataset = vi.fn(async () => ({
+      platform: 'image' as const,
+      baseUrl: imageUrl,
+      imageUrl,
+      imageKind: 'ome-zarr' as const,
+      checked: [],
+    }))
+
+    const report = await runDatasetDiagnostics(imageUrl, { detectDataset, fetcher })
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected OME-Zarr image'],
+        ['image-file', 'pass', 'Multiscale image metadata readable'],
+      ],
+    )
+
+    delete files['.zattrs']
+    const missing = await runDatasetDiagnostics(imageUrl, { detectDataset, fetcher })
+    expect(missing.checks.at(-1)).toMatchObject({ id: 'image-file', status: 'fail' })
+  })
+
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
     const report = await runDatasetDiagnostics(
       `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
