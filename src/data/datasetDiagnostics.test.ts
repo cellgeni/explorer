@@ -14,6 +14,120 @@ import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechun
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
+  // The H5AD reader downloads a file up to 300 MiB whole on a host that does
+  // not answer Range requests (EXP-228).
+  it('warns, not fails, for an H5AD file read whole on a host without Range', async () => {
+    const h5adUrl = 'https://no-range.test/run.h5ad'
+    const sizeOf = { bytes: 4_096 }
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'HEAD'
+        ? new Response(null, { headers: { 'Content-Length': String(sizeOf.bytes) } })
+        : new Response(new Uint8Array(8)),
+    ) as unknown as typeof fetch
+    const detectDataset = vi.fn(async () => ({
+      platform: 'h5ad' as const,
+      baseUrl: h5adUrl,
+      h5adUrl,
+      checked: [],
+    }))
+
+    const small = await runDatasetDiagnostics(h5adUrl, { detectDataset, fetcher })
+    expect(small.checks.at(-1)).toMatchObject({
+      id: 'h5ad-file',
+      status: 'warning',
+      message: expect.stringContaining('so this one (0.0 MB) loads'),
+    })
+
+    sizeOf.bytes = 400 * 1024 * 1024
+    const large = await runDatasetDiagnostics(h5adUrl, { detectDataset, fetcher })
+    expect(large.checks.at(-1)).toMatchObject({ id: 'h5ad-file', status: 'fail' })
+  })
+
+  // An Atera run named by a dataset manifest may leave out
+  // experiment.spatial, as for Xenium (EXP-228).
+  it('warns, not fails, for an Atera run with a manifest and no experiment.spatial', async () => {
+    const baseUrl = 'https://example.test/atera-manifest'
+    const report = await runDatasetDiagnostics(baseUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'atera' as const,
+        baseUrl,
+        manifest: {
+          platform: 'atera' as const,
+          url: `${baseUrl}/explorer.json`,
+          rootUrl: baseUrl,
+          files: {},
+        },
+        checked: [],
+      })),
+      fetcher: vi.fn(async () => new Response(null, { status: 404 })),
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'experiment-manifest'),
+    ).toMatchObject({
+      status: 'warning',
+      required: false,
+      message: "HTTP 404; the dataset manifest names the run's files",
+    })
+  })
+
+  // The readers refuse a gzipped table that inflates past their limit, which
+  // its compressed size did not show (EXP-229).
+  it('checks a gzipped table by the size it inflates to', async () => {
+    const detection: SpatialDatasetDetection = {
+      platform: 'merscope',
+      baseUrl: 'https://example.test/geo',
+      files: {
+        cellByGene: 'cell_by_gene.csv.gz',
+        cellMetadata: 'cell_metadata.csv.gz',
+        cellBoundaries: 'cell_boundaries.parquet',
+      },
+      checked: [],
+    }
+    const trailer = (bytes: number) => {
+      const isize = new Uint8Array(4)
+      new DataView(isize.buffer).setUint32(0, bytes, true)
+      return isize
+    }
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input)
+      const range = new Headers(init?.headers).get('Range')
+
+      if (range === 'bytes=-4') {
+        return new Response(
+          trailer(url.endsWith('cell_by_gene.csv.gz') ? 301 * 1024 * 1024 : 1_000),
+          { status: 206 },
+        )
+      }
+
+      return url.endsWith('images/manifest.json')
+        ? new Response(null, { status: 404 })
+        : new Response(null, { headers: { 'Content-Length': '314572' } })
+    })
+
+    const report = await runDatasetDiagnostics(detection.baseUrl, {
+      fetcher,
+      detectDataset: async () => detection,
+    })
+
+    expect(
+      report.checks
+        .filter(
+          (check) =>
+            check.id === 'merscope-cell-by-gene' || check.id === 'merscope-cell-metadata',
+        )
+        .map((check) => [check.id, check.status, check.message]),
+    ).toEqual([
+      [
+        'merscope-cell-by-gene',
+        'fail',
+        '0.3 MB gzipped inflates to 301.0 MB, above the 300 MB browser load limit',
+      ],
+      ['merscope-cell-metadata', 'pass', 'Readable (0.3 MB)'],
+    ])
+  })
+
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
     const report = await runDatasetDiagnostics(
       `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
