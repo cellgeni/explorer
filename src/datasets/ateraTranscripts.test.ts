@@ -364,6 +364,25 @@ describe('AteraTranscripts', () => {
     })
   })
 
+  it('shows the QV 20 squares for another Min QV without transcripts.zarr.zip (EXP-217)', async () => {
+    const { reader } = createReader({ withTranscripts: false })
+    const atTwenty = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA', 'GENEB'],
+      minQv: 20,
+    })
+    const result = await reader.aggregates(bbox(0, 0, 19, 19), {
+      featureNames: ['GENEA', 'GENEB'],
+      minQv: 30,
+    })
+
+    expect(result).toMatchObject({
+      bins: atTwenty.bins,
+      minQv: 20,
+      sourceFile: 'binned_transcripts.zarr.zip',
+      qvUnavailable: { minQv: 30, reason: `No fixture for ${TRANSCRIPTS_URL}` },
+    })
+  })
+
   it('reads exact points for selected genes in the box above the minimum QV', async () => {
     const { reader } = createReader()
     const result = await reader.viewport(bbox(0, 0, 15, 15), {

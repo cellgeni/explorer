@@ -160,7 +160,8 @@ export class AteraTranscripts {
   // box spans at most `maxBins` squares, and the selected-gene count in the
   // box. The binned store counts QV ≥ 20 transcripts; another `minQv` bins
   // the genes' rows from transcripts.zarr.zip instead, unless that is more
-  // than ATERA_QV_DENSITY_ROW_LIMIT rows, when the QV ≥ 20 squares say so.
+  // than ATERA_QV_DENSITY_ROW_LIMIT rows or the file cannot be opened, when
+  // the QV ≥ 20 squares say so.
   async aggregates(
     bbox: BBox,
     options: AteraTranscriptAggregateOptions,
@@ -169,6 +170,22 @@ export class AteraTranscripts {
 
     if (minQv === BINNED_MIN_QV) {
       return this.binnedAggregates(bbox, options)
+    }
+
+    // capabilities() reports such a run as density only, and the binned
+    // squares still show (EXP-217). A failed open is not kept, so a later
+    // view tries the file again.
+    const unreadable = await this.transcripts().then(
+      () => undefined,
+      (error: unknown) => errorMessage(error),
+    )
+    throwIfAborted(options.signal)
+
+    if (unreadable !== undefined) {
+      return {
+        ...(await this.binnedAggregates(bbox, options)),
+        qvUnavailable: { minQv, reason: unreadable },
+      }
     }
 
     const qvResult = await this.qvAggregates(bbox, options, minQv)

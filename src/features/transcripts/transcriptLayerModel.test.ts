@@ -524,6 +524,18 @@ describe('transcriptLayerModel', () => {
       'Showing native 1 selected-feature density squares at QV 20+ from binned_transcripts.zarr.zip (12 squares). Min QV 30 needs 3,000,000 transcript rows here, more than the 2,000,000 one view reads; zoom in or select fewer genes to apply it.',
     )
     expect(
+      transcriptNativeAggregateMessage({
+        mode: 'density',
+        selectedFeatureCount: 1,
+        binCount: 12,
+        sourceFile: 'binned_transcripts.zarr.zip',
+        minQv: 20,
+        qvUnavailable: { minQv: 30, reason: 'HTTP 404 for transcripts.zarr.zip' },
+      }),
+    ).toBe(
+      'Showing native 1 selected-feature density squares at QV 20+ from binned_transcripts.zarr.zip (12 squares). Min QV 30 needs the transcript rows, which could not be read: HTTP 404 for transcripts.zarr.zip.',
+    )
+    expect(
       transcriptAggregateFallbackMessage({
         mode: 'density',
         featureFilterMode: 'selected',

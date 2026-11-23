@@ -155,6 +155,12 @@ export interface TranscriptAggregateResult {
     readonly rowCount: number
     readonly rowLimit: number
   }
+  // Set when the bins count from a lower QV than asked, because the rows
+  // that hold the QV could not be read (Atera without transcripts.zarr.zip).
+  readonly qvUnavailable?: {
+    readonly minQv: number
+    readonly reason: string
+  }
 }
 
 export type TranscriptLodPlan =
