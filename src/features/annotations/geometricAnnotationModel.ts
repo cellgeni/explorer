@@ -144,7 +144,7 @@ export function parseGeometricAnnotationsGeoJson(
 
   const value: unknown = JSON.parse(trimmedText)
   const features = geoJsonFeatures(value)
-  const usedIds = new Set<string>()
+  const usedIds: UsedAnnotationIds = { ids: new Set(), nextSuffix: new Map() }
   const annotations = features.flatMap((feature, index) => {
     const parsed = parseFeature(feature, index, options, usedIds)
 
@@ -163,7 +163,7 @@ function parseFeature(
   feature: GeoJsonFeatureRecord,
   index: number,
   options: ParseGeometricAnnotationsOptions,
-  usedIds: Set<string>,
+  usedIds: UsedAnnotationIds,
 ): GeometricAnnotationFeature | string {
   const properties = feature.properties ?? {}
   const legacyObjectType =
@@ -806,16 +806,29 @@ function closeRing(ring: readonly DataPoint[]): readonly DataPoint[] {
   return [...ring, first]
 }
 
-function uniqueAnnotationId(baseId: string, usedIds: Set<string>): string {
-  let id = baseId
-  let suffix = 2
+// The ids given so far, and for each base id the suffix to try next. Shapes
+// of one class share a base id, so a file of thousands of them would probe
+// every earlier suffix again for each one.
+interface UsedAnnotationIds {
+  readonly ids: Set<string>
+  readonly nextSuffix: Map<string, number>
+}
 
-  while (usedIds.has(id)) {
-    id = `${baseId}-${suffix}`
-    suffix += 1
+function uniqueAnnotationId(baseId: string, used: UsedAnnotationIds): string {
+  let id = baseId
+
+  if (used.ids.has(id)) {
+    let suffix = used.nextSuffix.get(baseId) ?? 2
+
+    do {
+      id = `${baseId}-${suffix}`
+      suffix += 1
+    } while (used.ids.has(id))
+
+    used.nextSuffix.set(baseId, suffix)
   }
 
-  usedIds.add(id)
+  used.ids.add(id)
   return id
 }
 

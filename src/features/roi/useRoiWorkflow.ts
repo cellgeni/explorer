@@ -8,6 +8,8 @@ import { roiCellsStoppedAtLimit } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { FallbackNotifier } from '../../data/fallbackNotice'
 import type { RoiSelection } from '../../data/roiSelection'
+import { fileNamePart } from '../../utils/fileName'
+import { urlWithoutCredentials } from '../../utils/urlCredentials'
 import type {
   RoiCellsLoader,
   RoiGeneStatsLoader,
@@ -75,7 +77,6 @@ import {
   roiReferenceUnavailable,
   type RoiReferenceState,
 } from './roiEnrichmentModel'
-import { slug } from '../../utils/slug'
 import type { DatasetCell } from '../../datasets/spatialDataset'
 
 interface MutableRef<T> {
@@ -454,6 +455,11 @@ export function useRoiWorkflow({
         requestIdRef: roiGeneViewportWarmupRequestIdRef,
       })
       setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+      // The previous selection's transcript export stops, as Clear stops it.
+      invalidateLatestRequest({
+        abortRef: roiTranscriptExportAbortRef,
+        requestIdRef: roiTranscriptExportRequestIdRef,
+      })
       setRoiState(roiLoading(loadState.url, bbox, selection))
       setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
       setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
@@ -674,6 +680,8 @@ export function useRoiWorkflow({
       roiGeneViewportWarmupTimeoutRef,
       roiIdRef,
       roiRequestIdRef,
+      roiTranscriptExportAbortRef,
+      roiTranscriptExportRequestIdRef,
       setMagicLensState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
@@ -771,7 +779,10 @@ export function useRoiWorkflow({
     }
 
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
-    downloadTextFile(`${slug(name)}-cells.csv`, roiCellsToCsv(roiState.cells))
+    downloadTextFile(
+      `${fileNamePart(name, 'selection')}-cells.csv`,
+      roiCellsToCsv(roiState.cells),
+    )
     appendDebugEvent(`Exported ROI cells ${name}`)
   }, [appendDebugEvent, roiIdRef, roiName, roiState])
 
@@ -783,11 +794,12 @@ export function useRoiWorkflow({
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
 
     downloadTextFile(
-      `${slug(name)}-roi.geojson`,
+      `${fileNamePart(name, 'selection')}-roi.geojson`,
       roiSelectionToGeoJson(roiState.selection, {
         roi_name: name,
         exported_at: new Date().toISOString(),
-        dataset_url: roiState.url,
+        // Without a presigned URL's signature, as in the recent list.
+        dataset_url: urlWithoutCredentials(roiState.url).url,
         selected_cell_count: roiState.cells.length,
         hit_cell_limit: roiState.hitCellLimit,
       }),
@@ -818,7 +830,7 @@ export function useRoiWorkflow({
         }
 
         downloadTextFile(
-          `${slug(name)}-transcripts.csv`,
+          `${fileNamePart(name, 'selection')}-transcripts.csv`,
           roiTranscriptsToCsv(transcripts),
         )
         setRoiTranscriptExportState(IDLE_ROI_TRANSCRIPT_EXPORT_STATE)

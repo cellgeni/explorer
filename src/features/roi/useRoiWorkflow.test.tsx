@@ -7,11 +7,15 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
-import { micrometers } from '../../data/coords'
+import { micrometers, scaledImagePixelFrame } from '../../data/coords'
 import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
-import type { RoiCellsLoader, RoiGeneStatsLoader } from '../app-shell/appDependencies'
+import type {
+  RoiCellsLoader,
+  RoiGeneStatsLoader,
+  RoiTranscriptsLoader,
+} from '../app-shell/appDependencies'
 import type { DatasetLoadState } from '../dataset/datasetLoadModel'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import type { MagicLensScope, MagicLensState } from './magicLensModel'
@@ -24,6 +28,7 @@ import type {
 import { ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS } from './roiModel'
 import { ALL_GENES, type RoiReferenceState } from './roiEnrichmentModel'
 import { useRoiWorkflow } from './useRoiWorkflow'
+import { parseGeometricAnnotationsGeoJson } from '../annotations/geometricAnnotationModel'
 import type { DatasetCell } from '../../datasets/spatialDataset'
 
 const selection: RoiSelection = {
@@ -53,11 +58,13 @@ let snapshot: Snapshot
 function Probe({
   loadRoiCells,
   loadRoiGeneStats,
+  loadRoiTranscripts,
   onReady,
   referenceCells,
 }: {
   readonly loadRoiCells?: RoiCellsLoader
   readonly loadRoiGeneStats?: RoiGeneStatsLoader
+  readonly loadRoiTranscripts?: RoiTranscriptsLoader
   readonly referenceCells?: readonly DatasetCell[]
   readonly onReady: (
     nextApi: ReturnType<typeof useRoiWorkflow>,
@@ -145,7 +152,7 @@ function Probe({
           totalCount: 0,
           hitCellLimit: false,
         })),
-      loadRoiTranscripts: vi.fn(async () => []),
+      loadRoiTranscripts: loadRoiTranscripts ?? vi.fn(async () => []),
     },
     refs: {
       magicLensAbortRef,
@@ -394,6 +401,39 @@ describe('useRoiWorkflow', () => {
     expect(snapshot.debugMessages).toContain('Cleared ROI')
   })
 
+  it('stops the previous selection’s transcript export when another is drawn', async () => {
+    let exportSignal: AbortSignal | undefined
+    const loadRoiTranscripts = vi.fn<RoiTranscriptsLoader>(
+      (_url, _selection, options) => {
+        exportSignal = options?.signal
+        return new Promise(() => undefined)
+      },
+    )
+
+    render(
+      <Probe
+        loadRoiTranscripts={loadRoiTranscripts}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleExportRoiTranscripts()
+    })
+    expect(loadRoiTranscripts).toHaveBeenCalledTimes(1)
+    expect(exportSignal?.aborted).toBe(false)
+
+    await act(async () => {
+      api.handleRoiComplete(selection)
+    })
+
+    expect(exportSignal?.aborted).toBe(true)
+    expect(snapshot.roiTranscriptExportState).toEqual({ status: 'idle' })
+  })
+
   it('cancels ROI genes, keeping the ROI and its cells (15.3-D)', async () => {
     const stats = deferred<Awaited<ReturnType<RoiGeneStatsLoader>>>()
     let genesSignal: AbortSignal | undefined
@@ -512,6 +552,8 @@ describe('useRoiWorkflow', () => {
       features: [
         {
           properties: {
+            name: 'ROI 1',
+            objectType: 'annotation',
             roi_name: 'ROI 1',
             exported_at: '2026-11-22T12:34:56.789Z',
             dataset_url: 'https://example.test/output',
@@ -536,6 +578,13 @@ describe('useRoiWorkflow', () => {
     expect(click).toHaveBeenCalledTimes(1)
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
     expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON ROI 1')
+    // Import GeoJSON reads the selection back under its name.
+    expect(
+      parseGeometricAnnotationsGeoJson(JSON.stringify(geoJson), {
+        defaultCoordinateUnit: 'micrometer',
+        pixelFrame: scaledImagePixelFrame(1),
+      }).annotations.map((annotation) => annotation.label),
+    ).toEqual(['ROI 1'])
   })
 
   it('says an ROI is cut short only when the reader stopped at its limit', async () => {

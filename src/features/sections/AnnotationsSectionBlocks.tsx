@@ -149,7 +149,7 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
         id={importInputId}
         className="visually-hidden-file"
         type="file"
-        accept=".csv,.json,application/json,text/csv"
+        accept=".csv,.tsv,.txt,.json,application/json,text/csv,text/tab-separated-values"
         disabled={!loadEnabled}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0] ?? null
@@ -189,6 +189,11 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
           </button>
         </div>
       </form>
+      {sets.importError === null ? null : (
+        <p className="annotation-import-error" role="alert">
+          {sets.importError}
+        </p>
+      )}
       {sets.importNotice === null ? null : (
         <p className="annotation-import-notice" role="status">
           {sets.importNotice}

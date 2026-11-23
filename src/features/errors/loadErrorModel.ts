@@ -108,6 +108,22 @@ export function createStructuredLoadError(
     return datasetDetectionLoadError(source, message, detection, insecureAction)
   }
 
+  // DatasetAddressError (src/datasets/datasetDetectionError.ts): nothing was
+  // requested, so this comes before the network advice.
+  if (error instanceof Error && error.name === 'DatasetAddressError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'not-found',
+        title: 'Not a web address',
+        message,
+        action:
+          'Enter the full address, starting with https:// (or http:// for a server on this computer).',
+      },
+      detail,
+    )
+  }
+
   // Before the network advice: the browser reports a missing chunk as a
   // failed fetch, but the dataset is not at fault.
   if (isStaleChunkError(error)) {
@@ -761,6 +777,12 @@ const DATASET_DETECTION_ERRORS: Record<
     title: 'Request blocked',
     action:
       "Check the network connection, then the host's CORS rules: they must allow GET and HEAD with Range from this site. Run Diagnostics shows each request.",
+  },
+  timeout: {
+    code: 'network',
+    title: 'Host not responding',
+    action:
+      'Check the address and the network connection, then load again. Run Diagnostics shows each request.',
   },
   'server-error': {
     code: 'http',

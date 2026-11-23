@@ -1,3 +1,4 @@
+import { folderFileUrl } from '../utils/folderUrl'
 import { noteReadableResponse } from './hostResponses'
 
 // Hosts that drop CORS headers from error responses (see hostResponses.ts)
@@ -226,5 +227,5 @@ function safeDecode(value: string): string {
 }
 
 function withTrailingSlash(url: string): string {
-  return `${url.trim().replace(/\/+$/, '')}/`
+  return folderFileUrl(url.trim(), '')
 }

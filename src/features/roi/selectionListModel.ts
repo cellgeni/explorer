@@ -66,6 +66,19 @@ export function selectionPaletteColor(index: number): string {
   return SELECTION_PALETTE[index % SELECTION_PALETTE.length] ?? SELECTION_PALETTE[0]
 }
 
+// The first palette colour no selection in the list has, so a deleted
+// selection's colour is used again; with all 8 taken they repeat in turn.
+function unusedSelectionColor(
+  selections: readonly Pick<SavedSelection, 'color'>[],
+): string {
+  const used = new Set(selections.map((selection) => selection.color.toLowerCase()))
+
+  return (
+    SELECTION_PALETTE.find((color) => !used.has(color.toLowerCase())) ??
+    selectionPaletteColor(selections.length)
+  )
+}
+
 // The list for this dataset: the state if it was drawn on it, else empty.
 export function selectionListFor(
   state: SelectionListState,
@@ -89,7 +102,7 @@ export function addSelection(
   const added: SavedSelection = {
     id: `selection-${number.toLocaleString('en-US', { useGrouping: false })}`,
     name: name ?? defaultRoiName(number),
-    color: selectionPaletteColor(state.selections.length),
+    color: unusedSelectionColor(state.selections),
     visible: true,
     selection,
   }

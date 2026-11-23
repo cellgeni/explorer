@@ -1943,6 +1943,60 @@ describe('App', () => {
     })
   })
 
+  it('writes a set with most classes hidden by the classes shown, and reads it back', async () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/#xv=2&dataset=https%3A%2F%2Fexample.test%2Fxenium&groups=analysis%3A1&shownClasses=analysis%3A1%3A1',
+    )
+    const cells = [1, 2, 3].map((index) => intToCellId(index, 1))
+    const loadDatasetOverview = vi.fn(async () =>
+      cells.map((cellId, index) => ({
+        cellId,
+        position: { x: micrometers(10 * index), y: micrometers(20) },
+        transcriptCount: 8,
+      })),
+    )
+    const loadAnnotationGroups: ReturnType<typeof vi.fn<AnnotationGroupLoader>> = vi.fn(
+      async () => [
+        { id: 'analysis:1', label: 'kmeans 3', groupingName: 'k', groupCount: 3 },
+      ],
+    )
+    const loadAnnotations: ReturnType<typeof vi.fn<AnnotationLoader>> = vi.fn(async () =>
+      cells.map((cellId, index) => ({
+        id: `analysis:1:${index}`,
+        label: `kmeans 3: Cluster ${index + 1}`,
+        cellIds: [cellId],
+      })),
+    )
+
+    render(
+      <TestApp
+        loadDatasetOverview={loadDatasetOverview}
+        loadAnnotationGroups={loadAnnotationGroups}
+        loadAnnotations={loadAnnotations}
+      />,
+    )
+
+    openControls('clusters')
+    await waitFor(() => {
+      expect(screen.getByLabelText('kmeans 3: Cluster 1 visible')).not.toBeChecked()
+    })
+    expect(screen.getByLabelText('kmeans 3: Cluster 2 visible')).toBeChecked()
+    expect(screen.getByLabelText('kmeans 3: Cluster 3 visible')).not.toBeChecked()
+    await waitFor(() => {
+      expect(window.location.hash).toContain('shownClasses=analysis%3A1%3A1')
+    })
+    expect(window.location.hash).not.toContain('hiddenClasses=')
+
+    // Showing a second class leaves one hidden, which is listed as hidden.
+    fireEvent.click(screen.getByLabelText('kmeans 3: Cluster 1 visible'))
+    await waitFor(() => {
+      expect(window.location.hash).toContain('hiddenClasses=analysis%3A1%3A2')
+    })
+    expect(window.location.hash).not.toContain('shownClasses=')
+  })
+
   it('keeps a set a link hides hidden once it loads', async () => {
     window.history.replaceState(
       null,

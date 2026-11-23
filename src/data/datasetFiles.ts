@@ -10,6 +10,7 @@ import {
   type DatasetManifestFile,
 } from '../datasets/datasetManifest'
 import { dropDatasets } from '../datasets/datasetCache'
+import { folderFileUrl } from '../utils/folderUrl'
 import type { DatasetCollection } from '../datasets/datasetCollection'
 
 // Manifests found by detection, per dataset URL, and null where detection
@@ -87,7 +88,7 @@ export function datasetFileUrl(baseUrl: string, path: string): string {
   const rootUrl = datasetManifestFor(baseUrl)?.rootUrl
 
   return rootUrl === undefined
-    ? `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+    ? folderFileUrl(baseUrl, path)
     : resolveManifestPath(rootUrl, path)
 }
 

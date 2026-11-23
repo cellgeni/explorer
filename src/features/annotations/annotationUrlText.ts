@@ -10,11 +10,11 @@ export class AnnotationUrlTooLargeError extends Error {
   readonly byteLength: number | null
 
   constructor(sourceName: string, byteLength: number | null, maxBytes: number) {
-    const limit = `${formatMegabytes(maxBytes)} limit for annotation URLs`
+    const limit = `${formatMebibytes(maxBytes)} limit for annotation URLs`
     super(
       byteLength === null
         ? `${sourceName} is larger than the ${limit}.`
-        : `${sourceName} is ${formatMegabytes(byteLength)}, above the ${limit}.`,
+        : `${sourceName} is ${sizeAboveLimit(byteLength, maxBytes)}, above the ${limit}.`,
     )
     this.name = 'AnnotationUrlTooLargeError'
     this.sourceName = sourceName
@@ -71,7 +71,25 @@ export async function readAnnotationUrlText(
   }
 }
 
-function formatMegabytes(byteLength: number): string {
-  const megabytes = byteLength / (1024 * 1024)
-  return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`
+const MEBIBYTE = 1024 * 1024
+
+export function formatMebibytes(byteLength: number): string {
+  const mebibytes = byteLength / MEBIBYTE
+  return `${Number.isInteger(mebibytes) ? mebibytes : mebibytes.toFixed(1)} MiB`
+}
+
+// With enough decimals to read as more than the limit: 104,900,000 bytes is
+// 100.04 MiB, not "100.0".
+function sizeAboveLimit(byteLength: number, maxBytes: number): string {
+  const mebibytes = byteLength / MEBIBYTE
+
+  for (let digits = 1; digits <= 4; digits += 1) {
+    const text = mebibytes.toFixed(digits)
+
+    if (Number(text) > maxBytes / MEBIBYTE) {
+      return `${text} MiB`
+    }
+  }
+
+  return `${byteLength.toLocaleString()} bytes`
 }

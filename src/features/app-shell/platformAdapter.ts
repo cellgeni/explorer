@@ -432,20 +432,25 @@ export function isAnnDataPlatform(adapter: AppPlatformAdapter): boolean {
   )
 }
 
+// A Visium HD ROI holds bins of the tier drawn when it was drawn: the
+// selected size, or the coarser tier drawn in its place zoomed out or while a
+// switch loads. It stays while either is its tier.
 export function activeVisiumHdRoiStateForPlatform(options: {
   readonly activeBinSize: VisiumHdBinSizeMicrometers | undefined
   readonly adapter: AppPlatformAdapter
+  readonly drawnBinSize?: VisiumHdBinSizeMicrometers | undefined
   readonly loadState: DatasetLoadState
   readonly state: VisiumHdRoiState
 }): VisiumHdRoiState {
-  const { activeBinSize, adapter, loadState, state } = options
+  const { activeBinSize, adapter, drawnBinSize, loadState, state } = options
 
   if (
     adapter.kind !== 'visium-hd' ||
     loadState.status !== 'ready' ||
     state.status !== 'ready' ||
     state.url !== loadState.url ||
-    state.binSizeMicrometers !== activeBinSize
+    (state.binSizeMicrometers !== activeBinSize &&
+      (drawnBinSize === undefined || state.binSizeMicrometers !== drawnBinSize))
   ) {
     return IDLE_VISIUM_HD_ROI_STATE
   }

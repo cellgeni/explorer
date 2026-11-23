@@ -119,7 +119,15 @@ export function roiSelectionFromBox(
   return hasMinimumRoiSize(bbox) ? { kind: 'box', bbox } : null
 }
 
-export function roiSelectionFromLasso(points: readonly DataPoint[]): RoiSelection | null {
+// A lasso as drawn, with points no further than `tolerance` (one screen
+// pixel, in data units) from the path left out. The pointer adds a point every
+// few pixels, so a lasso would otherwise keep hundreds that a share link
+// writes out one by one.
+export function roiSelectionFromLasso(
+  drawnPoints: readonly DataPoint[],
+  tolerance = 0,
+): RoiSelection | null {
+  const points = simplifyLassoPoints(drawnPoints, tolerance)
   const bbox = dataPointArrayToBbox(points)
 
   if (bbox === null || points.length < 3 || !hasMinimumRoiSize(bbox)) {
@@ -127,6 +135,74 @@ export function roiSelectionFromLasso(points: readonly DataPoint[]): RoiSelectio
   }
 
   return { kind: 'lasso', bbox, points }
+}
+
+// Douglas–Peucker: the first and last points and, between them, each point
+// further than `tolerance` from the line through its neighbours kept.
+export function simplifyLassoPoints(
+  points: readonly DataPoint[],
+  tolerance: number,
+): readonly DataPoint[] {
+  if (!(tolerance > 0) || points.length <= 3) {
+    return points
+  }
+
+  const keep = new Uint8Array(points.length)
+  keep[0] = 1
+  keep[points.length - 1] = 1
+  const spans: [number, number][] = [[0, points.length - 1]]
+
+  for (let span = spans.pop(); span !== undefined; span = spans.pop()) {
+    const [first, last] = span
+    let farthest = -1
+    let farthestDistance = tolerance
+
+    for (let index = first + 1; index < last; index += 1) {
+      const distance = distanceToSegment(points[index], points[first], points[last])
+
+      if (distance > farthestDistance) {
+        farthest = index
+        farthestDistance = distance
+      }
+    }
+
+    if (farthest >= 0) {
+      keep[farthest] = 1
+      spans.push([first, farthest], [farthest, last])
+    }
+  }
+
+  const kept = points.filter((_, index) => keep[index] === 1)
+  return kept.length >= 3 ? kept : points
+}
+
+function distanceToSegment(
+  point: DataPoint | undefined,
+  start: DataPoint | undefined,
+  end: DataPoint | undefined,
+): number {
+  if (point === undefined || start === undefined || end === undefined) {
+    return 0
+  }
+
+  const deltaX = end.x - start.x
+  const deltaY = end.y - start.y
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY
+  const along =
+    lengthSquared === 0
+      ? 0
+      : Math.max(
+          0,
+          Math.min(
+            1,
+            ((point.x - start.x) * deltaX + (point.y - start.y) * deltaY) / lengthSquared,
+          ),
+        )
+
+  return Math.hypot(
+    point.x - (start.x + along * deltaX),
+    point.y - (start.y + along * deltaY),
+  )
 }
 
 export function hasMinimumPointStep(

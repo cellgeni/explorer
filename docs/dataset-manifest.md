@@ -37,13 +37,18 @@ There are two ways to use a manifest:
 
 When the viewer probes a folder:
 
-- An `HTTP 403` or `404`, a network error, or a timeout means there is no
-  manifest. Buckets that deny listing return `403` for missing keys.
+- An `HTTP 403` or `404` means there is no manifest. Buckets that deny listing
+  return `403` for missing keys.
+- A network error, a timeout or another status, such as a `5xx`, also opens
+  the folder without a manifest, unless an earlier load of the same folder read
+  one: that manifest is kept, so one dropped request does not change where the
+  open dataset's files are read from.
 - A response that is not a JSON object with a `platform` or `version` field is
   ignored, so hosts that answer every path with an HTML page or `{}` still
   work.
-- A manifest that fails validation stops the load with an error. It is not
-  silently ignored.
+- A manifest that fails validation stops the load with an error, and so does a
+  response that starts with `{` but is not valid JSON, such as one with a
+  trailing comma. Neither is silently ignored.
 
 The manifest is fetched with `cache: no-cache` each time the dataset is
 loaded, so edits show on the next load: a dataset already opened under a

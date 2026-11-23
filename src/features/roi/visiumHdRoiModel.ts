@@ -65,6 +65,8 @@ export function visiumHdRoiReady(options: {
 
 export interface VisiumHdRoiSelectionResult {
   readonly bins: readonly VisiumHdRoiBin[]
+  // Every bin in the selection; `bins` holds the first `limit` of them.
+  readonly selectedCount: number
   readonly hitBinLimit: boolean
 }
 
@@ -166,6 +168,7 @@ export function selectVisiumHdGridCellsInRoi(
 
   return {
     bins,
+    selectedCount,
     hitBinLimit: selectedCount > bins.length,
   }
 }
