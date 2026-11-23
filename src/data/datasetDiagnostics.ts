@@ -18,6 +18,7 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import { datasetDetectionError } from '../datasets/datasetDetectionError'
 import {
   DatasetManifestError,
   type DatasetFileRole,
@@ -408,12 +409,14 @@ export function summarizeDatasetDiagnostics(report: DatasetDiagnosticsReport): s
   const failed = report.checks.filter((check) => check.status === 'fail').length
   const warnings = report.checks.filter((check) => check.status === 'warning').length
 
+  const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`
+
   if (failed > 0) {
-    return `${failed} failed, ${warnings} warnings`
+    return `${failed} failed, ${warningText}`
   }
 
   if (warnings > 0) {
-    return `${warnings} warnings`
+    return warningText
   }
 
   return 'All checks passed'
@@ -466,10 +469,7 @@ async function checkManifest(
   const failed = required ? 'fail' : 'warning'
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, 'Experiment manifest', options)
 
     if (!response.ok) {
       discardBody(response)
@@ -688,10 +688,7 @@ async function runAteraDiagnostics(
   const checks: DatasetDiagnosticCheck[] = []
 
   try {
-    const response = await (options.fetcher ?? fetch)(experimentUrl, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(experimentUrl, 'Experiment manifest', options)
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`)
@@ -705,17 +702,18 @@ async function runAteraDiagnostics(
         url: experimentUrl,
         required: true,
         status: 'pass',
-        message: [
-          experiment.panelName,
-          experiment.cellCount === undefined
-            ? undefined
-            : `${experiment.cellCount.toLocaleString()} cells`,
-          experiment.micrometersPerPixel === undefined
-            ? undefined
-            : `${experiment.micrometersPerPixel} µm/px`,
-        ]
-          .filter((part) => part !== undefined)
-          .join('; '),
+        message:
+          [
+            experiment.panelName,
+            experiment.cellCount === undefined
+              ? undefined
+              : `${experiment.cellCount.toLocaleString()} cells`,
+            experiment.micrometersPerPixel === undefined
+              ? undefined
+              : `${experiment.micrometersPerPixel} µm/px`,
+          ]
+            .filter((part) => part !== undefined)
+            .join('; ') || 'Readable',
         startedAt,
       }),
     )
@@ -1897,6 +1895,29 @@ async function checkImage(
   }
 }
 
+// A GET for a check. On a host that hides its error responses (EBI FTP), a
+// missing file looks like a network failure; it is reported as most likely
+// missing, as the HEAD and Range checks report it.
+async function getForCheck(
+  url: string,
+  label: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<Response> {
+  let response: Response
+
+  try {
+    response = await (options.fetcher ?? fetch)(url, {
+      method: 'GET',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+  } catch (cause) {
+    throw likelyMissingFileError(label, url, cause) ?? cause
+  }
+
+  noteReadableResponse(url, response.status)
+  return response
+}
+
 // GET for small files read whole. Only the status is used, so the body is
 // cancelled rather than downloaded.
 async function checkReadableFile(
@@ -1909,10 +1930,7 @@ async function checkReadableFile(
   const startedAt = Date.now()
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, file.label, options)
     discardBody(response)
 
     if (!response.ok) {
@@ -2081,6 +2099,8 @@ function detectionDiagnosticCheck(
 ): DatasetDiagnosticCheck {
   const label = 'Dataset layout'
 
+  // Why detection found nothing, as a failed load says it: no file found,
+  // no response, an error status, or files that are no layout the app reads.
   if (detection.platform === 'unknown') {
     return diagnosticCheck({
       id: 'dataset-layout',
@@ -2088,7 +2108,7 @@ function detectionDiagnosticCheck(
       url: detection.baseUrl,
       required: true,
       status: 'fail',
-      message: 'Unsupported dataset layout',
+      message: datasetDetectionError(detection.checked).message,
       startedAt,
     })
   }
@@ -2109,7 +2129,9 @@ function detectionDiagnosticCheck(
           : detection.platform === 'h5ad'
             ? detection.source === 'zarr'
               ? 'Detected AnnData Zarr store'
-              : 'Detected H5AD'
+              : detection.source === 'icechunk'
+                ? 'Detected AnnData Icechunk repository'
+                : 'Detected H5AD'
             : detection.platform === 'spatialdata'
               ? 'Detected SpatialData'
               : detection.platform === 'atera'

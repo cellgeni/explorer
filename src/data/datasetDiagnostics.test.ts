@@ -6,6 +6,7 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
+import { clearHostResponses, noteReadableResponse } from './hostResponses'
 import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
   annDataZarrFixtureFetcher,
@@ -97,6 +98,82 @@ describe('runDatasetDiagnostics', () => {
     expect(missing.checks.at(-1)).toMatchObject({ id: 'image-file', status: 'fail' })
   })
 
+  // A missing or blocked address read "Unsupported dataset layout", the
+  // message for a layout the app does not read (EXP-226).
+  it('says why detection found no dataset', async () => {
+    const baseUrl = 'https://example.test/typo'
+    const probes = (error: { status?: number; error?: string }) =>
+      ['experiment.xenium', 'cells.parquet'].map((path) => ({
+        path,
+        url: `${baseUrl}/${path}`,
+        ok: false,
+        ...error,
+      }))
+    const diagnose = (checked: SpatialDatasetDetection['checked']) =>
+      runDatasetDiagnostics(baseUrl, {
+        detectDataset: vi.fn(async () => ({
+          platform: 'unknown' as const,
+          baseUrl,
+          checked,
+        })),
+      })
+
+    expect((await diagnose(probes({ status: 404 }))).checks).toEqual([
+      expect.objectContaining({
+        id: 'dataset-layout',
+        status: 'fail',
+        message: 'None of the 2 expected files were found at this address.',
+      }),
+    ])
+    expect(
+      (await diagnose(probes({ error: 'TypeError: Failed to fetch' }))).checks[0]
+        ?.message,
+    ).toMatch(/^The browser got no response\./)
+    expect(
+      (
+        await diagnose([
+          {
+            path: 'cells.parquet',
+            url: `${baseUrl}/cells.parquet`,
+            ok: true,
+            status: 200,
+          },
+        ])
+      ).checks[0]?.message,
+    ).toBe('Found cells.parquet, but not a dataset layout the app reads.')
+  })
+
+  // EBI FTP sends no CORS headers with its 404s, so a GET for a missing file
+  // fails like a network error (EXP-231).
+  it('reports a GET check that fails without a response as a likely missing file', async () => {
+    const baseUrl = 'https://hides-errors.test/run'
+    noteReadableResponse(`${baseUrl}/cells.parquet`, 206)
+    const fetcher = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }) as unknown as typeof fetch
+
+    try {
+      const report = await runDatasetDiagnostics(baseUrl, {
+        detectDataset: vi.fn(async () => ({
+          platform: 'xenium' as const,
+          baseUrl,
+          checked: [],
+        })),
+        fetcher,
+        rangeValidator: vi.fn(async () => undefined),
+      })
+
+      expect(
+        report.checks.find((check) => check.id === 'experiment-manifest'),
+      ).toMatchObject({
+        status: 'fail',
+        message: expect.stringContaining('most likely missing'),
+      })
+    } finally {
+      clearHostResponses()
+    }
+  })
+
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {
     const report = await runDatasetDiagnostics(
       `${ICECHUNK_FIXTURE_ORIGIN}/moved.h5ad.icechunk`,
@@ -111,6 +188,10 @@ describe('runDatasetDiagnostics', () => {
     )
 
     expect(report.platform).toBe('h5ad')
+    expect(report.checks[0]).toMatchObject({
+      id: 'dataset-layout',
+      message: 'Detected AnnData Icechunk repository',
+    })
     expect(report.checks).toContainEqual(
       expect.objectContaining({
         id: 'icechunk-repository',
@@ -1065,7 +1146,7 @@ describe('runDatasetDiagnostics', () => {
       status: 'pass',
     })
     expect(check('visium-hd-16um-tissue-image')).toBeUndefined()
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
   })
 
   it('fails a Visium HD tier with neither tissue image', async () => {
@@ -1233,7 +1314,7 @@ describe('runDatasetDiagnostics', () => {
       url: `https://example.test/visium/${VISIUM_HD_16UM_UMAP_PATHS[0]}`,
       message: `HTTP 404; ${VISIUM_HD_16UM_UMAP_PATHS.slice(1).join(', ')} also could not be read`,
     })
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
 
     // The viewer asks for the same paths in the same order.
     const viewerFetcher = projectionFetcher([])
@@ -1277,7 +1358,7 @@ describe('runDatasetDiagnostics', () => {
       message:
         'HTTP 403; analysis/umap/2_components/projection.csv also could not be read',
     })
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
   })
 
   it('cancels the body of each file it only checks with GET', async () => {
