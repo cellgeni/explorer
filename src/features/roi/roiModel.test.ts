@@ -190,9 +190,13 @@ describe('roiModel', () => {
     })
     expect(summarizeRoiCells([])).toEqual({
       cellCount: 0,
-      meanTranscriptCount: 0,
+      meanTranscriptCount: undefined,
       meanCellArea: undefined,
     })
+    // AnnData-backed cells carry neither, so there is no mean, not a mean of 0.
+    expect(
+      summarizeRoiCells(cells.map(({ id, position }) => ({ id, position }))),
+    ).toEqual({ cellCount: 2, meanTranscriptCount: undefined, meanCellArea: undefined })
     expect(
       roiSelectionLabel({
         kind: 'lasso',

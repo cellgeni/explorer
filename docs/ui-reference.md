@@ -687,11 +687,11 @@ selection as an annotation and colours by annotations. `Delete` (after the
 exports) removes the selection, with [Undo](#undo); closing the card keeps it
 in the list.
 
-| Tab                         | Contents                                                                                                               |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| Genes                       | Genes ranked as Enriched or Most abundant, with % of cells expressing inside and outside (see [Genes tab](#genes-tab)) |
-| Cells (Spots, Bins)         | Cells, mean transcripts and mean area; for bins, the count, bin size and in-tissue count                               |
-| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values          |
+| Tab                         | Contents                                                                                                                                              |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Genes                       | Genes ranked as Enriched or Most abundant, with % of cells expressing inside and outside (see [Genes tab](#genes-tab))                                |
+| Cells (Spots, Bins)         | Cells, mean transcripts and mean area where the cells carry them (not on AnnData-backed platforms); for bins, the count, bin size and in-tissue count |
+| Transcripts (or Expression) | `Summarise Transcripts`: Magic Lens over the selection (D14). Expression where the lens counts UMIs or values                                         |
 
 #### Genes tab
 
@@ -748,7 +748,8 @@ cells), `Export Cells` (`{name}-cells.csv`:
 the cells read, so up to 50,000 on Xenium and every cell elsewhere),
 `Export Transcripts`
 (`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, the selected
-genes on Atera, also shown for H5AD and SpatialData), or for Visium HD `Export Barcodes`
+genes on Atera, also shown for H5AD and SpatialData; drawing or choosing
+another selection stops it, as `Clear` does), or for Visium HD `Export Barcodes`
 (`{name}-barcodes.csv`, up to 50,000 bins).
 
 In these CSVs and `annotations.csv`, a field that starts with `=`, `+`, `-`,
