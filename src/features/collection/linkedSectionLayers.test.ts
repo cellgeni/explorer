@@ -91,6 +91,16 @@ describe('linkedSectionLayers', () => {
     expect(scoredCells(scores, OPTIONS).order).toEqual(Uint32Array.from([2, 0]))
   })
 
+  it('draws no cell whose stored score is NaN or infinite (EXP-241)', () => {
+    const scores = {
+      positions: new Float32Array([0, 0, 10, 20, 30, 5]),
+      scores: new Float32Array([Number.POSITIVE_INFINITY, Number.NaN, 2]),
+      maxScore: 2,
+    }
+
+    expect(scoredCells(scores, OPTIONS).order).toEqual(Uint32Array.from([2]))
+  })
+
   it('leaves out the scores layer when no cell scores', () => {
     const scores = {
       positions: new Float32Array([0, 0]),

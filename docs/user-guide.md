@@ -665,7 +665,8 @@ download button next to
 it writes a local JSON dump (`diagnostics-<timestamp>.json`, for example
 `diagnostics-2026-11-17T14-05-09Z.json`)
 with current controls, active errors, diagnostics, performance budget, and
-local telemetry events. Transcript diagnostics include detected
+local telemetry events. Signed addresses (presigned URLs, SAS tokens) appear
+without their query, so the file can be shared. Transcript diagnostics include detected
 transcript capabilities, native LOD availability, current transcript controls,
 exact-budget decisions, and summarized hovered or pinned transcript/bin
 inspection state. No telemetry is sent off-device by the app.

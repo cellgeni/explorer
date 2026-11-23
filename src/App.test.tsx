@@ -1352,6 +1352,76 @@ describe('App', () => {
     }
   })
 
+  // The Visium HD batch lists only bins that express a selected gene. The
+  // selected bin, styled with the 0 of a bin missing from it, made the card's
+  // score hook update during every render until React gave up (EXP-221).
+  it('scores 0 a selected Visium HD bin the expression batch does not list', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)
+    const viewport = installAppViewportFixture()
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      overrides: {
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M'],
+          cells: new Map([['BC-1', { geneNames: ['A2M'], counts: [0] }]]),
+        })),
+        // The clicked bin is BC-1; only BC-2 expresses the gene.
+        geneExpression: vi.fn(async () => ({
+          elements: [
+            {
+              id: 'BC-2',
+              position: { x: micrometers(20), y: micrometers(5) },
+              count: 7,
+            },
+          ],
+          genes: ['A2M'],
+          maxCount: 7,
+        })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+
+      openControls('cell-card')
+      fireEvent.click(screen.getByTestId('deck-layer-spatial-grid-cells'))
+      openControls('genes')
+      fireEvent.click(
+        await within(screen.getByRole('region', { name: /^Bins/ })).findByRole('button', {
+          name: 'A2M',
+        }),
+      )
+      await waitFor(() => {
+        expect(visiumDataset.geneExpression).toHaveBeenCalled()
+      })
+      openControls('cell-card')
+      await waitFor(
+        () => {
+          expect(
+            within(screen.getByRole('region', { name: 'Bin' })).getByText('Score')
+              .nextElementSibling,
+          ).toHaveTextContent('0')
+        },
+        { timeout: 3_000 },
+      )
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

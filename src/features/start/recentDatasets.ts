@@ -73,12 +73,24 @@ export function writeRecentDatasets(
 }
 
 // Puts the dataset first, replacing an older entry for the same URL, and
-// keeps at most MAX_RECENT_DATASETS.
+// keeps at most MAX_RECENT_DATASETS. A dataset opened by a signed address
+// that the list has without a signature stays openable from it.
 export function withRecentDataset(
   recent: readonly RecentDataset[],
   dataset: RecentDataset,
 ): readonly RecentDataset[] {
-  return [dataset, ...recent.filter((entry) => entry.url !== dataset.url)].slice(
+  const openable =
+    dataset.signed === true &&
+    recent.some((entry) => entry.url === dataset.url && entry.signed !== true)
+  const first: RecentDataset = openable
+    ? {
+        url: dataset.url,
+        name: dataset.name,
+        ...(dataset.platform === undefined ? {} : { platform: dataset.platform }),
+      }
+    : dataset
+
+  return [first, ...recent.filter((entry) => entry.url !== dataset.url)].slice(
     0,
     MAX_RECENT_DATASETS,
   )

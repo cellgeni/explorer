@@ -1,3 +1,4 @@
+import { H5AD_MAX_FILE_BYTES } from './h5adFormat'
 import { ReferenceStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
 import {
@@ -503,7 +504,6 @@ const VISIUM_IMAGE_KINDS: readonly VisiumImageKind[] = ['hires', 'lowres']
 const VISIUM_LIBRARY_COLUMNS = ['library_id', 'library', 'sample']
 
 const H5AD_FETCH_TIMEOUT_MS = 60_000
-const H5AD_MAX_FILE_BYTES = 300 * 1024 * 1024
 // The groups an .h5ad file's tree walk visits. Layers, raw, the pairwise
 // matrices and uns other than the Visium layout and a SpatialData table's
 // instance key are never read, and in a file read by range each object visited

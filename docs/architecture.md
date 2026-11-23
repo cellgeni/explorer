@@ -796,6 +796,10 @@ Diagnostics in the info drawer shows the active profile with debug info on.
   dump built by `src/features/diagnostics/diagnosticsDump.ts`.
 - **Telemetry.** `telemetryEvent` (`src/data/telemetry.ts`) records events in
   memory only; they appear in the diagnostics dump and are never sent anywhere.
+  Past the profile's event limit the oldest go first, but the latest of each
+  name stays, so tile evictions while panning cannot push out the dataset
+  load and diagnostics events. `Diagnose Dataset` sends its own Range probes
+  rather than reusing the session's, so a second run sees the host as it is.
 
 ## Shareable State
 

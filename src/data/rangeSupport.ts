@@ -35,7 +35,9 @@ export async function assertHttpRangeSupport(
   )
 }
 
-async function assertHttpRangeSupportUncached(
+// One probe of its own, for a check that must see the host as it is now
+// (Diagnose Dataset), not as an earlier probe found it.
+export async function assertHttpRangeSupportUncached(
   url: string,
   options: AssertHttpRangeSupportOptions,
 ): Promise<void> {

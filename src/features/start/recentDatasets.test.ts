@@ -141,6 +141,33 @@ describe('recent datasets', () => {
     expect(recentDatasetEntry(zenodo)).toBe(zenodo)
   })
 
+  // The presigned entry had replaced the one that reopens the dataset
+  // (EXP-234).
+  it('keeps the openable entry when the dataset is opened again by a signed address', () => {
+    const storage = memoryStorage()
+    const { result } = renderHook(() => useRecentDatasets(storage))
+    const url = 'https://bucket.s3.amazonaws.com/run.h5ad'
+
+    act(() => {
+      result.current.add({ url, name: 'run', platform: 'h5ad' })
+    })
+    act(() => {
+      result.current.add({
+        url: `${url}?X-Amz-Signature=abc`,
+        name: 'run 2',
+        platform: 'h5ad',
+      })
+    })
+    act(() => {
+      result.current.add({ url: '/data/local.h5ad?token=abc', name: 'local' })
+    })
+
+    expect(result.current.recent).toEqual([
+      { url: '/data/local.h5ad', name: 'local', signed: true },
+      { url, name: 'run 2', platform: 'h5ad' },
+    ])
+  })
+
   it('keeps the list for the page when storage refuses', () => {
     const refusing = memoryStorage()
     refusing.getItem = () => {

@@ -210,7 +210,7 @@ TIFF it already holds and place it:
 
 | Field                                          | Use                                                                                                                                                                              |
 | ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Pixels@PhysicalSizeX` (+ unit)                | µm/px, from any length unit (Å to km, inches, feet; `src/data/lengthUnits.ts`). Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
+| `Pixels@PhysicalSizeX` (+ unit)                | µm/px, from any OME-XML length unit, `Mm` not `mm` (`src/data/lengthUnits.ts`). Without OME-XML the default is 0.2125 (the Xenium pixel size). TIFF resolution tags are ignored. |
 | `Pixels@PhysicalSizeY` (+ unit)                | Checked only: pixels must be square, so an image whose size differs from `PhysicalSizeX` fails with both sizes, unless a pixel size is given with it                             |
 | `Pixels@Type`                                  | Default contrast window (uint8 0–255, uint16 0–65535, float 0–1)                                                                                                                 |
 | `Channel@Name`, MapAnnotation `Purpose`        | Channel name                                                                                                                                                                     |

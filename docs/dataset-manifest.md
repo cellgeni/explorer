@@ -118,6 +118,9 @@ such as a host with a space.
 A `root` with a query string, such as a token that grants the folder, keeps
 the query on each file resolved under it:
 `https://host/run-7?token=abc` reads `https://host/run-7/cells.parquet?token=abc`.
+So does a manifest found in a folder opened with a query, such as an Azure SAS
+token: without a `root` of its own, or with a relative one, its files keep the
+folder's query.
 
 ## Source
 
@@ -462,8 +465,8 @@ How defaults combine with other settings:
   not found or not readable", so check the path rather than the host's Range
   support.
 - `Diagnose Dataset` adds a `Dataset manifest` check and checks the files at
-  their manifest locations. With a manifest, a missing `experiment.xenium` is a
-  warning instead of a failure.
+  their manifest locations. With a manifest, a missing `experiment.xenium` or
+  Atera `experiment.spatial` is a warning instead of a failure.
 
 ## Editor Support
 

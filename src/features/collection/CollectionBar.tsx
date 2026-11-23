@@ -23,7 +23,6 @@ import {
 } from '../../datasets/datasetCollection'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
-import { colorsForAnnotations } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_RANGE,
@@ -167,6 +166,10 @@ export function CollectionBar({
     )
   }, [])
   const annotations = previews?.annotations ?? null
+  const classColors =
+    annotations === null
+      ? NO_CLASS_COLORS
+      : (store?.classColors(annotations.colors) ?? annotations.colors)
   const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
   // Only the previews in view, and a little beyond, are read.
@@ -441,6 +444,7 @@ export function CollectionBar({
                             scalePercentile={sharedScale ? null : scalePercentile}
                             onDrawnTop={reportDrawnTop}
                             annotations={annotations}
+                            classColors={classColors}
                           />
                           <span className="collection-bar-dataset-name">{label}</span>
                           {stat === null ? null : (
@@ -496,6 +500,7 @@ function CollectionPreview({
   scalePercentile,
   onDrawnTop,
   annotations,
+  classColors,
 }: {
   readonly entry: PreviewEntry | null
   readonly url: string
@@ -507,6 +512,7 @@ function CollectionPreview({
   readonly scalePercentile: number | null
   readonly onDrawnTop: (url: string, top: number) => void
   readonly annotations: CollectionBarAnnotations | null
+  readonly classColors: Readonly<Record<string, string>>
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const size = usePreviewSize(canvasRef)
@@ -517,18 +523,17 @@ function CollectionPreview({
     if (annotations !== null) {
       if (classes === null) return null
 
-      const colors = colorsForAnnotations(classes.classes, annotations.colors)
       return {
         kind: 'classes',
         classOf: shownClassOf(classes, annotations.hiddenIds),
         colors: classes.classes.map(({ id }) =>
-          annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
+          annotations.hiddenIds.has(id) ? null : (classColors[id] ?? null),
         ),
       }
     }
 
     return scores === null ? null : { kind: 'scores', scores }
-  }, [annotations, classes, scores])
+  }, [annotations, classColors, classes, scores])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -666,3 +671,4 @@ function collectionFileName(url: string): string {
 }
 
 const NO_ENTRIES: readonly DatasetCollectionEntry[] = []
+const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}

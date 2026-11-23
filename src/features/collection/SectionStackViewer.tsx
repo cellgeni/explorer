@@ -73,6 +73,7 @@ interface StackHover {
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
 const DEFAULT_SIZE = { width: 800, height: 600 }
 const NO_GENES: readonly string[] = []
+const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}
 const PICKING_RADIUS_PIXELS = 6
 
 export function SectionStackViewer({
@@ -104,6 +105,11 @@ export function SectionStackViewer({
   const previews = useSyncExternalStore(store?.subscribe ?? noSubscription, readPreviews)
   const { annotations, colorScale, scaleRange } = coloring
   const genes = annotations === null ? coloring.genes : NO_GENES
+  // Read with the previews, whose version it follows.
+  const classColors =
+    annotations === null
+      ? NO_CLASS_COLORS
+      : (store?.classColors(annotations.colors) ?? annotations.colors)
   const colored = annotations !== null || genes.length > 0
   const percentile = geneScalePercentile(scaleRange)
   const sharedScale = typeof scaleRange.max === 'number'
@@ -124,13 +130,13 @@ export function SectionStackViewer({
   const colorings = useMemo(
     () =>
       previews.map((preview) => {
-        const overlay = sectionOverlay(preview, { genes, annotations })
+        const overlay = sectionOverlay(preview, { genes, annotations, classColors })
         const top = overlay?.kind === 'scores' ? ownTop(overlay.scores, percentile) : 0
         const { min, max } = geneScaleBounds(scaleRange, top)
 
         return { overlay, scaleMin: min, scaleMax: max }
       }),
-    [annotations, genes, percentile, previews, scaleRange],
+    [annotations, classColors, genes, percentile, previews, scaleRange],
   )
   const inputs = useMemo(
     (): readonly (StackSectionInput | null)[] =>

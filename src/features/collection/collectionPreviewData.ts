@@ -68,6 +68,8 @@ export interface PreviewScores {
 export interface PreviewClass {
   readonly id: string
   readonly label: string
+  // The colour the dataset stores for the class, if any.
+  readonly color?: string
   // Every cell of the class, drawn or not.
   readonly cellCount: number
 }
@@ -381,7 +383,8 @@ function previewScores(
     positions[index * 2] = element.position.x
     positions[index * 2 + 1] = element.position.y
     values[index] = score
-    maxScore = Math.max(maxScore, score)
+    // A stored NaN or infinity is no score, as in the main view.
+    if (Number.isFinite(score)) maxScore = Math.max(maxScore, score)
 
     if (depths !== null) {
       const cell = cellIndex?.get(element.id)
@@ -433,9 +436,10 @@ function previewClasses(
   })
 
   return {
-    classes: annotations.map(({ id, label, cellIds }) => ({
+    classes: annotations.map(({ id, label, color, cellIds }) => ({
       id,
       label,
+      ...(color === undefined ? {} : { color }),
       cellCount: cellIds.length,
     })),
     classOf,

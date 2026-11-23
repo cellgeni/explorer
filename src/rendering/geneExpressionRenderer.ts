@@ -476,12 +476,26 @@ function pointBinKey(x: number, y: number, binMicrometers: number): string {
   return `${Math.floor(x / binMicrometers)}:${Math.floor(y / binMicrometers)}`
 }
 
-// Whether a bin's centre lies in `bbox` (data µm, y down), as a read covers it.
-export function gridCellCenterInBbox(cell: GridCellDatum, bbox: BBox): boolean {
-  const [x = 0, deckY = 0] = gridCellCenterPosition(cell)
-  const y = -deckY
+// Whether any part of a bin lies in `bbox` (data µm, y down), as a read
+// selects the bins it scores (`gridCellIntersectsBbox`).
+export function gridCellOverlapsBbox(cell: GridCellDatum, bbox: BBox): boolean {
+  if (cell.polygon.length === 0) {
+    return false
+  }
 
-  return x >= bbox.minX && x <= bbox.maxX && y >= bbox.minY && y <= bbox.maxY
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+
+  for (const [x = 0, deckY = 0] of cell.polygon) {
+    minX = Math.min(minX, x)
+    maxX = Math.max(maxX, x)
+    minY = Math.min(minY, -deckY)
+    maxY = Math.max(maxY, -deckY)
+  }
+
+  return maxX >= bbox.minX && minX <= bbox.maxX && maxY >= bbox.minY && minY <= bbox.maxY
 }
 
 function gridCellCenterPosition(cell: GridCellDatum): Position {

@@ -377,7 +377,9 @@ export function parseDatasetManifest(
     )
   }
 
-  const manifestFolderUrl = parentUrl(manifestUrl)
+  // The manifest's folder keeps the manifest address's query: a host that
+  // grants the folder by query (an Azure SAS token) wants it on every file.
+  const manifestFolderUrl = `${parentUrl(manifestUrl)}${new URL(manifestUrl).search}`
   const root = optionalPath(json, 'root', '', fail)
   const rootUrl =
     root === undefined

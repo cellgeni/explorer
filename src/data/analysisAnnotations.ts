@@ -1,9 +1,10 @@
-import { ZipFileStore } from '@zarrita/storage'
+import type { ZipFileStore } from '@zarrita/storage'
 import * as zarr from 'zarrita'
-import { intToCellId } from './cellid'
+import { xeniumCellIdText } from './cellid'
 import type { CellId } from './cellid'
 import type { Annotation, AnnotationGroupOption } from './annotation'
-import { getWholeArray } from '../zarr/zarrWholeArray'
+import { cellFeatureMatrixRowIds } from './gex'
+import { cachedZipFileStoreFromUrl } from '../zarr/cachedZipStore'
 
 export interface AnalysisGroupingArrays {
   readonly groupingIndex?: number
@@ -118,42 +119,40 @@ async function readAnalysisGroupings(
     options.groupId,
     metadata.groupingCount,
   )
-  const groupings: AnalysisGroupingArrays[] = []
+  const groupingIndexes = Array.from(
+    { length: metadata.groupingCount },
+    (_, groupingIndex) => groupingIndex,
+  ).filter(
+    (groupingIndex) =>
+      selectedGroupingIndexes === null || selectedGroupingIndexes.has(groupingIndex),
+  )
 
-  for (
-    let groupingIndex = 0;
-    groupingIndex < metadata.groupingCount;
-    groupingIndex += 1
-  ) {
-    if (selectedGroupingIndexes !== null && !selectedGroupingIndexes.has(groupingIndex)) {
-      continue
-    }
+  // Each grouping is several requests in a row, so they are read together:
+  // "All" on a Xenium run is ten.
+  return Promise.all(
+    groupingIndexes.map(async (groupingIndex): Promise<AnalysisGroupingArrays> => {
+      const group = await zarr.open(metadata.cellGroups.resolve(String(groupingIndex)), {
+        kind: 'group',
+      })
+      const read = async (name: 'indptr' | 'indices') => {
+        const array = await zarr.open(group.resolve(name), { kind: 'array' })
+        return expectNumericIndexArray(
+          (await zarr.get(array, [null])).data,
+          `cell_groups/${groupingIndex}/${name}`,
+        )
+      }
+      const [indptr, indices] = await Promise.all([read('indptr'), read('indices')])
 
-    const group = await zarr.open(metadata.cellGroups.resolve(String(groupingIndex)), {
-      kind: 'group',
-    })
-    const indptrArray = await zarr.open(group.resolve('indptr'), { kind: 'array' })
-    const indicesArray = await zarr.open(group.resolve('indices'), { kind: 'array' })
-    const indptr = expectNumericIndexArray(
-      (await zarr.get(indptrArray, [null])).data,
-      `cell_groups/${groupingIndex}/indptr`,
-    )
-    const indices = expectNumericIndexArray(
-      (await zarr.get(indicesArray, [null])).data,
-      `cell_groups/${groupingIndex}/indices`,
-    )
-
-    groupings.push({
-      groupingIndex,
-      groupingName:
-        metadata.groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`,
-      groupNames: metadata.groupNames[groupingIndex] ?? [],
-      indptr,
-      indices,
-    })
-  }
-
-  return groupings
+      return {
+        groupingIndex,
+        groupingName:
+          metadata.groupingNames[groupingIndex] ?? `Grouping ${groupingIndex + 1}`,
+        groupNames: metadata.groupNames[groupingIndex] ?? [],
+        indptr,
+        indices,
+      }
+    }),
+  )
 }
 
 async function readAnalysisGroupingMetadata(analysisUrl: string): Promise<{
@@ -162,7 +161,9 @@ async function readAnalysisGroupingMetadata(analysisUrl: string): Promise<{
   readonly groupNames: readonly (readonly string[])[]
   readonly groupingCount: number
 }> {
-  const store = ZipFileStore.fromUrl(analysisUrl)
+  // As the matrix is read: HEAD falls back to a one-byte GET on hosts that
+  // allow GET only, and ranges go through the persistent byte-range cache.
+  const store = cachedZipFileStoreFromUrl(analysisUrl)
   const root = await zarr.open(store, { kind: 'group' })
   const cellGroups = await zarr.open(root.resolve('cell_groups'), { kind: 'group' })
   const groupingNames = readStringArrayAttribute(cellGroups.attrs, 'grouping_names')
@@ -180,28 +181,28 @@ async function readAnalysisGroupingMetadata(analysisUrl: string): Promise<{
   }
 }
 
+// The matrix's cell ID per row, from the cell IDs the gene reads keep for
+// the matrix, built from character codes: intToCellId took about 0.85 s for
+// the demo's 1.4 million cells on every set load.
 async function readCellIdsByMatrixRow(matrixUrl: string): Promise<readonly CellId[]> {
-  const store = ZipFileStore.fromUrl(matrixUrl)
-  const root = await zarr.open(store, { kind: 'group' })
-  const cellFeatures = await zarr.open(root.resolve('cell_features'), { kind: 'group' })
-  const cellIdArray = await zarr.open(cellFeatures.resolve('cell_id'), {
-    kind: 'array',
-  })
-  const cellIdChunk = await getWholeArray(cellIdArray)
-  const cellIdData = expectUint32Array(cellIdChunk.data, 'cell_features/cell_id')
-  const rowCount = readShapeDimension(cellIdArray.shape, 0, 'cell_features/cell_id')
-  const stride = cellIdArray.shape[1] ?? 2
-  const cellIds: CellId[] = []
+  const rowIds = await cellFeatureMatrixRowIds(matrixUrl)
 
-  for (let row = 0; row < rowCount; row += 1) {
-    const prefix = cellIdData[row * stride]
-    const suffix = cellIdData[row * stride + 1]
+  if (Array.isArray(rowIds)) {
+    return rowIds as readonly CellId[]
+  }
+
+  const { pairs, stride, count } = rowIds as Exclude<typeof rowIds, readonly string[]>
+  const cellIds = new Array<CellId>(count)
+
+  for (let row = 0; row < count; row += 1) {
+    const prefix = pairs[row * stride]
+    const suffix = pairs[row * stride + 1]
 
     if (prefix === undefined || suffix === undefined) {
       throw new Error(`cell_features/cell_id row ${row} is incomplete.`)
     }
 
-    cellIds.push(intToCellId(prefix, suffix))
+    cellIds[row] = xeniumCellIdText(prefix, suffix) as CellId
   }
 
   return cellIds
@@ -301,28 +302,6 @@ function readNumberAttribute(
 
   if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
     throw new Error(`Expected analysis.zarr attribute ${key} to be a count.`)
-  }
-
-  return value
-}
-
-function readShapeDimension(
-  shape: readonly number[],
-  index: number,
-  label: string,
-): number {
-  const value = shape[index]
-
-  if (value === undefined || !Number.isInteger(value) || value < 0) {
-    throw new Error(`Expected ${label} shape[${index}] to be a non-negative integer.`)
-  }
-
-  return value
-}
-
-function expectUint32Array(value: unknown, label: string): Uint32Array {
-  if (!(value instanceof Uint32Array)) {
-    throw new Error(`Expected ${label} to be a Uint32Array.`)
   }
 
   return value
