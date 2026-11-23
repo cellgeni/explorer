@@ -73,6 +73,15 @@ export function customAnnotationImportOnMap(
   return { ...imported, annotations, metadataTracks }
 }
 
+// A file the importer cannot read as labels: its format or columns, not the
+// address it came from.
+export class AnnotationFileFormatError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options)
+    this.name = 'AnnotationFileFormatError'
+  }
+}
+
 export function parseCustomAnnotations(
   text: string,
   fileName = 'annotations',
@@ -105,7 +114,13 @@ interface CustomAnnotationEntry {
 }
 
 function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationImport {
-  const value: unknown = JSON.parse(text)
+  let value: unknown
+
+  try {
+    value = JSON.parse(text)
+  } catch (cause) {
+    throw new AnnotationFileFormatError(`${fileName} is not valid JSON.`, { cause })
+  }
 
   if (Array.isArray(value)) {
     return {
@@ -121,7 +136,7 @@ function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationI
     }
   }
 
-  throw new Error('JSON annotations must be an array or an object.')
+  throw new AnnotationFileFormatError('JSON annotations must be an array or an object.')
 }
 
 function annotationsFromJsonRows(
@@ -133,7 +148,7 @@ function annotationsFromJsonRows(
 
   for (const row of rows) {
     if (!isRecord(row)) {
-      throw new Error('JSON annotation rows must be objects.')
+      throw new AnnotationFileFormatError('JSON annotation rows must be objects.')
     }
 
     const label = readStringField(row, ['label', 'annotation', 'group', 'cluster'])
@@ -147,7 +162,7 @@ function annotationsFromJsonRows(
     const cellId = readStringField(row, ['cell_id', 'cellId', 'cell'])
 
     if (label === undefined || cellId === undefined) {
-      throw new Error(
+      throw new AnnotationFileFormatError(
         'JSON annotation rows need label plus cell_id, or label plus cellIds.',
       )
     }
@@ -169,14 +184,16 @@ function annotationsFromJsonRecord(
 
   for (const [label, value] of Object.entries(record)) {
     if (!Array.isArray(value)) {
-      throw new Error('JSON annotation object values must be cell-id arrays.')
+      throw new AnnotationFileFormatError(
+        'JSON annotation object values must be cell-id arrays.',
+      )
     }
 
     annotations.push({
       label,
       cellIds: value.map((cellId) => {
         if (typeof cellId !== 'string') {
-          throw new Error('JSON annotation cell ids must be strings.')
+          throw new AnnotationFileFormatError('JSON annotation cell ids must be strings.')
         }
 
         return asAnyCellId(cellId)
@@ -188,22 +205,25 @@ function annotationsFromJsonRecord(
 }
 
 function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationImport {
-  const rows = parseCsvRows(text)
+  const rows = parseCsvRows(text, csvDelimiter(text))
   const header = rows[0]
 
   if (header === undefined) {
     return { annotations: [], metadataTracks: [] }
   }
 
-  const cellIdIndex = header.findIndex((column) =>
-    ['cell_id', 'cellid', 'cell'].includes(column.trim().toLowerCase()),
-  )
+  const cellIdIndex = header.findIndex(isCellIdColumn)
   const labelIndex = header.findIndex((column) =>
     ['label', 'annotation', 'group', 'cluster'].includes(column.trim().toLowerCase()),
   )
 
   if (cellIdIndex < 0) {
-    throw new Error('CSV annotations need a cell_id column.')
+    throw new AnnotationFileFormatError(
+      `CSV annotations need a cell_id, cellid or cell column; ${fileName} has ${header
+        .slice(0, 8)
+        .map((column) => `"${column.trim()}"`)
+        .join(', ')}${header.length > 8 ? ', …' : ''}.`,
+    )
   }
 
   return parseCsvWideAnnotations(
@@ -263,7 +283,9 @@ function parseCsvWideAnnotations(
     )
 
   if (annotationColumns.length === 0 && labelIndex === undefined) {
-    throw new Error('CSV annotations need cell_id plus label or annotation columns.')
+    throw new AnnotationFileFormatError(
+      'CSV annotations need cell_id plus label or annotation columns.',
+    )
   }
 
   const annotations: CustomAnnotationEntry[] =
@@ -334,7 +356,7 @@ function parseCsvWideAnnotations(
     metadataTracks.length === 0 &&
     skippedColumns.length > 0
   ) {
-    throw new Error(
+    throw new AnnotationFileFormatError(
       `No column groups the cells: ${skippedColumnsText(skippedColumns)} would each have more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes.`,
     )
   }
@@ -462,9 +484,30 @@ function isNoNumberText(value: string): boolean {
   )
 }
 
-// Drops the `'` our CSV exports put before a field a spreadsheet would run as a
-// formula (`formatCsv`), so an exported file imports as it was.
-function parseCsvRows(text: string): readonly (readonly string[])[] {
+function isCellIdColumn(column: string): boolean {
+  return ['cell_id', 'cellid', 'cell'].includes(column.trim().toLowerCase())
+}
+
+// Comma, else a tab or semicolon when the header splits on one into a cell ID
+// column (tab-separated files, and spreadsheets saved where `,` is the
+// decimal mark).
+function csvDelimiter(text: string): string {
+  const header = text.slice(0, text.search(/\r|\n|$/))
+
+  return (
+    [',', '\t', ';'].find((delimiter) =>
+      header
+        .split(delimiter)
+        .some((column) => isCellIdColumn(column.replace(/^"|"$/g, ''))),
+    ) ?? ','
+  )
+}
+
+// RFC 4180: a `"` opens a quoted field only at its start, so `5" slide` is
+// read as written. Drops the `'` our CSV exports put before a field a
+// spreadsheet would run as a formula (`formatCsv`), so an exported file
+// imports as it was.
+function parseCsvRows(text: string, delimiter = ','): readonly (readonly string[])[] {
   const rows: string[][] = []
   let row: string[] = []
   let field = ''
@@ -474,24 +517,30 @@ function parseCsvRows(text: string): readonly (readonly string[])[] {
     const char = text[index]
     const nextChar = text[index + 1]
 
-    if (char === '"' && inQuotes && nextChar === '"') {
-      field += '"'
-      index += 1
+    if (inQuotes) {
+      if (char === '"' && nextChar === '"') {
+        field += '"'
+        index += 1
+      } else if (char === '"') {
+        inQuotes = false
+      } else {
+        field += char
+      }
       continue
     }
 
-    if (char === '"') {
-      inQuotes = !inQuotes
+    if (char === '"' && field.length === 0) {
+      inQuotes = true
       continue
     }
 
-    if (char === ',' && !inQuotes) {
+    if (char === delimiter) {
       row.push(withoutCsvFormulaGuard(field))
       field = ''
       continue
     }
 
-    if ((char === '\n' || char === '\r') && !inQuotes) {
+    if (char === '\n' || char === '\r') {
       if (char === '\r' && nextChar === '\n') {
         index += 1
       }
@@ -569,6 +618,7 @@ function appendGroupedCell(
   grouped.set(label, existing)
 }
 
+// Text, or a number written as text (cluster 3, instance ID 17).
 function readStringField(
   record: Readonly<Record<string, unknown>>,
   keys: readonly string[],
@@ -578,6 +628,10 @@ function readStringField(
 
     if (typeof value === 'string') {
       return value
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return String(value)
     }
   }
 
@@ -596,7 +650,7 @@ function readCellIdArrayField(
     }
 
     if (!Array.isArray(value) || !value.every((cellId) => typeof cellId === 'string')) {
-      throw new Error(`${key} must be an array of cell-id strings.`)
+      throw new AnnotationFileFormatError(`${key} must be an array of cell-id strings.`)
     }
 
     return value.map((cellId) => asAnyCellId(cellId))

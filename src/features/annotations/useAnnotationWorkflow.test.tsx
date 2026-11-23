@@ -375,6 +375,58 @@ describe('useAnnotationWorkflow', () => {
     }
   })
 
+  it('fetches a GitHub file whose path has a space or accent at its raw address', async () => {
+    const fetcher = vi.fn(async () => new Response('cell_id,label\naaaaaaaa-1,A'))
+    vi.stubGlobal('fetch', fetcher)
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotationUrl(
+        'https://github.com/o/r/blob/main/labels/my labels é.csv',
+      )
+    })
+
+    expect(fetcher).toHaveBeenCalledWith(
+      'https://raw.githubusercontent.com/o/r/main/labels/my%20labels%20%C3%A9.csv',
+      expect.anything(),
+    )
+  })
+
+  it('names a file it cannot read as labels, not the address', async () => {
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File(['barcode,label\nx,A'], 'wrong.csv', { type: 'text/csv' }),
+      )
+    })
+
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toMatchObject({
+      code: 'unsupported',
+      title: 'Annotation file not read',
+      message:
+        'CSV annotations need a cell_id, cellid or cell column; wrong.csv has "barcode", "label".',
+    })
+  })
+
   it('imports custom annotations from a URL', async () => {
     const cellId = asCellId('aaaaaaaa-1')
     const fetcher = vi.fn(async () => new Response(`cell_id,label\n${cellId},Remote ROI`))
@@ -504,9 +556,9 @@ describe('useAnnotationWorkflow', () => {
       source: 'Annotations',
       code: 'size-limit',
       title: 'Annotation file too large',
-      message: 'all-cells.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
+      message: 'all-cells.csv is 250.5 MiB, above the 100 MiB limit for annotation URLs.',
       action:
-        'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
+        'The file was not read. Use a file of 100 MiB or smaller, such as one with fewer columns, or split the labels into several files.',
     })
     expect(snapshot.debugMessages).toContain('Annotation URL import failed')
   })

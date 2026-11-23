@@ -149,7 +149,7 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
         id={importInputId}
         className="visually-hidden-file"
         type="file"
-        accept=".csv,.json,application/json,text/csv"
+        accept=".csv,.tsv,.txt,.json,application/json,text/csv,text/tab-separated-values"
         disabled={!loadEnabled}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0] ?? null

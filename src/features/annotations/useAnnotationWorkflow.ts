@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import {
+  AnnotationFileFormatError,
   customAnnotationImportOnMap,
   customCellMetadataFilePrefix,
   IMPORTED_COLUMN_CLASS_LIMIT,
@@ -815,7 +816,18 @@ function annotationImportError(error: unknown): StructuredLoadError {
       title: 'Annotation file too large',
       message: error.message,
       action:
-        'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
+        'The file was not read. Use a file of 100 MiB or smaller, such as one with fewer columns, or split the labels into several files.',
+    }
+  }
+
+  if (error instanceof AnnotationFileFormatError) {
+    return {
+      source: 'Annotations',
+      code: 'unsupported',
+      title: 'Annotation file not read',
+      message: error.message,
+      action:
+        'Check the file: CSV or TSV with a cell_id column and a label column or columns of classes, or JSON rows or {label: [cell IDs]}.',
     }
   }
 
@@ -933,10 +945,9 @@ function normalizeAnnotationFetchUrl(url: URL): URL {
     return url
   }
 
+  // The segments of `url.pathname` are already percent-encoded.
   return new URL(
-    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathParts
-      .map(encodeURIComponent)
-      .join('/')}`,
+    `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${pathParts.join('/')}`,
   )
 }
 
