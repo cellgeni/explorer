@@ -26,6 +26,7 @@ import type { PreviewScores } from './collectionPreviewData'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import type { LinkedSectionsColoring } from './LinkedSections'
 import { sectionOverlay } from './linkedSectionLayers'
+import { useFocusHandOff } from './useFocusHandOff'
 import {
   SECTION_STACK_VIEW,
   sectionStackLayers,
@@ -73,6 +74,7 @@ interface StackHover {
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
 const DEFAULT_SIZE = { width: 800, height: 600 }
 const NO_GENES: readonly string[] = []
+const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}
 const PICKING_RADIUS_PIXELS = 6
 
 export function SectionStackViewer({
@@ -85,6 +87,7 @@ export function SectionStackViewer({
   onClose,
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
+  useFocusHandOff(containerRef)
   // The canvas host, hidden from assistive technology, whose deck.gl root
   // leaves the tab order once loaded.
   const canvasHostRef = useRef<HTMLDivElement>(null)
@@ -104,6 +107,11 @@ export function SectionStackViewer({
   const previews = useSyncExternalStore(store?.subscribe ?? noSubscription, readPreviews)
   const { annotations, colorScale, scaleRange } = coloring
   const genes = annotations === null ? coloring.genes : NO_GENES
+  // Read with the previews, whose version it follows.
+  const classColors =
+    annotations === null
+      ? NO_CLASS_COLORS
+      : (store?.classColors(annotations.colors) ?? annotations.colors)
   const colored = annotations !== null || genes.length > 0
   const percentile = geneScalePercentile(scaleRange)
   const sharedScale = typeof scaleRange.max === 'number'
@@ -124,13 +132,13 @@ export function SectionStackViewer({
   const colorings = useMemo(
     () =>
       previews.map((preview) => {
-        const overlay = sectionOverlay(preview, { genes, annotations })
+        const overlay = sectionOverlay(preview, { genes, annotations, classColors })
         const top = overlay?.kind === 'scores' ? ownTop(overlay.scores, percentile) : 0
         const { min, max } = geneScaleBounds(scaleRange, top)
 
         return { overlay, scaleMin: min, scaleMax: max }
       }),
-    [annotations, genes, percentile, previews, scaleRange],
+    [annotations, classColors, genes, percentile, previews, scaleRange],
   )
   const inputs = useMemo(
     (): readonly (StackSectionInput | null)[] =>
@@ -170,7 +178,12 @@ export function SectionStackViewer({
           ],
     [depthScale, frame],
   )
-  const shownViewState = viewState ?? fittedVolumeViewState(extent, size ?? DEFAULT_SIZE)
+  // The same object while nothing moves: a new one on each render (each
+  // hover) made deck.gl redraw every cell.
+  const shownViewState = useMemo(
+    () => viewState ?? fittedVolumeViewState(extent, size ?? DEFAULT_SIZE),
+    [extent, size, viewState],
+  )
   const handleHover = useCallback(
     (info: PickingInfo) => {
       if (!hoverTooltips) return
@@ -352,6 +365,11 @@ export function SectionStackViewer({
             {status.missing}
           </p>
         )}
+        {status.uncolored === null ? null : (
+          <p className="viewport-message" aria-live="polite">
+            {status.uncolored}
+          </p>
+        )}
       </div>
       {hover === null || !hoverTooltips ? null : (
         <div
@@ -409,7 +427,9 @@ function ownTop(scores: PreviewScores, percentile: number): number {
 }
 
 function formatDepth(z: number): string {
-  return Number(z.toFixed(1)).toLocaleString()
+  const rounded = Number(z.toFixed(1))
+  // -0.04 rounds to -0, which toLocaleString writes "-0".
+  return (rounded === 0 ? 0 : rounded).toLocaleString()
 }
 
 function formatDepthScale(scale: number): string {

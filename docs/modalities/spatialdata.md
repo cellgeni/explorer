@@ -403,9 +403,13 @@ nucleus checkbox shown only when `summary().nuclei` names an element
 - A zipped store needs consolidated metadata like any other. Deflated zip
   entries are read whole, so a compressed `shapes.parquet` is downloaded in
   full before any of it is parsed.
-- Over HTTP, diagnostics send a `HEAD` for the first 2,000 table chunks and
-  check only the first chunk of the coarsest level of the image and of each
-  labels region. A zipped store has every chunk checked against its
+- Over HTTP, diagnostics send a `HEAD` for the first 2,000 table chunks,
+  those of string arrays (`obs/_index`, `var/_index` and other text columns)
+  first, since the viewer cannot read a table with one of them missing. The
+  total in the message counts every chunk of the table. They check only the
+  first chunk of the coarsest level of the image and of each labels region.
+  An Icechunk repository keeps chunks where its manifests say, so its first
+  200 table chunks are read through the repository instead. A zipped store has every chunk checked against its
   directory; image and labels chunks absent only from finer levels pass with
   a note, as writers such as zarr-python 3 skip empty chunks (304 of 1,148 in
   the 460-plex image).

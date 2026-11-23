@@ -7,7 +7,9 @@ import {
   openPreviewSource,
   PREVIEW_MAX_WHOLE_FILE_BYTES,
   PreviewUnavailableError,
+  shownClassOf,
   type CollectionPreviewLoaders,
+  type PreviewClasses,
 } from './collectionPreviewData'
 
 const URL_A = 'https://example.test/a.zarr'
@@ -88,6 +90,22 @@ describe('openPreviewSource', () => {
     const scores = await source.scores(cells, ['Aqp4', 'Gfap'], 'mean')
     expect([...scores.scores]).toEqual([1, 3])
     expect(scores.maxScore).toBe(3)
+
+    // A stored NaN is no score, so the highest is that of the others
+    // (EXP-241).
+    geneExpression.mockResolvedValueOnce({
+      genes: ['Aqp4'],
+      maxCount: 5,
+      elements: [
+        {
+          id: 'a',
+          position: { x: micrometers(0), y: micrometers(0) },
+          count: Number.NaN,
+        },
+        { id: 'b', position: { x: micrometers(10), y: micrometers(4) }, count: 5 },
+      ],
+    })
+    expect((await source.scores(cells, ['Aqp4'], 'sum')).maxScore).toBe(5)
     // Every cell: the query box is the cells' bounds and a little more.
     const [bbox, genes] = geneExpression.mock.calls[0] as unknown as [
       { minX: number; maxX: number; minY: number; maxY: number },
@@ -319,7 +337,7 @@ describe('openPreviewSource', () => {
           ),
         ),
       ),
-    ).toBe('64 MB file, read when opened')
+    ).toBe('64 MiB file, read when opened')
     expect(fetchImpl).toHaveBeenCalledWith('https://example.test/big.h5ad', {
       method: 'HEAD',
     })
@@ -366,5 +384,27 @@ describe('openPreviewSource', () => {
       )
       expect((await source.cells()).positions).toHaveLength(2)
     }
+  })
+})
+
+// A cell in a hidden class and a shown one took its first class, hidden or
+// not (EXP-243).
+describe('shownClassOf', () => {
+  const classes: PreviewClasses = {
+    classes: [
+      { id: 'celltype:T', label: 'T', cellCount: 1 },
+      { id: 'cluster:5', label: '5', cellCount: 2 },
+    ],
+    classOf: Int32Array.from([0, 1, -1]),
+    members: [Uint32Array.of(0), Uint32Array.of(0, 1)],
+  }
+
+  it('gives each cell the first class listing it that is shown', () => {
+    expect(shownClassOf(classes, new Set())).toBe(classes.classOf)
+    expect([...shownClassOf(classes, new Set(['celltype:T']))]).toEqual([1, 1, -1])
+    expect([...shownClassOf(classes, new Set(['cluster:5']))]).toEqual([0, -1, -1])
+    expect(shownClassOf(classes, new Set(['celltype:T']))).toBe(
+      shownClassOf(classes, new Set(['celltype:T'])),
+    )
   })
 })

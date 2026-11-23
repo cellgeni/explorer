@@ -72,7 +72,9 @@ from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
   carries a signature or token (S3 or Google Cloud presigned, CloudFront or
   Azure SAS signatures, `token=`) is kept without its query string and listed
   without a link, marked "signed address not kept": open it again from its
-  full address.
+  full address. This holds for addresses on the viewer's own site
+  (`/data/run.h5ad?token=…`) too. Opening a listed dataset again by a signed
+  address keeps its entry openable.
 - **Examples**: a card per entry of `examples/index.json` with name,
   platform, description, and source and licence (the source links to the
   repository). A collection's card says `Collection of {n} datasets` in place
@@ -125,7 +127,7 @@ the canvas, a `nav` named "Collection":
   or all share the Gene scale's range when its top is a score. When it is annotations, the cells of each class in its
   colour, and cells of hidden classes a faint grey. A line runs along its foot while it is read. Instead of a
   preview: "Loading…", "No cells to preview" (images, Visium HD), "{size}
-  MB file, read when opened" (a plain `.h5ad` over 64 MiB), or "Preview
+  MiB file, read when opened" (a plain `.h5ad` over 64 MiB), or "Preview
   failed" with the reason as its tooltip.
 - `Expand` (arrows out, `aria-expanded`), next to "Collection", lays the
   previews out as a grid over the canvas, with the heading and buttons
@@ -151,15 +153,19 @@ the canvas, a `nav` named "Collection":
   main view, or closes it. Disabled, with a tooltip saying so, while three
   are shown. A shown section's button has an accent border.
 - `Close Collection` (×) removes the bar, `collection=`,
-  `collectionView=`, `collectionPreviewSize=` and `compare=` from the
-  address; the open dataset stays.
+  `collectionView=`, `collectionPreviewSize=`, `compare=` and
+  `sectionView=` from the address; the open dataset stays.
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
 
 `useDatasetCollection` (`src/features/collection/useDatasetCollection.ts`)
-reads the collection, opens its first dataset when the link names none, and
-closes the collection when a dataset outside it loads. The top bar shows the
+reads the collection, opens its first dataset when the link names none
+(unless one was opened while it was read, which stays open), and closes the
+collection when a dataset outside it loads. Addresses are compared as the
+browser reads them, so `sham b.zarr` and `sham%20b.zarr`, or a host in
+capitals, are one entry. The dataset marked as loading is the one being
+opened, whatever the address field holds meanwhile. The top bar shows the
 entry's `name` when the dataset has no manifest name.
 
 Previews are read by `CollectionPreviewStore`
@@ -179,7 +185,9 @@ top centre. Each panel (`LinkedSections`, a `region` named after the section)
 has a pill at its top centre with the name, its top or highest score, `Open`
 and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
 preview, or "Could not be read". Hovering a cell shows a small label with its
-ID and class, or the gene and score.
+ID and class, or the gene and score. Closing a panel, or opening its section,
+hands keyboard focus back to the control that showed it, or else to the
+canvas.
 
 The main view and the panels share one camera through `LinkedViewChannel`
 (`src/components/linkedView.ts`): each publishes its view as it changes and
@@ -746,7 +754,8 @@ Method:
   analysis.
 
 Exports: `{name}` in a file name is the selection's name with its letters and
-digits in any script, accents dropped. `Export GeoJSON` (`{name}-roi.geojson`:
+digits in any script, accents on Latin, Greek and Cyrillic letters dropped;
+other scripts keep the marks that are part of their letters (`がん`, `हिन्दी`). `Export GeoJSON` (`{name}-roi.geojson`:
 the selection's polygon with its name in `name`, as QuPath and Import GeoJSON
 read it, and `objectType` `annotation`; the dataset URL, without a presigned
 URL's signature; the cell or barcode count and the time of export,
@@ -1142,7 +1151,10 @@ cells, z 0 to 780 µm").
 | `2D View`     | Button                         |                                          | Returns to the 2D view, which kept its place                                              |
 
 Hovering a cell gives its z and the cell and its class, or its score. While
-the cells or what colours them are read, the status says so.
+the cells or what colours them are read, the status says so; a section whose
+cells were read but whose colours could not be is drawn grey and named under
+"Colours could not be read". `2D View` hands keyboard focus back to the
+control that opened the view, or else to the canvas.
 
 ### Legend
 
@@ -1569,12 +1581,13 @@ deposit, followed by the licence and citation.
 `Diagnose Dataset` runs `runDatasetDiagnostics` for the URL; the download icon
 saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
 `generatedAt` in UTC to the second with `-` for `:` (for example
-`diagnostics-2026-11-17T14-05-09Z.json`). Then
+`diagnostics-2026-11-17T14-05-09Z.json`). A signed address loses its query
+wherever the dump has it, the page address's `#dataset=` included. Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Diagnostics           | Per-check pass / warning / fail with a summary line                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Diagnostics           | Per-check pass / warning / fail with a summary line. An address with no dataset says why, as Load issues does (no file found, no response, an error status, or files the app does not read); a GET check that fails without a response on a host that hides its error responses names the file as most likely missing                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | Data access notes (n) | Closed by default. Holds the Matrix Warning (Xenium `cell_feature_matrix.zarr.zip` has no CSC arrays, so ROI gene stats use the slower H5 path) and Fallbacks (up to 16 notices when a slower or partial path was used, plus "Zarr decoding" while Zarr chunks are decoded on the main thread because the decode workers failed, until reload)                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Load issues           | Structured errors from any workflow (`role="alert"`). A dataset that does not load says why: "Dataset not found" (every file checked is absent: HTTP 404, 403 from buckets that deny listing, or left out of the folder listing), "Access denied" (401), "Request blocked" (no response: CORS or network; for `http://` data opened from an HTTPS site it says how to allow the read or avoid it), "Host not responding" (no answer within the 15 s timeout), "Host server error", "Request refused" (another 4xx, such as 400, 405 or 429), "Unsupported dataset layout" with the files it did find, or "Not a web address" (no `https://`, `http://` or leading `/`; nothing is requested). It lists the first six files checked and offers `Run Diagnostics`. ⓘ counts them |
 | Log (n)               | Closed by default. Up to 32 timestamped activity entries, newest first; `Clear` empties it                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |

@@ -1,6 +1,14 @@
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import { DeckGL } from '@deck.gl/react'
-import { memo, useCallback, useId, useMemo, useState, useSyncExternalStore } from 'react'
+import {
+  memo,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { LinkedViewChannel } from '../../components/linkedView'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
@@ -30,6 +38,7 @@ import {
   sectionOverlay,
 } from './linkedSectionLayers'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
+import { useFocusHandOff } from './useFocusHandOff'
 
 // The panels of registered sections shown beside the main view, each a
 // viewer of one section's cells from its collection preview. They share the
@@ -61,6 +70,7 @@ interface LinkedSectionsProps {
 }
 
 const MemoDeckGL = memo(DeckGL) as typeof DeckGL
+const NO_CLASS_COLORS: Readonly<Record<string, string>> = {}
 // Points can be a pixel or two across, so hovering picks the nearest within
 // this distance.
 const PICKING_RADIUS_PIXELS = 6
@@ -77,6 +87,10 @@ export function LinkedSections({
   onClose,
 }: LinkedSectionsProps) {
   useCollectionPreviewUpdates(store)
+  const classColors =
+    coloring.annotations === null
+      ? NO_CLASS_COLORS
+      : (store?.classColors(coloring.annotations.colors) ?? coloring.annotations.colors)
 
   return (
     <>
@@ -87,6 +101,7 @@ export function LinkedSections({
           preview={store?.entry(entry.url) ?? null}
           channel={channel}
           coloring={coloring}
+          classColors={classColors}
           cellPointScale={cellPointScale}
           pointSizeFullViewScale={pointSizeFullViewScale}
           hoverTooltips={hoverTooltips}
@@ -103,6 +118,7 @@ interface LinkedSectionPanelProps {
   readonly preview: PreviewEntry | null
   readonly channel: LinkedViewChannel
   readonly coloring: LinkedSectionsColoring
+  readonly classColors: Readonly<Record<string, string>>
   readonly cellPointScale: number
   readonly pointSizeFullViewScale: number
   readonly hoverTooltips: boolean
@@ -121,6 +137,7 @@ function LinkedSectionPanel({
   preview,
   channel,
   coloring,
+  classColors,
   cellPointScale,
   pointSizeFullViewScale,
   hoverTooltips,
@@ -129,6 +146,8 @@ function LinkedSectionPanel({
 }: LinkedSectionPanelProps) {
   const label = collectionEntryLabel(entry)
   const source = useId()
+  const panelRef = useRef<HTMLElement>(null)
+  useFocusHandOff(panelRef)
   const linkedView = useSyncExternalStore(channel.subscribe, channel.getView)
   const cells = preview?.cells ?? null
   const scores = preview?.scores ?? null
@@ -156,8 +175,12 @@ function LinkedSectionPanel({
     }
   }, [cells, linkedView])
   const overlay = useMemo(
-    () => sectionOverlay({ scores, classes }, { genes: coloring.genes, annotations }),
-    [annotations, classes, coloring.genes, scores],
+    () =>
+      sectionOverlay(
+        { scores, classes },
+        { genes: coloring.genes, annotations, classColors },
+      ),
+    [annotations, classColors, classes, coloring.genes, scores],
   )
   // On Auto or a percentile top, each section tops out at that percentile of
   // its own scores above 0, as the main view does; a typed top is shared.
@@ -231,6 +254,7 @@ function LinkedSectionPanel({
 
   return (
     <section
+      ref={panelRef}
       className="viewer-tile linked-section"
       aria-label={label}
       data-loading={preview?.loading === true || undefined}
@@ -327,7 +351,11 @@ function hoverText(
   if (layerId !== LINKED_CELLS_LAYER_ID) return null
 
   const cellId = preview.cells.cellIds[info.index] ?? ''
-  const classIndex = preview.classes?.classOf[info.index] ?? -1
+  // The class it is drawn in, else its first, hidden, class.
+  const shownClass =
+    overlay?.kind === 'classes' ? (overlay.classOf[info.index] ?? -1) : -1
+  const classIndex =
+    shownClass >= 0 ? shownClass : (preview.classes?.classOf[info.index] ?? -1)
   const classLabel =
     overlay?.kind === 'classes' ? preview.classes?.classes[classIndex]?.label : undefined
   const parts = [cellId, classLabel].filter(

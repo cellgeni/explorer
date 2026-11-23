@@ -3,6 +3,7 @@ import {
   type DatasetDiagnosticsReport,
 } from '../../data/datasetDiagnostics'
 import type { GeneExpressionBatchTiming } from '../../datasets/spatialDataset'
+import { urlWithoutCredentials } from '../../utils/urlCredentials'
 
 interface DatasetLoadDiagnosticState {
   readonly status: string
@@ -120,10 +121,10 @@ export function createDiagnosticsDump(
   options: DiagnosticsDumpOptions,
   generatedAt = new Date(),
 ): Record<string, unknown> {
-  return {
+  return withoutCredentials({
     generatedAt: generatedAt.toISOString(),
     datasetUrl: options.datasetUrl,
-    location: readCurrentLocation(),
+    location: locationWithoutCredentials(readCurrentLocation()),
     performanceBudget: options.performanceBudget,
     controls: {
       openPanels: options.openPanels,
@@ -172,7 +173,79 @@ export function createDiagnosticsDump(
     activeErrors: options.activeErrors,
     activityLog: options.debugLog,
     telemetryEvents: options.telemetryEvents,
+  }) as Record<string, unknown>
+}
+
+// A dump is made to be attached to bug reports, so a signed address (a
+// presigned S3 URL, an Azure SAS, a token) loses its query wherever it
+// appears: the dataset URL, states, checks, messages, the log and telemetry
+// (EXP-026, EXP-198).
+function withoutCredentials(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return stringWithoutCredentials(value)
   }
+
+  if (Array.isArray(value)) {
+    return value.map(withoutCredentials)
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    const prototype: unknown = Object.getPrototypeOf(value)
+
+    if (prototype === Object.prototype || prototype === null) {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, entry]) => [key, withoutCredentials(entry)]),
+      )
+    }
+  }
+
+  return value
+}
+
+const ADDRESS = /^(?:https?:\/\/|\.{0,2}\/)\S*$/i
+const URL_IN_TEXT = /https?:\/\/[^\s"'<>`]+/gi
+
+function stringWithoutCredentials(text: string): string {
+  if (ADDRESS.test(text)) {
+    return urlWithoutCredentials(text).url
+  }
+
+  return text.replace(URL_IN_TEXT, (match) => {
+    // Sentence punctuation after an address in a message is not part of it.
+    const [, address = match, after = ''] = /^(.*?)([.,;:)]*)$/.exec(match) ?? []
+    return `${urlWithoutCredentials(address).url}${after}`
+  })
+}
+
+// The page's own address, and the dataset or image addresses its hash
+// carries (`#dataset=…`).
+function locationWithoutCredentials(href: string | undefined): string | undefined {
+  if (href === undefined) {
+    return undefined
+  }
+
+  const hashStart = href.indexOf('#')
+  const page = urlWithoutCredentials(
+    hashStart === -1 ? href : href.slice(0, hashStart),
+  ).url
+
+  if (hashStart === -1) {
+    return page
+  }
+
+  const params = new URLSearchParams(href.slice(hashStart + 1))
+  const signed = [...params].flatMap(([key, value]) => {
+    const { url, signed } = urlWithoutCredentials(value)
+    return signed ? [[key, url] as const] : []
+  })
+
+  for (const [key, url] of signed) {
+    params.set(key, url)
+  }
+
+  return signed.length === 0
+    ? `${page}${href.slice(hashStart)}`
+    : `${page}#${params.toString()}`
 }
 
 function summarizeGeneExpressionState(

@@ -8,8 +8,11 @@ import type { PreviewCells, PreviewScores } from './collectionPreviewData'
 
 // Beyond this many cells, a preview draws every Nth of them, in grey or in
 // its class colour: more do not change a preview of this size. Scored cells
-// are all drawn, so none that express a gene is missed.
+// are all drawn, so none that express a gene is missed, and so are the cells
+// of a small class.
 export const PREVIEW_MAX_DRAWN_CELLS = 200_000
+// A shown class keeps at least this many cells after thinning.
+const RARE_CLASS_DRAWN_CELLS = 64
 
 // A collection preview as pixels: every cell in grey, so the tissue shows,
 // and over them either the cells that score above zero in the gene colour
@@ -69,22 +72,30 @@ export function rasterizePreview(
 
   if (width <= 0 || height <= 0) return { pixels, scaleMax: 0 }
 
-  const spanX = Math.max(bounds.maxX - bounds.minX, Number.EPSILON)
-  const spanY = Math.max(bounds.maxY - bounds.minY, Number.EPSILON)
+  // A section of one cell, or of cells at one point, has no span: it is drawn
+  // centred, as a span of 1 µm. A tiny span made the scale so large that
+  // positions lost their offset and the cell went to a corner.
+  const spanX = bounds.maxX > bounds.minX ? bounds.maxX - bounds.minX : 1
+  const spanY = bounds.maxY > bounds.minY ? bounds.maxY - bounds.minY : 1
   const scale = Math.min(
     (width - 2 * padding - pointSize) / spanX,
     (height - 2 * padding - pointSize) / spanY,
   )
-  const offsetX = (width - spanX * scale - pointSize) / 2 - bounds.minX * scale
-  const offsetY = (height - spanY * scale - pointSize) / 2 - bounds.minY * scale
+  // The extent's centre at the preview's centre.
+  const offsetX = (width - pointSize) / 2 - ((bounds.minX + bounds.maxX) / 2) * scale
+  const offsetY = (height - pointSize) / 2 - ((bounds.minY + bounds.maxY) / 2) * scale
   const forEachPixel = (
     positions: Float32Array,
     visit: (pixel: number, index: number) => void,
-    stride = 1,
+    drawn: (index: number) => boolean = () => true,
   ) => {
-    for (let index = 0; index * 2 < positions.length; index += stride) {
+    for (let index = 0; index * 2 < positions.length; index += 1) {
+      if (!drawn(index)) continue
+
       const left = Math.floor((positions[index * 2] ?? 0) * scale + offsetX)
       const top = Math.floor((positions[index * 2 + 1] ?? 0) * scale + offsetY)
+      // A cell without a position (NaN) is not drawn.
+      if (!Number.isFinite(left) || !Number.isFinite(top)) continue
 
       for (let dy = 0; dy < pointSize; dy += 1) {
         const row = top + dy
@@ -105,16 +116,31 @@ export function rasterizePreview(
     Math.ceil(cells.positions.length / 2 / PREVIEW_MAX_DRAWN_CELLS),
   )
 
+  const everyStrideth = (index: number) => index % cellStride === 0
+
   forEachPixel(
     cells.positions,
     (pixel) => {
       pixels.set(tissue, pixel * 4)
     },
-    cellStride,
+    everyStrideth,
   )
 
   if (overlay?.kind === 'classes') {
     const colors = overlay.colors.map(hexRgb)
+    // Thinning keeps one cell in cellStride, so a class of fewer than
+    // RARE_CLASS_DRAWN_CELLS after it is drawn whole: a rare cell type is
+    // what hiding the others is for.
+    const classSizes = new Uint32Array(colors.length)
+    for (const classIndex of overlay.classOf) {
+      if (classIndex >= 0 && classIndex < classSizes.length) {
+        classSizes[classIndex] = (classSizes[classIndex] ?? 0) + 1
+      }
+    }
+    const drawnWhole = Array.from(
+      classSizes,
+      (size) => size < RARE_CLASS_DRAWN_CELLS * cellStride,
+    )
 
     forEachPixel(
       cells.positions,
@@ -126,7 +152,8 @@ export function rasterizePreview(
         pixels[pixel * 4 + 2] = color[2]
         pixels[pixel * 4 + 3] = 255
       },
-      cellStride,
+      (index) =>
+        everyStrideth(index) || drawnWhole[overlay.classOf[index] ?? -1] === true,
     )
 
     return { pixels, scaleMax: 0 }
@@ -140,7 +167,8 @@ export function rasterizePreview(
 
   forEachPixel(scores.positions, (pixel, index) => {
     const score = scores.scores[index] ?? 0
-    if (score > (best[pixel] ?? 0)) best[pixel] = score
+    // A stored NaN or infinity is no score, as in the main view.
+    if (Number.isFinite(score) && score > (best[pixel] ?? 0)) best[pixel] = score
   })
 
   const scaleMax =

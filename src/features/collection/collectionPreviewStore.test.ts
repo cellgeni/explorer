@@ -270,6 +270,112 @@ describe('CollectionPreviewStore', () => {
     expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4']])
   })
 
+  // A class the open dataset lacks took the next palette colour in each
+  // section's own order, without the colour its dataset stores (EXP-223).
+  it('gives each class one colour in every preview, its stored one first', async () => {
+    const fake = fakeDatasets()
+    const classesByUrl: Record<string, readonly unknown[]> = {
+      [A]: [
+        { id: 'type:T', label: 'T', cellIds: ['c0'] },
+        { id: 'type:B', label: 'B', cellIds: ['c1'] },
+      ],
+      [B]: [
+        { id: 'type:Tumour', label: 'Tumour', color: '#d62728', cellIds: ['c0'] },
+        { id: 'type:Immune', label: 'Immune', cellIds: ['c1'] },
+      ],
+      [C]: [
+        { id: 'type:Stroma', label: 'Stroma', cellIds: ['c0'] },
+        { id: 'type:Immune', label: 'Immune', cellIds: ['c1'] },
+      ],
+    }
+    const getSpatialDataset = vi.fn(async (url: string) => ({
+      ...(await fake.loaders.getSpatialDataset(url)),
+      annotations: async () => classesByUrl[url],
+    })) as unknown as CollectionPreviewLoaders['getSpatialDataset']
+    store = new CollectionPreviewStore(URLS, { ...fake.loaders, getSpatialDataset })
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'type' })
+    store.start()
+    for (const url of URLS) store.setVisible(url, true)
+    await flush()
+    for (const url of URLS) fake.finishOverview(url)
+    await flush()
+    await flush()
+
+    expect(store.entry(B).classes?.classes[0]).toEqual({
+      id: 'type:Tumour',
+      label: 'Tumour',
+      color: '#d62728',
+      cellCount: 1,
+    })
+    // The open dataset (A) coloured its own classes.
+    const main = { 'type:T': '#111111', 'type:B': '#222222' }
+    const colors = store.classColors(main)
+    expect(colors).toMatchObject({ ...main, 'type:Tumour': '#d62728' })
+    const immune = colors['type:Immune']
+    const stroma = colors['type:Stroma']
+    expect(immune).toBeDefined()
+    expect(stroma).toBeDefined()
+    expect(new Set(Object.values(colors)).size).toBe(5)
+    expect(store.classColors(main)).toBe(colors)
+  })
+
+  // A dataset switch commits before the next dataset's set loads, and asks
+  // for neither genes nor a set meanwhile (EXP-224).
+  it('keeps the classes of a set through a request for neither', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:type' })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    await flush()
+    const classes = store.entry(A).classes
+    expect(classes).not.toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).classes).toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:type' })
+    await flush()
+    expect(store.entry(A).classes).toBe(classes)
+    expect(fake.annotationCalls).toHaveLength(1)
+
+    // Another set is read afresh.
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:other' })
+    await flush()
+    await flush()
+    expect(fake.annotationCalls.map((call) => call.groupId)).toEqual([
+      'analysis:type',
+      'analysis:other',
+    ])
+  })
+
+  it('keeps the scores of the genes through a request for neither', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    fake.finishExpression(A, 3)
+    await flush()
+    const scores = store.entry(A).scores
+    expect(scores).not.toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).scores).toBe(null)
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).scores).toBe(scores)
+    expect(fake.expressions).toHaveLength(1)
+  })
+
   it('keeps the cells when the genes change during their read', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore([A], fake.loaders)
@@ -328,6 +434,31 @@ describe('CollectionPreviewStore', () => {
     await flush()
     expect(store.entry(A).error).toBe(null)
     expect(fake.overviewCalls).toEqual([A])
+  })
+
+  // A failure was kept until the genes, set or mode changed (EXP-242).
+  it('reads a failed preview again when it comes back into view', async () => {
+    const fake = fakeDatasets()
+    let fail = true
+    const getSpatialDataset = vi.fn(async (url: string) => {
+      if (fail) throw new Error('HTTP 503')
+      return fake.loaders.getSpatialDataset(url)
+    }) as unknown as CollectionPreviewLoaders['getSpatialDataset']
+    store = new CollectionPreviewStore([A], { ...fake.loaders, getSpatialDataset })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    await flush()
+    expect(store.entry(A).error).toContain('HTTP 503')
+
+    fail = false
+    store.setVisible(A, false)
+    store.setVisible(A, true)
+    expect(store.entry(A).error).toBe(null)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    expect(store.entry(A).cells).not.toBe(null)
   })
 
   it('stops reading when stopped, and goes on after a start', async () => {

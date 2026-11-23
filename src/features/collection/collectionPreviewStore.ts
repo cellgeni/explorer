@@ -1,4 +1,5 @@
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
+import { colorsForAnnotations } from '../annotations/annotationModel'
 import {
   openPreviewSource,
   PreviewUnavailableError,
@@ -64,8 +65,12 @@ export class CollectionPreviewStore {
   private readonly listeners = new Set<() => void>()
   // Cell positions do not depend on the genes, so only stopping stops them.
   private lifetime = new AbortController()
+  // Scores for the genes and score mode in scoresKey, and classes of the set
+  // classesGroupId: kept while a request asks for neither.
   private scores = new Map<string, PreviewScores>()
+  private scoresKey: string | null = null
   private classes = new Map<string, PreviewClasses>()
+  private classesGroupId: string | null = null
   private request: PreviewRequest = {
     genes: [],
     scoreMode: 'sum',
@@ -75,6 +80,11 @@ export class CollectionPreviewStore {
   // Until start(), and after stop(): nothing is read.
   private stopped = true
   private entries = new Map<string, PreviewEntry>()
+  private classColorsRead: {
+    readonly version: number
+    readonly mainColors: Readonly<Record<string, string>>
+    readonly colors: Readonly<Record<string, string>>
+  } | null = null
   version = 0
 
   constructor(
@@ -97,6 +107,25 @@ export class CollectionPreviewStore {
 
   readonly getVersion = (): number => this.version
 
+  // The colour of each class of the set in every preview: the main view's,
+  // else the colour its dataset stores, else the palette's next unused
+  // colour, given in the order the previews' classes were read. A class then
+  // has one colour in every section, and two classes never share one.
+  classColors(
+    mainColors: Readonly<Record<string, string>>,
+  ): Readonly<Record<string, string>> {
+    const read = this.classColorsRead
+    if (read?.version === this.version && read.mainColors === mainColors)
+      return read.colors
+
+    const colors = colorsForAnnotations(
+      [...this.classes.values()].flatMap(({ classes }) => classes),
+      mainColors,
+    )
+    this.classColorsRead = { version: this.version, mainColors, colors }
+    return colors
+  }
+
   entry(url: string): PreviewEntry {
     return this.entries.get(url) ?? EMPTY_ENTRY
   }
@@ -105,8 +134,21 @@ export class CollectionPreviewStore {
     if (requestKey(request) === requestKey(this.request)) return
 
     this.request = { ...request, genes: [...request.genes] }
-    this.scores = new Map()
-    this.classes = new Map()
+    // What was read for a set or for genes stays while a request asks for
+    // neither, as one does while a dataset switch loads the next dataset's
+    // set, so asking for the same again reads nothing.
+    if (
+      request.annotationGroupId !== null &&
+      request.annotationGroupId !== this.classesGroupId
+    ) {
+      this.classes = new Map()
+      this.classesGroupId = request.annotationGroupId
+    }
+    const scoresKey = scoresKeyOf(request)
+    if (scoresKey !== null && scoresKey !== this.scoresKey) {
+      this.scores = new Map()
+      this.scoresKey = scoresKey
+    }
     this.errors.clear()
 
     // Reads for the old selection stop; each dataset's next read starts when its
@@ -122,6 +164,9 @@ export class CollectionPreviewStore {
 
     if (visible) {
       this.visible.add(url)
+      // A read that failed (a 503, a dropped connection) is tried again when
+      // its preview comes back into view; one that cannot be previewed is not.
+      if (this.errors.delete(url)) this.changed()
       this.pump()
     } else {
       this.visible.delete(url)
@@ -263,13 +308,16 @@ export class CollectionPreviewStore {
 
   private changed(): void {
     const entries = new Map<string, PreviewEntry>()
+    // Only what the request asks for is shown.
+    const showsClasses = this.request.annotationGroupId !== null
+    const showsScores = scoresKeyOf(this.request) !== null
 
     for (const url of this.urls) {
       const previous = this.entries.get(url) ?? EMPTY_ENTRY
       const next: PreviewEntry = {
         cells: this.cells.get(url) ?? null,
-        scores: this.scores.get(url) ?? null,
-        classes: this.classes.get(url) ?? null,
+        scores: showsScores ? (this.scores.get(url) ?? null) : null,
+        classes: showsClasses ? (this.classes.get(url) ?? null) : null,
         loading: this.running.has(url),
         unavailable: this.unavailable.get(url) ?? null,
         error: this.errors.get(url) ?? null,
@@ -282,6 +330,13 @@ export class CollectionPreviewStore {
 
     for (const listener of this.listeners) listener()
   }
+}
+
+// The genes and score mode scores are read for; null when none are asked for.
+function scoresKeyOf(request: PreviewRequest): string | null {
+  return request.annotationGroupId !== null || request.genes.length === 0
+    ? null
+    : `${request.scoreMode}\u0000${request.genes.join('\u0000')}`
 }
 
 function requestKey(request: PreviewRequest): string {

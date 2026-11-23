@@ -128,8 +128,13 @@ describe('section stack', () => {
     expect(cellViewStatus(null, false)).toEqual({
       reading: 'Reading cells',
       missing: null,
+      uncolored: null,
     })
-    expect(cellViewStatus(READY, false)).toEqual({ reading: null, missing: null })
+    expect(cellViewStatus(READY, false)).toEqual({
+      reading: null,
+      missing: null,
+      uncolored: null,
+    })
     expect(cellViewStatus({ ...READY, loading: true }, true).reading).toBe(
       'Reading colours',
     )
@@ -138,10 +143,15 @@ describe('section stack', () => {
         { ...READY, cells: null, unavailable: 'No cells to preview.' },
         true,
       ),
-    ).toEqual({ reading: null, missing: 'Not shown: no cells to preview' })
+    ).toEqual({
+      reading: null,
+      missing: 'Not shown: no cells to preview',
+      uncolored: null,
+    })
     expect(cellViewStatus({ ...READY, cells: null, error: 'HTTP 403' }, false)).toEqual({
       reading: null,
       missing: 'Not shown: the cells could not be read',
+      uncolored: null,
     })
   })
 
@@ -151,6 +161,7 @@ describe('section stack', () => {
     expect(stackStatus(sections, [READY, READY, READY], false)).toEqual({
       reading: null,
       missing: null,
+      uncolored: null,
     })
     expect(
       stackStatus(
@@ -165,6 +176,15 @@ describe('section stack', () => {
     ).toEqual({
       reading: null,
       missing: 'Not shown: S2 (no cells to preview), S3 (could not be read)',
+      uncolored: null,
+    })
+    // Cells read, then the colours failed: the section is drawn (EXP-248).
+    expect(
+      stackStatus(sections, [READY, { ...READY, error: 'HTTP 503' }, READY], true),
+    ).toEqual({
+      reading: null,
+      missing: null,
+      uncolored: 'Colours could not be read: S2',
     })
     // Cells read but the genes' scores still loading.
     expect(
@@ -175,6 +195,7 @@ describe('section stack', () => {
     ).toEqual({
       reading: null,
       missing: null,
+      uncolored: null,
     })
   })
 })
