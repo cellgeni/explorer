@@ -18,6 +18,7 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import type { Platform } from '../datasets/spatialDataset'
+import { datasetDetectionError } from '../datasets/datasetDetectionError'
 import {
   DatasetManifestError,
   type DatasetFileRole,
@@ -41,7 +42,8 @@ import { MERSCOPE_CSV_MAX_BYTES } from '../datasets/merscopeFormat'
 import { H5AD_MAX_FILE_BYTES } from '../datasets/h5adFormat'
 import { visiumHdFilteredBarcodesPath } from '../datasets/visiumHdStrategy'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
-import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
+import { isIcechunkUrl } from '../zarr/icechunkUrl'
+import { isStringArrayMetadata, zarrChunkCount, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
   VisiumHdBinDescriptor,
   VisiumHdBinSizeMicrometers,
@@ -328,6 +330,18 @@ export async function runDatasetDiagnostics(
     }
   }
 
+  if (detection.platform === 'image') {
+    checks.push(await checkImage(detection, options))
+
+    return {
+      baseUrl,
+      platform: detection.platform,
+      startedAt: startedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      checks,
+    }
+  }
+
   if (detection.platform === 'spatialdata') {
     checks.push(...(await runSpatialDataDiagnostics(detection, options)))
 
@@ -391,12 +405,14 @@ export function summarizeDatasetDiagnostics(report: DatasetDiagnosticsReport): s
   const failed = report.checks.filter((check) => check.status === 'fail').length
   const warnings = report.checks.filter((check) => check.status === 'warning').length
 
+  const warningText = `${warnings} warning${warnings === 1 ? '' : 's'}`
+
   if (failed > 0) {
-    return `${failed} failed, ${warnings} warnings`
+    return `${failed} failed, ${warningText}`
   }
 
   if (warnings > 0) {
-    return `${warnings} warnings`
+    return warningText
   }
 
   return 'All checks passed'
@@ -449,10 +465,7 @@ async function checkManifest(
   const failed = required ? 'fail' : 'warning'
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, 'Experiment manifest', options)
 
     if (!response.ok) {
       discardBody(response)
@@ -671,10 +684,7 @@ async function runAteraDiagnostics(
   const checks: DatasetDiagnosticCheck[] = []
 
   try {
-    const response = await (options.fetcher ?? fetch)(experimentUrl, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(experimentUrl, 'Experiment manifest', options)
 
     // With a dataset manifest the run's files are named there, and the
     // reader reads a missing experiment.spatial as one that names none.
@@ -707,17 +717,18 @@ async function runAteraDiagnostics(
           url: experimentUrl,
           required: true,
           status: 'pass',
-          message: [
-            experiment.panelName,
-            experiment.cellCount === undefined
-              ? undefined
-              : `${experiment.cellCount.toLocaleString()} cells`,
-            experiment.micrometersPerPixel === undefined
-              ? undefined
-              : `${experiment.micrometersPerPixel} µm/px`,
-          ]
-            .filter((part) => part !== undefined)
-            .join('; '),
+          message:
+            [
+              experiment.panelName,
+              experiment.cellCount === undefined
+                ? undefined
+                : `${experiment.cellCount.toLocaleString()} cells`,
+              experiment.micrometersPerPixel === undefined
+                ? undefined
+                : `${experiment.micrometersPerPixel} µm/px`,
+            ]
+              .filter((part) => part !== undefined)
+              .join('; ') || 'Readable',
           startedAt,
         }),
       )
@@ -822,12 +833,22 @@ async function runSpatialDataDiagnostics(
     }),
   ]
   // A zip lists every file, so chunks are checked against its directory
-  // instead of with a request each, and every chunk is checked.
+  // instead of with a request each, and every chunk is checked. An Icechunk
+  // repository keeps chunks where its manifests say, not at their keys, so
+  // fewer are read through its store.
+  const icechunk = zip === undefined && isIcechunkUrl(url)
   const probe: ChunkProber =
-    zip === undefined
-      ? (targets) => probeChunks(url, targets, options)
-      : (targets) => Promise.resolve(zipChunkProbes(zip, targets))
+    zip !== undefined
+      ? (targets) => Promise.resolve(zipChunkProbes(zip, targets))
+      : icechunk
+        ? (targets) => storeChunkProbes(store, targets)
+        : (targets) => probeChunks(url, targets, options)
   const everyChunk = zip !== undefined
+  const maxTableChunks = everyChunk
+    ? Infinity
+    : icechunk
+      ? SPATIALDATA_MAX_STORE_CHECKED_CHUNKS
+      : SPATIALDATA_MAX_CHECKED_CHUNKS
 
   if (view.table === undefined) {
     checks.push(
@@ -846,7 +867,7 @@ async function runSpatialDataDiagnostics(
   if (view.table !== undefined) {
     checks.push(
       await checkSpatialDataTableChunks(url, store, catalog, view, probe, {
-        everyChunk,
+        maxChunks: maxTableChunks,
       }),
     )
   }
@@ -905,6 +926,8 @@ async function runSpatialDataDiagnostics(
 }
 
 const SPATIALDATA_MAX_CHECKED_CHUNKS = 2_000
+// Chunks read whole through an Icechunk repository's store.
+const SPATIALDATA_MAX_STORE_CHECKED_CHUNKS = 200
 const SPATIALDATA_CHUNK_CHECK_CONCURRENCY = 8
 
 interface ChunkProbe {
@@ -921,21 +944,25 @@ interface ChunkTarget {
 type ChunkProber = (targets: readonly ChunkTarget[]) => Promise<readonly ChunkProbe[]>
 
 // Zarr reads absent chunks as fill values, so an interrupted upload loads
-// without errors but with empty columns. HEAD each table chunk to find them:
-// the first SPATIALDATA_MAX_CHECKED_CHUNKS over HTTP, or every chunk with
-// `everyChunk` (a zip, checked against its directory).
+// without errors but with empty columns. Each table chunk is probed to find
+// them, up to `maxChunks`: those of string arrays first, since the viewer
+// cannot read a table with one of them missing, then the numeric arrays'.
 async function checkSpatialDataTableChunks(
   url: string,
   store: SpatialDataStore,
   catalog: SpatialDataCatalog,
   view: SpatialDataView,
   probe: ChunkProber,
-  options: { readonly everyChunk: boolean },
+  options: { readonly maxChunks: number },
 ): Promise<DatasetDiagnosticCheck> {
-  const maxChunks = options.everyChunk ? Infinity : SPATIALDATA_MAX_CHECKED_CHUNKS
+  const { maxChunks } = options
   const startedAt = Date.now()
   const tablePath = view.table?.path ?? ''
-  const targets: ChunkTarget[] = []
+  const arrays: {
+    readonly path: string
+    readonly metadata: Record<string, unknown>
+    readonly stringArray: boolean
+  }[] = []
 
   for (const node of catalog.nodes) {
     if (node.kind !== 'array' || !node.path.startsWith(`${tablePath}/`)) {
@@ -944,27 +971,40 @@ async function checkSpatialDataTableChunks(
 
     const metadata = await readZarrArrayMetadata(store, node.path)
 
-    if (metadata === null) {
-      continue
-    }
-
-    const stringArray = isStringArrayMetadata(metadata)
-
-    for (const chunkKey of zarrChunkKeys(
-      metadata,
-      options.everyChunk ? {} : { limit: maxChunks },
-    )) {
-      targets.push({ key: `${node.path}/${chunkKey}`, stringArray })
+    if (metadata !== null) {
+      arrays.push({
+        path: node.path,
+        metadata,
+        stringArray: isStringArrayMetadata(metadata),
+      })
     }
   }
 
-  const checked = targets.slice(0, maxChunks)
+  const ordered = [
+    ...arrays.filter((array) => array.stringArray),
+    ...arrays.filter((array) => !array.stringArray),
+  ]
+  const total = ordered.reduce((sum, array) => sum + zarrChunkCount(array.metadata), 0)
+  const checked: ChunkTarget[] = []
+
+  for (const { path, metadata, stringArray } of ordered) {
+    const limit = maxChunks - checked.length
+    if (limit <= 0) break
+
+    for (const chunkKey of zarrChunkKeys(
+      metadata,
+      Number.isFinite(limit) ? { limit } : {},
+    )) {
+      checked.push({ key: `${path}/${chunkKey}`, stringArray })
+    }
+  }
+
   const probes = await probe(checked)
   const failed = probes.filter((probe) => probe.status !== 200 && probe.status !== 206)
   const blocking = failed.filter((probe) => probe.status !== 404 || probe.stringArray)
   const scope =
-    checked.length < targets.length
-      ? `first ${checked.length.toLocaleString()} of ${targets.length.toLocaleString()}`
+    checked.length < total
+      ? `first ${checked.length.toLocaleString()} of ${total.toLocaleString()}`
       : checked.length.toLocaleString()
 
   return diagnosticCheck({
@@ -1177,6 +1217,33 @@ async function probeChunks(
       worker,
     ),
   )
+  return results
+}
+
+// Chunks read through a store that does not keep them at their keys (an
+// Icechunk repository): an absent numeric chunk reads as nothing, an absent
+// string-array chunk throws, as for the viewer.
+async function storeChunkProbes(
+  store: SpatialDataStore,
+  targets: readonly ChunkTarget[],
+): Promise<readonly ChunkProbe[]> {
+  const results: ChunkProbe[] = []
+
+  for (const target of targets) {
+    try {
+      const bytes = await store.get(`/${target.key}`)
+      results.push({ ...target, status: bytes === undefined ? 404 : 200 })
+    } catch (cause) {
+      results.push({
+        ...target,
+        status:
+          cause instanceof Error && cause.name === 'ZarrChunkUnavailableError'
+            ? 404
+            : 'error',
+      })
+    }
+  }
+
   return results
 }
 
@@ -1942,6 +2009,79 @@ async function checkDirectRangeFile(
   }
 }
 
+const IMAGE_KIND_LABELS = {
+  tiff: 'TIFF image',
+  qptiff: 'QPTIFF image',
+  svs: 'SVS slide',
+  ndpi: 'NDPI slide',
+  'ome-zarr': 'OME-Zarr image',
+} as const
+
+// An image-only dataset: a TIFF is read by byte ranges, as its tiles are; an
+// OME-Zarr image's multiscale metadata is read as the viewer opens it.
+async function checkImage(
+  detection: Extract<SpatialDatasetDetection, { readonly platform: 'image' }>,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const label = IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']
+
+  if (detection.imageKind !== 'ome-zarr') {
+    return checkDirectRangeFile(detection.imageUrl, 'image-file', label, true, options)
+  }
+
+  const startedAt = Date.now()
+  try {
+    const { openOmeZarrMultiscaleGroup } = await import('../zarr/omeZarrLoader')
+    await openOmeZarrMultiscaleGroup(detection.imageUrl, {
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'pass',
+      message: 'Multiscale image metadata readable',
+      startedAt,
+    })
+  } catch (cause) {
+    return diagnosticCheck({
+      id: 'image-file',
+      label,
+      url: detection.imageUrl,
+      required: true,
+      status: 'fail',
+      message: errorMessage(cause),
+      startedAt,
+    })
+  }
+}
+
+// A GET for a check. On a host that hides its error responses (EBI FTP), a
+// missing file looks like a network failure; it is reported as most likely
+// missing, as the HEAD and Range checks report it.
+async function getForCheck(
+  url: string,
+  label: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<Response> {
+  let response: Response
+
+  try {
+    response = await (options.fetcher ?? fetch)(url, {
+      method: 'GET',
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+  } catch (cause) {
+    throw likelyMissingFileError(label, url, cause) ?? cause
+  }
+
+  noteReadableResponse(url, response.status)
+  return response
+}
+
 // GET for small files read whole. Only the status is used, so the body is
 // cancelled rather than downloaded.
 async function checkReadableFile(
@@ -1954,10 +2094,7 @@ async function checkReadableFile(
   const startedAt = Date.now()
 
   try {
-    const response = await (options.fetcher ?? fetch)(url, {
-      method: 'GET',
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await getForCheck(url, file.label, options)
     discardBody(response)
 
     if (!response.ok) {
@@ -2126,6 +2263,8 @@ function detectionDiagnosticCheck(
 ): DatasetDiagnosticCheck {
   const label = 'Dataset layout'
 
+  // Why detection found nothing, as a failed load says it: no file found,
+  // no response, an error status, or files that are no layout the app reads.
   if (detection.platform === 'unknown') {
     return diagnosticCheck({
       id: 'dataset-layout',
@@ -2133,7 +2272,7 @@ function detectionDiagnosticCheck(
       url: detection.baseUrl,
       required: true,
       status: 'fail',
-      message: 'Unsupported dataset layout',
+      message: datasetDetectionError(detection.checked).message,
       startedAt,
     })
   }
@@ -2154,14 +2293,18 @@ function detectionDiagnosticCheck(
           : detection.platform === 'h5ad'
             ? detection.source === 'zarr'
               ? 'Detected AnnData Zarr store'
-              : 'Detected H5AD'
+              : detection.source === 'icechunk'
+                ? 'Detected AnnData Icechunk repository'
+                : 'Detected H5AD'
             : detection.platform === 'spatialdata'
               ? 'Detected SpatialData'
               : detection.platform === 'atera'
                 ? 'Detected Atera'
                 : detection.platform === 'merscope'
                   ? 'Detected MERSCOPE'
-                  : 'Detected Xenium',
+                  : detection.platform === 'image'
+                    ? `Detected ${IMAGE_KIND_LABELS[detection.imageKind ?? 'tiff']}`
+                    : 'Detected Xenium',
     startedAt,
   })
 }

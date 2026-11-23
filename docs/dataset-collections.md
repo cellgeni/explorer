@@ -282,12 +282,16 @@ coloured by something else, previews show the tissue only.
 
 While cells are coloured by an annotation set, previews show its classes in
 the main view's colours instead. A class the main view has not coloured yet
-takes the colour it will have when its dataset opens. Hidden classes fade
+takes the colour its dataset stores, or else the next free colour, in the
+order the previews read the classes. It has that one colour in every
+preview, panel beside the main view and the 3D stack. Hidden classes fade
 to a faint grey, as in the main view, so hiding all but one cell type (Alt-click its checkbox in the legend
 or in Cells › Clusters) shows where it is in every section;
 each preview then counts the cells of the shown classes (`1,204 cells`). The
 bar's left side names the set and how many classes are hidden. A set is read
-once per dataset and selection, like a gene.
+once per dataset and selection, like a gene. While a switch loads the next
+dataset's set, previews show the tissue only; the classes they read are kept,
+so they are coloured again, without another read, once it loads.
 
 - **Each its own scale, or one.** On Auto, or with a percentile top
   (`geneRange=,p95`), each preview runs from 0 to its own 99th (or that)

@@ -6,14 +6,254 @@ import {
   type SpatialDatasetDetection,
 } from '../datasets/datasetFactory'
 import { setDatasetManifest } from './datasetFiles'
+import { clearHostResponses, noteReadableResponse } from './hostResponses'
 import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
-import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import {
+  ICECHUNK_FIXTURE_ORIGIN,
+  icechunkFixtureFetcher,
+  type IcechunkFixtureRequest,
+} from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
+  // Image-only datasets fell through to the Xenium checks (EXP-225).
+  it('checks a TIFF image by byte ranges, not as a Xenium run', async () => {
+    const imageUrl = 'https://example.test/slides/section-1.ome.tif'
+    const fetcher = vi.fn(async () => new Response(null, { status: 404 }))
+    const rangeValidator = vi.fn(async () => undefined)
+
+    const report = await runDatasetDiagnostics(imageUrl, {
+      detectDataset: vi.fn(async () => ({
+        platform: 'image' as const,
+        baseUrl: imageUrl,
+        imageUrl,
+        imageKind: 'tiff' as const,
+        checked: [],
+      })),
+      fetcher: fetcher as unknown as typeof fetch,
+      rangeValidator,
+    })
+
+    expect(report.platform).toBe('image')
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected TIFF image'],
+        ['image-file', 'pass', 'Byte-range readable'],
+      ],
+    )
+    expect(rangeValidator).toHaveBeenCalledWith(
+      imageUrl,
+      expect.objectContaining({ label: 'TIFF image' }),
+    )
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('reads the multiscale metadata of an OME-Zarr image', async () => {
+    const imageUrl = 'https://example.test/images/section.ome.zarr'
+    const files: Record<string, unknown> = {
+      '.zgroup': { zarr_format: 2 },
+      '.zattrs': {
+        multiscales: [
+          {
+            version: '0.4',
+            axes: [
+              { name: 'y', type: 'space' },
+              { name: 'x', type: 'space' },
+            ],
+            datasets: [
+              {
+                path: '0',
+                coordinateTransformations: [{ type: 'scale', scale: [1, 1] }],
+              },
+            ],
+          },
+        ],
+      },
+    }
+    // The Zarr store fetches Requests.
+    const fetcher = vi.fn(async (input: URL | RequestInfo) => {
+      const url = input instanceof Request ? input.url : String(input)
+      const path = url.slice(imageUrl.length + 1)
+      return path in files
+        ? new Response(JSON.stringify(files[path]))
+        : new Response(null, { status: 404 })
+    }) as unknown as typeof fetch
+    const detectDataset = vi.fn(async () => ({
+      platform: 'image' as const,
+      baseUrl: imageUrl,
+      imageUrl,
+      imageKind: 'ome-zarr' as const,
+      checked: [],
+    }))
+
+    const report = await runDatasetDiagnostics(imageUrl, { detectDataset, fetcher })
+    expect(report.checks.map((check) => [check.id, check.status, check.message])).toEqual(
+      [
+        ['dataset-layout', 'pass', 'Detected OME-Zarr image'],
+        ['image-file', 'pass', 'Multiscale image metadata readable'],
+      ],
+    )
+
+    delete files['.zattrs']
+    const missing = await runDatasetDiagnostics(imageUrl, { detectDataset, fetcher })
+    expect(missing.checks.at(-1)).toMatchObject({ id: 'image-file', status: 'fail' })
+  })
+
+  // A missing or blocked address read "Unsupported dataset layout", the
+  // message for a layout the app does not read (EXP-226).
+  it('says why detection found no dataset', async () => {
+    const baseUrl = 'https://example.test/typo'
+    const probes = (error: { status?: number; error?: string }) =>
+      ['experiment.xenium', 'cells.parquet'].map((path) => ({
+        path,
+        url: `${baseUrl}/${path}`,
+        ok: false,
+        ...error,
+      }))
+    const diagnose = (checked: SpatialDatasetDetection['checked']) =>
+      runDatasetDiagnostics(baseUrl, {
+        detectDataset: vi.fn(async () => ({
+          platform: 'unknown' as const,
+          baseUrl,
+          checked,
+        })),
+      })
+
+    expect((await diagnose(probes({ status: 404 }))).checks).toEqual([
+      expect.objectContaining({
+        id: 'dataset-layout',
+        status: 'fail',
+        message: 'None of the 2 expected files were found at this address.',
+      }),
+    ])
+    expect(
+      (await diagnose(probes({ error: 'TypeError: Failed to fetch' }))).checks[0]
+        ?.message,
+    ).toMatch(/^The browser got no response\./)
+    expect(
+      (
+        await diagnose([
+          {
+            path: 'cells.parquet',
+            url: `${baseUrl}/cells.parquet`,
+            ok: true,
+            status: 200,
+          },
+        ])
+      ).checks[0]?.message,
+    ).toBe('Found cells.parquet, but not a dataset layout the app reads.')
+  })
+
+  // EBI FTP sends no CORS headers with its 404s, so a GET for a missing file
+  // fails like a network error (EXP-231).
+  it('reports a GET check that fails without a response as a likely missing file', async () => {
+    const baseUrl = 'https://hides-errors.test/run'
+    noteReadableResponse(`${baseUrl}/cells.parquet`, 206)
+    const fetcher = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    }) as unknown as typeof fetch
+
+    try {
+      const report = await runDatasetDiagnostics(baseUrl, {
+        detectDataset: vi.fn(async () => ({
+          platform: 'xenium' as const,
+          baseUrl,
+          checked: [],
+        })),
+        fetcher,
+        rangeValidator: vi.fn(async () => undefined),
+      })
+
+      expect(
+        report.checks.find((check) => check.id === 'experiment-manifest'),
+      ).toMatchObject({
+        status: 'fail',
+        message: expect.stringContaining('most likely missing'),
+      })
+    } finally {
+      clearHostResponses()
+    }
+  })
+
+  // An Icechunk repository keeps chunks where its manifests say; HEADs at
+  // their keys found none (EXP-227).
+  it('reads the table chunks of a SpatialData Icechunk repository through its store', async () => {
+    const requests: IcechunkFixtureRequest[] = []
+    const report = await runDatasetDiagnostics(
+      `${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`,
+      { fetcher: icechunkFixtureFetcher({ requests }) },
+    )
+    const chunks = report.checks.find((check) => check.id === 'spatialdata-table-chunks')
+
+    expect(chunks?.status).not.toBe('fail')
+    expect(
+      requests.filter(
+        ({ method, path }) => method === 'HEAD' && path.includes('/tables/'),
+      ),
+    ).toEqual([])
+  })
+
+  // The first 2,000 chunks were all of X, so a missing obs index chunk, which
+  // the viewer cannot read past, was never probed (EXP-227).
+  it('probes string-array chunks first and counts every table chunk', async () => {
+    const storeUrl = 'https://example.test/big-table.sdata.zarr'
+    const array = (dtype: string, shape: number[], chunks: number[], extra = {}) => ({
+      zarr_format: 2,
+      shape,
+      chunks,
+      dtype,
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+      ...extra,
+    })
+    const metadata = {
+      zarr_consolidated_format: 1,
+      metadata: {
+        '.zgroup': { zarr_format: 2 },
+        'tables/table/.zgroup': { zarr_format: 2 },
+        'tables/table/.zattrs': { region: 'cells', instance_key: 'cell_id' },
+        'tables/table/X/.zgroup': { zarr_format: 2 },
+        'tables/table/X/data/.zarray': array('<f4', [2_100], [1]),
+        'tables/table/obs/.zgroup': { zarr_format: 2 },
+        'tables/table/obs/_index/.zarray': array('|O', [4], [4], {
+          filters: [{ id: 'vlen-utf8' }],
+        }),
+      },
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.endsWith('/zmetadata')) return Response.json(metadata)
+      if (url.includes('/obs/_index/')) return new Response(null, { status: 404 })
+      return new Response(null, { status: init?.method === 'HEAD' ? 200 : 404 })
+    }) as unknown as typeof fetch
+
+    const report = await runDatasetDiagnostics(storeUrl, {
+      fetcher,
+      detectDataset: vi.fn(async () => ({
+        platform: 'spatialdata' as const,
+        baseUrl: storeUrl,
+        spatialDataUrl: storeUrl,
+        checked: [],
+      })),
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'spatialdata-table-chunks'),
+    ).toMatchObject({
+      status: 'fail',
+      message: expect.stringMatching(
+        /^1 of first 2,000 of 2,101 table chunks missing or unreadable: tables\/table\/obs\/_index\/0 \(HTTP 404\)/,
+      ),
+    })
+  })
+
   // The H5AD reader downloads a file up to 300 MiB whole on a host that does
   // not answer Range requests (EXP-228).
   it('warns, not fails, for an H5AD file read whole on a host without Range', async () => {
@@ -142,6 +382,10 @@ describe('runDatasetDiagnostics', () => {
     )
 
     expect(report.platform).toBe('h5ad')
+    expect(report.checks[0]).toMatchObject({
+      id: 'dataset-layout',
+      message: 'Detected AnnData Icechunk repository',
+    })
     expect(report.checks).toContainEqual(
       expect.objectContaining({
         id: 'icechunk-repository',
@@ -1096,7 +1340,7 @@ describe('runDatasetDiagnostics', () => {
       status: 'pass',
     })
     expect(check('visium-hd-16um-tissue-image')).toBeUndefined()
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
   })
 
   it('fails a Visium HD tier with neither tissue image', async () => {
@@ -1264,7 +1508,7 @@ describe('runDatasetDiagnostics', () => {
       url: `https://example.test/visium/${VISIUM_HD_16UM_UMAP_PATHS[0]}`,
       message: `HTTP 404; ${VISIUM_HD_16UM_UMAP_PATHS.slice(1).join(', ')} also could not be read`,
     })
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
 
     // The viewer asks for the same paths in the same order.
     const viewerFetcher = projectionFetcher([])
@@ -1308,7 +1552,7 @@ describe('runDatasetDiagnostics', () => {
       message:
         'HTTP 403; analysis/umap/2_components/projection.csv also could not be read',
     })
-    expect(summarizeDatasetDiagnostics(report)).toBe('1 warnings')
+    expect(summarizeDatasetDiagnostics(report)).toBe('1 warning')
   })
 
   it('cancels the body of each file it only checks with GET', async () => {
