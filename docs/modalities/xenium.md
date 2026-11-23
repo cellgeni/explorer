@@ -297,6 +297,12 @@ or exact points.
   to cell IDs through the matrix `cell_id` array. Labels drop the
   `gene_expression_` prefix and `_clusters` suffix.
 - Embedding CSVs are tried in order; the first usable UMAP and t-SNE files win.
+  A path is missing when it answers 404 or 403, the folder index leaves it
+  out, or the request fails on a host that hides its error responses; any
+  other error fails the load, so the panel offers to try again. A row with an
+  empty coordinate is left out. A projection the dataset manifest names
+  replaces the search for its kind, and a notice says when it is missing or
+  has no usable rows.
 
 ### Plots Panel
 

@@ -462,8 +462,8 @@ How defaults combine with other settings:
   not found or not readable", so check the path rather than the host's Range
   support.
 - `Diagnose Dataset` adds a `Dataset manifest` check and checks the files at
-  their manifest locations. With a manifest, a missing `experiment.xenium` is a
-  warning instead of a failure.
+  their manifest locations. With a manifest, a missing `experiment.xenium` or
+  Atera `experiment.spatial` is a warning instead of a failure.
 
 ## Editor Support
 

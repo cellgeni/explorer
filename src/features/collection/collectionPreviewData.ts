@@ -68,6 +68,8 @@ export interface PreviewScores {
 export interface PreviewClass {
   readonly id: string
   readonly label: string
+  // The colour the dataset stores for the class, if any.
+  readonly color?: string
   // Every cell of the class, drawn or not.
   readonly cellCount: number
 }
@@ -396,9 +398,10 @@ function previewClasses(
   })
 
   return {
-    classes: annotations.map(({ id, label, cellIds }) => ({
+    classes: annotations.map(({ id, label, color, cellIds }) => ({
       id,
       label,
+      ...(color === undefined ? {} : { color }),
       cellCount: cellIds.length,
     })),
     classOf,
