@@ -12,6 +12,7 @@ import { clearFolderListings, isListedAsMissing } from '../data/folderListing'
 import { clearHostResponses } from '../data/hostResponses'
 import {
   cachedSpatialDataset,
+  clearDatasetDetections,
   createSpatialDataset,
   detectSpatialDataset,
   isImageOnlyUrl,
@@ -39,6 +40,7 @@ import { clearZipFolders, withZipFolders } from '../data/zipFolder'
 
 afterEach(() => {
   clearZipFolders()
+  clearDatasetDetections()
 })
 
 describe('spatial dataset detection', () => {
@@ -289,7 +291,12 @@ describe('spatial dataset detection', () => {
     ).resolves.toBeDefined()
     expect(requests()).toEqual(probes)
 
-    // Without it, or with another URL's, the folder is probed again.
+    // Without it, the URL's last detection is used (EXP-204).
+    await createSpatialDataset('https://example.test/visium', { fetcher })
+    expect(requests()).toEqual(probes)
+
+    // With none, or with another URL's, the folder is probed again.
+    clearDatasetDetections()
     await createSpatialDataset('https://example.test/visium', { fetcher })
     expect(requests()).toEqual([...probes, ...probes])
     await createSpatialDataset('https://example.test/visium-copy', {
@@ -297,6 +304,26 @@ describe('spatial dataset detection', () => {
       detection,
     }).catch(() => undefined)
     expect(requests().length).toBeGreaterThan(2 * probes.length)
+  })
+
+  it('opens a dataset asked for without a detection from the last one (EXP-204)', async () => {
+    // A Xenium load creates no dataset, so its first boundary read asks the
+    // cache for one; a collection preview does the same after detecting.
+    const url = 'https://example.test/xenium-run'
+    const fetcher = fetcherForOkPaths(['/xenium-run/experiment.xenium'])
+    vi.stubGlobal('fetch', fetcher)
+
+    try {
+      await detectSpatialDataset(url, { fetcher })
+      const probes = vi.mocked(fetcher).mock.calls.length
+      dropDatasets(url)
+
+      await expect(cachedSpatialDataset(url)).resolves.toBeDefined()
+      expect(fetcher).toHaveBeenCalledTimes(probes)
+    } finally {
+      dropDatasets(url)
+      vi.unstubAllGlobals()
+    }
   })
 
   it('detects Space Ranger 1.x output from tissue_positions_list.csv', async () => {
@@ -1279,6 +1306,102 @@ describe('dataset manifests', () => {
     ).resolves.toMatchObject({ platform: 'xenium' })
     expect(datasetManifestFor(baseUrl)).toBeUndefined()
     expect(datasetFileUrlFor(baseUrl, 'cells')).toBe(`${baseUrl}/cells.parquet`)
+  })
+
+  it('keeps the manifest when a later read of it gets no answer (EXP-205)', async () => {
+    const baseUrl = 'https://example.test/flaky-manifest'
+    const manifest = {
+      version: 1,
+      platform: 'xenium',
+      files: { cells: 'tables/cells_resegmented.parquet' },
+    }
+    let manifestAnswer: () => Response = () => Response.json(manifest)
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const { pathname } = new URL(String(input))
+
+      if (pathname === '/flaky-manifest/explorer.json') return manifestAnswer()
+      return new Response(null, {
+        status:
+          pathname === '/flaky-manifest/tables/cells_resegmented.parquet' ? 200 : 404,
+      })
+    }) as unknown as typeof fetch
+    const relocated = `${baseUrl}/tables/cells_resegmented.parquet`
+
+    try {
+      await detectSpatialDataset(baseUrl, { fetcher })
+      expect(datasetFileUrlFor(baseUrl, 'cells')).toBe(relocated)
+
+      for (const unanswered of [
+        () => {
+          throw new TypeError('Failed to fetch')
+        },
+        () => new Response(null, { status: 503 }),
+      ]) {
+        manifestAnswer = unanswered
+        await expect(detectSpatialDataset(baseUrl, { fetcher })).resolves.toMatchObject({
+          platform: 'xenium',
+          manifest: { files: { cells: { url: relocated } } },
+        })
+        expect(datasetFileUrlFor(baseUrl, 'cells')).toBe(relocated)
+      }
+
+      // A 404 shows the manifest is gone.
+      manifestAnswer = () => new Response(null, { status: 404 })
+      await detectSpatialDataset(baseUrl, { fetcher }).catch(() => undefined)
+      expect(datasetManifestFor(baseUrl)).toBeUndefined()
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
+  it('ends a cancelled detection as an abort and keeps the manifest (EXP-206)', async () => {
+    const baseUrl = 'https://example.test/cancelled'
+    const fetcher = fetcherForJsonPaths({
+      '/cancelled/explorer.json': {
+        version: 1,
+        platform: 'visium',
+        files: { tissuePositions: 'meta/positions.csv' },
+      },
+      '/cancelled/meta/positions.csv': null,
+      '/cancelled/spatial/scalefactors_json.json': {},
+      '/cancelled/filtered_feature_bc_matrix.h5': null,
+    })
+
+    try {
+      await detectSpatialDataset(baseUrl, { fetcher })
+      const registered = datasetManifestFor(baseUrl)
+      expect(registered).toBeDefined()
+
+      // Cancelled while the manifest's files are probed.
+      const controller = new AbortController()
+      const aborting = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith('/meta/positions.csv')) {
+          controller.abort()
+          throw new DOMException('aborted', 'AbortError')
+        }
+
+        return fetcher(input, init)
+      }) as typeof fetch
+
+      await expect(
+        detectSpatialDataset(baseUrl, { fetcher: aborting, signal: controller.signal }),
+      ).rejects.toMatchObject({ name: 'AbortError' })
+      expect(datasetManifestFor(baseUrl)).toBe(registered)
+    } finally {
+      setDatasetManifest(baseUrl, undefined)
+    }
+  })
+
+  it('stops on a folder manifest with a JSON syntax error (EXP-208)', async () => {
+    const fetcher = fetcherForResponses({
+      '/broken/explorer.json': () =>
+        new Response('{ "version": 1, "platform": "xenium", }', { status: 200 }),
+      '/broken/experiment.xenium': () => new Response(null, { status: 200 }),
+    })
+
+    await expect(
+      detectSpatialDataset('https://example.test/broken', { fetcher }),
+    ).rejects.toThrow('is not valid JSON')
   })
 
   it('builds Visium HD bins from the manifest and checks their files', async () => {

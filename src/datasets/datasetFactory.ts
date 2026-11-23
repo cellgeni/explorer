@@ -358,18 +358,43 @@ export async function detectSpatialDataset(
 
   try {
     const detection = await detectSpatialDatasetLayout(normalizedBaseUrl, options)
+    // A cancelled detection leaves the last one's registrations (EXP-206).
+    options.signal?.throwIfAborted()
     setDatasetManifest(
       normalizedBaseUrl,
       detection.platform === 'unknown' ? undefined : detection.manifest,
     )
+
+    if (detection.platform === 'unknown') {
+      datasetDetections.delete(normalizedBaseUrl)
+    } else {
+      datasetDetections.set(normalizedBaseUrl, detection)
+    }
+
     return detection
   } catch (error) {
+    // A probe that failed because the caller aborted can surface as another
+    // error, such as a manifest file that "is not readable".
+    options.signal?.throwIfAborted()
+
     if (error instanceof DatasetManifestError) {
       setDatasetManifest(normalizedBaseUrl, undefined)
+      datasetDetections.delete(normalizedBaseUrl)
     }
 
     throw error
   }
+}
+
+// The last detection of each URL that found a dataset. A dataset opened
+// without a detection, such as by a Xenium load's first boundary read or a
+// collection preview, takes it rather than probing the folder again
+// (EXP-204). A later detection of the URL replaces it.
+const datasetDetections = new Map<string, SpatialDatasetDetection>()
+
+// For tests.
+export function clearDatasetDetections(): void {
+  datasetDetections.clear()
 }
 
 async function detectSpatialDatasetLayout(
@@ -486,16 +511,19 @@ async function detectSpatialDatasetLayout(
 
   await registerFolderListing(normalizedBaseUrl, options)
 
-  const [manifest, xeniumManifest, ateraManifest] = await Promise.all([
-    readDatasetManifest(
-      joinUrl(normalizedBaseUrl, DATASET_MANIFEST_FILE),
-      'optional',
-      options,
-      checked,
-    ),
+  const manifestUrl = joinUrl(normalizedBaseUrl, DATASET_MANIFEST_FILE)
+  const [readManifest, xeniumManifest, ateraManifest] = await Promise.all([
+    readDatasetManifest(manifestUrl, 'optional', options, checked),
     probeDatasetPath(normalizedBaseUrl, 'experiment.xenium', options),
     probeDatasetPath(normalizedBaseUrl, ATERA_EXPERIMENT_FILE, options),
   ])
+  // A manifest read that got no answer does not show the folder has none: one
+  // an earlier detection of this folder found still holds (EXP-205).
+  const manifest =
+    readManifest ??
+    (manifestUnanswered(checked.find((probe) => probe.url === manifestUrl))
+      ? datasetManifestFor(normalizedBaseUrl)
+      : undefined)
 
   if (manifest !== undefined) {
     if (normalizeBaseUrl(manifest.rootUrl) !== normalizedBaseUrl) {
@@ -932,9 +960,10 @@ async function readDatasetManifest(
   }
 
   noteReadableResponse(url, response.status)
-  checked.push({ path, url, ok: response.ok, status: response.status })
 
   if (!response.ok) {
+    checked.push({ path, url, ok: false, status: response.status })
+
     if (mode === 'required') {
       throw new DatasetManifestError(url, `could not be read (HTTP ${response.status}).`)
     }
@@ -942,12 +971,35 @@ async function readDatasetManifest(
     return undefined
   }
 
+  let text: string
+
+  try {
+    text = await response.text()
+  } catch (cause) {
+    const error = cause instanceof Error ? cause.message : String(cause)
+
+    if (options.signal?.aborted === true) {
+      throw cause
+    }
+
+    checked.push({ path, url, ok: false, status: response.status, error })
+
+    if (mode === 'required') {
+      throw new DatasetManifestError(url, `could not be read (${error}).`, { cause })
+    }
+
+    return undefined
+  }
+
+  checked.push({ path, url, ok: true, status: response.status })
   let json: unknown
 
   try {
-    json = JSON.parse(await response.text())
+    json = JSON.parse(text)
   } catch (cause) {
-    if (mode === 'required') {
+    // A page a host answers for any path is not a manifest, but a document
+    // that opens as a JSON object is one with a syntax error (EXP-208).
+    if (mode === 'required' || text.trimStart().startsWith('{')) {
       throw new DatasetManifestError(url, 'is not valid JSON.', { cause })
     }
 
@@ -959,6 +1011,19 @@ async function readDatasetManifest(
   }
 
   return parseDatasetManifest(json, url)
+}
+
+// A manifest read that neither found the file nor showed it absent: no
+// response, a timeout, a body that broke off, or a status such as 5xx or 429.
+function manifestUnanswered(probe: DatasetProbeResult | undefined): boolean {
+  return (
+    probe !== undefined &&
+    !probe.ok &&
+    probe.error !== NOT_LISTED &&
+    probe.status !== 403 &&
+    probe.status !== 404 &&
+    probe.status !== 410
+  )
 }
 
 async function detectFromManifest(
@@ -1663,6 +1728,7 @@ export async function createSpatialDataset(
 ): Promise<AnySpatialDataset> {
   const detection =
     detectionOf(baseUrl, options.detection) ??
+    detectionOf(baseUrl, datasetDetections.get(normalizeBaseUrl(baseUrl))) ??
     (await detectSpatialDataset(baseUrl, options))
 
   if (detection.platform === 'xenium') {
@@ -1936,6 +2002,10 @@ async function probeDirectDatasetUrl(
         : {}),
     }
   } catch (cause) {
+    if (options.signal?.aborted === true) {
+      throw cause
+    }
+
     return { path, url, ok: false, error: probeError(url, cause) }
   }
 }

@@ -156,7 +156,11 @@ missing file fails as a network error, so the listing is the only way to know
 it is missing.
 
 Detection registers the manifest it found (or clears an earlier one) for the
-entered URL in `src/data/datasetFiles.ts`. Readers keep receiving the entered
+entered URL in `src/data/datasetFiles.ts`. It also keeps the URL's last
+detection that found a dataset, so a dataset asked for without one, such as by
+a Xenium load's first boundary read or a collection preview, is opened from it
+rather than probing the folder again. A cancelled detection ends as an
+`AbortError` and changes neither. Readers keep receiving the entered
 URL and ask for files by role with `datasetFileUrlFor(baseUrl, role)`, which
 returns the manifest's location or the standard name. See
 [Dataset manifest](./dataset-manifest.md#how-it-works).
