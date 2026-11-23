@@ -741,8 +741,11 @@ Method:
   not independent. Use exported cells for a proper differential expression
   analysis.
 
-Exports: `Export GeoJSON` (`{name}-roi.geojson`: the selection's polygon with
-its name, the dataset URL, the cell or barcode count and the time of export,
+Exports: `{name}` in a file name is the selection's name with its letters and
+digits in any script, accents dropped. `Export GeoJSON` (`{name}-roi.geojson`:
+the selection's polygon with its name in `name`, as QuPath and Import GeoJSON
+read it, and `objectType` `annotation`; the dataset URL, without a presigned
+URL's signature; the cell or barcode count and the time of export,
 `exported_at`, in UTC; `hit_cell_limit` is true when Xenium stopped at 50,000
 cells), `Export Cells` (`{name}-cells.csv`:
 the cells read, so up to 50,000 on Xenium and every cell elsewhere),

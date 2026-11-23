@@ -1,4 +1,5 @@
 import { formatCsv } from '../../utils/csv'
+import { fileNamePart } from '../../utils/fileName'
 import type { PlotGene, PlotPaint } from './plotModel'
 import {
   plotGroupMean,
@@ -141,16 +142,6 @@ export function plotFileName(
     ...(setLabel === null ? [] : [fileNamePart(setLabel, 'set')]),
   ]
   return `${parts.join('-')}.${extension}`
-}
-
-function fileNamePart(value: string, fallback: string): string {
-  const part = value
-    .normalize('NFKD')
-    .replace(/\p{M}+/gu, '')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '-')
-    .replace(/^-+|-+$/g, '')
-  return part === '' ? fallback : part
 }
 
 // The extensions of the data the app opens, which a dataset's name drops;

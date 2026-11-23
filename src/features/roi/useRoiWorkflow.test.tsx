@@ -7,7 +7,7 @@ import type {
   ViewerViewportDetail,
 } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
-import { micrometers } from '../../data/coords'
+import { micrometers, scaledImagePixelFrame } from '../../data/coords'
 import { ROI_CELL_EXPORT_LIMIT, roiCellsWithin } from '../../data/roiCells'
 import { RoiGeneStatsH5FallbackSkippedError } from '../../data/roiGeneStats'
 import type { RoiSelection } from '../../data/roiSelection'
@@ -24,6 +24,7 @@ import type {
 import { ROI_GENE_VIEWPORT_PREWARM_DEBOUNCE_MS } from './roiModel'
 import { ALL_GENES, type RoiReferenceState } from './roiEnrichmentModel'
 import { useRoiWorkflow } from './useRoiWorkflow'
+import { parseGeometricAnnotationsGeoJson } from '../annotations/geometricAnnotationModel'
 import type { DatasetCell } from '../../datasets/spatialDataset'
 
 const selection: RoiSelection = {
@@ -512,6 +513,8 @@ describe('useRoiWorkflow', () => {
       features: [
         {
           properties: {
+            name: 'ROI 1',
+            objectType: 'annotation',
             roi_name: 'ROI 1',
             exported_at: '2026-11-22T12:34:56.789Z',
             dataset_url: 'https://example.test/output',
@@ -536,6 +539,13 @@ describe('useRoiWorkflow', () => {
     expect(click).toHaveBeenCalledTimes(1)
     expect(revokeObjectUrl).toHaveBeenCalledWith('blob:test')
     expect(snapshot.debugMessages).toContain('Exported ROI GeoJSON ROI 1')
+    // Import GeoJSON reads the selection back under its name.
+    expect(
+      parseGeometricAnnotationsGeoJson(JSON.stringify(geoJson), {
+        defaultCoordinateUnit: 'micrometer',
+        pixelFrame: scaledImagePixelFrame(1),
+      }).annotations.map((annotation) => annotation.label),
+    ).toEqual(['ROI 1'])
   })
 
   it('says an ROI is cut short only when the reader stopped at its limit', async () => {
