@@ -330,6 +330,31 @@ describe('CollectionPreviewStore', () => {
     expect(fake.overviewCalls).toEqual([A])
   })
 
+  // A failure was kept until the genes, set or mode changed (EXP-242).
+  it('reads a failed preview again when it comes back into view', async () => {
+    const fake = fakeDatasets()
+    let fail = true
+    const getSpatialDataset = vi.fn(async (url: string) => {
+      if (fail) throw new Error('HTTP 503')
+      return fake.loaders.getSpatialDataset(url)
+    }) as unknown as CollectionPreviewLoaders['getSpatialDataset']
+    store = new CollectionPreviewStore([A], { ...fake.loaders, getSpatialDataset })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    await flush()
+    expect(store.entry(A).error).toContain('HTTP 503')
+
+    fail = false
+    store.setVisible(A, false)
+    store.setVisible(A, true)
+    expect(store.entry(A).error).toBe(null)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    expect(store.entry(A).cells).not.toBe(null)
+  })
+
   it('stops reading when stopped, and goes on after a start', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore([A], fake.loaders)

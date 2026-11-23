@@ -226,7 +226,11 @@ export function stackPickText(
   }
 
   const cellId = section.cells.cellIds[pick.index] ?? ''
-  const classIndex = section.classes?.classOf[pick.index] ?? -1
+  // The class it is drawn in, else its first, hidden, class.
+  const shownClass =
+    section.overlay?.kind === 'classes' ? (section.overlay.classOf[pick.index] ?? -1) : -1
+  const classIndex =
+    shownClass >= 0 ? shownClass : (section.classes?.classOf[pick.index] ?? -1)
   const classLabel =
     section.overlay?.kind === 'classes'
       ? section.classes?.classes[classIndex]?.label

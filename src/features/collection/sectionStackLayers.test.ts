@@ -38,6 +38,7 @@ const CLASSES: PreviewClasses = {
     { id: 'glia', label: 'Glia', cellCount: 1 },
   ],
   classOf: Int32Array.from([0, 1, 0]),
+  members: [Uint32Array.of(0, 2), Uint32Array.of(1)],
 }
 // The same cells placed in 3D, and their scores with each one's z.
 const DEEP_CELLS: PreviewCells = {

@@ -40,6 +40,7 @@ import {
   type CollectionState,
   type CollectionView,
 } from './collectionModel'
+import { shownClassOf } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import { canShowBeside, MAX_LINKED_SECTIONS } from './linkedSectionsModel'
@@ -519,7 +520,7 @@ function CollectionPreview({
       const colors = colorsForAnnotations(classes.classes, annotations.colors)
       return {
         kind: 'classes',
-        classOf: classes.classOf,
+        classOf: shownClassOf(classes, annotations.hiddenIds),
         colors: classes.classes.map(({ id }) =>
           annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
         ),
@@ -638,6 +639,7 @@ interface PreviewSize {
 const DEFAULT_PREVIEW_SIZE: PreviewSize = { width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }
 
 // The cells of the classes not hidden, of every cell in the dataset.
+// The cells drawn in a shown class, each once, whatever other classes list it.
 function shownClassCellCount(
   classes: PreviewEntry['classes'],
   annotations: CollectionBarAnnotations,
@@ -645,8 +647,8 @@ function shownClassCellCount(
   if (classes === null) return undefined
 
   let count = 0
-  for (const entry of classes.classes) {
-    if (!annotations.hiddenIds.has(entry.id)) count += entry.cellCount
+  for (const classIndex of shownClassOf(classes, annotations.hiddenIds)) {
+    if (classIndex >= 0) count += 1
   }
   return count
 }

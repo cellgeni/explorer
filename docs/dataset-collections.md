@@ -285,7 +285,9 @@ the main view's colours instead. A class the main view has not coloured yet
 takes the colour it will have when its dataset opens. Hidden classes fade
 to a faint grey, as in the main view, so hiding all but one cell type (Alt-click its checkbox in the legend
 or in Cells › Clusters) shows where it is in every section;
-each preview then counts the cells of the shown classes (`1,204 cells`). The
+each preview then counts the cells of the shown classes (`1,204 cells`),
+each once. A cell in a hidden class and a shown one (the `All` set) is
+drawn in the shown one, as in the main view. The
 bar's left side names the set and how many classes are hidden. A set is read
 once per dataset and selection, like a gene.
 
@@ -307,6 +309,8 @@ once per dataset and selection, like a gene.
   classes, whenever the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
+  A preview that could not be read is tried again when it comes back into
+  view.
 - **Grid.** `Expand` (the arrows next to "Collection" in the bar) lays the previews out as a grid over the
   view, larger, with groups side by side where they fit, so a collection
   of about twenty sections fits on one screen. The layer panel stays open

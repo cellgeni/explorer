@@ -122,6 +122,9 @@ export class CollectionPreviewStore {
 
     if (visible) {
       this.visible.add(url)
+      // A read that failed (a 503, a dropped connection) is tried again when
+      // its preview comes back into view; one that cannot be previewed is not.
+      if (this.errors.delete(url)) this.changed()
       this.pump()
     } else {
       this.visible.delete(url)
