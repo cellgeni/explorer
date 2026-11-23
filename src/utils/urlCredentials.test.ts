@@ -16,6 +16,19 @@ describe('urlWithoutCredentials', () => {
       url: 'https://example.test/run?version=2',
       signed: false,
     })
+    // Addresses on this site, which the app accepts (EXP-234).
+    expect(urlWithoutCredentials('/data/run.h5ad?token=abc#view')).toEqual({
+      url: '/data/run.h5ad#view',
+      signed: true,
+    })
+    expect(urlWithoutCredentials('../run.h5ad?sig=1&sv=2')).toEqual({
+      url: '../run.h5ad',
+      signed: true,
+    })
+    expect(urlWithoutCredentials('./run.h5ad?version=2')).toEqual({
+      url: './run.h5ad?version=2',
+      signed: false,
+    })
     expect(urlWithoutCredentials('not a url')).toEqual({
       url: 'not a url',
       signed: false,
