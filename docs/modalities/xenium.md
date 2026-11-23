@@ -294,8 +294,11 @@ or exact points.
 ### Annotations And Embeddings
 
 - `analysis.zarr.zip` groupings load on demand; matrix row indices are mapped
-  to cell IDs through the matrix `cell_id` array. Labels drop the
-  `gene_expression_` prefix and `_clusters` suffix.
+  to cell IDs through the matrix `cell_id` array, which the gene reads keep
+  for the session. Labels drop the `gene_expression_` prefix and `_clusters`
+  suffix. Both zips are read as the matrix is (a one-byte GET where HEAD is
+  refused, the persistent byte-range cache), and the groupings of "All" are
+  read together.
 - Embedding CSVs are tried in order; the first usable UMAP and t-SNE files win.
 
 ### Plots Panel
