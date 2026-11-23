@@ -658,6 +658,39 @@ AAACAGAGCGACTCCT-1,Stroma`,
     expect(snapshot.hiddenAnnotationIds).toEqual(['b'])
   })
 
+  it('hides the other classes of a set a link shows only some of', async () => {
+    const annotations: readonly Annotation[] = [0, 1, 2, 3].map((index) => ({
+      id: `analysis:leiden:${index}`,
+      label: `leiden: ${index}`,
+      cellIds: [asCellId(`aaaaaaaa-${index + 1}`)],
+    }))
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => annotations)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.loadAnnotationGroup('analysis:leiden', {
+        shownAnnotationIds: ['analysis:leiden:2'],
+      })
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(snapshot.hiddenAnnotationIds).toEqual([
+      'analysis:leiden:0',
+      'analysis:leiden:1',
+      'analysis:leiden:3',
+    ])
+  })
+
   it('keeps the imported classes a link hides', async () => {
     const cellId = asCellId('aaaaaaaa-1')
     vi.stubGlobal(

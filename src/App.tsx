@@ -262,6 +262,7 @@ import { useDatasetDiagnosticsWorkflow } from './features/diagnostics/useDataset
 import {
   annotationLabelsForCell,
   annotationStatusCopy,
+  compactHiddenAnnotationIds,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   linkAnnotationGroupId,
@@ -3140,6 +3141,7 @@ export function App({ dependencies }: AppProps = {}) {
       const load = loadAnnotationGroup(groupId, {
         switchColorMode: pending.switchColorMode,
         hiddenAnnotationIds: pending.hiddenAnnotationIds,
+        shownAnnotationIds: pending.shownAnnotationIds,
         hiddenAnnotationSetIds: pending.hiddenAnnotationSetIds,
       })
       linkAnnotationSetLoadRef.current = load
@@ -3201,6 +3203,7 @@ export function App({ dependencies }: AppProps = {}) {
       void handleImportAnnotationUrlRef
         .current(initialAnnotationUrl, {
           hiddenAnnotationIds: initialShareableState.hiddenAnnotationIds,
+          shownAnnotationIds: initialShareableState.shownAnnotationIds,
           hiddenAnnotationSetIds: initialShareableState.hiddenAnnotationSetIds,
         })
         .then((imported) => {
@@ -3221,6 +3224,7 @@ export function App({ dependencies }: AppProps = {}) {
     initialShareableState.datasetUrl,
     initialShareableState.hiddenAnnotationIds,
     initialShareableState.hiddenAnnotationSetIds,
+    initialShareableState.shownAnnotationIds,
     loadRequestId,
     loadedDatasetUrl,
     setAnnotationImportUrl,
@@ -4036,10 +4040,25 @@ export function App({ dependencies }: AppProps = {}) {
   )
   // Hidden classes and sets: until the link's set loads, the link keeps the
   // ones it was opened with, as it keeps its sets.
-  const sharedHiddenAnnotationIds =
-    linkAnnotationGroupIds === null
-      ? hiddenAnnotationIds
-      : (initialShareableState.hiddenAnnotationIds ?? hiddenAnnotationIds)
+  // A set with most classes hidden is written by the classes shown.
+  const compactedHiddenAnnotationIds = useMemo(
+    () =>
+      compactHiddenAnnotationIds(
+        annotationState.status === 'ready' ? annotationState.annotations : [],
+        hiddenAnnotationIds,
+      ),
+    [annotationState, hiddenAnnotationIds],
+  )
+  const linkHiddenClassesPending =
+    linkAnnotationGroupIds !== null &&
+    (initialShareableState.hiddenAnnotationIds !== undefined ||
+      initialShareableState.shownAnnotationIds !== undefined)
+  const sharedHiddenAnnotationIds = linkHiddenClassesPending
+    ? (initialShareableState.hiddenAnnotationIds ?? [])
+    : compactedHiddenAnnotationIds.hidden
+  const sharedShownAnnotationIds = linkHiddenClassesPending
+    ? (initialShareableState.shownAnnotationIds ?? [])
+    : compactedHiddenAnnotationIds.shown
   const sharedHiddenAnnotationSetIds =
     linkAnnotationGroupIds === null
       ? hiddenAnnotationSetIds
@@ -4157,6 +4176,7 @@ export function App({ dependencies }: AppProps = {}) {
       datasetDefaults: datasetManifestDefaults,
       annotationGroupIds: sharedAnnotationGroupIds,
       hiddenAnnotationIds: sharedHiddenAnnotationIds,
+      shownAnnotationIds: sharedShownAnnotationIds,
       hiddenAnnotationSetIds: sharedHiddenAnnotationSetIds,
       spatialDataSelection: spatialDataSelectionToShareable(spatialDataControlState),
       visiumSelection: visiumSelectionToShareable(visiumControlState),
@@ -5651,6 +5671,7 @@ interface PendingAnnotationGroups {
   readonly openUrl: string | null
   readonly groupIds: readonly string[]
   readonly hiddenAnnotationIds: readonly string[] | undefined
+  readonly shownAnnotationIds: readonly string[] | undefined
   readonly hiddenAnnotationSetIds: readonly string[] | undefined
   readonly switchColorMode: boolean
 }
@@ -5664,6 +5685,7 @@ function pendingAnnotationGroupsFor(
     openUrl,
     groupIds: state.annotationGroupIds ?? [],
     hiddenAnnotationIds: state.hiddenAnnotationIds,
+    shownAnnotationIds: state.shownAnnotationIds,
     hiddenAnnotationSetIds: state.hiddenAnnotationSetIds,
     switchColorMode:
       state.linkVersion === undefined && state.observationColorMode === undefined,

@@ -14,6 +14,8 @@ interface ShareableDatasetHashOptions {
   readonly annotationGroupIds?: readonly string[] | undefined
   // Hidden annotation classes (hiddenClasses=).
   readonly hiddenAnnotationIds?: readonly string[] | undefined
+  // A set's shown classes when most of it is hidden (shownClasses=).
+  readonly shownAnnotationIds?: readonly string[] | undefined
   // Hidden annotation sets (hiddenSets=).
   readonly hiddenAnnotationSetIds?: readonly string[] | undefined
   readonly customImageOpacities: readonly number[] | undefined
@@ -222,6 +224,7 @@ export function useShareableUrlHash({
     hiddenAnnotationIds,
     hiddenAnnotationSetIds,
     sectionView,
+    shownAnnotationIds,
   } = dataset
   const segmentationUrl = dataset.segmentation?.url
   const segmentationFormat = dataset.segmentation?.format
@@ -367,6 +370,7 @@ export function useShareableUrlHash({
           ...(query === undefined ? {} : { query }),
           hiddenLayers,
           ...(hiddenAnnotationIds === undefined ? {} : { hiddenAnnotationIds }),
+          ...(shownAnnotationIds === undefined ? {} : { shownAnnotationIds }),
           ...(hiddenAnnotationSetIds === undefined ? {} : { hiddenAnnotationSetIds }),
           geneExpressionColorScale,
           ...(geneExpressionScaleRange === undefined ? {} : { geneExpressionScaleRange }),
@@ -456,6 +460,7 @@ export function useShareableUrlHash({
     hiddenAnnotationSetIds,
     hiddenLayers,
     panels,
+    shownAnnotationIds,
     plot,
     query,
     tool,

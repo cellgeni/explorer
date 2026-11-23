@@ -65,6 +65,10 @@ export interface ShareableState {
   // Hidden annotation classes, such as `analysis:leiden:3`: `hiddenClasses=`,
   // comma-separated, with `%` and `,` in an ID written as `%25` and `%2C`.
   readonly hiddenAnnotationIds?: readonly string[]
+  // For a set with more classes hidden than shown, the shown ones instead:
+  // `shownClasses=`, written as `hiddenClasses=` is. The set's other classes
+  // are hidden.
+  readonly shownAnnotationIds?: readonly string[]
   // Hidden annotation sets, such as `analysis:leiden` (the set's eye):
   // `hiddenSets=`, written as `hiddenClasses=` is.
   readonly hiddenAnnotationSetIds?: readonly string[]
@@ -153,25 +157,26 @@ export function parseShareableState(hash: string): ShareableState {
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
   const annotationUrl = readString(params, 'annotationUrl')
-  const annotationGroupIds = readCsv(params, 'groups')
+  const annotationGroupIds = readEscapedCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
   const customImageOpacities = readUnitNumbers(params, 'customImageOpacity')
   const segmentationUrl = readString(params, 'segmentation')
   const segmentationFormat = readString(params, 'segmentationFormat')
   const segmentationUnits = readString(params, 'segmentationUnits')
   // An empty genes= clears a dataset manifest's genes.
-  const selectedGenes = readCsvAllowEmpty(params, 'genes')
+  const selectedGenes = readCsvAllowEmpty(params, 'genes')?.map(unescapeCsvEntry)
   const geneSets = readString(params, 'geneSets')
   const viewState = parseViewState(params.get('view'))
   const roiSelection = parseRoiSelection(params.get('roi'))
   const activeTab = readString(params, 'tab')
-  const panels = readCsvAllowEmpty(params, 'panel')
+  const panels = readCsvAllowEmpty(params, 'panel')?.map(unescapeCsvEntry)
   const card = readString(params, 'card')
   const tool = readString(params, 'tool')
   const plot = readString(params, 'plot')
   const query = readString(params, 'query')
-  const hiddenLayers = readCsv(params, 'hidden')
+  const hiddenLayers = readEscapedCsv(params, 'hidden')
   const hiddenAnnotationIds = readEscapedCsv(params, 'hiddenClasses')
+  const shownAnnotationIds = readEscapedCsv(params, 'shownClasses')
   const hiddenAnnotationSetIds = readEscapedCsv(params, 'hiddenSets')
   const geneExpressionColorScale = readString(params, 'scale')
   const geneExpressionScaleRange = readString(params, 'geneRange')
@@ -195,7 +200,9 @@ export function parseShareableState(hash: string): ShareableState {
   const showNavigation = parseBoolean(params.get('navButtons'))
   const showScaleBar = parseBoolean(params.get('scaleBar'))
   const cellBoundaryOpacity = parseUnitNumber(params.get('cellBoundary'))
-  const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')
+  const morphologyEnabledChannelIds = readCsvAllowEmpty(params, 'channels')?.map(
+    unescapeCsvEntry,
+  )
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
   const imageView = readString(params, 'imageView')
   const cellView = readString(params, 'cellView')
@@ -323,6 +330,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (hiddenAnnotationIds !== undefined) {
     state.hiddenAnnotationIds = hiddenAnnotationIds
+  }
+
+  if (shownAnnotationIds !== undefined) {
+    state.shownAnnotationIds = shownAnnotationIds
   }
 
   if (hiddenAnnotationSetIds !== undefined) {
@@ -560,7 +571,7 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'annotationUrl', state.annotationUrl)
 
   if (state.annotationGroupIds !== undefined && state.annotationGroupIds.length > 0) {
-    params.set('groups', state.annotationGroupIds.join(','))
+    params.set('groups', state.annotationGroupIds.map(escapeCsvEntry).join(','))
   }
 
   if (state.customImageUrls !== undefined) {
@@ -586,7 +597,7 @@ export function formatShareableState(state: ShareableState): string {
   // Written even when empty, which a link does only to clear a manifest's
   // genes (withoutShareableDefaults leaves out the usual empty list).
   if (state.selectedGenes !== undefined) {
-    params.set('genes', state.selectedGenes.join(','))
+    params.set('genes', state.selectedGenes.map(escapeCsvEntry).join(','))
   }
 
   setOptionalString(params, 'geneSets', state.geneSets)
@@ -602,7 +613,7 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'tab', state.activeTab)
 
   if (state.panels !== undefined) {
-    params.set('panel', state.panels.join(','))
+    params.set('panel', state.panels.map(escapeCsvEntry).join(','))
   }
 
   setOptionalString(params, 'card', state.card)
@@ -611,10 +622,11 @@ export function formatShareableState(state: ShareableState): string {
   setOptionalString(params, 'query', state.query)
 
   if (state.hiddenLayers !== undefined && state.hiddenLayers.length > 0) {
-    params.set('hidden', state.hiddenLayers.join(','))
+    params.set('hidden', state.hiddenLayers.map(escapeCsvEntry).join(','))
   }
 
   setEscapedCsv(params, 'hiddenClasses', state.hiddenAnnotationIds)
+  setEscapedCsv(params, 'shownClasses', state.shownAnnotationIds)
   setEscapedCsv(params, 'hiddenSets', state.hiddenAnnotationSetIds)
   setOptionalString(params, 'scale', state.geneExpressionColorScale)
   setOptionalString(params, 'geneRange', state.geneExpressionScaleRange)
@@ -688,7 +700,10 @@ export function formatShareableState(state: ShareableState): string {
   }
 
   if (state.morphologyEnabledChannelIds !== undefined) {
-    params.set('channels', state.morphologyEnabledChannelIds.join(','))
+    params.set(
+      'channels',
+      state.morphologyEnabledChannelIds.map(escapeCsvEntry).join(','),
+    )
   }
 
   if (state.morphologyZPlane !== undefined && Number.isFinite(state.morphologyZPlane)) {

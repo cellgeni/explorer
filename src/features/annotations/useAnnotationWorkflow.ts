@@ -34,6 +34,7 @@ import {
   annotationLoadFailed,
   annotationLoadReady,
   annotationLoadStarted,
+  annotationIdsHiddenByLink,
   annotationSetIdForAnnotation,
   annotationsToCsv,
   colorsForAnnotations,
@@ -111,6 +112,8 @@ interface UseAnnotationWorkflowOptions {
 // loaded labels stay hidden once they load; the rest are dropped.
 interface LinkHiddenAnnotationOptions {
   readonly hiddenAnnotationIds?: readonly string[] | undefined
+  // shownClasses=: the other classes of their sets are hidden.
+  readonly shownAnnotationIds?: readonly string[] | undefined
   readonly hiddenAnnotationSetIds?: readonly string[] | undefined
 }
 
@@ -203,6 +206,7 @@ export function useAnnotationWorkflow({
       {
         hiddenAnnotationIds = [],
         hiddenAnnotationSetIds = [],
+        shownAnnotationIds = [],
         switchColorMode = true,
       }: { readonly switchColorMode?: boolean } & LinkHiddenAnnotationOptions = {},
     ): Promise<void> => {
@@ -236,7 +240,13 @@ export function useAnnotationWorkflow({
             annotationLoadReady(loadState.url, annotations, selectedGroupId),
           )
           setAnnotationColors((current) => colorsForAnnotations(annotations, current))
-          setHiddenAnnotationIds(loadedAnnotationIds(annotations, hiddenAnnotationIds))
+          setHiddenAnnotationIds(
+            annotationIdsHiddenByLink(
+              annotations,
+              hiddenAnnotationIds,
+              shownAnnotationIds,
+            ),
+          )
           setHiddenAnnotationSetIds((current) =>
             withLoadedAnnotationSetIds(current, annotations, hiddenAnnotationSetIds),
           )
@@ -297,6 +307,7 @@ export function useAnnotationWorkflow({
       {
         hiddenAnnotationIds: linkHiddenAnnotationIds = [],
         hiddenAnnotationSetIds: linkHiddenAnnotationSetIds = [],
+        shownAnnotationIds: linkShownAnnotationIds = [],
       }: LinkHiddenAnnotationOptions = {},
     ) => {
       const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
@@ -346,7 +357,11 @@ export function useAnnotationWorkflow({
       )
       setHiddenAnnotationIds((current) => [
         ...removeHiddenAnnotationIdsByPrefix(current, importedPrefix),
-        ...loadedAnnotationIds(importedAnnotations, linkHiddenAnnotationIds),
+        ...annotationIdsHiddenByLink(
+          importedAnnotations,
+          linkHiddenAnnotationIds,
+          linkShownAnnotationIds,
+        ),
       ])
       setHiddenAnnotationSetIds((current) =>
         withLoadedAnnotationSetIds(
@@ -823,20 +838,6 @@ function checkImportedCellIds(
   }
 
   return { total: importedCellIds.size, missing }
-}
-
-// The IDs among the loaded labels, for the classes a link hides.
-function loadedAnnotationIds(
-  annotations: readonly Annotation[],
-  annotationIds: readonly string[],
-): readonly string[] {
-  if (annotationIds.length === 0) {
-    return []
-  }
-
-  const loadedIds = new Set(annotations.map((annotation) => annotation.id))
-
-  return annotationIds.filter((annotationId) => loadedIds.has(annotationId))
 }
 
 // The hidden sets with those a link hides that the loaded labels belong to.
