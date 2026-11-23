@@ -35,6 +35,20 @@ Important rules:
 - Allow `HEAD` requests. Platform detection, H5AD size checks, and the Parquet
   reader use them. A failed `HEAD` makes detection skip that platform.
 
+## Dataset Addresses
+
+Enter the full address, starting with `https://` (or `http://`), or a path on
+the viewer's own server starting with `/`. An address without its scheme, such
+as `data.example.org/run-1`, is refused as "Not a web address" before anything
+is requested.
+
+A folder's address can end in a query string, such as a token or an Azure SAS
+signature that grants the whole folder. Each file is then read at its own path
+with that query after it: `…/run-1?token=abc` reads
+`…/run-1/cells.parquet?token=abc`. A fragment (`#…`) is dropped. A presigned
+URL signs a single object, so it opens a single file (an `.h5ad`, an image or a
+zip), not a folder.
+
 ## Serve Data From Your Computer
 
 A small file server such as rclone or `npx http-server` can serve data from your
