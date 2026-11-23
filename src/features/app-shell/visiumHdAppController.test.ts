@@ -75,6 +75,23 @@ describe('visiumHdAppController', () => {
     ])
   })
 
+  it("maps a MultiPolygon cell's later parts to the cell's bins (EXP-220)", async () => {
+    expect(selectedVisiumHdCellMappedBinIds(mappings, 'cell-1#2', 8)).toEqual([
+      's_008um_1_1',
+      's_008um_1_2',
+    ])
+
+    const barcodeMappingsForCell = vi.fn(async () => mappings)
+    const signal = new AbortController().signal
+    await selectedVisiumHdCellMappings(
+      { matrix: vi.fn(), barcodeMappings: vi.fn(), barcodeMappingsForCell },
+      'cell-1#3',
+      50,
+      signal,
+    )
+    expect(barcodeMappingsForCell).toHaveBeenCalledWith('cell-1', { signal })
+  })
+
   it('uses cell-scoped mapping APIs before full mapping scans', async () => {
     const signal = new AbortController().signal
     const barcodeMappingsForCell = vi.fn(async () => mappings)

@@ -428,23 +428,25 @@ export function parseVisiumHdNucleusInstanceMaskRaster(
   const elements: SpatialElement[] = []
 
   for (const [label, edges] of edgesByLabel) {
-    const rings = traceMaskBoundaryRings(edges, options.scalefactors)
+    const polygons = maskRingsAsPolygons(
+      traceMaskBoundaryRings(edges, options.scalefactors),
+    )
 
-    for (let ringIndex = 0; ringIndex < rings.length; ringIndex += 1) {
-      const ring = rings[ringIndex]
+    for (let polygonIndex = 0; polygonIndex < polygons.length; polygonIndex += 1) {
+      const rings = polygons[polygonIndex]
 
-      if (ring === undefined || ring.length < 4) {
+      if (rings === undefined) {
         continue
       }
 
       elements.push({
         id:
-          ringIndex === 0
+          polygonIndex === 0
             ? formatVisiumHdNucleusInstanceMaskId(label)
-            : `${formatVisiumHdNucleusInstanceMaskId(label)}#${ringIndex + 1}`,
+            : `${formatVisiumHdNucleusInstanceMaskId(label)}#${polygonIndex + 1}`,
         geometry: {
           kind: 'polygon',
-          rings: [ring],
+          rings,
         },
         metadata: {
           segmentation: {
@@ -706,6 +708,82 @@ function readOrCreateMaskEdges(
   return edges
 }
 
+// Pixel edges run clockwise with y down, so an outer boundary traces with a
+// positive area and a hole with a negative one. Each hole joins the outer ring
+// around it, so a nucleus with a hole is one polygon, not a second, filled
+// nucleus (EXP-219).
+function maskRingsAsPolygons(rings: readonly DataPoint[][]): DataPoint[][][] {
+  const polygons: DataPoint[][][] = []
+  const holes: DataPoint[][] = []
+
+  for (const ring of rings) {
+    if (ring.length < 4) {
+      continue
+    }
+
+    if (signedRingArea(ring) < 0) {
+      holes.push(ring)
+    } else {
+      polygons.push([ring])
+    }
+  }
+
+  for (const hole of holes) {
+    const [start, end] = hole
+
+    if (start === undefined || end === undefined) {
+      continue
+    }
+
+    // The middle of the hole's first pixel edge is on no other ring.
+    const inside = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+    polygons
+      .find((polygon) => polygon[0] !== undefined && ringContains(polygon[0], inside))
+      ?.push(hole)
+  }
+
+  return polygons
+}
+
+function signedRingArea(ring: readonly DataPoint[]): number {
+  let area = 0
+
+  for (let index = 0; index + 1 < ring.length; index += 1) {
+    const a = ring[index]
+    const b = ring[index + 1]
+
+    if (a !== undefined && b !== undefined) {
+      area += a.x * b.y - b.x * a.y
+    }
+  }
+
+  return area / 2
+}
+
+// Even-odd test against a closed ring.
+function ringContains(
+  ring: readonly DataPoint[],
+  point: { x: number; y: number },
+): boolean {
+  let inside = false
+
+  for (let index = 0; index + 1 < ring.length; index += 1) {
+    const a = ring[index]
+    const b = ring[index + 1]
+
+    if (
+      a !== undefined &&
+      b !== undefined &&
+      a.y > point.y !== b.y > point.y &&
+      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
+    ) {
+      inside = !inside
+    }
+  }
+
+  return inside
+}
+
 function traceMaskBoundaryRings(
   edges: readonly MaskEdge[],
   scalefactors: VisiumHdSegmentationScalefactors,
@@ -909,10 +987,18 @@ function segmentationFeatureToElements(
     )
   }
 
-  const geometry = expectObject(
-    feature.geometry,
-    `Visium HD segmentation feature ${featureIndex} geometry`,
-  )
+  // A feature with no geometry or another kind, such as a point in a merged
+  // annotation file, is skipped, as the image-only GeoJSON reader does,
+  // rather than failing the file (EXP-218).
+  const geometry = feature.geometry
+
+  if (
+    !isRecord(geometry) ||
+    (geometry.type !== 'Polygon' && geometry.type !== 'MultiPolygon')
+  ) {
+    return []
+  }
+
   const polygonRings = readGeometryPolygons(geometry, featureIndex, options.scalefactors)
   const baseId = readSegmentationFeatureId(feature, featureIndex, options.kind)
   const metadata = readSegmentationFeatureMetadata(
@@ -1323,11 +1409,15 @@ function expectGeojsonMultiPolygon(
 }
 
 function expectObject(value: unknown, label: string): Record<string, unknown> {
-  if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-    return value as Record<string, unknown>
+  if (isRecord(value)) {
+    return value
   }
 
   throw new Error(`Expected ${label} to be an object.`)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function assertPositiveMicronsPerPixel(value: number): void {

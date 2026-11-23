@@ -9,6 +9,7 @@ import {
   visiumHdBarcodeMappingBinId,
   type VisiumHdBarcodeMapping,
 } from '../../datasets/visiumHdBarcodeMappings'
+import { visiumHdSegmentationCellId } from '../../datasets/visiumHdSegmentationIndex'
 import type { BBox } from '../../data/coords'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import type { GeneExpressionLoader } from './appDependencies'
@@ -95,7 +96,7 @@ export async function selectedVisiumHdCellMappings(
   signal: AbortSignal,
 ): Promise<readonly VisiumHdBarcodeMapping[]> {
   if (isVisiumHdCellBarcodeMappingsDataset(dataset)) {
-    return dataset.barcodeMappingsForCell(cellId, { signal })
+    return dataset.barcodeMappingsForCell(visiumHdSegmentationCellId(cellId), { signal })
   }
 
   if (!isVisiumHdBarcodeMappingsDataset(dataset)) {
@@ -127,9 +128,11 @@ export function selectedVisiumHdCellMappedBinIds(
   binSizeMicrometers: VisiumHdBinSizeMicrometers,
 ): readonly SpatialElementId[] {
   const mappedBinIds = new Set<SpatialElementId>()
+  // Every part of a MultiPolygon cell maps to the cell's bins (EXP-220).
+  const mappedCellId = visiumHdSegmentationCellId(cellId)
 
   for (const mapping of mappings) {
-    if (mapping.cellId !== cellId || (!mapping.inCell && !mapping.inNucleus)) {
+    if (mapping.cellId !== mappedCellId || (!mapping.inCell && !mapping.inNucleus)) {
       continue
     }
 

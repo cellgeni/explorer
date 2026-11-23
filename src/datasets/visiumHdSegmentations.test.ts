@@ -461,6 +461,76 @@ describe('Visium HD segmentation GeoJSON reader', () => {
     ).toThrow('to be a FeatureCollection')
   })
 
+  it('skips features without polygon geometry instead of failing the file (EXP-218)', () => {
+    const square = (x: number) => [
+      [
+        [x, 0],
+        [x + 4, 0],
+        [x + 4, 4],
+        [x, 0],
+      ],
+    ]
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: { cell_id: 1 },
+          geometry: { type: 'Polygon', coordinates: square(0) },
+        },
+        { type: 'Feature', properties: { cell_id: 2 }, geometry: null },
+        {
+          type: 'Feature',
+          properties: { cell_id: 3 },
+          geometry: { type: 'Point', coordinates: [5, 5] },
+        },
+        {
+          type: 'Feature',
+          properties: { cell_id: 4 },
+          geometry: { type: 'Polygon', coordinates: square(20) },
+        },
+      ],
+    }
+    const parser = createVisiumHdSegmentationIndexParser({ kind: 'cell', scalefactors })
+    parser.push(new TextEncoder().encode(JSON.stringify(geojson)))
+
+    expect(parser.finish().ids).toEqual(['cellid_000000001-1', 'cellid_000000004-1'])
+    expect(
+      parseVisiumHdSegmentationGeojson(geojson, { scalefactors }).map(
+        (element) => element.id,
+      ),
+    ).toEqual(['cellid_000000001-1', 'cellid_000000004-1'])
+  })
+
+  it('draws a nucleus with a hole as one polygon with that hole (EXP-219)', () => {
+    // Label 1 fills a 3 x 3 block except its middle pixel; label 2 is two
+    // separate pixels, so two parts.
+    const width = 7
+    const data = new Uint16Array(width * 5)
+    for (let row = 0; row < 3; row += 1) {
+      for (let col = 0; col < 3; col += 1) {
+        if (row !== 1 || col !== 1) data[row * width + col] = 1
+      }
+    }
+    data[4] = 2
+    data[4 * width + 6] = 2
+
+    const elements = parseVisiumHdNucleusInstanceMaskRaster(
+      { width, height: 5, data },
+      { scalefactors },
+    )
+
+    expect(elements.map((element) => element.id)).toEqual([
+      'nucleus_000000001',
+      'nucleus_000000002',
+      'nucleus_000000002#2',
+    ])
+    const ringCounts = elements.map((element) =>
+      element.geometry.kind === 'polygon' ? element.geometry.rings.length : 0,
+    )
+    expect(ringCounts).toEqual([2, 1, 1])
+  })
+
   it('converts labelled nucleus instance-mask TIFF pixels into polygon elements', () => {
     const elements = parseVisiumHdNucleusInstanceMaskRaster(
       {
