@@ -1582,7 +1582,9 @@ deposit, followed by the licence and citation.
 saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
 `generatedAt` in UTC to the second with `-` for `:` (for example
 `diagnostics-2026-11-17T14-05-09Z.json`). A signed address loses its query
-wherever the dump has it, the page address's `#dataset=` included. Then
+wherever the dump has it, the page address's `#dataset=` included. The
+transcript layer is written as counts (points, groups, bins), not the points
+themselves. Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
