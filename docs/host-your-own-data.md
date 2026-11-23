@@ -386,7 +386,8 @@ For hosted H5AD files, use the same CORS and byte-range rules listed above.
 Files up to 64 MiB are downloaded whole (no byte ranges) and opened
 client-side with `h5wasm`; larger ones are read by range, so only the groups
 the viewer shows are fetched, whatever their size. A host without byte-range
-support gets files up to 300 MiB downloaded whole. Over 300 MiB, when the file
+support gets files up to 300 MiB downloaded whole, and `Diagnose Dataset`
+gives such a file a warning rather than a failure. Over 300 MiB, when the file
 cannot be read by range (for example the host hides its size), the viewer uses
 a sibling kerchunk reference JSON at the H5AD URL plus `.json`, or an Icechunk
 repository at the H5AD URL plus `.icechunk`; for example:

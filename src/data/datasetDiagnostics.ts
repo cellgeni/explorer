@@ -39,6 +39,7 @@ import {
   type SpatialDataView,
 } from '../datasets/spatialDataCatalog'
 import { MERSCOPE_CSV_MAX_BYTES } from '../datasets/merscopeFormat'
+import { H5AD_MAX_FILE_BYTES } from '../datasets/h5adFormat'
 import { visiumHdFilteredBarcodesPath } from '../datasets/visiumHdStrategy'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
 import { isIcechunkUrl } from '../zarr/icechunkUrl'
@@ -305,13 +306,7 @@ export async function runDatasetDiagnostics(
         ? await checkIcechunkAnnData(detection.h5adUrl, options)
         : detection.source === 'zarr'
           ? await checkZarrAnnData(detection.h5adUrl, options)
-          : await checkDirectRangeFile(
-              detection.h5adUrl,
-              'h5ad-file',
-              'H5AD file',
-              true,
-              options,
-            ),
+          : await checkH5adFile(detection.h5adUrl, options),
     )
 
     return {
@@ -691,33 +686,53 @@ async function runAteraDiagnostics(
   try {
     const response = await getForCheck(experimentUrl, 'Experiment manifest', options)
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`)
-    }
+    // With a dataset manifest the run's files are named there, and the
+    // reader reads a missing experiment.spatial as one that names none.
+    if (
+      detection.manifest !== undefined &&
+      (response.status === 404 || response.status === 403)
+    ) {
+      discardBody(response)
+      checks.push(
+        diagnosticCheck({
+          id: 'experiment-manifest',
+          label: 'Experiment manifest',
+          url: experimentUrl,
+          required: false,
+          status: 'warning',
+          message: `HTTP ${response.status}; the dataset manifest names the run's files`,
+          startedAt,
+        }),
+      )
+    } else {
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
 
-    experiment = parseAteraExperiment(await response.json())
-    checks.push(
-      diagnosticCheck({
-        id: 'experiment-manifest',
-        label: 'Experiment manifest',
-        url: experimentUrl,
-        required: true,
-        status: 'pass',
-        message:
-          [
-            experiment.panelName,
-            experiment.cellCount === undefined
-              ? undefined
-              : `${experiment.cellCount.toLocaleString()} cells`,
-            experiment.micrometersPerPixel === undefined
-              ? undefined
-              : `${experiment.micrometersPerPixel} µm/px`,
-          ]
-            .filter((part) => part !== undefined)
-            .join('; ') || 'Readable',
-        startedAt,
-      }),
-    )
+      experiment = parseAteraExperiment(await response.json())
+      checks.push(
+        diagnosticCheck({
+          id: 'experiment-manifest',
+          label: 'Experiment manifest',
+          url: experimentUrl,
+          required: true,
+          status: 'pass',
+          message:
+            [
+              experiment.panelName,
+              experiment.cellCount === undefined
+                ? undefined
+                : `${experiment.cellCount.toLocaleString()} cells`,
+              experiment.micrometersPerPixel === undefined
+                ? undefined
+                : `${experiment.micrometersPerPixel} µm/px`,
+            ]
+              .filter((part) => part !== undefined)
+              .join('; ') || 'Readable',
+          startedAt,
+        }),
+      )
+    }
   } catch (cause) {
     checks.push(
       diagnosticCheck({
@@ -1486,6 +1501,78 @@ async function runMerscopeDiagnostics(
   ]
 }
 
+// A gzip file's inflated size from its trailer (ISIZE, the size modulo 2^32),
+// read with a suffix Range request; undefined when the host does not answer it.
+async function gzipInflatedSize(
+  url: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<number | undefined> {
+  try {
+    const response = await (options.fetcher ?? fetch)(url, {
+      headers: { Range: 'bytes=-4' },
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
+    })
+
+    if (response.status !== 206) {
+      discardBody(response)
+      return undefined
+    }
+
+    const bytes = new Uint8Array(await response.arrayBuffer())
+    return bytes.byteLength === 4
+      ? new DataView(bytes.buffer, bytes.byteOffset, 4).getUint32(0, true)
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
+// An .h5ad file read by range, or, on a host that does not answer Range
+// requests, downloaded whole when it is no larger than the reader allows.
+async function checkH5adFile(
+  url: string,
+  options: DatasetDiagnosticsOptions,
+): Promise<DatasetDiagnosticCheck> {
+  const range = await checkDirectRangeFile(url, 'h5ad-file', 'H5AD file', true, options)
+
+  if (range.status === 'pass') {
+    return range
+  }
+
+  let length: number | null
+
+  try {
+    const response = await fetchHead(
+      options.fetcher ?? fetch,
+      url,
+      options.signal === undefined ? {} : { signal: options.signal },
+    )
+
+    if (!response.ok) {
+      return range
+    }
+
+    const declared = Number(response.headers.get('Content-Length'))
+    length = Number.isFinite(declared) && declared > 0 ? declared : null
+  } catch {
+    return range
+  }
+
+  if (length !== null && length > H5AD_MAX_FILE_BYTES) {
+    return range
+  }
+
+  return {
+    ...range,
+    status: 'warning',
+    message: `${range.message} Files up to ${(H5AD_MAX_FILE_BYTES / (1024 * 1024)).toFixed(0)} MB are downloaded whole, so this one ${
+      length === null
+        ? 'loads if it is no larger'
+        : `(${(length / (1024 * 1024)).toFixed(1)} MB) loads`
+    }.`,
+  }
+}
+
 async function checkHeadFile(
   baseUrl: string,
   file: { readonly id: string; readonly label: string; readonly path: string },
@@ -1522,17 +1609,30 @@ async function checkHeadFile(
       Number.isFinite(length) && length > 0
         ? `${(length / (1024 * 1024)).toFixed(1)} MB`
         : null
-
-    if (maxBytes !== undefined && Number.isFinite(length) && length > maxBytes) {
-      return diagnosticCheck({
+    const limit = (maxBytes ?? 0) / (1024 * 1024)
+    const overLimit = (message: string) =>
+      diagnosticCheck({
         id: file.id,
         label: file.label,
         url,
         required,
         status: required ? 'fail' : 'warning',
-        message: `${size ?? ''} is above the ${(maxBytes / (1024 * 1024)).toFixed(0)} MB browser load limit`,
+        message: `${message} above the ${limit.toFixed(0)} MB browser load limit`,
         startedAt,
       })
+
+    if (maxBytes !== undefined && Number.isFinite(length) && length > maxBytes) {
+      return overLimit(`${size ?? ''} is`)
+    }
+
+    // The readers check a gzipped file's inflated size, from its trailer.
+    const gzipped = maxBytes !== undefined && /\.gz$/i.test(new URL(url).pathname)
+    const inflated = gzipped ? await gzipInflatedSize(url, options) : undefined
+
+    if (maxBytes !== undefined && inflated !== undefined && inflated > maxBytes) {
+      return overLimit(
+        `${size ?? 'The file'} gzipped inflates to ${(inflated / (1024 * 1024)).toFixed(1)} MB,`,
+      )
     }
 
     return diagnosticCheck({
@@ -1541,7 +1641,14 @@ async function checkHeadFile(
       url,
       required,
       status: 'pass',
-      message: size === null ? 'Readable' : `Readable (${size})`,
+      message:
+        size === null
+          ? maxBytes === undefined
+            ? 'Readable'
+            : 'Readable; size unknown, so the limit is checked as it loads'
+          : gzipped && inflated === undefined
+            ? `Readable (${size} gzipped); the size it inflates to is checked as it loads`
+            : `Readable (${size})`,
       startedAt,
     })
   } catch (cause) {
