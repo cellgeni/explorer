@@ -27,6 +27,12 @@ export interface VisiumHdSegmentationIndex {
   readonly cellIds?: readonly (string | undefined)[]
 }
 
+// A MultiPolygon's later parts are elements `<id>#2`, `<id>#3`, and so on; the
+// cell they belong to, as barcode_mappings.parquet names it, is `<id>`.
+export function visiumHdSegmentationCellId(elementId: string): string {
+  return elementId.replace(/#\d+$/, '')
+}
+
 // Collects polygons into index columns as a file is parsed.
 export class VisiumHdSegmentationIndexBuilder {
   private readonly ids: string[] = []
