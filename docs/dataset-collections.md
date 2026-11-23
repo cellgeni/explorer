@@ -310,7 +310,10 @@ so they are coloured again, without another read, once it loads.
   then the selected genes' scores for every cell, or the annotation set's
   classes, whenever the selection changes. Positions
   come from the same readers as the main view, so a previewed dataset
-  opens faster when chosen. Beyond 200,000 cells, every Nth is drawn.
+  opens faster when chosen. Beyond 200,000 cells, every Nth is drawn, but
+  every cell that scores and every cell of a small shown class is, so a rare
+  cell type still shows. A stored NaN or infinite score counts as none, as in
+  the main view.
 - **Grid.** `Expand` (the arrows next to "Collection" in the bar) lays the previews out as a grid over the
   view, larger, with groups side by side where they fit, so a collection
   of about twenty sections fits on one screen. The layer panel stays open
