@@ -122,7 +122,7 @@
         },
         "url": {
           "type": "string",
-          "pattern": "^[Hh][Tt][Tt][Pp][Ss]?://[^/]",
+          "pattern": "^\\s*[Hh][Tt][Tt][Pp][Ss]?://[^/]",
           "description": "Landing page for the deposit."
         },
         "license": {
@@ -154,25 +154,41 @@
           "description": "Genes to select. Names must match the gene panel exactly."
         },
         "colorCellsBy": {
-          "enum": [
-            "gene-expression",
-            "transcript-count",
-            "cell-area",
-            "annotations",
-            "metadata"
+          "anyOf": [
+            {
+              "enum": [
+                "gene-expression",
+                "transcript-count",
+                "cell-area",
+                "annotations",
+                "metadata"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(?:gene-expression|transcript-count|cell-area|annotations|metadata)\\s*$"
+            }
           ],
           "description": "The Cell color control. Without it, genes colour cells by gene expression."
         },
         "geneColorScale": {
-          "enum": [
-            "gold",
-            "magma",
-            "viridis",
-            "plasma",
-            "cividis",
-            "teal",
-            "rose",
-            "glasbey"
+          "anyOf": [
+            {
+              "enum": [
+                "gold",
+                "magma",
+                "viridis",
+                "plasma",
+                "cividis",
+                "teal",
+                "rose",
+                "glasbey"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^\\s*(?:gold|magma|viridis|plasma|cividis|teal|rose|glasbey)\\s*$"
+            }
           ],
           "description": "The Gene scale control."
         },
@@ -195,8 +211,11 @@
           "description": "The Gene scale range, [min, max]. null leaves that end on Auto (0 at the bottom, the 99th percentile of the scores above 0 at the top); max must be above min. max may also be a percentile of each dataset's scores above 0, from \"p1\" to \"p100\", such as \"p95\". Kept when the next dataset sets no range."
         },
         "geneScoreMode": {
-          "enum": ["sum", "mean", "z-score"],
-          "description": "The Signature score control."
+          "anyOf": [
+            { "enum": ["sum", "mean", "z-score"] },
+            { "type": "string", "pattern": "^\\s*(?:sum|mean|z-score)\\s*$" }
+          ],
+          "description": "The Combine genes control."
         },
         "cellPointScale": {
           "type": "number",

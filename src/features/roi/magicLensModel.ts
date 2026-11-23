@@ -358,12 +358,16 @@ export function magicLensEmptyGeneMessage(summary: MagicLensSummary): string {
     : 'No detected gene transcripts'
 }
 
+// The lens is scanned again once its centre moves by a twentieth of its
+// radius (at least 0.5 µm): a fixed 4 µm step left a 10 µm lens's summary for
+// a circle shifted by up to 38% of its radius.
 export function magicLensDetailQueryKey(
   detail: MagicLensQueryDetail,
   selectedGenes: readonly string[],
 ): string {
-  const roundedX = Math.round(detail.center.x / 4)
-  const roundedY = Math.round(detail.center.y / 4)
+  const step = Math.max(0.5, detail.radiusMicrometers / 20)
+  const roundedX = Math.round(detail.center.x / step)
+  const roundedY = Math.round(detail.center.y / step)
   const selectedGeneKey = selectedGenes
     .map((gene) => gene.toLocaleLowerCase())
     .sort()

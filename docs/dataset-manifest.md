@@ -37,13 +37,18 @@ There are two ways to use a manifest:
 
 When the viewer probes a folder:
 
-- An `HTTP 403` or `404`, a network error, or a timeout means there is no
-  manifest. Buckets that deny listing return `403` for missing keys.
+- An `HTTP 403` or `404` means there is no manifest. Buckets that deny listing
+  return `403` for missing keys.
+- A network error, a timeout or another status, such as a `5xx`, also opens
+  the folder without a manifest, unless an earlier load of the same folder read
+  one: that manifest is kept, so one dropped request does not change where the
+  open dataset's files are read from.
 - A response that is not a JSON object with a `platform` or `version` field is
   ignored, so hosts that answer every path with an HTML page or `{}` still
   work.
-- A manifest that fails validation stops the load with an error. It is not
-  silently ignored.
+- A manifest that fails validation stops the load with an error, and so does a
+  response that starts with `{` but is not valid JSON, such as one with a
+  trailing comma. Neither is silently ignored.
 
 The manifest is fetched with `cache: no-cache` each time the dataset is
 loaded, so edits show on the next load: a dataset already opened under a
@@ -102,8 +107,17 @@ reported instead of falling back to the standard name.
 
 Each path is either relative or an `http://` / `https://` URL. Relative paths
 resolve against `root` when it is set, otherwise against the folder the
-manifest is in. A leading `./` and trailing `/` are dropped; `../` is allowed.
-Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
+manifest is in, as links in a web page do: `../` is allowed, and a path
+starting with `/` starts from the host. A leading `./` and trailing `/` are
+dropped, except a `./` before a name with a colon (`./run:1/cells.parquet`),
+which would otherwise read as a scheme. Other schemes such as `s3://` are
+rejected: the browser can only read HTTP(S). So are paths with control
+characters such as tabs or line breaks, and text that does not parse as a URL,
+such as a host with a space.
+
+A `root` with a query string, such as a token that grants the folder, keeps
+the query on each file resolved under it:
+`https://host/run-7?token=abc` reads `https://host/run-7/cells.parquet?token=abc`.
 
 ## Source
 
@@ -466,8 +480,10 @@ The schema catches blank names and paths, unknown fields and values, a
 need (such as `options.labelColumn` without `files.labels`), a segmentation
 whose extension the viewer does not read without
 `options.segmentationFormat`, a `zchunkstore` with an OME-Zarr image, an
-`options.binSize` not in `files.bins`, and a bin size listed twice. The
-viewer checks more when it opens the manifest: a `geneRange` maximum at or
+`options.binSize` not in `files.bins`, and a bin size listed twice. Like the
+viewer, it allows spaces around strings, such as `" mean"`. A file for a newer
+`version` is refused for its version first, before any field this viewer does
+not know. The viewer checks more when it opens the manifest: a `geneRange` maximum at or
 below its minimum, and numbers too large to be finite, such as `1e400`. A
 manifest the schema passes can still stop the load, with a message naming the
 field.

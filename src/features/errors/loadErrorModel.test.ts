@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { DuckDbExtensionLoadError } from '../../data/duckdb'
 import { FileNotListedError } from '../../data/folderListing'
-import { datasetDetectionError } from '../../datasets/datasetDetectionError'
+import {
+  DatasetAddressError,
+  datasetDetectionError,
+} from '../../datasets/datasetDetectionError'
 import { LikelyMissingFileError } from '../../data/hostResponses'
 import { assertHttpRangeSupport } from '../../data/rangeSupport'
 import {
@@ -459,6 +462,15 @@ describe('loadErrorModel', () => {
       ),
     ).toMatchObject({ code: 'http', title: 'Request refused' })
 
+    const timedOut = createStructuredLoadError(
+      'Dataset overview',
+      datasetDetectionError([
+        { path: 'a', url: 'u', ok: false, error: 'Request timed out after 15,000 ms.' },
+      ]),
+    )
+    expect(timedOut).toMatchObject({ code: 'network', title: 'Host not responding' })
+    expect(timedOut.message).toContain('within 15 s')
+
     expect(
       createStructuredLoadError(
         'Dataset overview',
@@ -478,6 +490,17 @@ describe('loadErrorModel', () => {
       ),
     )
     expect(many.detail).toMatch(/f5: HTTP 404; and 2 more$/)
+  })
+
+  it('says an address without https:// is not a web address (EXP-209)', () => {
+    const error = createStructuredLoadError(
+      'Dataset overview',
+      new DatasetAddressError('data.example.org/run-1'),
+    )
+
+    expect(error).toMatchObject({ code: 'not-found', title: 'Not a web address' })
+    expect(error.message).toContain('"data.example.org/run-1"')
+    expect(error.action).toContain('https://')
   })
 
   it('explains failed plain-http reads from an HTTPS page instead of blaming CORS', async () => {

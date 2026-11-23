@@ -357,8 +357,8 @@ export function parseDatasetManifest(
     )
   }
 
-  checkKeys(json, DATASET_MANIFEST_TOP_LEVEL_KEYS, '', fail)
-
+  // Before the field check: a newer version's fields are unknown here, and
+  // the version is what the author can act on (EXP-215).
   if (json.version !== DATASET_MANIFEST_VERSION) {
     return fail(
       json.version === undefined
@@ -366,6 +366,8 @@ export function parseDatasetManifest(
         : `"version" ${JSON.stringify(json.version)} is not supported; this viewer reads version ${DATASET_MANIFEST_VERSION}.`,
     )
   }
+
+  checkKeys(json, DATASET_MANIFEST_TOP_LEVEL_KEYS, '', fail)
 
   const platform = json.platform
 
@@ -1174,11 +1176,47 @@ export function optionalPath(
     return undefined
   }
 
+  // The URL parser drops tabs and line breaks, so "da\tta:" would pass the
+  // scheme check below as a relative path and then read as "data:".
+  if (hasControlCharacter(value)) {
+    return fail(
+      `"${prefix}${key}" must not contain control characters such as tabs or line breaks.`,
+    )
+  }
+
   if (isAbsoluteUrl(value) && !/^https?:\/\//i.test(value)) {
     return fail(`"${prefix}${key}" must be a relative path or an http(s) URL.`)
   }
 
-  return value.replace(/^(?:\.\/)+/, '').replace(/\/+$/, '')
+  if (!isParsableUrl(value)) {
+    return fail(`"${prefix}${key}" is not a valid URL or path.`)
+  }
+
+  const relative = value.replace(/^(?:\.\/)+/, '').replace(/\/+$/, '')
+  // "./run:1/a" keeps its "./": without it, "run:" reads as a scheme.
+  return !isAbsoluteUrl(value) && isAbsoluteUrl(relative) ? `./${relative}` : relative
+}
+
+function hasControlCharacter(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index)
+
+    if (code < 0x20 || code === 0x7f) {
+      return true
+    }
+  }
+
+  return false
+}
+
+// A URL, or a path that resolves to one against any http(s) folder.
+function isParsableUrl(value: string): boolean {
+  try {
+    new URL(value, 'https://placeholder.invalid/folder/')
+    return true
+  } catch {
+    return false
+  }
 }
 
 function optionalRecord(
@@ -1200,12 +1238,25 @@ function optionalRecord(
   return value
 }
 
+// Relative paths resolve inside the base folder. A query on the base, such as
+// a token that grants the folder, is kept on the files it resolves.
 function resolve(baseUrl: string, path: string): string {
   if (isAbsoluteUrl(path)) {
     return path
   }
 
-  return new URL(path, `${trimTrailingSlashes(baseUrl)}/`).toString()
+  const folder = new URL(baseUrl)
+  const query = folder.search
+  folder.search = ''
+  folder.hash = ''
+  folder.pathname = `${trimTrailingSlashes(folder.pathname)}/`
+  const resolved = new URL(path, folder)
+
+  if (resolved.search === '' && resolved.origin === folder.origin) {
+    resolved.search = query
+  }
+
+  return resolved.toString()
 }
 
 export function parentUrl(url: string): string {

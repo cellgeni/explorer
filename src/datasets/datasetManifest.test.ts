@@ -403,6 +403,12 @@ describe('parseDatasetManifest', () => {
     )
   })
 
+  it('names a newer version before its unknown fields (EXP-215)', () => {
+    expect(
+      parseError({ version: 2, platform: 'xenium', projections: { umap: 'umap.csv' } }),
+    ).toContain('"version" 2 is not supported; this viewer reads version 1.')
+  })
+
   it('rejects non-string and non-http paths', () => {
     expect(
       parseError({ version: 1, platform: 'xenium', files: { cells: 42 } }),
@@ -414,6 +420,55 @@ describe('parseDatasetManifest', () => {
         files: { cells: 's3://bucket/cells.parquet' },
       }),
     ).toContain('"files.cells" must be a relative path or an http(s) URL')
+  })
+
+  it('checks paths as URLs, not as text (EXP-211)', () => {
+    const xenium = (cells: string) => ({
+      version: 1,
+      platform: 'xenium',
+      files: { cells },
+    })
+    const cellsUrl = (cells: string) => {
+      const manifest = parse(xenium(cells))
+      return manifest.platform === 'xenium' ? manifest.files.cells?.url : undefined
+    }
+
+    // Without its "./", "run:1" would read as a scheme.
+    expect(cellsUrl('./run:1/cells.parquet')).toBe(
+      'https://example.test/runs/sample-1/run:1/cells.parquet',
+    )
+    // The URL parser drops tabs and line breaks, which would make these
+    // data: and javascript: URLs.
+    for (const cells of ['da\tta:text/plain,a', 'java\nscript:alert(1)', 'a\u0001b']) {
+      expect(parseError(xenium(cells))).toContain(
+        '"files.cells" must not contain control characters',
+      )
+    }
+    for (const cells of [
+      'https://exa mple.test/cells.parquet',
+      '//host:abc/cells.parquet',
+    ]) {
+      expect(parseError(xenium(cells))).toContain(
+        '"files.cells" is not a valid URL or path',
+      )
+    }
+    expect(
+      parseError({ version: 1, platform: 'xenium', root: 'https://exa mple.test/run' }),
+    ).toContain('"root" is not a valid URL or path')
+  })
+
+  it('resolves files inside a root with a query, keeping the query (EXP-212)', () => {
+    const manifest = parse({
+      version: 1,
+      platform: 'xenium',
+      root: 'https://other.test/bucket/run-7?token=abc',
+      files: { cells: 'cells.parquet', transcripts: 'https://cdn.test/t.parquet' },
+    })
+
+    expect(manifest.platform === 'xenium' && manifest.files).toMatchObject({
+      cells: { url: 'https://other.test/bucket/run-7/cells.parquet?token=abc' },
+      transcripts: { url: 'https://cdn.test/t.parquet' },
+    })
   })
 
   it('requires the source file for single-file platforms', () => {

@@ -681,6 +681,7 @@ export function transcriptNativeAggregateMessage({
   sourceFile = 'transcripts.zarr.zip',
   minQv,
   qvOverBudget,
+  qvUnavailable,
 }: {
   readonly mode: 'density'
   readonly selectedFeatureCount: number
@@ -690,6 +691,7 @@ export function transcriptNativeAggregateMessage({
   // not the one asked for.
   readonly minQv?: number | undefined
   readonly qvOverBudget?: TranscriptAggregateResult['qvOverBudget']
+  readonly qvUnavailable?: TranscriptAggregateResult['qvUnavailable']
 }): string {
   const featureLabel =
     selectedFeatureCount > 0
@@ -700,8 +702,12 @@ export function transcriptNativeAggregateMessage({
     qvOverBudget === undefined
       ? ''
       : ` Min QV ${qvOverBudget.minQv.toLocaleString()} needs ${qvOverBudget.rowCount.toLocaleString()} transcript rows here, more than the ${qvOverBudget.rowLimit.toLocaleString()} one view reads; zoom in or select fewer genes to apply it.`
+  const unavailableNote =
+    qvUnavailable === undefined
+      ? ''
+      : ` Min QV ${qvUnavailable.minQv.toLocaleString()} needs the transcript rows, which could not be read: ${qvUnavailable.reason.replace(/\.?$/, '.')}`
 
-  return `Showing native ${featureLabel} density squares${qvLabel} from ${sourceFile} (${binCount.toLocaleString()} squares).${overBudgetNote}`
+  return `Showing native ${featureLabel} density squares${qvLabel} from ${sourceFile} (${binCount.toLocaleString()} squares).${overBudgetNote}${unavailableNote}`
 }
 
 // The selected-gene density was not read because the new genes need more of

@@ -125,8 +125,8 @@ export function parseDatasetCollection(
     )
   }
 
-  checkKeys(json, DATASET_COLLECTION_TOP_LEVEL_KEYS, '', fail)
-
+  // Before the field check, as for manifests: a newer version's fields are
+  // unknown here.
   if (json.version !== DATASET_COLLECTION_VERSION) {
     return fail(
       json.version === undefined
@@ -134,6 +134,8 @@ export function parseDatasetCollection(
         : `"version" ${JSON.stringify(json.version)} is not supported; this viewer reads version ${DATASET_COLLECTION_VERSION}.`,
     )
   }
+
+  checkKeys(json, DATASET_COLLECTION_TOP_LEVEL_KEYS, '', fail)
 
   const collectionFolderUrl = parentUrl(collectionUrl)
   const root = optionalPath(json, 'root', '', fail)
@@ -372,12 +374,14 @@ export async function fetchDatasetCollection(
     timeoutMs = COLLECTION_FETCH_TIMEOUT_MS,
   }: FetchDatasetCollectionOptions = {},
 ): Promise<DatasetCollection> {
+  signal?.throwIfAborted()
   const controller = new AbortController()
   const abort = () => {
     controller.abort()
   }
   const timeout = setTimeout(abort, timeoutMs)
   signal?.addEventListener('abort', abort, { once: true })
+  const timedOut = `the file did not answer within ${(timeoutMs / 1000).toLocaleString()} s.`
 
   try {
     let response: Response
@@ -390,7 +394,7 @@ export async function fetchDatasetCollection(
       throw new DatasetCollectionError(
         url,
         controller.signal.aborted
-          ? `the file did not answer within ${(timeoutMs / 1000).toLocaleString()} s.`
+          ? timedOut
           : 'the file could not be read. Check the URL and that the host allows browser reads (CORS).',
         { cause: error },
       )
@@ -400,10 +404,28 @@ export async function fetchDatasetCollection(
       throw new DatasetCollectionError(url, `the file answered HTTP ${response.status}.`)
     }
 
+    let text: string
+
+    // The timeout covers the body too: a body that stalls or breaks off is
+    // not a JSON error (EXP-214).
+    try {
+      text = await response.text()
+    } catch (error) {
+      if (signal?.aborted === true) throw error
+
+      throw new DatasetCollectionError(
+        url,
+        controller.signal.aborted
+          ? timedOut
+          : 'the file broke off before it was read whole. Check the network, then load it again.',
+        { cause: error },
+      )
+    }
+
     let json: unknown
 
     try {
-      json = await response.json()
+      json = JSON.parse(text)
     } catch (error) {
       throw new DatasetCollectionError(url, 'the file is not JSON.', { cause: error })
     }

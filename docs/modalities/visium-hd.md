@@ -59,6 +59,13 @@ is an error), `files.segmentedOutputs` replaces the segmented-output probes, and
 `T/spatial/tissue_lowres_image.png` is drawn instead of the high-res PNG when
 that cannot be read (a `HEAD` decides), with a notice naming the skipped path.
 
+In the segmentation GeoJSON, a feature without a Polygon or MultiPolygon
+geometry (a `null` geometry, a point) is skipped, as the image-only GeoJSON
+reader skips it. A MultiPolygon cell is one element per part, the later ones
+named `<cell_id>#2` and on. Labels traced from `nucleus_instance_mask.tiff`
+keep their holes: a gap inside a nucleus is cut out of it, not drawn as a
+second nucleus.
+
 Probed or diagnosed but **never read**: the 2 µm `tissue_positions.parquet`
 (171 MB and 11.2 million rows on the reference dataset, read by no check),
 `segmented_outputs/spatial/scalefactors_json.json`,
@@ -151,7 +158,7 @@ fails with `VisiumHdTwoMicrometerOverviewDisabledError`, naming the file.
 | Selected-gene overlay      | `geneExpression(bbox, genes)` reads `feature_slice.h5` in a worker, sums counts into the active bin size (`floor(row / (binSize / spot_pitch))`), and colours bins. There is no fallback to the filtered matrix.                                                                                                                                                  |
 | Bin card: assignment       | `useGridCellAssignmentWorkflow` reads the row groups of `barcode_mappings.parquet` that can hold the bin; an 8 or 16 µm bin has a row per 2 µm barcode, so the card names the cell holding most of them, with that share and how many cells the bin touches                                                                                                       |
 | Bin card: all-gene profile | `useVisiumHdExpressionProfileWorkflow` calls `matrix([barcode], binSize)` on the tier's filtered matrix                                                                                                                                                                                                                                                           |
-| Segmented-cell profile     | DuckDB-WASM query on `barcode_mappings.parquet` for one `cell_id`, then `matrix()` over those bins at the active size. The segmented `filtered_feature_cell_matrix.h5` is not used.                                                                                                                                                                               |
+| Segmented-cell profile     | DuckDB-WASM query on `barcode_mappings.parquet` for one `cell_id`, then `matrix()` over those bins at the active size. A MultiPolygon cell's later parts (`<cell_id>#2`, …) query their cell's `cell_id`. The segmented `filtered_feature_cell_matrix.h5` is not used.                                                                                            |
 | Cell/nucleus boundaries    | `elements(bbox)` / `segmentationElements('nucleus', bbox)`. Each GeoJSON is read once into a columnar index; each viewport selects the polygons whose bounds meet its box. A nucleus's `cell_id` is kept in its own index column, so nuclei name their cell. Loading is gated by the boundary viewport rule (see [Xenium](./xenium.md#viewport-cell-boundaries)). |
 | Expression projection      | `useVisiumHdExpressionProjectionWorkflow` splits each bin's count across its mapped cells; the result feeds status text                                                                                                                                                                                                                                           |
 | Tissue image               | The active tier's `tissue_hires_image.png`, drawn at `(px / tissue_hires_scalef) × microns_per_pixel`. No pyramid; `tissue_lowres_image.png` at `tissue_lowres_scalef` when the high-res PNG cannot be read.                                                                                                                                                      |

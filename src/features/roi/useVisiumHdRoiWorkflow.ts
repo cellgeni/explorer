@@ -206,7 +206,7 @@ export function useVisiumHdRoiWorkflow({
             readyDatasetUrl,
             summarizeRoiGeneExpression(
               { geneNames: [], cells: new Map() },
-              { cellCount: barcodes.length, sampledCellIds: barcodes },
+              { cellCount: result.selectedCount, sampledCellIds: barcodes },
             ),
           ),
         )
@@ -293,7 +293,7 @@ export function useVisiumHdRoiWorkflow({
               }
 
               const stats = summarizeRoiGeneExpression(matrix, {
-                cellCount: barcodes.length,
+                cellCount: result.selectedCount,
                 geneLimit: Number.MAX_SAFE_INTEGER,
                 sampledCellIds: barcodes,
               })

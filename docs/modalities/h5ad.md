@@ -14,8 +14,10 @@ manifest:
 
 1. The URL, with trailing slashes stripped, must end in `.h5ad` (a query string
    or fragment may follow).
-2. A single `HEAD` request (15 s timeout) must return `2xx`. A host that rejects
-   `HEAD` makes the file undetectable and the platform `unknown`.
+2. A single `HEAD` request (15 s timeout) must return `2xx`. A `HEAD` that gets
+   no response (CORS rules that allow only `GET`) is sent again as a one-byte
+   `GET`. A host that answers `HEAD` with an error status, such as 405, makes the
+   file undetectable and the platform `unknown` ("Request refused").
 
 Two other addresses open as `h5ad` without the suffix (see the
 [detection order](../architecture.md#1-detection)):
