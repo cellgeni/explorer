@@ -134,11 +134,13 @@ export function sectionModelMatrix(
   )
 }
 
-// What the stack says under it: sections still being read, and those it
-// cannot show, by name.
+// What the stack says under it: sections still being read, those it cannot
+// show, and those it shows without the colours that could not be read, by
+// name.
 export interface StackStatus {
   readonly reading: string | null
   readonly missing: string | null
+  readonly uncolored: string | null
 }
 
 export function stackStatus(
@@ -148,6 +150,7 @@ export function stackStatus(
 ): StackStatus {
   let done = 0
   const missing: string[] = []
+  const uncolored: string[] = []
 
   sections.forEach((section, index) => {
     const preview = previews[index] ?? null
@@ -157,7 +160,10 @@ export function stackStatus(
       missing.push(`${label} (${lowerFirst(preview.unavailable)})`)
       done += 1
     } else if (preview?.error != null) {
-      missing.push(`${label} (could not be read)`)
+      // Cells read, then the scores or classes failed: drawn, uncoloured.
+      ;(preview.cells === null ? missing : uncolored).push(
+        preview.cells === null ? `${label} (could not be read)` : label,
+      )
       done += 1
     } else if (
       preview !== null &&
@@ -174,6 +180,10 @@ export function stackStatus(
         ? `Reading sections: ${done.toLocaleString()} of ${sections.length.toLocaleString()}`
         : null,
     missing: missing.length === 0 ? null : `Not shown: ${missing.join(', ')}`,
+    uncolored:
+      uncolored.length === 0
+        ? null
+        : `Colours could not be read: ${uncolored.join(', ')}`,
   }
 }
 
@@ -191,6 +201,7 @@ export function cellViewStatus(
         : null
 
   return {
+    uncolored: null,
     reading:
       missing !== null
         ? null

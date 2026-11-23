@@ -26,6 +26,7 @@ import type { PreviewScores } from './collectionPreviewData'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import type { LinkedSectionsColoring } from './LinkedSections'
 import { sectionOverlay } from './linkedSectionLayers'
+import { useFocusHandOff } from './useFocusHandOff'
 import {
   SECTION_STACK_VIEW,
   sectionStackLayers,
@@ -85,6 +86,7 @@ export function SectionStackViewer({
   onClose,
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
+  useFocusHandOff(containerRef)
   // The canvas host, hidden from assistive technology, whose deck.gl root
   // leaves the tab order once loaded.
   const canvasHostRef = useRef<HTMLDivElement>(null)
@@ -170,7 +172,12 @@ export function SectionStackViewer({
           ],
     [depthScale, frame],
   )
-  const shownViewState = viewState ?? fittedVolumeViewState(extent, size ?? DEFAULT_SIZE)
+  // The same object while nothing moves: a new one on each render (each
+  // hover) made deck.gl redraw every cell.
+  const shownViewState = useMemo(
+    () => viewState ?? fittedVolumeViewState(extent, size ?? DEFAULT_SIZE),
+    [extent, size, viewState],
+  )
   const handleHover = useCallback(
     (info: PickingInfo) => {
       if (!hoverTooltips) return
@@ -352,6 +359,11 @@ export function SectionStackViewer({
             {status.missing}
           </p>
         )}
+        {status.uncolored === null ? null : (
+          <p className="viewport-message" aria-live="polite">
+            {status.uncolored}
+          </p>
+        )}
       </div>
       {hover === null || !hoverTooltips ? null : (
         <div
@@ -409,7 +421,9 @@ function ownTop(scores: PreviewScores, percentile: number): number {
 }
 
 function formatDepth(z: number): string {
-  return Number(z.toFixed(1)).toLocaleString()
+  const rounded = Number(z.toFixed(1))
+  // -0.04 rounds to -0, which toLocaleString writes "-0".
+  return (rounded === 0 ? 0 : rounded).toLocaleString()
 }
 
 function formatDepthScale(scale: number): string {

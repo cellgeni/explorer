@@ -179,7 +179,9 @@ top centre. Each panel (`LinkedSections`, a `region` named after the section)
 has a pill at its top centre with the name, its top or highest score, `Open`
 and `Close {label}` (×). Instead of cells: "Loading…", the reason it has no
 preview, or "Could not be read". Hovering a cell shows a small label with its
-ID and class, or the gene and score.
+ID and class, or the gene and score. Closing a panel, or opening its section,
+hands keyboard focus back to the control that showed it, or else to the
+canvas.
 
 The main view and the panels share one camera through `LinkedViewChannel`
 (`src/components/linkedView.ts`): each publishes its view as it changes and
@@ -1142,7 +1144,10 @@ cells, z 0 to 780 µm").
 | `2D View`     | Button                         |                                          | Returns to the 2D view, which kept its place                                              |
 
 Hovering a cell gives its z and the cell and its class, or its score. While
-the cells or what colours them are read, the status says so.
+the cells or what colours them are read, the status says so; a section whose
+cells were read but whose colours could not be is drawn grey and named under
+"Colours could not be read". `2D View` hands keyboard focus back to the
+control that opened the view, or else to the canvas.
 
 ### Legend
 

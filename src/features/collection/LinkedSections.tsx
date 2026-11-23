@@ -1,6 +1,14 @@
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import { DeckGL } from '@deck.gl/react'
-import { memo, useCallback, useId, useMemo, useState, useSyncExternalStore } from 'react'
+import {
+  memo,
+  useCallback,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import type { LinkedViewChannel } from '../../components/linkedView'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
@@ -30,6 +38,7 @@ import {
   sectionOverlay,
 } from './linkedSectionLayers'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
+import { useFocusHandOff } from './useFocusHandOff'
 
 // The panels of registered sections shown beside the main view, each a
 // viewer of one section's cells from its collection preview. They share the
@@ -129,6 +138,8 @@ function LinkedSectionPanel({
 }: LinkedSectionPanelProps) {
   const label = collectionEntryLabel(entry)
   const source = useId()
+  const panelRef = useRef<HTMLElement>(null)
+  useFocusHandOff(panelRef)
   const linkedView = useSyncExternalStore(channel.subscribe, channel.getView)
   const cells = preview?.cells ?? null
   const scores = preview?.scores ?? null
@@ -231,6 +242,7 @@ function LinkedSectionPanel({
 
   return (
     <section
+      ref={panelRef}
       className="viewer-tile linked-section"
       aria-label={label}
       data-loading={preview?.loading === true || undefined}
