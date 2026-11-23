@@ -150,6 +150,37 @@ describe('useCellMetadataTrackValues', () => {
     ])
   })
 
+  it('reads a track again when it is chosen again after a failed read', async () => {
+    const loadCellMetadataTrackValues = vi
+      .fn<CellMetadataTrackValuesLoader>()
+      .mockRejectedValueOnce(new Error('HTTP 503'))
+      .mockResolvedValue(scoreValues)
+    const probe = renderProbe({
+      initialTracks: [lazyTrack('h5ad:score', 'score')],
+      loadCellMetadataTrackValues,
+      observationColorMode: 'metadata',
+    })
+
+    await waitFor(() => {
+      expect(probe.appendDebugEvent).toHaveBeenCalledWith(
+        'Metadata track failed: score: HTTP 503',
+      )
+    })
+    expect(probe.handle.tracks()[0]?.values).toBeNull()
+
+    act(() => {
+      probe.handle.setObservationColorMode('transcript-count')
+    })
+    act(() => {
+      probe.handle.setObservationColorMode('metadata')
+    })
+
+    await waitFor(() => {
+      expect(probe.handle.tracks()[0]?.values).toEqual(scoreValues)
+    })
+    expect(loadCellMetadataTrackValues).toHaveBeenCalledTimes(2)
+  })
+
   it('leaves tracks that already have values alone', () => {
     const loadCellMetadataTrackValues = vi.fn<CellMetadataTrackValuesLoader>(
       async () => scoreValues,
