@@ -116,6 +116,36 @@ export function annotationPaletteColor(index: number): string {
   )
 }
 
+// Gives palette colours in order, skipping those `usedColors` already has, so
+// a colour freed by a removal is used again before a taken one. Once every
+// palette colour is taken they repeat in turn, from `usedCount`.
+export function unusedAnnotationPaletteColors(
+  usedColors: Iterable<string>,
+  usedCount: number,
+): () => string {
+  const used = new Set([...usedColors].map((color) => color.toLowerCase()))
+  let paletteIndex = 0
+  let count = usedCount
+
+  return () => {
+    while (
+      paletteIndex < ANNOTATION_DEFAULT_PALETTE.length &&
+      used.has(ANNOTATION_DEFAULT_PALETTE[paletteIndex] ?? '')
+    ) {
+      paletteIndex += 1
+    }
+
+    const color =
+      paletteIndex < ANNOTATION_DEFAULT_PALETTE.length
+        ? (ANNOTATION_DEFAULT_PALETTE[paletteIndex] ?? FALLBACK_ANNOTATION_COLOR)
+        : annotationPaletteColor(count)
+    used.add(color)
+    paletteIndex += 1
+    count += 1
+    return color
+  }
+}
+
 export function normalizeAnnotationColor(color: string): string | null {
   return /^#[0-9a-f]{6}$/i.test(color) ? color.toLowerCase() : null
 }

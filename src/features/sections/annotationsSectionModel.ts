@@ -11,6 +11,7 @@ import type {
   GeometricAnnotationImportMessage,
 } from '../annotations/geometricAnnotationModel'
 import type { SectionSplitLink } from '../collection/sectionSplitModel'
+import { formatStructuredError, type StructuredLoadError } from '../errors/loadErrorModel'
 import type { SavedSelection } from '../roi/selectionListModel'
 import type { SelectionList } from '../roi/useSelectionList'
 import type { AnnotationGroupOption } from '../../data/annotation'
@@ -69,6 +70,8 @@ export interface AnnotationSetsModel {
   readonly onImportUrl: (url: string) => Promise<void>
   // How many imported cells are not on the map, if any.
   readonly importNotice: string | null
+  // Why the last import failed; the labels already loaded stay.
+  readonly importError: string | null
   readonly colors: Readonly<Record<string, string>>
   readonly hiddenSetIds: readonly string[]
   readonly hiddenIds: readonly string[]
@@ -121,6 +124,7 @@ export interface AnnotationsSectionModelInput {
   readonly annotationGroupOptions: readonly AnnotationGroupOption[]
   readonly annotationGroupState: AnnotationGroupState
   readonly annotationHeaderCopy: string
+  readonly annotationImportError: StructuredLoadError | null
   readonly annotationImportNotice: string | null
   readonly annotationImportUrl: string
   readonly annotationPlacedCellIds: PlacedCellIds | null
@@ -181,6 +185,7 @@ export function useAnnotationsSectionModel({
   annotationGroupOptions,
   annotationGroupState,
   annotationHeaderCopy,
+  annotationImportError,
   annotationImportNotice,
   annotationImportUrl,
   annotationPlacedCellIds,
@@ -262,6 +267,10 @@ export function useAnnotationsSectionModel({
         }
       },
       importNotice: annotationImportNotice,
+      importError:
+        annotationImportError === null
+          ? null
+          : formatStructuredError(annotationImportError),
       colors: annotationColors,
       hiddenSetIds: hiddenAnnotationSetIds,
       hiddenIds: hiddenAnnotationIds,

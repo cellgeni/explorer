@@ -360,6 +360,7 @@ export function testAnnotationsSectionModel(
       isImportingUrl: false,
       onImportUrl: vi.fn(async () => {}),
       importNotice: null,
+      importError: null,
       colors: {},
       hiddenSetIds: [],
       hiddenIds: [],

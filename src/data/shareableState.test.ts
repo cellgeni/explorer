@@ -417,6 +417,39 @@ describe('shareableState', () => {
     ).toEqual(['a,b', '100%'])
   })
 
+  it('keeps a gene, channel or set ID with a comma in one piece', () => {
+    const state = {
+      selectedGenes: ['1,3-bisphosphoglycerate', 'ATP', '100%'],
+      morphologyEnabledChannelIds: ['Channel:0,1', 'Channel:2'],
+      annotationGroupIds: ['analysis:a,b'],
+      hiddenLayers: ['image'],
+      panels: ['cells', 'plots'],
+    }
+
+    expect(parseShareableState(formatShareableState(state))).toMatchObject(state)
+    // Links written before keep reading as they did.
+    expect(parseShareableState('#genes=Actb,Gad1&channels=0,1')).toMatchObject({
+      selectedGenes: ['Actb', 'Gad1'],
+      morphologyEnabledChannelIds: ['0', '1'],
+    })
+  })
+
+  it('writes and reads the classes shown in a mostly hidden set', () => {
+    const hash = formatShareableState({
+      hiddenAnnotationIds: ['custom:labels-csv:b'],
+      shownAnnotationIds: ['analysis:leiden:3'],
+    })
+
+    expect(new URLSearchParams(hash.slice(1)).get('shownClasses')).toBe(
+      'analysis:leiden:3',
+    )
+    expect(parseShareableState(hash)).toMatchObject({
+      hiddenAnnotationIds: ['custom:labels-csv:b'],
+      shownAnnotationIds: ['analysis:leiden:3'],
+    })
+    expect(formatShareableState({ shownAnnotationIds: [] })).toBe('#xv=2')
+  })
+
   it('writes and reads the Plots panel’s plot', () => {
     const hash = formatShareableState({ panels: ['cells', 'plots'], plot: 'heatmap' })
 

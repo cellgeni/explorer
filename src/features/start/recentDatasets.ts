@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { urlWithoutCredentials } from '../../utils/urlCredentials'
 
 // Recently opened datasets (plan 15.3-A), newest first, kept in
 // this browser's localStorage. Storage can be missing or refuse, which only
@@ -29,29 +30,12 @@ function isRecentDataset(value: unknown): value is RecentDataset {
   )
 }
 
-// Query parameters that sign or authorise a request: S3 and Google Cloud
-// presigned URLs, CloudFront and Azure SAS signatures, and bearer tokens.
-const CREDENTIAL_PARAMETER =
-  /^(?:x-amz-|x-goog-)|^(?:signature|sig|token|access_token|awsaccessid|awsaccesskeyid|googleaccessid|key-pair-id)$/i
-
 // The entry as kept in storage: an address that carries a credential keeps
 // no query string, since a presigned URL's other parameters are part of its
 // signature, and is marked as signed.
 export function recentDatasetEntry(dataset: RecentDataset): RecentDataset {
-  let url: URL
-
-  try {
-    url = new URL(dataset.url)
-  } catch {
-    return dataset
-  }
-
-  if (![...url.searchParams.keys()].some((key) => CREDENTIAL_PARAMETER.test(key))) {
-    return dataset
-  }
-
-  url.search = ''
-  return { ...dataset, url: url.toString(), signed: true }
+  const { url, signed } = urlWithoutCredentials(dataset.url)
+  return signed ? { ...dataset, url, signed: true } : dataset
 }
 
 export function readRecentDatasets(

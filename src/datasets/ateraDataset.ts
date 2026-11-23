@@ -73,6 +73,7 @@ import type {
 } from './spatialDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 import { throwIfAborted } from '../utils/abort'
+import { folderFileUrl, pathInFolder } from '../utils/folderUrl'
 import type {
   Annotation,
   AnnotationGroupOption,
@@ -576,13 +577,11 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
 
   private async fileLabel(role: AteraFileRole): Promise<string> {
     const url = await this.fileUrl(role)
-    return url.startsWith(`${this.baseUrl}/`) ? url.slice(this.baseUrl.length + 1) : url
+    return pathInFolder(this.baseUrl, url) ?? url
   }
 
   private resolve(path: string): string {
-    return /^[a-z][a-z\d+.-]*:/i.test(path)
-      ? path
-      : `${this.baseUrl}/${path.replace(/^\/+/, '')}`
+    return /^[a-z][a-z\d+.-]*:/i.test(path) ? path : folderFileUrl(this.baseUrl, path)
   }
 
   private async readExperiment(): Promise<AteraExperiment> {

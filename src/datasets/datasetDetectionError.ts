@@ -53,6 +53,31 @@ export class DatasetDetectionError extends Error {
   }
 }
 
+// Detection reads http and https addresses, and paths on the viewer's own
+// host ("/data/sample.h5ad", "./run-1"). An address pasted without its scheme
+// ("data.example.org/run-1") is neither.
+export function isWebAddress(address: string): boolean {
+  if (/^\.{0,2}\//.test(address)) return true
+
+  try {
+    const { protocol } = new URL(address)
+    return protocol === 'https:' || protocol === 'http:'
+  } catch {
+    return false
+  }
+}
+
+export const DATASET_ADDRESS_ERROR_NAME = 'DatasetAddressError'
+
+export class DatasetAddressError extends Error {
+  constructor(address: string) {
+    super(
+      `"${address}" is not a web address: it does not start with https:// or http://, or with / for a path on this site.`,
+    )
+    this.name = DATASET_ADDRESS_ERROR_NAME
+  }
+}
+
 const LISTED_FILE_LIMIT = 5
 
 export function classifyDatasetDetection(

@@ -19,11 +19,13 @@ import {
 import { readZipDirectory, ZIP_METHOD_STORED } from '../data/zipArchive'
 import { registerZipFolder, zipFolderFor, zipFolderRoot } from '../data/zipFolder'
 import {
+  DatasetAddressError,
   DatasetDetectionError,
   PROBE_HIDDEN_ERROR,
   PROBE_NOT_LISTED,
   datasetDetectionError,
   isTimedOutProbe,
+  isWebAddress,
 } from './datasetDetectionError'
 import { parseAnnDataSectionUrl, type AnnDataSectionRef } from './annDataSections'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
@@ -32,6 +34,7 @@ import { isOmeZarrImageUrl } from '../zarr/omeZarrUrl'
 import { isZarrZipUrl } from '../zarr/zarrZipUrl'
 import { isQptiffUrl } from '../tiff/qptiff'
 import { isSvsUrl } from '../tiff/svs'
+import { folderFileUrl } from '../utils/folderUrl'
 import {
   DATASET_MANIFEST_FILE,
   DatasetManifestError,
@@ -345,6 +348,12 @@ export async function detectSpatialDataset(
   baseUrl: string,
   options: DetectSpatialDatasetOptions = {},
 ): Promise<SpatialDatasetDetection> {
+  // Before any request: an address without its https:// would otherwise be
+  // requested from this page's host, or fail as a network error.
+  if (!isWebAddress(baseUrl)) {
+    throw new DatasetAddressError(baseUrl)
+  }
+
   const normalizedBaseUrl = normalizeBaseUrl(baseUrl)
 
   try {
@@ -2174,7 +2183,7 @@ function normalizeBaseUrl(baseUrl: string): string {
 // Detection probes the folder as given, not through a manifest registered by
 // an earlier detection of the same URL.
 function joinUrl(baseUrl: string, path: string): string {
-  return `${normalizeBaseUrl(baseUrl)}/${path.replace(/^\/+/, '')}`
+  return folderFileUrl(baseUrl, path)
 }
 
 function isH5adUrl(url: string): boolean {

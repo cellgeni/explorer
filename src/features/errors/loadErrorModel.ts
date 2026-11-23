@@ -108,6 +108,22 @@ export function createStructuredLoadError(
     return datasetDetectionLoadError(source, message, detection, insecureAction)
   }
 
+  // DatasetAddressError (src/datasets/datasetDetectionError.ts): nothing was
+  // requested, so this comes before the network advice.
+  if (error instanceof Error && error.name === 'DatasetAddressError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'not-found',
+        title: 'Not a web address',
+        message,
+        action:
+          'Enter the full address, starting with https:// (or http:// for a server on this computer).',
+      },
+      detail,
+    )
+  }
+
   // Before the network advice: the browser reports a missing chunk as a
   // failed fetch, but the dataset is not at fault.
   if (isStaleChunkError(error)) {

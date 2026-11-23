@@ -16,7 +16,10 @@ import {
   isIdLikeAnnotationGroup,
   annotationStatusCopy,
   annotationsToCsv,
+  annotationIdsHiddenByLink,
   colorsForAnnotations,
+  nextAnnotationColor,
+  compactHiddenAnnotationIds,
   customAnnotationFilePrefix,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
@@ -301,8 +304,13 @@ describe('annotationModel', () => {
       { id: 'custom:file:new', label: 'New', cellIds: [] },
     ])
 
+    // The first palette colour no class has: a user's own colour leaves it free.
     expect(colorsForAnnotations(annotations, { a: '#abcdef' })).toEqual({
       a: '#abcdef',
+      b: '#1f77b4',
+    })
+    expect(colorsForAnnotations(annotations, { a: '#1f77b4' })).toEqual({
+      a: '#1f77b4',
       b: '#ff7f0e',
     })
     // Stored colours seed new classes; colours already set, and malformed
@@ -316,7 +324,48 @@ describe('annotationModel', () => {
         ],
         { a: '#abcdef' },
       ),
-    ).toEqual({ a: '#abcdef', b: '#8e00f8', c: '#2ca02c' })
+    ).toEqual({ a: '#abcdef', b: '#8e00f8', c: '#1f77b4' })
+    // A colour freed by a removal is used again before a later one.
+    expect(
+      colorsForAnnotations([{ id: 'd' }], {
+        a: '#1f77b4',
+        c: '#2ca02c',
+      }),
+    ).toEqual({ a: '#1f77b4', c: '#2ca02c', d: '#ff7f0e' })
+    expect(nextAnnotationColor({ a: '#1f77b4', c: '#2ca02c' })).toBe('#ff7f0e')
+  })
+
+  it('writes a mostly hidden set by its shown classes, and reads it back', () => {
+    const leiden = Array.from({ length: 150 }, (_, index) => ({
+      id: `analysis:leiden:${index}`,
+      label: `leiden: ${index}`,
+      cellIds: [],
+    }))
+    const custom = [
+      { id: 'custom:labels-csv:a', label: 'A', cellIds: [] },
+      { id: 'custom:labels-csv:b', label: 'B', cellIds: [] },
+    ]
+    const annotations = [...leiden, ...custom]
+    // "Only this class" for leiden 3, and one custom class hidden.
+    const hidden = [
+      ...leiden.filter((annotation) => annotation.id !== 'analysis:leiden:3'),
+      custom[1],
+    ].map((annotation) => annotation?.id ?? '')
+
+    const compact = compactHiddenAnnotationIds(annotations, [...hidden, 'not-loaded'])
+
+    expect(compact).toEqual({
+      hidden: ['custom:labels-csv:b', 'not-loaded'],
+      shown: ['analysis:leiden:3'],
+    })
+    expect(
+      new Set(annotationIdsHiddenByLink(annotations, compact.hidden, compact.shown)),
+    ).toEqual(new Set(hidden))
+    // Half or fewer hidden: listed as hidden.
+    expect(compactHiddenAnnotationIds(custom, ['custom:labels-csv:b'])).toEqual({
+      hidden: ['custom:labels-csv:b'],
+      shown: [],
+    })
   })
 
   it('removes colors and builds custom import prefixes', () => {
