@@ -1,7 +1,9 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   customCellMetadataFilePrefix,
+  IMPORTED_COLUMN_CLASS_LIMIT,
   parseCustomAnnotationImport,
+  skippedColumnsText,
   type ContinuousCellMetadataTrack,
 } from '../../data/customAnnotations'
 import {
@@ -308,8 +310,11 @@ export function useAnnotationWorkflow({
         hiddenAnnotationSetIds: linkHiddenAnnotationSetIds = [],
       }: LinkHiddenAnnotationOptions = {},
     ) => {
-      const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
-        parseCustomAnnotationImport(text, sourceName)
+      const {
+        annotations: importedAnnotations,
+        metadataTracks: importedMetadataTracks,
+        skippedColumns = [],
+      } = parseCustomAnnotationImport(text, sourceName)
       const cellCheck = checkImportedCellIds(
         importedAnnotations,
         importedMetadataTracks,
@@ -365,12 +370,24 @@ export function useAnnotationWorkflow({
         ),
       )
       setImportError(null)
+      const noticeParts = [
+        ...(cellCheck.missing === 0
+          ? []
+          : [
+              `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
+            ]),
+        ...(skippedColumns.length === 0
+          ? []
+          : [
+              `Left out ${skippedColumnsText(skippedColumns)}: a column of more than ${IMPORTED_COLUMN_CLASS_LIMIT.toLocaleString()} classes names cells rather than grouping them.`,
+            ]),
+      ]
       setImportNotice(
-        cellCheck.missing === 0
+        noticeParts.length === 0
           ? null
           : {
               url: loadState.status === 'ready' ? loadState.url : datasetUrl,
-              message: `${cellCheck.missing.toLocaleString()} of ${cellCheck.total.toLocaleString()} imported cells are not on the map.`,
+              message: noticeParts.join(' '),
             },
       )
       setCellMetadataTracks(nextCellMetadataTracks)
