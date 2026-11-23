@@ -119,10 +119,8 @@ function countLabel(count: number, singular: string, plural: string, more = fals
   return `${count.toLocaleString()}${more ? '+' : ''} ${count === 1 ? singular : plural}`
 }
 
-function formatMean(value: number | undefined): string {
-  return value === undefined
-    ? '0'
-    : value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+function formatMean(value: number): string {
+  return value.toLocaleString(undefined, { maximumFractionDigits: 1 })
 }
 
 // Go To regions, in data µm (y down) from deck.gl positions (y up).
@@ -285,8 +283,18 @@ export function cellsSelectionCard({
               label: elementsLabel,
               value: `${summary.cellCount.toLocaleString()}${hitLimit ? '+' : ''}`,
             },
-            { label: 'Mean transcripts', value: formatMean(summary.meanTranscriptCount) },
-            { label: 'Mean area', value: formatMean(summary.meanCellArea) },
+            // Left out where the cells carry no count or area.
+            ...(summary.meanTranscriptCount === undefined
+              ? []
+              : [
+                  {
+                    label: 'Mean transcripts',
+                    value: formatMean(summary.meanTranscriptCount),
+                  },
+                ]),
+            ...(summary.meanCellArea === undefined
+              ? []
+              : [{ label: 'Mean area', value: formatMean(summary.meanCellArea) }]),
           ],
     genes: {
       ...genes,

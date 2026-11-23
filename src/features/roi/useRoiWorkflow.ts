@@ -454,6 +454,11 @@ export function useRoiWorkflow({
         requestIdRef: roiGeneViewportWarmupRequestIdRef,
       })
       setRoiGeneViewportWarmupState(IDLE_ROI_GENE_VIEWPORT_WARMUP_STATE)
+      // The previous selection's transcript export stops, as Clear stops it.
+      invalidateLatestRequest({
+        abortRef: roiTranscriptExportAbortRef,
+        requestIdRef: roiTranscriptExportRequestIdRef,
+      })
       setRoiState(roiLoading(loadState.url, bbox, selection))
       setRoiGeneStatsState(IDLE_ROI_GENE_STATS_STATE)
       setRoiReferenceState(IDLE_ROI_REFERENCE_STATE)
@@ -674,6 +679,8 @@ export function useRoiWorkflow({
       roiGeneViewportWarmupTimeoutRef,
       roiIdRef,
       roiRequestIdRef,
+      roiTranscriptExportAbortRef,
+      roiTranscriptExportRequestIdRef,
       setMagicLensState,
       setRoiGeneStatsState,
       setRoiGeneViewportWarmupState,
