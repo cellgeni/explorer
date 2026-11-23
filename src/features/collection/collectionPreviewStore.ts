@@ -1,4 +1,5 @@
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
+import { colorsForAnnotations } from '../annotations/annotationModel'
 import {
   openPreviewSource,
   PreviewUnavailableError,
@@ -75,6 +76,11 @@ export class CollectionPreviewStore {
   // Until start(), and after stop(): nothing is read.
   private stopped = true
   private entries = new Map<string, PreviewEntry>()
+  private classColorsRead: {
+    readonly version: number
+    readonly mainColors: Readonly<Record<string, string>>
+    readonly colors: Readonly<Record<string, string>>
+  } | null = null
   version = 0
 
   constructor(
@@ -96,6 +102,25 @@ export class CollectionPreviewStore {
   }
 
   readonly getVersion = (): number => this.version
+
+  // The colour of each class of the set in every preview: the main view's,
+  // else the colour its dataset stores, else the palette's next unused
+  // colour, given in the order the previews' classes were read. A class then
+  // has one colour in every section, and two classes never share one.
+  classColors(
+    mainColors: Readonly<Record<string, string>>,
+  ): Readonly<Record<string, string>> {
+    const read = this.classColorsRead
+    if (read?.version === this.version && read.mainColors === mainColors)
+      return read.colors
+
+    const colors = colorsForAnnotations(
+      [...this.classes.values()].flatMap(({ classes }) => classes),
+      mainColors,
+    )
+    this.classColorsRead = { version: this.version, mainColors, colors }
+    return colors
+  }
 
   entry(url: string): PreviewEntry {
     return this.entries.get(url) ?? EMPTY_ENTRY
