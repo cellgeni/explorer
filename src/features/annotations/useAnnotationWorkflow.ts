@@ -191,10 +191,13 @@ export function useAnnotationWorkflow({
     setSelectedAnnotationGroupId,
     setSelectedCellMetadataTrackId,
   } = setters
-  // The last import's notice, for the dataset it was imported into.
+  // The last import's notice, for the dataset it was imported into and the
+  // id prefixes its labels and tracks carry.
   const [importNotice, setImportNotice] = useState<{
     readonly url: string
     readonly message: string
+    readonly annotationPrefix: string
+    readonly metadataPrefix: string
   } | null>(null)
   // The last failed import, for the dataset it was imported into.
   const [importError, setImportError] = useState<{
@@ -390,6 +393,8 @@ export function useAnnotationWorkflow({
           ? null
           : {
               url: loadState.status === 'ready' ? loadState.url : datasetUrl,
+              annotationPrefix: importedPrefix,
+              metadataPrefix: importedMetadataPrefix,
               message: noticeParts.join(' '),
             },
       )
@@ -675,7 +680,10 @@ export function useAnnotationWorkflow({
     const name = roiName.trim() || defaultRoiName(roiIdRef.current + 1)
     const annotation: Annotation = {
       id: `roi:${roiIdRef.current + 1}:${slug(name)}`,
-      label: name,
+      // A selection read up to the cell limit holds only its first cells.
+      label: roiState.hitCellLimit
+        ? `${name} (first ${roiState.cells.length.toLocaleString()} cells)`
+        : name,
       cellIds: roiState.cells.map((cell) => cell.id),
     }
 
@@ -741,13 +749,19 @@ export function useAnnotationWorkflow({
     ],
   )
 
-  // Shown while the dataset it was imported into is open and labels or
-  // tracks are loaded.
+  // Shown while the dataset it was imported into is open and the labels or
+  // tracks it brought are loaded, not other labels loaded after a reopen.
   const annotationImportNotice =
     importNotice !== null &&
     loadState.status === 'ready' &&
     importNotice.url === loadState.url &&
-    (annotationState.status === 'ready' || cellMetadataTracks.length > 0)
+    ((annotationState.status === 'ready' &&
+      annotationState.annotations.some((annotation) =>
+        annotation.id.startsWith(importNotice.annotationPrefix),
+      )) ||
+      cellMetadataTracks.some((track) =>
+        track.id.startsWith(importNotice.metadataPrefix),
+      ))
       ? importNotice.message
       : null
 

@@ -327,6 +327,113 @@ describe('useAnnotationWorkflow', () => {
     expect(snapshot.roiName).toBe('Marker ROI')
   })
 
+  it('names a class saved from a selection cut at the cell limit for what it holds', () => {
+    const selection = {
+      kind: 'box' as const,
+      bbox: {
+        minX: micrometers(1),
+        minY: micrometers(2),
+        maxX: micrometers(3),
+        maxY: micrometers(4),
+      },
+    }
+    const roiState: RoiState<StructuredLoadError> = {
+      status: 'ready',
+      url: 'https://example.test/output',
+      bbox: selection.bbox,
+      selection,
+      cells: Array.from({ length: 3 }, (_, index) => ({
+        id: asCellId(`aaaaaaaa-${index + 1}`),
+        position: { x: micrometers(index), y: micrometers(index) },
+      })),
+      hitCellLimit: true,
+    }
+
+    render(
+      <Probe
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        roiState={roiState}
+      />,
+    )
+
+    act(() => {
+      api.handleSaveRoiAnnotation()
+    })
+
+    expect(
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations[0]?.label
+        : '',
+    ).toBe('Marker ROI (first 3 cells)')
+  })
+
+  it('shows an import notice only while that import’s labels are loaded', async () => {
+    const selection = {
+      kind: 'box' as const,
+      bbox: {
+        minX: micrometers(1),
+        minY: micrometers(2),
+        maxX: micrometers(3),
+        maxY: micrometers(4),
+      },
+    }
+    const roiState: RoiState<StructuredLoadError> = {
+      status: 'ready',
+      url: 'https://example.test/output',
+      bbox: selection.bbox,
+      selection,
+      cells: [
+        {
+          id: asCellId('aaaaaaaa-1'),
+          position: { x: micrometers(1), y: micrometers(1) },
+        },
+      ],
+      hitCellLimit: false,
+    }
+
+    render(
+      <Probe
+        datasetCellIds={new Set(['aaaaaaaa-1'])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+        roiState={roiState}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File(['cell_id,label\naaaaaaaa-1,Tumour\nother-1,Stroma'], 'labels.csv', {
+          type: 'text/csv',
+        }),
+      )
+    })
+    expect(api.annotationImportNotice).toBe('1 of 2 imported cells are not on the map.')
+
+    // The imported classes go; a class saved from a selection is not imported.
+    const importedIds =
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations.map((annotation) => annotation.id)
+        : []
+    act(() => {
+      for (const id of importedIds) {
+        api.handleRemoveAnnotation(id)
+      }
+    })
+    act(() => {
+      api.handleSaveRoiAnnotation()
+    })
+
+    expect(snapshot.annotationState.status).toBe('ready')
+    expect(api.annotationImportNotice).toBeNull()
+  })
+
   it('exports ready annotations as CSV', async () => {
     const click = vi
       .spyOn(HTMLAnchorElement.prototype, 'click')
