@@ -1,6 +1,7 @@
 import { datasetFileUrl, datasetManifestFor, xeniumManifestFileFor } from './datasetFiles'
 import { notifyFallback, type FallbackNotifier } from './fallbackNotice'
 import { isListedAsMissing } from './folderListing'
+import { likelyMissingFileError, noteReadableResponse } from './hostResponses'
 
 export type AnalysisEmbeddingKind = string
 export type AnalysisEmbeddingElementLabel = 'cells' | 'bins' | 'spots'
@@ -41,6 +42,12 @@ export interface EmbeddingCandidate {
   readonly kind: AnalysisEmbeddingKind
   readonly label: string
   readonly path: string
+}
+
+// A candidate the dataset manifest names, so a missing file is the manifest's
+// mistake, not a path the output layout did not use.
+interface SearchedEmbeddingCandidate extends EmbeddingCandidate {
+  readonly fromManifest?: boolean
 }
 
 export const EMBEDDING_CANDIDATES: readonly EmbeddingCandidate[] = [
@@ -100,18 +107,26 @@ export async function loadDatasetAnalysisEmbeddings(
       options.signal,
     )
 
-    if (csv === null) {
-      appendSkippedEmbeddingPath(skippedPathsByKind, candidate)
-      continue
-    }
-
-    const points = parseAnalysisEmbeddingCsv(csv, candidate.kind, {
-      sourcePath: candidate.path,
-      ...(options.onFallback === undefined ? {} : { onFallback: options.onFallback }),
-    })
+    const points =
+      csv === null
+        ? []
+        : parseAnalysisEmbeddingCsv(csv, candidate.kind, {
+            sourcePath: candidate.path,
+            ...(options.onFallback === undefined
+              ? {}
+              : { onFallback: options.onFallback }),
+          })
 
     if (points.length === 0) {
       appendSkippedEmbeddingPath(skippedPathsByKind, candidate)
+      if (candidate.fromManifest === true) {
+        notifyManifestEmbeddingUnusable(
+          options.onFallback,
+          baseUrl,
+          candidate,
+          csv === null,
+        )
+      }
       continue
     }
 
@@ -207,8 +222,8 @@ export function parseAnalysisEmbeddingCsv(
 
   for (const row of rows.slice(1)) {
     const id = row[idIndex]?.trim()
-    const x = Number(row[xIndex])
-    const y = Number(row[yIndex])
+    const x = coordinate(row[xIndex])
+    const y = coordinate(row[yIndex])
 
     if (
       id === undefined ||
@@ -225,10 +240,17 @@ export function parseAnalysisEmbeddingCsv(
   return points
 }
 
+// A coordinate field as a number; NaN for an empty field, which pandas writes
+// for a missing value and Number() would read as 0.
+function coordinate(field: string | undefined): number {
+  const text = field?.trim() ?? ''
+  return text.length === 0 ? Number.NaN : Number(text)
+}
+
 function analysisEmbeddingCandidates(
   baseUrl: string,
   visiumHdBinSizeMicrometers: AnalysisEmbeddingVisiumHdBinSize | undefined,
-): readonly EmbeddingCandidate[] {
+): readonly SearchedEmbeddingCandidate[] {
   if (visiumHdBinSizeMicrometers === undefined) {
     return xeniumEmbeddingCandidates(baseUrl)
   }
@@ -261,12 +283,21 @@ export function visiumHdEmbeddingCandidates(
 
 // A projection named in the dataset manifest replaces the searched paths for
 // that kind.
-function xeniumEmbeddingCandidates(baseUrl: string): readonly EmbeddingCandidate[] {
+function xeniumEmbeddingCandidates(
+  baseUrl: string,
+): readonly SearchedEmbeddingCandidate[] {
   const overrides = (['umap', 'tsne'] as const).flatMap((kind) => {
     const file = xeniumManifestFileFor(baseUrl, kind)
     return file === undefined
       ? []
-      : [{ kind, label: analysisEmbeddingLabel(kind), path: file.path }]
+      : [
+          {
+            kind,
+            label: analysisEmbeddingLabel(kind),
+            path: file.path,
+            fromManifest: true,
+          },
+        ]
   })
 
   if (overrides.length === 0) {
@@ -291,6 +322,23 @@ function appendSkippedEmbeddingPath(
   ])
 }
 
+function notifyManifestEmbeddingUnusable(
+  onFallback: FallbackNotifier | undefined,
+  baseUrl: string,
+  candidate: EmbeddingCandidate,
+  missing: boolean,
+): void {
+  notifyFallback(onFallback, {
+    source: 'Analysis embeddings',
+    message: `The ${candidate.label} projection the dataset manifest names ${
+      missing ? 'was not found' : 'has no rows with a cell ID and two coordinates'
+    }.`,
+    action: 'Check its path and columns in the dataset manifest.',
+    detail: candidate.path,
+    coalesceKey: `analysis-embedding-manifest:${baseUrl}:${candidate.kind}`,
+  })
+}
+
 function notifyEmbeddingPathFallback(
   onFallback: FallbackNotifier | undefined,
   baseUrl: string,
@@ -311,6 +359,11 @@ function notifyEmbeddingPathFallback(
   })
 }
 
+// A projection's text, or null when the file is missing: a 404, a 403 from a
+// bucket that denies listing, a path the folder index leaves out, or a failed
+// request on a host that hides its error responses (the BioImage Archive's).
+// Any other failure fails the load, so the panel offers to try again rather
+// than saying there is no projection.
 async function fetchEmbeddingCsv(
   url: string,
   fetcher: typeof fetch,
@@ -320,14 +373,24 @@ async function fetchEmbeddingCsv(
     return null
   }
 
-  const response = await fetcher(url, signal === undefined ? undefined : { signal })
+  let response: Response
+  try {
+    response = await fetcher(url, signal === undefined ? undefined : { signal })
+  } catch (error) {
+    if (likelyMissingFileError('Projection CSV', url, error) !== undefined) {
+      return null
+    }
+    throw error
+  }
 
-  if (response.status === 404) {
+  noteReadableResponse(url, response.status)
+
+  if (response.status === 404 || response.status === 403) {
     return null
   }
 
   if (!response.ok) {
-    return null
+    throw new Error(`Projection CSV ${url} could not be read: HTTP ${response.status}.`)
   }
 
   return response.text()
