@@ -138,6 +138,24 @@ describe('parseDatasetCollection', () => {
     )
   })
 
+  it('resolves entries as URLs, inside a root with a query (EXP-211, EXP-212)', () => {
+    expect(
+      parse({ version: 1, datasets: [{ dataset: './run:1/a.zarr' }] }).datasets[0]?.url,
+    ).toBe('https://example.test/studies/injury/run:1/a.zarr')
+    expect(
+      parse({
+        version: 1,
+        root: 'https://bucket.example.test/study?token=abc',
+        datasets: [{ dataset: 'a.zarr' }],
+      }).datasets[0]?.url,
+    ).toBe('https://bucket.example.test/study/a.zarr?token=abc')
+    expect(
+      parseError({ version: 1, datasets: [{ dataset: 'da\tta:text/plain,a' }] }),
+    ).toBe(
+      'collection.json: "datasets[0].dataset" must not contain control characters such as tabs or line breaks.',
+    )
+  })
+
   it('pairs an image with a dataset, resolved like the dataset', () => {
     const collection = parse({
       version: 1,

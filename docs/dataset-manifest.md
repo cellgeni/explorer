@@ -102,8 +102,17 @@ reported instead of falling back to the standard name.
 
 Each path is either relative or an `http://` / `https://` URL. Relative paths
 resolve against `root` when it is set, otherwise against the folder the
-manifest is in. A leading `./` and trailing `/` are dropped; `../` is allowed.
-Other schemes such as `s3://` are rejected: the browser can only read HTTP(S).
+manifest is in, as links in a web page do: `../` is allowed, and a path
+starting with `/` starts from the host. A leading `./` and trailing `/` are
+dropped, except a `./` before a name with a colon (`./run:1/cells.parquet`),
+which would otherwise read as a scheme. Other schemes such as `s3://` are
+rejected: the browser can only read HTTP(S). So are paths with control
+characters such as tabs or line breaks, and text that does not parse as a URL,
+such as a host with a space.
+
+A `root` with a query string, such as a token that grants the folder, keeps
+the query on each file resolved under it:
+`https://host/run-7?token=abc` reads `https://host/run-7/cells.parquet?token=abc`.
 
 ## Source
 

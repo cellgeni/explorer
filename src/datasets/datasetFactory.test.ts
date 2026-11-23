@@ -22,7 +22,11 @@ import {
 import { AteraDataset } from './ateraDataset'
 import { dropDatasets } from './datasetCache'
 import { parseDatasetCollection } from './datasetCollection'
-import { DatasetManifestError } from './datasetManifest'
+import {
+  DatasetManifestError,
+  parseDatasetManifest,
+  resolveManifestPath,
+} from './datasetManifest'
 import { AnnDataH5adDataset } from './h5adDataset'
 import { ImageOnlyDataset } from './imageOnlyDataset'
 import { MerscopeDataset } from './merscopeDataset'
@@ -1160,6 +1164,29 @@ describe('dataset manifests', () => {
       'unknown field "defaults.opacity"',
     )
     expect(datasetManifestFor(baseUrl)).toBeUndefined()
+  })
+
+  it('reads a manifest path where detection probes it (EXP-213)', () => {
+    const url = 'https://example.test/data/explorer.json'
+    const path = '/data/spatial/tissue_positions.csv'
+    const manifest = parseDatasetManifest(
+      { version: 1, platform: 'visium', files: { tissuePositions: path } },
+      url,
+    )
+    setDatasetManifest(url, manifest)
+
+    try {
+      // A leading "/" starts from the host, as detection resolves it.
+      expect(datasetFileUrl(url, path)).toBe(resolveManifestPath(manifest.rootUrl, path))
+      expect(datasetFileUrl(url, path)).toBe(
+        'https://example.test/data/spatial/tissue_positions.csv',
+      )
+      expect(datasetFileUrl(url, 'spatial/scalefactors_json.json')).toBe(
+        'https://example.test/data/spatial/scalefactors_json.json',
+      )
+    } finally {
+      setDatasetManifest(url, undefined)
+    }
   })
 
   it('drops a manifest registered by an earlier detection once it is gone', async () => {

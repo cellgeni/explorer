@@ -3,6 +3,7 @@ import {
   isAbsoluteUrl,
   manifestImageAttachment,
   manifestZchunkStoreUrl,
+  resolveManifestPath,
   type DatasetFileRole,
   type DatasetImageAttachment,
   type DatasetManifest,
@@ -76,14 +77,18 @@ export function clearDatasetImages(): void {
 }
 
 // URL of a file inside a dataset. Relative paths resolve against the
-// manifest's root when the dataset has one; absolute URLs pass through.
+// manifest's root when the dataset has one, as detection resolves them, so a
+// path is probed and read at one URL; absolute URLs pass through.
 export function datasetFileUrl(baseUrl: string, path: string): string {
   if (isAbsoluteUrl(path)) {
     return path
   }
 
-  const rootUrl = datasetManifestFor(baseUrl)?.rootUrl ?? baseUrl
-  return `${rootUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+  const rootUrl = datasetManifestFor(baseUrl)?.rootUrl
+
+  return rootUrl === undefined
+    ? `${baseUrl.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`
+    : resolveManifestPath(rootUrl, path)
 }
 
 // URL of a standard dataset file, following the manifest when it relocates it.
