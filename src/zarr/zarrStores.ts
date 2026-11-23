@@ -388,14 +388,12 @@ export function zarrChunkKeys(
   metadata: Record<string, unknown>,
   options: { readonly limit?: number } = {},
 ): readonly string[] {
-  const shape = numberList(metadata.shape)
-  const chunks = chunkShape(metadata)
+  const counts = chunkCounts(metadata)
 
-  if (shape === null || chunks === null || shape.length !== chunks.length) {
+  if (counts === null) {
     return []
   }
 
-  const counts = shape.map((size, index) => Math.ceil(size / (chunks[index] ?? size)))
   const total = counts.reduce((product, count) => product * count, 1)
   const limit = Math.min(total, options.limit ?? total)
   const keys: string[] = []
@@ -414,6 +412,20 @@ export function zarrChunkKeys(
   }
 
   return keys
+}
+
+// How many chunks an array has, from its shape and chunk shape.
+export function zarrChunkCount(metadata: Record<string, unknown>): number {
+  return chunkCounts(metadata)?.reduce((product, count) => product * count, 1) ?? 0
+}
+
+function chunkCounts(metadata: Record<string, unknown>): readonly number[] | null {
+  const shape = numberList(metadata.shape)
+  const chunks = chunkShape(metadata)
+
+  return shape === null || chunks === null || shape.length !== chunks.length
+    ? null
+    : shape.map((size, index) => Math.ceil(size / (chunks[index] ?? size)))
 }
 
 // Key of one chunk relative to the array path, following the array's chunk

@@ -41,7 +41,8 @@ import {
 import { MERSCOPE_CSV_MAX_BYTES } from '../datasets/merscopeFormat'
 import { visiumHdFilteredBarcodesPath } from '../datasets/visiumHdStrategy'
 import type { ZippedZarrStore } from '../zarr/zarrZipStore'
-import { isStringArrayMetadata, zarrChunkKeys } from '../zarr/zarrStores'
+import { isIcechunkUrl } from '../zarr/icechunkUrl'
+import { isStringArrayMetadata, zarrChunkCount, zarrChunkKeys } from '../zarr/zarrStores'
 import type {
   VisiumHdBinDescriptor,
   VisiumHdBinSizeMicrometers,
@@ -817,12 +818,22 @@ async function runSpatialDataDiagnostics(
     }),
   ]
   // A zip lists every file, so chunks are checked against its directory
-  // instead of with a request each, and every chunk is checked.
+  // instead of with a request each, and every chunk is checked. An Icechunk
+  // repository keeps chunks where its manifests say, not at their keys, so
+  // fewer are read through its store.
+  const icechunk = zip === undefined && isIcechunkUrl(url)
   const probe: ChunkProber =
-    zip === undefined
-      ? (targets) => probeChunks(url, targets, options)
-      : (targets) => Promise.resolve(zipChunkProbes(zip, targets))
+    zip !== undefined
+      ? (targets) => Promise.resolve(zipChunkProbes(zip, targets))
+      : icechunk
+        ? (targets) => storeChunkProbes(store, targets)
+        : (targets) => probeChunks(url, targets, options)
   const everyChunk = zip !== undefined
+  const maxTableChunks = everyChunk
+    ? Infinity
+    : icechunk
+      ? SPATIALDATA_MAX_STORE_CHECKED_CHUNKS
+      : SPATIALDATA_MAX_CHECKED_CHUNKS
 
   if (view.table === undefined) {
     checks.push(
@@ -841,7 +852,7 @@ async function runSpatialDataDiagnostics(
   if (view.table !== undefined) {
     checks.push(
       await checkSpatialDataTableChunks(url, store, catalog, view, probe, {
-        everyChunk,
+        maxChunks: maxTableChunks,
       }),
     )
   }
@@ -900,6 +911,8 @@ async function runSpatialDataDiagnostics(
 }
 
 const SPATIALDATA_MAX_CHECKED_CHUNKS = 2_000
+// Chunks read whole through an Icechunk repository's store.
+const SPATIALDATA_MAX_STORE_CHECKED_CHUNKS = 200
 const SPATIALDATA_CHUNK_CHECK_CONCURRENCY = 8
 
 interface ChunkProbe {
@@ -916,21 +929,25 @@ interface ChunkTarget {
 type ChunkProber = (targets: readonly ChunkTarget[]) => Promise<readonly ChunkProbe[]>
 
 // Zarr reads absent chunks as fill values, so an interrupted upload loads
-// without errors but with empty columns. HEAD each table chunk to find them:
-// the first SPATIALDATA_MAX_CHECKED_CHUNKS over HTTP, or every chunk with
-// `everyChunk` (a zip, checked against its directory).
+// without errors but with empty columns. Each table chunk is probed to find
+// them, up to `maxChunks`: those of string arrays first, since the viewer
+// cannot read a table with one of them missing, then the numeric arrays'.
 async function checkSpatialDataTableChunks(
   url: string,
   store: SpatialDataStore,
   catalog: SpatialDataCatalog,
   view: SpatialDataView,
   probe: ChunkProber,
-  options: { readonly everyChunk: boolean },
+  options: { readonly maxChunks: number },
 ): Promise<DatasetDiagnosticCheck> {
-  const maxChunks = options.everyChunk ? Infinity : SPATIALDATA_MAX_CHECKED_CHUNKS
+  const { maxChunks } = options
   const startedAt = Date.now()
   const tablePath = view.table?.path ?? ''
-  const targets: ChunkTarget[] = []
+  const arrays: {
+    readonly path: string
+    readonly metadata: Record<string, unknown>
+    readonly stringArray: boolean
+  }[] = []
 
   for (const node of catalog.nodes) {
     if (node.kind !== 'array' || !node.path.startsWith(`${tablePath}/`)) {
@@ -939,27 +956,40 @@ async function checkSpatialDataTableChunks(
 
     const metadata = await readZarrArrayMetadata(store, node.path)
 
-    if (metadata === null) {
-      continue
-    }
-
-    const stringArray = isStringArrayMetadata(metadata)
-
-    for (const chunkKey of zarrChunkKeys(
-      metadata,
-      options.everyChunk ? {} : { limit: maxChunks },
-    )) {
-      targets.push({ key: `${node.path}/${chunkKey}`, stringArray })
+    if (metadata !== null) {
+      arrays.push({
+        path: node.path,
+        metadata,
+        stringArray: isStringArrayMetadata(metadata),
+      })
     }
   }
 
-  const checked = targets.slice(0, maxChunks)
+  const ordered = [
+    ...arrays.filter((array) => array.stringArray),
+    ...arrays.filter((array) => !array.stringArray),
+  ]
+  const total = ordered.reduce((sum, array) => sum + zarrChunkCount(array.metadata), 0)
+  const checked: ChunkTarget[] = []
+
+  for (const { path, metadata, stringArray } of ordered) {
+    const limit = maxChunks - checked.length
+    if (limit <= 0) break
+
+    for (const chunkKey of zarrChunkKeys(
+      metadata,
+      Number.isFinite(limit) ? { limit } : {},
+    )) {
+      checked.push({ key: `${path}/${chunkKey}`, stringArray })
+    }
+  }
+
   const probes = await probe(checked)
   const failed = probes.filter((probe) => probe.status !== 200 && probe.status !== 206)
   const blocking = failed.filter((probe) => probe.status !== 404 || probe.stringArray)
   const scope =
-    checked.length < targets.length
-      ? `first ${checked.length.toLocaleString()} of ${targets.length.toLocaleString()}`
+    checked.length < total
+      ? `first ${checked.length.toLocaleString()} of ${total.toLocaleString()}`
       : checked.length.toLocaleString()
 
   return diagnosticCheck({
@@ -1172,6 +1202,33 @@ async function probeChunks(
       worker,
     ),
   )
+  return results
+}
+
+// Chunks read through a store that does not keep them at their keys (an
+// Icechunk repository): an absent numeric chunk reads as nothing, an absent
+// string-array chunk throws, as for the viewer.
+async function storeChunkProbes(
+  store: SpatialDataStore,
+  targets: readonly ChunkTarget[],
+): Promise<readonly ChunkProbe[]> {
+  const results: ChunkProbe[] = []
+
+  for (const target of targets) {
+    try {
+      const bytes = await store.get(`/${target.key}`)
+      results.push({ ...target, status: bytes === undefined ? 404 : 200 })
+    } catch (cause) {
+      results.push({
+        ...target,
+        status:
+          cause instanceof Error && cause.name === 'ZarrChunkUnavailableError'
+            ? 404
+            : 'error',
+      })
+    }
+  }
+
   return results
 }
 

@@ -11,7 +11,11 @@ import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
   annDataZarrFixtureFetcher,
 } from '../test/annDataZarrFixtures'
-import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
+import {
+  ICECHUNK_FIXTURE_ORIGIN,
+  icechunkFixtureFetcher,
+  type IcechunkFixtureRequest,
+} from '../test/icechunkFixtures'
 import { byteRangeFetcher, zipArchive, type ByteRangeRequest } from '../test/zipFixtures'
 
 describe('runDatasetDiagnostics', () => {
@@ -172,6 +176,82 @@ describe('runDatasetDiagnostics', () => {
     } finally {
       clearHostResponses()
     }
+  })
+
+  // An Icechunk repository keeps chunks where its manifests say; HEADs at
+  // their keys found none (EXP-227).
+  it('reads the table chunks of a SpatialData Icechunk repository through its store', async () => {
+    const requests: IcechunkFixtureRequest[] = []
+    const report = await runDatasetDiagnostics(
+      `${ICECHUNK_FIXTURE_ORIGIN}/spatialdata.icechunk`,
+      { fetcher: icechunkFixtureFetcher({ requests }) },
+    )
+    const chunks = report.checks.find((check) => check.id === 'spatialdata-table-chunks')
+
+    expect(chunks?.status).not.toBe('fail')
+    expect(
+      requests.filter(
+        ({ method, path }) => method === 'HEAD' && path.includes('/tables/'),
+      ),
+    ).toEqual([])
+  })
+
+  // The first 2,000 chunks were all of X, so a missing obs index chunk, which
+  // the viewer cannot read past, was never probed (EXP-227).
+  it('probes string-array chunks first and counts every table chunk', async () => {
+    const storeUrl = 'https://example.test/big-table.sdata.zarr'
+    const array = (dtype: string, shape: number[], chunks: number[], extra = {}) => ({
+      zarr_format: 2,
+      shape,
+      chunks,
+      dtype,
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+      ...extra,
+    })
+    const metadata = {
+      zarr_consolidated_format: 1,
+      metadata: {
+        '.zgroup': { zarr_format: 2 },
+        'tables/table/.zgroup': { zarr_format: 2 },
+        'tables/table/.zattrs': { region: 'cells', instance_key: 'cell_id' },
+        'tables/table/X/.zgroup': { zarr_format: 2 },
+        'tables/table/X/data/.zarray': array('<f4', [2_100], [1]),
+        'tables/table/obs/.zgroup': { zarr_format: 2 },
+        'tables/table/obs/_index/.zarray': array('|O', [4], [4], {
+          filters: [{ id: 'vlen-utf8' }],
+        }),
+      },
+    }
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.endsWith('/zmetadata')) return Response.json(metadata)
+      if (url.includes('/obs/_index/')) return new Response(null, { status: 404 })
+      return new Response(null, { status: init?.method === 'HEAD' ? 200 : 404 })
+    }) as unknown as typeof fetch
+
+    const report = await runDatasetDiagnostics(storeUrl, {
+      fetcher,
+      detectDataset: vi.fn(async () => ({
+        platform: 'spatialdata' as const,
+        baseUrl: storeUrl,
+        spatialDataUrl: storeUrl,
+        checked: [],
+      })),
+      rangeValidator: vi.fn(async () => undefined),
+    })
+
+    expect(
+      report.checks.find((check) => check.id === 'spatialdata-table-chunks'),
+    ).toMatchObject({
+      status: 'fail',
+      message: expect.stringMatching(
+        /^1 of first 2,000 of 2,101 table chunks missing or unreadable: tables\/table\/obs\/_index\/0 \(HTTP 404\)/,
+      ),
+    })
   })
 
   it('reads the first expression chunk of AnnData in an Icechunk repository', async () => {

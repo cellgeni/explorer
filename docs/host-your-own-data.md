@@ -502,7 +502,8 @@ partly uploaded store can load with empty columns. The app logs table chunks
 read that way, fails with `Store objects missing or unreadable` when a string
 array or a required array cannot be read, and skips optional `obs` columns
 whose chunks return `403`. `Diagnose Dataset` checks the first 2,000 table
-chunks, one chunk of the image and of each labels region in the view the app
+chunks, string arrays first (the first 200, read through the repository, for
+an Icechunk store), one chunk of the image and of each labels region in the view the app
 loads, and the `shapes.parquet` files drawn as cells or nuclei. In a zipped
 store it checks every table, image, and labels chunk against the zip's
 directory.
