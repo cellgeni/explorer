@@ -403,6 +403,12 @@ describe('parseDatasetManifest', () => {
     )
   })
 
+  it('names a newer version before its unknown fields (EXP-215)', () => {
+    expect(
+      parseError({ version: 2, platform: 'xenium', projections: { umap: 'umap.csv' } }),
+    ).toContain('"version" 2 is not supported; this viewer reads version 1.')
+  })
+
   it('rejects non-string and non-http paths', () => {
     expect(
       parseError({ version: 1, platform: 'xenium', files: { cells: 42 } }),

@@ -84,8 +84,8 @@ describe('dataset collection JSON Schema', () => {
 
   it('offers the same default values as the dataset manifest', () => {
     for (const key of DATASET_COLLECTION_DEFAULT_KEYS) {
-      expect(schema.$defs?.defaults?.properties?.[key]?.enum).toEqual(
-        manifestSchema.$defs?.defaults?.properties?.[key]?.enum,
+      expect(schema.$defs?.defaults?.properties?.[key]).toEqual(
+        manifestSchema.$defs?.defaults?.properties?.[key],
       )
     }
   })
