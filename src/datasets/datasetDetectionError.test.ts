@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { DatasetProbeResult } from './datasetFactory'
-import { classifyDatasetDetection, datasetDetectionError } from './datasetDetectionError'
+import {
+  PROBE_HIDDEN_ERROR,
+  PROBE_NOT_LISTED,
+  classifyDatasetDetection,
+  datasetDetectionError,
+} from './datasetDetectionError'
 
 function probe(path: string, result: Partial<DatasetProbeResult>): DatasetProbeResult {
   return { path, url: `https://example.test/${path}`, ok: false, ...result }
@@ -59,6 +64,66 @@ describe('dataset detection errors', () => {
     expect(datasetDetectionError([probe('a', { status: 405 })]).message).toContain(
       '(HTTP 405)',
     )
+  })
+
+  it('names the cause from the probes a 404 did not answer (EXP-202)', () => {
+    // A host that refuses HEAD with 405; the manifest GET is a plain 404.
+    const refusedHead = datasetDetectionError([
+      probe('explorer.json', { status: 404 }),
+      probe('experiment.xenium', { status: 405 }),
+      probe('experiment.spatial', { status: 405 }),
+    ])
+
+    expect(refusedHead.kind).toBe('refused')
+    expect(refusedHead.message).toBe(
+      'The host refused the requests for 2 of the 3 expected files (HTTP 405).',
+    )
+    expect(
+      classifyDatasetDetection([
+        probe('experiment.xenium', { status: 429 }),
+        probe('zarr.json', { status: 404 }),
+      ]),
+    ).toBe('refused')
+    expect(
+      datasetDetectionError([
+        probe('explorer.json', { status: 503 }),
+        probe('experiment.xenium', { status: 404 }),
+      ]).message,
+    ).toBe('The host returned server errors for 1 of the 2 expected files (HTTP 503).')
+    expect(
+      datasetDetectionError([
+        probe('experiment.xenium', { status: 404 }),
+        probe('zarr.json', { error: 'Failed to fetch' }),
+      ]).message,
+    ).toMatch(/^The browser got no response for 1 of the 2 expected files, so they may/)
+  })
+
+  it('counts a fetch hidden by the host as a missing file (EXP-203)', () => {
+    expect(
+      classifyDatasetDetection([
+        probe('experiment.xenium', { error: PROBE_NOT_LISTED }),
+        probe('.zattrs', { error: PROBE_HIDDEN_ERROR }),
+      ]),
+    ).toBe('not-found')
+  })
+
+  it('says when the host did not answer in time (EXP-207)', () => {
+    const timedOut = { error: 'Request timed out after 15,000 ms.' }
+    const error = datasetDetectionError([
+      probe('explorer.json', timedOut),
+      probe('experiment.xenium', timedOut),
+    ])
+
+    expect(error.kind).toBe('timeout')
+    expect(error.message).toBe(
+      'The host did not answer the requests for the expected files within 15 s.',
+    )
+    expect(
+      classifyDatasetDetection([
+        probe('explorer.json', timedOut),
+        probe('experiment.xenium', { error: 'Failed to fetch' }),
+      ]),
+    ).toBe('blocked')
   })
 
   it('lists what was found when the layout is unknown', () => {

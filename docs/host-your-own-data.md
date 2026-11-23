@@ -33,7 +33,9 @@ Important rules:
   `Content-Encoding`.
 - Keep object paths immutable when possible so browser/CDN caches stay useful.
 - Allow `HEAD` requests. Platform detection, H5AD size checks, and the Parquet
-  reader use them. A failed `HEAD` makes detection skip that platform.
+  reader use them. A `HEAD` that gets no response (CORS rules that allow only
+  `GET`) is sent again as a one-byte `GET`, but one refused with an error
+  status, such as 405, makes detection skip that platform.
 
 ## Dataset Addresses
 

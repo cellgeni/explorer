@@ -778,6 +778,12 @@ const DATASET_DETECTION_ERRORS: Record<
     action:
       "Check the network connection, then the host's CORS rules: they must allow GET and HEAD with Range from this site. Run Diagnostics shows each request.",
   },
+  timeout: {
+    code: 'network',
+    title: 'Host not responding',
+    action:
+      'Check the address and the network connection, then load again. Run Diagnostics shows each request.',
+  },
   'server-error': {
     code: 'http',
     title: 'Host server error',

@@ -125,7 +125,23 @@ match:
 | 7     | At least one complete `binned_outputs/square_*um` tier                                                                                  | `visium-hd`                                                        |
 | —     | Nothing matched                                                                                                                         | `unknown` → "Unsupported spatial dataset layout."                  |
 
-Every probe has a 15 s timeout. A host that rejects `HEAD` breaks detection.
+Every probe has a 15 s timeout. When all of steps 4a to 4c time out, detection
+stops there instead of waiting out each later step, and reports "Host not
+responding". A `HEAD` that gets no response, as on a host whose CORS rules allow
+only `GET`, is sent again as a one-byte Range `GET` (`fetchHead`,
+`src/data/hostResponses.ts`). A `HEAD` answered with an error status, such as
+405, is final: the file counts as absent for that platform, and when nothing
+matches, detection reports "Request refused".
+
+When nothing matches, the error is named by the probes that did not rule their
+file out (`classifyDatasetDetection`,
+`src/datasets/datasetDetectionError.ts`). A 404, a 403 (as buckets that deny
+listing send for missing files), a file the folder's index page leaves out, and
+a failed fetch on a host that hides its error responses all rule a file out.
+"Dataset not found" needs every probe to; otherwise a 401 is "Access denied",
+5xx answers "Host server error", other answers such as 405 or 429 "Request
+refused", timeouts "Host not responding", and failures without a response
+"Request blocked".
 
 Before step 4, detection reads the folder's index page (`GET <url>/`, 5 s
 timeout); for a dataset manifest it also reads the index page of the manifest's
