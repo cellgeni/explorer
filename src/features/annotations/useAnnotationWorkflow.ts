@@ -1,5 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import {
+  customAnnotationImportOnMap,
   customCellMetadataFilePrefix,
   IMPORTED_COLUMN_CLASS_LIMIT,
   parseCustomAnnotationImport,
@@ -110,10 +111,13 @@ interface UseAnnotationWorkflowOptions {
 }
 
 // Classes and sets a link hides (hiddenClasses=, hiddenSets=). Those in the
-// loaded labels stay hidden once they load; the rest are dropped.
+// loaded labels stay hidden once they load; the rest are dropped. An import
+// colours cells by what it brought, unless switchColorMode is false (a
+// link's labels, under the link's own colour mode).
 interface LinkHiddenAnnotationOptions {
   readonly hiddenAnnotationIds?: readonly string[] | undefined
   readonly hiddenAnnotationSetIds?: readonly string[] | undefined
+  readonly switchColorMode?: boolean
 }
 
 interface UseAnnotationWorkflowResult {
@@ -308,16 +312,14 @@ export function useAnnotationWorkflow({
       {
         hiddenAnnotationIds: linkHiddenAnnotationIds = [],
         hiddenAnnotationSetIds: linkHiddenAnnotationSetIds = [],
+        switchColorMode = true,
       }: LinkHiddenAnnotationOptions = {},
     ) => {
-      const {
-        annotations: importedAnnotations,
-        metadataTracks: importedMetadataTracks,
-        skippedColumns = [],
-      } = parseCustomAnnotationImport(text, sourceName)
+      const parsed = parseCustomAnnotationImport(text, sourceName)
+      const skippedColumns = parsed.skippedColumns ?? []
       const cellCheck = checkImportedCellIds(
-        importedAnnotations,
-        importedMetadataTracks,
+        parsed.annotations,
+        parsed.metadataTracks,
         datasetCellIds,
       )
 
@@ -328,6 +330,13 @@ export function useAnnotationWorkflow({
             : `None of the ${cellCheck.total.toLocaleString()} imported cells are on the map.`,
         )
       }
+
+      // Cells of other samples would count in classes, tracks' ranges and
+      // exports; the notice says how many were left out.
+      const { annotations: importedAnnotations, metadataTracks: importedMetadataTracks } =
+        cellCheck.missing === 0
+          ? parsed
+          : customAnnotationImportOnMap(parsed, datasetCellIds)
 
       const importedPrefix = customAnnotationFilePrefix(sourceName)
       const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
@@ -405,9 +414,9 @@ export function useAnnotationWorkflow({
 
         return importedMetadataTracks[0]?.id ?? nextCellMetadataTracks[0]?.id ?? null
       })
-      if (importedAnnotations.length > 0) {
+      if (switchColorMode && importedAnnotations.length > 0) {
         setObservationColorMode('annotations')
-      } else if (importedMetadataTracks.length > 0) {
+      } else if (switchColorMode && importedMetadataTracks.length > 0) {
         setObservationColorMode('metadata')
       }
       appendDebugEvent(
