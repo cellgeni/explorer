@@ -270,6 +270,63 @@ describe('CollectionPreviewStore', () => {
     expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4']])
   })
 
+  // A dataset switch commits before the next dataset's set loads, and asks
+  // for neither genes nor a set meanwhile (EXP-224).
+  it('keeps the classes of a set through a request for neither', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:type' })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    await flush()
+    const classes = store.entry(A).classes
+    expect(classes).not.toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).classes).toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:type' })
+    await flush()
+    expect(store.entry(A).classes).toBe(classes)
+    expect(fake.annotationCalls).toHaveLength(1)
+
+    // Another set is read afresh.
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: 'analysis:other' })
+    await flush()
+    await flush()
+    expect(fake.annotationCalls.map((call) => call.groupId)).toEqual([
+      'analysis:type',
+      'analysis:other',
+    ])
+  })
+
+  it('keeps the scores of the genes through a request for neither', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    fake.finishExpression(A, 3)
+    await flush()
+    const scores = store.entry(A).scores
+    expect(scores).not.toBe(null)
+
+    store.setRequest({ genes: [], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).scores).toBe(null)
+    store.setRequest({ genes: ['Aqp4'], scoreMode: 'sum', annotationGroupId: null })
+    await flush()
+    expect(store.entry(A).scores).toBe(scores)
+    expect(fake.expressions).toHaveLength(1)
+  })
+
   it('keeps the cells when the genes change during their read', async () => {
     const fake = fakeDatasets()
     store = new CollectionPreviewStore([A], fake.loaders)
