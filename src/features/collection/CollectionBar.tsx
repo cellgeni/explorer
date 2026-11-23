@@ -655,11 +655,20 @@ function cellCountText(count: number): string {
   return `${count.toLocaleString()} ${count === 1 ? 'cell' : 'cells'}`
 }
 
+// The file name as it reads, not as the address encodes it: `spinal cord.json`.
 function collectionFileName(url: string): string {
+  let name: string
+
   try {
-    return new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
+    name = new URL(url).pathname.split('/').filter(Boolean).at(-1) ?? url
   } catch {
     return url
+  }
+
+  try {
+    return decodeURIComponent(name)
+  } catch {
+    return name
   }
 }
 

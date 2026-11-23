@@ -319,7 +319,7 @@ describe('openPreviewSource', () => {
           ),
         ),
       ),
-    ).toBe('64 MB file, read when opened')
+    ).toBe('64 MiB file, read when opened')
     expect(fetchImpl).toHaveBeenCalledWith('https://example.test/big.h5ad', {
       method: 'HEAD',
     })
