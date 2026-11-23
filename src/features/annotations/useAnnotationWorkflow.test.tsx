@@ -499,17 +499,14 @@ describe('useAnnotationWorkflow', () => {
       expect(imported).toBe(false)
     })
 
-    expect(snapshot.annotationState).toEqual({
-      status: 'error',
-      url: 'https://example.test/output',
-      error: {
-        source: 'Annotations',
-        code: 'size-limit',
-        title: 'Annotation file too large',
-        message: 'all-cells.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
-        action:
-          'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
-      },
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toEqual({
+      source: 'Annotations',
+      code: 'size-limit',
+      title: 'Annotation file too large',
+      message: 'all-cells.csv is 250.5 MB, above the 100 MB limit for annotation URLs.',
+      action:
+        'The file was not read. Use a file of 100 MB or smaller, such as one with fewer columns, or split the labels into several files.',
     })
     expect(snapshot.debugMessages).toContain('Annotation URL import failed')
   })
@@ -647,19 +644,72 @@ AAACAGAGCGACTCCT-1,Stroma`,
       await api.handleImportAnnotations(file)
     })
 
-    expect(snapshot.annotationState).toEqual({
-      status: 'error',
-      url: 'https://example.test/output',
-      error: {
-        source: 'Annotations',
-        code: 'unknown',
-        title: 'Imported cells not found',
-        message: 'None of the 2 imported cells are on the map.',
-        action: "Check that the file's cell IDs come from this dataset.",
-      },
+    expect(snapshot.annotationState).toEqual({ status: 'idle' })
+    expect(api.annotationImportError).toEqual({
+      source: 'Annotations',
+      code: 'unknown',
+      title: 'Imported cells not found',
+      message: 'None of the 2 imported cells are on the map.',
+      action: "Check that the file's cell IDs come from this dataset.",
     })
     expect(api.annotationImportNotice).toBeNull()
     expect(snapshot.debugMessages).toContain('Annotation import failed')
+  })
+
+  it('keeps the loaded labels when an import fails, and clears the error on the next', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('Not found', { status: 404 })),
+    )
+
+    render(
+      <Probe
+        datasetCellIds={new Set([cellId])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,label\n${cellId},Tumour`], 'saved.csv', { type: 'text/csv' }),
+      )
+    })
+    const loaded = snapshot.annotationState
+    expect(loaded).toMatchObject({ status: 'ready' })
+
+    // A typo'd URL, then a file without a cell_id column.
+    await act(async () => {
+      await api.handleImportAnnotationUrl('https://example.test/labels/typo.csv')
+    })
+    expect(snapshot.annotationState).toBe(loaded)
+    expect(api.annotationImportError?.message).toContain('HTTP 404')
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File(['barcode,label\nx,A'], 'wrong.csv', { type: 'text/csv' }),
+      )
+    })
+    expect(snapshot.annotationState).toBe(loaded)
+    expect(api.annotationImportError?.message).toContain('cell_id')
+
+    await act(async () => {
+      await api.handleImportAnnotations(
+        new File([`cell_id,label\n${cellId},Stroma`], 'more.csv', { type: 'text/csv' }),
+      )
+    })
+    expect(api.annotationImportError).toBeNull()
+    expect(snapshot.annotationState).toMatchObject({
+      status: 'ready',
+      annotations: expect.arrayContaining([
+        expect.objectContaining({ label: 'Tumour' }),
+        expect.objectContaining({ label: 'Stroma' }),
+      ]),
+    })
   })
 
   it('keeps the classes a link hides once its set loads, if the set has them', async () => {
