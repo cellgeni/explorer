@@ -440,9 +440,18 @@ button.ui-chip-label {
   box-shadow: var(--shadow-1);
   color: var(--text-1);
   font-size: var(--font-caption);
-  pointer-events: none;
   transform: translateX(-50%);
   white-space: nowrap;
+}
+
+/* Spans the 6 px gap to the anchor, so the pointer can move onto the tooltip
+   to read it without leaving the anchor, which would hide it (WCAG 1.4.13). */
+.ui-tooltip::before {
+  position: absolute;
+  right: 0;
+  left: 0;
+  height: 8px;
+  content: '';
 }
 
 .ui-tooltip[hidden] {
@@ -498,8 +507,16 @@ button.ui-chip-label {
   bottom: calc(100% + 6px);
 }
 
+.ui-tooltip--top::before {
+  top: 100%;
+}
+
 .ui-tooltip--bottom {
   top: calc(100% + 6px);
+}
+
+.ui-tooltip--bottom::before {
+  bottom: 100%;
 }
 
 .ui-kbd {
