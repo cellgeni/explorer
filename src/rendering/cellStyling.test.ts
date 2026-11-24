@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { intToCellId } from '../data/cellid'
+import { type CellId, intToCellId } from '../data/cellid'
 import {
+  annotationMembership,
   createElementObservationColorizer,
+  createObservationColorizer,
   styleOverviewCellsByObservation,
+  type AnnotationColorStyle,
+  type CellMetadataColorStyle,
 } from './cellStyling'
 import type { OverviewCellDatum } from './deckLayers'
 
@@ -170,3 +174,79 @@ describe('element observation styling', () => {
     expect(colorize?.({ id: cellA })).not.toEqual(colorize?.({ id: cellB }))
   })
 })
+
+describe('annotation membership', () => {
+  const cellC = intToCellId(1, 3)
+
+  it('names every class listing a cell, in class order, once each', () => {
+    const membership = annotationMembership([
+      { id: 'a', label: 'A', cellIds: [cellA, cellB, cellA], color: '#ff0000' },
+      { id: 'b', cellIds: [cellB], color: '#00ff00' },
+      { id: 'c', label: 'C', cellIds: [cellB, cellB], color: '#0000ff' },
+    ])
+
+    expect(membership.labelsOf(cellA)).toEqual(['A'])
+    expect(membership.labelsOf(cellB)).toEqual(['A', 'b', 'C'])
+    expect(membership.labelsOf(cellC)).toBeUndefined()
+    expect(membership.firstClassOf(cellB)).toBe(0)
+  })
+
+  it('walks the classes once, at the first lookup, for cells, bins and labels', () => {
+    const counted = countedWalks<CellId>([cellA, cellB])
+    const annotations: readonly AnnotationColorStyle[] = [
+      { id: 'a', label: 'A', cellIds: counted.items, color: '#ff0000' },
+    ]
+    const colorizeCells = createObservationColorizer(cells, 'annotations', {
+      annotations,
+    })
+    const colorizeBins = createElementObservationColorizer('annotations', {
+      annotations,
+    })
+    expect(counted.passes()).toBe(0)
+
+    expect(colorizeCells?.(cells[0]!)).toEqual([255, 0, 0, 230])
+    expect(colorizeBins?.({ id: cellB })).toEqual([255, 0, 0, 230])
+    expect(annotationMembership(annotations).labelsOf(cellA)).toEqual(['A'])
+    expect(counted.passes()).toBe(1)
+
+    // A new list of classes is walked again.
+    createObservationColorizer(cells, 'annotations', {
+      annotations: [...annotations],
+    })?.(cells[0]!)
+    expect(counted.passes()).toBe(2)
+  })
+
+  it('reads a metadata track once for the cells and the bins', () => {
+    const counted = countedWalks([
+      { cellId: cellA, value: 0 },
+      { cellId: cellB, value: 10 },
+    ])
+    const metadataTrack: CellMetadataColorStyle = {
+      id: 'score',
+      values: counted.items,
+      min: 0,
+      max: 10,
+    }
+
+    const colorizeCells = createObservationColorizer(cells, 'metadata', { metadataTrack })
+    const colorizeBins = createElementObservationColorizer('metadata', { metadataTrack })
+
+    expect(colorizeCells?.(cells[1]!)).toEqual(colorizeBins?.({ id: cellB }))
+    expect(counted.passes()).toBe(1)
+  })
+})
+
+// A list that counts how often it is walked.
+function countedWalks<T>(items: readonly T[]): {
+  readonly items: readonly T[]
+  readonly passes: () => number
+} {
+  let passes = 0
+  const counted = new Proxy([...items], {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) passes += 1
+      return Reflect.get(target, property, receiver) as unknown
+    },
+  })
+  return { items: counted, passes: () => passes }
+}

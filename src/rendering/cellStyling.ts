@@ -108,30 +108,103 @@ export function createElementObservationColorizer(
   return mode === 'metadata' ? metadataColorizer(options.metadataTrack ?? null) : null
 }
 
+// Which shown classes list each cell. The cells' colours, the bins' colours
+// and the hover's class names all read it, so one walk over the classes'
+// cells serves the three, kept for as long as the class list is (EXP-326). It
+// is made at the first lookup, so a list only hovered costs nothing until then.
+export interface AnnotationMembership {
+  // The class listing the cell first, which colours it.
+  readonly firstClassOf: (id: string) => number | undefined
+  // The names of the classes listing the cell, in class order.
+  readonly labelsOf: (id: string) => readonly string[] | undefined
+}
+
+const annotationMemberships = new WeakMap<
+  readonly AnnotationColorStyle[],
+  AnnotationMembership
+>()
+
+export function annotationMembership(
+  annotations: readonly AnnotationColorStyle[],
+): AnnotationMembership {
+  const cached = annotationMemberships.get(annotations)
+  if (cached !== undefined) return cached
+
+  let lists: ReturnType<typeof classListsOf> | null = null
+  const read = () => (lists ??= classListsOf(annotations))
+  const labels = annotations.map((annotation) => annotation.label ?? annotation.id)
+  const singleLabels = labels.map((label) => [label])
+  const membership: AnnotationMembership = {
+    firstClassOf: (id) => read().firstClass.get(id),
+    labelsOf: (id) => {
+      const { firstClass, laterClasses } = read()
+      const first = firstClass.get(id)
+      if (first === undefined) return undefined
+      const later = laterClasses.get(id)
+      return later === undefined
+        ? singleLabels[first]
+        : [first, ...later].map((index) => labels[index] ?? '')
+    },
+  }
+  annotationMemberships.set(annotations, membership)
+  return membership
+}
+
+// Each cell's first class, and the later ones of the few cells in more than
+// one; a cell listed twice by one class counts once.
+function classListsOf(annotations: readonly AnnotationColorStyle[]): {
+  readonly firstClass: ReadonlyMap<string, number>
+  readonly laterClasses: ReadonlyMap<string, readonly number[]>
+} {
+  const firstClass = new Map<string, number>()
+  const laterClasses = new Map<string, number[]>()
+
+  annotations.forEach((annotation, classIndex) => {
+    for (const cellId of annotation.cellIds) {
+      const first = firstClass.get(cellId)
+
+      if (first === undefined) {
+        firstClass.set(cellId, classIndex)
+        continue
+      }
+
+      if (first === classIndex) continue
+      const later = laterClasses.get(cellId)
+
+      if (later === undefined) {
+        laterClasses.set(cellId, [classIndex])
+      } else if (later[later.length - 1] !== classIndex) {
+        later.push(classIndex)
+      }
+    }
+  })
+
+  return { firstClass, laterClasses }
+}
+
 function annotationColorizer(
   annotations: readonly AnnotationColorStyle[],
 ): (cell: { readonly id: string }) => Color {
-  const colorByCellId = new Map<string, Color>()
+  const membership = annotationMembership(annotations)
+  const colors = annotations.map((annotation) => hexToRgba(annotation.color, 230))
 
-  for (const annotation of annotations) {
-    const color = hexToRgba(annotation.color, 230)
+  return (cell) => {
+    const classIndex = membership.firstClassOf(cell.id)
 
-    for (const cellId of annotation.cellIds) {
-      if (!colorByCellId.has(cellId)) {
-        colorByCellId.set(cellId, color)
-      }
-    }
+    return classIndex === undefined
+      ? UNCLASSED_CELL_COLOR
+      : (colors[classIndex] ?? UNCLASSED_CELL_COLOR)
   }
-
-  return (cell) => colorByCellId.get(cell.id) ?? UNCLASSED_CELL_COLOR
 }
 
-function metadataColorizer(
-  metadataTrack: CellMetadataColorStyle | null,
-): ((cell: { readonly id: string }) => Color) | null {
-  if (metadataTrack === null || metadataTrack.values.length === 0) {
-    return null
-  }
+// The values by cell, read once per track for the cells and the bins.
+const metadataValues = new WeakMap<CellMetadataColorStyle, ReadonlyMap<string, number>>()
+
+function metadataValuesOf(
+  metadataTrack: CellMetadataColorStyle,
+): ReadonlyMap<string, number> {
+  const cached = metadataValues.get(metadataTrack)
+  if (cached !== undefined) return cached
 
   const valueByCellId = new Map<string, number>()
 
@@ -142,6 +215,19 @@ function metadataColorizer(
       valueByCellId.set(value.cellId, value.value)
     }
   }
+
+  metadataValues.set(metadataTrack, valueByCellId)
+  return valueByCellId
+}
+
+function metadataColorizer(
+  metadataTrack: CellMetadataColorStyle | null,
+): ((cell: { readonly id: string }) => Color) | null {
+  if (metadataTrack === null || metadataTrack.values.length === 0) {
+    return null
+  }
+
+  const valueByCellId = metadataValuesOf(metadataTrack)
 
   return (cell) => {
     const value = valueByCellId.get(cell.id)

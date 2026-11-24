@@ -144,6 +144,7 @@ import {
   viewportClipBboxFromKey,
 } from '../rendering/viewportClip'
 import {
+  annotationMembership,
   createElementObservationColorizer,
   createObservationColorizer,
 } from '../rendering/cellStyling'
@@ -1039,8 +1040,9 @@ function ViewerSurface({
     }),
     [cellIndexById, cells],
   )
-  const annotationLabelsByCellId = useMemo(
-    () => annotationLabelsByCellIdForStyles(annotationStyleColors),
+  // The class names a hover shows, from the walk the colours made (EXP-326).
+  const annotationClasses = useMemo(
+    () => annotationMembership(annotationStyleColors),
     [annotationStyleColors],
   )
   const nucleusIdsByCell = useMemo(
@@ -1793,7 +1795,7 @@ function ViewerSurface({
           return
         }
 
-        const annotationLabels = annotationLabelsByCellId.get(info.object.id)
+        const annotationLabels = annotationClasses.labelsOf(info.object.id)
         setGridCellHover({
           cell: info.object,
           ...(annotationLabels === undefined ? {} : { annotationLabels }),
@@ -1850,7 +1852,7 @@ function ViewerSurface({
           expressionElement?.expressionCount ?? boundary.expressionCount
         const expressionGenes =
           expressionElement?.expressionGenes ?? boundary.expressionGenes
-        const annotationLabels = annotationLabelsByCellId.get(boundary.id)
+        const annotationLabels = annotationClasses.labelsOf(boundary.id)
         const cell = cellById.get(boundary.id)
 
         setTranscriptHover((current) => {
@@ -1883,7 +1885,7 @@ function ViewerSurface({
       }
 
       if (isOverviewCellDatum(info.object)) {
-        const annotationLabels = annotationLabelsByCellId.get(info.object.id)
+        const annotationLabels = annotationClasses.labelsOf(info.object.id)
 
         setTranscriptHover((current) => {
           if (current !== null) {
@@ -1927,7 +1929,7 @@ function ViewerSurface({
       setCellHover(null)
     },
     [
-      annotationLabelsByCellId,
+      annotationClasses,
       cellBoundaryHoverEnabled,
       cellById,
       cellPointStyler,
@@ -2570,27 +2572,4 @@ function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
       />
     </div>
   )
-}
-
-function annotationLabelsByCellIdForStyles(
-  annotationStyles: readonly AnnotationColorStyle[],
-): ReadonlyMap<string, readonly string[]> {
-  const labelsByCellId = new Map<string, string[]>()
-
-  for (const annotationStyle of annotationStyles) {
-    const label = annotationStyle.label ?? annotationStyle.id
-
-    for (const cellId of annotationStyle.cellIds) {
-      const labels = labelsByCellId.get(cellId)
-
-      if (labels === undefined) {
-        labelsByCellId.set(cellId, [label])
-        continue
-      }
-
-      labels.push(label)
-    }
-  }
-
-  return labelsByCellId
 }

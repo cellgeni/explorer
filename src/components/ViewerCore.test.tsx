@@ -10,7 +10,7 @@ import type {
   OverviewCellDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
-import { asCellId } from '../data/cellid'
+import { asCellId, type CellId } from '../data/cellid'
 import { micrometers } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { TiffPyramidLoader } from '../tiff/loader'
@@ -1160,6 +1160,34 @@ describe('ViewerCore', () => {
     expect(screen.getByText('Annotations').closest('div')).toHaveClass(
       'hover-tooltip-annotation-row',
     )
+  })
+
+  it('walks each class once for the cell and bin colours and the hover (EXP-326)', () => {
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const first = countedIds(['aaaaaaaa-1', 'aaaaaaaa-2'])
+    const second = countedIds(['aaaaaaaa-2', 'aaaaaaaa-3'])
+    const cells = ['aaaaaaaa-1', 'aaaaaaaa-2', 'aaaaaaaa-3'].map((id) => ({
+      ...overviewCellDatum(),
+      id,
+    }))
+
+    render(
+      <ViewerCore
+        cells={cells}
+        observationColorMode="annotations"
+        annotationStyleColors={[
+          { id: 'a', label: 'A', cellIds: first.cellIds, color: '#1f77b4' },
+          { id: 'b', label: 'B', cellIds: second.cellIds, color: '#ff7f0e' },
+        ]}
+      />,
+    )
+    act(() => {
+      deckGlMock.onHover?.({ object: cells[1], x: 18, y: 24 })
+    })
+
+    expect(screen.getByText('A, B')).toBeInTheDocument()
+    expect(first.passes()).toBe(1)
+    expect(second.passes()).toBe(1)
   })
 
   it('shows overview cell hover metadata with a dataset-specific source label', () => {
@@ -3123,4 +3151,19 @@ function imageLoaderFixture(): TiffPyramidLoader {
     url: 'https://example.test/sample.ome.tif',
     channels: [],
   } as unknown as TiffPyramidLoader
+}
+
+// Cell IDs that count how often they are walked.
+function countedIds(ids: readonly string[]): {
+  readonly cellIds: readonly CellId[]
+  readonly passes: () => number
+} {
+  let passes = 0
+  const cellIds = new Proxy(ids.map(asCellId), {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) passes += 1
+      return Reflect.get(target, property, receiver) as unknown
+    },
+  })
+  return { cellIds, passes: () => passes }
 }
