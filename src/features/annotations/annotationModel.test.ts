@@ -198,6 +198,36 @@ describe('annotationModel', () => {
     ).toEqual(exported.map(({ label, cellIds }) => ({ label, cellIds })))
   })
 
+  it('counts each cell once in a set whose classes overlap', () => {
+    const a = asCellId('aaaaaaaa-1')
+    const b = asCellId('bbbbbbbb-2')
+    const c = asCellId('cccccccc-3')
+    const queries = [
+      { id: 'query:1:cd3', label: 'CD3+', cellIds: [a, b, c] },
+      { id: 'query:2:cd4', label: 'CD4+', cellIds: [a, b] },
+    ]
+
+    expect(annotationSizePlots(queries)).toMatchObject([
+      {
+        label: 'Queries',
+        cellCount: 3,
+        totalCellAssignments: 5,
+        rows: [
+          { label: 'CD3+', cellCount: 3, fraction: 1 },
+          { label: 'CD4+', cellCount: 2, fraction: 2 / 3 },
+        ],
+      },
+    ])
+    // Only the cells on the map.
+    expect(annotationSizePlots(queries, new Set<string>([a, c]))[0]).toMatchObject({
+      cellCount: 2,
+      rows: [
+        { cellCount: 2, fraction: 1 },
+        { cellCount: 1, fraction: 0.5 },
+      ],
+    })
+  })
+
   it('summarizes annotation size plots by analysis grouping', () => {
     const plots = annotationSizePlots([
       {

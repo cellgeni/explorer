@@ -428,7 +428,9 @@ Loaded state:
   eye (`{set} visible`), which turns its colours off and on and keeps the
   classes' checkboxes; a checkbox for all its classes (`All {set} classes`),
   checked when every class shows, a dash when some do, that checks or
-  unchecks them all; the set name and its cell total. A set of more than
+  unchecks them all; the set name and its cell total, each cell once where
+  classes overlap (Cell Query's Queries, `Save ROI` classes, imports), and
+  each class's share is of that total. A set of more than
   8 classes has a search box under its heading (`Search {set} classes`) that
   lists only the classes whose name contains the text, with "N of M" beside
   it; the all-classes checkbox then checks or unchecks only those, so
@@ -527,7 +529,7 @@ Atera stores transcripts per gene (see
 | Gene list            | Rows             | See below                                                | With exact points coloured by Feature (Phase 15.4-C), or gene markers                             |
 | `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal, Gene markers | Relative to the largest square on the slide, or in view for some squares. Gene markers: see below |
 | `Point color`        | Select           | **Feature**, Gene set, QV                                | Exact points. Gene set colours by saved gene set (see below), gene markers too                    |
-| `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too                                                                   |
+| `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too. Applies on Enter or when left; Esc puts it back                  |
 | `Gene-only calls`    | Checkbox         | On                                                       | Excludes control probes                                                                           |
 | `Transcript opacity` | Slider 0–100%    | 85%                                                      |                                                                                                   |
 | `Point size`         | Slider 1–6 px    | 2 px                                                     |                                                                                                   |
@@ -544,10 +546,13 @@ in view with All features ("+n more genes in view"). Each row has:
   or removed; other genes keep the colour from their name. A colour chosen
   here is kept for that gene, also in other datasets, for the session.
 - an eye (`{gene} transcripts visible`), which hides that gene's points or
-  markers. `Show All` shows them again. Hidden genes reset when another
+  markers. `Show All` shows them again; it is there while a gene that can
+  still show is hidden. A gene taken out of the selected genes is no longer
+  hidden, so picked again it shows. Hidden genes reset when another
   dataset opens, and QV colours show every point.
 - the number of its points loaded in view, hidden ones included; with gene
-  markers, its transcripts in the squares drawn.
+  markers, its transcripts in the squares drawn (titled "Transcripts in
+  view, from the gene marker bins").
 
 The canvas legend lists the same genes under "Transcripts" (the first 12,
 then "+n more in Transcripts", a link that opens this section), and its checkboxes are the same eyes; it
@@ -562,8 +567,8 @@ order, with its gene count and its points in view (or transcripts in the
 squares), then `Other genes` (grey) when genes in no set have any. A set
 takes the next of the 12 colours by its place in the list; its swatch
 changes it for the session, and its eye (`{set} transcripts visible`) hides
-its genes; `Show All` shows every set again, and hidden sets reset when
-another dataset opens. Gene markers merge each set's genes in a square into
+its genes; `Show All` shows every set again, a deleted set is no longer
+hidden, and hidden sets reset when another dataset opens. Gene markers merge each set's genes in a square into
 one circle at their count-weighted centre, whose hover card lists the genes'
 counts (top 4). With no saved sets the section says so and every gene is in
 `Other genes`. Only loaded genes are coloured: on Atera, or with Selected
@@ -642,8 +647,8 @@ the same view (a Visium off-tissue toggle) keeps them.
 | Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                                                   |
 | Area                | µm², from the box or lasso; a lasso that crosses itself counts each lobe it selects                                                                         |
 | `Go to {name}`      | Fits the view to it                                                                                                                                         |
-| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too                                   |
-| `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                                                              |
+| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one; after Enter or Esc, focus is back on Rename. The card's `ROI name` too |
+| `Delete {name}` (x) | Removes it, with [Undo](#undo). Focus moves to the next row's Delete, or the last one's, or the heading                                                     |
 
 On the canvas, the card's selection is drawn solid with a light fill in its
 colour; the other visible selections are dashed outlines. Hiding the

@@ -291,6 +291,7 @@ export function testTranscriptsSectionModel(
       items: [],
       moreCount: 0,
       hiddenCount: 0,
+      countTitle: 'Points loaded in view',
       onColorChange: vi.fn(),
       onVisibilityChange: vi.fn(),
       onShowAll: vi.fn(),

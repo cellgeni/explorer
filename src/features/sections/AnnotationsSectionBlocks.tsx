@@ -590,7 +590,7 @@ function AnnotationSetList({
           }}
         />
         <h5>{plot.label}</h5>
-        <small>{countOf(plot.totalCellAssignments, elementNoun)}</small>
+        <small>{countOf(plot.cellCount, elementNoun)}</small>
       </div>
       {searchable ? (
         <div className="annotation-set-search">
