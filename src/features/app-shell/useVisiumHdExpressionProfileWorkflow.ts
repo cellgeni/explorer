@@ -26,11 +26,14 @@ import {
   startLatestRequest,
   type DebugLogAppendOptions,
 } from './appRuntimeModel'
+import { visiumHdBinBarcodeShares } from '../genes/visiumHdExpressionProjection'
 import {
+  isVisiumHdBarcodeAssignmentsDataset,
   isVisiumHdExpressionProfileDataset,
   selectedVisiumHdCellMappedBinIds,
   selectedVisiumHdCellMappings,
   selectedVisiumHdProfileBinSize,
+  visiumHdCellShareOfBins,
   type VisiumHdExpressionProfileDataset,
 } from './visiumHdAppController'
 
@@ -268,9 +271,32 @@ async function loadVisiumHdExpressionProfile({
   }
 
   const matrix = await profileDataset.matrix(mappedBinIds, binSize, { signal })
+  const binNoun = mappedBinIds.length === 1 ? 'bin' : 'bins'
+
+  // A 2 µm bin is one barcode, all the cell's. An 8 or 16 µm bin's counts
+  // are shared with the other barcodes in it, so the cell takes its share,
+  // as its selected-gene score does (EXP-255).
+  if (binSize === 2 || !isVisiumHdBarcodeAssignmentsDataset(dataset)) {
+    return {
+      expression: cellExpressionSummaryFromGexCells(matrix, mappedBinIds),
+      sourceLabel:
+        binSize === 2
+          ? `${mappedBinIds.length.toLocaleString()} mapped ${binNoun}`
+          : `${mappedBinIds.length.toLocaleString()} whole ${binNoun} at ${binSize} µm, other cells' barcodes included`,
+    }
+  }
+
+  const assignments = await dataset.barcodeMappingAssignments(binSize, mappedBinIds, {
+    signal,
+  })
+  const shared = visiumHdCellShareOfBins(
+    matrix,
+    visiumHdBinBarcodeShares(assignments),
+    selection.id,
+  )
 
   return {
-    expression: cellExpressionSummaryFromGexCells(matrix, mappedBinIds),
-    sourceLabel: `${mappedBinIds.length.toLocaleString()} mapped bins`,
+    expression: cellExpressionSummaryFromGexCells(shared, mappedBinIds),
+    sourceLabel: `Its share of ${mappedBinIds.length.toLocaleString()} ${binNoun} at ${binSize} µm, by 2 µm barcodes`,
   }
 }

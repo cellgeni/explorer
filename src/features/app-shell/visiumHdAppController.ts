@@ -1,4 +1,8 @@
-import type { CellFeatureMatrixReadOptions, GexResult } from '../../data/gexTypes'
+import type {
+  CellFeatureMatrixReadOptions,
+  GexCell,
+  GexResult,
+} from '../../data/gexTypes'
 import type {
   GeneExpressionBatch,
   SpatialElement,
@@ -10,6 +14,10 @@ import {
   type VisiumHdBarcodeMapping,
 } from '../../datasets/visiumHdBarcodeMappings'
 import { visiumHdSegmentationCellId } from '../../datasets/visiumHdSegmentationIndex'
+import type {
+  VisiumHdBinBarcodeShares,
+  VisiumHdExpressionCellAssignment,
+} from '../genes/visiumHdExpressionProjection'
 import type { BBox } from '../../data/coords'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import type { GeneExpressionLoader } from './appDependencies'
@@ -44,6 +52,14 @@ export interface VisiumHdCellBarcodeMappingsDataset extends VisiumHdExpressionPr
     cellId: SpatialElementId,
     options?: { readonly signal?: AbortSignal },
   ) => Promise<readonly VisiumHdBarcodeMapping[]>
+}
+
+export interface VisiumHdBarcodeAssignmentsDataset {
+  readonly barcodeMappingAssignments: (
+    binSizeMicrometers: VisiumHdBinSizeMicrometers,
+    binIds: readonly SpatialElementId[],
+    options: { readonly maxRows?: number; readonly signal?: AbortSignal },
+  ) => Promise<readonly VisiumHdExpressionCellAssignment[]>
 }
 
 export interface SpatialSegmentationDataset {
@@ -81,6 +97,12 @@ export function isVisiumHdCellBarcodeMappingsDataset(
     isVisiumHdExpressionProfileDataset(dataset) &&
     hasFunction(dataset, 'barcodeMappingsForCell')
   )
+}
+
+export function isVisiumHdBarcodeAssignmentsDataset(
+  dataset: unknown,
+): dataset is VisiumHdBarcodeAssignmentsDataset {
+  return hasFunction(dataset, 'barcodeMappingAssignments')
 }
 
 export function isSpatialSegmentationDataset(
@@ -140,6 +162,34 @@ export function selectedVisiumHdCellMappedBinIds(
   }
 
   return [...mappedBinIds]
+}
+
+// A segmented cell's part of its bins' counts: each bin's counts times the
+// cell's share of the bin's 2 µm barcodes, as its selected-gene score is
+// shared (visiumHdBinBarcodeShares). An 8 or 16 µm bin's counts also hold
+// other cells' and unassigned barcodes.
+export function visiumHdCellShareOfBins(
+  matrix: GexResult<SpatialElementId>,
+  shares: ReadonlyMap<SpatialElementId, VisiumHdBinBarcodeShares>,
+  cellId: SpatialElementId,
+): GexResult<SpatialElementId> {
+  const mappedCellId = visiumHdSegmentationCellId(cellId)
+  const cells = new Map<SpatialElementId, GexCell>()
+
+  for (const [binId, cell] of matrix.cells) {
+    const binShares = shares.get(binId)
+    const share =
+      binShares === undefined || binShares.barcodeCount === 0
+        ? 0
+        : (binShares.cells.get(mappedCellId) ?? 0) / binShares.barcodeCount
+
+    cells.set(binId, {
+      geneNames: cell.geneNames,
+      counts: cell.counts.map((count) => count * share),
+    })
+  }
+
+  return { geneNames: matrix.geneNames, cells }
 }
 
 export function isVisiumHdBinSizeMicrometers(

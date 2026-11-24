@@ -1511,6 +1511,111 @@ describe('App', () => {
     }
   })
 
+  // A segmented cell's card read "no expression value matched this cell" for
+  // every cell: expression comes by bins, and the projection onto cells was
+  // computed and never read (EXP-254).
+  it("scores a Visium HD segmented cell by its share of its bins' counts", async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&genes=Actb&cellBounds=1`,
+    )
+    const viewport = installAppViewportFixture()
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        segmentedOutputs: {
+          cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+        },
+      }),
+    )
+    const cell = {
+      id: 'cellid_000000001-1',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(0), y: micrometers(0) },
+            { x: micrometers(10), y: micrometers(0) },
+            { x: micrometers(10), y: micrometers(10) },
+          ],
+        ],
+      },
+    }
+    // BC-1 holds 8 Actb counts over 4 barcodes; the cell holds 2 of them, so
+    // its score is 8 × 2/4 = 4.
+    const barcodeMappingAssignments = vi.fn(async () =>
+      ['a', 'b', 'c', 'd'].map((barcode, index) => ({
+        binId: 'BC-1',
+        square002um: `s_002um_${barcode}`,
+        cellId: index < 2 ? 'cellid_000000001-1' : null,
+        inCell: index < 2,
+        inNucleus: false,
+      })),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      meta: visiumHdMetaFixture(overview, {
+        capabilities: { cellBoundaries: true },
+        segmentations: [
+          {
+            id: 'visium-hd-cell-segmentations',
+            kind: 'cell' as const,
+            label: 'Cell segmentations',
+            sourceKind: 'geojson' as const,
+            path: 'segmented_outputs/cell_segmentations.geojson',
+          },
+        ],
+      }),
+      overrides: {
+        elements: vi.fn(async () => ({ elements: [cell] })),
+        barcodeMappingAssignments,
+        genePanel: vi.fn(async () => ['Actb']),
+        geneExpression: vi.fn(async () => ({
+          elements: [
+            { id: 'BC-1', position: { x: micrometers(5), y: micrometers(5) }, count: 8 },
+          ],
+          genes: ['Actb'],
+          maxCount: 8,
+        })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+      await waitFor(() => {
+        expect(barcodeMappingAssignments).toHaveBeenCalled()
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
+      fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
+      openControls('cell-card')
+
+      const card = screen.getByRole('region', { name: 'Cell' })
+      await waitFor(() => {
+        expect(within(card).getByText('Score').nextElementSibling).toHaveTextContent(
+          /^4$/,
+        )
+      })
+      expect(within(card).queryByText(/no expression value matched/)).toBeNull()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('loads Visium HD segmented boundaries through the active spatial dataset', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

@@ -3,6 +3,7 @@ import * as React from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import type { GexResult } from '../../data/gexTypes'
 import type { VisiumHdBarcodeMapping } from '../../datasets/visiumHdBarcodeMappings'
+import type { VisiumHdExpressionCellAssignment } from '../genes/visiumHdExpressionProjection'
 import type { GridCellDatum } from '../../rendering/deckLayers'
 import type { SpatialDatasetLoader } from './appDependencies'
 import type {
@@ -234,12 +235,63 @@ describe('useVisiumHdExpressionProfileWorkflow', () => {
       status: 'ready',
       selectionId: 'cell-1',
       selectionKind: 'cell',
-      sourceLabel: '2 mapped bins',
+      sourceLabel: "2 whole bins at 8 µm, other cells' barcodes included",
       expression: {
         genes: [{ gene: 'DCN', count: 10, percentTotal: 100 }],
         totalCount: 10,
         hitGeneLimit: false,
       },
+    })
+  })
+
+  // An 8 µm bin's counts hold every barcode in it, so the card listed the
+  // whole bin as the cell's (EXP-255).
+  it("gives a segmented cell its share of an 8 µm bin's counts", async () => {
+    // One 8 µm bin of 16 barcodes, one count each: cell-1 holds 5, cell-2
+    // holds 6 and 5 are in no cell. cell-1's own count is 5.
+    const assignments: VisiumHdExpressionCellAssignment[] = Array.from(
+      { length: 16 },
+      (_, index) => ({
+        binId: 's_008um_1_1',
+        square002um: `s_002um_${index}`,
+        cellId: index < 5 ? 'cell-1' : index < 11 ? 'cell-2' : null,
+        inCell: index < 11,
+        inNucleus: false,
+      }),
+    )
+    const barcodeMappingAssignments = vi.fn(async () => assignments)
+    const matrix = vi.fn(async () => matrixResult('s_008um_1_1', 'DCN', 16))
+    const getSpatialDataset = spatialDatasetLoader({
+      barcodeMappingAssignments,
+      barcodeMappingsForCell: vi.fn(async () => [mappings[0]!]),
+      matrix,
+    })
+
+    render(
+      <Probe
+        activeSelection={{ id: 'cell-1', kind: 'cell' }}
+        getSpatialDataset={getSpatialDataset}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    await act(async () => {
+      api.handleLoadVisiumHdExpressionProfile()
+    })
+    await waitFor(() => {
+      expect(snapshot.state.status).toBe('ready')
+    })
+
+    expect(barcodeMappingAssignments).toHaveBeenCalledWith(8, ['s_008um_1_1'], {
+      signal: expect.any(AbortSignal),
+    })
+    expect(snapshot.state).toMatchObject({
+      status: 'ready',
+      sourceLabel: 'Its share of 1 bin at 8 µm, by 2 µm barcodes',
+      expression: { genes: [{ gene: 'DCN', count: 5 }], totalCount: 5 },
     })
   })
 
@@ -314,9 +366,15 @@ describe('useVisiumHdExpressionProfileWorkflow', () => {
 })
 
 function spatialDatasetLoader({
+  barcodeMappingAssignments,
   barcodeMappingsForCell = vi.fn(async () => []),
   matrix,
 }: {
+  readonly barcodeMappingAssignments?: (
+    binSizeMicrometers: number,
+    binIds: readonly string[],
+    options: { readonly signal?: AbortSignal },
+  ) => Promise<readonly VisiumHdExpressionCellAssignment[]>
   readonly barcodeMappingsForCell?: (
     cellId: string,
     options?: { readonly signal?: AbortSignal },
@@ -328,6 +386,7 @@ function spatialDatasetLoader({
   ) => Promise<GexResult<string>>
 }): SpatialDatasetLoader {
   return vi.fn(async () => ({
+    ...(barcodeMappingAssignments === undefined ? {} : { barcodeMappingAssignments }),
     barcodeMappingsForCell,
     matrix,
   })) as unknown as SpatialDatasetLoader
