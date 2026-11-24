@@ -3,6 +3,7 @@ import { isIcechunkUrl } from '../../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../../zarr/omeZarrUrl'
 import type { ZarrStructure, ZarrStructureNode } from '../../zarr/zarrStructure'
 import { isZarrZipUrl } from '../../zarr/zarrZipUrl'
+import { folderFileUrl } from '../../utils/folderUrl'
 
 // Addresses whose structure Browse Store can show: a `.zarr` store or a group
 // inside one, a Zarr metadata file, a zipped store, or an Icechunk
@@ -239,7 +240,8 @@ export function parquetFileOf(
     return null
   }
 
-  return { url: `${url}/shapes.parquet` }
+  // Into the path, before a query that grants the store (a signed address).
+  return { url: folderFileUrl(url, 'shapes.parquet') }
 }
 
 // Groups opened at first: the root, and its child groups when the store is

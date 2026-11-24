@@ -1432,8 +1432,9 @@ once, and the spots change when the reload is ready.
 
 `Browse Store` opens "Store structure" (`StoreStructureDrawer`,
 `src/features/store-structure/`): 560 px wide, on the right over the canvas,
-and not modal, so it can sit beside the info drawer. Esc or `Close Store
-structure` closes it. It keeps what it read while closed: `Browse Store` on
+and not modal, so it can sit beside the info drawer. Esc or its `Close`
+button (`Close Store structure`, `Close Parquet file` or `Close HDF5 file`,
+after its title) closes it. It keeps what it read while closed: `Browse Store` on
 the same address shows the same tree, and another address reads that store.
 Closing it during a read stops the read. `readZarrStructure`
 (`src/zarr/zarrStructure.ts`) reads the store:
@@ -1461,12 +1462,24 @@ Once read:
 | Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
 | Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
 
+A path in the filter also matches as the details write it, with a leading
+`/` (`/obs/cluster`), and a dotted one as a Parquet field's path (`a.b`).
+`Collapse All` leaves the root open while filtering too.
+
+The tree is one tab stop (`role="tree"`, rows as `treeitem`s with their
+level). Up and Down move between rows, Home and End to the first and last,
+Right opens a group or moves into it, Left closes it or moves to its group,
+and Enter or Space shows a row's details. Moving does not change the
+details. The chevron opens and closes a group with the mouse. `Show More` is
+a row too, and focus moves to the first row it adds.
+
 A Parquet file in a zip or a listed folder, and a SpatialData shapes group
 whose `shapes.parquet` is not listed (`parquetFileOf`), have `Browse File` in
 their details, with a note when the zip deflates the file. It opens the file
 in the drawer, titled "Parquet file", with `Back to Store` above it. Both
 views stay mounted, so going back keeps the store's open groups and
-selection.
+selection. Focus moves with the view, which would otherwise be left on a
+hidden button: into the file view, and back to `Browse File`.
 
 #### Parquet File View
 
@@ -1487,6 +1500,10 @@ the same filter,
 | Tree    | The schema: the file, then fields in schema order; structs, lists and maps hold their fields. Rows show the reader's type (`string`, `uint8`, `timestamp[us, UTC]`) and compressed size, and badges for GeoParquet geometry and pandas index columns                                                                |
 | File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length)                                               |
 | Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics (unsigned and decimal integers as the rows show them), dictionary, page index and bloom filter, and GeoParquet facts |
+
+A legacy `INT96` column is typed `timestamp[ns]`, as readers and `Rows` show
+it. A statistic below 0.001 keeps six significant digits (`2.5e-7`), so a
+small p-value is not written as 0.
 
 `Columns` / `Rows` (a segmented control under the summary) switch between
 the tree and the file's first rows; the tree stays mounted, so its selection

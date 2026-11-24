@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useLayoutEffect, useRef } from 'react'
 import { Button, Disclosure, Drawer } from '../../components/ui'
 import type { ParquetFileRef } from '../../data/parquetStructure'
 import type {
@@ -31,7 +31,11 @@ import {
   StructureBrowser,
   type StructureNodeLabel,
 } from './StructureBrowser'
-import type { StoreStructureState, StoreStructureStore } from './useStoreStructure'
+import type {
+  StoreStructureState,
+  StoreStructureStore,
+  StructureView,
+} from './useStoreStructure'
 
 const DRAWER_TITLES = {
   store: 'Store structure',
@@ -45,6 +49,40 @@ const DRAWER_TITLES = {
 // as a dataset. A Parquet file in the store opens in its place, with a way
 // back. It sits over the right of the canvas and is not modal.
 export function StoreStructureDrawer({ store }: { readonly store: StoreStructureStore }) {
+  const storeViewRef = useRef<HTMLDivElement>(null)
+  const fileViewRef = useRef<HTMLDivElement>(null)
+  const h5ViewRef = useRef<HTMLDivElement>(null)
+  const shownViewRef = useRef(store.view)
+  // Where focus was in each view when it was left, to go back to.
+  const lastFocusRef = useRef<Partial<Record<StructureView, HTMLElement>>>({})
+
+  // Browse File and Back to Store hide the view their button is in, which
+  // would drop focus to the page (and Esc would no longer reach the drawer):
+  // focus moves to the view shown, where it was when that view was left.
+  useLayoutEffect(() => {
+    const viewElement = (view: StructureView) =>
+      (view === 'store' ? storeViewRef : view === 'file' ? fileViewRef : h5ViewRef)
+        .current
+    const left = shownViewRef.current
+    shownViewRef.current = store.view
+    if (left === store.view) return
+    const active = document.activeElement
+    if (
+      !(active instanceof HTMLElement) ||
+      viewElement(left)?.contains(active) !== true
+    ) {
+      return
+    }
+
+    lastFocusRef.current[left] = active
+    const view = viewElement(store.view)
+    const previous = lastFocusRef.current[store.view]
+    ;(previous !== undefined && view?.contains(previous) === true
+      ? previous
+      : view
+    )?.focus()
+  }, [store.view])
+
   return (
     <Drawer
       title={DRAWER_TITLES[store.view]}
@@ -54,14 +92,24 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
       className="store-structure-drawer"
     >
       {/* Both stay mounted, so going back keeps the store's open groups. */}
-      <div className="store-structure-view" hidden={store.view !== 'store'}>
+      <div
+        ref={storeViewRef}
+        className="store-structure-view"
+        hidden={store.view !== 'store'}
+        tabIndex={-1}
+      >
         <StoreStructureView
           state={store.store}
           onRetry={store.retry}
           onBrowseFile={store.browseFile}
         />
       </div>
-      <div className="store-structure-view" hidden={store.view !== 'file'}>
+      <div
+        ref={fileViewRef}
+        className="store-structure-view"
+        hidden={store.view !== 'file'}
+        tabIndex={-1}
+      >
         <ParquetFileView
           state={store.file}
           readRows={store.readRows}
@@ -69,7 +117,12 @@ export function StoreStructureDrawer({ store }: { readonly store: StoreStructure
           {...(store.fileFromStore ? { onBack: store.back } : {})}
         />
       </div>
-      <div className="store-structure-view" hidden={store.view !== 'h5'}>
+      <div
+        ref={h5ViewRef}
+        className="store-structure-view"
+        hidden={store.view !== 'h5'}
+        tabIndex={-1}
+      >
         <H5FileView state={store.h5} onRetry={store.retry} />
       </div>
     </Drawer>
