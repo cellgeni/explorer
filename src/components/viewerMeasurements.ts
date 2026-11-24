@@ -196,3 +196,17 @@ function formatScaleDistanceWithPrecision(
 ): string {
   return Number(distance.toFixed(fractionDigits)).toLocaleString()
 }
+
+// A ring's corners: a closed ring (GeoJSON, Xenium) repeats its first point
+// at the end, which is not a corner of its own (12 sides read 12, not 13).
+export function ringVertexCount(polygon: readonly ArrayLike<number>[]): number {
+  const first = polygon[0]
+  const last = polygon.at(-1)
+  return polygon.length > 1 &&
+    first !== undefined &&
+    last !== undefined &&
+    first[0] === last[0] &&
+    first[1] === last[1]
+    ? polygon.length - 1
+    : polygon.length
+}

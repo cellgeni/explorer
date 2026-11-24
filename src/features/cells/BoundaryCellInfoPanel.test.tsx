@@ -34,6 +34,27 @@ describe('BoundaryCellInfoPanel', () => {
     expect(screen.queryByText('Annotation')).not.toBeInTheDocument()
   })
 
+  it('counts a closed ring\u2019s corners once, and writes areas in the data unit', () => {
+    render(
+      <BoundaryCellInfoPanel
+        cell={boundaryCell({
+          // GeoJSON closes the ring on its first point.
+          polygon: [
+            [0, 0],
+            [10, 0],
+            [10, 10],
+            [0, 10],
+            [0, 0],
+          ],
+        })}
+        unitLabel="units"
+      />,
+    )
+
+    expect(valueOf('Vertices')).toBe('4')
+    expect(valueOf('Area')).toBe('100 units²')
+  })
+
   it('lists the nuclei drawn for the cell', () => {
     render(
       <BoundaryCellInfoPanel

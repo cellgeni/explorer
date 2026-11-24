@@ -354,6 +354,7 @@ import {
   scaledImagePixelFrame,
   type BBox,
 } from './data/coords'
+import { MICROMETERS } from './data/units'
 import type { CellId } from './data/cellid'
 import { slug } from './utils/slug'
 import type {
@@ -5171,7 +5172,15 @@ export function App({ dependencies }: AppProps = {}) {
     selectedGenes,
     onShowGene: showGene,
   }
+  // The data's length unit: "units" for a SpatialData dataset whose units
+  // are unknown (EXP-052), else µm.
+  const dataUnitLabel =
+    spatialDataControlState.status !== 'idle' &&
+    spatialDataControlState.units.source === 'unknown'
+      ? 'units'
+      : MICROMETERS
   const cards = useCardStackModel({
+    unitLabel: dataUnitLabel,
     selection:
       platformAdapter.kind === 'image'
         ? {
@@ -5214,7 +5223,10 @@ export function App({ dependencies }: AppProps = {}) {
               onDelete: deleteActiveSelection,
               onExportCells: handleExportRoiCells,
               onExportGeoJson: handleExportRoiGeoJson,
-              onExportTranscripts: handleExportRoiTranscripts,
+              // Only where transcripts are read: Xenium and Atera.
+              onExportTranscripts: platformAdapter.capabilities.transcripts
+                ? handleExportRoiTranscripts
+                : null,
               onNameChange: handleSelectionNameChange,
               onSave: handleSaveRoiAnnotation,
               roiState,
@@ -5415,10 +5427,7 @@ export function App({ dependencies }: AppProps = {}) {
               : {
                   micrometersPerPixel: viewerMicrometersPerPixel,
                 })}
-            {...(spatialDataControlState.status !== 'idle' &&
-            spatialDataControlState.units.source === 'unknown'
-              ? { physicalUnitLabel: 'units' }
-              : {})}
+            physicalUnitLabel={dataUnitLabel}
             {...(viewerBoundaryState.status === 'error'
               ? { boundaryErrorMessage: formatStructuredError(viewerBoundaryState.error) }
               : {})}

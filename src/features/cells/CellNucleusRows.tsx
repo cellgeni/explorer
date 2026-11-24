@@ -1,4 +1,4 @@
-import { SQUARE_MICROMETERS } from '../../data/units'
+import { MICROMETERS } from '../../data/units'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import { summarizeNucleusShapes } from './cellDetailModel'
 
@@ -6,8 +6,11 @@ import { summarizeNucleusShapes } from './cellDetailModel'
 // nucleus outlines are shown and loaded.
 export function CellNucleusRows({
   nuclei,
+  unitLabel = MICROMETERS,
 }: {
   readonly nuclei: readonly CellBoundaryDatum[]
+  // µm, or "units" where a dataset's are unknown (EXP-052).
+  readonly unitLabel?: string | undefined
 }) {
   const shapes = summarizeNucleusShapes(nuclei)
 
@@ -15,7 +18,7 @@ export function CellNucleusRows({
     const value = [
       shape.areaMicrometersSquared === undefined
         ? undefined
-        : `${formatShapeNumber(shape.areaMicrometersSquared)} ${SQUARE_MICROMETERS}`,
+        : `${formatShapeNumber(shape.areaMicrometersSquared)} ${unitLabel}²`,
       shape.circularity === undefined
         ? undefined
         : `circularity ${formatShapeNumber(shape.circularity)}`,

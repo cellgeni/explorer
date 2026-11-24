@@ -27,7 +27,7 @@ import type {
 // The cards (plan 15.2-D), top left over the canvas: Selection,
 // Cell (Spot, Bin), Transcript and Magic Lens.
 export function CardStack({ cards }: { readonly cards: CardStackModel }) {
-  const { selection, cell, transcript, magicLens } = cards
+  const { selection, cell, transcript, magicLens, unitLabel } = cards
 
   if (selection === null && cell === null && transcript === null && magicLens === null) {
     return null
@@ -42,7 +42,7 @@ export function CardStack({ cards }: { readonly cards: CardStackModel }) {
       )}
       {cell === null ? null : (
         <CardSlot key={cellKey(cell)}>
-          <CellCard card={cell} />
+          <CellCard card={cell} unitLabel={unitLabel} />
         </CardSlot>
       )}
       {transcript === null ? null : (
@@ -349,7 +349,13 @@ function GoToButton({
   )
 }
 
-export function CellCard({ card }: { readonly card: CellCardModel }) {
+export function CellCard({
+  card,
+  unitLabel,
+}: {
+  readonly card: CellCardModel
+  readonly unitLabel?: string | undefined
+}) {
   return (
     <Card
       title={card.title}
@@ -372,6 +378,7 @@ export function CellCard({ card }: { readonly card: CellCardModel }) {
         <BoundaryCellInfoPanel
           cell={card.cell}
           nuclei={card.nuclei}
+          unitLabel={unitLabel}
           expressionStatus={card.expressionStatus}
           expressionProfileState={card.profileState}
           onLoadExpressionProfile={card.onLoadProfile}
@@ -388,6 +395,7 @@ export function CellCard({ card }: { readonly card: CellCardModel }) {
         <CellInfoPanel
           cell={card.cell}
           nuclei={card.nuclei}
+          unitLabel={unitLabel}
           annotationLabels={card.annotationLabels}
           state={card.state}
           transcriptDistributionState={card.distributionState}

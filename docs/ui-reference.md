@@ -719,7 +719,10 @@ renames the selection, and, for cells, `Save ROI`, which adds the
 selection as an annotation and colours by annotations; a selection cut at
 50,000 cells is saved as "{name} (first 50,000 cells)". `Delete` (after the
 exports) removes the selection, with [Undo](#undo); closing the card keeps it
-in the list.
+in the list. Areas are in µm², or "units²" for a SpatialData dataset whose
+units are unknown, as its scale bar and tooltips are. A box holding no bin
+gives its tier's bin size, never 0. `Export Transcripts` is offered only
+where transcripts are read: Xenium, and Atera's selected genes.
 
 | Tab                         | Contents                                                                                                                                              |
 | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -788,9 +791,9 @@ URL's signature; the cell or barcode count and the time of export,
 cells), `Export Cells` (`{name}-cells.csv`:
 the cells read, so up to 50,000 on Xenium and every cell elsewhere),
 `Export Transcripts`
-(`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, the selected
-genes on Atera, also shown for H5AD and SpatialData; drawing or choosing
-another selection stops it, as `Clear` does), or for Visium HD `Export Barcodes`
+(`{name}-transcripts.csv`, up to 100,000 transcripts; Xenium, and the selected
+genes on Atera; drawing or choosing another selection stops it, as `Clear`
+does), or for Visium HD `Export Barcodes`
 (`{name}-barcodes.csv`, up to 50,000 bins).
 
 In these CSVs and `annotations.csv`, a field that starts with `=`, `+`, `-`,
@@ -814,8 +817,10 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
 - Cell (`src/features/cells/CellInfoPanel.tsx`). Xenium: ID, position,
   transcripts, nuclei, segmentation, annotations, shape metrics (area,
   diameter, eccentricity, axes, perimeter, circularity), and a "Z-axis
-  transcripts" histogram. Visium, H5AD, SpatialData: ID, annotations and `obs`
-  values ("Observations"); a Visium spot's barcode is its ID. While
+  transcripts" histogram. Visium, H5AD, SpatialData: ID, annotations (when it
+  has any) and `obs` values ("Observations"); a Visium spot's barcode is its
+  ID. Areas there are in "units²" where a SpatialData dataset's units are
+  unknown. While
   `Nucleus boundaries` is on, each of the cell's nuclei in view adds a
   `Nucleus` row (`Nucleus 1`, `Nucleus 2`, … for several) with its area and
   circularity (`CellNucleusRows.tsx`); Atera rows follow the observations.
@@ -832,10 +837,12 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
   with `Load Bin GEX` / `Refresh Bin GEX` and a gene filter.
 - Cell, Visium HD segmentation boundary
   (`src/features/cells/BoundaryCellInfoPanel.tsx`): cell ID, annotation,
-  segmentation, vertices, area, the cell's nuclei in view, selected-gene score
-  and `Load Cell GEX`. Expression is read by bins, so at 8 and 16 µm the score
-  and the profile are the cell's share of its bins' counts, by the share of
-  each bin's 2 µm barcodes it holds.
+  segmentation, vertices (a closed ring's closing point is not counted, here
+  or in the tooltip), area, the cell's nuclei in view, selected-gene score and
+  `Load Cell GEX`. Expression is read by bins, so at 8 and 16 µm the score and
+  the profile are the cell's share of its bins' counts, by the share of each
+  bin's 2 µm barcodes it holds. Zooming across the level-of-detail threshold
+  does not read a selected cell or bin again.
 
 ### Transcript
 

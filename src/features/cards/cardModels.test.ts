@@ -113,12 +113,49 @@ describe('selection card', () => {
       stats: [
         { label: 'Cells', value: '6,229+' },
         { label: 'Mean transcripts', value: '112.3' },
-        { label: 'Mean area', value: '48' },
+        { label: 'Mean area', value: '48 µm²' },
       ],
     })
     expect(
       card?.variant === 'geometry' ? [] : card?.exports.map((action) => action.label),
     ).toEqual(['Export GeoJSON', 'Export Cells', 'Export Transcripts'])
+  })
+
+  it('offers Export Transcripts only where the platform reads transcripts', () => {
+    const card = cellsSelectionCard({
+      ...cellsInput({
+        status: 'ready',
+        url: 'https://example.test',
+        bbox: BBOX,
+        selection: SELECTION,
+        cells: [],
+        hitCellLimit: false,
+      }),
+      onExportTranscripts: null,
+    })
+
+    expect(
+      card?.variant === 'geometry' ? [] : card?.exports.map((action) => action.label),
+    ).toEqual(['Export GeoJSON', 'Export Cells'])
+  })
+
+  it('writes areas in units where the dataset has none', () => {
+    const card = cellsSelectionCard({
+      ...cellsInput({
+        status: 'ready',
+        url: 'https://example.test',
+        bbox: BBOX,
+        selection: SELECTION,
+        cells: [],
+        hitCellLimit: false,
+      }),
+      unitLabel: 'units',
+    })
+
+    expect(card).toMatchObject({
+      summary: '6,229 cells · 5,000 units²',
+      stats: [{}, {}, { label: 'Mean area', value: '48 units²' }],
+    })
   })
 
   it('leaves out means the cells carry no value for', () => {
@@ -248,6 +285,51 @@ describe('selection card', () => {
       ],
       genes: { emptyMessage: 'No detected ROI gene expression' },
     })
+  })
+
+  it('sizes a selection holding no bin by its tier, never "0"', () => {
+    const input = {
+      genes: {
+        copy: '',
+        state: { status: 'idle' as const },
+        reference: { status: 'idle' as const },
+        selectedGenes: [],
+        onShowGene: vi.fn(),
+      },
+      lens: lens(),
+      name: 'ROI 3',
+      nameDisabled: false,
+      onClose: vi.fn(),
+      onDelete: vi.fn(),
+      onExportBarcodes: vi.fn(),
+      onExportGeoJson: vi.fn(),
+      onNameChange: vi.fn(),
+      status: '0 bins',
+      summary: { binCount: 0, inTissueCount: undefined, binSizeMicrometers: undefined },
+      zoomToBbox: vi.fn(),
+    }
+    const roiState = {
+      status: 'ready' as const,
+      url: 'https://example.test',
+      bbox: BBOX,
+      selection: SELECTION,
+      bins: [],
+      hitBinLimit: false,
+    }
+    const binSizeOf = (card: ReturnType<typeof binsSelectionCard>) =>
+      card?.variant === 'bins'
+        ? card.stats.find((stat) => stat.label === 'Bin size')?.value
+        : undefined
+
+    expect(
+      binSizeOf(
+        binsSelectionCard({
+          ...input,
+          roiState: { ...roiState, binSizeMicrometers: 16 },
+        }),
+      ),
+    ).toBe('16 µm')
+    expect(binSizeOf(binsSelectionCard({ ...input, roiState }))).toBeUndefined()
   })
 
   it('names the next shape on an image while drawing', () => {

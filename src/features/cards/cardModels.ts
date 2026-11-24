@@ -1,7 +1,7 @@
 import type { ViewerTranscriptHoverDetail } from '../../components/ViewerCore'
 import { micrometers, type BBox } from '../../data/coords'
 import { roiSelectionArea, type RoiSelection } from '../../data/roiSelection'
-import { formatSquareMicrometers, withMicrometers } from '../../data/units'
+import { formatArea, MICROMETERS, withMicrometers } from '../../data/units'
 import type {
   CellBoundaryDatum,
   GridCellDatum,
@@ -34,6 +34,9 @@ export interface CardStackModel {
   readonly cell: CellCardModel | null
   readonly transcript: TranscriptCardModel | null
   readonly magicLens: MagicLensCardModel | null
+  // The data's length unit: µm, or "units" where a SpatialData dataset's
+  // are unknown (EXP-052). µm when left out.
+  readonly unitLabel?: string
 }
 
 // Selection
@@ -175,9 +178,11 @@ export function selectionSummary(
   noun: { readonly singular: string; readonly plural: string },
   hitLimit: boolean,
   selection: RoiSelection,
+  unitLabel: string = MICROMETERS,
 ): string {
-  return `${countLabel(count, noun.singular, noun.plural, hitLimit)} · ${formatSquareMicrometers(
+  return `${countLabel(count, noun.singular, noun.plural, hitLimit)} · ${formatArea(
     roiSelectionArea(selection),
+    unitLabel,
   )}`
 }
 
@@ -231,9 +236,11 @@ export function cellsSelectionCard({
   status,
   summary,
   transcriptExportState,
+  unitLabel = MICROMETERS,
   zoomToBbox,
 }: SelectionNameInput & {
   readonly elementNoun: { readonly singular: string; readonly plural: string }
+  readonly unitLabel?: string
   readonly genes: SelectionGenesInput
   readonly lens: SelectionLensInput
   readonly loading: boolean
@@ -241,7 +248,9 @@ export function cellsSelectionCard({
   readonly onDelete: () => void
   readonly onExportCells: () => void
   readonly onExportGeoJson: () => void
-  readonly onExportTranscripts: () => void
+  // Null where the platform has no transcripts to export (Visium, H5AD,
+  // SpatialData, MERSCOPE).
+  readonly onExportTranscripts: (() => void) | null
   readonly onSave: () => void
   readonly roiState: RoiState
   readonly status: string
@@ -273,7 +282,13 @@ export function cellsSelectionCard({
     summary:
       summary === null
         ? null
-        : selectionSummary(summary.cellCount, elementNoun, hitLimit, roiState.selection),
+        : selectionSummary(
+            summary.cellCount,
+            elementNoun,
+            hitLimit,
+            roiState.selection,
+            unitLabel,
+          ),
     elementsLabel,
     stats:
       summary === null
@@ -294,7 +309,12 @@ export function cellsSelectionCard({
                 ]),
             ...(summary.meanCellArea === undefined
               ? []
-              : [{ label: 'Mean area', value: formatMean(summary.meanCellArea) }]),
+              : [
+                  {
+                    label: 'Mean area',
+                    value: `${formatMean(summary.meanCellArea)} ${unitLabel}²`,
+                  },
+                ]),
           ],
     genes: {
       ...genes,
@@ -319,13 +339,17 @@ export function cellsSelectionCard({
         busy: false,
         onExport: onExportCells,
       },
-      {
-        label: 'Export Transcripts',
-        title: 'Export ROI transcripts',
-        busy: exporting,
-        busyLabel: 'Exporting…',
-        onExport: onExportTranscripts,
-      },
+      ...(onExportTranscripts === null
+        ? []
+        : [
+            {
+              label: 'Export Transcripts',
+              title: 'Export ROI transcripts',
+              busy: exporting,
+              busyLabel: 'Exporting…',
+              onExport: onExportTranscripts,
+            },
+          ]),
     ],
     lens: selectionLens(lens),
   }
@@ -360,6 +384,7 @@ export function binsSelectionCard({
   if (roiState.status === 'idle') return null
 
   const noun = { singular: 'bin', plural: 'bins' }
+  const binSize = summary?.binSizeMicrometers ?? roiState.binSizeMicrometers
   const stats: SelectionStat[] =
     summary === null
       ? []
@@ -368,13 +393,11 @@ export function binsSelectionCard({
             label: 'Bins',
             value: `${summary.binCount.toLocaleString()}${roiState.hitBinLimit ? '+' : ''}`,
           },
-          {
-            label: 'Bin size',
-            value:
-              summary.binSizeMicrometers === undefined
-                ? '0'
-                : withMicrometers(String(summary.binSizeMicrometers)),
-          },
+          // A box holding no bin has no bins to size; the selection's tier
+          // does (EXP-195 left such stats out of the cells card).
+          ...(binSize === undefined
+            ? []
+            : [{ label: 'Bin size', value: withMicrometers(String(binSize)) }]),
           ...(summary.inTissueCount === undefined
             ? []
             : [{ label: 'In tissue', value: summary.inTissueCount.toLocaleString() }]),
@@ -698,6 +721,7 @@ export interface CardStackModelInput {
   readonly transcript: WithoutZoom<Parameters<typeof transcriptCard>[0]> | null
   readonly magicLens: Parameters<typeof magicLensCard>[0] | null
   readonly zoomToBbox: ZoomToBbox
+  readonly unitLabel?: string
 }
 
 // Built in App, like the section models.
@@ -707,11 +731,12 @@ export function useCardStackModel({
   transcript,
   magicLens,
   zoomToBbox,
+  unitLabel = MICROMETERS,
 }: CardStackModelInput): CardStackModel {
   return {
     selection:
       selection.variant === 'cells'
-        ? cellsSelectionCard({ ...selection, zoomToBbox })
+        ? cellsSelectionCard({ ...selection, zoomToBbox, unitLabel })
         : selection.variant === 'bins'
           ? binsSelectionCard({ ...selection, zoomToBbox })
           : geometrySelectionCard(selection),
@@ -719,5 +744,6 @@ export function useCardStackModel({
     transcript:
       transcript === null ? null : transcriptCard({ ...transcript, zoomToBbox }),
     magicLens: magicLens === null ? null : magicLensCard(magicLens),
+    unitLabel,
   }
 }

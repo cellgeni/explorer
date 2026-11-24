@@ -17,7 +17,7 @@ import {
   transcriptAggregateCountRows,
   transcriptAggregateTitle,
 } from './viewerHoverModel'
-import { formatCoordinateValue } from './viewerMeasurements'
+import { formatCoordinateValue, ringVertexCount } from './viewerMeasurements'
 
 // Each tooltip writes lengths and areas in the viewer's data unit: µm, or
 // "units" for a SpatialData dataset whose units are unknown (EXP-052).
@@ -204,7 +204,7 @@ export function CellBoundaryHoverTooltip({
         )}
         <div>
           <dt>Vertices</dt>
-          <dd>{boundary.polygon.length.toLocaleString()}</dd>
+          <dd>{ringVertexCount(boundary.polygon).toLocaleString()}</dd>
         </div>
         <div>
           <dt>Area</dt>
@@ -267,7 +267,7 @@ function NucleusBoundaryHoverTooltip({
         )}
         <div>
           <dt>Vertices</dt>
-          <dd>{boundary.polygon.length.toLocaleString()}</dd>
+          <dd>{ringVertexCount(boundary.polygon).toLocaleString()}</dd>
         </div>
         <div>
           <dt>Area</dt>
