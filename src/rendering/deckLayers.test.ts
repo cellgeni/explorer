@@ -28,6 +28,10 @@ import {
   transcriptAggregateBinsToLayerData,
   transcriptPointsToLayerData,
 } from './deckLayers'
+import {
+  geneExpressionRadiusMaxPixels,
+  overviewCellRadiusMaxPixels,
+} from './cellPointRenderer'
 import { geneExpressionColor } from './deckLayerColors'
 import { geneExpressionScores, nonFiniteScoreCount } from './geneExpressionRenderer'
 import type { CellBoundaryDatum, OverviewCellDatum } from './deckLayers'
@@ -220,6 +224,50 @@ describe('deck layer factory', () => {
 
     expect(fullViewLayer.props.radiusMaxPixels).toBe(5)
     expect(closeViewLayer.props.radiusMaxPixels).toBe(24)
+  })
+
+  it('shrinks the full-view point caps of a crowded dataset by the root of its count', () => {
+    const layers = createOverviewLayers(fixtureCells, [], {
+      pointSizeZoomDelta: 0,
+      pointSizeFullViewScale: 0.5,
+      pointSizeCellCount: 1_000_000,
+      geneExpressionOverlayElements: [
+        { ...fixtureCells[0]!, id: 'expression-cell', expressionCount: 2 },
+      ],
+    })
+    const cellLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'cells-overview-scatter',
+    )
+    const expressionLayer = layers.find(
+      (layer) =>
+        layer instanceof ScatterplotLayer && layer.id === 'gene-expression-scatter',
+    )
+
+    if (
+      !(cellLayer instanceof ScatterplotLayer) ||
+      !(expressionLayer instanceof ScatterplotLayer)
+    ) {
+      throw new Error('Expected cell and expression ScatterplotLayer instances.')
+    }
+
+    // 5 and 6 px by √(20,000 / 1,000,000); expression points keep their 1 px
+    // smallest radius.
+    expect(cellLayer.props.radiusMaxPixels).toBe(0.7)
+    expect(expressionLayer.props.radiusMaxPixels).toBe(1)
+  })
+
+  it('grows crowded point caps twice per zoom level up to the usual caps', () => {
+    expect(overviewCellRadiusMaxPixels(0, 0.5, 20_000)).toBe(5)
+    expect(overviewCellRadiusMaxPixels(2, 0.5, 1_000_000)).toBe(2.8)
+    expect(overviewCellRadiusMaxPixels(2, 0.5, 20_000)).toBe(5.7)
+    expect(overviewCellRadiusMaxPixels(5, 0.5, 1_000_000)).toBe(
+      overviewCellRadiusMaxPixels(5, 0.5),
+    )
+    expect(overviewCellRadiusMaxPixels(10, 0.5, 1_000_000)).toBe(24)
+    expect(overviewCellRadiusMaxPixels(-2, 0.5, 1_000_000)).toBe(0.7)
+    expect(overviewCellRadiusMaxPixels(0, 0.5, 1_000_000_000)).toBe(0.5)
+    expect(geneExpressionRadiusMaxPixels(2, 0.5, 1_000_000)).toBe(3.4)
   })
 
   it('scales cell point radii and their pixel limits by the cell point scale', () => {

@@ -921,6 +921,15 @@ function ViewerSurface({
       : (renderCellLimit ?? DEFAULT_OVERVIEW_RENDER_CELL_LIMIT),
     shouldClipRenderCells ? visibleCellCount : cells.length,
   )
+  // The cell points the full view draws once the view keeps still, which
+  // sizes them, so they keep their size while a moving view samples them.
+  const fullViewCellPointCount =
+    overviewRenderCellLimit === null
+      ? cells.length
+      : Math.min(
+          cells.length,
+          overviewRenderCellLimit ?? DEFAULT_OVERVIEW_RENDER_CELL_LIMIT,
+        )
   const observationColorizer = useMemo(
     () =>
       observationColorMode === 'transcript-count'
@@ -1137,6 +1146,7 @@ function ViewerSurface({
         transcriptPointSize,
         pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
         pointSizeFullViewScale,
+        pointSizeCellCount: fullViewCellPointCount,
         trueSizePoints,
         cellPointScale,
         cellPointPacking,
@@ -1163,6 +1173,7 @@ function ViewerSurface({
       transcriptPointSize,
       transcriptPoints,
       pointSizeFullViewScale,
+      fullViewCellPointCount,
       trueSizePoints,
       cellPointScale,
       viewState.zoom,
