@@ -154,6 +154,8 @@ describe('CellInfoPanel', () => {
     expect(
       screen.getByText('4 transcript rows · QV 20+ · UMOD, NPHS1, PODXL +1'),
     ).toBeInTheDocument()
+    // The interface writes µm, never um (EXP-283).
+    expect(screen.getByText('Z location (µm)')).toBeInTheDocument()
 
     rerender(
       <CellInfoPanel
@@ -206,6 +208,39 @@ describe('CellInfoPanel', () => {
     expect(screen.queryByText('Eccentricity')).not.toBeInTheDocument()
     expect(screen.queryByText('Transcripts')).not.toBeInTheDocument()
     expect(screen.getByText('Gene expression')).toBeInTheDocument()
+  })
+
+  // Fractions, scores and probabilities read 0, -0 and 1 at one decimal
+  // (EXP-256).
+  it('writes obs numbers below 10 to four significant digits', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum({
+          metadata: {
+            doublet_score: 0.0123,
+            S_score: -0.04,
+            probability: 0.9876,
+            pct_counts_mt: 3.14159,
+            total_counts: 12345.678,
+            n_genes: 812,
+            zero: -0,
+          },
+        })}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        transcriptDistributionVisible={false}
+        variant="observations"
+      />,
+    )
+
+    const value = (name: string) => screen.getByText(name).nextElementSibling?.textContent
+    expect(value('doublet_score')).toBe('0.0123')
+    expect(value('S_score')).toBe('-0.04')
+    expect(value('probability')).toBe('0.9876')
+    expect(value('pct_counts_mt')).toBe('3.142')
+    expect(value('total_counts')).toBe('12,345.7')
+    expect(value('n_genes')).toBe('812')
+    expect(value('zero')).toBe('0')
   })
 
   it('shows why the gene expression profile is unavailable', () => {

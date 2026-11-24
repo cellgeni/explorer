@@ -794,8 +794,11 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
   `Nucleus boundaries` is on, each of the cell's nuclei in view adds a
   `Nucleus` row (`Nucleus 1`, `Nucleus 2`, … for several) with its area and
   circularity (`CellNucleusRows.tsx`); Atera rows follow the observations.
-  Then a "Gene expression" list for the cell with a search filter
-  (`CellGeneExpressionList.tsx`).
+  Numeric `obs` values below 10 keep four significant digits (`0.0123`), and
+  one decimal from 10 up. Then a "Gene expression" list for the cell with a
+  search filter (`CellGeneExpressionList.tsx`): each gene's count and share of
+  the cell's total (`<0.1%` for a share that rounds to 0); a stored NaN or
+  infinite value is left out of the list, the total and the shares.
 - Bin, Visium HD (`src/features/cells/GridCellInfoPanel.tsx`): barcode, bin
   size, tissue, array row/column, image pixel position; cell assignment from
   `barcode_mappings.parquet` (for 8 and 16 µm bins, the cell holding most of

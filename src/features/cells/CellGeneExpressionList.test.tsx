@@ -50,6 +50,20 @@ describe('CellGeneExpressionList', () => {
     expect(within(items[3]!).getByText('0.1% total')).toBeInTheDocument()
   })
 
+  // 1 count of 20,000 read "0% total" for a gene the cell has (EXP-283).
+  it('does not write a detected gene as 0% of the cell', () => {
+    render(
+      <CellGeneExpressionList
+        expression={expression([
+          ['Gad1', 19_999],
+          ['Actb', 1],
+        ])}
+      />,
+    )
+
+    expect(within(rows()[1]!).getByText('<0.1% total')).toBeInTheDocument()
+  })
+
   it('sizes bars against the most expressed gene, with a 2% minimum', () => {
     render(<CellGeneExpressionList expression={GENES} />)
 

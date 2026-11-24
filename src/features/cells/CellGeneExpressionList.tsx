@@ -106,6 +106,12 @@ function expressionBarWidth(count: number, maxCount: number): number {
   return Math.max(2, Math.min(100, (count / maxCount) * 100))
 }
 
+// A detected gene is never written as 0% of the cell: 1 count of 20,000
+// is "<0.1%".
 function formatPercent(value: number): string {
+  if (value > 0 && value < 0.05) {
+    return '<0.1%'
+  }
+
   return `${value.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 }
