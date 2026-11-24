@@ -4444,8 +4444,9 @@ export function App({ dependencies }: AppProps = {}) {
             elementCount: loadState.cellCount,
             geneCount:
               genePanelState.status === 'ready' ? genePanelState.genes.length : null,
-            channelCount: morphologyChannels.length,
+            channelCount: morphologyImage?.channelLoaders.length ?? 0,
             zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
+            imageLoading: morphologyState.status === 'loading',
             hasFlatImage: flatMorphologyImage !== null,
             imageSize: datasetImageSize(
               morphologyImage?.loader ?? null,

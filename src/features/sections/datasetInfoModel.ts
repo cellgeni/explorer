@@ -67,8 +67,11 @@ export interface DatasetFactsInput {
   readonly elementNoun: string
   readonly elementCount: number
   readonly geneCount: number | null
+  // The dataset image's channels; custom image layers are not the dataset's.
   readonly channelCount: number
   readonly zPlaneCount: number
+  // The dataset image is still being read (it reads after the cells).
+  readonly imageLoading: boolean
   // A single RGB tissue image (Visium) rather than channels.
   readonly hasFlatImage: boolean
   // The image's full-resolution pixels and extent; null without an image or
@@ -155,7 +158,8 @@ function imageSizeFact(size: DatasetImageSize, calibrated: boolean): string {
 
 function imageFact(input: DatasetFactsInput): string {
   if (input.channelCount === 0) {
-    return input.hasFlatImage ? 'Tissue image' : 'None'
+    if (input.hasFlatImage) return 'Tissue image'
+    return input.imageLoading ? 'Loading…' : 'None'
   }
 
   const channels = `${input.channelCount.toLocaleString()} ${

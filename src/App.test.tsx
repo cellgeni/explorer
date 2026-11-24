@@ -27,6 +27,7 @@ import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { SpatialElement } from './datasets/spatialDataset'
+import type { MorphologyImage } from './data/morphologyImage'
 import type { TiffPyramidLoader } from './tiff/loader'
 import {
   appTestDependencies,
@@ -3312,6 +3313,94 @@ describe('App', () => {
     expect(
       within(drawer).getByRole('region', { name: 'Open another dataset' }),
     ).toBeInTheDocument()
+  })
+
+  it('counts the dataset image alone in the info drawer, and says while it loads', async () => {
+    const channel = (index: number, name: string) => ({
+      id: `Channel:${index.toString()}`,
+      index,
+      name,
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    })
+    const dapi = channel(0, 'DAPI')
+    const boundary = channel(1, 'Boundary')
+    const custom = channel(0, 'H&E')
+    const loader = {} as TiffPyramidLoader
+    const image = deferredPromise<MorphologyImage>()
+    const loadMorphologyImage = vi.fn(() => image.promise)
+    const loadCustomMorphologyLayer: ReturnType<
+      typeof vi.fn<CustomMorphologyLayerLoader>
+    > = vi.fn(async (url) => ({
+      url,
+      loader,
+      channels: [custom],
+      channelLoaders: [{ info: custom, loader }],
+    }))
+
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 0,
+      max: 1,
+      histogram: { bins: [1], maxCount: 1, min: 0, max: 1, sampleCount: 1 },
+    }))
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+        loadMorphologyImage={loadMorphologyImage}
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
+        computeAutoChannelContrast={computeAutoChannelContrast}
+      />,
+    )
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Dataset info/ }))
+    const imageFact = () =>
+      within(screen.getByRole('region', { name: 'Dataset' })).getByText('Image')
+        .nextElementSibling
+    expect(imageFact()).toHaveTextContent('Loading…')
+
+    await act(async () => {
+      image.resolve({
+        url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+        loader,
+        channels: [dapi, boundary],
+        channelLoaders: [
+          { info: dapi, loader },
+          { info: boundary, loader },
+        ],
+      })
+      await image.promise
+    })
+    await waitFor(() => {
+      expect(imageFact()).toHaveTextContent('2 channels')
+    })
+
+    // A custom layer is not the dataset's image.
+    openControls('image')
+    fireEvent.change(screen.getByLabelText('Custom image URL'), {
+      target: { value: 'https://example.test/layers/he.ome.tif' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Layer' }))
+    await waitFor(() => {
+      expect(loadCustomMorphologyLayer).toHaveBeenCalled()
+    })
+    const layers = await screen.findByRole('list', { name: 'Custom image layers' })
+    expect(layers).toHaveTextContent('1 channel')
+    expect(layers).not.toHaveTextContent('1 channels')
+    openControls('diagnostics')
+    expect(imageFact()).toHaveTextContent('2 channels')
   })
 
   it('shows the embedding in a panel from Cells (15.2-G)', async () => {
