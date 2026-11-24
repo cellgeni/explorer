@@ -1539,8 +1539,10 @@
    a bottom sheet that peeks 56 px, the cards dock at the bottom of the canvas
    as sheets, and the tools fold into a menu. */
 
+/* The sheet's row holds its 56 px handle and 1 px top border, so the sheet
+   covers nothing at the canvas's bottom. */
 .shell-body.is-narrow {
-  grid-template-rows: minmax(0, 1fr) 56px;
+  grid-template-rows: minmax(0, 1fr) 57px;
   grid-template-columns: minmax(0, 1fr);
 }
 
