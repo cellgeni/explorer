@@ -47,6 +47,7 @@ const deckGlMock = vi.hoisted(() => ({
   layers: [] as readonly unknown[],
   viewState: undefined as OverviewViewState | undefined,
   renderCount: 0,
+  onDeviceInitialized: undefined as ((device: unknown) => void) | undefined,
 }))
 
 vi.mock('@deck.gl/react', () => ({
@@ -57,7 +58,9 @@ vi.mock('@deck.gl/react', () => ({
     eventRecognizerOptions,
     onViewStateChange,
     viewState,
+    onDeviceInitialized,
   }: {
+    readonly onDeviceInitialized?: (device: unknown) => void
     readonly layers?: readonly unknown[]
     readonly onHover?: MockDeckHover | null
     readonly onClick?: MockDeckClick
@@ -66,6 +69,7 @@ vi.mock('@deck.gl/react', () => ({
     readonly viewState?: OverviewViewState
   }) => {
     deckGlMock.renderCount += 1
+    deckGlMock.onDeviceInitialized = onDeviceInitialized
     deckGlMock.onHover = onHover
     deckGlMock.onClick = onClick
     deckGlMock.eventRecognizerOptions = eventRecognizerOptions
@@ -159,6 +163,7 @@ afterEach(() => {
   deckGlMock.layers = []
   deckGlMock.viewState = undefined
   deckGlMock.renderCount = 0
+  deckGlMock.onDeviceInitialized = undefined
   vi.useRealTimers()
   vi.restoreAllMocks()
 })
@@ -676,6 +681,77 @@ describe('ViewerCore', () => {
     expect(document.querySelector('canvas.morphology-canvas')).toHaveStyle({
       opacity: '0.4',
     })
+  })
+
+  it('draws the view again on a new canvas when its WebGL context is lost (EXP-325)', async () => {
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+    const firstDeck = screen.getByTestId('deckgl')
+    const firstLayers = deckGlMock.layers.flat() as { readonly id: string }[]
+    expect(firstLayers.length).toBeGreaterThan(0)
+    const canvas = document.body.appendChild(document.createElement('canvas'))
+
+    try {
+      await act(async () => {
+        deckGlMock.onDeviceInitialized?.(lostDevice(canvas))
+        await Promise.resolve()
+      })
+
+      expect(screen.getByTestId('deckgl')).not.toBe(firstDeck)
+      // New instances of the same layers: deck.gl cannot reuse finalized ones.
+      const layers = deckGlMock.layers.flat() as { readonly id: string }[]
+      expect(layers.map((layer) => layer.id)).toEqual(
+        firstLayers.map((layer) => layer.id),
+      )
+      expect(layers.some((layer) => firstLayers.includes(layer))).toBe(false)
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Drawing was interrupted (the GPU was reset, or too many tabs are using it), so the view was drawn again.',
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+      expect(screen.queryByText(/Drawing was interrupted/)).toBeNull()
+    } finally {
+      canvas.remove()
+    }
+  })
+
+  it('leaves a view whose canvas has left the page, as it closes', async () => {
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+    const deck = screen.getByTestId('deckgl')
+
+    await act(async () => {
+      deckGlMock.onDeviceInitialized?.(lostDevice(document.createElement('canvas')))
+      await Promise.resolve()
+    })
+
+    expect(screen.getByTestId('deckgl')).toBe(deck)
+    expect(screen.queryByText(/Drawing was interrupted/)).toBeNull()
+  })
+
+  it('stops drawing the view again after three lost contexts and says to reload', async () => {
+    render(<ViewerCore cells={[overviewCellDatum()]} />)
+    const canvas = document.body.appendChild(document.createElement('canvas'))
+
+    try {
+      for (let loss = 1; loss <= 3; loss += 1) {
+        const deck = screen.getByTestId('deckgl')
+        await act(async () => {
+          deckGlMock.onDeviceInitialized?.(lostDevice(canvas))
+          await Promise.resolve()
+        })
+        expect(screen.getByTestId('deckgl')).not.toBe(deck)
+      }
+      const deck = screen.getByTestId('deckgl')
+      await act(async () => {
+        deckGlMock.onDeviceInitialized?.(lostDevice(canvas))
+        await Promise.resolve()
+      })
+
+      expect(screen.getByTestId('deckgl')).toBe(deck)
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Reload the page to draw the cells again.',
+      )
+    } finally {
+      canvas.remove()
+    }
   })
 
   it('renders loading tasks and viewport status in the same notification stack', () => {
@@ -2748,6 +2824,14 @@ describe('ViewerCore', () => {
     expect(selection.points).toHaveLength(4)
   })
 })
+
+// A luma.gl device whose context is already lost, drawing to `canvas`.
+function lostDevice(canvas: HTMLCanvasElement) {
+  return {
+    lost: Promise.resolve({ reason: 'destroyed', message: 'Context lost.' }),
+    canvasContext: { canvas },
+  }
+}
 
 function overviewCellDatum(): OverviewCellDatum {
   return {

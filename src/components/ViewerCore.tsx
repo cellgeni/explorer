@@ -21,6 +21,7 @@ import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import { ViewerMinimap } from './ViewerMinimap'
 import { ViewerAxes } from './ViewerAxes'
 import { viewerAxesModel } from './viewerAxesModel'
+import { cloneLayers, useDeckDeviceLoss } from './useDeckDeviceLoss'
 import {
   minimapDrawsImage,
   minimapIndexPoints,
@@ -1180,6 +1181,14 @@ function ViewerSurface({
       fittedViewZoom,
     ],
   )
+  // A lost WebGL context draws the view again on a new canvas (EXP-325), with
+  // new layers: deck.gl cannot reuse a layer its old Deck finalized.
+  const deviceLoss = useDeckDeviceLoss()
+  const deckGeneration = deviceLoss.generation
+  const deckLayers = useMemo(
+    () => (deckGeneration === 0 ? layers : cloneLayers(layers)),
+    [deckGeneration, layers],
+  )
   const hasCells = cells.length > 0
   const hasGridCells = gridCells.length > 0
   const hasViewportCountGridCells = viewportCountGridCells.length > 0
@@ -2257,7 +2266,9 @@ function ViewerSurface({
         {hasSpatialData ? (
           <div className="deckgl-host" aria-hidden="true">
             <MemoDeckGL
+              key={deckGeneration}
               Deck={ReleasingDeck}
+              onDeviceInitialized={deviceLoss.onDeviceInitialized}
               views={spatialOverviewView}
               viewState={viewState}
               onViewStateChange={handleViewStateChange}
@@ -2265,7 +2276,7 @@ function ViewerSurface({
               eventRecognizerOptions={DECK_EVENT_RECOGNIZER_OPTIONS}
               onHover={deckHoverEnabled ? handleDeckHover : null}
               controller
-              layers={layers}
+              layers={deckLayers}
               onLoad={removeDeckFromTabOrder}
             />
           </div>
@@ -2429,7 +2440,8 @@ function ViewerSurface({
       )}
       {legendSections.length === 0 &&
       loadingTasks.length === 0 &&
-      viewportMessage === null ? null : (
+      viewportMessage === null &&
+      deviceLoss.notice === null ? null : (
         <div className="viewport-notification-stack">
           <ViewerLegend
             sections={legendSections}
@@ -2453,11 +2465,30 @@ function ViewerSurface({
               {viewportMessage.text}
             </p>
           )}
+          {deviceLoss.notice === null ? null : (
+            <div
+              className={`viewport-message ${deviceLoss.notice === 'stopped' ? 'viewport-message-error' : 'viewport-message-notice'}`}
+            >
+              <p role="status">{DEVICE_LOSS_NOTICES[deviceLoss.notice]}</p>
+              <IconButton
+                title="Dismiss"
+                icon={<CloseIcon />}
+                onClick={deviceLoss.dismissNotice}
+              />
+            </div>
+          )}
         </div>
       )}
     </>
   )
 }
+
+const DEVICE_LOSS_NOTICES = {
+  redrawn:
+    'Drawing was interrupted (the GPU was reset, or too many tabs are using it), so the view was drawn again.',
+  stopped:
+    'Drawing keeps being interrupted (the GPU was reset, or too many tabs are using it). Reload the page to draw the cells again.',
+} as const
 
 // What the active tool does, shown at the top of the canvas so it is clear a
 // tool is on and how to leave it.
