@@ -1356,6 +1356,17 @@ nearest it within 24 screen px (or inside its drawn size), as a click would
 `Enter` selects the whole view instead, so a selection can be framed with the
 arrow keys and `+`/`-` and made without a pointer. Lasso stays pointer-only.
 
+### Lost Graphics
+
+The browser can take the view's WebGL context away: a GPU reset, sleep, or
+more than 16 live contexts on the page. The cells, bins and transcripts are
+then drawn again on a new canvas, in place, and a notice says so ("Drawing was
+interrupted (the GPU was reset, or too many tabs are using it), so the view
+was drawn again.", with `Dismiss`). After three losses the view stops drawing
+itself again, as something keeps taking the context, and the notice says to
+reload the page (`src/components/useDeckDeviceLoss.ts`). The image is drawn on
+its own canvas and is not affected.
+
 ### Picking
 
 Click (`ViewerCore.tsx`, `src/components/viewerPicking.ts`):
