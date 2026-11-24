@@ -256,7 +256,12 @@ export function initiallyExpanded(structure: ZarrStructure): ReadonlySet<string>
   return expanded
 }
 
-// JSON for display, cut at `limit` characters.
+// Marks a value JSON has no form for, so it is written bare.
+const BARE = '\u0000'
+
+// JSON for display, cut at `limit` characters. NaN, infinities and bigints
+// (HDF5 attributes) are written as themselves, where JSON would give null or
+// throw.
 export function formatJson(
   value: unknown,
   limit = 20_000,
@@ -266,7 +271,16 @@ export function formatJson(
   readonly shown: number
   readonly length: number
 } {
-  const text = JSON.stringify(value, null, 2) ?? String(value)
+  const text = (
+    JSON.stringify(
+      value,
+      (_key, item: unknown) =>
+        typeof item === 'bigint' || (typeof item === 'number' && !Number.isFinite(item))
+          ? `${BARE}${String(item)}${BARE}`
+          : item,
+      2,
+    ) ?? String(value)
+  ).replace(/"\\u0000([^"]*)\\u0000"/g, '$1')
   return text.length > limit
     ? { text: `${text.slice(0, limit)}\n…`, cut: true, shown: limit, length: text.length }
     : { text, cut: false, shown: text.length, length: text.length }

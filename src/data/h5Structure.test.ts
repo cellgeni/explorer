@@ -1,4 +1,7 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
+import { createStructuredLoadError } from '../features/errors/loadErrorModel'
 import { createH5Bytes, writeBrowsableH5ad } from '../test/h5Fixtures'
 import { H5_RANGE_UNSUPPORTED_ERROR } from '../workers/h5FileMessages'
 import {
@@ -155,5 +158,136 @@ describe('readH5Structure', () => {
     await expect(
       readH5Structure(URL_, { open: failWith(unsupported) }),
     ).rejects.toBeInstanceOf(H5RangeRequiredError)
+  })
+
+  it('calls only 403, 404 and 410 a missing file', async () => {
+    const errorFor = async (status: number) => {
+      try {
+        await readH5Structure(URL_, {
+          open: () => Promise.reject(new Error(`sample.h5ad returned HTTP ${status}.`)),
+        })
+      } catch (error) {
+        return error
+      }
+      throw new Error('The read should have failed.')
+    }
+
+    for (const status of [403, 404, 410]) {
+      expect(await errorFor(status)).toBeInstanceOf(H5FileNotFoundError)
+    }
+
+    const titles = await Promise.all(
+      [503, 429, 401].map(async (status) => {
+        const error = await errorFor(status)
+        expect(error).not.toBeInstanceOf(H5FileNotFoundError)
+        return createStructuredLoadError('Store structure', error).title
+      }),
+    )
+    expect(titles).toEqual(['HTTP 503 response', 'Too many requests', 'Access denied'])
+  })
+})
+
+// Written with the HDF5 C library (src/test/fixtures/h5/odd-types.c), as h5wasm
+// cannot write these types.
+function oddTypes(): Promise<H5Structure> {
+  const bytes = new Uint8Array(
+    readFileSync(join(process.cwd(), 'src/test/fixtures/h5/odd-types.h5')),
+  )
+  return readH5Structure('https://bucket.test/odd.h5', {
+    open: () => openH5WorkerFile(bytes),
+  })
+}
+
+describe('readH5Structure values of other types', () => {
+  it('gives one value per element: opaque and bitfield bytes, array elements', async () => {
+    const structure = await oddTypes()
+    const read = (path: string) =>
+      structure.readValues(path, new AbortController().signal)
+
+    try {
+      // As h5dump writes them.
+      expect(await read('opaque')).toEqual({
+        shape: [3],
+        values: [
+          '64:65:66:67:68:69:6a:6b',
+          '6c:6d:6e:6f:70:71:72:73',
+          '74:75:76:77:78:79:7a:7b',
+        ],
+      })
+      expect(await read('bitfield')).toEqual({
+        shape: [3],
+        values: ['02:01', '04:03', '06:05'],
+      })
+
+      // h5wasm nests a 2-D array type by the dataset's whole shape.
+      const array2d = await read('array2d')
+      expect(array2d.shape).toEqual([2, 20])
+      expect(array2d.values).toHaveLength(40)
+      expect(array2d.values[1]).toEqual([3, 4, 5])
+      // Row 1, column 0 is element 30.
+      expect(array2d.values[20]).toEqual([90, 91, 92])
+      expect((await read('array1d')).values[1]).toEqual([3, 4, 5])
+    } finally {
+      structure.close()
+    }
+  })
+
+  it('fails a read HDF5 cannot make, rather than showing memory', async () => {
+    const structure = await oddTypes()
+
+    try {
+      await expect(
+        structure.readValues('external', new AbortController().signal),
+      ).rejects.toThrow(/external storage/)
+    } finally {
+      structure.close()
+    }
+  })
+})
+
+describe('readH5Structure attributes', () => {
+  it('keeps NaN, infinity, large integers and shape, and names references', async () => {
+    const structure = await readH5Structure(URL_, {
+      open: async () =>
+        openH5WorkerFile(
+          await createH5Bytes((file) => {
+            const target = file.create_dataset({
+              name: 'target',
+              data: new Int32Array([1]),
+            })
+            file.create_attribute('scores', new Float64Array([1, Number.NaN, Infinity]))
+            file.create_attribute('total', new BigUint64Array([9_007_199_254_740_993n]))
+            file.create_attribute('count', new BigInt64Array([42n]))
+            file.create_attribute('grid', new Int32Array([1, 2, 3, 4, 5, 6]), [2, 3])
+            file.create_attribute('points_at', [target.create_reference()])
+          }),
+        ),
+    })
+
+    try {
+      expect(structure.root.attributes).toEqual({
+        scores: [1, Number.NaN, Infinity],
+        // Shape [1], so lists, as before.
+        total: [9_007_199_254_740_993n],
+        count: [42],
+        grid: [
+          [1, 2, 3],
+          [4, 5, 6],
+        ],
+        points_at: ['object reference'],
+      })
+    } finally {
+      structure.close()
+    }
+  })
+
+  it('writes an opaque attribute as its bytes', async () => {
+    const structure = await oddTypes()
+
+    try {
+      expect(structure.root.attributes['opaque_attr']).toBe('01:02:03:04')
+    } finally {
+      structure.close()
+    }
   })
 })

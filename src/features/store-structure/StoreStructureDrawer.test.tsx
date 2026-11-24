@@ -9,6 +9,7 @@ import {
   type H5Structure,
   type ReadH5StructureOptions,
 } from '../../data/h5Structure'
+import { H5T_CLASS, type H5ValuePreview } from '../../data/h5StructureTypes'
 import { openH5WorkerFile } from '../../data/h5WorkerFile'
 import { createH5Bytes, writeBrowsableH5ad } from '../../test/h5Fixtures'
 import {
@@ -29,6 +30,7 @@ import {
   type ReadZarrStructureOptions,
   type ZarrStructure,
 } from '../../zarr/zarrStructure'
+import { H5FileView } from './H5StructureView'
 import { StoreStructureDrawer } from './StoreStructureDrawer'
 import { useStoreStructure } from './useStoreStructure'
 
@@ -412,5 +414,96 @@ describe('StoreStructureDrawer', () => {
     unmount()
     expect(closes).toHaveLength(1)
     expect(closes[0]).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('HDF5 Read Values', () => {
+  // A 1,000 × 30,000 float32 matrix stored contiguously: its first block
+  // spans 12 MB, so its values wait for Read Values.
+  function matrixFile(readValues: H5Structure['readValues']): H5Structure {
+    return {
+      root: {
+        path: '',
+        name: 'm.h5',
+        kind: 'group',
+        attributes: {},
+        skippedAttributes: [],
+        children: [
+          {
+            path: 'matrix',
+            name: 'matrix',
+            kind: 'dataset',
+            attributes: {},
+            skippedAttributes: [],
+            dataset: {
+              shape: [1000, 30_000],
+              maxShape: [1000, 30_000],
+              chunks: null,
+              dtype: {
+                typeClass: H5T_CLASS.FLOAT,
+                size: 4,
+                signed: false,
+                littleEndian: true,
+                vlen: false,
+              },
+              filters: [],
+            },
+            children: [],
+          },
+        ],
+      },
+      groupCount: 1,
+      datasetCount: 1,
+      otherCount: 0,
+      truncated: false,
+      url: 'https://bucket.test/m.h5',
+      range: { size: 120_000_000, requests: 1, fetchedBytes: 1_000_000 },
+      readValues,
+      close: () => undefined,
+    }
+  }
+
+  it('moves focus to "Reading…", then to the values, or to Retry', async () => {
+    const reads: {
+      resolve: (preview: H5ValuePreview) => void
+      reject: (error: Error) => void
+    }[] = []
+    const structure = matrixFile(
+      () =>
+        new Promise<H5ValuePreview>((resolve, reject) => {
+          reads.push({ resolve, reject })
+        }),
+    )
+    render(
+      <H5FileView
+        state={{ status: 'ready', target: structure.url, value: structure }}
+        onRetry={() => undefined}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('Show details of matrix'))
+    const details = screen.getByRole('region', { name: 'matrix' })
+    const readValues = within(details).getByRole('button', { name: 'Read Values' })
+    readValues.focus()
+
+    fireEvent.click(readValues)
+    expect(within(details).getByRole('status')).toHaveFocus()
+
+    await act(async () => {
+      reads[0]?.reject(
+        new Error('https://bucket.test/m.h5 could not be read (HTTP 503).'),
+      )
+      await Promise.resolve()
+    })
+    const retry = within(details).getByRole('button', { name: 'Retry' })
+    expect(retry).toHaveFocus()
+
+    fireEvent.click(retry)
+    expect(within(details).getByRole('status')).toHaveFocus()
+    await act(async () => {
+      reads[1]?.resolve({ shape: [1, 2], values: [1, 2] })
+      await Promise.resolve()
+    })
+    expect(within(details).getByRole('heading', { name: 'Values' })).toHaveFocus()
+    expect(within(details).getByRole('table', { name: 'Values' })).toBeInTheDocument()
   })
 })
