@@ -1,3 +1,5 @@
+import { useLayoutEffect, useRef } from 'react'
+import { centredLabelShift } from './overlayPlacement'
 import type { MeasurementLine, MeasurementOverlayModel } from './viewerMeasurements'
 
 export interface MeasurementDraft {
@@ -16,6 +18,25 @@ export function MeasurementOverlay({
 }: {
   readonly model: MeasurementOverlayModel
 }) {
+  const labelRef = useRef<HTMLSpanElement>(null)
+
+  // The label is centred over the line's midpoint; near the frame's left or
+  // right edge it moves along so the frame does not cut it off (EXP-304).
+  useLayoutEffect(() => {
+    const label = labelRef.current
+    const frame = label?.offsetParent
+    if (label == null || !(frame instanceof HTMLElement) || label.offsetWidth === 0) {
+      return
+    }
+
+    const shift = centredLabelShift(
+      label.offsetLeft,
+      label.offsetWidth,
+      frame.clientWidth,
+    )
+    label.style.translate = shift === 0 ? '' : `${shift}px 0`
+  })
+
   return (
     <div className="measurement-overlay">
       <svg className="measurement-svg" focusable="false" aria-hidden="true">
@@ -40,6 +61,7 @@ export function MeasurementOverlay({
         />
       </svg>
       <span
+        ref={labelRef}
         className={`measurement-label${model.isDraft ? ' is-draft' : ''}`}
         style={model.labelStyle}
       >

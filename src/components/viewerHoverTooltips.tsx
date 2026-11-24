@@ -18,6 +18,7 @@ import {
   transcriptAggregateTitle,
 } from './viewerHoverModel'
 import { formatCoordinateValue, ringVertexCount } from './viewerMeasurements'
+import { PointerTooltip } from './PointerTooltip'
 
 // Each tooltip writes lengths and areas in the viewer's data unit: µm, or
 // "units" for a SpatialData dataset whose units are unknown (EXP-052).
@@ -31,13 +32,10 @@ export function GridCellHoverTooltip({
   const cell = detail.cell
 
   return (
-    <div
+    <PointerTooltip
+      x={detail.screen.x}
+      y={detail.screen.y}
       className="transcript-hover-tooltip grid-cell-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
     >
       <p>{cell.id}</p>
       <dl>
@@ -67,7 +65,7 @@ export function GridCellHoverTooltip({
         )}
         <AnnotationLabelsRow labels={detail.annotationLabels} />
       </dl>
-    </div>
+    </PointerTooltip>
   )
 }
 
@@ -85,13 +83,10 @@ export function OverviewCellHoverTooltip({
   const isAggregateBin = cellCount !== undefined || cell.id.startsWith('cell-bin:')
 
   return (
-    <div
+    <PointerTooltip
+      x={detail.screen.x}
+      y={detail.screen.y}
       className="transcript-hover-tooltip grid-cell-hover-tooltip overview-cell-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
     >
       <p>{cell.id}</p>
       <dl>
@@ -136,7 +131,7 @@ export function OverviewCellHoverTooltip({
         )}
         <AnnotationLabelsRow labels={detail.annotationLabels} />
       </dl>
-    </div>
+    </PointerTooltip>
   )
 }
 
@@ -163,13 +158,10 @@ export function CellBoundaryHoverTooltip({
   }
 
   return (
-    <div
+    <PointerTooltip
+      x={detail.screen.x}
+      y={detail.screen.y}
       className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
     >
       <p>{boundary.id}</p>
       <dl>
@@ -224,7 +216,7 @@ export function CellBoundaryHoverTooltip({
           </div>
         )}
       </dl>
-    </div>
+    </PointerTooltip>
   )
 }
 
@@ -241,13 +233,10 @@ function NucleusBoundaryHoverTooltip({
   const boundary = detail.boundary
 
   return (
-    <div
+    <PointerTooltip
+      x={detail.screen.x}
+      y={detail.screen.y}
       className="transcript-hover-tooltip grid-cell-hover-tooltip cell-boundary-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
     >
       <p>{boundary.id}</p>
       <dl>
@@ -274,7 +263,7 @@ function NucleusBoundaryHoverTooltip({
           <dd>{formatBoundaryPolygonArea(boundary.polygon, unitLabel)}</dd>
         </div>
       </dl>
-    </div>
+    </PointerTooltip>
   )
 }
 
@@ -309,13 +298,10 @@ export function TranscriptHoverTooltip({
 
   if (aggregate !== undefined) {
     return (
-      <div
+      <PointerTooltip
+        x={detail.screen.x}
+        y={detail.screen.y}
         className="transcript-hover-tooltip"
-        style={{
-          left: detail.screen.x,
-          top: detail.screen.y,
-        }}
-        aria-hidden="true"
       >
         <p>{transcriptAggregateTitle(aggregate)}</p>
         <dl>
@@ -364,7 +350,7 @@ export function TranscriptHoverTooltip({
             </div>
           )}
         </dl>
-      </div>
+      </PointerTooltip>
     )
   }
 
@@ -377,13 +363,10 @@ export function TranscriptHoverTooltip({
   const transcriptCellLabel = transcriptCellDisplayLabel(transcript)
 
   return (
-    <div
+    <PointerTooltip
+      x={detail.screen.x}
+      y={detail.screen.y}
       className="transcript-hover-tooltip"
-      style={{
-        left: detail.screen.x,
-        top: detail.screen.y,
-      }}
-      aria-hidden="true"
     >
       <p>{transcript.featureName}</p>
       <dl>
@@ -444,7 +427,7 @@ export function TranscriptHoverTooltip({
           </div>
         )}
       </dl>
-    </div>
+    </PointerTooltip>
   )
 }
 

@@ -264,7 +264,7 @@ describes its button (`About {term}`) for screen readers. The texts are in
 One tool is on at a time (`activeTool`, `src/features/app-shell/activeToolModel.ts`,
 D8). Turning one on turns the others off. While a tool other than Pan is on,
 the top of the canvas says what to do, such as "Drag to draw a box. Esc
-cancels." The tools are one tab stop, on the active tool; the arrow keys,
+cancels." (under the main view's name, with sections shown beside it). The tools are one tab stop, on the active tool; the arrow keys,
 `Home` and `End` move between them (the ARIA toolbar pattern). Esc, anywhere
 except a text field, returns to Pan and drops a
 half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
@@ -1314,6 +1314,11 @@ on or when `Hover tooltips` is off (except transcripts). The setting also
 covers the cells of the sections shown beside the main view and of the 3D
 views.
 
+A tooltip sits 10 px below and right of the pointer, and flips to its left or
+above it where the view's right or bottom edge would cut it off
+(`PointerTooltip`, `src/components/overlayPlacement.ts`); in a panel too
+small for it either way, it keeps as far inside as it goes.
+
 With the setting off and no transcripts drawn, ViewerCore gives deck.gl
 `onHover={null}` rather than leaving the prop out: deck.gl merges props, so a
 handler left out would stay, still showing the tooltips.
@@ -1333,7 +1338,9 @@ Positions, lengths and areas are in the scale bar's unit: µm and µm², or
 ### Distance Measurement
 
 With the Measure tool on, drag in the view. Lines shorter than 3 screen px are
-ignored. The label shows µm or px; pixel values use the image µm/px.
+ignored. The label shows µm or px; pixel values use the image µm/px. It sits
+over the line's midpoint, moved along to stay inside the view near its left
+or right edge.
 
 ### ROI Drawing
 
@@ -1374,6 +1381,10 @@ the coordinate readout says the same.
 ### Readouts And Messages
 
 - Bottom centre: mouse X/Y in µm or px, and `Zoom N.NN` with debug info on.
+  It centres in the room right of the bottom-left stack, as toasts do; where
+  that room is too narrow it rises above the stack and the minimap, and under
+  860 px it sits above the stack, which there leaves 110 px at the right for
+  the zoom buttons and scale bar.
 - Bottom right: the [minimap](#minimap), zoom buttons, then the scale bar
   (1/2/5 steps) in the `Mouse coordinates` unit. Settings can hide each; what
   is left moves down, so hiding one leaves no gap.

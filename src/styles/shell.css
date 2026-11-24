@@ -804,6 +804,23 @@
   width: min(440px, max(280px, calc(var(--toast-room) - 2 * var(--space-3))));
 }
 
+/* The pointer readout centres in the room right of the bottom-left stack, as
+   toasts do. Where that room is too narrow it rises above both corners, the
+   stack and the minimap, at the toasts' --toast-bottom (EXP-305). */
+.shell-body:not(.is-narrow) .viewport-bottom-center-readout {
+  left: calc(
+    var(--canvas-bottom-left-width, 0px) + (100% - var(--canvas-bottom-left-width, 0px)) /
+      2
+  );
+}
+
+.shell-body:not(.is-narrow)
+  .shell-canvas[data-toast-raised]
+  .viewport-bottom-center-readout {
+  bottom: max(16px, var(--toast-bottom, 0px));
+  left: 50%;
+}
+
 .shell-body:not(.is-narrow) .shell-canvas[data-toast-raised] .viewer-toasts {
   bottom: max(16px, env(safe-area-inset-bottom), var(--toast-bottom, 0px));
   left: 50%;
@@ -1614,10 +1631,16 @@
   bottom: calc(12px + var(--canvas-bottom-sheet-height, 0px));
 }
 
+/* The pointer readout sits above the bottom-left stack, which on a phone
+   leaves no room beside it (EXP-305). */
 .shell-body.is-narrow .viewport-bottom-center-readout {
-  bottom: calc(10px + var(--canvas-bottom-sheet-height, 0px));
+  bottom: calc(
+    10px + var(--canvas-bottom-sheet-height, 0px) + var(--canvas-bottom-left-height, 0px)
+  );
 }
 
+/* Clear of the zoom buttons and scale bar at the bottom right, 94 px wide
+   and 12 px in (EXP-305). */
 .shell-body.is-narrow .viewport-notification-stack {
   --stack-bottom: calc(
     max(8px, env(safe-area-inset-bottom)) + var(--canvas-bottom-sheet-height, 0px)
@@ -1626,6 +1649,7 @@
   bottom: var(--stack-bottom);
   display: flex;
   flex-direction: column;
+  width: min(420px, calc(100% - 16px - 110px));
   max-height: calc(100% - var(--stack-bottom) - 8px);
 }
 
