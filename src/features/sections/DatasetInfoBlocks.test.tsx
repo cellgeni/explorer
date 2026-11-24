@@ -110,6 +110,28 @@ describe('OpenDatasetForm', () => {
   })
 })
 
+describe('OpenDatasetForm focus', () => {
+  it('moves from Load Dataset, off while the dataset loads, to the address (EXP-316)', () => {
+    const form = (isLoading: boolean) => (
+      <OpenDatasetForm
+        open={
+          testDatasetInfoModel({
+            open: { datasetUrl: 'https://example.test/run', isLoading },
+          }).open
+        }
+      />
+    )
+    const { rerender } = render(form(false))
+    const load = screen.getByRole('button', { name: 'Load Dataset' })
+    load.focus()
+    fireEvent.click(load)
+
+    rerender(form(true))
+    expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled()
+    expect(screen.getByLabelText('Dataset or image URL')).toHaveFocus()
+  })
+})
+
 describe('OpenDatasetForm addresses', () => {
   it.each(['/data/run.h5ad', './run-1', 'bucket.test/run.h5ad'])(
     'leaves %s for the app to check, as the browser would refuse it',

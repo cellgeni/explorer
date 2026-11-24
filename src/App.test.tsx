@@ -3041,6 +3041,8 @@ describe('App', () => {
     )
     const start = screen.getByRole('region', { name: 'Open a dataset' })
     expect(within(start).getByLabelText('Dataset or image URL')).toHaveValue('')
+    // The view under it is out of reach (EXP-317).
+    expect(document.querySelector('.viewer-tiles')).toHaveAttribute('inert')
     fireEvent.click(await within(start).findByRole('link', { name: 'Human skin' }))
 
     await waitFor(() => {
@@ -3050,6 +3052,7 @@ describe('App', () => {
     expect(
       screen.queryByRole('region', { name: 'Open a dataset' }),
     ).not.toBeInTheDocument()
+    expect(document.querySelector('.viewer-tiles')).not.toHaveAttribute('inert')
     expect(loadExamplesIndex).toHaveBeenCalledTimes(1)
 
     // The dataset menu lists it under Recent, and has the examples too.

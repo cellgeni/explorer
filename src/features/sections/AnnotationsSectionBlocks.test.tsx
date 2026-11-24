@@ -267,3 +267,121 @@ describe('MetadataTracksPanel', () => {
     expect(screen.getByText('3 cells | 503-12,346')).toBeInTheDocument()
   })
 })
+
+// Controls that take themselves away hand focus on rather than drop it to
+// the page (EXP-316).
+describe('focus kept in the Clusters controls', () => {
+  const clusters = (
+    <h4 data-layer-anchor="clusters" tabIndex={-1}>
+      Clusters
+    </h4>
+  )
+  const classes = (labels: readonly string[]): readonly Annotation[] =>
+    labels.map((label, index) => ({
+      id: `analysis:${label}`,
+      label: `cluster: ${label}`,
+      cellIds: Array.from({ length: 10 - index }, (_, cell) =>
+        asCellId(`aaaaaaaa-${index * 100 + cell}`),
+      ),
+    }))
+
+  function press(name: string) {
+    const button = screen.getByRole('button', { name })
+    button.focus()
+    fireEvent.click(button)
+  }
+
+  it('moves from a removed class to the next one, then to the Clusters heading', () => {
+    const lists = (labels: readonly string[]) => {
+      const { sets } = testAnnotationsSectionModel({
+        sets: {
+          state: {
+            status: 'ready',
+            url: 'https://example.test',
+            annotations: classes(labels),
+          },
+        },
+      })
+      return (
+        <>
+          {clusters}
+          <AnnotationLabelLists sets={sets} />
+        </>
+      )
+    }
+    const { rerender } = render(lists(['A', 'B', 'C']))
+
+    press('Remove cluster: B')
+    rerender(lists(['A', 'C']))
+    expect(screen.getByRole('button', { name: 'Remove cluster: C' })).toHaveFocus()
+
+    press('Remove cluster: C')
+    rerender(lists(['A']))
+    expect(screen.getByRole('button', { name: 'Remove cluster: A' })).toHaveFocus()
+
+    press('Remove cluster: A')
+    rerender(lists([]))
+    expect(screen.getByRole('heading', { name: 'Clusters' })).toHaveFocus()
+  })
+
+  it('moves from a removed metadata track to the next one, then to the Clusters heading', () => {
+    const panel = (labels: readonly string[]) => {
+      const { metadataTracks } = testAnnotationsSectionModel({
+        metadataTracks: {
+          tracks: labels.map((label) => ({
+            id: `h5ad:${label}`,
+            label,
+            values: null,
+            cellCount: 10,
+            min: 0,
+            max: 1,
+          })),
+        },
+      })
+      return (
+        <>
+          {clusters}
+          <MetadataTracksPanel metadataTracks={metadataTracks} />
+        </>
+      )
+    }
+    const { rerender } = render(panel(['n_genes', 'n_counts']))
+
+    press('Remove n_genes')
+    rerender(panel(['n_counts']))
+    expect(screen.getByRole('button', { name: 'Remove n_counts' })).toHaveFocus()
+
+    press('Remove n_counts')
+    rerender(panel([]))
+    expect(screen.getByRole('heading', { name: 'Clusters' })).toHaveFocus()
+  })
+
+  it('moves from Load Annotations, off while loading, to the set choice', () => {
+    const controls = (status: 'idle' | 'loading') => {
+      const { sets } = testAnnotationsSectionModel({
+        sets: {
+          selectedGroupId: 'analysis:cluster',
+          groupOptions: [
+            {
+              id: 'analysis:cluster',
+              label: 'cluster',
+              groupingName: 'cluster',
+              groupCount: 3,
+            },
+          ],
+          state:
+            status === 'idle'
+              ? { status: 'idle' }
+              : { status: 'loading', url: 'https://example.test' },
+        },
+      })
+      return <AnnotationSetControls sets={sets} />
+    }
+    const { rerender } = render(controls('idle'))
+
+    press('Load Annotations')
+    rerender(controls('loading'))
+    expect(screen.getByRole('button', { name: 'Loading…' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Annotation set' })).toHaveFocus()
+  })
+})

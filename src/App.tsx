@@ -61,6 +61,7 @@ import { datasetManifestFor } from './data/datasetFiles'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
+import { useNarrowScreen } from './features/shell/useNarrowScreen'
 import { useCardStackModel } from './features/cards/cardModels'
 import { useEmbeddingModel } from './features/sections/embeddingModel'
 import type { PlotKind } from './features/plots/plotModel'
@@ -1032,6 +1033,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadState.status === 'error' ||
     (loadState.status === 'idle' && !(linkOpensDataset && !datasetLoadStarted))
   const examplesIndex = useExamplesIndex({ loadIndex: loadExamplesIndex })
+  const narrowScreen = useNarrowScreen()
   // Browse Store's drawer, opened from the dataset field (any of its forms).
   const storeStructure = useStoreStructure({
     read: readStoreStructure,
@@ -5291,6 +5293,21 @@ export function App({ dependencies }: AppProps = {}) {
         ? initialShareableState.viewState
         : undefined
   const viewerTileCount = 1 + linkedSections.length
+  // What covers the 2D view leaves it out of the Tab order and of reach
+  // (EXP-317): the start screen, the section stack and the expanded
+  // collection grid cover every tile, a 3D view the main one. Under 860 px
+  // a window spans the view, which then is no Tab stop but can still be
+  // dragged where it shows.
+  const viewerTilesCovered =
+    showStartScreen ||
+    sectionStackShown ||
+    (collectionView === 'grid' && datasetCollection.state.status === 'ready')
+  const viewerCoreCovered = volumeViewShown || cellViewShown
+  const narrowWindowShown =
+    narrowScreen &&
+    ((shellPanelAvailability.embedding && shellPanels.embeddingOpen) ||
+      (plotsAvailable && shellPanels.plotsOpen) ||
+      (queryAvailable && shellPanels.queryOpen))
   const viewerRegion = (
     <section className="viewer-region" aria-labelledby="viewer-heading">
       <h2 id="viewer-heading" className="visually-hidden" tabIndex={-1}>
@@ -5299,6 +5316,7 @@ export function App({ dependencies }: AppProps = {}) {
 
       <div
         className="viewer-tiles"
+        inert={viewerTilesCovered}
         style={
           {
             '--viewer-tile-columns': viewerTileCount === 4 ? 2 : viewerTileCount,
@@ -5306,134 +5324,141 @@ export function App({ dependencies }: AppProps = {}) {
         }
       >
         <div className="viewer-tile viewer-main-tile">
-          <ViewerCore
-            cells={styledOverviewCells}
-            expressionElements={viewerGeneExpressionElements}
-            geneExpressionActive={geneExpressionColorsReady}
-            geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
-            boundaries={expressionStyledBoundaryLayerData}
-            nucleusBoundaries={visibleNucleusBoundaryLayerData}
-            cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
-              showCellBoundaries,
-            )}
-            hoverTooltipsEnabled={showHoverTooltips}
-            overviewCellSourceLabel={
-              platformAdapter.kind === 'h5ad'
-                ? 'H5AD'
-                : platformAdapter.kind === 'visium'
-                  ? 'Visium'
-                  : platformAdapter.kind === 'spatialdata'
-                    ? 'SpatialData'
-                    : platformAdapter.kind === 'atera' ||
-                        platformAdapter.kind === 'merscope'
-                      ? PLATFORM_NAMES[platformAdapter.kind]
-                      : 'Xenium'
-            }
-            gridCells={viewerGridCells}
-            fitGridCells={spatialGridCells}
-            fitImageExtent={imageFitExtent}
-            transcriptAggregateBins={transcriptLayerAggregateBins}
-            transcriptPoints={transcriptLayerPoints}
-            geometricAnnotations={
-              layerVisibility.annotations
-                ? geometricAnnotationLayerData
-                : NO_GEOMETRY_LAYERS
-            }
-            imageLoader={morphologyImage?.loader ?? null}
-            imageChannels={morphologyCanvasChannels}
-            flatImage={flatMorphologyImage}
-            imageOpacity={
-              morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1
-            }
-            cellLayersVisible={layerVisibility.cells}
-            cellFillOpacity={cellFillOpacity}
-            cellPointScale={cellPointScale}
-            cellBoundaryOpacity={
-              // H5AD points have no outline unless the table has label boundaries.
-              platformAdapter.kind === 'h5ad' && !showCellBoundaries
-                ? 0
-                : platformAdapter.kind === 'image'
-                  ? segmentationOutlineOpacity
-                  : cellBoundaryOpacity
-            }
-            pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
-            trueSizePoints={platformAdapter.trueSizePoints}
-            transcriptOpacity={transcriptOpacity}
-            transcriptPointSize={transcriptPointSize}
-            observationColorMode={viewerObservationColorMode}
-            annotationStyleColors={annotationStyleColors}
-            cellMetadataTrack={activeCellMetadataTrack}
-            loadingTasks={loadingTasks}
-            onCancelLoadingTask={handleCancelLoadingTask}
-            legendSections={legendSections}
-            legend={showLegend}
-            showZoomLevel={debugMode}
-            selectionHighlight={selectionHighlight}
-            onClearSelection={handleClearSelection}
-            onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
-            onLegendShowMore={handleLegendShowMore}
-            coordinateUnit={coordinateUnit}
-            measurementEnabled={measurementEnabled}
-            measurementUnit={measurementUnit}
-            measurementResetKey={measurementResetKey}
-            status={loadState.status}
-            imageStatus={viewerImageStatus}
-            boundaryStatus={viewerBoundaryState.status}
-            overviewRenderCellLimit={viewerOverviewRenderCellLimit}
-            movingOverviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
-            clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
-            maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
-            tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
-            roiMode={roiMode}
-            roiSelection={activeRoiSelection}
-            selectionOutlines={viewerSelectionOutlines}
-            magicLensActive={magicLensIsCursorActive}
-            magicLensRadiusMicrometers={magicLensRadiusMicrometers}
-            magicLensStatus={magicLensViewerStatus}
-            magicLensSummary={magicLensViewerSummary}
-            viewResetKey={viewerViewResetKey}
-            focusRequest={spatialFocusRequest}
-            navigationControls={showNavigation}
-            minimap={showMinimap}
-            axes={showAxes}
-            scaleBar={showScaleBar}
-            fitRequestKey={fitRequestKey}
-            onImageTileError={handleImageTileError}
-            onTileCacheEviction={handleTileCacheEviction}
-            onViewportCellCountChange={setViewportCellCount}
-            onViewportChange={handleViewportChange}
-            onTranscriptHover={setHoveredTranscript}
-            onTranscriptClick={handlePinTranscript}
-            onCellClick={handleViewerCellClick}
-            onCellBoundaryClick={handleViewerCellBoundaryClick}
-            onGridCellClick={handleViewerGridCellClick}
-            onRoiComplete={
-              platformAdapter.kind === 'image'
-                ? handleImageRoiComplete
-                : selectionList.onDrawn
-            }
-            onMagicLensMove={handleMagicLensMove}
-            onMagicLensLeave={handleMagicLensLeave}
-            linkedView={linkedViewChannel}
-            {...(viewerInitialView === undefined
-              ? {}
-              : { initialViewStateOverride: viewerInitialView })}
-            {...(loadState.status === 'error'
-              ? { errorMessage: formatStructuredError(loadState.error) }
-              : {})}
-            {...(viewerImageError === null
-              ? {}
-              : { imageErrorMessage: formatStructuredError(viewerImageError) })}
-            {...(viewerMicrometersPerPixel === undefined
-              ? {}
-              : {
-                  micrometersPerPixel: viewerMicrometersPerPixel,
-                })}
-            physicalUnitLabel={dataUnitLabel}
-            {...(viewerBoundaryState.status === 'error'
-              ? { boundaryErrorMessage: formatStructuredError(viewerBoundaryState.error) }
-              : {})}
-          />
+          <div className="viewer-core-layer" inert={viewerCoreCovered}>
+            <ViewerCore
+              keyboardFocusable={!narrowWindowShown}
+              cells={styledOverviewCells}
+              expressionElements={viewerGeneExpressionElements}
+              geneExpressionActive={geneExpressionColorsReady}
+              geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
+              boundaries={expressionStyledBoundaryLayerData}
+              nucleusBoundaries={visibleNucleusBoundaryLayerData}
+              cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
+                showCellBoundaries,
+              )}
+              hoverTooltipsEnabled={showHoverTooltips}
+              overviewCellSourceLabel={
+                platformAdapter.kind === 'h5ad'
+                  ? 'H5AD'
+                  : platformAdapter.kind === 'visium'
+                    ? 'Visium'
+                    : platformAdapter.kind === 'spatialdata'
+                      ? 'SpatialData'
+                      : platformAdapter.kind === 'atera' ||
+                          platformAdapter.kind === 'merscope'
+                        ? PLATFORM_NAMES[platformAdapter.kind]
+                        : 'Xenium'
+              }
+              gridCells={viewerGridCells}
+              fitGridCells={spatialGridCells}
+              fitImageExtent={imageFitExtent}
+              transcriptAggregateBins={transcriptLayerAggregateBins}
+              transcriptPoints={transcriptLayerPoints}
+              geometricAnnotations={
+                layerVisibility.annotations
+                  ? geometricAnnotationLayerData
+                  : NO_GEOMETRY_LAYERS
+              }
+              imageLoader={morphologyImage?.loader ?? null}
+              imageChannels={morphologyCanvasChannels}
+              flatImage={flatMorphologyImage}
+              imageOpacity={
+                morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1
+              }
+              cellLayersVisible={layerVisibility.cells}
+              cellFillOpacity={cellFillOpacity}
+              cellPointScale={cellPointScale}
+              cellBoundaryOpacity={
+                // H5AD points have no outline unless the table has label boundaries.
+                platformAdapter.kind === 'h5ad' && !showCellBoundaries
+                  ? 0
+                  : platformAdapter.kind === 'image'
+                    ? segmentationOutlineOpacity
+                    : cellBoundaryOpacity
+              }
+              pointSizeFullViewScale={platformAdapter.pointSizeFullViewScale}
+              trueSizePoints={platformAdapter.trueSizePoints}
+              transcriptOpacity={transcriptOpacity}
+              transcriptPointSize={transcriptPointSize}
+              observationColorMode={viewerObservationColorMode}
+              annotationStyleColors={annotationStyleColors}
+              cellMetadataTrack={activeCellMetadataTrack}
+              loadingTasks={loadingTasks}
+              onCancelLoadingTask={handleCancelLoadingTask}
+              legendSections={legendSections}
+              legend={showLegend}
+              showZoomLevel={debugMode}
+              selectionHighlight={selectionHighlight}
+              onClearSelection={handleClearSelection}
+              onLegendCategoryVisibilityChange={handleLegendCategoryVisibilityChange}
+              onLegendShowMore={handleLegendShowMore}
+              coordinateUnit={coordinateUnit}
+              measurementEnabled={measurementEnabled}
+              measurementUnit={measurementUnit}
+              measurementResetKey={measurementResetKey}
+              status={loadState.status}
+              imageStatus={viewerImageStatus}
+              boundaryStatus={viewerBoundaryState.status}
+              overviewRenderCellLimit={viewerOverviewRenderCellLimit}
+              movingOverviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
+              clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
+              maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
+              tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}
+              roiMode={roiMode}
+              roiSelection={activeRoiSelection}
+              selectionOutlines={viewerSelectionOutlines}
+              magicLensActive={magicLensIsCursorActive}
+              magicLensRadiusMicrometers={magicLensRadiusMicrometers}
+              magicLensStatus={magicLensViewerStatus}
+              magicLensSummary={magicLensViewerSummary}
+              viewResetKey={viewerViewResetKey}
+              focusRequest={spatialFocusRequest}
+              navigationControls={showNavigation}
+              minimap={showMinimap}
+              axes={showAxes}
+              scaleBar={showScaleBar}
+              fitRequestKey={fitRequestKey}
+              onImageTileError={handleImageTileError}
+              onTileCacheEviction={handleTileCacheEviction}
+              onViewportCellCountChange={setViewportCellCount}
+              onViewportChange={handleViewportChange}
+              onTranscriptHover={setHoveredTranscript}
+              onTranscriptClick={handlePinTranscript}
+              onCellClick={handleViewerCellClick}
+              onCellBoundaryClick={handleViewerCellBoundaryClick}
+              onGridCellClick={handleViewerGridCellClick}
+              onRoiComplete={
+                platformAdapter.kind === 'image'
+                  ? handleImageRoiComplete
+                  : selectionList.onDrawn
+              }
+              onMagicLensMove={handleMagicLensMove}
+              onMagicLensLeave={handleMagicLensLeave}
+              linkedView={linkedViewChannel}
+              {...(viewerInitialView === undefined
+                ? {}
+                : { initialViewStateOverride: viewerInitialView })}
+              {...(loadState.status === 'error'
+                ? { errorMessage: formatStructuredError(loadState.error) }
+                : {})}
+              {...(viewerImageError === null
+                ? {}
+                : { imageErrorMessage: formatStructuredError(viewerImageError) })}
+              {...(viewerMicrometersPerPixel === undefined
+                ? {}
+                : {
+                    micrometersPerPixel: viewerMicrometersPerPixel,
+                  })}
+              physicalUnitLabel={dataUnitLabel}
+              {...(viewerBoundaryState.status === 'error'
+                ? {
+                    boundaryErrorMessage: formatStructuredError(
+                      viewerBoundaryState.error,
+                    ),
+                  }
+                : {})}
+            />
+          </div>
           {volumeViewShown ? (
             <MorphologyVolumeView
               image={morphologyImage}

@@ -317,4 +317,22 @@ describe('Gene picker focus', () => {
     expect(search).toHaveFocus()
     expect(search).toHaveValue('')
   })
+  it('moves from a removed gene to the next one, then to the search (EXP-316)', () => {
+    render(<StatefulPicker />)
+    for (const gene of ['GFAP', 'MBP']) {
+      fireEvent.click(screen.getByRole('button', { name: gene }), { detail: 0 })
+    }
+    const remove = (gene: string) => {
+      const button = screen.getByRole('button', { name: `Remove ${gene}` })
+      button.focus()
+      fireEvent.click(button)
+    }
+
+    remove('GFAP')
+    expect(screen.getByRole('button', { name: 'Remove MBP' })).toHaveFocus()
+
+    remove('MBP')
+    expect(screen.queryByLabelText('Selected genes')).toBeNull()
+    expect(screen.getByLabelText('Gene selection')).toHaveFocus()
+  })
 })

@@ -1,5 +1,6 @@
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   renderHook,
@@ -269,6 +270,37 @@ describe('StartScreen', () => {
 
 // Controls that take themselves away would otherwise leave focus on the page.
 describe('StartScreen focus', () => {
+  it('focuses the address when it comes back with a load error (EXP-316)', () => {
+    renderStartScreen(testDatasetLibraryModel(), {
+      source: 'Dataset overview',
+      code: 'not-found',
+      title: 'Not a web address',
+      message: 'hello world is not a web address.',
+      action: 'Check the address.',
+    })
+
+    expect(screen.getByLabelText('Dataset or image URL')).toHaveFocus()
+  })
+
+  it('leaves focus alone without an error, or when it is elsewhere', () => {
+    renderStartScreen()
+    expect(document.body).toHaveFocus()
+    cleanup()
+
+    const elsewhere = document.createElement('button')
+    document.body.append(elsewhere)
+    elsewhere.focus()
+    renderStartScreen(testDatasetLibraryModel(), {
+      source: 'Dataset overview',
+      code: 'not-found',
+      title: 'Dataset not found',
+      message: 'Nothing answered.',
+      action: 'Check the address.',
+    })
+    expect(elsewhere).toHaveFocus()
+    elsewhere.remove()
+  })
+
   const RUNS: readonly RecentDataset[] = [
     { url: 'https://example.test/run-1', name: 'run-1' },
     { url: 'https://example.test/run-2', name: 'run-2' },

@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -41,13 +42,26 @@ interface StartScreenProps {
 export function StartScreen({ open, library, error }: StartScreenProps) {
   const headingId = useId()
   const { onLoadExamples } = library
+  const sectionRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     onLoadExamples()
   }, [onLoadExamples])
 
+  // The screen leaves while a load runs and comes back with its error, so the
+  // field that was focused has gone: focus its successor, to correct the
+  // address (EXP-316).
+  const focusAddressAfterError = useEffectEvent(() => {
+    const active = document.activeElement
+    if (error === null || (active !== null && active !== document.body)) return
+    sectionRef.current?.querySelector<HTMLElement>('input[name="datasetUrl"]')?.focus()
+  })
+  useEffect(() => {
+    focusAddressAfterError()
+  }, [])
+
   return (
-    <section className="start-screen" aria-labelledby={headingId}>
+    <section ref={sectionRef} className="start-screen" aria-labelledby={headingId}>
       <div className="start-screen-content">
         <header className="start-screen-header">
           <h2 id={headingId}>Open a dataset</h2>

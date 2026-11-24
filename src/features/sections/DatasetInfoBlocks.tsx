@@ -7,6 +7,7 @@ import {
   ErrorSummary,
 } from '../../components/AppStatusPanels'
 import { Disclosure, InfoTip, Select } from '../../components/ui'
+import { useKeepFocus } from '../../components/ui/useKeepFocus'
 import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
 import { isH5Url } from '../store-structure/h5StructureModel'
 import { isParquetUrl } from '../store-structure/parquetStructureModel'
@@ -43,6 +44,10 @@ export function OpenDatasetForm({
   const datasetInputId = useId()
   const morphologyInputId = useId()
   const boundaryLimitInputId = useId()
+  const datasetInputRef = useRef<HTMLInputElement>(null)
+  // Load Dataset turns itself off while the dataset loads; focus goes to the
+  // address.
+  const keepFocus = useKeepFocus(() => datasetInputRef.current)
   const boundaryLimitField = (
     <>
       <div className="ui-label-row">
@@ -60,6 +65,7 @@ export function OpenDatasetForm({
     <form className="dataset-form" noValidate onSubmit={open.onSubmit}>
       <label htmlFor={datasetInputId}>Dataset or image URL</label>
       <input
+        ref={datasetInputRef}
         id={datasetInputId}
         name="datasetUrl"
         type="url"
@@ -98,7 +104,14 @@ export function OpenDatasetForm({
         </Disclosure>
       )}
       <div className="dataset-form-actions">
-        <button type="submit" disabled={open.isLoading} title="Load dataset or image">
+        <button
+          type="submit"
+          disabled={open.isLoading}
+          title="Load dataset or image"
+          onClick={() => {
+            keepFocus()
+          }}
+        >
           {open.isLoading ? 'Loading…' : 'Load Dataset'}
         </button>
         {isZarrStoreUrl(open.datasetUrl) ? (

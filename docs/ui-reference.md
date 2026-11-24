@@ -311,6 +311,14 @@ section. Cells is open at first, or the first section on an image. Sections
 stay mounted while closed, so a gene search survives. `Hide layers (\)` (or
 `\`) collapses the panel to a 40 px strip and gives the canvas the space.
 
+A control that takes itself away or turns itself off hands keyboard focus on
+rather than dropping it to the page (`useKeepFocus`): a selected gene's,
+class's or metadata track's Remove to the next one's, or the last one's, then
+to the gene search or the Clusters heading once none is left;
+`Load Annotations` while it loads and `Clear Annotations` to
+`Annotation set`; and `Load Dataset` while the dataset loads to the address
+field.
+
 | Section             | Shown for     | Header state                                         | The checkbox hides                                      |
 | ------------------- | ------------- | ---------------------------------------------------- | ------------------------------------------------------- |
 | Image               | All           | "3 of 27 channels · z 8 of 15 · +1 layer", or "80%"  | The image and custom layers                             |
@@ -1165,6 +1173,14 @@ How pictures work ([plan 23-D10 to 23-D12](plan/phases/23-cell-query.md#product-
   their own.
 
 ## Canvas
+
+Whatever covers the 2D view takes it out of the Tab order and out of reach
+(`inert`): the start screen, the section stack and the expanded collection
+grid cover every tile, and the image's or the cells' 3D view the main one.
+Under 860 px an open window spans the view, which is then no Tab stop but can
+still be dragged where it shows. `Dismiss` on an error banner moves focus to
+the view, and the start screen, back with a load error, focuses its address
+field.
 
 ### 3D View
 

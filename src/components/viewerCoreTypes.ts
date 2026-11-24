@@ -40,6 +40,8 @@ export interface ViewerCoreProps {
   readonly nucleusBoundaries?: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled?: boolean
   readonly hoverTooltipsEnabled?: boolean
+  // False leaves the view out of the Tab order, as when a window covers it.
+  readonly keyboardFocusable?: boolean
   readonly overviewCellSourceLabel?: string
   // Grid bins (Visium HD), as columns.
   readonly gridCells?: GridCellColumns
