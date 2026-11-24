@@ -1788,7 +1788,7 @@ test('shows a MERSCOPE .vzg stain and switches it off @smoke', async ({ page }) 
   await expectLogEntry(page, /Morphology image ready/, { timeout: H5AD_LOAD_TIMEOUT_MS })
   const image = await openControls(page, 'image')
   await expect(image.getByTitle('MERSCOPE stain to show')).toHaveValue('DAPI')
-  await expect(image.getByTitle('MERSCOPE z plane to show')).toContainText('z3 (19 KB)')
+  await expect(image.getByTitle('MERSCOPE z plane to show')).toContainText('z3 (19 KiB)')
   await expect(image.getByLabel('Image channels')).toContainText('DAPI')
 
   await image.getByTitle('MERSCOPE stain to show').selectOption('')

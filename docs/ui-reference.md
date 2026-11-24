@@ -446,7 +446,9 @@ Loaded state:
   every class unchecked, all cells fade. Visium spots hidden off the tissue
   are not counted, here or in the legend.
 - **Metadata tracks**: every track, with its label, cell count, range, and
-  `x` (the panel scrolls, not the list).
+  `x` (the panel scrolls, not the list). A range, here and in
+  `Metadata track`, has three significant digits below 1,000 and whole
+  numbers above ("503-12,346").
 
 **Advanced**: `Expression detail`, a select of **Auto LOD**, Exact region and
 All cells.

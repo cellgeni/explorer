@@ -62,6 +62,11 @@ describe('store structure model', () => {
     expect(formatShape([3, 21_571, 19_505])).toBe('3 × 21,571 × 19,505')
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(1_260_000_000)).toBe('1.26 GB')
+    // Rounded before the unit is picked, never "1,000 KB".
+    expect(formatBytes(999_400)).toBe('999 KB')
+    expect(formatBytes(999_999)).toBe('1 MB')
+    expect(formatBytes(999_600_000)).toBe('1 GB')
+    expect(formatBytes(999)).toBe('999 B')
   })
 
   it("names a node's role from its attributes", () => {
