@@ -39,7 +39,17 @@ export function geneScalePercentile(range: GeneScaleRange): number {
 
 // `autoTop` is the data's top at the range's percentile.
 export function geneScaleBounds(range: GeneScaleRange, autoTop: number): GeneScaleBounds {
-  return { min: range.min ?? 0, max: typeof range.max === 'number' ? range.max : autoTop }
+  const max = typeof range.max === 'number' ? range.max : autoTop
+
+  return { min: geneScaleBottom(range.min, max), max }
+}
+
+// The bottom of a scale topping out at `max`: the set one, unless it is not
+// below `max`, then Auto's 0. A bottom kept from another gene or dataset can
+// sit above this one's top, which would leave no range; it applies again
+// where it fits.
+export function geneScaleBottom(min: number | null, max: number): number {
+  return min !== null && min < max ? min : 0
 }
 
 // "95th", "99.5th", "1st".
@@ -102,7 +112,9 @@ export function geneScoreSpread(
     }
   }
 
-  const rank = Math.max(1, Math.ceil((percentile / 100) * count))
+  // Less a hair, as the product can land just above a whole rank: 0.999 * 1000
+  // is 999.0000000000001 in floating point.
+  const rank = Math.max(1, Math.ceil((percentile * count) / 100 - 1e-9))
 
   return { top: selectKth(positive, rank - 1), highest }
 }
@@ -172,7 +184,8 @@ export function parseGeneScaleRange(
   const max = parseGeneScalePercentile(maxPart) ?? parseGeneScaleScore(maxPart)
 
   if (min === undefined || max === undefined) return undefined
-  if (typeof min === 'number' && typeof max === 'number' && max <= min) return undefined
+  // A top at or below the bottom, which is 0 on Auto, leaves no range.
+  if (typeof max === 'number' && max <= (min ?? 0)) return undefined
 
   return { min, max }
 }

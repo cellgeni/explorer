@@ -157,7 +157,9 @@ export function CollectionBar({
   // where a gene is high within each section.
   const sharedScale = typeof scaleRange.max === 'number'
   const scalePercentile = geneScalePercentile(scaleRange)
-  const { min: scaleMin, max: sharedScaleMax } = geneScaleBounds(scaleRange, 0)
+  // Each preview leaves out a set bottom that is not below its own top.
+  const scaleMin = scaleRange.min ?? 0
+  const { max: sharedScaleMax } = geneScaleBounds(scaleRange, 0)
   // Each preview's top as drawn, for its label.
   const [drawnTops, setDrawnTops] = useState<ReadonlyMap<string, number>>(() => new Map())
   const reportDrawnTop = useCallback((url: string, top: number) => {

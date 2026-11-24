@@ -35,7 +35,7 @@ export function geneExpressionElementsToLayerData(
 
   const scores = geneExpressionScores(elements, genes, scoreMode, options.cellCount)
   const scaleMin = options.scaleMin ?? 0
-  const scaleMax = expressionScoreScaleMax(scores, options.scaleMax)
+  const scaleMax = expressionScoreScaleMax(scores, scaleMin, options.scaleMax)
 
   const layerData = elements.map((element, index): OverviewCellDatum => {
     const score = scores[index] ?? 0
@@ -81,6 +81,7 @@ export function styleGeneExpressionElementsByScale(
   const scaleMin = options.scaleMin ?? 0
   const scaleMax = expressionScoreScaleMax(
     elements.map((element) => element.expressionCount ?? 0),
+    scaleMin,
     options.scaleMax,
   )
 
@@ -377,15 +378,19 @@ export function nonFiniteScoreCount(scores: Iterable<number | undefined>): numbe
   return count
 }
 
-// The score at the top of the scale: the given one, or the highest score.
+// The score at the top of the scale: the given one where it is above the
+// bottom, which a typed top below 0 can be, else the highest score, else one
+// above the bottom. Auto gives 0 where no cell scores above 0.
 function expressionScoreScaleMax(
   scores: readonly number[],
+  scaleMin: number,
   scaleMax: number | undefined,
 ): number {
-  const maxScore =
-    scaleMax === undefined || scaleMax <= 0 ? maxExpressionScore(scores) : scaleMax
+  if (scaleMax !== undefined && scaleMax > scaleMin) return scaleMax
 
-  return maxScore > 0 ? maxScore : 1
+  const maxScore = maxExpressionScore(scores)
+
+  return maxScore > scaleMin ? maxScore : scaleMin + 1
 }
 
 function maxExpressionScore(scores: readonly number[]): number {

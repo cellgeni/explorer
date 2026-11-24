@@ -439,8 +439,10 @@ How defaults combine with other settings:
 - `geneRange` is in the units of the selected `Combine genes` score, so a
   range set for `sum` does not suit `mean` or `z-score`. An Auto end is 0 at
   the bottom and, at the top, the 99th percentile of the scores above 0. Its
-  max must be above its min, or the load stops; `[0, null]` fixes only the
-  bottom.
+  max must be above its min, and above 0 when the min is Auto, or the load
+  stops; `[0, null]` fixes only the bottom. Where a set min is not below the
+  top that Auto or a percentile gives, for a gene or section, the scale runs
+  from 0 there instead.
 - A percentile max, such as `[null, "p95"]`, follows the data like Auto but
   at that percentile: each dataset gets its own top, the 95th percentile of
   its selected genes' scores above 0, and cells above it get the top colour.

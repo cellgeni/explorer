@@ -92,6 +92,32 @@ describe('Gene scale range', () => {
     expect(screen.getByLabelText('Gene scale minimum')).toHaveValue(0)
   })
 
+  it('says when a kept bottom is not below this top', () => {
+    // Set to 3 on another gene; this one tops out at 1.5, so the scale runs
+    // from 0.
+    renderScale({
+      scaleRange: { min: 3, max: null },
+      scaleMin: 0,
+      scaleMax: 1.5,
+      autoScaleMax: 1.5,
+    })
+
+    const min = screen.getByLabelText('Gene scale minimum')
+    expect(min).toHaveValue(0)
+    expect(min.closest('.gene-scale-end')).not.toHaveClass('is-set')
+    expect(min).toHaveAttribute(
+      'title',
+      'Score at the bottom of the scale: 0, as the bottom set, 3, is not below the top. Cells at or below it get the first colour. Type a score and press Enter to change it',
+    )
+  })
+
+  it('shows small ends to two significant digits', () => {
+    renderScale({ scaleMax: 0.0048, autoScaleMax: 0.0048, highestScore: 0.0123 })
+
+    expect(screen.getByLabelText('Gene scale maximum')).toHaveValue(0.0048)
+    expect(screen.getByLabelText('Gene scale range')).toHaveTextContent('0.0012')
+  })
+
   it('resets both ends to Auto', () => {
     const colour = renderScale({
       scaleRange: { min: 2, max: 20 },
