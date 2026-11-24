@@ -102,4 +102,26 @@ describe('mapWithConcurrency', () => {
 
     await expect(result).rejects.toBe(failure)
   })
+
+  it('starts no task after one fails', async () => {
+    const items = Array.from({ length: 20 }, (_value, index) => index)
+    const gates = items.map(() => deferred<number>())
+    const started: number[] = []
+    const result = mapWithConcurrency(items, 2, (item) => {
+      started.push(item)
+      return gates[item]!.promise
+    })
+
+    await settle()
+    expect(started).toEqual([0, 1])
+
+    const failure = new Error('chunk 1 failed')
+    gates[1]!.reject(failure)
+    await expect(result).rejects.toBe(failure)
+
+    // The task in flight finishes; nothing starts after it.
+    gates[0]!.resolve(0)
+    await settle()
+    expect(started).toEqual([0, 1])
+  })
 })

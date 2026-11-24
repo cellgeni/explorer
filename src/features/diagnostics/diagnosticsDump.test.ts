@@ -160,6 +160,28 @@ describe('createDiagnosticsDump', () => {
     })
   })
 
+  it('keeps every value of a repeated parameter when one is signed', () => {
+    const signed = 'https://bucket.s3.amazonaws.com/he.ome.tif?X-Amz-Signature=c0ffee'
+    const hash = new URLSearchParams([
+      ['dataset', 'https://example.test/output'],
+      ['customImageUrl', 'https://example.test/dapi.ome.tif'],
+      ['customImageUrl', signed],
+      ['customImageUrl', 'https://example.test/cd45.ome.tif'],
+    ])
+    window.history.pushState(null, '', `/viewer#${hash.toString()}`)
+
+    const location = String(createDiagnosticsDump(DUMP_OPTIONS).location)
+    const params = new URLSearchParams(location.slice(location.indexOf('#') + 1))
+
+    expect(location).not.toContain('X-Amz-Signature')
+    expect(params.get('dataset')).toBe('https://example.test/output')
+    expect(params.getAll('customImageUrl')).toEqual([
+      'https://example.test/dapi.ome.tif',
+      'https://bucket.s3.amazonaws.com/he.ome.tif',
+      'https://example.test/cd45.ome.tif',
+    ])
+  })
+
   it('serializes controls, state summaries, transcript inspections, and budget decisions', () => {
     window.history.pushState(null, '', '/viewer?dataset=test')
 

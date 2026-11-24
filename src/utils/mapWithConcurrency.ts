@@ -1,5 +1,7 @@
 // Runs `task` over `items` with at most `concurrency` tasks in flight and
-// returns the results in item order.
+// returns the results in item order. Once a task fails no other starts, so
+// nothing is still being read after the caller sees the failure but the
+// tasks already in flight; it rejects with the first error.
 export async function mapWithConcurrency<Item, Result>(
   items: readonly Item[],
   concurrency: number,
@@ -7,12 +9,19 @@ export async function mapWithConcurrency<Item, Result>(
 ): Promise<Result[]> {
   const results: Result[] = new Array(items.length)
   let next = 0
+  let failed = false
 
   async function worker(): Promise<void> {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const index = next
       next += 1
-      results[index] = await task(items[index] as Item)
+
+      try {
+        results[index] = await task(items[index] as Item)
+      } catch (error) {
+        failed = true
+        throw error
+      }
     }
   }
 

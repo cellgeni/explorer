@@ -249,19 +249,17 @@ function locationWithoutCredentials(href: string | undefined): string | undefine
     return page
   }
 
-  const params = new URLSearchParams(href.slice(hashStart + 1))
-  const signed = [...params].flatMap(([key, value]) => {
-    const { url, signed } = urlWithoutCredentials(value)
-    return signed ? [[key, url] as const] : []
-  })
+  // Parameter by parameter, as `compare=` and `customImageUrl=` repeat.
+  const params = new URLSearchParams()
+  let signed = false
 
-  for (const [key, url] of signed) {
-    params.set(key, url)
+  for (const [key, value] of new URLSearchParams(href.slice(hashStart + 1))) {
+    const cleaned = urlWithoutCredentials(value)
+    signed ||= cleaned.signed
+    params.append(key, cleaned.signed ? cleaned.url : value)
   }
 
-  return signed.length === 0
-    ? `${page}${href.slice(hashStart)}`
-    : `${page}#${params.toString()}`
+  return signed ? `${page}#${params.toString()}` : `${page}${href.slice(hashStart)}`
 }
 
 function summarizeGeneExpressionState(
