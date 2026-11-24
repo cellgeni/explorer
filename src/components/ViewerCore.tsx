@@ -16,6 +16,7 @@ import type { LinkedViewChannel } from './linkedView'
 import { MorphologyCanvas } from './MorphologyCanvas'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import { CloseIcon, FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
+import { useKeepFocus } from './ui/useKeepFocus'
 import { ViewerLegend } from './ViewerLegend'
 import { ViewerSelectionOverlay } from './ViewerSelectionOverlay'
 import { ViewerMinimap } from './ViewerMinimap'
@@ -268,6 +269,7 @@ export function ViewerCore({
   nucleusBoundaries = EMPTY_BOUNDARIES,
   cellBoundaryHoverEnabled = false,
   hoverTooltipsEnabled = true,
+  keyboardFocusable = true,
   overviewCellSourceLabel = 'Xenium',
   gridCells = EMPTY_GRID_CELL_COLUMNS,
   fitGridCells,
@@ -394,6 +396,7 @@ export function ViewerCore({
       nucleusBoundaries={nucleusBoundaries}
       cellBoundaryHoverEnabled={cellBoundaryHoverEnabled}
       hoverTooltipsEnabled={hoverTooltipsEnabled}
+      keyboardFocusable={keyboardFocusable}
       overviewCellSourceLabel={overviewCellSourceLabel}
       gridCells={gridCells}
       viewportCountGridCells={viewFitGridCells}
@@ -489,6 +492,7 @@ interface ViewerSurfaceProps {
   readonly nucleusBoundaries: readonly CellBoundaryDatum[]
   readonly cellBoundaryHoverEnabled: boolean
   readonly hoverTooltipsEnabled: boolean
+  readonly keyboardFocusable: boolean
   readonly overviewCellSourceLabel: string
   readonly gridCells: GridCellColumns
   readonly viewportCountGridCells: GridCellColumns
@@ -582,6 +586,7 @@ function ViewerSurface({
   nucleusBoundaries,
   cellBoundaryHoverEnabled,
   hoverTooltipsEnabled,
+  keyboardFocusable,
   overviewCellSourceLabel,
   gridCells,
   viewportCountGridCells,
@@ -662,6 +667,8 @@ function ViewerSurface({
   onMagicLensLeave,
 }: ViewerSurfaceProps) {
   const frameRef = useRef<HTMLDivElement>(null)
+  // Dismiss takes its banner away; focus goes to the view.
+  const keepFocusOnDismiss = useKeepFocus(() => frameRef.current)
   const keyboardHelpId = useId()
   const [viewport, setViewport] = useState<CssViewportSize>({
     width: 0,
@@ -2228,7 +2235,7 @@ function ViewerSurface({
         aria-label="Spatial viewer canvas area"
         aria-describedby={keyboardHelpId}
         aria-keyshortcuts="ArrowUp ArrowDown ArrowLeft ArrowRight + - Home Enter"
-        tabIndex={0}
+        tabIndex={keyboardFocusable ? 0 : -1}
         onKeyDown={handleKeyboardNavigation}
         onPointerMove={handleMouseCoordinatePointerMove}
         onPointerLeave={handlePointerLeave}
@@ -2447,6 +2454,7 @@ function ViewerSurface({
                 title="Dismiss"
                 icon={<CloseIcon />}
                 onClick={() => {
+                  keepFocusOnDismiss()
                   setDismissedViewportError(viewportMessage.text)
                 }}
               />

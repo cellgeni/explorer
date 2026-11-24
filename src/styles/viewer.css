@@ -55,6 +55,12 @@
   border-color: var(--accent-border);
 }
 
+/* Holds the 2D view, to make it inert under a 3D view (App.tsx); no box of
+   its own. */
+.viewer-core-layer {
+  display: contents;
+}
+
 .viewer-tile-name {
   min-width: 0;
   overflow: hidden;

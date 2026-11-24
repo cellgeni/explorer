@@ -8,6 +8,11 @@ import {
   type FormEvent,
 } from 'react'
 import { EyeIcon, EyeOffIcon, IconButton, Select } from '../../components/ui'
+import {
+  focusedIndexAmong,
+  nthOrLast,
+  useKeepFocus,
+} from '../../components/ui/useKeepFocus'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
   ALL_ANNOTATION_GROUP_ID,
@@ -50,6 +55,9 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
   const groupInputId = useId()
   const importInputId = useId()
   const importUrlInputId = useId()
+  const groupSelectRef = useRef<HTMLSelectElement>(null)
+  // Load and Clear turn themselves off; focus goes to the set choice.
+  const keepFocus = useKeepFocus(() => groupSelectRef.current)
 
   if (!sets.available) {
     return null
@@ -76,6 +84,7 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
     <>
       <label htmlFor={groupInputId}>Annotation set</label>
       <select
+        ref={groupSelectRef}
         id={groupInputId}
         value={sets.selectedGroupId}
         disabled={!loadEnabled}
@@ -117,7 +126,10 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
         className="secondary-action"
         disabled={loadDisabled}
         title="Load annotations"
-        onClick={sets.onLoad}
+        onClick={() => {
+          keepFocus()
+          sets.onLoad()
+        }}
       >
         {state.status === 'loading' ? 'Loading…' : 'Load Annotations'}
       </button>
@@ -126,7 +138,10 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
         className="secondary-action"
         disabled={!sets.canClear}
         title="Clear annotations"
-        onClick={sets.onClear}
+        onClick={() => {
+          keepFocus()
+          sets.onClear()
+        }}
       >
         Clear Annotations
       </button>
@@ -208,6 +223,14 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
 
 // The loaded labels, one list per annotation set.
 export function AnnotationLabelLists({ sets }: { readonly sets: AnnotationSetsModel }) {
+  // A class's Remove hands focus to the next class's, or the Clusters
+  // heading once none is left.
+  const keepFocus = useKeepFocus(
+    (index) =>
+      nthOrLast(document.querySelectorAll<HTMLElement>(CLASS_REMOVE), index) ??
+      clustersHeading(),
+  )
+
   if (sets.state.status !== 'ready' || sets.state.annotations.length === 0) {
     return null
   }
@@ -224,9 +247,19 @@ export function AnnotationLabelLists({ sets }: { readonly sets: AnnotationSetsMo
       onAnnotationSetVisibilityChange={sets.onSetVisibilityChange}
       onAnnotationVisibilityChange={sets.onVisibilityChange}
       onAnnotationsVisibilityChange={sets.onManyVisibilityChange}
-      onRemoveAnnotation={sets.onRemove}
+      onRemoveAnnotation={(annotationId) => {
+        keepFocus(focusedIndexAmong(document.querySelectorAll(CLASS_REMOVE)))
+        sets.onRemove(annotationId)
+      }}
     />
   )
+}
+
+const CLASS_REMOVE = '.annotation-sets .annotation-remove'
+const TRACK_REMOVE = '.metadata-track-list .annotation-remove'
+
+function clustersHeading(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-layer-anchor="clusters"]')
 }
 
 export function MetadataTracksPanel({
@@ -234,6 +267,14 @@ export function MetadataTracksPanel({
 }: {
   readonly metadataTracks: MetadataTracksModel
 }) {
+  // A track's Remove hands focus to the next track's, or the Clusters
+  // heading once none is left.
+  const keepFocus = useKeepFocus(
+    (index) =>
+      nthOrLast(document.querySelectorAll<HTMLElement>(TRACK_REMOVE), index) ??
+      clustersHeading(),
+  )
+
   if (tracks.length === 0) {
     return null
   }
@@ -247,7 +288,10 @@ export function MetadataTracksPanel({
       <MetadataTrackList
         tracks={tracks}
         elementNoun={elementNoun}
-        onRemoveCellMetadataTrack={onRemove}
+        onRemoveCellMetadataTrack={(trackId) => {
+          keepFocus(focusedIndexAmong(document.querySelectorAll(TRACK_REMOVE)))
+          onRemove(trackId)
+        }}
       />
     </section>
   )

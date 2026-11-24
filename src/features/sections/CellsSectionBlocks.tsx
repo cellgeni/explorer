@@ -12,6 +12,7 @@ import {
   cellPointScaleStepIndex,
 } from '../../rendering/cellPointStyle'
 import { opacityToPercent } from '../../rendering/layerOpacity'
+import { nthOrLast, useKeepFocus } from '../../components/ui/useKeepFocus'
 import { Button, Chip, InfoTip, NumberField, Segmented } from '../../components/ui'
 import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
@@ -225,6 +226,16 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
     unnamedSetName,
   } = useGeneSetControls(genes)
   const searchRef = useRef<HTMLInputElement>(null)
+  const chipRowRef = useRef<HTMLDivElement>(null)
+  // A chip's Remove hands focus to the next chip's, or the search field
+  // once none is left.
+  const keepFocus = useKeepFocus(
+    (index) =>
+      nthOrLast(
+        chipRowRef.current?.querySelectorAll<HTMLElement>('.ui-chip-remove'),
+        index,
+      ) ?? searchRef.current,
+  )
   const isPanelReady = genes.panelState.status === 'ready'
   const selectedGenes = genes.selected
   const selectedGeneSet = new Set(selectedGenes)
@@ -248,14 +259,20 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
       />
 
       {selectedGenes.length === 0 ? null : (
-        <div className="gene-chip-row" role="group" aria-label="Selected genes">
-          {selectedGenes.map((gene) => (
+        <div
+          ref={chipRowRef}
+          className="gene-chip-row"
+          role="group"
+          aria-label="Selected genes"
+        >
+          {selectedGenes.map((gene, index) => (
             <Chip
               key={gene}
               title={gene}
               selected
               removeTitle={`Remove ${gene}`}
               onRemove={() => {
+                keepFocus(index)
                 genes.onToggle(gene)
               }}
             >

@@ -202,6 +202,30 @@ describe('ViewerCore', () => {
     expect(screen.getByText('HTTP 500 response: HTTP 500')).toBeInTheDocument()
   })
 
+  it('moves focus from Dismiss, which goes with its banner, to the view (EXP-316)', () => {
+    render(
+      <ViewerCore
+        imageStatus="error"
+        imageErrorMessage="Network request failed: Failed to fetch"
+      />,
+    )
+    const dismiss = screen.getByRole('button', { name: 'Dismiss' })
+    dismiss.focus()
+    fireEvent.click(dismiss)
+
+    expect(dismiss).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Spatial viewer canvas area' })).toHaveFocus()
+  })
+
+  it('leaves the view out of the Tab order while something covers it (EXP-317)', () => {
+    const { rerender } = render(<ViewerCore />)
+    const frame = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+    expect(frame).toHaveAttribute('tabindex', '0')
+
+    rerender(<ViewerCore keyboardFocusable={false} />)
+    expect(frame).toHaveAttribute('tabindex', '-1')
+  })
+
   it('renders grid-cell polygons without overview cells', () => {
     render(<ViewerCore gridCells={gridCellColumns()} />)
 
