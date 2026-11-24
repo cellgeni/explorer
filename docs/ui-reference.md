@@ -222,7 +222,14 @@ wide each shows its icon and name; between 860 and 1100 px only the icon,
 with the name still read and in the tooltip. Under 860 px they fold into a
 menu (see [Narrow Screens](#narrow-screens)). Until 2026-11-19 they were
 Cells › Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the
-genes and clusters.
+genes and clusters. A window the open dataset lacks closes, so a dataset
+opened later does not open it.
+
+A tool that cannot be used says why in its tooltip: "Open a dataset", "The
+dataset is still opening" while the first dataset opens, or for Box and Lasso
+"The dataset is still preparing". Help lists the keys in three groups: Tools,
+View (`F`, `\`, `?`, anywhere but in a text field), and In the view (arrows,
+`+` `-`, `Home`, `Enter`), which need the view focused.
 
 The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
 leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in
@@ -1767,7 +1774,7 @@ page with that link too.
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names, when it first opens. A dataset opened after it, or the same one loaded again, starts fitted to its extent                                                                                                                                                                                                                        |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens`                                                 |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                              |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open, even after others were opened and closed; only what the dataset has; `panel=info` is the drawer with every section closed                         |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                                                                       |
 | `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                                                                               |
 | `query`                                                                                                   | Cell Query's conditions, `;`-separated: column, operator and values joined by `\|`; class IDs joined by `,`, or the bounds. `%`, `;`, `\|`, `,` in a part are `%25`, `%3B`, `%7C`, `%2C`. Image columns are `image:{mean or above}:{level}:[z{plane}:][t{threshold}:][r{radius}:]{channel}`, such as `image:above:2:t2188:Channel:0\|at-least\|40`, and are measured as the link opens |

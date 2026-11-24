@@ -352,6 +352,15 @@ describe('TopBar', () => {
     const help = screen.getByRole('dialog', { name: 'Help' })
     expect(within(help).getByText('Show or hide this help')).toBeInTheDocument()
     expect(within(help).getByText('Fit the data to the view')).toBeInTheDocument()
+    // The view's own keys need it focused, and Help says so.
+    const inView = within(help).getByRole('region', { name: 'In the view shortcuts' })
+    expect(inView).toHaveTextContent('With the view focused')
+    expect(within(inView).getByText('Zoom in or out')).toBeInTheDocument()
+    expect(
+      within(within(help).getByRole('region', { name: 'View shortcuts' })).queryByText(
+        'Zoom in or out',
+      ),
+    ).toBeNull()
     const guides = within(help).getByRole('navigation', { name: 'Guides' })
     expect(within(guides).getByRole('link', { name: 'User guide' })).toHaveAttribute(
       'href',

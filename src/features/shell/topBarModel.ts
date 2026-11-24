@@ -96,14 +96,20 @@ export function datasetSummaryText({
 
 export function toolOptions({
   datasetReady,
+  datasetOpening = false,
   canDrawRoi,
   magicLens,
 }: {
   readonly datasetReady: boolean
+  // The first dataset is opening: the tools wait for it rather than for one
+  // to be opened.
+  readonly datasetOpening?: boolean
   readonly canDrawRoi: boolean
   // Null where the platform has no Magic Lens (images).
   readonly magicLens: { readonly enabled: boolean; readonly reason?: string } | null
 }): readonly ToolOption[] {
+  const noDataset = datasetOpening ? 'The dataset is still opening' : 'Open a dataset'
+
   return TOOL_ORDER.flatMap((tool): ToolOption[] => {
     const base = { tool, label: TOOL_LABELS[tool], shortcut: TOOL_SHORTCUT_KEYS[tool] }
 
@@ -118,16 +124,14 @@ export function toolOptions({
             : {
                 ...base,
                 disabled: true,
-                reason: datasetReady
-                  ? 'The dataset is still preparing'
-                  : 'Open a dataset',
+                reason: datasetReady ? 'The dataset is still preparing' : noDataset,
               },
         ]
       case 'measure':
         return [
           datasetReady
             ? { ...base, disabled: false }
-            : { ...base, disabled: true, reason: 'Open a dataset' },
+            : { ...base, disabled: true, reason: noDataset },
         ]
       case 'magic-lens':
         if (magicLens === null) return []
@@ -137,7 +141,7 @@ export function toolOptions({
             : {
                 ...base,
                 disabled: true,
-                reason: magicLens.reason ?? 'Open a dataset',
+                reason: magicLens.reason ?? noDataset,
               },
         ]
     }
@@ -202,6 +206,7 @@ export function useTopBarModel({
 }: TopBarModelInput): TopBarModel {
   const options = toolOptions({
     datasetReady: datasetName !== null,
+    datasetOpening: datasetName === null && loadingDatasetName !== null,
     canDrawRoi,
     magicLens: magicLensAvailable
       ? {

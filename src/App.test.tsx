@@ -278,6 +278,57 @@ describe('App', () => {
     )
   })
 
+  it('leaves windows a Visium HD dataset lacks out of its link (EXP-277)', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&panel=cells%2Cplots%2Cquery`,
+    )
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview: visiumOverviewFixture(),
+      overrides: {
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M', 'GAD1'],
+          cells: new Map([['BC-1', { geneNames: ['A2M', 'GAD1'], counts: [7, 2] }]]),
+        })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+
+      await waitFor(
+        () => {
+          expect(document.querySelector('.shell-summary')?.textContent).toMatch(
+            /^Visium HD ·/,
+          )
+        },
+        { timeout: 8_000 },
+      )
+      // Rewritten for the open dataset: a rewritten link has cellBounds.
+      await waitFor(
+        () => {
+          expect(window.location.hash).toContain('cellBounds=')
+        },
+        { timeout: 8_000 },
+      )
+      // Only the default section was open, so panel= is left out.
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('panel')).toBeNull()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('hides transcript controls, Plots and Query for Visium HD datasets', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(
