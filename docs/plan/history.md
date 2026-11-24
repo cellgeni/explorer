@@ -42,6 +42,12 @@ records except these:
   `UNIFIED_PLAN.md`.
 - Code comments that cited `UNIFIED_PLAN.md, 15.2-A` now cite `plan 15.2-A`.
 
+From 2026-11-19 to 2026-11-24 a code review in ten passes read every source
+file. Its 332 findings were fixed or closed in 207 tasks, almost all one PR
+each (#203 to #424). It is recorded under the
+[feature-fix pass](phases/feature-fix-pass.md#code-review-2026-11-19-to-2026-11-24);
+afterwards every open item was checked again against `24f0fd2`.
+
 ## Starting Point: The Proof Of Concept
 
 The POC in `old/` (vanilla JS and CDN deck.gl: `main.js`, `gex.js`, `quack.js`,

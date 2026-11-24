@@ -85,9 +85,11 @@ instead of extending cell-ID annotations. Shipped on 2026-07-09 (`f7ff9c5`,
 - [x] A failed GeoJSON import logs "GeoJSON annotation import failed" without
       the reason. Fixed 2026-11-12: a message under `Import GeoJSON` gives the
       file name and the reason (not JSON, wrong geometry, or no polygons).
-- [ ] `id` and `visible` properties are not imported, and shapes are not saved
-      in the shareable URL.
-- [ ] No E2E coverage for image-only sources.
+- [ ] The `visible` property is not imported, and shapes are not saved in
+      the shareable URL. A feature's `id` is kept as its object ID and
+      exported again since #288 (2026-11-22).
+- [ ] No E2E test of GeoJSON import or export. Smoke tests load OME-TIFF
+      images and a plain TIFF with a label mask (#193, #205, #234, #255).
 
 ## Closed Open Items
 
