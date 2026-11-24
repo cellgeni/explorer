@@ -24,14 +24,30 @@ type DatasetDiagnosticsDiagnosticState =
 
 interface TranscriptDiagnosticLayerState {
   readonly status: string
+  readonly url?: string
   readonly visibleTranscriptEstimate?: number
   readonly exactLoadEstimate?: number
   readonly exactLoadRequestKey?: string
   readonly message?: string
   readonly points?: readonly unknown[]
+  readonly groups?: readonly unknown[]
   readonly hitPointLimit?: boolean
   readonly durationMs?: number
   readonly bins?: readonly unknown[]
+  readonly featureNames?: readonly string[]
+  readonly scaleMax?: number
+  readonly source?: string
+  readonly mode?: string
+  readonly error?: unknown
+  readonly previousLayer?: TranscriptDiagnosticRetainedLayer
+  readonly previousState?: TranscriptDiagnosticLayerState
+}
+
+interface TranscriptDiagnosticRetainedLayer {
+  readonly kind: string
+  readonly points?: readonly unknown[]
+  readonly bins?: readonly unknown[]
+  readonly featureNames?: readonly string[]
   readonly source?: string
 }
 
@@ -159,7 +175,7 @@ export function createDiagnosticsDump(
       ),
       transcripts: {
         capability: options.transcriptCapabilityState,
-        layer: options.transcriptLayerState,
+        layer: summarizeTranscriptLayerState(options.transcriptLayerState),
         exactBudget: summarizeTranscriptExactBudgetDecision(
           options.transcriptLayerState,
           options.transcriptExactPointLimit,
@@ -330,6 +346,47 @@ function summarizeTranscriptInspection(
   }
 
   return null
+}
+
+// The layer by its counts. A ready exact layer holds every drawn point (the
+// exact budget, up to 1,000,000) and a reloading one the points shown before,
+// so the dump says how many, not which.
+function summarizeTranscriptLayerState(
+  state: TranscriptDiagnosticLayerState,
+): Record<string, unknown> {
+  return {
+    status: state.status,
+    url: state.url,
+    message: state.message,
+    source: state.source,
+    mode: state.mode,
+    visibleTranscriptEstimate: state.visibleTranscriptEstimate,
+    exactLoadEstimate: state.exactLoadEstimate,
+    hasExactLoadAction:
+      state.status === 'waiting' ? state.exactLoadRequestKey !== undefined : undefined,
+    featureNames: state.featureNames,
+    scaleMax: state.scaleMax,
+    pointCount: state.points?.length,
+    groupCount: state.groups?.length,
+    binCount: state.bins?.length,
+    hitPointLimit: state.hitPointLimit,
+    durationMs: state.durationMs,
+    error: summarizeUnknownError(state.error),
+    previousLayer:
+      state.previousLayer === undefined
+        ? undefined
+        : {
+            kind: state.previousLayer.kind,
+            source: state.previousLayer.source,
+            featureNames: state.previousLayer.featureNames,
+            pointCount: state.previousLayer.points?.length,
+            binCount: state.previousLayer.bins?.length,
+          },
+    previousState:
+      state.previousState === undefined
+        ? undefined
+        : summarizeTranscriptLayerState(state.previousState),
+  }
 }
 
 function summarizeTranscriptExactBudgetDecision(

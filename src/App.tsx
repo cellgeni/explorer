@@ -35,6 +35,7 @@ import {
   useVisiumHdExpressionProjectionWorkflow,
   type VisiumHdExpressionProjectionState,
 } from './features/genes/useVisiumHdExpressionProjectionWorkflow'
+import { projectedBoundaryCellCount } from './features/genes/visiumHdExpressionProjection'
 import { useAnnotationsSectionModel } from './features/sections/annotationsSectionModel'
 import { useCellsSectionModel } from './features/sections/cellsSectionModel'
 import {
@@ -71,13 +72,16 @@ import type { CellQueryImageChannel } from './features/query/cellQueryImage'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import {
+  availableLayerSections,
   cardForLink,
   cardFromLink,
+  closeUnavailableWindows,
   hiddenLayersForLink,
   defaultExpandedSections,
   panelsForLink,
   panelsFromLink,
   withShellLink,
+  type ShellPanelAvailability,
   type ShellPanelState,
 } from './features/shell/shellLinkModel'
 import {
@@ -228,7 +232,10 @@ import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressi
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
 import { useSelectedGridCellScore } from './features/cells/useSelectedGridCellScore'
-import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
+import {
+  analysisEmbeddingCleared,
+  analysisEmbeddingStatusCopy,
+} from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
@@ -980,9 +987,36 @@ export function App({ dependencies }: AppProps = {}) {
     () => defaultExpandedSections(platformAdapter.capabilities.cells),
     [platformAdapter.capabilities.cells],
   )
+  // The sections and windows the open dataset has. The Plots window (plan
+  // 22) reads each gene across every cell, and Cell Query (plan 23) lists
+  // overview cells; Visium HD has no matrix it reads by gene across every
+  // bin, and its bins are not overview cells, so it has neither.
+  const shellPanelAvailability = useMemo<ShellPanelAvailability>(
+    () => ({
+      sections: availableLayerSections(platformAdapter.capabilities),
+      embedding: platformAdapter.capabilities.cells,
+      plots:
+        platformAdapter.capabilities.cells &&
+        platformAdapter.capabilities.annotations &&
+        platformAdapter.kind !== 'visium-hd',
+      query: platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd',
+    }),
+    [platformAdapter.capabilities, platformAdapter.kind],
+  )
+  // A window the open dataset lacks closes, so a dataset opened later does
+  // not open it (EXP-277).
+  if (loadState.status === 'ready') {
+    const withAvailableWindows = closeUnavailableWindows(
+      shellPanels,
+      shellPanelAvailability,
+    )
+    if (withAvailableWindows !== shellPanels) setShellPanels(withAvailableWindows)
+  }
   const openPanelIds = useMemo(
-    () => panelsForLink(shellPanels, defaultPanelIds) ?? defaultPanelIds,
-    [defaultPanelIds, shellPanels],
+    () =>
+      panelsForLink(shellPanels, defaultPanelIds, shellPanelAvailability) ??
+      defaultPanelIds,
+    [defaultPanelIds, shellPanelAvailability, shellPanels],
   )
   // The start screen (plan 15.3-A) shows until a load starts,
   // unless the link names a dataset or a collection that opens one, and again
@@ -1309,12 +1343,33 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells.length,
   )
   const activeSelectedBoundaryCell = useMemo(() => {
-    return platformActiveBoundaryCell(
+    const cell = platformActiveBoundaryCell(
       platformAdapter,
       selectedBoundaryCell,
       expressionStyledBoundaryLayerData,
     )
-  }, [expressionStyledBoundaryLayerData, platformAdapter, selectedBoundaryCell])
+
+    // Expression is read by bins, which no segmented cell's ID matches, so a
+    // cell's selected-gene score is its share of its bins' counts (EXP-254).
+    if (
+      cell === null ||
+      cell.expressionCount !== undefined ||
+      visiumHdExpressionProjectionState.status !== 'ready'
+    ) {
+      return cell
+    }
+
+    const expressionCount = projectedBoundaryCellCount(
+      visiumHdExpressionProjectionState.batch,
+      cell.id,
+    )
+    return expressionCount === undefined ? cell : { ...cell, expressionCount }
+  }, [
+    expressionStyledBoundaryLayerData,
+    platformAdapter,
+    selectedBoundaryCell,
+    visiumHdExpressionProjectionState,
+  ])
   const viewerMicrometersPerPixel =
     morphologyMicrometersPerPixel ?? flatMorphologyImage?.micrometersPerPixel
   // GeoJSON pixel coordinates are the image's full-resolution pixels, as
@@ -1520,12 +1575,22 @@ export function App({ dependencies }: AppProps = {}) {
     activeSelectedGridCell,
   )
   const embeddingElementLabel = platformAdapter.labels.embeddingElementPlural
-  const embeddingCopy = analysisEmbeddingStatusCopy(
-    analysisEmbeddingState,
-    activeEmbedding,
-    roiCellIds,
-    selectedEmbeddingElementId,
-    embeddingElementLabel,
+  const embeddingCopy = useMemo(
+    () =>
+      analysisEmbeddingStatusCopy(
+        analysisEmbeddingState,
+        activeEmbedding,
+        roiCellIds,
+        selectedEmbeddingElementId,
+        embeddingElementLabel,
+      ),
+    [
+      activeEmbedding,
+      analysisEmbeddingState,
+      embeddingElementLabel,
+      roiCellIds,
+      selectedEmbeddingElementId,
+    ],
   )
   const cellDetailCopy = cellDetailStatusCopy(cellDetailState, selectedCell)
   const selectedCellAnnotationLabels = useMemo(
@@ -2897,7 +2962,18 @@ export function App({ dependencies }: AppProps = {}) {
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
-  }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
+    // A tier's projection names that tier's bins, so it goes with the tier,
+    // and a read for it that has not finished is dropped.
+    invalidateLatestRequest({
+      abortRef: analysisEmbeddingAbortRef,
+      requestIdRef: analysisEmbeddingRequestId,
+    })
+    setAnalysisEmbeddingState(analysisEmbeddingCleared)
+  }, [
+    clearVisiumHdExpressionProfileState,
+    clearVisiumHdRoiState,
+    setAnalysisEmbeddingState,
+  ])
 
   const {
     annotationImportError,
@@ -3457,9 +3533,11 @@ export function App({ dependencies }: AppProps = {}) {
   }, [activeTool, returnToPan])
   const handleRoiModeChange = useCallback(
     (nextMode: RoiDrawMode) => {
-      // Starting a shape clears the measurement line.
+      // Starting a shape clears the measurement line, and leaves the Magic
+      // Lens, as Pan and Measure do: its scan stops and its card goes.
       if (nextMode !== 'idle') {
         setMeasurementResetKey((current) => current + 1)
+        if (activeTool === 'magic-lens') handleMagicLensLeave()
       }
 
       setRoiMode(nextMode)
@@ -3477,7 +3555,14 @@ export function App({ dependencies }: AppProps = {}) {
               : 'ROI lasso mode enabled',
       )
     },
-    [appendDebugEvent, platformAdapter.kind, setMeasurementResetKey, setRoiMode],
+    [
+      activeTool,
+      appendDebugEvent,
+      handleMagicLensLeave,
+      platformAdapter.kind,
+      setMeasurementResetKey,
+      setRoiMode,
+    ],
   )
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =
@@ -4074,8 +4159,8 @@ export function App({ dependencies }: AppProps = {}) {
       ? hiddenAnnotationSetIds
       : (initialShareableState.hiddenAnnotationSetIds ?? hiddenAnnotationSetIds)
   const sharedPanels = useMemo(
-    () => panelsForLink(shellPanels, defaultPanelIds),
-    [defaultPanelIds, shellPanels],
+    () => panelsForLink(shellPanels, defaultPanelIds, shellPanelAvailability),
+    [defaultPanelIds, shellPanelAvailability, shellPanels],
   )
   const sharedHiddenLayers = useMemo(
     () => hiddenLayersForLink(layerVisibility),
@@ -4399,8 +4484,9 @@ export function App({ dependencies }: AppProps = {}) {
             elementCount: loadState.cellCount,
             geneCount:
               genePanelState.status === 'ready' ? genePanelState.genes.length : null,
-            channelCount: morphologyChannels.length,
+            channelCount: morphologyImage?.channelLoaders.length ?? 0,
             zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
+            imageLoading: morphologyState.status === 'loading',
             hasFlatImage: flatMorphologyImage !== null,
             imageSize: datasetImageSize(
               morphologyImage?.loader ?? null,
@@ -4934,7 +5020,7 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     copy: embeddingCopy,
     datasetReady: loadState.status === 'ready',
-    elementLabel: isVisiumHdDataset ? 'bins' : 'cells',
+    elementLabel: embeddingElementLabel,
     onLoad: handleLoadAnalysisEmbeddings,
     onSelectElement: handleEmbeddingElementSelect,
     roiElementIds: roiCellIds,
@@ -4960,13 +5046,7 @@ export function App({ dependencies }: AppProps = {}) {
           },
     [activeSavedSelection, roiCellIds, roiState],
   )
-  // The Plots window (plan 22) reads each gene across every cell. Visium HD
-  // has no matrix it reads by gene across every bin, so the window is hidden
-  // there, as Cell Query is.
-  const plotsAvailable =
-    platformAdapter.capabilities.cells &&
-    platformAdapter.capabilities.annotations &&
-    platformAdapter.kind !== 'visium-hd'
+  const plotsAvailable = shellPanelAvailability.plots
   const plotsDatasetSets = useMemo(
     () =>
       plotDatasetSets(
@@ -5001,9 +5081,8 @@ export function App({ dependencies }: AppProps = {}) {
   })
 
   // The Cell Query window (plan 23): the cells matching conditions on their
-  // columns, in a table. Visium HD bins are not overview cells.
-  const queryAvailable =
-    platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd'
+  // columns, in a table.
+  const queryAvailable = shellPanelAvailability.query
   // Pictures take the canvas's channels, colours and contrast (plan
   // 23-D10), whether or not the canvas shows the image now.
   const cellQueryPictureImage = useMemo<CellQueryPictureImage | null>(() => {
@@ -5458,7 +5537,7 @@ export function App({ dependencies }: AppProps = {}) {
           platformAdapter.capabilities.segmentationImport ? segmentationSection : null
         }
         cards={cards}
-        embedding={platformAdapter.capabilities.cells ? embedding : null}
+        embedding={shellPanelAvailability.embedding ? embedding : null}
         plots={plotsAvailable ? plots : null}
         query={queryAvailable ? cellQuery : null}
         panels={shellPanels}

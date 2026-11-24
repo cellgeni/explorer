@@ -165,7 +165,10 @@ export function CustomImageLayers({
               <li key={layer.id}>
                 <div className="custom-layer-summary">
                   <span>{layer.label}</span>
-                  <small>{layer.channels.length.toLocaleString()} channels</small>
+                  <small>
+                    {layer.channels.length.toLocaleString()}{' '}
+                    {layer.channels.length === 1 ? 'channel' : 'channels'}
+                  </small>
                   <button
                     type="button"
                     className="custom-layer-remove"

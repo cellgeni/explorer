@@ -6,6 +6,7 @@ import {
 import { formatCsv } from '../../utils/csv'
 import { slug } from '../../utils/slug'
 import type { Annotation, AnnotationGroupOption } from '../../data/annotation'
+import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 
 export type AnnotationState<ErrorType = unknown> =
   | { readonly status: 'idle' }
@@ -85,6 +86,9 @@ export interface AnnotationSizePlot {
   readonly id: string
   readonly label: string
   readonly totalCellAssignments: number
+  // Cells in any class of the set, each once: classes can overlap (Cell
+  // Query's Queries, Save ROI classes, JSON imports).
+  readonly cellCount: number
   readonly maxCellCount: number
   readonly rows: readonly AnnotationSizeRow[]
 }
@@ -283,6 +287,10 @@ export function annotationSizePlots(
       rows: AnnotationSizeRow[]
       totalCellAssignments: number
       maxCellCount: number
+      // The set's placed cells, each once; built for a set whose classes can
+      // overlap, once it has a second class.
+      cells: Set<string> | null
+      firstCellIds: readonly string[]
     }
   >()
 
@@ -293,8 +301,17 @@ export function annotationSizePlots(
       rows: [],
       totalCellAssignments: 0,
       maxCellCount: 0,
+      cells: null,
+      firstCellIds: annotation.cellIds,
     }
     const cellCount = placedAnnotationCellCount(annotation, placedCellIds)
+
+    if (current.rows.length > 0 && canOverlap(grouping.id)) {
+      current.cells ??= placedCellSet(current.firstCellIds, placedCellIds)
+      for (const cellId of annotation.cellIds) {
+        if (placedCellIds === null || placedCellIds.has(cellId)) current.cells.add(cellId)
+      }
+    }
 
     current.rows.push({
       id: annotation.id,
@@ -307,24 +324,47 @@ export function annotationSizePlots(
     groups.set(grouping.id, current)
   }
 
-  return [...groups.entries()].map(([id, group]) => ({
-    id,
-    label: group.label,
-    totalCellAssignments: group.totalCellAssignments,
-    maxCellCount: group.maxCellCount,
-    rows: group.rows
-      .map((row) => ({
-        ...row,
-        fraction:
-          group.totalCellAssignments === 0
-            ? 0
-            : row.cellCount / group.totalCellAssignments,
-      }))
-      .sort((left, right) => {
-        const countDelta = right.cellCount - left.cellCount
-        return countDelta === 0 ? left.label.localeCompare(right.label) : countDelta
-      }),
-  }))
+  return [...groups.entries()].map(([id, group]) => {
+    const cellCount = group.cells?.size ?? group.totalCellAssignments
+
+    return {
+      id,
+      label: group.label,
+      totalCellAssignments: group.totalCellAssignments,
+      cellCount,
+      maxCellCount: group.maxCellCount,
+      rows: group.rows
+        .map((row) => ({
+          ...row,
+          // Of the set's cells, so a class holding every cell is 100% even
+          // where classes overlap.
+          fraction: cellCount === 0 ? 0 : row.cellCount / cellCount,
+        }))
+        .sort((left, right) => {
+          const countDelta = right.cellCount - left.cellCount
+          return countDelta === 0 ? left.label.localeCompare(right.label) : countDelta
+        }),
+    }
+  })
+}
+
+// A dataset's sets come from one value per cell (a column, a clustering), so
+// their classes do not overlap; counting their cells once each would cost a
+// set of every cell (about 0.3 s for 1.4 million). Sets made in the viewer
+// or imported can overlap.
+function canOverlap(setId: string): boolean {
+  return !setId.startsWith('analysis:')
+}
+
+function placedCellSet(
+  cellIds: readonly string[],
+  placedCellIds: PlacedCellIds | null,
+): Set<string> {
+  return new Set(
+    placedCellIds === null
+      ? cellIds
+      : cellIds.filter((cellId) => placedCellIds.has(cellId)),
+  )
 }
 
 export function hasReadyAnnotationsAfterRemove(
@@ -484,20 +524,7 @@ function annotationSizeGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
 
 export const QUERY_ANNOTATION_SET_ID = 'queries'
 
-// More categories than this, and a column labels cells rather than grouping
-// them.
-const ID_LIKE_CATEGORY_LIMIT = 500
-
-// H5AD and SpatialData columns that identify cells or ontology terms rather
-// than group them (15.1-I). They are listed apart, under "More columns".
-export function isIdLikeAnnotationGroup(group: AnnotationGroupOption): boolean {
-  const label = group.label.toLowerCase()
-  return (
-    label.endsWith('_ontology_term_id') ||
-    label === 'observation_joinid' ||
-    group.groupCount > ID_LIKE_CATEGORY_LIMIT
-  )
-}
+export { isIdLikeAnnotationGroup } from '../../data/annotation'
 
 // The set chosen when a dataset's sets are listed: Xenium's graphclust, or
 // the first set. "All" stacked every clustering and was a poor default.
@@ -514,5 +541,25 @@ export function linkAnnotationGroupId(
 ): string | undefined {
   return groupIds.find(
     (id) => id === ALL_ANNOTATION_GROUP_ID || groups.some((group) => group.id === id),
+  )
+}
+
+// A metadata track's range, as "503-12,346": three significant digits below
+// 1,000, whole numbers above, grouped, and never in exponent notation (which
+// toPrecision(3) gave from 1,000 up: "1.23e+4").
+export function metadataTrackRange(
+  track: Pick<ContinuousCellMetadataTrack, 'min' | 'max'>,
+): string {
+  return `${metadataValueText(track.min)}-${metadataValueText(track.max)}`
+}
+
+function metadataValueText(value: number): string {
+  if (Number.isInteger(value)) return value.toLocaleString()
+
+  return value.toLocaleString(
+    undefined,
+    Math.abs(value) >= 1000
+      ? { maximumFractionDigits: 0 }
+      : { maximumSignificantDigits: 3 },
   )
 }

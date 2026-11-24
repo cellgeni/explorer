@@ -31,6 +31,7 @@ import {
   isAutoGeneScaleRange,
 } from '../genes/geneScaleRange'
 import { useGeneSetControls } from '../genes/useGeneSetControls'
+import { metadataTrackRange } from '../annotations/annotationModel'
 import type {
   CellAppearanceModel,
   CellColourModel,
@@ -243,7 +244,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
       />
 
       {selectedGenes.length === 0 ? null : (
-        <div className="gene-chip-row" aria-label="Selected genes">
+        <div className="gene-chip-row" role="group" aria-label="Selected genes">
           {selectedGenes.map((gene) => (
             <Chip
               key={gene}
@@ -321,7 +322,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
       />
 
       {savedGeneSets.length === 0 ? null : (
-        <div className="gene-set-list" aria-label="Saved gene sets">
+        <div className="gene-set-list" role="group" aria-label="Saved gene sets">
           {savedGeneSets.map((geneSet) => (
             <div key={geneSet.id} className="gene-set-row">
               <button
@@ -607,11 +608,5 @@ export function CellColorControls({ colour }: { readonly colour: CellColourModel
 }
 
 function metadataTrackOptionLabel(track: ContinuousCellMetadataTrack): string {
-  return `${track.label} (${formatMetadataValue(track.min)}-${formatMetadataValue(
-    track.max,
-  )})`
-}
-
-function formatMetadataValue(value: number): string {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
+  return `${track.label} (${metadataTrackRange(track)})`
 }

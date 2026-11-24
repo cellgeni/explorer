@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { QUERY_WINDOW_SIZE, windowOpensUnderDrawer } from './floatingWindowModel'
+import {
+  QUERY_WINDOW_SIZE,
+  windowOpensUnderDrawer,
+  narrowShownWindow,
+} from './floatingWindowModel'
 
 describe('windowOpensUnderDrawer (EXP-029)', () => {
   it('says a window would start under the drawer on a 1024 px screen', () => {
@@ -43,5 +47,20 @@ describe('windowOpensUnderDrawer (EXP-029)', () => {
         width: QUERY_WINDOW_SIZE.width,
       }),
     ).toBe(true)
+  })
+})
+
+describe('narrowShownWindow', () => {
+  const allOpen = { embedding: true, plots: true, query: true }
+
+  it('shows the window in front, else the first open in the top bar order', () => {
+    expect(narrowShownWindow(allOpen, 'query')).toBe('query')
+    expect(narrowShownWindow(allOpen, null)).toBe('embedding')
+    expect(narrowShownWindow({ ...allOpen, embedding: false }, null)).toBe('plots')
+    // The front window was closed.
+    expect(narrowShownWindow({ ...allOpen, query: false }, 'query')).toBe('embedding')
+    expect(
+      narrowShownWindow({ embedding: false, plots: false, query: false }, 'plots'),
+    ).toBeNull()
   })
 })

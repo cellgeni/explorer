@@ -72,9 +72,9 @@ describe('InfoDrawer', () => {
 
     const advanced = screen.getByTitle('Advanced dataset options').closest('details')
     expect(advanced).not.toHaveAttribute('open')
-    fireEvent.change(screen.getByLabelText('Boundary limit'), {
-      target: { value: '200' },
-    })
+    const boundaryLimit = screen.getByLabelText('Boundary limit')
+    fireEvent.change(boundaryLimit, { target: { value: '200' } })
+    fireEvent.keyDown(boundaryLimit, { key: 'Enter' })
     expect(info.open.onBoundaryCellLimitChange).toHaveBeenCalledWith(200)
   })
 

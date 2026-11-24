@@ -22,6 +22,9 @@ import { openParquetFile, type ParquetStructure } from './parquetStructure'
 // go through its row reader, which uses an offset index when there is one.
 
 export const PARQUET_PREVIEW_ROWS = 20
+// Columns read at a time: a file with a column per gene has thousands, each
+// a request and a table column.
+export const PARQUET_PREVIEW_COLUMNS = 40
 
 export interface ParquetPreviewColumn {
   // A top-level field.
@@ -41,6 +44,9 @@ export interface ParquetRowPreview {
 
 export interface ReadParquetRowsOptions {
   readonly rows?: number
+  // The top-level fields to read, in order; the first
+  // PARQUET_PREVIEW_COLUMNS when left out.
+  readonly columns?: readonly string[]
   readonly fetcher?: typeof fetch
   readonly signal?: AbortSignal
 }
@@ -66,7 +72,9 @@ export async function readParquetRows(
   options: ReadParquetRowsOptions = {},
 ): Promise<ParquetRowPreview> {
   const { metadata } = structure
-  const names = structure.root.children.map((child) => child.name)
+  const names =
+    options.columns ??
+    structure.root.children.slice(0, PARQUET_PREVIEW_COLUMNS).map((child) => child.name)
   const group = previewRowGroup(metadata)
 
   if (group === null) {
@@ -81,12 +89,14 @@ export async function readParquetRows(
   const rows = Math.min(options.rows ?? PARQUET_PREVIEW_ROWS, group.rows)
   const { signal } = options
   let bytesRead = 0
-  const opened = await openParquetFile(structure.ref, {
-    byteLength: structure.byteLength,
-    parallel: true,
-    ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const opened =
+    structure.zipFile ??
+    (await openParquetFile(structure.ref, {
+      byteLength: structure.byteLength,
+      parallel: true,
+      ...(options.fetcher === undefined ? {} : { fetcher: options.fetcher }),
+      ...(signal === undefined ? {} : { signal }),
+    }))
   const file: AsyncBuffer = {
     byteLength: opened.byteLength,
     slice: async (start, end) => {

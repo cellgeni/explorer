@@ -1,4 +1,4 @@
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import {
   ActivityLog,
   DataAccessNotes,
@@ -49,27 +49,15 @@ export function OpenDatasetForm({
         <label htmlFor={boundaryLimitInputId}>Boundary limit</label>
         <InfoTip title="Boundary limit">{BOUNDARY_LIMIT_HELP}</InfoTip>
       </div>
-      <input
-        id={boundaryLimitInputId}
-        name="boundaryCellLimit"
-        type="number"
-        inputMode="numeric"
-        min="1"
-        max={open.maxBoundaryCellLimit}
-        step="1"
-        autoComplete="off"
-        value={open.boundaryCellLimit}
-        title="Boundary cell limit"
-        disabled={open.boundaryLimitDisabled}
-        onChange={(event) => {
-          open.onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
-        }}
-      />
+      <BoundaryLimitInput id={boundaryLimitInputId} open={open} />
     </>
   )
 
+  // The app checks the address itself and says why it cannot be read; the
+  // browser's URL check would refuse the same-site paths it accepts
+  // (`/data/run.h5ad`, `./run-1`) before the app sees them.
   return (
-    <form className="dataset-form" onSubmit={open.onSubmit}>
+    <form className="dataset-form" noValidate onSubmit={open.onSubmit}>
       <label htmlFor={datasetInputId}>Dataset or image URL</label>
       <input
         id={datasetInputId}
@@ -152,6 +140,65 @@ export function OpenDatasetForm({
   )
 }
 
+// The boundary limit as typed, applied on Enter or blur, as NumberField is:
+// a box emptied to type a new number applied 50,000 at once, whatever the
+// device's limit, and Enter in the Open form loaded the dataset. Escape
+// puts the limit back.
+function BoundaryLimitInput({
+  id,
+  open,
+}: {
+  readonly id: string
+  readonly open: OpenDatasetModel
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const revertedRef = useRef(false)
+
+  const commit = () => {
+    const typed = draft
+    setDraft(null)
+    if (revertedRef.current) {
+      revertedRef.current = false
+      return
+    }
+    if (typed === null || typed.trim() === '') return
+    const value = Number(typed)
+    if (Number.isFinite(value) && value !== open.boundaryCellLimit) {
+      open.onBoundaryCellLimitChange(value)
+    }
+  }
+
+  return (
+    <input
+      id={id}
+      name="boundaryCellLimit"
+      type="number"
+      inputMode="numeric"
+      min="1"
+      max={open.maxBoundaryCellLimit}
+      step="1"
+      autoComplete="off"
+      value={draft ?? String(open.boundaryCellLimit)}
+      title="Boundary cell limit"
+      disabled={open.boundaryLimitDisabled}
+      onChange={(event) => {
+        revertedRef.current = false
+        setDraft(event.currentTarget.value)
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          commit()
+        } else if (event.key === 'Escape') {
+          revertedRef.current = draft !== null
+          setDraft(null)
+        }
+      }}
+    />
+  )
+}
+
 // The boundary limit alone, for Settings (15.2-B).
 export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }) {
   const inputId = useId()
@@ -162,21 +209,7 @@ export function BoundaryLimitField({ open }: { readonly open: OpenDatasetModel }
         <label htmlFor={inputId}>Boundary limit</label>
         <InfoTip title="Boundary limit">{BOUNDARY_LIMIT_HELP}</InfoTip>
       </div>
-      <input
-        id={inputId}
-        type="number"
-        inputMode="numeric"
-        min="1"
-        max={open.maxBoundaryCellLimit}
-        step="1"
-        autoComplete="off"
-        value={open.boundaryCellLimit}
-        title="Boundary cell limit"
-        disabled={open.boundaryLimitDisabled}
-        onChange={(event) => {
-          open.onBoundaryCellLimitChange(event.currentTarget.valueAsNumber)
-        }}
-      />
+      <BoundaryLimitInput id={inputId} open={open} />
     </div>
   )
 }

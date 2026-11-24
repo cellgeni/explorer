@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   testDatasetInfoModel,
   testDatasetLibraryModel,
@@ -271,9 +271,10 @@ describe('TopBar', () => {
     fireEvent.click(within(panel).getByLabelText('Show navigation buttons'))
     fireEvent.click(within(panel).getByLabelText('Show legend'))
     fireEvent.click(within(panel).getByLabelText('Show scale bar'))
-    fireEvent.change(within(panel).getByLabelText('Boundary limit'), {
-      target: { value: '20000' },
-    })
+    const boundaryLimit = within(panel).getByLabelText('Boundary limit')
+    fireEvent.change(boundaryLimit, { target: { value: '20000' } })
+    // The limit applies when the field is left.
+    fireEvent.blur(boundaryLimit)
     fireEvent.click(within(panel).getByRole('switch', { name: 'Show debug info' }))
 
     expect(settings.onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
@@ -307,6 +308,43 @@ describe('TopBar', () => {
     expect(screen.getByText('Link copied')).toBeInTheDocument()
   })
 
+  describe('a second Share', () => {
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('keeps "Link copied" for 2.5 s after it and says it again', async () => {
+      vi.useFakeTimers()
+      const info = testDatasetInfoModel({ share: { canCopyLink: true } })
+      renderTopBar({ info })
+      const share = async () => {
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Share' }))
+          await vi.advanceTimersByTimeAsync(0)
+        })
+      }
+      const wait = async (ms: number) => {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(ms)
+        })
+      }
+
+      await share()
+      const first = screen.getByText('Link copied')
+      await wait(2_000)
+      await share()
+
+      // A new node, so the status region announces the second copy.
+      const second = screen.getByText('Link copied')
+      expect(second).not.toBe(first)
+      await wait(2_000)
+      expect(second).toBeInTheDocument()
+      await wait(600)
+      expect(screen.queryByText('Link copied')).toBeNull()
+      expect(document.querySelector('.shell-share-status')).toBeEmptyDOMElement()
+    })
+  })
+
   it('opens Help with ?, listing the shortcuts and the guides (15.3-B)', () => {
     renderTopBar()
 
@@ -314,6 +352,15 @@ describe('TopBar', () => {
     const help = screen.getByRole('dialog', { name: 'Help' })
     expect(within(help).getByText('Show or hide this help')).toBeInTheDocument()
     expect(within(help).getByText('Fit the data to the view')).toBeInTheDocument()
+    // The view's own keys need it focused, and Help says so.
+    const inView = within(help).getByRole('region', { name: 'In the view shortcuts' })
+    expect(inView).toHaveTextContent('With the view focused')
+    expect(within(inView).getByText('Zoom in or out')).toBeInTheDocument()
+    expect(
+      within(within(help).getByRole('region', { name: 'View shortcuts' })).queryByText(
+        'Zoom in or out',
+      ),
+    ).toBeNull()
     const guides = within(help).getByRole('navigation', { name: 'Guides' })
     expect(within(guides).getByRole('link', { name: 'User guide' })).toHaveAttribute(
       'href',

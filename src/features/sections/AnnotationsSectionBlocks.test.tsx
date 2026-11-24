@@ -49,6 +49,29 @@ describe('AnnotationSetControls', () => {
 })
 
 describe('AnnotationLabelLists', () => {
+  it('counts the cells of overlapping classes once, and shares of them', () => {
+    const cell = (index: number) => asCellId(`aaaaaaaa-${index}`)
+    const { sets } = testAnnotationsSectionModel({
+      sets: {
+        state: {
+          status: 'ready',
+          url: 'https://example.test',
+          annotations: [
+            { id: 'query:1:cd3', label: 'CD3+', cellIds: [cell(1), cell(2), cell(3)] },
+            { id: 'query:2:cd4', label: 'CD4+', cellIds: [cell(1), cell(2)] },
+          ],
+        },
+      },
+    })
+    render(<AnnotationLabelLists sets={sets} />)
+    const set = screen.getByRole('region', { name: 'Queries labels' })
+
+    expect(
+      within(set).getByRole('heading', { name: 'Queries' }).parentElement,
+    ).toHaveTextContent('3 cells')
+    expect(within(set).getByTitle('CD3+').closest('li')).toHaveTextContent('100%')
+  })
+
   it('lists every class of a set', () => {
     renderLists()
     const set = screen.getByRole('region', { name: 'fine_celltype labels' })
@@ -197,5 +220,25 @@ describe('MetadataTracksPanel', () => {
 
     expect(screen.getByText('370 spots | 0-2')).toBeInTheDocument()
     expect(screen.getByText('1 spot | 1-1')).toBeInTheDocument()
+  })
+
+  it('writes ranges past 1,000 without exponent notation', () => {
+    const { metadataTracks } = testAnnotationsSectionModel({
+      metadataTracks: {
+        tracks: [
+          {
+            id: 'h5ad:total_counts',
+            label: 'total_counts',
+            values: null,
+            cellCount: 3,
+            min: 502.5,
+            max: 12_345.5,
+          },
+        ],
+      },
+    })
+    render(<MetadataTracksPanel metadataTracks={metadataTracks} />)
+
+    expect(screen.getByText('3 cells | 503-12,346')).toBeInTheDocument()
   })
 })

@@ -139,10 +139,17 @@ function openError(url: string, error: unknown): unknown {
     return new H5RangeRequiredError(url, error.message)
   }
 
-  const status = /returned HTTP (\d+)/.exec(error.message)?.[1]
+  const status = Number(/returned HTTP (\d+)/.exec(error.message)?.[1])
 
-  if (status !== undefined) {
-    return new H5FileNotFoundError(url, Number(status))
+  // As Browse Store and the Parquet view: only these say the file is not
+  // there. A 401, 429 or 5xx keeps its status, which the load error model
+  // names (access denied, request refused, host server error).
+  if (status === 403 || status === 404 || status === 410) {
+    return new H5FileNotFoundError(url, status)
+  }
+
+  if (status >= 400) {
+    return new Error(`${url} could not be read (HTTP ${status}).`, { cause: error })
   }
 
   if (/not a readable HDF5 file/.test(error.message)) {

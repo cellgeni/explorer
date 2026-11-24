@@ -3187,4 +3187,44 @@ describe('AnnData set, class and track IDs', () => {
     const values = await dataset.metadataTrackValues('h5ad:s-score-2')
     expect(values.map((value) => value.value)).toEqual([10, 20, 30, 40])
   })
+
+  // "All" read the columns the picker lists apart under "More columns", one
+  // class per cell for a Census file's observation_joinid (EXP-251).
+  it('leaves the columns that name cells out of All, and reads one picked by name', async () => {
+    const dataset = memoryDataset([
+      {
+        name: 'cell_type',
+        kind: 'categorical',
+        codes: new Int8Array([0, 1, 0, 1]),
+        categories: ['T cell', 'B cell'],
+      },
+      {
+        name: 'observation_joinid',
+        kind: 'categorical',
+        codes: new Int8Array([0, 1, 2, 3]),
+        categories: ['j0', 'j1', 'j2', 'j3'],
+      },
+      {
+        name: 'barcode',
+        kind: 'categorical',
+        codes: new Int16Array([0, 1, 2, 3]),
+        categories: Array.from({ length: 501 }, (_, index) => `b${index}`),
+      },
+    ])
+
+    const groups = await dataset.annotationGroups()
+    expect(groups.map((group) => group.label)).toEqual([
+      'cell_type',
+      'observation_joinid',
+      'barcode',
+    ])
+    const all = await dataset.annotations()
+    expect(all.map((annotation) => annotation.label)).toEqual([
+      'cell_type: T cell',
+      'cell_type: B cell',
+    ])
+    await expect(dataset.annotations({ groupId: 'all' })).resolves.toEqual(all)
+    const picked = await dataset.annotations({ groupId: groups[1]!.id })
+    expect(picked).toHaveLength(4)
+  })
 })

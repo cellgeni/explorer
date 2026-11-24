@@ -130,6 +130,12 @@ export function segmentationLinkFor(source: SegmentationSource | null):
 }
 
 // The last part of a URL or path, for display.
+// A picked file's name as it is; the last part of a URL, decoded, without its
+// query (which can hold a signature).
+export function segmentationDisplayName(source: SegmentationSource): string {
+  return source.file === undefined ? segmentationSourceName(source.url) : source.url
+}
+
 export function segmentationSourceName(url: string): string {
   const path = stripQueryAndHash(url).replace(/\/+$/, '')
   const name = path.slice(path.lastIndexOf('/') + 1)

@@ -3,6 +3,7 @@ import { isIcechunkUrl } from '../../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../../zarr/omeZarrUrl'
 import type { ZarrStructure, ZarrStructureNode } from '../../zarr/zarrStructure'
 import { isZarrZipUrl } from '../../zarr/zarrZipUrl'
+import { folderFileUrl } from '../../utils/folderUrl'
 
 // Addresses whose structure Browse Store can show: a `.zarr` store or a group
 // inside one, a Zarr metadata file, a zipped store, or an Icechunk
@@ -36,7 +37,12 @@ export function formatBytes(bytes: number): string {
   let value = bytes
   let unit = 0
 
-  while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+  // Rounded to three digits before the unit is picked, so 999,999 bytes
+  // reads "1 MB", not "1,000 KB".
+  while (
+    unit < BYTE_UNITS.length - 1 &&
+    (unit === 0 ? value : Number(value.toPrecision(3))) >= 1000
+  ) {
     value /= 1000
     unit += 1
   }
@@ -239,7 +245,8 @@ export function parquetFileOf(
     return null
   }
 
-  return { url: `${url}/shapes.parquet` }
+  // Into the path, before a query that grants the store (a signed address).
+  return { url: folderFileUrl(url, 'shapes.parquet') }
 }
 
 // Groups opened at first: the root, and its child groups when the store is
@@ -256,7 +263,12 @@ export function initiallyExpanded(structure: ZarrStructure): ReadonlySet<string>
   return expanded
 }
 
-// JSON for display, cut at `limit` characters.
+// Marks a value JSON has no form for, so it is written bare.
+const BARE = '\u0000'
+
+// JSON for display, cut at `limit` characters. NaN, infinities and bigints
+// (HDF5 attributes) are written as themselves, where JSON would give null or
+// throw.
 export function formatJson(
   value: unknown,
   limit = 20_000,
@@ -266,7 +278,16 @@ export function formatJson(
   readonly shown: number
   readonly length: number
 } {
-  const text = JSON.stringify(value, null, 2) ?? String(value)
+  const text = (
+    JSON.stringify(
+      value,
+      (_key, item: unknown) =>
+        typeof item === 'bigint' || (typeof item === 'number' && !Number.isFinite(item))
+          ? `${BARE}${String(item)}${BARE}`
+          : item,
+      2,
+    ) ?? String(value)
+  ).replace(/"\\u0000([^"]*)\\u0000"/g, '$1')
   return text.length > limit
     ? { text: `${text.slice(0, limit)}\n…`, cut: true, shown: limit, length: text.length }
     : { text, cut: false, shown: text.length, length: text.length }

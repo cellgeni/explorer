@@ -221,6 +221,35 @@ describe('cellDetailModel', () => {
     ).toBe('1 gene')
   })
 
+  // One NaN in a dense X row made the heading "NaN counts" and every gene
+  // "NaN% total" (EXP-283).
+  it('leaves non-finite counts out of the cell summary, its total and shares', () => {
+    const gene = (name: string, count: number) => ({
+      gene: name,
+      count,
+      detectedCells: 1,
+      percentCells: 100,
+      meanPerCell: count,
+      percentTotal: Number.NaN,
+    })
+    const stats: RoiGeneStats = {
+      genes: [gene('Actb', 6), gene('Bad', Number.NaN), gene('Gad1', 2)],
+      cellCount: 1,
+      sampledCellCount: 1,
+      totalCount: Number.NaN,
+      hitCellLimit: false,
+    }
+
+    expect(cellExpressionSummaryFromStats(stats)).toEqual({
+      genes: [
+        { gene: 'Actb', count: 6, percentTotal: 75 },
+        { gene: 'Gad1', count: 2, percentTotal: 25 },
+      ],
+      totalCount: 8,
+      hitGeneLimit: false,
+    })
+  })
+
   it('summarizes cell shape from cell metrics and polygon boundaries', () => {
     const cellWithoutArea: OverviewCellDatum = {
       id: cell.id,

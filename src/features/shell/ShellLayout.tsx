@@ -25,6 +25,7 @@ import { EmbeddingWindow } from './EmbeddingWindow'
 import {
   EMBEDDING_WINDOW_SIZE,
   PLOTS_WINDOW_SIZE,
+  narrowShownWindow,
   plotsWindowRightOffset,
   QUERY_WINDOW_SIZE,
   queryWindowRightOffset,
@@ -123,8 +124,30 @@ export function ShellLayout({
   const handlePlotsSizeChange = useCallback((size: { readonly width: number }) => {
     setPlotsWidth(size.width)
   }, [])
-  const embeddingShown = embedding !== null && embeddingOpen
-  const plotsShown = plots !== null && plotsOpen
+  const [queryWidth, setQueryWidth] = useState(QUERY_WINDOW_SIZE.width)
+  const handleQuerySizeChange = useCallback((size: { readonly width: number }) => {
+    setQueryWidth(size.width)
+  }, [])
+  // The window last clicked or focused is drawn over the others, which
+  // overlap once moved.
+  const [frontWindow, setFrontWindow] = useState<PanelToggle['panel'] | null>(null)
+  // Under 860 px one window shows; the others stay open for a wider screen,
+  // unpressed and out of the tab order.
+  const narrowWindow = narrow
+    ? narrowShownWindow(
+        {
+          embedding: embedding !== null && embeddingOpen,
+          plots: plots !== null && plotsOpen,
+          query: query !== null && queryOpen,
+        },
+        frontWindow,
+      )
+    : null
+  const embeddingVisible = narrow ? narrowWindow === 'embedding' : embeddingOpen
+  const plotsVisible = narrow ? narrowWindow === 'plots' : plotsOpen
+  const queryVisible = narrow ? narrowWindow === 'query' : queryOpen
+  const embeddingShown = embedding !== null && embeddingVisible
+  const plotsShown = plots !== null && plotsVisible
   const plotsRightOffset = plotsWindowRightOffset(embeddingShown, embeddingWidth, narrow)
   const queryRightOffset = queryWindowRightOffset(
     [...(embeddingShown ? [embeddingWidth] : []), ...(plotsShown ? [plotsWidth] : [])],
@@ -172,15 +195,11 @@ export function ShellLayout({
     onPanelsChange({
       ...panels,
       ...(open && narrow ? narrowClosed : {}),
-      ...(open && !queryOpen
-        ? drawerClosedFor(queryRightOffset, QUERY_WINDOW_SIZE.width)
-        : {}),
+      // At its own width, which a resize may have changed (EXP-278).
+      ...(open && !queryOpen ? drawerClosedFor(queryRightOffset, queryWidth) : {}),
       queryOpen: open,
     })
   }
-  // The window last clicked or focused is drawn over the others, which
-  // overlap once moved.
-  const [frontWindow, setFrontWindow] = useState<PanelToggle['panel'] | null>(null)
   // The Cell Query window mounts the first time it opens, so a session that
   // never uses it does not render it with every update, then stays mounted
   // to keep its size.
@@ -220,15 +239,15 @@ export function ShellLayout({
   if (embedding !== null) {
     panelToggles.push({
       panel: 'embedding',
-      open: embeddingOpen,
+      open: embeddingVisible,
       onOpenChange: setEmbeddingOpen,
     })
   }
   if (plots !== null) {
-    panelToggles.push({ panel: 'plots', open: plotsOpen, onOpenChange: setPlotsOpen })
+    panelToggles.push({ panel: 'plots', open: plotsVisible, onOpenChange: setPlotsOpen })
   }
   if (query !== null) {
-    panelToggles.push({ panel: 'query', open: queryOpen, onOpenChange: setQueryOpen })
+    panelToggles.push({ panel: 'query', open: queryVisible, onOpenChange: setQueryOpen })
   }
 
   // The same element whatever the width, so the sections keep their state.
@@ -300,7 +319,7 @@ export function ShellLayout({
               <EmbeddingWindow
                 embedding={embedding}
                 fullWidth={narrow}
-                open={embeddingOpen}
+                open={embeddingVisible}
                 onClose={() => {
                   setEmbeddingOpen(false)
                 }}
@@ -316,7 +335,7 @@ export function ShellLayout({
                 plots={plots}
                 fullWidth={narrow}
                 rightOffset={plotsRightOffset}
-                open={plotsOpen}
+                open={plotsVisible}
                 onClose={() => {
                   setPlotsOpen(false)
                 }}
@@ -332,7 +351,7 @@ export function ShellLayout({
                 query={query}
                 fullWidth={narrow}
                 rightOffset={queryRightOffset}
-                open={queryOpen}
+                open={queryVisible}
                 onClose={() => {
                   setQueryOpen(false)
                 }}
@@ -340,6 +359,7 @@ export function ShellLayout({
                 onActivate={() => {
                   setFrontWindow('query')
                 }}
+                onSizeChange={handleQuerySizeChange}
               />
             )}
           </div>

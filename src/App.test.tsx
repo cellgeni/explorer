@@ -27,6 +27,7 @@ import { NO_ANNOTATION_GROUP_ID } from './data/datasetAnnotations'
 import { warmDatasetForRoi } from './data/datasetWarmup'
 import { DEMO_DATASET_URL, initialViewerState, useViewerStore } from './store/viewerStore'
 import type { SpatialElement } from './datasets/spatialDataset'
+import type { MorphologyImage } from './data/morphologyImage'
 import type { TiffPyramidLoader } from './tiff/loader'
 import {
   appTestDependencies,
@@ -275,6 +276,57 @@ describe('App', () => {
       'aria-disabled',
       'true',
     )
+  })
+
+  it('leaves windows a Visium HD dataset lacks out of its link (EXP-277)', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&panel=cells%2Cplots%2Cquery`,
+    )
+    const viewport = installAppViewportFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({ baseUrl: visiumUrl }),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview: visiumOverviewFixture(),
+      overrides: {
+        matrix: vi.fn(async () => ({
+          geneNames: ['A2M', 'GAD1'],
+          cells: new Map([['BC-1', { geneNames: ['A2M', 'GAD1'], counts: [7, 2] }]]),
+        })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+
+      await waitFor(
+        () => {
+          expect(document.querySelector('.shell-summary')?.textContent).toMatch(
+            /^Visium HD ·/,
+          )
+        },
+        { timeout: 8_000 },
+      )
+      // Rewritten for the open dataset: a rewritten link has cellBounds.
+      await waitFor(
+        () => {
+          expect(window.location.hash).toContain('cellBounds=')
+        },
+        { timeout: 8_000 },
+      )
+      // Only the default section was open, so panel= is left out.
+      expect(new URLSearchParams(window.location.hash.slice(1)).get('panel')).toBeNull()
+    } finally {
+      viewport.restore()
+    }
   })
 
   it('hides transcript controls, Plots and Query for Visium HD datasets', async () => {
@@ -547,6 +599,95 @@ describe('App', () => {
       createObjectUrlSpy.mockRestore()
       revokeObjectUrlSpy.mockRestore()
       downloadClickSpy.mockRestore()
+    }
+  })
+
+  // The 16 µm projection stayed on screen for the 8 µm bins, and points on
+  // it selected nothing (EXP-253).
+  it('drops a Visium HD tier projection when the bin size changes', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&view=20,10,0,4`,
+    )
+    const viewport = installAppViewportFixture()
+    const sixteen = visiumOverviewFixture()
+    const eight = {
+      ...sixteen,
+      binSizeMicrometers: 8 as const,
+      grid: { ...sixteen.grid, id: 'grid-8um', binSizeMicrometers: micrometers(8) },
+      gridCells: { ...sixteen.gridCells, gridId: 'grid-8um', ids: ['BC8-1', 'BC8-2'] },
+    }
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        bins: [
+          visiumHdBinFixture(),
+          visiumHdBinFixture({
+            binSizeMicrometers: 8,
+            outputPath: 'binned_outputs/square_008um',
+            tissuePositionsPath:
+              'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_008um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+          }),
+        ],
+      }),
+    )
+    const readBinnedOverview = vi.fn(async (binSize?: number) =>
+      binSize === 8 ? eight : sixteen,
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview: sixteen,
+      overrides: {
+        readBinnedOverview,
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({ geneNames: ['A2M'], cells: new Map() })),
+      },
+    })
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'binned_outputs/square_016um/analysis/umap/projection.csv',
+          points: [
+            { id: 'BC-1', x: 0, y: 0 },
+            { id: 'BC-2', x: 10, y: 10 },
+          ],
+        },
+      ])
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+
+      openControls('embedding')
+      fireEvent.click(screen.getByTitle('Load embeddings'))
+      expect(await screen.findByText('UMAP: 2 bins')).toBeInTheDocument()
+
+      openControls('spot-options')
+      const bins = screen.getByRole('region', { name: 'Visium HD dataset' })
+      fireEvent.click(within(bins).getByRole('button', { name: '8 µm' }))
+      await waitFor(() => {
+        expect(readBinnedOverview).toHaveBeenLastCalledWith(8)
+      })
+      expect(await within(bins).findByText(/at 8 µm/)).toBeInTheDocument()
+
+      expect(screen.queryByText('UMAP: 2 bins')).toBeNull()
+      expect(screen.queryByRole('img', { name: 'UMAP embedding, 2 bins' })).toBeNull()
+    } finally {
+      viewport.restore()
     }
   })
 
@@ -1417,6 +1558,111 @@ describe('App', () => {
         },
         { timeout: 3_000 },
       )
+    } finally {
+      viewport.restore()
+    }
+  })
+
+  // A segmented cell's card read "no expression value matched this cell" for
+  // every cell: expression comes by bins, and the projection onto cells was
+  // computed and never read (EXP-254).
+  it("scores a Visium HD segmented cell by its share of its bins' counts", async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&genes=Actb&cellBounds=1`,
+    )
+    const viewport = installAppViewportFixture()
+    const overview = visiumOverviewFixture()
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        segmentedOutputs: {
+          cellSegmentationsGeojsonPath: 'segmented_outputs/cell_segmentations.geojson',
+        },
+      }),
+    )
+    const cell = {
+      id: 'cellid_000000001-1',
+      geometry: {
+        kind: 'polygon' as const,
+        rings: [
+          [
+            { x: micrometers(0), y: micrometers(0) },
+            { x: micrometers(10), y: micrometers(0) },
+            { x: micrometers(10), y: micrometers(10) },
+          ],
+        ],
+      },
+    }
+    // BC-1 holds 8 Actb counts over 4 barcodes; the cell holds 2 of them, so
+    // its score is 8 × 2/4 = 4.
+    const barcodeMappingAssignments = vi.fn(async () =>
+      ['a', 'b', 'c', 'd'].map((barcode, index) => ({
+        binId: 'BC-1',
+        square002um: `s_002um_${barcode}`,
+        cellId: index < 2 ? 'cellid_000000001-1' : null,
+        inCell: index < 2,
+        inNucleus: false,
+      })),
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview,
+      meta: visiumHdMetaFixture(overview, {
+        capabilities: { cellBoundaries: true },
+        segmentations: [
+          {
+            id: 'visium-hd-cell-segmentations',
+            kind: 'cell' as const,
+            label: 'Cell segmentations',
+            sourceKind: 'geojson' as const,
+            path: 'segmented_outputs/cell_segmentations.geojson',
+          },
+        ],
+      }),
+      overrides: {
+        elements: vi.fn(async () => ({ elements: [cell] })),
+        barcodeMappingAssignments,
+        genePanel: vi.fn(async () => ['Actb']),
+        geneExpression: vi.fn(async () => ({
+          elements: [
+            { id: 'BC-1', position: { x: micrometers(5), y: micrometers(5) }, count: 8 },
+          ],
+          genes: ['Actb'],
+          maxCount: 8,
+        })),
+      },
+    })
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+      await waitFor(() => {
+        expect(barcodeMappingAssignments).toHaveBeenCalled()
+      })
+      await waitFor(() => {
+        expect(screen.getByTestId('deck-layer-cell-boundary-hit-areas')).toHaveAttribute(
+          'data-count',
+          '1',
+        )
+      })
+      fireEvent.click(screen.getByTestId('deck-layer-cell-boundary-hit-areas'))
+      openControls('cell-card')
+
+      const card = screen.getByRole('region', { name: 'Cell' })
+      await waitFor(() => {
+        expect(within(card).getByText('Score').nextElementSibling).toHaveTextContent(
+          /^4$/,
+        )
+      })
+      expect(within(card).queryByText(/no expression value matched/)).toBeNull()
     } finally {
       viewport.restore()
     }
@@ -3120,6 +3366,94 @@ describe('App', () => {
     ).toBeInTheDocument()
   })
 
+  it('counts the dataset image alone in the info drawer, and says while it loads', async () => {
+    const channel = (index: number, name: string) => ({
+      id: `Channel:${index.toString()}`,
+      index,
+      name,
+      color: [88, 144, 255] as const,
+      contrast: { min: 0, max: 65_535 },
+    })
+    const dapi = channel(0, 'DAPI')
+    const boundary = channel(1, 'Boundary')
+    const custom = channel(0, 'H&E')
+    const loader = {} as TiffPyramidLoader
+    const image = deferredPromise<MorphologyImage>()
+    const loadMorphologyImage = vi.fn(() => image.promise)
+    const loadCustomMorphologyLayer: ReturnType<
+      typeof vi.fn<CustomMorphologyLayerLoader>
+    > = vi.fn(async (url) => ({
+      url,
+      loader,
+      channels: [custom],
+      channelLoaders: [{ info: custom, loader }],
+    }))
+
+    const computeAutoChannelContrast = vi.fn(async () => ({
+      min: 0,
+      max: 1,
+      histogram: { bins: [1], maxCount: 1, min: 0, max: 1, sampleCount: 1 },
+    }))
+
+    render(
+      <TestApp
+        loadDatasetOverview={vi.fn(async () => [
+          {
+            cellId: intToCellId(1, 1),
+            position: { x: micrometers(10), y: micrometers(20) },
+            transcriptCount: 8,
+          },
+        ])}
+        loadMorphologyImage={loadMorphologyImage}
+        loadCustomMorphologyLayer={loadCustomMorphologyLayer}
+        computeAutoChannelContrast={computeAutoChannelContrast}
+      />,
+    )
+    openControls('open-dataset')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    await screen.findByText(/^Xenium · 1 cell/)
+    await waitFor(() => {
+      expect(loadMorphologyImage).toHaveBeenCalled()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Dataset info/ }))
+    const imageFact = () =>
+      within(screen.getByRole('region', { name: 'Dataset' })).getByText('Image')
+        .nextElementSibling
+    expect(imageFact()).toHaveTextContent('Loading…')
+
+    await act(async () => {
+      image.resolve({
+        url: 'https://example.test/xenium/morphology_focus/morphology_focus_0000.ome.tif',
+        loader,
+        channels: [dapi, boundary],
+        channelLoaders: [
+          { info: dapi, loader },
+          { info: boundary, loader },
+        ],
+      })
+      await image.promise
+    })
+    await waitFor(() => {
+      expect(imageFact()).toHaveTextContent('2 channels')
+    })
+
+    // A custom layer is not the dataset's image.
+    openControls('image')
+    fireEvent.change(screen.getByLabelText('Custom image URL'), {
+      target: { value: 'https://example.test/layers/he.ome.tif' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Load Layer' }))
+    await waitFor(() => {
+      expect(loadCustomMorphologyLayer).toHaveBeenCalled()
+    })
+    const layers = await screen.findByRole('list', { name: 'Custom image layers' })
+    expect(layers).toHaveTextContent('1 channel')
+    expect(layers).not.toHaveTextContent('1 channels')
+    openControls('diagnostics')
+    expect(imageFact()).toHaveTextContent('2 channels')
+  })
+
   it('shows the embedding in a panel from Cells (15.2-G)', async () => {
     const cellId = intToCellId(1, 1)
     const loadDatasetOverview = vi.fn(async () => [
@@ -3583,6 +3917,61 @@ describe('App', () => {
       viewport.restore()
     }
   })
+
+  it.each(['Box selection', 'Lasso selection'])(
+    'leaves the Magic Lens for %s, so its scan does not run (EXP-281)',
+    async (toolName) => {
+      const viewport = installAppViewportFixture(
+        appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+      )
+      const cell = {
+        id: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      }
+      const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [cell])
+
+      try {
+        render(
+          <TestApp
+            loadDatasetOverview={vi.fn<DatasetOverviewLoader>(async () => [
+              { ...cell, cellId: cell.id },
+            ])}
+            loadGenePanel={vi.fn(async () => ['Actb'])}
+            loadRoiCells={loadRoiCells}
+            loadRoiTranscripts={vi.fn<RoiTranscriptsLoader>(async () => [])}
+          />,
+        )
+        openControls('open-dataset')
+        fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+        const lensTool = screen.getByRole('button', { name: 'Magic Lens' })
+        const tool = screen.getByRole('button', { name: toolName })
+        await waitFor(() => {
+          expect(lensTool).toHaveAttribute('aria-disabled', 'false')
+          expect(tool).toHaveAttribute('aria-disabled', 'false')
+        })
+
+        fireEvent.click(lensTool)
+        fireEvent.pointerMove(
+          screen.getByRole('img', { name: 'Spatial viewer canvas area' }),
+          { clientX: 500, clientY: 500 },
+        )
+        // Within the lens's 320 ms debounce.
+        fireEvent.click(tool)
+        expect(tool).toHaveAttribute('aria-pressed', 'true')
+
+        // Past the debounce and the mocked reads.
+        await new Promise((resolve) => setTimeout(resolve, 900))
+        expect(loadRoiCells).not.toHaveBeenCalled()
+        expect(screen.queryByRole('region', { name: 'Magic Lens' })).toBeNull()
+      } finally {
+        viewport.restore()
+      }
+    },
+    20_000,
+  )
 
   it('scans exact circle cells while cursor magic lens is enabled', async () => {
     const viewport = installAppViewportFixture(
@@ -4873,7 +5262,7 @@ describe('App', () => {
       expect(
         await screen.findByLabelText('Cell transcript z-axis distribution'),
       ).toHaveTextContent('8 z records')
-      expect(screen.getByText('Z location (um)')).toBeInTheDocument()
+      expect(screen.getByText('Z location (µm)')).toBeInTheDocument()
       expect(expressionList).toHaveTextContent('Actb')
       expect(expressionList).toHaveTextContent('Gad1')
       expect(screen.getByText('10 counts')).toBeInTheDocument()

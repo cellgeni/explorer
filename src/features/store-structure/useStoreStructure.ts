@@ -113,8 +113,12 @@ export function useStoreStructure({
     [fetcher, readParquet],
   )
   const readRows = useCallback(
-    (structure: ParquetStructure, signal: AbortSignal) =>
-      readRowsOf(structure, { signal, ...(fetcher === undefined ? {} : { fetcher }) }),
+    (structure: ParquetStructure, signal: AbortSignal, columns?: readonly string[]) =>
+      readRowsOf(structure, {
+        signal,
+        ...(columns === undefined ? {} : { columns }),
+        ...(fetcher === undefined ? {} : { fetcher }),
+      }),
     [fetcher, readRowsOf],
   )
   // The worker reads the file itself, so `fetcher` does not apply.

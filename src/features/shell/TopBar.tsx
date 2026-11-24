@@ -543,7 +543,7 @@ function ShareButton({
   readonly info: DatasetInfoModel
   readonly iconOnly: boolean
 }) {
-  const { copy, message } = useCopyLinkStatus(info.share)
+  const { copy, copies, message } = useCopyLinkStatus(info.share)
   const title = 'Copy a link that opens this dataset with the current view'
 
   return (
@@ -568,7 +568,7 @@ function ShareButton({
         </Button>
       )}
       <span role="status" className="shell-share-status">
-        {message}
+        {message === '' ? null : <span key={copies}>{message}</span>}
       </span>
     </span>
   )
@@ -655,14 +655,25 @@ export function BuildCommitNote({
   )
 }
 
-function ShortcutList() {
-  const groups = ['Tools', 'View'] as const
+// The view's own keys need it focused; the others work anywhere but in a
+// text field.
+const SHORTCUT_GROUPS = [
+  { group: 'Tools', heading: 'Tools', note: null },
+  { group: 'View', heading: 'View', note: null },
+  {
+    group: 'Canvas',
+    heading: 'In the view',
+    note: 'With the view focused: click it, or Tab to it.',
+  },
+] as const
 
+function ShortcutList() {
   return (
     <div className="shell-shortcuts">
-      {groups.map((group) => (
-        <section key={group} aria-label={`${group} shortcuts`}>
-          <h2>{group}</h2>
+      {SHORTCUT_GROUPS.map(({ group, heading, note }) => (
+        <section key={group} aria-label={`${heading} shortcuts`}>
+          <h2>{heading}</h2>
+          {note === null ? null : <p className="shell-shortcuts-note">{note}</p>}
           <dl>
             {SHORTCUTS.filter((shortcut) => shortcut.group === group).map((shortcut) => (
               <div key={shortcut.action}>

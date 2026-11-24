@@ -18,6 +18,7 @@ import { altClick } from '../../utils/altClick'
 import {
   annotationSizePlots,
   isIdLikeAnnotationGroup,
+  metadataTrackRange,
   type AnnotationSizePlot,
   type PlacedCellIds,
 } from '../annotations/annotationModel'
@@ -590,7 +591,7 @@ function AnnotationSetList({
           }}
         />
         <h5>{plot.label}</h5>
-        <small>{countOf(plot.totalCellAssignments, elementNoun)}</small>
+        <small>{countOf(plot.cellCount, elementNoun)}</small>
       </div>
       {searchable ? (
         <div className="annotation-set-search">
@@ -716,7 +717,7 @@ function MetadataTrackList({
         <li key={track.id}>
           <span>{track.label}</span>
           <small>
-            {countOf(track.cellCount, elementNoun)} | {formatMetadataTrackDomain(track)}
+            {countOf(track.cellCount, elementNoun)} | {metadataTrackRange(track)}
           </small>
           <button
             type="button"
@@ -738,14 +739,6 @@ function MetadataTrackList({
 // `noun` is plural: cells, spots or bins.
 function countOf(count: number, noun: string): string {
   return `${count.toLocaleString()} ${count === 1 ? noun.replace(/s$/, '') : noun}`
-}
-
-function formatMetadataTrackDomain(track: ContinuousCellMetadataTrack): string {
-  return `${formatMetadataValue(track.min)}-${formatMetadataValue(track.max)}`
-}
-
-function formatMetadataValue(value: number): string {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
 }
 
 function formatAnnotationFraction(fraction: number): string {

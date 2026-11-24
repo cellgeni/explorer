@@ -1,4 +1,10 @@
-import { useRef, useState, type CSSProperties, type KeyboardEvent } from 'react'
+import {
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react'
 import { IconButton, PencilIcon, TargetIcon } from '../../components/ui'
 import { roiSelectionArea } from '../../data/roiSelection'
 import { formatSquareMicrometers } from '../../data/units'
@@ -17,14 +23,37 @@ export function SelectionListPanel({
 }: {
   readonly selections: SelectionListModel
 }) {
+  const { selections } = model
+  const sectionRef = useRef<HTMLElement>(null)
+  // The row deleted, until it has gone.
+  const deletedRef = useRef<{ readonly id: string; readonly index: number } | null>(null)
+
+  // Delete takes its own row away: focus moves to the next row's Delete, or
+  // the last one's, or the heading once the list is empty.
+  useLayoutEffect(() => {
+    const deleted = deletedRef.current
+    if (deleted === null || selections.some((selection) => selection.id === deleted.id)) {
+      return
+    }
+    deletedRef.current = null
+    const buttons =
+      sectionRef.current?.querySelectorAll<HTMLElement>('.annotation-remove') ?? []
+    const next = buttons[Math.min(deleted.index, buttons.length - 1)]
+    ;(next ?? sectionRef.current?.querySelector<HTMLElement>('h4'))?.focus()
+  }, [selections])
+
   if (!model.available) return null
 
-  const { selections } = model
-
   return (
-    <section className="annotation-size-panel" aria-labelledby="selection-list-heading">
+    <section
+      ref={sectionRef}
+      className="annotation-size-panel"
+      aria-labelledby="selection-list-heading"
+    >
       <div className="annotation-size-heading">
-        <h4 id="selection-list-heading">Selections</h4>
+        <h4 id="selection-list-heading" tabIndex={-1}>
+          Selections
+        </h4>
         <small>
           {selections.length === 0
             ? 'None'
@@ -37,12 +66,16 @@ export function SelectionListPanel({
         </p>
       ) : (
         <ul className="annotation-list selection-list" aria-label="Selections">
-          {selections.map((selection) => (
+          {selections.map((selection, index) => (
             <SelectionRow
               key={selection.id}
               selection={selection}
               active={selection.id === model.activeId}
               model={model}
+              onDelete={() => {
+                deletedRef.current = { id: selection.id, index }
+                model.onDelete(selection.id)
+              }}
             />
           ))}
         </ul>
@@ -55,12 +88,23 @@ function SelectionRow({
   selection,
   active,
   model,
+  onDelete,
 }: {
   readonly selection: SavedSelection
   readonly active: boolean
   readonly model: SelectionListModel
+  readonly onDelete: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
+  const rowRef = useRef<HTMLLIElement>(null)
+  // Enter or Esc closed the rename field, which had focus.
+  const refocusRef = useRef(false)
+
+  useLayoutEffect(() => {
+    if (renaming || !refocusRef.current) return
+    refocusRef.current = false
+    rowRef.current?.querySelector<HTMLElement>('.selection-list-rename-button')?.focus()
+  }, [renaming])
   const name = selectionDisplayName(selection)
   const className = [
     active ? 'is-active' : null,
@@ -70,7 +114,7 @@ function SelectionRow({
     .join(' ')
 
   return (
-    <li className={className === '' ? undefined : className}>
+    <li ref={rowRef} className={className === '' ? undefined : className}>
       <label
         className="annotation-color-picker"
         style={{ '--annotation-color': selection.color } as CSSProperties}
@@ -102,7 +146,8 @@ function SelectionRow({
         <RenameField
           name={selection.name}
           label={`Rename ${name}`}
-          onDone={(next) => {
+          onDone={(next, byKey) => {
+            refocusRef.current = byKey
             setRenaming(false)
             if (next !== null && next.trim() !== '') {
               model.onRename(selection.id, next.trim())
@@ -137,7 +182,7 @@ function SelectionRow({
       <IconButton
         title={`Rename ${name}`}
         icon={<PencilIcon />}
-        className="selection-list-action"
+        className="selection-list-action selection-list-rename-button"
         disabled={renaming}
         onClick={() => {
           setRenaming(true)
@@ -148,9 +193,7 @@ function SelectionRow({
         className="annotation-remove"
         aria-label={`Delete ${name}`}
         title={`Delete ${name}`}
-        onClick={() => {
-          model.onDelete(selection.id)
-        }}
+        onClick={onDelete}
       >
         x
       </button>
@@ -166,27 +209,28 @@ function RenameField({
 }: {
   readonly name: string
   readonly label: string
-  readonly onDone: (name: string | null) => void
+  // `byKey`: Enter or Esc, so focus goes back to the row.
+  readonly onDone: (name: string | null, byKey: boolean) => void
 }) {
   const [value, setValue] = useState(name)
   // The field may blur as it closes; only the first ending counts.
   const doneRef = useRef(false)
 
-  function finish(next: string | null) {
+  function finish(next: string | null, byKey: boolean) {
     if (doneRef.current) return
     doneRef.current = true
-    onDone(next)
+    onDone(next, byKey)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === 'Enter') {
       event.preventDefault()
-      finish(value)
+      finish(value, true)
     } else if (event.key === 'Escape') {
       // Esc here is the field's, not the tool's.
       event.preventDefault()
       event.stopPropagation()
-      finish(null)
+      finish(null, true)
     }
   }
 
@@ -206,7 +250,7 @@ function RenameField({
       }}
       onKeyDown={handleKeyDown}
       onBlur={() => {
-        finish(value)
+        finish(value, false)
       }}
     />
   )

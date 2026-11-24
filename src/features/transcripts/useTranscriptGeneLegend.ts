@@ -1,5 +1,13 @@
 import type { Color } from '@deck.gl/core'
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { TranscriptFeatureFilterMode } from '../../data/transcriptOverlay'
 import type {
   TranscriptDensityColorScale,
@@ -9,6 +17,7 @@ import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import type { SavedGeneSet } from '../genes/geneControlsModel'
 import {
   EMPTY_TRANSCRIPT_GENE_LEGEND,
+  OTHER_TRANSCRIPT_GENES_ID,
   assignTranscriptGeneColors,
   countTranscriptsByGene,
   countTranscriptsByGeneInBins,
@@ -40,7 +49,10 @@ export interface TranscriptGeneLegendModel {
   readonly note: string | null
   readonly items: readonly TranscriptGeneLegendItem[]
   readonly moreCount: number
+  // Hidden genes or sets that can still show; Show All is offered for them.
   readonly hiddenCount: number
+  // What a row's count is: points, or transcripts in the gene marker bins.
+  readonly countTitle: string
   // A gene, or with `bySet` a gene set's ID.
   readonly onColorChange: (id: string, color: string) => void
   readonly onVisibilityChange: (id: string, visible: boolean) => void
@@ -207,6 +219,48 @@ export function useTranscriptGeneLegend({
     },
     [appendDebugEvent, bySet, setHiddenGeneSets, setHiddenGenes],
   )
+  // A gene taken out of the list of selected genes, or a gene set deleted,
+  // is no longer hidden: picked again, it shows, and Show All does not stay
+  // for it.
+  const listsSelected = filterMode === 'selected' && selectedGenes.length > 0
+  const geneSetIds = useMemo(
+    () => new Set([...geneSets.map((geneSet) => geneSet.id), OTHER_TRANSCRIPT_GENES_ID]),
+    [geneSets],
+  )
+  const previousRef = useRef({ selectedGenes, geneSetIds })
+  useEffect(() => {
+    const previous = previousRef.current
+    previousRef.current = { selectedGenes, geneSetIds }
+    // While the list was the selected genes, even when the last one goes.
+    if (
+      filterMode === 'selected' &&
+      previous.selectedGenes.length > 0 &&
+      previous.selectedGenes !== selectedGenes
+    ) {
+      const kept = new Set(selectedGenes)
+      const removed = previous.selectedGenes.filter((gene) => !kept.has(gene))
+      if (removed.length > 0) {
+        setHiddenGenes((current) =>
+          current.some((gene) => removed.includes(gene))
+            ? current.filter((gene) => !removed.includes(gene))
+            : current,
+        )
+      }
+    }
+    if (previous.geneSetIds !== geneSetIds) {
+      setHiddenGeneSets((current) =>
+        current.every((id) => geneSetIds.has(id))
+          ? current
+          : current.filter((id) => geneSetIds.has(id)),
+      )
+    }
+  }, [filterMode, geneSetIds, selectedGenes, setHiddenGeneSets, setHiddenGenes])
+  const hiddenCount = bySet
+    ? hiddenGeneSets.filter((id) => geneSetIds.has(id)).length
+    : listsSelected
+      ? hiddenGenes.filter((gene) => selectedGenes.includes(gene)).length
+      : hiddenGenes.length
+
   const onShowAll = useCallback(() => {
     if (bySet) {
       setHiddenGeneSets([])
@@ -232,7 +286,10 @@ export function useTranscriptGeneLegend({
               : null,
       items: legend.items,
       moreCount: legend.moreCount,
-      hiddenCount: bySet ? hiddenGeneSets.length : hiddenGenes.length,
+      hiddenCount,
+      countTitle: markersShown
+        ? 'Transcripts in view, from the gene marker bins'
+        : 'Points loaded in view',
       onColorChange,
       onVisibilityChange,
       onShowAll,

@@ -67,8 +67,10 @@ Until a dataset opens, the canvas shows the start screen
   in the user guide.
 - **Recent**: the last eight datasets opened in this browser, newest first,
   each with its name, platform and address, and a × button (`Remove {name}
-from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
-  without storage the list lasts until the page closes. An address that
+from recent datasets`), which moves focus to the next entry's ×, or to the
+  address field once the list is empty. Kept in `localStorage`
+  (`explorer.recentDatasets`); without storage the list lasts until the
+  page closes. An address that
   carries a signature or token (S3 or Google Cloud presigned, CloudFront or
   Azure SAS signatures, `token=`) is kept without its query string and listed
   without a link, marked "signed address not kept": open it again from its
@@ -87,8 +89,9 @@ from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
   id, a name or an http(s) manifest or collection URL are skipped, and all
   text is shown as text.
 - If the index cannot be read: "Examples couldn't be loaded from GitHub."
-  with `Retry`, and the Xenium demo dataset as a card. An empty index also
-  shows the demo.
+  with `Retry`, and the Xenium demo dataset as a card. `Retry` moves focus to
+  "Loading examples…", and then to the first example, or to `Retry` if the
+  index still cannot be read. An empty index also shows the demo.
 
 Each example and recent dataset is a link to `?dataset=<url>` on this
 deployment, never the index's `viewerUrl`. A plain click opens it in place,
@@ -219,11 +222,21 @@ wide each shows its icon and name; between 860 and 1100 px only the icon,
 with the name still read and in the tooltip. Under 860 px they fold into a
 menu (see [Narrow Screens](#narrow-screens)). Until 2026-11-19 they were
 Cells › Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the
-genes and clusters.
+genes and clusters. A window the open dataset lacks closes, so a dataset
+opened later does not open it.
+
+A tool that cannot be used says why in its tooltip: "Open a dataset", "The
+dataset is still opening" while the first dataset opens, or for Box and Lasso
+"The dataset is still preparing". Help lists the keys in three groups: Tools,
+View (`F`, `\`, `?`, anywhere but in a text field), and In the view (arrows,
+`+` `-`, `Home`, `Enter`), which need the view focused.
 
 The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
 leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in
-`ShellLayout`, `?` in `TopBar`).
+`ShellLayout`, `?` in `TopBar`). A letter is the one typed, or, where the
+layout types another script (Cyrillic, Greek) or an input method has the key,
+the letter at that place on a US keyboard (`event.code`). `\` also works typed
+with AltGr (German, French, Spanish, Nordic layouts) or Option on a Mac.
 
 Help's guides are the [User guide](user-guide.md), "What can I open?"
 ([Loading data](user-guide.md#loading-data)),
@@ -263,7 +276,9 @@ tooltip does only that, and the tool stays.
   (Visium HD) under it; queries are debounced by 320 ms. It is not offered on
   images, and says "Unavailable" where the platform cannot scan (Visium,
   MERSCOPE, H5AD, SpatialData). It has no QV filter: the `Min QV` setting
-  changed nothing (F21) and was removed in 15.5-C.
+  changed nothing (F21) and was removed in 15.5-C. Any other tool (Pan, Box
+  selection, Lasso selection, Measure) leaves it: a pending or running scan
+  stops and its card closes.
 
 ### Settings
 
@@ -278,6 +293,9 @@ tooltip does only that, and the tool stays.
 | `Mouse coordinates`       | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                        |
 | `Boundary limit`          | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD    |
 | `Show debug info`         | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6)   |
+
+`Boundary limit` applies on Enter or when the field is left. Escape puts the
+limit back, and a field left empty keeps it.
 
 ## Layer Panel
 
@@ -413,7 +431,7 @@ Titled Spots on Visium and Bins on Visium HD. Its parts, top to bottom:
 
 | Control                         | Type                                         | Values / default                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Annotation set`                | Select                                       | None, All, dataset groups; **graphclust** or the first group (Xenium, Atera, Visium HD), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip`, categorical `obs` columns, or a Visium HD bin size's `analysis/clustering/*/clusters.csv`. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns"                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `Annotation set`                | Select                                       | None, All, dataset groups; **graphclust** or the first group (Xenium, Atera, Visium HD), **None** (H5AD/SpatialData) | Groups come from `analysis.zarr.zip`, categorical `obs` columns, or a Visium HD bin size's `analysis/clustering/*/clusters.csv`. Columns that identify cells (`*_ontology_term_id`, `observation_joinid`, or more than 500 categories) are listed under "More columns", and All leaves them out                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `Open N Sections`               | Link                                         |                                                                                                                      | H5AD (not Visium) with an obs column named like a section column (`section`, `sample`, `library_id`, …) of 2 to 500 labels or numbers, opened whole outside a collection. Reloads the viewer with the table split into one dataset per section; see [Sections Of One Table](./dataset-collections.md#sections-of-one-table)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `Load Annotations`              | Button                                       |                                                                                                                      | Loads the selected set and switches `Cell color` to Annotations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `Clear Annotations`             | Button                                       |                                                                                                                      |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
@@ -428,7 +446,9 @@ Loaded state:
   eye (`{set} visible`), which turns its colours off and on and keeps the
   classes' checkboxes; a checkbox for all its classes (`All {set} classes`),
   checked when every class shows, a dash when some do, that checks or
-  unchecks them all; the set name and its cell total. A set of more than
+  unchecks them all; the set name and its cell total, each cell once where
+  classes overlap (Cell Query's Queries, `Save ROI` classes, imports), and
+  each class's share is of that total. A set of more than
   8 classes has a search box under its heading (`Search {set} classes`) that
   lists only the classes whose name contains the text, with "N of M" beside
   it; the all-classes checkbox then checks or unchecks only those, so
@@ -440,7 +460,9 @@ Loaded state:
   every class unchecked, all cells fade. Visium spots hidden off the tissue
   are not counted, here or in the legend.
 - **Metadata tracks**: every track, with its label, cell count, range, and
-  `x` (the panel scrolls, not the list).
+  `x` (the panel scrolls, not the list). A range, here and in
+  `Metadata track`, has three significant digits below 1,000 and whole
+  numbers above ("503-12,346").
 
 **Advanced**: `Expression detail`, a select of **Auto LOD**, Exact region and
 All cells.
@@ -527,7 +549,7 @@ Atera stores transcripts per gene (see
 | Gene list            | Rows             | See below                                                | With exact points coloured by Feature (Phase 15.4-C), or gene markers                             |
 | `Density color`      | Select + preview | **Thermal**, Magma, Viridis, Cividis, Teal, Gene markers | Relative to the largest square on the slide, or in view for some squares. Gene markers: see below |
 | `Point color`        | Select           | **Feature**, Gene set, QV                                | Exact points. Gene set colours by saved gene set (see below), gene markers too                    |
-| `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too                                                                   |
+| `Min QV`             | Number           | 0–40; 20                                                 | Exact points; Atera density too. Applies on Enter or when left; Esc puts it back                  |
 | `Gene-only calls`    | Checkbox         | On                                                       | Excludes control probes                                                                           |
 | `Transcript opacity` | Slider 0–100%    | 85%                                                      |                                                                                                   |
 | `Point size`         | Slider 1–6 px    | 2 px                                                     |                                                                                                   |
@@ -544,10 +566,13 @@ in view with All features ("+n more genes in view"). Each row has:
   or removed; other genes keep the colour from their name. A colour chosen
   here is kept for that gene, also in other datasets, for the session.
 - an eye (`{gene} transcripts visible`), which hides that gene's points or
-  markers. `Show All` shows them again. Hidden genes reset when another
+  markers. `Show All` shows them again; it is there while a gene that can
+  still show is hidden. A gene taken out of the selected genes is no longer
+  hidden, so picked again it shows. Hidden genes reset when another
   dataset opens, and QV colours show every point.
 - the number of its points loaded in view, hidden ones included; with gene
-  markers, its transcripts in the squares drawn.
+  markers, its transcripts in the squares drawn (titled "Transcripts in
+  view, from the gene marker bins").
 
 The canvas legend lists the same genes under "Transcripts" (the first 12,
 then "+n more in Transcripts", a link that opens this section), and its checkboxes are the same eyes; it
@@ -562,8 +587,8 @@ order, with its gene count and its points in view (or transcripts in the
 squares), then `Other genes` (grey) when genes in no set have any. A set
 takes the next of the 12 colours by its place in the list; its swatch
 changes it for the session, and its eye (`{set} transcripts visible`) hides
-its genes; `Show All` shows every set again, and hidden sets reset when
-another dataset opens. Gene markers merge each set's genes in a square into
+its genes; `Show All` shows every set again, a deleted set is no longer
+hidden, and hidden sets reset when another dataset opens. Gene markers merge each set's genes in a square into
 one circle at their count-weighted centre, whose hover card lists the genes'
 counts (top 4). With no saved sets the section says so and every gene is in
 `Other genes`. Only loaded genes are coloured: on Atera, or with Selected
@@ -642,8 +667,8 @@ the same view (a Visium off-tissue toggle) keeps them.
 | Name                | `Show {name}`: shows it in the Selection card and runs its queries again (pressed while it is the card's)                                                   |
 | Area                | µm², from the box or lasso; a lasso that crosses itself counts each lobe it selects                                                                         |
 | `Go to {name}`      | Fits the view to it                                                                                                                                         |
-| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one. The card's `ROI name` renames it too                                   |
-| `Delete {name}` (x) | Removes it, with [Undo](#undo)                                                                                                                              |
+| `Rename {name}`     | Swaps the name for a field: Enter or leaving it keeps the new name, Esc the old one; after Enter or Esc, focus is back on Rename. The card's `ROI name` too |
+| `Delete {name}` (x) | Removes it, with [Undo](#undo). Focus moves to the next row's Delete, or the last one's, or the heading                                                     |
 
 On the canvas, the card's selection is drawn solid with a light fill in its
 colour; the other visible selections are dashed outlines. Hiding the
@@ -799,8 +824,11 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
   `Nucleus boundaries` is on, each of the cell's nuclei in view adds a
   `Nucleus` row (`Nucleus 1`, `Nucleus 2`, … for several) with its area and
   circularity (`CellNucleusRows.tsx`); Atera rows follow the observations.
-  Then a "Gene expression" list for the cell with a search filter
-  (`CellGeneExpressionList.tsx`).
+  Numeric `obs` values below 10 keep four significant digits (`0.0123`), and
+  one decimal from 10 up. Then a "Gene expression" list for the cell with a
+  search filter (`CellGeneExpressionList.tsx`): each gene's count and share of
+  the cell's total (`<0.1%` for a share that rounds to 0); a stored NaN or
+  infinite value is left out of the list, the total and the shares.
 - Bin, Visium HD (`src/features/cells/GridCellInfoPanel.tsx`): barcode, bin
   size, tissue, array row/column, image pixel position; cell assignment from
   `barcode_mappings.parquet` (for 8 and 16 µm bins, the cell holding most of
@@ -811,8 +839,10 @@ ring around the point. Esc on the canvas, or closing the card, clears it.
   (`src/features/cells/BoundaryCellInfoPanel.tsx`): cell ID, annotation,
   segmentation, vertices (a closed ring's closing point is not counted, here
   or in the tooltip), area, the cell's nuclei in view, selected-gene score and
-  `Load Cell GEX`. Zooming across the level-of-detail threshold does not read
-  a selected cell or bin again.
+  `Load Cell GEX`. Expression is read by bins, so at 8 and 16 µm the score and
+  the profile are the cell's share of its bins' counts, by the share of each
+  bin's 2 µm barcodes it holds. Zooming across the level-of-detail threshold
+  does not read a selected cell or bin again.
 
 ### Transcript
 
@@ -832,7 +862,9 @@ on, a circle and a compact summary also follow the mouse
 
 The Embedding panel (UMAP, t-SNE or the dataset's `obsm` views) opens from
 `Embedding` in the top bar and closes with `Close embedding` or Esc
-(`src/features/shell/EmbeddingWindow.tsx`). It sits at the top right of the
+(`src/features/shell/EmbeddingWindow.tsx`). In a field of this, Plots or
+Cell Query, the first Esc leaves the field and the second closes the window,
+as in the info drawer. It sits at the top right of the
 canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
 260 px up to the canvas, and the plot redraws at its new size. The grip's
@@ -854,8 +886,8 @@ button).
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Embedding view`                                          | Dataset options (H5AD/SpatialData `obsm` keys) or UMAP / t-SNE                                                                                                   |
-| `Load Embeddings`                                         | Loads the projection                                                                                                                                             |
+| `Embedding view`                                          | Dataset options (H5AD/SpatialData `obsm` keys) or UMAP / t-SNE. A view picked but not loaded stays picked, and the plot keeps the loaded one until Load          |
+| `Load Embeddings`                                         | Loads the projection. On Visium HD a bin-size switch drops it, since it names that bin size's bins                                                               |
 | Scatter plot (`src/features/analysis/EmbeddingPanel.tsx`) | Up to 120,000 points; coloured by annotation when active; ROI members yellow; selection pink. Click selects the nearest cell or bin and centres the spatial view |
 
 ## Plots Panel
@@ -1387,17 +1419,17 @@ it; Esc in a text field, such as the address, first leaves the field. Its
 sections render only while it is open. A window opened from the Panels group
 where the drawer would cover it, as Plots and Cell Query would at about
 1024 px wide, closes the drawer as it opens (`windowOpensUnderDrawer` in
-`src/features/shell/floatingWindowModel.ts`). Windows already open, moved or
-not, stay where they are.
+`src/features/shell/floatingWindowModel.ts`), at the width it was last
+resized to. Windows already open, moved or not, stay where they are.
 
-| Section              | Contents                                                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dataset              | Platform, exact counts (cells, spots or bins; genes), image ("4 channels · 15 z planes", "Tissue image", "None"), pixel size in µm/px, address |
-| Slide images         | For an SVS image: the label, the macro (the whole glass slide), and the thumbnail; see [Slide Images](#slide-images)                           |
-| About                | The manifest's name, description, source, licence and citation, when it has them                                                               |
-| View options         | The Visium summary and library, and the SpatialData coordinate system, image and scale, on those platforms                                     |
-| Open another dataset | The open-dataset form, with `Boundary limit` under Advanced                                                                                    |
-| Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode   |
+| Section              | Contents                                                                                                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dataset              | Platform, exact counts (cells, spots or bins; genes), the dataset's own image without custom layers ("4 channels · 15 z planes", "Tissue image", "Loading…", "None"), image size, pixel size in µm/px, address |
+| Slide images         | For an SVS image: the label, the macro (the whole glass slide), and the thumbnail; see [Slide Images](#slide-images)                                                                                           |
+| About                | The manifest's name, description, source, licence and citation, when it has them                                                                                                                               |
+| View options         | The Visium summary and library, and the SpatialData coordinate system, image and scale, on those platforms                                                                                                     |
+| Open another dataset | The open-dataset form, with `Boundary limit` under Advanced                                                                                                                                                    |
+| Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode                                                                   |
 
 ### Slide Images
 
@@ -1425,6 +1457,11 @@ Examples below it, and shows on the [start screen](#start-screen)
 | `Browse Store`                                               | Button    |                                        | Only for a Zarr store address (`isZarrStoreUrl`). Opens the [Store structure drawer](#store-structure-drawer) on it without loading it; from the dataset menu, the menu closes            |
 | `Browse File`                                                | Button    |                                        | Only for a Parquet file address (`isParquetUrl`) or an HDF5 file address (`isH5Url`). Opens the drawer on the file, as [Parquet file](#parquet-file-view) or [HDF5 file](#hdf5-file-view) |
 
+The app checks the address itself rather than the browser, so a path on the
+viewer's own site (`/data/run.h5ad`, `./run-1`) loads, and an address without
+its scheme gets "Not a web address". Enter in `Boundary limit` applies the
+limit and does not load the dataset.
+
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,
 which drops the new load and keeps the open one (15.3-D). If the new one
@@ -1439,8 +1476,9 @@ once, and the spots change when the reload is ready.
 
 `Browse Store` opens "Store structure" (`StoreStructureDrawer`,
 `src/features/store-structure/`): 560 px wide, on the right over the canvas,
-and not modal, so it can sit beside the info drawer. Esc or `Close Store
-structure` closes it. It keeps what it read while closed: `Browse Store` on
+and not modal, so it can sit beside the info drawer. Esc or its `Close`
+button (`Close Store structure`, `Close Parquet file` or `Close HDF5 file`,
+after its title) closes it. It keeps what it read while closed: `Browse Store` on
 the same address shows the same tree, and another address reads that store.
 Closing it during a read stops the read. `readZarrStructure`
 (`src/zarr/zarrStructure.ts`) reads the store:
@@ -1468,12 +1506,24 @@ Once read:
 | Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
 | Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
 
+A path in the filter also matches as the details write it, with a leading
+`/` (`/obs/cluster`), and a dotted one as a Parquet field's path (`a.b`).
+`Collapse All` leaves the root open while filtering too.
+
+The tree is one tab stop (`role="tree"`, rows as `treeitem`s with their
+level). Up and Down move between rows, Home and End to the first and last,
+Right opens a group or moves into it, Left closes it or moves to its group,
+and Enter or Space shows a row's details. Moving does not change the
+details. The chevron opens and closes a group with the mouse. `Show More` is
+a row too, and focus moves to the first row it adds.
+
 A Parquet file in a zip or a listed folder, and a SpatialData shapes group
 whose `shapes.parquet` is not listed (`parquetFileOf`), have `Browse File` in
 their details, with a note when the zip deflates the file. It opens the file
 in the drawer, titled "Parquet file", with `Back to Store` above it. Both
 views stay mounted, so going back keeps the store's open groups and
-selection.
+selection. Focus moves with the view, which would otherwise be left on a
+hidden button: into the file view, and back to `Browse File`.
 
 #### Parquet File View
 
@@ -1495,6 +1545,10 @@ the same filter,
 | File    | Schema root name, rows, columns, compressed and uncompressed data size, the address with `Copy`, the row groups (rows, compressed, uncompressed; 100 at first, then `Show More`), and the key-value metadata (JSON as JSON; Arrow's base64 schema only by its length)                                               |
 | Column  | Path (dotted), type, physical type, annotation (logical or converted type), repetition, field ID, codecs, encodings, sizes, values, nulls, minimum and maximum over the row groups' statistics (unsigned and decimal integers as the rows show them), dictionary, page index and bloom filter, and GeoParquet facts |
 
+A legacy `INT96` column is typed `timestamp[ns]`, as readers and `Rows` show
+it. A statistic below 0.001 keeps six significant digits (`2.5e-7`), so a
+small p-value is not written as 0.
+
 `Columns` / `Rows` (a segmented control under the summary) switch between
 the tree and the file's first rows; the tree stays mounted, so its selection
 survives. `readParquetRows` (`src/data/parquetRows.ts`) reads up to 20 rows
@@ -1502,14 +1556,18 @@ from the first row group that holds rows. Flat columns are read from the
 start of their chunk page by page, from the page headers, until the pages hold
 enough values, and decoded with hyparquet's `readColumn`; nested columns go
 through `parquetReadObjects` with `useOffsetIndex`. The ranges are fetched in
-parallel with `cache: 'no-store'`, and the footer is not read again.
+parallel with `cache: 'no-store'`, and the footer is not read again; a file
+in a zip is read through the entry opened for its footer, so a deflated entry
+is downloaded and inflated once. Columns are read 40 at a time
+(`PARQUET_PREVIEW_COLUMNS`), each a request. Closing the drawer or `Back to
+Store` stops a read, and `Read Rows` offers it again.
 
-| State   | Shows                                                                                                                                                                                                    |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Asking  | When the row group's compressed size is over 8 MB (`AUTO_READ_ROWS_BYTES`): which row group, that only first pages are read, the most it can read, and `Read Rows`. Smaller files read on opening `Rows` |
-| Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                              |
-| Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                  |
-| Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON)              |
+| State   | Shows                                                                                                                                                                                                                                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Asking  | When the row group's compressed size is over 8 MB (`AUTO_READ_ROWS_BYTES`): which row group, that only first pages are read, the most it can read, and `Read Rows`. Smaller files read on opening `Rows`                                                                                                                                       |
+| Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                                                                                                                                                                    |
+| Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                                                                                                                                                        |
+| Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON). Text is cut at 60 characters; its tooltip holds up to 2,000. A file of more columns says "Columns 1 to 40 of N" and offers `Read 40 More Columns` |
 
 #### HDF5 File View
 
@@ -1518,23 +1576,28 @@ parallel with `cache: 'no-store'`, and the footer is not read again.
 `readH5Structure` (`src/data/h5Structure.ts`) opens the file in an H5 file
 worker that reads it by range (`rangeOnly`), and the worker walks it
 (`walkH5Structure`, `src/workers/h5StructureCore.ts`), sending progress as it
-goes. Soft links to objects that exist are shown as those objects; the walk
-stops after 5,000 objects or 32 levels. The worker stays open for `Values`
+goes. Soft links to objects that exist are shown as those objects, except a
+soft link to a group it is in, which is listed and not followed. The walk goes
+level by level, so the groups near the root are listed first, and stops after
+5,000 objects or 32 levels; a group HDF5 cannot list is marked `not listed`.
+The worker stays open for `Values`
 until another file or a retry replaces it. While reading, it says "Reading
 the file's groups and datasets… N objects read". Failures show "No HDF5 file
-at this address" (an HTTP error), "Not an HDF5 file", or "The file cannot be
+at this address" (HTTP 403, 404 or 410, as for Browse Store and Parquet),
+another HTTP error by its status (401 "Access denied", 429 "Too many
+requests", "HTTP 503 response"), "Not an HDF5 file", or "The file cannot be
 read in parts" (the server ignores Range or hides the file's size), with
 `Retry`. Once read, it has the same filter, `Expand All`, `Collapse All` and
 tree as the store view:
 
-| Part    | Shows                                                                                                                                                                                                                                  |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Summary | Format `HDF5`, "Written as" (AnnData with its encoding version, or before encoding versions; 10x feature-barcode matrix; Loom), groups · datasets · datatypes · links, size, bytes and requests read                                   |
-| Notes   | When the walk stopped, and when the file has external links (not followed)                                                                                                                                                             |
-| Tree    | Groups, datasets, committed datatypes and links in HDF5's order. Role badges from AnnData attributes (`encoding-type`, or `h5sparse_format` before 0.7) and 10x `matrix` groups; `missing target` for a broken soft link; `not listed` |
-| Group   | Path, kind, role, what it holds, attributes (as JSON; over 10,000 values, or unreadable, named under "Not shown"), and for the root the address with `Copy`                                                                            |
-| Dataset | Path, kind, role, shape, max shape (when it differs; `unlimited`), data type, byte order, chunks and chunk count, filters (gzip level, plugins by ID), decoded size, `Values`, attributes                                              |
-| Link    | Target, and for an external link its file                                                                                                                                                                                              |
+| Part    | Shows                                                                                                                                                                                                                                                        |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Summary | Format `HDF5`, "Written as" (AnnData with its encoding version, or before encoding versions; 10x feature-barcode matrix; Loom), groups · datasets · datatypes · links, size, bytes and requests read                                                         |
+| Notes   | When the walk stopped, and when the file has external links (not followed)                                                                                                                                                                                   |
+| Tree    | Groups, datasets, committed datatypes and links in HDF5's order. Role badges from AnnData attributes (`encoding-type`, or `h5sparse_format` before 0.7) and 10x `matrix` groups; `missing target` for a broken soft link; `loop, not followed`; `not listed` |
+| Group   | Path, kind, role, what it holds, attributes (as JSON; over 10,000 values, or unreadable, named under "Not shown"), and for the root the address with `Copy`                                                                                                  |
+| Dataset | Path, kind, role, shape, max shape (when it differs; `unlimited`), data type, byte order, chunks and chunk count, filters (gzip level, plugins by ID), decoded size, `Values`, attributes                                                                    |
+| Link    | Target, and for an external link its file                                                                                                                                                                                                                    |
 
 `Values` reads a block from the dataset's origin: up to 100 along the first
 dimension, 20 along the second and 1 along any other (`h5PreviewBlock`).
@@ -1542,15 +1605,26 @@ Variable-length strings are read by hyperslab without h5wasm's whole-dataspace
 reclaim, which aborts its module after a slice; other variable-length types
 are read whole up to 10,000 elements. Booleans show as `True`/`False`, enums
 by name, compounds as `{name: value}` (1D compounds get a column per member),
-and float32 as numpy prints it.
+array types as a list per element, opaque and bitfield elements by their bytes
+as h5dump writes them (`64:65:66`), and float32 as numpy prints it. The first
+element is read through HDF5 before the block, so a read HDF5 cannot make
+(values in an external storage file) fails rather than showing whatever memory
+held.
 
-| State       | Shows                                                                                                                                                                               |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unavailable | Why: no dataspace, an HDF5 plugin filter, or variable-length elements in a dataset too large to read whole                                                                          |
-| Asking      | When the chunks touched, or the span of a contiguous dataset, are over 4 MB (`AUTO_READ_VALUES_BYTES`): how much it may read, and `Read Values`. Smaller datasets read on selection |
-| Reading     | "Reading the first values…" (`role="status"`)                                                                                                                                       |
-| Failed      | The error's title and message (`role="alert"`), with `Retry`                                                                                                                        |
-| Read        | "All N values." or "The first R × C, of shape.", and a table "Values" with indices                                                                                                  |
+Attributes keep their shape, NaN and infinities, 64-bit integers past 2^53
+exactly, opaque bytes as above, and references as "object reference" or
+"region reference".
+
+`Read Values` and `Retry` give way to "Reading…", so focus moves to it, and
+then to the `Values` heading, or to `Retry` if the read fails.
+
+| State       | Shows                                                                                                                                                                                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unavailable | Why: no dataspace, an HDF5 plugin filter, or variable-length elements in a dataset too large to read whole                                                                                                                                                                                              |
+| Asking      | When the chunks touched, or the span of a contiguous dataset, are over 4 MB (`AUTO_READ_VALUES_BYTES`): how much it may read, and `Read Values`. Smaller datasets read on selection. A ragged array or a compound with variable-length members is read whole, so its cost is unknown and it always asks |
+| Reading     | "Reading the first values…" (`role="status"`)                                                                                                                                                                                                                                                           |
+| Failed      | The error's title and message (`role="alert"`), with `Retry`                                                                                                                                                                                                                                            |
+| Read        | "All N values." or "The first R × C, of shape.", and a table "Values" with indices                                                                                                                                                                                                                      |
 
 ### View Options
 
@@ -1589,7 +1663,9 @@ deposit, followed by the licence and citation.
 saves `diagnostics-<timestamp>.json`, where the timestamp is the dump's
 `generatedAt` in UTC to the second with `-` for `:` (for example
 `diagnostics-2026-11-17T14-05-09Z.json`). A signed address loses its query
-wherever the dump has it, the page address's `#dataset=` included. Then
+wherever the dump has it, the page address's `#dataset=` included. The
+transcript layer is written as counts (points, groups, bins), not the points
+themselves. Then
 (`src/components/AppStatusPanels.tsx`):
 
 | Panel                 | Shows                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
@@ -1621,7 +1697,10 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others.
+  canvas's width, one at a time: opening one closes the others. Where a link
+  or a wider screen left several open, the one in front shows (else the first
+  in the top bar's order), its button alone pressed; the others show again
+  once the screen is 860 px or wider.
 
 ## Platform Availability
 
@@ -1662,8 +1741,9 @@ that is its colour mode here. `cellBounds` and `nucleusBounds` are always
 written, because a load picks their default by platform when a link is silent,
 and `boundaryLimit` only when it differs from the device's own limit, so each
 reader keeps theirs. Version 1 links, which wrote every value, still open as
-before. `Share` in the top bar and `Copy Link` copy the link for the current
-state, which the address shows up to 160 ms later, and say "Link copied".
+before. `Share` in the top bar copies the link for the current state, which
+the address shows up to 160 ms later, and says "Link copied" for 2.5 s after
+the latest copy.
 Until the dataset a link names has opened, failed or been cancelled, or
 another dataset is opening, the address and the copied link stay the link it
 was opened with: the load applies its `card`, `roi`, `channels` and `z`
@@ -1706,7 +1786,7 @@ page with that link too.
 | `view`                                                                                                    | Target x, y, z, zoom, for the dataset the link names, when it first opens. A dataset opened after it, or the same one loaded again, starts fitted to its extent                                                                                                                                                                                                                        |
 | `roi`                                                                                                     | The selection in the Selection card: `box:minX,minY,maxX,maxY` or `lasso:x,y;x,y;…`. Other selections are not in the link                                                                                                                                                                                                                                                              |
 | `tab`                                                                                                     | Read from older links, which named a control tab, and mapped: `dataset` → info drawer (not in a version 1 link, where every link said `dataset`), `layers` → Image, `genes` and `annotations` → Cells, `transcripts` → Transcripts, `roi` → `tool=box`, `cell` → the Embedding panel and `card=cell`, `magic-lens` → `tool=magic-lens`                                                 |
-| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open; `panel=info` is the drawer with every section closed                                                                                              |
+| `panel`                                                                                                   | Exactly what is open: layer sections (`image`, `cells`, `segmentation`, `transcripts`, `annotations`), `info` (the info drawer), `embedding`, `plots` and `query`, comma-separated. Left out while only the default section is open, even after others were opened and closed; only what the dataset has; `panel=info` is the drawer with every section closed                         |
 | `tool`                                                                                                    | The active tool: `box`, `lasso`, `measure` or `magic-lens`; left out for Pan. Replaces `lens=1`, which version 1 links still use                                                                                                                                                                                                                                                       |
 | `plot`                                                                                                    | The Plots panel's plot: `violin` or `heatmap`; left out for the dot plot                                                                                                                                                                                                                                                                                                               |
 | `query`                                                                                                   | Cell Query's conditions, `;`-separated: column, operator and values joined by `\|`; class IDs joined by `,`, or the bounds. `%`, `;`, `\|`, `,` in a part are `%25`, `%3B`, `%7C`, `%2C`. Image columns are `image:{mean or above}:{level}:[z{plane}:][t{threshold}:][r{radius}:]{channel}`, such as `image:above:2:t2188:Channel:0\|at-least\|40`, and are measured as the link opens |
