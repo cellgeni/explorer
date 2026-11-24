@@ -260,10 +260,7 @@ function readAttributes(entity: { readonly attrs: unknown }): {
 } {
   const attributes: Record<string, unknown> = {}
   const skippedAttributes: H5SkippedAttribute[] = []
-  let records: Record<
-    string,
-    { readonly metadata: Metadata; readonly json_value: unknown }
-  >
+  let records: Record<string, { readonly metadata: Metadata; readonly value: unknown }>
 
   try {
     records = entity.attrs as typeof records
@@ -283,7 +280,7 @@ function readAttributes(entity: { readonly attrs: unknown }): {
         continue
       }
 
-      attributes[name] = attribute.json_value
+      attributes[name] = attributeValue(attribute.value, attribute.metadata)
     } catch (error) {
       skippedAttributes.push({
         name,
@@ -394,9 +391,130 @@ export function previewH5Dataset(
     return { shape: block, values: blockOf(whole, shape, block) }
   }
 
-  const values = listOf(dataset.slice(block.map((size) => [0, size])))
+  // h5wasm does not check H5Dread's status, so a read that fails (an external
+  // storage file that is not there) would show whatever memory held.
+  probeRead(module, dataset, metadata, block.length)
+  const raw: unknown = dataset.slice(block.map((size) => [0, size]))
   check()
-  return { shape: block, values }
+  return { shape: block, values: elementsOf(raw, metadata, block.length) }
+}
+
+// One value per element, as the values table takes them: h5wasm gives opaque
+// and bitfield data as all their bytes, and nests an array type's elements by
+// the dataset's whole shape.
+function elementsOf(raw: unknown, metadata: Metadata, dimensions: number): unknown[] {
+  if (raw instanceof Uint8Array && isByteType(metadata)) {
+    return byteElements(raw, metadata.size)
+  }
+
+  if (metadata.type === H5T_CLASS.ARRAY && Array.isArray(raw) && dimensions > 1) {
+    return raw.flat(dimensions - 1).map(plainValue)
+  }
+
+  return listOf(raw)
+}
+
+function isByteType(metadata: Metadata): boolean {
+  return metadata.type === H5T_CLASS.OPAQUE || metadata.type === H5T_CLASS.BITFIELD
+}
+
+// Each element's bytes as h5dump writes them: "64:65:66".
+function byteElements(bytes: Uint8Array, size: number): string[] {
+  const elements: string[] = []
+
+  for (let start = 0; start + size <= bytes.length; start += size) {
+    elements.push(
+      Array.from(bytes.subarray(start, start + size), (byte) =>
+        byte.toString(16).padStart(2, '0'),
+      ).join(':'),
+    )
+  }
+
+  return elements
+}
+
+// Reads the first element through H5Dread and throws if HDF5 cannot.
+function probeRead(
+  module: H5Module,
+  dataset: H5wasmDataset,
+  metadata: Metadata,
+  dimensions: number,
+): void {
+  const buffer = module._malloc(Math.max(1, metadata.size))
+
+  if (buffer === 0) {
+    throw new Error('h5wasm ran out of memory reading the dataset.')
+  }
+
+  try {
+    const status = module.get_dataset_data(
+      dataset.file_id,
+      dataset.path,
+      Array.from({ length: dimensions }, () => 1n),
+      Array.from({ length: dimensions }, () => 0n),
+      Array.from({ length: dimensions }, () => 1n),
+      BigInt(buffer),
+    )
+
+    if (status < 0) {
+      throw new Error(
+        `HDF5 could not read ${dataset.path}. Its values may be stored in another file (external storage), which Browse File cannot reach.`,
+      )
+    }
+  } finally {
+    module._free(buffer)
+  }
+}
+
+// An attribute's value for its JSON: nested by its shape, NaN and infinity
+// kept, 64-bit integers past 2^53 kept exact (as bigint), opaque and bitfield
+// bytes as h5dump writes them, and references named, not given as bytes.
+function attributeValue(value: unknown, metadata: Metadata): unknown {
+  if (metadata.type === H5T_CLASS.REFERENCE) {
+    const name = metadata.ref_type === 'region' ? 'region reference' : 'object reference'
+    return metadata.shape === null || metadata.shape.length === 0
+      ? name
+      : nestedByShape(
+          Array.from({ length: metadata.total_size }, () => name),
+          metadata.shape,
+        )
+  }
+
+  const elements =
+    value instanceof Uint8Array && isByteType(metadata)
+      ? byteElements(value, metadata.size)
+      : ArrayBuffer.isView(value) && !(value instanceof DataView)
+        ? Array.from(value as unknown as ArrayLike<unknown>, attributeNumber)
+        : null
+
+  if (elements === null) {
+    return Array.isArray(value) && metadata.shape !== null && metadata.shape.length > 1
+      ? nestedByShape(value.map(plainValue), metadata.shape)
+      : attributeNumber(plainValue(value))
+  }
+
+  if (metadata.shape === null || metadata.shape.length === 0) {
+    return elements[0]
+  }
+
+  return nestedByShape(elements, metadata.shape)
+}
+
+// A 64-bit integer as a number when that is exact, else as a bigint.
+function attributeNumber(value: unknown): unknown {
+  return typeof value === 'bigint' &&
+    value <= BigInt(Number.MAX_SAFE_INTEGER) &&
+    value >= BigInt(Number.MIN_SAFE_INTEGER)
+    ? Number(value)
+    : value
+}
+
+function nestedByShape(values: readonly unknown[], shape: readonly number[]): unknown {
+  if (shape.length <= 1) return [...values]
+  const inner = shape.slice(1).reduce((product, size) => product * size, 1)
+  return Array.from({ length: shape[0] ?? 0 }, (_, index) =>
+    nestedByShape(values.slice(index * inner, (index + 1) * inner), shape.slice(1)),
+  )
 }
 
 // The block's strings, read by hyperslab as h5wasm's slice does, without its

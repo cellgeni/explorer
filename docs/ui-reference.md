@@ -1557,7 +1557,9 @@ level by level, so the groups near the root are listed first, and stops after
 The worker stays open for `Values`
 until another file or a retry replaces it. While reading, it says "Reading
 the file's groups and datasets… N objects read". Failures show "No HDF5 file
-at this address" (an HTTP error), "Not an HDF5 file", or "The file cannot be
+at this address" (HTTP 403, 404 or 410, as for Browse Store and Parquet),
+another HTTP error by its status (401 "Access denied", 429 "Too many
+requests", "HTTP 503 response"), "Not an HDF5 file", or "The file cannot be
 read in parts" (the server ignores Range or hides the file's size), with
 `Retry`. Once read, it has the same filter, `Expand All`, `Collapse All` and
 tree as the store view:
@@ -1577,7 +1579,18 @@ Variable-length strings are read by hyperslab without h5wasm's whole-dataspace
 reclaim, which aborts its module after a slice; other variable-length types
 are read whole up to 10,000 elements. Booleans show as `True`/`False`, enums
 by name, compounds as `{name: value}` (1D compounds get a column per member),
-and float32 as numpy prints it.
+array types as a list per element, opaque and bitfield elements by their bytes
+as h5dump writes them (`64:65:66`), and float32 as numpy prints it. The first
+element is read through HDF5 before the block, so a read HDF5 cannot make
+(values in an external storage file) fails rather than showing whatever memory
+held.
+
+Attributes keep their shape, NaN and infinities, 64-bit integers past 2^53
+exactly, opaque bytes as above, and references as "object reference" or
+"region reference".
+
+`Read Values` and `Retry` give way to "Reading…", so focus moves to it, and
+then to the `Values` heading, or to `Retry` if the read fails.
 
 | State       | Shows                                                                                                                                                                                                                                                                                                   |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

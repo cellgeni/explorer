@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '../../components/ui'
 import type { H5Structure } from '../../data/h5Structure'
 import {
@@ -304,6 +304,9 @@ function H5ValuesPanel({
     autoRead ? { status: 'loading' } : { status: 'idle' },
   )
   const controllerRef = useRef<AbortController | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // Read Values or Retry was pressed: focus follows what replaces them.
+  const requestedRef = useRef(false)
 
   const fetchValues = useCallback(() => {
     controllerRef.current?.abort()
@@ -325,9 +328,24 @@ function H5ValuesPanel({
   }, [node.path, structure])
 
   const read = () => {
+    requestedRef.current = true
     setState({ status: 'loading' })
     fetchValues()
   }
+
+  // Read Values and Retry give way to "Reading…", and that to the values or
+  // Retry, so keyboard focus moves to each rather than falling to the page.
+  useLayoutEffect(() => {
+    if (!requestedRef.current) return
+    const panel = panelRef.current
+    if (state.status === 'loading') {
+      panel?.querySelector<HTMLElement>('[role="status"]')?.focus()
+      return
+    }
+
+    requestedRef.current = false
+    panel?.querySelector<HTMLElement>(state.status === 'error' ? 'button' : 'h4')?.focus()
+  }, [state.status])
 
   useEffect(() => {
     if (autoRead) fetchValues()
@@ -337,8 +355,10 @@ function H5ValuesPanel({
   }, [autoRead, fetchValues])
 
   return (
-    <div className="store-structure-values">
-      <h4 id={headingId}>Values</h4>
+    <div ref={panelRef} className="store-structure-values">
+      <h4 id={headingId} tabIndex={-1}>
+        Values
+      </h4>
       {unavailable !== null ? (
         <p className="store-structure-empty">{unavailable}</p>
       ) : state.status === 'idle' ? (
@@ -353,7 +373,9 @@ function H5ValuesPanel({
           </Button>
         </div>
       ) : state.status === 'loading' ? (
-        <p role="status">Reading the first values…</p>
+        <p role="status" tabIndex={-1}>
+          Reading the first values…
+        </p>
       ) : state.status === 'error' ? (
         <div className="store-structure-error" role="alert">
           <strong>{state.error.title}</strong>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { structureFromFlatNodes, type ZarrStructure } from '../../zarr/zarrStructure'
 import {
   formatBytes,
+  formatJson,
   formatShape,
   isZarrStoreUrl,
   nodeRole,
@@ -55,6 +56,18 @@ describe('store structure model', () => {
     ]) {
       expect(isZarrStoreUrl(url), url).toBe(false)
     }
+  })
+
+  it('writes NaN, infinities and bigints in JSON as themselves', () => {
+    expect(
+      formatJson(
+        { scores: [1, Number.NaN, -Infinity], total: 9_007_199_254_740_993n },
+        1_000,
+      ).text,
+    ).toBe(
+      '{\n  "scores": [\n    1,\n    NaN,\n    -Infinity\n  ],\n  "total": 9007199254740993\n}',
+    )
+    expect(formatJson({ name: 'NaN' }).text).toBe('{\n  "name": "NaN"\n}')
   })
 
   it('formats shapes and sizes', () => {
