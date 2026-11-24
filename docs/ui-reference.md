@@ -1721,12 +1721,12 @@ stylesheet's narrow rules use too) the shell folds up:
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others. Their grip
-  then changes only their height (up and down arrow keys), so the width each
-  has on a wider screen stays. Where a link
+  canvas's width, one at a time: opening one closes the others. Where a link
   or a wider screen left several open, the one in front shows (else the first
   in the top bar's order), its button alone pressed; the others show again
   once the screen is 860 px or wider.
+- A full-width panel's grip changes only its height (up and down arrow
+  keys), so the width it has on a wider screen stays.
 
 On any screen, a popover from the top bar (the menus, Help, Settings and the
 tools' options) opens under its button but stays 8 px inside the window
