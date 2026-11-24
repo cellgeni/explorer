@@ -67,8 +67,10 @@ Until a dataset opens, the canvas shows the start screen
   in the user guide.
 - **Recent**: the last eight datasets opened in this browser, newest first,
   each with its name, platform and address, and a × button (`Remove {name}
-from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
-  without storage the list lasts until the page closes. An address that
+from recent datasets`), which moves focus to the next entry's ×, or to the
+  address field once the list is empty. Kept in `localStorage`
+  (`explorer.recentDatasets`); without storage the list lasts until the
+  page closes. An address that
   carries a signature or token (S3 or Google Cloud presigned, CloudFront or
   Azure SAS signatures, `token=`) is kept without its query string and listed
   without a link, marked "signed address not kept": open it again from its
@@ -87,8 +89,9 @@ from recent datasets`). Kept in `localStorage` (`explorer.recentDatasets`);
   id, a name or an http(s) manifest or collection URL are skipped, and all
   text is shown as text.
 - If the index cannot be read: "Examples couldn't be loaded from GitHub."
-  with `Retry`, and the Xenium demo dataset as a card. An empty index also
-  shows the demo.
+  with `Retry`, and the Xenium demo dataset as a card. `Retry` moves focus to
+  "Loading examples…", and then to the first example, or to `Retry` if the
+  index still cannot be read. An empty index also shows the demo.
 
 Each example and recent dataset is a link to `?dataset=<url>` on this
 deployment, never the index's `viewerUrl`. A plain click opens it in place,
@@ -278,6 +281,9 @@ tooltip does only that, and the tool stays.
 | `Mouse coordinates`       | Segmented µm / px | µm                                         | Also sets the scale-bar unit                                                        |
 | `Boundary limit`          | Number            | 1–100,000; 2,500 (compact) or 50,000       | Most visible cells before boundary polygons are deferred. Disabled for Visium HD    |
 | `Show debug info`         | Switch            | Off, or on with `?debug=1` (or `#debug=1`) | Shows the zoom number, and the deck.gl layer and budget lines in Diagnostics (D6)   |
+
+`Boundary limit` applies on Enter or when the field is left. Escape puts the
+limit back, and a field left empty keeps it.
 
 ## Layer Panel
 
@@ -1422,6 +1428,11 @@ Examples below it, and shows on the [start screen](#start-screen)
 | `Load Dataset`                                               | Submit    |                                        | Resets genes, annotations, embeddings, ROI, selections, and Magic Lens results once the new dataset is ready; shows `Loading…` and is disabled until then, or until the load is cancelled |
 | `Browse Store`                                               | Button    |                                        | Only for a Zarr store address (`isZarrStoreUrl`). Opens the [Store structure drawer](#store-structure-drawer) on it without loading it; from the dataset menu, the menu closes            |
 | `Browse File`                                                | Button    |                                        | Only for a Parquet file address (`isParquetUrl`) or an HDF5 file address (`isH5Url`). Opens the drawer on the file, as [Parquet file](#parquet-file-view) or [HDF5 file](#hdf5-file-view) |
+
+The app checks the address itself rather than the browser, so a path on the
+viewer's own site (`/data/run.h5ad`, `./run-1`) loads, and an address without
+its scheme gets "Not a web address". Enter in `Boundary limit` applies the
+limit and does not load the dataset.
 
 The open dataset stays on screen and usable while another loads (Phase
 15.1-F); the loading list shows "Loading dataset {name}", with `Cancel`,

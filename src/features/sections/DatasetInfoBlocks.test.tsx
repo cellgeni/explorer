@@ -110,6 +110,78 @@ describe('OpenDatasetForm', () => {
   })
 })
 
+describe('OpenDatasetForm addresses', () => {
+  it.each(['/data/run.h5ad', './run-1', 'bucket.test/run.h5ad'])(
+    'leaves %s for the app to check, as the browser would refuse it',
+    (address) => {
+      const { open } = testDatasetInfoModel({ open: { datasetUrl: address } })
+      render(<OpenDatasetForm open={open} />)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+      expect(open.onSubmit).toHaveBeenCalledTimes(1)
+    },
+  )
+})
+
+describe('Boundary limit', () => {
+  function renderLimit() {
+    const { open } = testDatasetInfoModel({ open: { boundaryCellLimit: 2_500 } })
+    render(<OpenDatasetForm open={open} />)
+    const input = screen.getByRole<HTMLInputElement>('spinbutton', {
+      name: 'Boundary limit',
+    })
+    return { open, input }
+  }
+
+  it('can be emptied while a number is typed, and keeps the limit if left empty', () => {
+    const { open, input } = renderLimit()
+
+    fireEvent.change(input, { target: { value: '' } })
+    expect(input.value).toBe('')
+    fireEvent.blur(input)
+
+    expect(open.onBoundaryCellLimitChange).not.toHaveBeenCalled()
+    expect(input.value).toBe('2500')
+  })
+
+  it('applies the typed number when the field is left', () => {
+    const { open, input } = renderLimit()
+
+    fireEvent.change(input, { target: { value: '1' } })
+    fireEvent.change(input, { target: { value: '10000' } })
+    expect(open.onBoundaryCellLimitChange).not.toHaveBeenCalled()
+    fireEvent.blur(input)
+
+    expect(open.onBoundaryCellLimitChange).toHaveBeenCalledTimes(1)
+    expect(open.onBoundaryCellLimitChange).toHaveBeenCalledWith(10_000)
+  })
+
+  it('applies on Enter without loading the dataset', () => {
+    const { open, input } = renderLimit()
+
+    fireEvent.change(input, { target: { value: '8000' } })
+    // A browser submits the form on Enter in a field unless the key is
+    // cancelled; jsdom does not, so the cancel is what is checked.
+    const notCancelled = fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(notCancelled).toBe(false)
+    expect(open.onBoundaryCellLimitChange).toHaveBeenCalledWith(8_000)
+    expect(open.onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('puts the limit back on Escape', () => {
+    const { open, input } = renderLimit()
+
+    fireEvent.change(input, { target: { value: '9' } })
+    fireEvent.keyDown(input, { key: 'Escape' })
+    expect(input.value).toBe('2500')
+    fireEvent.blur(input)
+
+    expect(open.onBoundaryCellLimitChange).not.toHaveBeenCalled()
+  })
+})
+
 describe('DatasetViewOptions', () => {
   it('leaves section controls to the layer panel (15.2-C)', () => {
     render(<DatasetViewOptions viewOptions={VISIUM_VIEW_OPTIONS} />)
