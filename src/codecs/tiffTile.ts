@@ -17,7 +17,7 @@ const TIFF_COMPRESSION_JPEG_2000_LOSSLESS = 33003
 const TIFF_COMPRESSION_JPEG_2000_LOSSY = 33004
 const TIFF_COMPRESSION_JPEG_2000_LEGACY = 33005
 
-const JPEG_2000_COMPRESSION_CODES = new Set([
+export const JPEG_2000_COMPRESSION_CODES: ReadonlySet<number> = new Set([
   TIFF_COMPRESSION_JPEG_2000,
   TIFF_COMPRESSION_JPEG_2000_LOSSLESS,
   TIFF_COMPRESSION_JPEG_2000_LOSSY,
@@ -163,6 +163,7 @@ export async function decodeTiffChunkSamples(
                 ...(metadata.jpegTables === undefined
                   ? {}
                   : { jpegTables: metadata.jpegTables }),
+                littleEndian: metadata.littleEndian ?? true,
                 planarConfiguration,
                 predictor,
                 samplesPerPixel,
@@ -485,6 +486,7 @@ async function decodeWithGeotiff(
     readonly bitsPerSample: readonly number[]
     readonly compression: number
     readonly jpegTables?: Uint8Array
+    readonly littleEndian: boolean
     readonly planarConfiguration: number
     readonly predictor: number
     readonly samplesPerPixel: number
@@ -492,19 +494,39 @@ async function decodeWithGeotiff(
     readonly tileWidth: number
   },
 ): Promise<ArrayBufferLike> {
+  // geotiff undoes the horizontal predictor on samples in the machine's
+  // (little-endian) byte order, which garbles a big-endian file's (EXP-332),
+  // so it is undone here in the file's byte order, as for LZW.
+  const ownPredictor =
+    options.predictor === TIFF_PREDICTOR_HORIZONTAL &&
+    options.compression !== TIFF_COMPRESSION_JPEG
   const decoderParameters = {
     bitsPerSample: [...options.bitsPerSample],
     ...(options.jpegTables === undefined ? {} : { JPEGTables: options.jpegTables }),
     planarConfiguration: options.planarConfiguration,
-    predictor: options.predictor,
+    predictor: ownPredictor ? 1 : options.predictor,
     samplesPerPixel: options.samplesPerPixel,
     tileHeight: options.tileHeight,
     tileWidth: options.tileWidth,
   }
 
   const decoder = await getDecoder(options.compression, decoderParameters)
+  const decoded = await decoder.decode(copyToArrayBuffer(bytes))
 
-  return decoder.decode(copyToArrayBuffer(bytes))
+  return ownPredictor
+    ? undoPredictor(
+        decoded instanceof ArrayBuffer
+          ? decoded
+          : copyToArrayBuffer(new Uint8Array(decoded)),
+        {
+          predictor: options.predictor,
+          width: options.tileWidth,
+          bitsPerSample: options.bitsPerSample[0] ?? 8,
+          samplesPerPixel: options.samplesPerPixel,
+          littleEndian: options.littleEndian,
+        },
+      )
+    : decoded
 }
 
 function decodedByteLength(

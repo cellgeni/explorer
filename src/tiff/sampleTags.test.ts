@@ -67,4 +67,48 @@ describe('TIFF sample tags (EXP-015)', () => {
     )
     expect(labels.tileDecodeOptions(0, 0, 0)).toMatchObject({ sampleFormat: 2 })
   })
+
+  // Tiles were read a byte per sample: a 1-bit mask of ones drew as 255s
+  // and zeros (EXP-330).
+  it.each([
+    ['a bilevel mask', 1],
+    ['packed 12-bit samples', 12],
+    ['32-bit samples', 32],
+  ])('refuses tiles of %s in an image', async (_name, bitsPerSample) => {
+    await expect(
+      openTiff('https://example.test/odd.tif', undefined, undefined, {
+        bytes: image({ bitsPerSample, tileBytes: () => [0xff, 0x00] }),
+      }),
+    ).rejects.toThrow(
+      `The image stores ${bitsPerSample}-bit samples, which the viewer cannot read from its tiles.`,
+    )
+  })
+
+  it('reads 32-bit tiles in labels, and 8- and 16-bit tiles in images', async () => {
+    const labels = await openTiff(
+      'https://example.test/labels.tif',
+      undefined,
+      undefined,
+      {
+        bytes: image({
+          bitsPerSample: 32,
+          tileBytes: () => new Array<number>(16 * 16 * 4).fill(0),
+        }),
+        labels: true,
+      },
+    )
+    expect(labels.tileDecodeOptions(0, 0, 0)).toMatchObject({ bitsPerSample: [32] })
+
+    for (const bitsPerSample of [8, 16]) {
+      clearOpenTiffFiles()
+      await expect(
+        openTiff(`https://example.test/${bitsPerSample}.tif`, undefined, undefined, {
+          bytes: image({
+            bitsPerSample,
+            tileBytes: () => new Array<number>((16 * 16 * bitsPerSample) / 8).fill(1),
+          }),
+        }),
+      ).resolves.toBeDefined()
+    }
+  })
 })
