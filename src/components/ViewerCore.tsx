@@ -231,6 +231,8 @@ interface OverviewCellLookup {
   get(id: string): OverviewCellDatum | undefined
 }
 const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
+// How long the view keeps still before it stops counting as moving.
+const VIEW_SETTLE_DELAY_MS = 200
 // @deck.gl/react redraws every layer after each render of <DeckGL>, even when
 // its props are unchanged. Skip those renders so ROI drags, the cursor readout,
 // and hover tooltips do not redraw every cell on each pointer move.
@@ -328,6 +330,7 @@ export function ViewerCore({
   scaleBar = true,
   fitRequestKey = 0,
   overviewRenderCellLimit,
+  movingOverviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
@@ -441,6 +444,9 @@ export function ViewerCore({
       minimapPoints={minimapDots}
       fitRequestKey={fitRequestKey}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
+      {...(movingOverviewRenderCellLimit === undefined
+        ? {}
+        : { movingOverviewRenderCellLimit })}
       clipOverviewCellsToViewport={clipOverviewCellsToViewport}
       {...(maxConcurrentTileRequests === undefined ? {} : { maxConcurrentTileRequests })}
       {...(tileCacheMaxTiles === undefined ? {} : { tileCacheMaxTiles })}
@@ -535,6 +541,7 @@ interface ViewerSurfaceProps {
   readonly minimapPoints: readonly (readonly [number, number])[]
   readonly fitRequestKey: number
   readonly overviewRenderCellLimit?: number | null
+  readonly movingOverviewRenderCellLimit?: number
   readonly clipOverviewCellsToViewport: boolean
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
@@ -623,6 +630,7 @@ function ViewerSurface({
   minimapPoints: minimapDots,
   fitRequestKey,
   overviewRenderCellLimit,
+  movingOverviewRenderCellLimit,
   clipOverviewCellsToViewport,
   maxConcurrentTileRequests,
   tileCacheMaxTiles,
@@ -875,14 +883,42 @@ function ViewerSurface({
         : cells.length,
     [cells.length, clipsCellsToViewport, overviewCellIndex, viewportBbox],
   )
+  // Without a render limit (AnnData embeddings) every cell draws, so each
+  // frame of a pan or zoom would rasterise all of them. They sample down to
+  // the moving limit until the view keeps still: deck.gl's own interaction
+  // state ends with each wheel event, and keyboard and minimap moves have none.
+  const movingRenderCellLimit =
+    overviewRenderCellLimit === null &&
+    movingOverviewRenderCellLimit !== undefined &&
+    cells.length > movingOverviewRenderCellLimit
+      ? movingOverviewRenderCellLimit
+      : null
+  const [settledViewState, setSettledViewState] = useState(viewState)
+  useEffect(() => {
+    if (movingRenderCellLimit === null || settledViewState === viewState) {
+      return
+    }
+
+    const timeout = window.setTimeout(() => {
+      setSettledViewState(viewState)
+    }, VIEW_SETTLE_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
+  }, [movingRenderCellLimit, settledViewState, viewState])
+  const renderCellLimit =
+    movingRenderCellLimit !== null && settledViewState !== viewState
+      ? movingRenderCellLimit
+      : overviewRenderCellLimit
   const shouldClipRenderCells =
     clipOverviewCellsToViewport ||
-    (overviewRenderCellLimit !== null &&
+    (renderCellLimit !== null &&
       viewState.zoom - fittedViewZoom >= STABLE_OVERVIEW_RENDER_CLIP_ZOOM_DELTA)
   const cellPointSample = cellPointSampleFraction(
-    overviewRenderCellLimit === null
+    renderCellLimit === null
       ? null
-      : (overviewRenderCellLimit ?? DEFAULT_OVERVIEW_RENDER_CELL_LIMIT),
+      : (renderCellLimit ?? DEFAULT_OVERVIEW_RENDER_CELL_LIMIT),
     shouldClipRenderCells ? visibleCellCount : cells.length,
   )
   const observationColorizer = useMemo(
