@@ -51,11 +51,12 @@
   left: 0;
 }
 
+/* At least 24 px, and taller with a larger font or text spacing; the list's
+   row pitch follows (GeneOptionList, EXP-308). */
 .gene-option-list.is-virtualized button {
   display: block;
   width: 100%;
   min-height: 24px;
-  height: 24px;
   overflow: hidden;
   border-radius: 6px;
   text-align: left;

@@ -970,6 +970,13 @@
   white-space: nowrap;
 }
 
+/* A cut name shows in full while its row has focus, for keyboard and touch
+   users, as the row's title does on hover (EXP-307). */
+.viewer-legend-categories li:focus-within .viewer-legend-label {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .viewer-legend-count {
   color: var(--text-2);
   font-variant-numeric: tabular-nums;

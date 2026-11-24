@@ -83,7 +83,11 @@ export function CellInfoPanel({
                 <dt>Annotations</dt>
                 <dd className="cell-annotation-values">
                   {annotationLabels.map((label, labelIndex) => (
-                    <span className="cell-annotation-chip" key={`${label}:${labelIndex}`}>
+                    <span
+                      className="cell-annotation-chip"
+                      key={`${label}:${labelIndex}`}
+                      title={label}
+                    >
                       {label}
                     </span>
                   ))}
@@ -136,6 +140,7 @@ export function CellInfoPanel({
                       <span
                         className="cell-annotation-chip"
                         key={`${label}:${labelIndex}`}
+                        title={label}
                       >
                         {label}
                       </span>

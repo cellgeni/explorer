@@ -54,9 +54,9 @@
   white-space: normal;
 }
 
+/* A long class name wraps rather than being cut (EXP-307). */
 .cell-annotation-chip {
   max-width: 100%;
-  overflow: hidden;
   border: 1px solid var(--accent-border);
   border-radius: 4px;
   padding: 1px 5px;
@@ -64,8 +64,7 @@
   color: var(--accent);
   font-size: var(--font-control);
   font-weight: 700;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .cell-expression-panel {

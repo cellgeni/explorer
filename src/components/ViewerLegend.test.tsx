@@ -70,6 +70,24 @@ describe('ViewerLegend', () => {
     expect(onChange).toHaveBeenCalledWith('cluster-1', false, categories.id)
   })
 
+  // The label is cut at 260 px; its row carries the full name (EXP-307).
+  it('names each class in full on its row', () => {
+    const long = 'Intratelencephalic-projecting excitatory neuron of cortical layer 2/3'
+    render(
+      <ViewerLegend
+        sections={[
+          {
+            ...categories,
+            items: [{ id: 'a', label: long, color: '#1f77b4', count: 10, visible: true }],
+          },
+        ]}
+        onCategoryVisibilityChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText(long).closest('label')).toHaveAttribute('title', long)
+  })
+
   it('shows only one class on an Alt-click, where the section allows it', () => {
     const onChange = vi.fn()
     const { rerender } = render(
