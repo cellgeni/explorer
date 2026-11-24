@@ -198,4 +198,24 @@ describe('MetadataTracksPanel', () => {
     expect(screen.getByText('370 spots | 0-2')).toBeInTheDocument()
     expect(screen.getByText('1 spot | 1-1')).toBeInTheDocument()
   })
+
+  it('writes ranges past 1,000 without exponent notation', () => {
+    const { metadataTracks } = testAnnotationsSectionModel({
+      metadataTracks: {
+        tracks: [
+          {
+            id: 'h5ad:total_counts',
+            label: 'total_counts',
+            values: null,
+            cellCount: 3,
+            min: 502.5,
+            max: 12_345.5,
+          },
+        ],
+      },
+    })
+    render(<MetadataTracksPanel metadataTracks={metadataTracks} />)
+
+    expect(screen.getByText('3 cells | 503-12,346')).toBeInTheDocument()
+  })
 })

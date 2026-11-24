@@ -31,6 +31,7 @@ import {
   isAutoGeneScaleRange,
 } from '../genes/geneScaleRange'
 import { useGeneSetControls } from '../genes/useGeneSetControls'
+import { metadataTrackRange } from '../annotations/annotationModel'
 import type {
   CellAppearanceModel,
   CellColourModel,
@@ -607,11 +608,5 @@ export function CellColorControls({ colour }: { readonly colour: CellColourModel
 }
 
 function metadataTrackOptionLabel(track: ContinuousCellMetadataTrack): string {
-  return `${track.label} (${formatMetadataValue(track.min)}-${formatMetadataValue(
-    track.max,
-  )})`
-}
-
-function formatMetadataValue(value: number): string {
-  return Number.isInteger(value) ? value.toLocaleString() : value.toPrecision(3)
+  return `${track.label} (${metadataTrackRange(track)})`
 }

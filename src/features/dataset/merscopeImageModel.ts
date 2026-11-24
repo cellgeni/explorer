@@ -106,12 +106,14 @@ export function merscopeImageSelectionToShareable(state: MerscopeImageControlSta
     : { merscopeImage: formatMerscopeImageChoice(state.choice) }
 }
 
+// In MiB, the unit of the 100 MiB default limit (EXP-033 did the same for
+// collection previews).
 export function formatMerscopeImageSize(byteLength: number): string {
-  const megabytes = byteLength / (1024 * 1024)
+  const mebibytes = byteLength / (1024 * 1024)
 
-  return megabytes >= 10
-    ? `${megabytes.toFixed(0)} MB`
-    : megabytes >= 1
-      ? `${megabytes.toFixed(1)} MB`
-      : `${Math.max(1, Math.round(byteLength / 1024))} KB`
+  return mebibytes >= 9.95
+    ? `${Math.round(mebibytes).toLocaleString()} MiB`
+    : mebibytes >= 0.9995
+      ? `${mebibytes.toFixed(1)} MiB`
+      : `${Math.max(1, Math.round(byteLength / 1024)).toLocaleString()} KiB`
 }

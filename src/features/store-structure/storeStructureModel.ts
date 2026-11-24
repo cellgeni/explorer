@@ -36,7 +36,12 @@ export function formatBytes(bytes: number): string {
   let value = bytes
   let unit = 0
 
-  while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+  // Rounded to three digits before the unit is picked, so 999,999 bytes
+  // reads "1 MB", not "1,000 KB".
+  while (
+    unit < BYTE_UNITS.length - 1 &&
+    (unit === 0 ? value : Number(value.toPrecision(3))) >= 1000
+  ) {
     value /= 1000
     unit += 1
   }
