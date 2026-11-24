@@ -247,7 +247,8 @@ Testing:
       protection or rulesets, so today no check blocks a merge at all;
       protecting it with the existing checks comes first. On 2026-11-24 the
       coverage job failed on #409 and #411, and the required job on #412 and
-      #420, from a flaky `MorphologyCanvas` tile-retry test (added in #405)
+      #420, from a flaky `MorphologyCanvas` tile-retry test (added in #405,
+      fixed in #426: an early timer now waits for the cache's retry time)
       and `App.test.tsx` timeouts.
 - [ ] E2E for SpatialData, OME-Zarr, and image-only sources. Partly done: the
       nightly examples test loads an OME-Zarr, a QPTIFF, and a SpatialData
