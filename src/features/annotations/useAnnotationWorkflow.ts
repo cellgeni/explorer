@@ -1,4 +1,4 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   AnnotationFileFormatError,
   customAnnotationImportOnMap,
@@ -40,6 +40,7 @@ import {
   annotationsToCsv,
   colorsForAnnotations,
   customAnnotationFilePrefix,
+  importedFileIdName,
   hasReadyAnnotationsAfterRemove,
   mergeImportedAnnotations,
   nextAnnotationColor,
@@ -216,6 +217,13 @@ export function useAnnotationWorkflow({
     readonly metadataPrefix: string
   } | null>(null)
 
+  // The file names imported into this dataset, by the slug of the name their
+  // IDs are made from, so names that slug alike get prefixes of their own.
+  const importedFileNamesRef = useRef<{
+    readonly url: string
+    readonly names: Map<string, string>
+  }>({ url: '', names: new Map() })
+
   const loadAnnotationGroup = useCallback(
     (
       selectedGroupId: string,
@@ -327,8 +335,14 @@ export function useAnnotationWorkflow({
         switchColorMode = true,
         shownAnnotationIds: linkShownAnnotationIds = [],
       }: LinkHiddenAnnotationOptions = {},
-    ) => {
-      const parsed = parseCustomAnnotationImport(text, sourceName)
+    ): { readonly annotationPrefix: string; readonly metadataPrefix: string } => {
+      const importUrl = loadState.status === 'ready' ? loadState.url : datasetUrl
+      if (importedFileNamesRef.current.url !== importUrl) {
+        importedFileNamesRef.current = { url: importUrl, names: new Map() }
+      }
+      const importedNames = importedFileNamesRef.current.names
+      const idName = importedFileIdName(sourceName, importedNames)
+      const parsed = parseCustomAnnotationImport(text, sourceName, idName)
       const skippedColumns = parsed.skippedColumns ?? []
       const cellCheck = checkImportedCellIds(
         parsed.annotations,
@@ -351,8 +365,9 @@ export function useAnnotationWorkflow({
           ? parsed
           : customAnnotationImportOnMap(parsed, datasetCellIds)
 
-      const importedPrefix = customAnnotationFilePrefix(sourceName)
-      const importedMetadataPrefix = customCellMetadataFilePrefix(sourceName)
+      const importedPrefix = customAnnotationFilePrefix(idName)
+      const importedMetadataPrefix = customCellMetadataFilePrefix(idName)
+      importedNames.set(slug(idName), sourceName)
       // A file of the URL's name replaces its labels.
       setUrlImport((current) =>
         current?.annotationPrefix === importedPrefix ? null : current,
@@ -445,6 +460,7 @@ export function useAnnotationWorkflow({
           ? `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels`
           : `${sourceLabel}: ${importedAnnotations.length.toLocaleString()} labels, ${importedMetadataTracks.length.toLocaleString()} metadata tracks`,
       )
+      return { annotationPrefix: importedPrefix, metadataPrefix: importedMetadataPrefix }
     },
     [
       appendDebugEvent,
@@ -504,19 +520,14 @@ export function useAnnotationWorkflow({
           return false
         }
 
-        importCustomAnnotationText(
+        const prefixes = importCustomAnnotationText(
           text,
           sourceName,
           'Imported URL annotations',
           linkHidden,
         )
         if (loadState.status === 'ready') {
-          setUrlImport({
-            datasetUrl: loadState.url,
-            url: url.trim(),
-            annotationPrefix: customAnnotationFilePrefix(sourceName),
-            metadataPrefix: customCellMetadataFilePrefix(sourceName),
-          })
+          setUrlImport({ datasetUrl: loadState.url, url: url.trim(), ...prefixes })
         }
         return true
       } catch (error) {

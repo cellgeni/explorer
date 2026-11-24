@@ -82,12 +82,20 @@ describe('ViewerLegend', () => {
 
     expect(cluster1).toHaveAttribute(
       'title',
-      'Hide Cluster 1 (Alt-click: show only this)',
+      'Hide Cluster 1 (Alt- or Shift-click, or Enter: show only this)',
     )
     fireEvent.click(cluster1, { altKey: true })
     expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', true, 'cells', true)
     // The eye waits for the new state rather than toggling itself.
     expect(cluster1).toBeChecked()
+
+    // Shift-click, where the desktop takes Alt-click, and Enter.
+    onChange.mockClear()
+    fireEvent.click(cluster1, { shiftKey: true })
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', true, 'cells', true)
+    onChange.mockClear()
+    expect(fireEvent.keyDown(cluster1, { key: 'Enter' })).toBe(false)
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', true, 'cells', true)
 
     onChange.mockClear()
     rerender(
@@ -97,6 +105,11 @@ describe('ViewerLegend', () => {
       altKey: true,
     })
     expect(onChange).toHaveBeenCalledExactlyOnceWith('cluster-1', false, 'cells')
+    onChange.mockClear()
+    fireEvent.keyDown(screen.getByRole('checkbox', { name: 'Cluster 1, 1,000 cells' }), {
+      key: 'Enter',
+    })
+    expect(onChange).not.toHaveBeenCalled()
   })
 
   it('counts transcripts and points to the Transcripts section for the rest', () => {

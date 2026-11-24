@@ -21,6 +21,7 @@ import {
   nextAnnotationColor,
   compactHiddenAnnotationIds,
   customAnnotationFilePrefix,
+  importedFileIdName,
   filterAnnotationsByVisibleClasses,
   filterAnnotationsByVisibleSets,
   hasReadyAnnotationsAfterRemove,
@@ -474,5 +475,22 @@ describe('annotationModel', () => {
     expect(isIdLikeAnnotationGroup(group('observation_joinid'))).toBe(true)
     expect(isIdLikeAnnotationGroup(group('barcode', 501))).toBe(true)
     expect(isIdLikeAnnotationGroup(group('cell_type', 40))).toBe(false)
+  })
+})
+
+describe('importedFileIdName', () => {
+  it('numbers an imported file whose name slugs like another’s', () => {
+    const imported = new Map([['my-labels-csv', 'My Labels.csv']])
+
+    expect(importedFileIdName('My Labels.csv', imported)).toBe('My Labels.csv')
+    expect(importedFileIdName('my_labels.csv', imported)).toBe('my_labels.csv 2')
+    expect(importedFileIdName('scores.csv', imported)).toBe('scores.csv')
+    // Names in another script slug to their extension.
+    const other = new Map([['json', '细胞类型.json']])
+    expect(importedFileIdName('分类.json', other)).toBe('分类.json 2')
+    // A numbered name keeps its number when imported again.
+    imported.set('my-labels-csv-2', 'my_labels.csv')
+    expect(importedFileIdName('my_labels.csv', imported)).toBe('my_labels.csv 2')
+    expect(importedFileIdName('MY-LABELS.csv', imported)).toBe('MY-LABELS.csv 3')
   })
 })

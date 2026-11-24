@@ -468,6 +468,24 @@ export function customAnnotationFilePrefix(fileName: string): string {
   return `custom:${slug(fileName)}:`
 }
 
+// The name an imported file's class and track IDs are made from. Names that
+// slug alike, such as `My Labels.csv` and `my_labels.csv` or names in another
+// script, would share a prefix, and an import replaces the labels under its
+// prefix; a later name is numbered instead (`my_labels.csv 2`). A name
+// imported before keeps its prefix, so importing it again replaces its
+// labels. `imported` maps each prefix's slug to the file name that has it.
+export function importedFileIdName(
+  fileName: string,
+  imported: ReadonlyMap<string, string>,
+): string {
+  for (let number = 1; ; number += 1) {
+    const idName = number === 1 ? fileName : `${fileName} ${number.toString()}`
+    const owner = imported.get(slug(idName))
+
+    if (owner === undefined || owner === fileName) return idName
+  }
+}
+
 function annotationSizeGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
   readonly id: string
   readonly label: string

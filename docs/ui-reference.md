@@ -318,7 +318,9 @@ Hidden layers leave the deck.gl layer list (`cellsVisible` in
 `createOverviewLayers`), so they cannot be hovered or picked. The link keeps
 them (`hidden=`) and the open sections (`panel=`). Hidden annotation classes
 are kept as `hiddenClasses=`, and sets hidden with their eye as `hiddenSets=`.
-Alt-click on a class's checkbox shows only that class.
+Alt-click on a class's checkbox shows only that class, as do Shift-click
+(where the desktop takes Alt-click to move windows, as KDE and XFCE do) and
+Enter on the checkbox, the keyboard's route.
 
 ### Image
 
@@ -445,6 +447,12 @@ legend and in the collection bar write two significant digits below 1
 | `Export Annotations`            | Button                                       |                                                                                                                      | Downloads `annotations.csv`; a field a spreadsheet would run as a formula starts with `'` (see [Selection](#selection))                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `Import File`                   | File input (`.csv`, `.tsv`, `.txt`, `.json`) |                                                                                                                      | CSV, separated by commas, tabs or semicolons: a `cell_id`/`cellid`/`cell` column and a `label`/`annotation`/`group`/`cluster` column; the other columns are read as in a file without one, as sets of classes or metadata tracks, leaving out an export's `annotation_id`. Without a label column each column is a set of classes, or a metadata track when at least 95% of its values are numbers and some are fractional or there are more than 12; empty cells, `NA` and `NaN` have no value, and so do `#N/A`, `-` and `inf` in a numeric column. A column of more than 500 classes names cells rather than grouping them, so it is left out and the notice under the import controls says so. JSON: rows (a number reads as text) or `{label: [ids]}` (`src/data/customAnnotations.ts`). A file it cannot read is named as such, with its columns. Cell IDs are any non-empty text matching the dataset's own (Xenium IDs, obs names, barcodes, SpatialData instance IDs). None on the map is an error; some missing gives a notice under the import controls while that import's labels or tracks are loaded, and only the cells on the map are kept, so classes, a track's range and exports are the open dataset's. A failed import (a file it cannot read, an address that fails) leaves the labels and tracks already loaded and says why under the import controls and in Issues. A `'` that an export put before a formula is dropped, so exported files import unchanged |
 | `Annotation URL` + `Import URL` | URL form                                     |                                                                                                                      | Same formats from a URL, up to 100 MiB: a larger file is refused, before it is read when the host sends its size, and is shown under Issues; saved in the share URL                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+An imported file replaces the labels and tracks it imported before, found by
+its name. Names that differ but would make the same IDs (`My Labels.csv` and
+`my_labels.csv`, or names in another script, whose IDs keep only `a-z0-9`)
+are told apart: the later one's IDs are numbered (`custom:my-labels-csv-2:`),
+so it does not replace the other's labels.
 
 Loaded state:
 
@@ -1220,9 +1228,9 @@ for each of these, scales first and category lists last:
   Clusters", a link that opens the layer panel and Cells and scrolls to the
   Clusters heading, focusing it. The checkboxes and counts are the same as
   those in Cells › Clusters: Visium spots hidden off the tissue are left
-  out. Alt-click (Option-click) on a class's checkbox, here or in Cells ›
-  Clusters, shows only that class, or every class again when it is the only
-  one shown. Cells of hidden classes, and cells in no class, fade to a
+  out. Alt-click (Option-click), Shift-click or Enter on a class's checkbox,
+  here or in Cells › Clusters, shows only that class, or every class again
+  when it is the only one shown. Cells of hidden classes, and cells in no class, fade to a
   faint grey (fill and outline at 15% of the usual opacity), so the tissue
   still shows but the shown classes stand out.
 - `Cell color` Metadata: the track name and its range. Cells whose value is
