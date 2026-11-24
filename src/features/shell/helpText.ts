@@ -3,7 +3,7 @@
 // The UI reference has the details.
 
 export const EXPRESSION_DETAIL_HELP =
-  'Level of detail (LOD). Auto LOD colours every cell of datasets up to 500,000 cells. On larger ones it reads a sample while zoomed out, and every cell in view once 50,000 or fewer are visible; samples keep every cell expressing the selected genes. Exact region reads the cells in view, All cells the whole slide.'
+  'Level of detail (LOD). Auto LOD colours every cell of datasets up to 500,000 cells. On larger ones it reads a sample while zoomed out, and every cell in view once 50,000 or fewer are visible; samples keep every cell expressing the selected genes. Visium HD is never sampled: it reads every bin on the slide when zoomed out, and every bin in view closer in. Exact region reads the cells in view, All cells the whole slide.'
 
 export const TRANSCRIPT_DETAIL_HELP =
   'Level of detail (LOD). Auto shows each transcript as a point when the view holds fewer than the point budget, and density squares when it holds more. Density counts transcripts per square; Exact always reads points.'

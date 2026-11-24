@@ -12,6 +12,9 @@ import {
   panelsFromLink,
   toolFromLink,
   withShellLink,
+  availableLayerSections,
+  closeUnavailableWindows,
+  type ShellPanelAvailability,
 } from './shellLinkModel'
 
 describe('version 1 tabs in the new shell', () => {
@@ -137,6 +140,57 @@ describe('panels in the link', () => {
         cells,
       ),
     ).toEqual([])
+  })
+
+  it('leaves the default sections out once opened and closed again', () => {
+    const closed = {
+      infoOpen: false,
+      embeddingOpen: false,
+      plotsOpen: false,
+      queryOpen: false,
+    }
+
+    expect(panelsForLink({ ...closed, expanded: ['cells'] }, ['cells'])).toBeUndefined()
+    expect(panelsForLink({ ...closed, expanded: ['image'] }, ['cells'])).toEqual([
+      'image',
+    ])
+  })
+
+  it('writes only the sections and windows the dataset has', () => {
+    const visiumHd: ShellPanelAvailability = {
+      sections: availableLayerSections({
+        cells: true,
+        transcripts: false,
+        segmentationImport: false,
+        geometricAnnotations: true,
+      }),
+      embedding: true,
+      plots: false,
+      query: false,
+    }
+    const panels = {
+      expanded: ['cells', 'transcripts'] as const,
+      infoOpen: false,
+      embeddingOpen: false,
+      plotsOpen: true,
+      queryOpen: true,
+    }
+
+    expect(visiumHd.sections).toEqual(['image', 'cells', 'annotations'])
+    // Only the default section is left, and no window: left out.
+    expect(panelsForLink(panels, ['cells'], visiumHd)).toBeUndefined()
+    expect(
+      panelsForLink({ ...panels, embeddingOpen: true }, ['cells'], visiumHd),
+    ).toEqual(['cells', 'embedding'])
+
+    // The windows close, so a dataset opened later does not open them.
+    expect(closeUnavailableWindows(panels, visiumHd)).toEqual({
+      ...panels,
+      plotsOpen: false,
+      queryOpen: false,
+    })
+    const withoutWindows = { ...panels, plotsOpen: false, queryOpen: false }
+    expect(closeUnavailableWindows(withoutWindows, visiumHd)).toBe(withoutWindows)
   })
 
   it('round-trips through the link', () => {

@@ -1112,6 +1112,12 @@
   font-weight: 700;
 }
 
+.shell-shortcuts-note {
+  margin: 0 0 var(--space-1);
+  color: var(--text-3);
+  font-size: var(--font-caption);
+}
+
 .shell-shortcuts dl {
   display: grid;
   gap: var(--space-1);

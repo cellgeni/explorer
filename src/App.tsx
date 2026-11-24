@@ -71,13 +71,16 @@ import type { CellQueryImageChannel } from './features/query/cellQueryImage'
 import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQueryModel'
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import {
+  availableLayerSections,
   cardForLink,
   cardFromLink,
+  closeUnavailableWindows,
   hiddenLayersForLink,
   defaultExpandedSections,
   panelsForLink,
   panelsFromLink,
   withShellLink,
+  type ShellPanelAvailability,
   type ShellPanelState,
 } from './features/shell/shellLinkModel'
 import {
@@ -979,9 +982,36 @@ export function App({ dependencies }: AppProps = {}) {
     () => defaultExpandedSections(platformAdapter.capabilities.cells),
     [platformAdapter.capabilities.cells],
   )
+  // The sections and windows the open dataset has. The Plots window (plan
+  // 22) reads each gene across every cell, and Cell Query (plan 23) lists
+  // overview cells; Visium HD has no matrix it reads by gene across every
+  // bin, and its bins are not overview cells, so it has neither.
+  const shellPanelAvailability = useMemo<ShellPanelAvailability>(
+    () => ({
+      sections: availableLayerSections(platformAdapter.capabilities),
+      embedding: platformAdapter.capabilities.cells,
+      plots:
+        platformAdapter.capabilities.cells &&
+        platformAdapter.capabilities.annotations &&
+        platformAdapter.kind !== 'visium-hd',
+      query: platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd',
+    }),
+    [platformAdapter.capabilities, platformAdapter.kind],
+  )
+  // A window the open dataset lacks closes, so a dataset opened later does
+  // not open it (EXP-277).
+  if (loadState.status === 'ready') {
+    const withAvailableWindows = closeUnavailableWindows(
+      shellPanels,
+      shellPanelAvailability,
+    )
+    if (withAvailableWindows !== shellPanels) setShellPanels(withAvailableWindows)
+  }
   const openPanelIds = useMemo(
-    () => panelsForLink(shellPanels, defaultPanelIds) ?? defaultPanelIds,
-    [defaultPanelIds, shellPanels],
+    () =>
+      panelsForLink(shellPanels, defaultPanelIds, shellPanelAvailability) ??
+      defaultPanelIds,
+    [defaultPanelIds, shellPanelAvailability, shellPanels],
   )
   // The start screen (plan 15.3-A) shows until a load starts,
   // unless the link names a dataset or a collection that opens one, and again
@@ -4073,8 +4103,8 @@ export function App({ dependencies }: AppProps = {}) {
       ? hiddenAnnotationSetIds
       : (initialShareableState.hiddenAnnotationSetIds ?? hiddenAnnotationSetIds)
   const sharedPanels = useMemo(
-    () => panelsForLink(shellPanels, defaultPanelIds),
-    [defaultPanelIds, shellPanels],
+    () => panelsForLink(shellPanels, defaultPanelIds, shellPanelAvailability),
+    [defaultPanelIds, shellPanelAvailability, shellPanels],
   )
   const sharedHiddenLayers = useMemo(
     () => hiddenLayersForLink(layerVisibility),
@@ -4959,13 +4989,7 @@ export function App({ dependencies }: AppProps = {}) {
           },
     [activeSavedSelection, roiCellIds, roiState],
   )
-  // The Plots window (plan 22) reads each gene across every cell. Visium HD
-  // has no matrix it reads by gene across every bin, so the window is hidden
-  // there, as Cell Query is.
-  const plotsAvailable =
-    platformAdapter.capabilities.cells &&
-    platformAdapter.capabilities.annotations &&
-    platformAdapter.kind !== 'visium-hd'
+  const plotsAvailable = shellPanelAvailability.plots
   const plotsDatasetSets = useMemo(
     () =>
       plotDatasetSets(
@@ -5000,9 +5024,8 @@ export function App({ dependencies }: AppProps = {}) {
   })
 
   // The Cell Query window (plan 23): the cells matching conditions on their
-  // columns, in a table. Visium HD bins are not overview cells.
-  const queryAvailable =
-    platformAdapter.capabilities.cells && platformAdapter.kind !== 'visium-hd'
+  // columns, in a table.
+  const queryAvailable = shellPanelAvailability.query
   // Pictures take the canvas's channels, colours and contrast (plan
   // 23-D10), whether or not the canvas shows the image now.
   const cellQueryPictureImage = useMemo<CellQueryPictureImage | null>(() => {
@@ -5449,7 +5472,7 @@ export function App({ dependencies }: AppProps = {}) {
           platformAdapter.capabilities.segmentationImport ? segmentationSection : null
         }
         cards={cards}
-        embedding={platformAdapter.capabilities.cells ? embedding : null}
+        embedding={shellPanelAvailability.embedding ? embedding : null}
         plots={plotsAvailable ? plots : null}
         query={queryAvailable ? cellQuery : null}
         panels={shellPanels}

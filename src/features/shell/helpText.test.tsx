@@ -40,6 +40,8 @@ describe('info tips', () => {
     expect(
       screen.getByRole('button', { name: 'About Expression detail' }),
     ).toHaveAccessibleDescription(EXPRESSION_DETAIL_HELP)
+    // Visium HD reads bins by tier, never a sample.
+    expect(EXPRESSION_DETAIL_HELP).toContain('Visium HD is never sampled')
     // The tips sit beside the labels, which still name their controls.
     expect(screen.getByRole('combobox', { name: 'Combine genes' })).toBeInTheDocument()
   })

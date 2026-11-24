@@ -102,6 +102,23 @@ describe('toolOptions', () => {
     ])
   })
 
+  it('says the dataset is still opening while the first one opens', () => {
+    const options = toolOptions({
+      datasetReady: false,
+      datasetOpening: true,
+      canDrawRoi: false,
+      magicLens: { enabled: false },
+    })
+
+    expect(options.map((option) => option.reason)).toEqual([
+      undefined,
+      'The dataset is still opening',
+      'The dataset is still opening',
+      'The dataset is still opening',
+      'The dataset is still opening',
+    ])
+  })
+
   it('leaves out the Magic Lens where the platform has none', () => {
     const options = toolOptions({
       datasetReady: true,

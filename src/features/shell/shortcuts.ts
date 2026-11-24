@@ -7,7 +7,8 @@ export interface Shortcut {
   // As printed on the key, such as "R" or "Esc".
   readonly keys: readonly string[]
   readonly action: string
-  readonly group: 'Tools' | 'View'
+  // `Canvas`: keys the spatial view takes while it has focus.
+  readonly group: 'Tools' | 'View' | 'Canvas'
 }
 
 export const TOOL_LABELS: Readonly<Record<ActiveTool, string>> = {
@@ -57,16 +58,16 @@ export const SHORTCUTS: readonly Shortcut[] = [
   {
     keys: ['←', '↑', '→', '↓'],
     action: 'Move the view; Shift moves further',
-    group: 'View',
+    group: 'Canvas',
   },
   // The keys as typed: '-', not the '−' sign the zoom buttons show.
-  { keys: ['+', '-'], action: 'Zoom in or out', group: 'View' },
-  { keys: ['Home'], action: 'Return to the first view', group: 'View' },
+  { keys: ['+', '-'], action: 'Zoom in or out', group: 'Canvas' },
+  { keys: ['Home'], action: 'Return to the first view', group: 'Canvas' },
   // A ring marks the centre while the canvas has focus (15.5-D).
   {
     keys: ['Enter'],
     action: 'Open the cell at the centre; with Box selection, select the view',
-    group: 'View',
+    group: 'Canvas',
   },
   // F works anywhere, like the tool letters (useToolShortcuts).
   { keys: [FIT_KEY], action: 'Fit the data to the view', group: 'View' },

@@ -123,28 +123,81 @@ export function panelsFromLink(state: ShareableState): ShellPanelState {
   }
 }
 
-// Left out at the default; with the drawer or a window open, the default
-// sections are written out.
+// The sections and windows the open dataset has.
+export interface ShellPanelAvailability {
+  readonly sections: readonly LayerSectionId[]
+  readonly embedding: boolean
+  readonly plots: boolean
+  readonly query: boolean
+}
+
+// The layer sections a platform has, as the layer panel lists them.
+export function availableLayerSections(capabilities: {
+  readonly cells: boolean
+  readonly transcripts: boolean
+  readonly segmentationImport?: boolean | undefined
+  readonly geometricAnnotations: boolean
+}): readonly LayerSectionId[] {
+  return [
+    'image',
+    ...(capabilities.cells ? (['cells'] as const) : []),
+    ...(capabilities.segmentationImport === true ? (['segmentation'] as const) : []),
+    ...(capabilities.transcripts ? (['transcripts'] as const) : []),
+    ...(capabilities.geometricAnnotations ? (['annotations'] as const) : []),
+  ]
+}
+
+// Windows the dataset lacks are closed, so a later dataset does not open
+// them; the same state when nothing changes.
+export function closeUnavailableWindows(
+  panels: ShellPanelState,
+  available: ShellPanelAvailability,
+): ShellPanelState {
+  return (panels.embeddingOpen && !available.embedding) ||
+    (panels.plotsOpen && !available.plots) ||
+    (panels.queryOpen && !available.query)
+    ? {
+        ...panels,
+        embeddingOpen: panels.embeddingOpen && available.embedding,
+        plotsOpen: panels.plotsOpen && available.plots,
+        queryOpen: panels.queryOpen && available.query,
+      }
+    : panels
+}
+
+// Only what the dataset has. Left out while only the default sections are
+// open, as at first; with the drawer or a window open, the default sections
+// are written out.
 export function panelsForLink(
   panels: ShellPanelState,
   defaultExpanded: readonly LayerSectionId[],
+  available?: ShellPanelAvailability,
 ): readonly ShellPanelId[] | undefined {
+  const has = (id: LayerSectionId) => available?.sections.includes(id) ?? true
+  const expanded = (panels.expanded ?? defaultExpanded).filter(has)
+  const shownDefault = defaultExpanded.filter(has)
+  const embeddingOpen = panels.embeddingOpen && (available?.embedding ?? true)
+  const plotsOpen = panels.plotsOpen && (available?.plots ?? true)
+  const queryOpen = panels.queryOpen && (available?.query ?? true)
+
   if (
-    panels.expanded === null &&
+    (panels.expanded === null ||
+      (expanded.length === shownDefault.length &&
+        shownDefault.every((id) => expanded.includes(id)))) &&
     !panels.infoOpen &&
-    !panels.embeddingOpen &&
-    !panels.plotsOpen &&
-    !panels.queryOpen
+    !embeddingOpen &&
+    !plotsOpen &&
+    !queryOpen
   ) {
     return undefined
   }
 
   return [
-    ...(panels.expanded ?? defaultExpanded),
+    ...expanded,
     ...(panels.infoOpen ? (['info'] as const) : []),
-    ...(panels.embeddingOpen ? (['embedding'] as const) : []),
-    ...(panels.plotsOpen ? (['plots'] as const) : []),
-    ...(panels.queryOpen ? (['query'] as const) : []),
+    ...(embeddingOpen ? (['embedding'] as const) : []),
+    ...(plotsOpen ? (['plots'] as const) : []),
+    ...(queryOpen ? (['query'] as const) : []),
   ]
 }
 
