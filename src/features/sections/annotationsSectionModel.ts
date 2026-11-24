@@ -82,7 +82,7 @@ export interface AnnotationSetsModel {
   readonly elementNoun: string
   readonly onColorChange: (annotationId: string, color: string) => void
   readonly onSetVisibilityChange: (setId: string, visible: boolean) => void
-  // `only`: show only this class (an Alt-click).
+  // `only`: show only this class (Alt- or Shift-click, or Enter).
   readonly onVisibilityChange: (
     annotationId: string,
     visible: boolean,

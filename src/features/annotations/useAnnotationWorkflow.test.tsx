@@ -981,6 +981,53 @@ AAACAGAGCGACTCCT-1,Stroma`,
     })
   })
 
+  it('keeps both files’ labels when their names slug alike, and replaces a file imported again', async () => {
+    const cellId = asCellId('aaaaaaaa-1')
+
+    render(
+      <Probe
+        datasetCellIds={new Set([cellId])}
+        loadAnnotations={vi.fn(async () => [])}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+    const importFile = async (name: string, label: string) => {
+      await act(async () => {
+        await api.handleImportAnnotations(
+          new File([`cell_id,label\n${cellId},${label}`], name, { type: 'text/csv' }),
+        )
+      })
+    }
+    const labels = () =>
+      snapshot.annotationState.status === 'ready'
+        ? snapshot.annotationState.annotations
+            .map((annotation) => annotation.label)
+            .sort()
+        : []
+
+    // Both slug to "my-labels-csv", and names in another script to "csv".
+    await importFile('My Labels.csv', 'T cells')
+    await importFile('my_labels.csv', 'B cells')
+    await importFile('метки.csv', 'Stroma')
+    await importFile('кластеры.csv', 'Tumour')
+    expect(labels()).toEqual(['B cells', 'Stroma', 'T cells', 'Tumour'])
+
+    // The first keeps the IDs it always had.
+    expect(snapshot.annotationState).toMatchObject({
+      annotations: expect.arrayContaining([
+        expect.objectContaining({ id: 'custom:my-labels-csv:t-cells' }),
+        expect.objectContaining({ id: 'custom:my-labels-csv-2:b-cells' }),
+      ]),
+    })
+
+    // A file imported again replaces its own labels only.
+    await importFile('my_labels.csv', 'NK cells')
+    expect(labels()).toEqual(['NK cells', 'Stroma', 'T cells', 'Tumour'])
+  })
+
   it('keeps the classes a link hides once its set loads, if the set has them', async () => {
     const annotations: readonly Annotation[] = [
       { id: 'a', label: 'Astrocytes', cellIds: [asCellId('aaaaaaaa-1')] },

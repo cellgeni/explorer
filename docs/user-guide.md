@@ -202,8 +202,9 @@ compare levels instead, put them all on one scale: click the number at the
 top end of the `Gene scale` gradient in Cells and type a score (`Reset`,
 after the `Gene scale` label, puts it back): the view, the legend and every
 preview then use it, as you move between sections and genes. With cells coloured by an annotation
-set, previews show its classes instead: Alt-click (Option-click) a class's
-checkbox in the legend to show only that class and see where that cell type
+set, previews show its classes instead: Alt-click (Option-click) or
+Shift-click a class's checkbox in the legend, or press Enter on it, to show
+only that class and see where that cell type
 is in each section. To show a group of classes, such as every
 astrocyte cluster, uncheck all with the checkbox by the set's name in Cells,
 type part of their name in the set's search box, and check the box again:

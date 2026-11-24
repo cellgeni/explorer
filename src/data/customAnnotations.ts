@@ -92,9 +92,12 @@ export function parseCustomAnnotations(
 // Cell IDs are any non-empty text, as each platform names cells its own way
 // (src/data/cellid.ts, asAnyCellId); the caller checks them against the
 // loaded dataset.
+// `idName` is the name the classes' and tracks' IDs are made from, the file's
+// own unless the caller numbered it apart from another file's.
 export function parseCustomAnnotationImport(
   text: string,
   fileName = 'annotations',
+  idName = fileName,
 ): CustomAnnotationImport {
   const trimmedText = text.trim()
 
@@ -103,8 +106,8 @@ export function parseCustomAnnotationImport(
   }
 
   return fileName.toLowerCase().endsWith('.json') || startsJson(trimmedText)
-    ? parseJsonAnnotations(trimmedText, fileName)
-    : parseCsvAnnotations(trimmedText, fileName)
+    ? parseJsonAnnotations(trimmedText, fileName, idName)
+    : parseCsvAnnotations(trimmedText, fileName, idName)
 }
 
 interface CustomAnnotationEntry {
@@ -113,7 +116,11 @@ interface CustomAnnotationEntry {
   readonly setName?: string
 }
 
-function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationImport {
+function parseJsonAnnotations(
+  text: string,
+  fileName: string,
+  idName: string,
+): CustomAnnotationImport {
   let value: unknown
 
   try {
@@ -124,14 +131,14 @@ function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationI
 
   if (Array.isArray(value)) {
     return {
-      annotations: annotationsFromJsonRows(value, fileName),
+      annotations: annotationsFromJsonRows(value, idName),
       metadataTracks: [],
     }
   }
 
   if (isRecord(value)) {
     return {
-      annotations: annotationsFromJsonRecord(value, fileName),
+      annotations: annotationsFromJsonRecord(value, idName),
       metadataTracks: [],
     }
   }
@@ -141,7 +148,7 @@ function parseJsonAnnotations(text: string, fileName: string): CustomAnnotationI
 
 function annotationsFromJsonRows(
   rows: readonly unknown[],
-  fileName: string,
+  idName: string,
 ): readonly Annotation[] {
   const grouped = new Map<string, Set<CellId>>()
   const directAnnotations: CustomAnnotationEntry[] = []
@@ -170,7 +177,7 @@ function annotationsFromJsonRows(
     appendGroupedCell(grouped, label, asAnyCellId(cellId))
   }
 
-  return createCustomAnnotations(fileName, [
+  return createCustomAnnotations(idName, [
     ...directAnnotations,
     ...annotationEntriesFromGroupedCells(grouped),
   ])
@@ -178,7 +185,7 @@ function annotationsFromJsonRows(
 
 function annotationsFromJsonRecord(
   record: Readonly<Record<string, unknown>>,
-  fileName: string,
+  idName: string,
 ): readonly Annotation[] {
   const annotations: CustomAnnotationEntry[] = []
 
@@ -205,10 +212,14 @@ function annotationsFromJsonRecord(
     })
   }
 
-  return createCustomAnnotations(fileName, annotations)
+  return createCustomAnnotations(idName, annotations)
 }
 
-function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationImport {
+function parseCsvAnnotations(
+  text: string,
+  fileName: string,
+  idName: string,
+): CustomAnnotationImport {
   const rows = parseCsvRows(text, csvDelimiter(text))
   const header = rows[0]
 
@@ -234,7 +245,7 @@ function parseCsvAnnotations(text: string, fileName: string): CustomAnnotationIm
     rows,
     header,
     cellIdIndex,
-    fileName,
+    idName,
     labelIndex < 0 ? undefined : labelIndex,
   )
 }
@@ -273,7 +284,7 @@ function parseCsvWideAnnotations(
   rows: readonly (readonly string[])[],
   header: readonly string[],
   cellIdIndex: number,
-  fileName: string,
+  idName: string,
   labelIndex?: number,
 ): CustomAnnotationImport {
   const annotationColumns = header
@@ -311,7 +322,7 @@ function parseCsvWideAnnotations(
         rows,
         cellIdIndex,
         index,
-        fileName,
+        idName,
         name,
       )
 
@@ -366,7 +377,7 @@ function parseCsvWideAnnotations(
   }
 
   return {
-    annotations: createCustomAnnotations(fileName, annotations),
+    annotations: createCustomAnnotations(idName, annotations),
     metadataTracks,
     ...(skippedColumns.length === 0 ? {} : { skippedColumns }),
   }
@@ -386,7 +397,7 @@ function createContinuousMetadataTrack(
   rows: readonly (readonly string[])[],
   cellIdIndex: number,
   valueIndex: number,
-  fileName: string,
+  idName: string,
   label: string,
 ): ContinuousCellMetadataTrack | null {
   const values: ContinuousCellMetadataValue[] = []
@@ -426,7 +437,7 @@ function createContinuousMetadataTrack(
   }
 
   return {
-    id: `${customCellMetadataFilePrefix(fileName)}${slug(label)}`,
+    id: `${customCellMetadataFilePrefix(idName)}${slug(label)}`,
     label,
     values,
     cellCount: values.length,
@@ -578,7 +589,7 @@ function annotationEntriesFromGroupedCells(
 }
 
 function createCustomAnnotations(
-  fileName: string,
+  idName: string,
   entries: readonly CustomAnnotationEntry[],
 ): readonly Annotation[] {
   const usedIds = new Set<string>()
@@ -587,8 +598,8 @@ function createCustomAnnotations(
     const displayLabel = setName === undefined ? label : `${setName}: ${label}`
     const baseId =
       setName === undefined
-        ? `custom:${slug(fileName)}:${slug(label)}`
-        : `custom:${slug(fileName)}:${slug(setName)}:${slug(label)}`
+        ? `custom:${slug(idName)}:${slug(label)}`
+        : `custom:${slug(idName)}:${slug(setName)}:${slug(label)}`
     const id = uniqueAnnotationId(baseId, usedIds)
     usedIds.add(id)
 

@@ -285,8 +285,8 @@ the main view's colours instead. A class the main view has not coloured yet
 takes the colour its dataset stores, or else the next free colour, in the
 order the previews read the classes. It has that one colour in every
 preview, panel beside the main view and the 3D stack. Hidden classes fade
-to a faint grey, as in the main view, so hiding all but one cell type (Alt-click its checkbox in the legend
-or in Cells › Clusters) shows where it is in every section;
+to a faint grey, as in the main view, so hiding all but one cell type (Alt- or Shift-click its checkbox in the legend
+or in Cells › Clusters, or press Enter on it) shows where it is in every section;
 each preview then counts the cells of the shown classes (`1,204 cells`),
 each once. A cell in a hidden class and a shown one (the `All` set) is
 drawn in the shown one, as in the main view. The

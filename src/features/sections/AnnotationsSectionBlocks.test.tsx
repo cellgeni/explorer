@@ -148,6 +148,31 @@ describe('AnnotationLabelLists', () => {
     expect(sets.onManyVisibilityChange).not.toHaveBeenCalled()
   })
 
+  it('shows only one class with Enter or Shift-click', () => {
+    const sets = renderLists()
+    const class3 = screen.getByLabelText('fine_celltype: Class 3 visible')
+
+    expect(class3).toHaveAttribute(
+      'title',
+      'fine_celltype: Class 3 visible (Alt- or Shift-click, or Enter: show only this)',
+    )
+    // Enter on a checkbox does nothing else, so it is the keyboard's route.
+    expect(fireEvent.keyDown(class3, { key: 'Enter' })).toBe(false)
+    expect(sets.onVisibilityChange).toHaveBeenLastCalledWith(
+      'analysis:class-3',
+      true,
+      true,
+    )
+    fireEvent.click(screen.getByLabelText('fine_celltype: Class 4 visible'), {
+      shiftKey: true,
+    })
+    expect(sets.onVisibilityChange).toHaveBeenLastCalledWith(
+      'analysis:class-4',
+      true,
+      true,
+    )
+  })
+
   it('counts in the dataset’s own noun', () => {
     renderLists({ elementNoun: 'spots' })
     const set = screen.getByRole('region', { name: 'fine_celltype labels' })

@@ -14,7 +14,7 @@ import {
   NO_ANNOTATION_GROUP_ID,
 } from '../../data/datasetAnnotations'
 import { annotationPaletteColor } from '../../rendering/annotationPalette'
-import { altClick } from '../../utils/altClick'
+import { SHOW_ONLY_HINT, showOnlyClick } from '../../utils/altClick'
 import {
   annotationSizePlots,
   isIdLikeAnnotationGroup,
@@ -663,13 +663,18 @@ function AnnotationSetList({
                   type="checkbox"
                   checked={rowVisible}
                   aria-label={`${fullLabel} visible`}
-                  title={`${fullLabel} visible (Alt-click: show only this)`}
+                  title={`${fullLabel} visible (${SHOW_ONLY_HINT})`}
                   onChange={(event) => {
-                    if (altClick(event.nativeEvent)) {
+                    if (showOnlyClick(event.nativeEvent)) {
                       onAnnotationVisibilityChange(row.id, true, true)
                     } else {
                       onAnnotationVisibilityChange(row.id, event.currentTarget.checked)
                     }
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== 'Enter') return
+                    event.preventDefault()
+                    onAnnotationVisibilityChange(row.id, true, true)
                   }}
                 />
               </label>

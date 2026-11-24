@@ -1598,8 +1598,8 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [setHiddenAnnotationSetIds],
   )
-  // A class's eye. With `only` (an Alt-click), only that class shows, or
-  // every class again when it is the only one shown.
+  // A class's eye. With `only` (Alt- or Shift-click, or Enter), only that
+  // class shows, or every class again when it is the only one shown.
   const handleAnnotationVisibilityChange = useCallback(
     (annotationId: string, visible: boolean, only = false) => {
       if (only) {

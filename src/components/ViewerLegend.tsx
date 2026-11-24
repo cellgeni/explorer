@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { altClick } from '../utils/altClick'
+import { SHOW_ONLY_HINT, showOnlyClick } from '../utils/altClick'
 import { ChevronDownIcon } from './ui'
 import {
   LEGEND_CATEGORY_LIMIT,
@@ -9,7 +9,7 @@ import {
 } from './viewerLegendTypes'
 
 // The section id tells the eyes of transcript genes from those of classes.
-// `only` is an Alt-click on a class: show only that class.
+// `only` is Alt- or Shift-click, or Enter, on a class: show only that class.
 export type LegendCategoryVisibilityChange = (
   id: string,
   visible: boolean,
@@ -120,15 +120,20 @@ function CategoryLegend({
                 disabled={onVisibilityChange === undefined}
                 aria-label={`${item.label}, ${item.count.toLocaleString()} ${item.count === 1 ? noun.singular : noun.plural}`}
                 title={`${item.visible ? 'Hide' : 'Show'} ${item.label}${
-                  section.showOnly === true ? ' (Alt-click: show only this)' : ''
+                  section.showOnly === true ? ` (${SHOW_ONLY_HINT})` : ''
                 }`}
                 onChange={(event) => {
                   // React takes a checkbox's change from its click.
-                  if (section.showOnly === true && altClick(event.nativeEvent)) {
+                  if (section.showOnly === true && showOnlyClick(event.nativeEvent)) {
                     onVisibilityChange?.(item.id, true, section.id, true)
                   } else {
                     onVisibilityChange?.(item.id, event.currentTarget.checked, section.id)
                   }
+                }}
+                onKeyDown={(event) => {
+                  if (section.showOnly !== true || event.key !== 'Enter') return
+                  event.preventDefault()
+                  onVisibilityChange?.(item.id, true, section.id, true)
                 }}
               />
               <span
