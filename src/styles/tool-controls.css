@@ -367,7 +367,7 @@
   width: 100%;
   min-width: 0;
   padding: 4px 5px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong);
   border-radius: 4px;
   background: var(--surface-2);
   color: var(--text-2);

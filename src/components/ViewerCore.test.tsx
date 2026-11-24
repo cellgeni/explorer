@@ -2491,6 +2491,10 @@ describe('ViewerCore', () => {
     expect((saved[0] as SVGElement).style.getPropertyValue('--selection-color')).toBe(
       '#4bd6f0',
     )
+    // A dark casing under the stroke keeps it visible over bright images.
+    const casing = saved[0]?.previousElementSibling
+    expect(casing).toHaveClass('roi-path-casing')
+    expect(casing?.getAttribute('d')).toBe(saved[0]?.getAttribute('d'))
     const rectangle = document.querySelector('.roi-rectangle')
     expect((rectangle as HTMLElement).style.getPropertyValue('--selection-color')).toBe(
       '#f04bc8',
@@ -2731,7 +2735,13 @@ describe('ViewerCore', () => {
     fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 50, pointerId: 1 })
     fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
 
-    expect(document.querySelector('.roi-lasso-path')).toBeInTheDocument()
+    const lasso = document.querySelector('.roi-lasso-path')
+    expect(lasso).toBeInTheDocument()
+    // Drawn over a dark casing of the same path, for bright images.
+    expect(lasso?.previousElementSibling).toHaveClass('roi-path-casing')
+    expect(lasso?.previousElementSibling?.getAttribute('d')).toBe(
+      lasso?.getAttribute('d'),
+    )
 
     fireEvent.pointerUp(roiLayer, { clientX: 100, clientY: 66, pointerId: 1 })
 
