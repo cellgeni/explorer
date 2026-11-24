@@ -1,4 +1,11 @@
-import { useEffect, useId, type MouseEvent, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import type { StructuredLoadError } from '../errors/loadErrorModel'
 import { OpenDatasetForm } from '../sections/DatasetInfoBlocks'
@@ -148,10 +155,33 @@ export function ExampleGallery({
   const { examples } = library
   const listClassName =
     variant === 'gallery' ? 'start-example-grid' : 'start-example-menu'
+  const retriedRef = useRef(false)
+  const loadingRef = useRef<HTMLParagraphElement>(null)
+  const unavailableRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  // Retry replaces itself with "Loading examples…", and that is replaced by
+  // the examples or Retry again, so keyboard focus follows each rather than
+  // falling to the page.
+  useLayoutEffect(() => {
+    if (!retriedRef.current) return
+
+    if (examples.status === 'idle' || examples.status === 'loading') {
+      loadingRef.current?.focus()
+      return
+    }
+
+    retriedRef.current = false
+    const target =
+      examples.status === 'error'
+        ? unavailableRef.current?.querySelector<HTMLElement>('button')
+        : listRef.current?.querySelector<HTMLElement>('a, button')
+    target?.focus()
+  }, [examples.status])
 
   if (examples.status === 'idle' || examples.status === 'loading') {
     return (
-      <p className="start-screen-note" role="status">
+      <p ref={loadingRef} className="start-screen-note" role="status" tabIndex={-1}>
         Loading examples…
       </p>
     )
@@ -160,9 +190,15 @@ export function ExampleGallery({
   if (examples.status === 'error') {
     return (
       <>
-        <div className="start-examples-unavailable" role="status">
+        <div ref={unavailableRef} className="start-examples-unavailable" role="status">
           <p>{examplesUnavailableMessage(library.examplesIndexUrl)}</p>
-          <Button title="Load the examples again" onClick={library.onRetryExamples}>
+          <Button
+            title="Load the examples again"
+            onClick={() => {
+              retriedRef.current = true
+              library.onRetryExamples()
+            }}
+          >
             Retry
           </Button>
         </div>
@@ -176,7 +212,7 @@ export function ExampleGallery({
   const shown = examples.examples.length === 0 ? [DEMO_EXAMPLE] : examples.examples
 
   return (
-    <ul className={listClassName} aria-label="Examples">
+    <ul ref={listRef} className={listClassName} aria-label="Examples">
       {shown.map((example) => (
         <ExampleItem
           key={example.id}
@@ -279,9 +315,42 @@ export function RecentDatasetList({
   readonly onOpen: (url: string) => void
   readonly onRemove: (url: string) => void
 }) {
+  const listRef = useRef<HTMLUListElement>(null)
+  // The entry removed, and where focus goes if the list goes with it.
+  const removedRef = useRef<{
+    readonly index: number
+    readonly fallback: HTMLElement | null
+  } | null>(null)
+
+  // Remove takes its own button away, so focus moves to the next entry's
+  // Remove, or the last one's.
+  useLayoutEffect(() => {
+    const removed = removedRef.current
+    if (removed === null) return
+    removedRef.current = null
+    const buttons =
+      listRef.current?.querySelectorAll<HTMLElement>('.start-recent-remove') ?? []
+    const next = buttons[Math.min(removed.index, buttons.length - 1)]
+    ;(next ?? removed.fallback)?.focus()
+  }, [recent])
+
+  // Removing the last entry takes the list and its heading away: focus goes
+  // to the address field beside them.
+  useLayoutEffect(
+    () => () => {
+      const removed = removedRef.current
+      if (removed !== null) {
+        queueMicrotask(() => {
+          removed.fallback?.focus()
+        })
+      }
+    },
+    [],
+  )
+
   return (
-    <ul className="start-recent-list" aria-label="Recent datasets">
-      {recent.map((dataset) => {
+    <ul ref={listRef} className="start-recent-list" aria-label="Recent datasets">
+      {recent.map((dataset, index) => {
         const platform = platformDisplayName(dataset.platform)
 
         return (
@@ -307,9 +376,17 @@ export function RecentDatasetList({
                 .join(' · ')}
             </small>
             <IconButton
+              className="start-recent-remove"
               title={`Remove ${dataset.name} from recent datasets`}
               icon={<CloseIcon />}
               onClick={() => {
+                removedRef.current = {
+                  index,
+                  fallback:
+                    listRef.current
+                      ?.closest('.start-screen, [role="dialog"]')
+                      ?.querySelector<HTMLElement>('input[name="datasetUrl"]') ?? null,
+                }
                 onRemove(dataset.url)
               }}
             />

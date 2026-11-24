@@ -271,9 +271,10 @@ describe('TopBar', () => {
     fireEvent.click(within(panel).getByLabelText('Show navigation buttons'))
     fireEvent.click(within(panel).getByLabelText('Show legend'))
     fireEvent.click(within(panel).getByLabelText('Show scale bar'))
-    fireEvent.change(within(panel).getByLabelText('Boundary limit'), {
-      target: { value: '20000' },
-    })
+    const boundaryLimit = within(panel).getByLabelText('Boundary limit')
+    fireEvent.change(boundaryLimit, { target: { value: '20000' } })
+    // The limit applies when the field is left.
+    fireEvent.blur(boundaryLimit)
     fireEvent.click(within(panel).getByRole('switch', { name: 'Show debug info' }))
 
     expect(settings.onShowHoverTooltipsChange).toHaveBeenCalledWith(false)
