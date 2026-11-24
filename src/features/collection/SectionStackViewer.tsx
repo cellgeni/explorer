@@ -10,6 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
+import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import { Button, FitIcon, IconButton, Slider, Switch } from '../../components/ui'
 import { fittedVolumeViewState } from '../../components/volumeViewerModel'
@@ -372,13 +373,9 @@ export function SectionStackViewer({
         )}
       </div>
       {hover === null || !hoverTooltips ? null : (
-        <div
-          className="linked-section-tooltip"
-          style={{ left: hover.x, top: hover.y }}
-          aria-hidden="true"
-        >
+        <PointerTooltip x={hover.x} y={hover.y} className="linked-section-tooltip">
           {hover.text}
-        </div>
+        </PointerTooltip>
       )}
       <p className="volume-viewer-hint">
         Drag to rotate · Shift-drag to pan · Scroll to zoom

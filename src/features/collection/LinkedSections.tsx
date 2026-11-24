@@ -12,6 +12,7 @@ import {
 import type { LinkedViewChannel } from '../../components/linkedView'
 import { Button, CloseIcon, IconButton } from '../../components/ui'
 import { removeDeckFromTabOrder } from '../../components/deckTabOrder'
+import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import type { DatasetCollectionEntry } from '../../datasets/datasetCollection'
 import { overviewCellRadiusMaxPixels } from '../../rendering/cellPointRenderer'
@@ -307,13 +308,9 @@ function LinkedSectionPanel({
         </p>
       )}
       {hover === null || !hoverTooltips ? null : (
-        <div
-          className="linked-section-tooltip"
-          style={{ left: hover.x, top: hover.y }}
-          aria-hidden="true"
-        >
+        <PointerTooltip x={hover.x} y={hover.y} className="linked-section-tooltip">
           {hover.text}
-        </div>
+        </PointerTooltip>
       )}
     </section>
   )

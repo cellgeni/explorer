@@ -1020,6 +1020,12 @@
   transform: translateX(-50%);
 }
 
+/* With a section beside, the main view's name chip takes the top centre: the
+   hint sits under it (EXP-305). */
+.viewer-main-tile:has(> .viewer-tile-header) .viewport-tool-hint {
+  top: 38px;
+}
+
 .viewport-frame.is-drawing {
   cursor: crosshair;
 }
