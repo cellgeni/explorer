@@ -90,7 +90,9 @@ from recent datasets`), which moves focus to the next entry's ×, or to the
   without a link, marked "signed address not kept": open it again from its
   full address. This holds for addresses on the viewer's own site
   (`/data/run.h5ad?token=…`) too. Opening a listed dataset again by a signed
-  address keeps its entry openable.
+  address keeps its entry openable. A list saved before signatures were left
+  out is cleaned the same way when the app first runs. The list follows other
+  tabs when it changes here: × on an entry another tab removed takes it off.
 - **Examples**: a card per entry of `examples/index.json` with name,
   platform, description, and source and licence (the source links to the
   repository). A collection's card says `Collection of {n} datasets` in place
