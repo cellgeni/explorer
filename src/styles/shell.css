@@ -75,11 +75,15 @@
   display: none;
 }
 
+/* Scrolls where the window is too short for its controls, as at 400% zoom
+   (WCAG 1.4.10). */
 .shell-floating-body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-2);
   min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: var(--space-3);
   font-size: var(--font-body);
 }
@@ -405,6 +409,22 @@
    window, then notes and actions, then the table, which takes the rest. */
 .shell-query-body {
   grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+/* In a short window, as at 400% zoom, a window's plot, table or embedding
+   keeps some height rather than shrink to nothing, and the body scrolls. */
+@media (max-height: 599.98px) {
+  .shell-floating-body.shell-plots-body {
+    grid-template-rows: auto minmax(120px, 1fr) auto;
+  }
+
+  .shell-floating-body.shell-query-body {
+    grid-template-rows: auto auto minmax(120px, 1fr);
+  }
+
+  .shell-floating-body.shell-embedding-body {
+    grid-template-rows: auto minmax(160px, 1fr);
+  }
 }
 
 .cell-query-conditions {

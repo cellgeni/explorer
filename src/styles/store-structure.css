@@ -27,10 +27,12 @@
   width: min(560px, 100%);
 }
 
+/* The tree takes the room the header and details leave. The body still
+   scrolls (ui.css) where the drawer is too short for the header, the tree's
+   least height and the details. */
 .store-structure-drawer .ui-drawer-body {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 /* The store's view and the file's view; the hidden one stays mounted. */

@@ -1720,6 +1720,18 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   in the top bar's order), its button alone pressed; the others show again
   once the screen is 860 px or wider.
 
+On any screen, a popover from the top bar (the menus, Help, Settings and the
+tools' options) opens under its button but stays 8 px inside the window
+(`useKeepOnScreen`, `src/components/ui/useKeepOnScreen.ts`): one that would
+run off a side moves back onto the screen, and one taller than the room below
+the bar scrolls inside itself. Where that scrolling would hide its start, as
+Help's in a landscape phone, the popover itself takes focus and opens at the
+top; Tab goes on to its first control. The Embedding, Plots and Cell Query
+panels scroll their body when the window is too short for it, and in a
+window under 600 px high, as at 200% to 400% zoom, keep 120 px (160 px for
+the embedding) for their plot or table. The store structure drawer scrolls
+when the header, the tree's least height and the details do not fit.
+
 ## Platform Availability
 
 From the capabilities in `src/features/app-shell/platformAdapter.ts`:

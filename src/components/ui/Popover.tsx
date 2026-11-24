@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { classNames } from './classNames'
 import { focusFirst, useDismiss } from './useDismiss'
+import { useKeepOnScreen } from './useKeepOnScreen'
 
 export interface PopoverProps {
   // The trigger's tooltip and the popover's accessible name.
@@ -16,9 +17,10 @@ export interface PopoverProps {
   readonly className?: string | undefined
 }
 
-// A panel that opens below its trigger button. Focus moves into it; Escape,
-// or closing from inside, returns focus to the trigger. A click outside also
-// closes it, without moving focus.
+// A panel that opens below its trigger button, moved back inside the window
+// where it would run off it, and scrolling where it is taller than the room
+// below. Focus moves into it; Escape, or closing from inside, returns focus
+// to the trigger. A click outside also closes it, without moving focus.
 export function Popover({
   title,
   trigger,
@@ -43,6 +45,8 @@ export function Popover({
   const wasOpenRef = useRef(isOpen)
   const dismissedOutsideRef = useRef(false)
 
+  useKeepOnScreen(panelRef, isOpen)
+
   useDismiss(isOpen, [triggerRef, panelRef], (reason) => {
     dismissedOutsideRef.current = reason === 'outside'
     setOpen(false)
@@ -55,7 +59,17 @@ export function Popover({
 
     if (isOpen) {
       dismissedOutsideRef.current = false
-      if (panelRef.current !== null) focusFirst(panelRef.current)
+      const panel = panelRef.current
+      if (panel !== null) {
+        focusFirst(panel)
+        // In a popover that scrolls, a first control further down would
+        // scroll its start out of view, as Help's links do in a short
+        // window: the popover takes focus instead, and Tab goes on to it.
+        if (panel.scrollTop > 0) {
+          panel.scrollTop = 0
+          panel.focus({ preventScroll: true })
+        }
+      }
       return
     }
 
