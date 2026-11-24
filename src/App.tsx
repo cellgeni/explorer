@@ -3456,9 +3456,11 @@ export function App({ dependencies }: AppProps = {}) {
   }, [activeTool, returnToPan])
   const handleRoiModeChange = useCallback(
     (nextMode: RoiDrawMode) => {
-      // Starting a shape clears the measurement line.
+      // Starting a shape clears the measurement line, and leaves the Magic
+      // Lens, as Pan and Measure do: its scan stops and its card goes.
       if (nextMode !== 'idle') {
         setMeasurementResetKey((current) => current + 1)
+        if (activeTool === 'magic-lens') handleMagicLensLeave()
       }
 
       setRoiMode(nextMode)
@@ -3476,7 +3478,14 @@ export function App({ dependencies }: AppProps = {}) {
               : 'ROI lasso mode enabled',
       )
     },
-    [appendDebugEvent, platformAdapter.kind, setMeasurementResetKey, setRoiMode],
+    [
+      activeTool,
+      appendDebugEvent,
+      handleMagicLensLeave,
+      platformAdapter.kind,
+      setMeasurementResetKey,
+      setRoiMode,
+    ],
   )
 
   const { handleAutoContrast, queueAutoContrast, updateMorphologyChannel } =

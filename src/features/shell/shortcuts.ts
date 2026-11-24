@@ -76,22 +76,36 @@ export const SHORTCUTS: readonly Shortcut[] = [
 
 export interface ShortcutKeyEvent {
   readonly key: string
+  // The key's place, as on a US keyboard ("KeyP"), whatever it types.
+  readonly code?: string
   readonly altKey: boolean
   readonly ctrlKey: boolean
   readonly metaKey: boolean
+}
+
+// The letter a press is: the one typed, else, where the layout types another
+// script (Cyrillic, Greek) or an input method has the key (key "Process"),
+// the letter at its place on a US keyboard. A layout's own Latin letters win,
+// so the keys move with AZERTY and Dvorak.
+function shortcutLetter(event: ShortcutKeyEvent): string | null {
+  if (/^[a-z]$/i.test(event.key)) return event.key.toUpperCase()
+  return /^Key([A-Z])$/.exec(event.code ?? '')?.[1] ?? null
 }
 
 // The tool a key press picks, or null. Modifier keys are left to the browser.
 export function toolForShortcutKey(event: ShortcutKeyEvent): ActiveTool | null {
   if (event.altKey || event.ctrlKey || event.metaKey) return null
 
-  const key = event.key.toUpperCase()
-  return TOOL_ORDER.find((tool) => TOOL_SHORTCUT_KEYS[tool] === key) ?? null
+  const letter = shortcutLetter(event)
+  return TOOL_ORDER.find((tool) => TOOL_SHORTCUT_KEYS[tool] === letter) ?? null
 }
 
+// `\` is typed with AltGr on German, French, Spanish, Italian, Nordic and
+// Portuguese layouts (Ctrl and Alt on Windows) and with Option on a Mac, so
+// only Ctrl alone and Cmd leave it to the browser.
 export function isLayerPanelKey(event: ShortcutKeyEvent): boolean {
   return (
-    event.key === LAYER_PANEL_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
+    event.key === LAYER_PANEL_KEY && !event.metaKey && !(event.ctrlKey && !event.altKey)
   )
 }
 
@@ -102,9 +116,6 @@ export function isHelpKey(event: ShortcutKeyEvent): boolean {
 
 export function isFitKey(event: ShortcutKeyEvent): boolean {
   return (
-    event.key.toUpperCase() === FIT_KEY &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.metaKey
+    shortcutLetter(event) === FIT_KEY && !event.altKey && !event.ctrlKey && !event.metaKey
   )
 }
