@@ -544,6 +544,11 @@ test('has no accessibility violations beyond the axe baseline @smoke', async ({
   })
   await checkEachPlace('H5AD fixture with a gene selected')
 
+  // The Screenshot popover (plan 27).
+  await page.getByRole('button', { name: 'Screenshot' }).click()
+  await collectAxeFindings(page, 'H5AD fixture, screenshot', findings)
+  await page.keyboard.press('Escape')
+
   // The dot plot and its table (plan 22-I).
   const clusters = await openControls(page, 'clusters')
   await clusters.getByLabel('Annotation set').selectOption({ label: 'cluster' })
@@ -2366,6 +2371,132 @@ test('draws an imported label mask and WKT outlines over an image @smoke', async
   await expect(page).toHaveURL(/segmentation=.*cells\.csv/)
 })
 
+// Plan 27: a 2× PNG of an image with outlines over it, with its dpi and text
+// chunks, that looks as the screen does.
+test('saves a 2× screenshot of the view that matches the screen @smoke', async ({
+  page,
+  baseURL,
+}) => {
+  const webglContexts = await trackWebglContexts(page)
+  await routeRangeFiles(page, '/screenshot-smoke', {
+    // Bright on the left, dark on the right, so a misplaced image shows.
+    'slide.tif': tinyTiff(64, 64, 8, (x, y) => (x < 32 ? 200 : 20 + ((x + y) % 16))),
+    'cells.csv': Buffer.from(
+      'cell_id,geometry\na,"POLYGON ((8 8, 56 8, 56 56, 8 56, 8 8))"\n',
+    ),
+  })
+  const folder = new URL('/screenshot-smoke/', baseURL).toString()
+  await page.goto(
+    `/#dataset=${encodeURIComponent(`${folder}slide.tif`)}&segmentation=${encodeURIComponent(`${folder}cells.csv`)}&panel=segmentation`,
+  )
+  await expect(page.locator('[data-layer-section="segmentation"]')).toContainText(
+    '1 outline drawn.',
+    { timeout: H5AD_LOAD_TIMEOUT_MS },
+  )
+  // The view keeps still, with its image drawn.
+  await page.waitForTimeout(1_000)
+  const frame = page.getByRole('img', { name: 'Spatial viewer canvas area' })
+  const box = await frame.boundingBox()
+  if (box === null) throw new Error('The view has no box.')
+  const screen = await frame.screenshot()
+
+  await page.getByRole('button', { name: 'Screenshot' }).click()
+  const dialog = page.getByRole('dialog', { name: /high-resolution PNG/ })
+  await expect(dialog.getByRole('button', { name: '2×' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  // Only the map, to compare with the screen.
+  for (const mark of ['Scale bar', 'Legend', 'Axes', 'Selections']) {
+    await dialog.getByRole('checkbox', { name: mark }).uncheck()
+  }
+  const downloading = page.waitForEvent('download')
+  await dialog.getByRole('button', { name: 'Save PNG' }).click()
+  const download = await downloading
+  expect(download.suggestedFilename()).toBe('slide-screenshot.png')
+  await expect(dialog.getByText('Saved slide-screenshot.png.')).toBeVisible()
+  // The screenshot's Deck gave its WebGL context back once it left the
+  // page, so the view keeps its own and counts no loss.
+  await expect.poll(async () => (await webglContexts()).live).toBe(1)
+  expect((await webglContexts()).lostOnPage).toBe(0)
+  const png = await readFile(await download.path())
+
+  const chunks = pngChunks(png)
+  expect(chunks.map((chunk) => chunk.type).slice(0, 2)).toEqual(['IHDR', 'pHYs'])
+  expect([chunks[0]?.data.readUInt32BE(0), chunks[0]?.data.readUInt32BE(4)]).toEqual([
+    Math.round(box.width) * 2,
+    Math.round(box.height) * 2,
+  ])
+  // 300 dpi is 11,811 pixels per metre.
+  expect(chunks[1]?.data.readUInt32BE(0)).toBe(11_811)
+  const text = Object.fromEntries(
+    chunks
+      .filter((chunk) => chunk.type === 'tEXt')
+      .map((chunk) => {
+        const nul = chunk.data.indexOf(0)
+        return [
+          chunk.data.subarray(0, nul).toString('latin1'),
+          chunk.data.subarray(nul + 1).toString('latin1'),
+        ]
+      }),
+  )
+  expect(text.Software).toMatch(/^Spatial Omics Explorer/)
+  expect(text.Source).toBe(`${folder}slide.tif`)
+  expect(text.Description).toMatch(/µm per pixel; 2× scale$/)
+  expect(text['Creation Time']).toMatch(/^\d{4}-\d\d-\d\dT/)
+
+  // Halved, the PNG is the screen: the image in place and the outline over
+  // it. The middle of the view leaves out the readouts and the minimap.
+  const difference = await page.evaluate(
+    async ({ pngBase64, screenBase64 }) => {
+      const decode = (base64: string) =>
+        createImageBitmap(
+          new Blob([Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))]),
+        )
+      const [saved, shown] = await Promise.all([decode(pngBase64), decode(screenBase64)])
+      const pixels = (image: ImageBitmap) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = shown.width
+        canvas.height = shown.height
+        const context = canvas.getContext('2d')
+        if (context === null) throw new Error('No 2D canvas.')
+        context.drawImage(image, 0, 0, shown.width, shown.height)
+        return context.getImageData(
+          Math.floor(shown.width * 0.25),
+          Math.floor(shown.height * 0.25),
+          Math.floor(shown.width * 0.5),
+          Math.floor(shown.height * 0.5),
+        ).data
+      }
+      const [a, b] = [pixels(saved), pixels(shown)]
+      let total = 0
+      let largest = 0
+      for (let index = 0; index < a.length; index += 4) {
+        for (let channel = 0; channel < 3; channel += 1) {
+          const delta = Math.abs((a[index + channel] ?? 0) - (b[index + channel] ?? 0))
+          total += delta
+          largest = Math.max(largest, delta)
+        }
+      }
+      return { mean: total / ((a.length / 4) * 3), largest }
+    },
+    { pngBase64: png.toString('base64'), screenBase64: screen.toString('base64') },
+  )
+  expect(difference.mean).toBeLessThan(6)
+})
+
+function pngChunks(png: Buffer): { readonly type: string; readonly data: Buffer }[] {
+  const chunks: { type: string; data: Buffer }[] = []
+  for (let offset = 8; offset + 12 <= png.length; ) {
+    const length = png.readUInt32BE(offset)
+    const type = png.subarray(offset + 4, offset + 8).toString('latin1')
+    chunks.push({ type, data: png.subarray(offset + 8, offset + 8 + length) })
+    offset += 12 + length
+    if (type === 'IEND') break
+  }
+  return chunks
+}
+
 test('loads a CELLxGENE Visium H5AD with uns/spatial as spots over its H&E @live', async ({
   page,
 }) => {
@@ -2855,6 +2986,42 @@ test('draws Xenium nucleus boundaries without reading cell outlines @live', asyn
   await expect(log.getByText(/^Cell boundaries started/)).toHaveCount(0)
   await expect(log.getByText('Nucleus boundary load failed')).toHaveCount(0)
   await expect(page.locator('.viewport-message-error')).toHaveCount(0)
+})
+
+// Plan 27: a 4× PNG of the whole slide draws every one of its 1.4 million
+// cells, not the screen's sample, and reads the image at its scale.
+test('saves a 4× screenshot of the whole Xenium slide @live', async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(300_000)
+
+  await page.goto(`/#xv=2&dataset=${encodeURIComponent(XENIUM_DEMO_URL)}`)
+  await expect(
+    page.getByRole('status').filter({ hasText: /Xenium · 1\.41 M cells/ }),
+  ).toBeVisible({ timeout: XENIUM_LOAD_TIMEOUT_MS })
+  await page.getByRole('button', { name: 'Screenshot' }).click()
+  const dialog = page.getByRole('dialog', { name: /high-resolution PNG/ })
+  await dialog.getByRole('button', { name: '4×' }).click()
+  await expect(dialog).toContainText(/Draws all 1,414,155 cells in view/)
+
+  const startedAt = Date.now()
+  const downloading = page.waitForEvent('download', { timeout: 240_000 })
+  await dialog.getByRole('button', { name: /Save PNG|and save/ }).click()
+  const download = await downloading
+  testInfo.annotations.push({
+    type: 'Time to a 4× PNG',
+    description: `${((Date.now() - startedAt) / 1000).toFixed(1)} s from Save PNG`,
+  })
+  const png = await readFile(await download.path())
+  const box = await page
+    .getByRole('img', { name: 'Spatial viewer canvas area' })
+    .boundingBox()
+  // IHDR's width and height.
+  expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([
+    Math.round(box?.width ?? 0) * 4,
+    Math.round(box?.height ?? 0) * 4,
+  ])
+  await expect(page.locator('.screenshot-deck-host')).toHaveCount(0)
 })
 
 test('draws STHELAR nuclei over its axis-swapped and flipped H&E @live', async ({

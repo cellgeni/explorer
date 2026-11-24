@@ -59,7 +59,7 @@ export function drawMorphologyTiles(
   context.clearRect(0, 0, viewport.width, viewport.height)
 
   for (const tile of tiles) {
-    drawReadyTile(context, tile, viewState, viewport)
+    drawReadyTile(context, tile, viewState, viewport, globalThis.devicePixelRatio || 1)
   }
 }
 
@@ -70,11 +70,24 @@ export function drawMorphologyTileChannels(
   viewport: CssViewportSize,
 ): void {
   context.clearRect(0, 0, viewport.width, viewport.height)
+  addMorphologyTileChannels(context, batches, viewState, viewport)
+}
 
+// Draws the batches' tiles over what the context holds. Channels add, and a
+// single RGB channel's tiles do not overlap, so tiles can be drawn in any
+// order, as a screenshot draws them as they arrive (plan 27). `pixelRatio`
+// is device pixels per unit of `viewport`.
+export function addMorphologyTileChannels(
+  context: CanvasRenderingContext2D,
+  batches: readonly MorphologyChannelTileBatch[],
+  viewState: OverviewViewState,
+  viewport: CssViewportSize,
+  pixelRatio = globalThis.devicePixelRatio || 1,
+): void {
   if (batches.length === 1 && isWhite(batches[0]?.color)) {
     for (const tile of batches[0]?.tiles ?? []) {
       context.globalAlpha = batches[0]?.opacity ?? 1
-      drawReadyTile(context, tile, viewState, viewport, batches[0]?.placement)
+      drawReadyTile(context, tile, viewState, viewport, pixelRatio, batches[0]?.placement)
     }
     context.globalAlpha = 1
     return
@@ -85,7 +98,7 @@ export function drawMorphologyTileChannels(
     context.globalCompositeOperation = 'lighter'
 
     for (const tile of batch.tiles) {
-      drawReadyTile(context, tile, viewState, viewport, batch.placement)
+      drawReadyTile(context, tile, viewState, viewport, pixelRatio, batch.placement)
     }
   }
 
@@ -188,6 +201,7 @@ function drawReadyTile(
   tile: ReadyTile,
   viewState: OverviewViewState,
   viewport: CssViewportSize,
+  pixelRatio: number,
   placement?: ImageFramePlacement,
 ): void {
   const target = bboxTargetRect(
@@ -201,11 +215,7 @@ function drawReadyTile(
   }
 
   if (placement === undefined || isUnflippedPlacement(placement)) {
-    context.imageSmoothingQuality = tileSmoothingQuality(
-      tile,
-      target,
-      globalThis.devicePixelRatio || 1,
-    )
+    context.imageSmoothingQuality = tileSmoothingQuality(tile, target, pixelRatio)
     context.drawImage(
       tile.image,
       0,
@@ -230,7 +240,7 @@ function drawReadyTile(
   context.imageSmoothingQuality = tileSmoothingQuality(
     tile,
     { width, height },
-    globalThis.devicePixelRatio || 1,
+    pixelRatio,
   )
   context.save()
   context.translate(target.x + target.width / 2, target.y + target.height / 2)

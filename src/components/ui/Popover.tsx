@@ -14,6 +14,9 @@ export interface PopoverProps {
   // Which edge of the trigger the popover lines up with.
   readonly align?: 'start' | 'end' | undefined
   readonly triggerClassName?: string | undefined
+  // The trigger's accessible name, where its tooltip says more than its name.
+  readonly triggerLabel?: string | undefined
+  readonly disabled?: boolean | undefined
   readonly className?: string | undefined
 }
 
@@ -29,6 +32,8 @@ export function Popover({
   onOpenChange,
   align = 'start',
   triggerClassName,
+  triggerLabel,
+  disabled = false,
   className,
 }: PopoverProps) {
   const id = useId()
@@ -90,6 +95,8 @@ export function Popover({
         aria-haspopup="dialog"
         aria-expanded={isOpen}
         aria-controls={isOpen ? id : undefined}
+        aria-label={triggerLabel}
+        disabled={disabled}
         className={classNames('ui-button', 'ui-button--ghost', triggerClassName)}
         onClick={() => {
           setOpen(!isOpen)

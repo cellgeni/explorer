@@ -231,6 +231,7 @@ shown sections first (`setLinked`).
 | Measure ▾      | While measuring: `Measure unit` (µm or px, starting at the mouse coordinate unit) and `Clear Measurement`                                                                                       |
 | Magic Lens ▾   | `Radius` (10–500 µm, step 10; 80 µm) and `Summarise View`, which scans the whole view into the Magic Lens card                                                                                  |
 | Panels         | `Embedding`, `Plots` and `Query` open and close the [Embedding](#embedding-panel), [Plots](#plots-panel) and [Cell Query](#cell-query-panel) panels; an open one is pressed. See below          |
+| `Screenshot`   | A camera: saves the spatial view as a PNG at 1×, 2×, 4× or 8× its size; see [Screenshot](#screenshot)                                                                                           |
 | `Share`        | Copies the link (the address, which holds the view) and says "Link copied"                                                                                                                      |
 | `Help`         | `?` opens and closes it. Lists the keyboard shortcuts, from `SHORTCUTS` (`src/features/shell/shortcuts.ts`), the table the key handlers read, and links to the guides on GitHub (`HELP_LINKS`)  |
 | `Settings`     | See [Settings](#settings)                                                                                                                                                                       |
@@ -238,9 +239,10 @@ shown sections first (`setLinked`).
 **Panels** (the `Panels` group, `PanelToggles` in `TopBar.tsx`): the
 windows' toggles sit at the right of the bar, above where the windows open.
 A dataset shows only the ones it has: none on images, no `Plots` or `Query`
-on Visium HD, whose bins are not cells the panels can read. From 1100 px
-wide each shows its icon and name; between 860 and 1100 px only the icon,
-with the name still read and in the tooltip. Under 860 px they fold into a
+on Visium HD, whose bins are not cells the panels can read. From 1180 px
+wide each shows its icon and name; between 860 and 1180 px only the icon,
+with the name still read and in the tooltip. `Screenshot` shows its name
+from 1340 px, and its camera alone below that. Under 860 px they fold into a
 menu (see [Narrow Screens](#narrow-screens)). Until 2026-11-19 they were
 Cells › Panels › `Show Embedding`, `Show Plots` and `Show Query`, below the
 genes and clusters. A window the open dataset lacks closes, so a dataset
@@ -322,6 +324,55 @@ shown tooltip does only that, and the tool stays.
 
 `Boundary limit` applies on Enter or when the field is left. Escape puts the
 limit back, and a field left empty keeps it.
+
+### Screenshot
+
+`Screenshot` (`ScreenshotButton`, `src/features/screenshot/`, plan 27) saves
+the main 2D view as a PNG for a figure. It is off until a dataset is open,
+and says so when the view has not drawn yet. Its popover:
+
+| Control      | Type                                   | Default                                                      | Notes                                                                                                   |
+| ------------ | -------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `Scale`      | Segmented 1× / 2× / 4× / 8×            | 2×, or the largest under the limit below it                  | A scale over 16,384 px on a side or 128 megapixels is off, and its tooltip says which                   |
+| Size line    | Text                                   |                                                              | "3,000 × 1,800 px · 0.25 µm per pixel · 254 × 152 mm at 300 dpi"                                        |
+| `DPI`        | Number, 30–2400                        | 300                                                          | Written into the PNG; changes only the mm figure, not the pixels                                        |
+| `Include`    | Checkboxes                             | `Scale bar`, `Legend`, `Axes` from Settings; `Selections` on | The scale bar bottom right, the legend bottom left, the rulers, and the saved and active selections     |
+| `Background` | Segmented Canvas / White / Transparent | Canvas                                                       | On White the scale bar's and legend's boxes turn white with dark text                                   |
+| Read line    | Text                                   |                                                              | "Reads 480 image tiles (96 MB)": the tiles at the PNG's scale, and their size where the TIFF index says |
+| Notes        | List                                   |                                                              | What the view holds that the PNG shows differently, or still loads; see below                           |
+| `Save PNG`   | Button                                 |                                                              | Above 512 MiB of tiles it asks first: `Read {size} and save` or `Back`                                  |
+
+While it runs the popover shows its progress with `Cancel`, and so does the
+loading list, as `Screenshot`; closing the popover does not stop it. One runs
+at a time, and opening another dataset cancels it. A tile that cannot be read
+after the canvas's retries (1, 2 and 4 s) fails it with `Retry`, which reads
+again with new caches; a figure with a hole in it is worse than none. It ends
+with "Saved {file}".
+
+The PNG is the canvas's frame, the part under the layer panel and the cards
+included, drawn again off screen rather than copied (the live view is never
+resized or read):
+
+- The image at the pyramid level the PNG's pixel size needs: a 4× PNG reads
+  the level a window four times larger would. Its tiles go through caches of
+  the screenshot's own, and reads leave the byte-range cache as it is.
+- Every loaded cell, not the render cap's sample. The notes say so when the
+  screen samples ("Draws all 1,414,155 cells in view; the screen shows about
+  250,000."), when expression is a sample at this zoom, when transcripts are
+  density squares, and what is still loading. The PNG shows what has loaded;
+  `All cells` and `Exact` make the view complete.
+- Points, outlines and text keep their size against the frame, so the PNG
+  looks as the screen does, only sharper.
+- The marks are drawn from their models at the PNG's scale. The legend leaves
+  out its controls and the classes hidden on the map. Tooltips, the
+  crosshair, the readouts, tool hints, a shape or measurement being drawn,
+  the minimap and the zoom buttons are left out.
+
+The file is `{dataset}-screenshot.png`, named as plot exports are. It records
+its dpi (`pHYs`) and, in `tEXt` chunks, `Software` (the app, its release and
+commit), `Source` (the dataset address without a presigned URL's
+signature), `Description` (the view's x and y ranges, µm per pixel, the
+scale and, for a z-stack, the plane) and `Creation Time` (UTC, ISO 8601).
 
 ## Layer Panel
 
@@ -1812,8 +1863,8 @@ stylesheet's narrow rules use too) the shell folds up:
 - The tools fold into a menu: its button shows the active tool ("Tools:
   Pan"), and it lists each tool with its key and, when off, why. Picking one
   closes the menu and returns focus to its button. The brand is
-  hidden, the summary chip is read out but not shown, and Share shows only its
-  icon. The Magic Lens options appear only while the lens is on. The dataset
+  hidden, the summary chip is read out but not shown, and Screenshot and
+  Share show only their icons. The Magic Lens options appear only while the lens is on. The dataset
   name gives way to the buttons, ending in "…".
 - The window toggles fold into a `Panels` menu beside Share, listing
   `Embedding`, `Plots` and `Query` with the open one pressed. Picking one

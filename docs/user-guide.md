@@ -269,6 +269,28 @@ the top bar copies the link to share the same view. Older links with `tab=`
 still work. Each dataset you open is a step in the browser's history, so Back
 returns to the previous dataset, or to the start screen.
 
+### Making A Figure
+
+`Screenshot` (the camera in the top bar) saves the spatial view as a PNG for
+a figure. Frame the view, then pick:
+
+- **Scale**: the PNG is 1, 2, 4 or 8 times the size of the view on screen.
+  The line under it gives the size in pixels, µm per pixel and the size in
+  print at the `DPI` you set (300 to start). The image is read at the detail
+  the larger size needs, and points, outlines and text grow with it, so the
+  PNG looks like the screen, only sharper.
+- **Include**: the scale bar, legend and axes start from Settings; the
+  selections' outlines start on.
+- **Background**: black as on screen, white, or transparent.
+
+The PNG draws every loaded cell, where the screen draws a sample of a large
+dataset zoomed out; the popover says so. It also says when expression is a
+sample at this zoom or transcripts are density squares: set
+`Expression detail` to `All cells`, and the transcripts' `Detail` to `Exact`
+(or zoom in), for a complete figure. A screenshot that reads a lot of image
+asks first, and you can cancel it from the popover or the loading list. The
+file records the dpi, the dataset, the view in µm and when it was made.
+
 ## Layers And Genes
 
 The layer panel's Image section controls dataset image opacity, image

@@ -227,6 +227,16 @@ export function ImageIcon() {
   )
 }
 
+// A camera, for Screenshot (plan 27).
+export function CameraIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M2.5 5.5h2.5l1.25-1.75h3.5l1.25 1.75h2.5v7h-11z" />
+      <circle cx="8" cy="8.75" r="2.25" />
+    </svg>
+  )
+}
+
 // Two sections side by side.
 export function SideBySideIcon() {
   return (

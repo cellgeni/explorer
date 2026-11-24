@@ -4,6 +4,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
 } from 'react'
 import {
@@ -60,6 +61,14 @@ import { manifestSegmentationSource } from './datasets/datasetManifest'
 import { datasetManifestFor } from './data/datasetFiles'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
+import {
+  ScreenshotRunner,
+  screenshotStageText,
+} from './features/screenshot/screenshotRunner'
+import {
+  screenshotFileInfo,
+  type ScreenshotModel,
+} from './features/screenshot/screenshotModel'
 import { useToolShortcuts } from './features/shell/useToolShortcuts'
 import { useNarrowScreen } from './features/shell/useNarrowScreen'
 import { useCardStackModel } from './features/cards/cardModels'
@@ -520,6 +529,12 @@ export function App({ dependencies }: AppProps = {}) {
   } | null>(null)
 
   const datasetUrl = useViewerStore((state) => state.datasetUrl)
+  // Screenshots of the spatial view (plan 27), one at a time.
+  const [screenshotRunner] = useState(() => new ScreenshotRunner())
+  const screenshotState = useSyncExternalStore(
+    screenshotRunner.subscribe,
+    screenshotRunner.getState,
+  )
   const setDatasetUrl = useViewerStore((state) => state.setDatasetUrl)
   const appState = useAppDomainState({ initialShareableState, performanceBudget })
   const {
@@ -2715,9 +2730,21 @@ export function App({ dependencies }: AppProps = {}) {
                   detail: `${importedSegmentation.state.shapeCount.toLocaleString()} outlines`,
                 }
             : undefined,
+        screenshotLoading:
+          screenshotState.status === 'running'
+            ? {
+                detail: screenshotStageText(screenshotState.progress),
+                progress:
+                  screenshotState.progress === null
+                    ? undefined
+                    : screenshotState.progress.done /
+                      Math.max(1, screenshotState.progress.total),
+              }
+            : undefined,
         boundariesAreSegmentation: platformAdapter.kind === 'image',
       }),
     [
+      screenshotState,
       importedSegmentation.state,
       platformAdapter.kind,
       analysisEmbeddingState,
@@ -3975,6 +4002,9 @@ export function App({ dependencies }: AppProps = {}) {
       'cell-transcripts': cancelCellDetails,
       'roi-cells': handleCancelRoiCells,
       'roi-genes': handleCancelRoiGenes,
+      screenshot: () => {
+        screenshotRunner.cancel()
+      },
     }
 
     cancelLoadingTaskRef.current = (id) => {
@@ -4962,6 +4992,53 @@ export function App({ dependencies }: AppProps = {}) {
       : loadState.status === 'loading'
         ? loadState.url
         : null
+  // Changing dataset cancels a screenshot of the last one (27-D12).
+  useEffect(
+    () => () => {
+      screenshotRunner.cancel()
+    },
+    [loadedDatasetUrl, screenshotRunner],
+  )
+  const screenshotModel = useMemo<ScreenshotModel | null>(
+    () =>
+      loadedDatasetUrl === null
+        ? null
+        : {
+            runner: screenshotRunner,
+            available: true,
+            include: {
+              scaleBar: showScaleBar,
+              legend: showLegend,
+              axes: showAxes,
+              selections: true,
+            },
+            expressionSampled:
+              geneExpressionState.status === 'ready' &&
+              (geneExpressionState.mode === 'sampled' ||
+                geneExpressionState.mode === 'overview-sampled'),
+            transcriptsAsDensity: transcriptLayerAggregateBins.length > 0,
+            loadingLabels: loadingTasks
+              .filter((task) => task.id !== 'screenshot')
+              .map((task) => task.label),
+            file: screenshotFileInfo(
+              loadedDatasetUrl,
+              morphologyImage?.zStack === undefined
+                ? null
+                : morphologyImage.zStack.zPlane + 1,
+            ),
+          },
+    [
+      geneExpressionState,
+      loadedDatasetUrl,
+      loadingTasks,
+      morphologyImage,
+      screenshotRunner,
+      showAxes,
+      showLegend,
+      showScaleBar,
+      transcriptLayerAggregateBins.length,
+    ],
+  )
   const topBar = useTopBarModel({
     activeTool,
     appendDebugEvent,
@@ -4993,6 +5070,7 @@ export function App({ dependencies }: AppProps = {}) {
     onReturnToPan: returnToPan,
     onRoiModeChange: handleRoiModeChange,
     platform: platformAdapter.kind,
+    screenshot: screenshotModel,
     setDebugMode,
   })
   const [fitRequestKey, setFitRequestKey] = useState(0)
@@ -5418,6 +5496,7 @@ export function App({ dependencies }: AppProps = {}) {
               axes={showAxes}
               scaleBar={showScaleBar}
               fitRequestKey={fitRequestKey}
+              screenshot={screenshotRunner}
               onImageTileError={handleImageTileError}
               onTileCacheEviction={handleTileCacheEviction}
               onViewportCellCountChange={setViewportCellCount}

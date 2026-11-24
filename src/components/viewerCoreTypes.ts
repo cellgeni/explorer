@@ -21,6 +21,7 @@ import type {
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import type { GridCellColumns } from '../rendering/gridCellColumns'
 import type { LoadingTaskSummary } from './AppStatusPanels'
+import type { ScreenshotRunner } from '../features/screenshot/screenshotRunner'
 import type {
   FlatMorphologyCanvasImage,
   MorphologyCanvasChannel,
@@ -125,6 +126,9 @@ export interface ViewerCoreProps {
   readonly scaleBar?: boolean
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
+  // Takes screenshots of the view (plan 27): the viewer connects its
+  // snapshot to it. One runner for the life of the app, so it never changes.
+  readonly screenshot?: ScreenshotRunner | null
   readonly overviewRenderCellLimit?: number | null
   // When overviewRenderCellLimit is null and every cell draws, the cells
   // drawn while the view moves, so pans and zooms do not draw them all on

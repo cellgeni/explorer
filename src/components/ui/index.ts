@@ -17,6 +17,7 @@ export { Switch, type SwitchProps } from './Switch'
 export { Tooltip, type TooltipProps } from './Tooltip'
 export {
   BoxSelectIcon,
+  CameraIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   CloseIcon,
