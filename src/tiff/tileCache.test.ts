@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { imagePixels, micrometers } from '../data/coords'
-import { TileCache } from './tileCache'
+import { TILE_RETRY_DELAYS_MS, TileCache } from './tileCache'
 import type { BBox } from '../data/coords'
 import type { TileSource } from './tileCache'
 
@@ -360,23 +360,101 @@ describe('TileCache', () => {
     }
   })
 
-  it('reports tile load errors through the cache callback', async () => {
+  it('reports a tile load error through the cache callback once its retries are spent', async () => {
+    vi.useFakeTimers()
+    try {
+      const source = new FakeTileSource()
+      const onError = vi.fn()
+      const cache = new TileCache({
+        decodeTile: async () => {
+          throw new Error('decode failed')
+        },
+        onError,
+      })
+
+      for (const delay of TILE_RETRY_DELAYS_MS) {
+        await expect(cache.request(source, 0, 1, 2)).resolves.toMatchObject({
+          state: 'error',
+          error: new Error('decode failed'),
+          retryAt: Date.now() + delay,
+        })
+        expect(onError).not.toHaveBeenCalled()
+        vi.advanceTimersByTime(delay)
+      }
+
+      const last = await cache.request(source, 0, 1, 2)
+      expect(last).toMatchObject({ state: 'error', failures: 4 })
+      expect(last).not.toHaveProperty('retryAt')
+      expect(onError).toHaveBeenCalledOnce()
+      expect(onError.mock.calls[0]?.[0].message).toBe('decode failed')
+
+      // Spent: later requests keep the error and read nothing.
+      vi.advanceTimersByTime(60_000)
+      await expect(cache.request(source, 0, 1, 2)).resolves.toBe(last)
+      expect(source.fetches).toHaveLength(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('reads a failed tile again once its back-off has passed (EXP-296)', async () => {
+    vi.useFakeTimers()
+    try {
+      const source = new FlakyTileSource(1)
+      const onError = vi.fn()
+      const cache = new TileCache({
+        displayWindow: { lo: 0, hi: 1 },
+        decodeTile: readyDecode,
+        onError,
+      })
+
+      const failed = await cache.request(source, 0, 0, 0)
+      expect(failed).toMatchObject({ state: 'error', failures: 1 })
+
+      // Within the back-off the error stands and nothing is read.
+      vi.advanceTimersByTime((TILE_RETRY_DELAYS_MS[0] ?? 0) - 1)
+      await expect(cache.request(source, 0, 0, 0)).resolves.toBe(failed)
+      expect(source.reads).toBe(1)
+
+      vi.advanceTimersByTime(1)
+      await expect(cache.request(source, 0, 0, 0)).resolves.toMatchObject({
+        state: 'ready',
+      })
+      expect(source.reads).toBe(2)
+      expect(onError).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps no failure for a tile evicted while it loaded', async () => {
+    let failRead: (error: Error) => void = () => {}
     const source = new FakeTileSource()
+    source.fetchTileBytes = (level, col, row) => {
+      source.fetches.push(`${level}:${col}:${row}`)
+      return level === 0 && col === 0
+        ? new Promise((_resolve, reject) => {
+            failRead = reject
+          })
+        : Promise.resolve(new Uint8Array([1, 2, 3]))
+    }
     const onError = vi.fn()
     const cache = new TileCache({
-      decodeTile: async () => {
-        throw new Error('decode failed')
-      },
+      maxTiles: 1,
+      displayWindow: { lo: 0, hi: 1 },
+      decodeTile: readyDecode,
       onError,
     })
 
-    await expect(cache.request(source, 0, 1, 2)).resolves.toMatchObject({
-      state: 'error',
-      error: new Error('decode failed'),
-    })
+    const first = cache.request(source, 0, 0, 0)
+    await cache.request(source, 0, 1, 0)
+    expect(cache.get(0, 0, 0)).toBeUndefined()
 
-    expect(onError).toHaveBeenCalledOnce()
-    expect(onError.mock.calls[0]?.[0].message).toBe('decode failed')
+    failRead(new TypeError('Failed to fetch'))
+    await expect(first).resolves.toMatchObject({ state: 'error' })
+    expect(cache.get(0, 0, 0)).toBeUndefined()
+    expect(cache.get(0, 1, 0)).toMatchObject({ state: 'ready' })
+    expect(onError).not.toHaveBeenCalled()
   })
 
   // A fetch can fail with a network error rather than an abort once it is
@@ -434,6 +512,31 @@ describe('TileCache', () => {
     expect(cache.get(0, 1, 2)).toBeUndefined()
   })
 })
+
+// Fails its first `failures` reads with a network error.
+class FlakyTileSource extends FakeTileSource {
+  reads = 0
+
+  constructor(private readonly failures: number) {
+    super()
+  }
+
+  override async fetchTileBytes(level: number, col: number, row: number) {
+    this.reads += 1
+    if (this.reads <= this.failures) throw new TypeError('Failed to fetch')
+    return super.fetchTileBytes(level, col, row)
+  }
+}
+
+async function readyDecode() {
+  return {
+    bitmap: { close: vi.fn() } as unknown as ImageBitmap,
+    width: 2,
+    height: 1,
+    lo: 0,
+    hi: 1,
+  }
+}
 
 class AbortableTileSource extends FakeTileSource {
   constructor(private readonly cancelError: () => Error = abortError) {

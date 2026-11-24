@@ -67,7 +67,18 @@ export interface TileErrorEntry {
   readonly state: 'error'
   readonly bounds: BBox
   readonly error: Error
+  // Failed reads of the tile in a row, and when a request may read it again
+  // (Date.now() ms). Left out on cancels, and retryAt once the retries are
+  // spent.
+  readonly failures?: number
+  readonly retryAt?: number
 }
+
+// After a failed read, a request reads the tile again once each of these has
+// passed: a dropped connection, a 503 or a decode-worker reset is often gone a
+// moment later. The error is reported once they are spent, and the tile then
+// keeps it until it is evicted or the cache cleared.
+export const TILE_RETRY_DELAYS_MS: readonly number[] = [1_000, 2_000, 4_000]
 
 export interface ReadyTile {
   readonly id: string
@@ -128,9 +139,15 @@ export class TileCache {
   ): Promise<TileCacheEntry> {
     const key = this.key(level, col, row)
     const existing = this.cache.get(key)
+    const failures = existing?.state === 'error' ? (existing.failures ?? 0) : 0
 
     if (existing !== undefined) {
-      if (existing.state === 'loading' && existing.signal?.aborted) {
+      if (
+        (existing.state === 'loading' && existing.signal?.aborted) ||
+        (existing.state === 'error' &&
+          existing.retryAt !== undefined &&
+          Date.now() >= existing.retryAt)
+      ) {
         this.cache.delete(key)
         this.removeFromOrder(key)
       } else {
@@ -152,6 +169,7 @@ export class TileCache {
     const promise = this.load(
       loader,
       { level, col, row, key },
+      failures,
       bounds,
       sourceSize,
       signal,
@@ -211,6 +229,7 @@ export class TileCache {
   private async load(
     loader: TileSource,
     { level, col, row, key }: CachedTileKey,
+    failures: number,
     bounds: BBox,
     sourceSize: TileSourceSize,
     signal?: AbortSignal,
@@ -285,14 +304,18 @@ export class TileCache {
         return { state: 'error', bounds, error }
       }
 
-      const failed: TileErrorEntry = {
-        state: 'error',
-        bounds,
-        error,
+      const failed = failedTile(bounds, error, failures + 1)
+
+      // A tile evicted while it loaded keeps nothing, nor overwrites a newer
+      // read of it.
+      if (!this.isCurrentLoading(key, signal)) {
+        return failed
       }
 
       this.cache.set(key, failed)
-      this.onError(error)
+      if (failed.retryAt === undefined) {
+        this.onError(error)
+      }
       return failed
     }
   }
@@ -432,6 +455,18 @@ export class TileCache {
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return !(a.maxX < b.minX || a.minX > b.maxX || a.maxY < b.minY || a.minY > b.maxY)
+}
+
+function failedTile(bounds: BBox, error: Error, failures: number): TileErrorEntry {
+  const delay = TILE_RETRY_DELAYS_MS[failures - 1]
+
+  return {
+    state: 'error',
+    bounds,
+    error,
+    failures,
+    ...(delay === undefined ? {} : { retryAt: Date.now() + delay }),
+  }
 }
 
 function noop(): void {}

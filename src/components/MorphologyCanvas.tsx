@@ -257,7 +257,9 @@ export function MorphologyCanvas({
         return
       }
 
-      drewCurrentRequest = currentRequestIsReady
+      // A tile that failed and will be read again draws when it comes.
+      drewCurrentRequest =
+        currentRequestIsReady && !requestedTilesWillRetry(channelRequests)
       syncCanvasBackingStore(canvas, context, viewport)
       drawMorphologyTileChannels(context, batches, viewState, viewport)
     }
@@ -394,6 +396,15 @@ function requestedTilesAreReadyToDraw(requests: readonly ChannelRequest[]): bool
   }
 
   return true
+}
+
+function requestedTilesWillRetry(requests: readonly ChannelRequest[]): boolean {
+  return requests.some((request) =>
+    request.tiles.some((tile) => {
+      const entry = request.cache.get(request.level, tile.col, tile.row)
+      return entry?.state === 'error' && entry.retryAt !== undefined
+    }),
+  )
 }
 
 function visibleMorphologyChannels(
