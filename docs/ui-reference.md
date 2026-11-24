@@ -1260,7 +1260,10 @@ link's `view` wins over the fit. Level of detail still measures zoom from the
 720 px fit, so cells draw the same at a given scale.
 
 Keyboard (`src/components/viewerNavigation.ts`; focus the spatial view first,
-except for `F`):
+except for `F`). The skip link, the page's first Tab stop, focuses the view
+without changing the address (`src/features/app-shell/spatialViewFocus.ts`);
+with the start screen or a 3D view over it, it focuses the region's heading
+instead, so the next Tab enters what covers it.
 
 | Key                | Action                                          |
 | ------------------ | ----------------------------------------------- |
@@ -1782,7 +1785,8 @@ Back returns to the previous dataset, or to the start screen (or the page
 before a collection link): when Back or Forward reaches an entry for another
 dataset, the page reloads that entry's link, with its view and settings. A
 link typed or pasted into the address bar for the open dataset reloads the
-page with that link too.
+page with that link too. A hash with no link values in it, such as an in-page
+anchor, reloads nothing: the address the page wrote is put back.
 
 | Parameter                                                                                                 | Meaning                                                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
