@@ -1021,10 +1021,11 @@ function parseGeneRange(
     value.length !== 2 ||
     !isScore(value[0]) ||
     !(isScore(value[1]) || isPercentile(value[1])) ||
-    (typeof value[0] === 'number' && typeof value[1] === 'number' && value[1] <= value[0])
+    // An Auto bottom is 0.
+    (typeof value[1] === 'number' && value[1] <= (value[0] ?? 0))
   ) {
     return fail(
-      '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".',
+      '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min (above 0 when min is null). max may also be a percentile of the scores above 0, from "p1" to "p100", such as "p95".',
     )
   }
 

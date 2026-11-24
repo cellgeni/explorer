@@ -136,6 +136,32 @@ describe('rasterizePreview', () => {
     ])
   })
 
+  it('runs its own scale from 0 where the set bottom is not below its top', () => {
+    // A bottom of 30 kept for a section whose own 99th percentile is 4.
+    const raster = rasterizePreview(
+      square,
+      {
+        kind: 'scores',
+        scores: {
+          positions: new Float32Array([0, 0, 9, 9]),
+          scores: new Float32Array([1, 4]),
+          maxScore: 4,
+        },
+      },
+      { ...OPTIONS, scaleMin: 30, scalePercentile: 99 },
+    )
+    const quarterWay = geneExpressionColor('plasma', 0.5)
+    const full = geneExpressionColor('plasma', 1)
+
+    expect(raster.scaleMax).toBe(4)
+    expect(pixel(raster.pixels, 0, 0).slice(0, 3)).toEqual([
+      quarterWay[0],
+      quarterWay[1],
+      quarterWay[2],
+    ])
+    expect(pixel(raster.pixels, 9, 9).slice(0, 3)).toEqual([full[0], full[1], full[2]])
+  })
+
   it('colours the cells of shown classes, fading hidden ones and the rest', () => {
     const { pixels } = rasterizePreview(
       square,

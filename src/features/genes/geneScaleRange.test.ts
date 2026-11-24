@@ -18,6 +18,30 @@ describe('gene scale range', () => {
     expect(geneScaleBounds({ min: null, max: 20 }, 92)).toEqual({ min: 0, max: 20 })
   })
 
+  it('runs from 0 where a kept bottom is not below the data’s top', () => {
+    // Set to 3 on a gene whose top was 20, kept for one whose top is 1.5.
+    expect(geneScaleBounds({ min: 3, max: null }, 1.5)).toEqual({ min: 0, max: 1.5 })
+    expect(geneScaleBounds({ min: 2, max: { percentile: 95 } }, 2)).toEqual({
+      min: 0,
+      max: 2,
+    })
+    // It applies again where it fits, and a bottom below 0 always does.
+    expect(geneScaleBounds({ min: 3, max: null }, 20)).toEqual({ min: 3, max: 20 })
+    expect(geneScaleBounds({ min: -3, max: null }, 0)).toEqual({ min: -3, max: 0 })
+  })
+
+  it('takes the nearest rank in whole numbers', () => {
+    const scores = (count: number) =>
+      Array.from({ length: count }, (_v, index) => index + 1)
+
+    // 0.999 * 1000 and 0.07 * 100 are just above 999 and 7 in floating point.
+    expect(geneScoreSpread(scores(1000), 99.9).top).toBe(999)
+    expect(geneScoreSpread(scores(100), 7).top).toBe(7)
+    expect(geneScoreSpread(scores(50), 14).top).toBe(7)
+    expect(geneScoreSpread(scores(25), 28).top).toBe(7)
+    expect(geneScoreSpread(scores(1000), 99.95).top).toBe(1000)
+  })
+
   it('puts the Auto top at the 99th percentile of the scores above 0', () => {
     // 990 cells at 1 to 10 and 10 outliers at 100: the 990th of 1,000.
     const scores = [
@@ -71,6 +95,10 @@ describe('gene scale range', () => {
     expect(parseGeneScaleRange(',20')).toEqual({ min: null, max: 20 })
     expect(parseGeneScaleRange('-1,')).toEqual({ min: -1, max: null })
     expect(parseGeneScaleRange('20,5')).toBeUndefined()
+    // An empty bottom is 0, so the top must be above it.
+    expect(parseGeneScaleRange(',0')).toBeUndefined()
+    expect(parseGeneScaleRange(',-3')).toBeUndefined()
+    expect(parseGeneScaleRange('-5,-3')).toEqual({ min: -5, max: -3 })
     expect(parseGeneScaleRange('a,5')).toBeUndefined()
     expect(parseGeneScaleRange('5')).toBeUndefined()
   })

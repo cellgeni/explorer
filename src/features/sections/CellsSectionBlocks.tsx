@@ -21,6 +21,7 @@ import {
   formatGeneScaleValue,
   geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
+  roundGeneScaleValue,
 } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_PERCENTILE,
@@ -475,19 +476,33 @@ function scaleTopTitle(colour: CellColourModel): string {
   return `Score at the top of the scale: ${where}. Cells at or above it get the last colour. Type a score and press Enter to ${max === null ? 'fix' : 'change'} it`
 }
 
+function scaleBottomCopy(min: number | null, unused: boolean): string {
+  if (min === null) return 'Auto, 0'
+
+  return unused
+    ? `0, as the bottom set, ${formatGeneScaleValue(min)}, is not below the top`
+    : 'set'
+}
+
 // The Gene scale's ends under the gradient, with the score at its middle. Each
 // end is a field that reads as a label until pointed at: type a score and
 // press Enter to fix it. A set end is in the accent colour.
 function GeneScaleRangeFields({ colour }: { readonly colour: CellColourModel }) {
   const { scaleMin, scaleMax, scaleRange, onScaleRangeChange } = colour
+  // A bottom kept from another gene or dataset that is not below this top.
+  const minUnused = scaleRange.min !== null && scaleRange.min !== scaleMin
 
   return (
     <div className="gene-scale-values" role="group" aria-label="Gene scale range">
       <NumberField
-        title={`Score at the bottom of the scale: ${scaleRange.min === null ? 'Auto, 0' : 'set'}. Cells at or below it get the first colour. Type a score and press Enter to ${scaleRange.min === null ? 'fix' : 'change'} it`}
+        title={`Score at the bottom of the scale: ${scaleBottomCopy(scaleRange.min, minUnused)}. Cells at or below it get the first colour. Type a score and press Enter to ${scaleRange.min === null ? 'fix' : 'change'} it`}
         label={<span className="visually-hidden">Gene scale minimum</span>}
-        value={roundScaleValue(scaleMin)}
-        className={scaleRange.min === null ? 'gene-scale-end' : 'gene-scale-end is-set'}
+        value={roundGeneScaleValue(scaleMin)}
+        className={
+          scaleRange.min === null || minUnused
+            ? 'gene-scale-end'
+            : 'gene-scale-end is-set'
+        }
         onChange={(value) => {
           if (value < scaleMax) onScaleRangeChange({ ...scaleRange, min: value })
         }}
@@ -498,7 +513,7 @@ function GeneScaleRangeFields({ colour }: { readonly colour: CellColourModel }) 
       <NumberField
         title={scaleTopTitle(colour)}
         label={<span className="visually-hidden">Gene scale maximum</span>}
-        value={roundScaleValue(scaleMax)}
+        value={roundGeneScaleValue(scaleMax)}
         className={scaleRange.max === null ? 'gene-scale-end' : 'gene-scale-end is-set'}
         onChange={(value) => {
           if (value > scaleMin) onScaleRangeChange({ ...scaleRange, max: value })
@@ -506,12 +521,6 @@ function GeneScaleRangeFields({ colour }: { readonly colour: CellColourModel }) 
       />
     </div>
   )
-}
-
-// To the digits the scale labels show.
-function roundScaleValue(value: number): number {
-  const factor = Math.abs(value) < 10 ? 100 : 10
-  return Math.round(value * factor) / factor
 }
 
 export function ExpressionDetailControl({

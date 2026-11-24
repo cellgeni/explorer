@@ -352,15 +352,31 @@ export function parseGeneExpressionDetailMode(
   return value !== undefined && isGeneExpressionDetailMode(value) ? value : undefined
 }
 
+// Scale ends and labels: two significant digits below 1, so the scores of a
+// fraction-normalised matrix (0.0042) do not read as 0, else two decimals
+// below 10 and one above. Negative only for a range set below zero (z-scores),
+// and never "-0".
 export function formatGeneScaleValue(value: number): string {
   if (!Number.isFinite(value) || value === 0) {
     return '0'
   }
 
-  // Negative only for a range set below zero (z-scores).
-  return value.toLocaleString(undefined, {
-    maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1,
-  })
+  return value.toLocaleString(undefined, geneScaleDigits(value))
+}
+
+// A scale end to the digits its label shows.
+export function roundGeneScaleValue(value: number): number {
+  if (!Number.isFinite(value) || value === 0) return 0
+  if (Math.abs(value) < 1) return Number(value.toPrecision(2))
+
+  const factor = Math.abs(value) < 10 ? 100 : 10
+  return Math.round(value * factor) / factor
+}
+
+function geneScaleDigits(value: number): Intl.NumberFormatOptions {
+  return Math.abs(value) < 1
+    ? { maximumSignificantDigits: 2 }
+    : { maximumFractionDigits: Math.abs(value) < 10 ? 2 : 1 }
 }
 
 // How well a gene matches a lower-case search: 0 exact (name or alias),

@@ -24,6 +24,7 @@ import {
   genePanelStatusCopy,
   parseGeneExpressionColorScale,
   parseGeneExpressionDetailMode,
+  roundGeneScaleValue,
   parseGeneExpressionScoreMode,
   formatGeneSetsLink,
   parseGeneSetSymbols,
@@ -204,6 +205,23 @@ describe('geneControlsModel', () => {
     expect(parseGeneExpressionDetailMode('all-cells')).toBe('all-cells')
     expect(formatGeneScaleValue(0)).toBe('0')
     expect(formatGeneScaleValue(4.123)).toBe('4.12')
+  })
+
+  it('writes small scale values to two significant digits, never "-0"', () => {
+    // Fraction-normalised matrices hold scores near 0.001.
+    expect(formatGeneScaleValue(0.0042)).toBe('0.0042')
+    expect(formatGeneScaleValue(0.0123)).toBe('0.012')
+    expect(formatGeneScaleValue(0.0007)).toBe('0.0007')
+    expect(formatGeneScaleValue(-0.004)).toBe('-0.004')
+    expect(formatGeneScaleValue(0.25)).toBe('0.25')
+    expect(formatGeneScaleValue(12.34)).toBe('12.3')
+    // The end fields show the same digits.
+    expect(roundGeneScaleValue(0.0042)).toBe(0.0042)
+    expect(roundGeneScaleValue(0.0123)).toBe(0.012)
+    expect(roundGeneScaleValue(-0.004)).toBe(-0.004)
+    expect(roundGeneScaleValue(4.123)).toBe(4.12)
+    expect(roundGeneScaleValue(12.34)).toBe(12.3)
+    expect(roundGeneScaleValue(Number.NaN)).toBe(0)
   })
 
   it('remembers one Gene scale top per Visium HD bin size', () => {

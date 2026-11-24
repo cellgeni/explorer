@@ -658,9 +658,12 @@ describe('parseDatasetManifest', () => {
       [0, 'p101'],
       [0, 'P95'],
       ['p5', 10],
+      // The Auto bottom is 0.
+      [null, 0],
+      [null, -3],
     ]) {
       expect(defaults({ geneRange })).toContain(
-        '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min. max may also be a percentile',
+        '"defaults.geneRange" must be [min, max]: numbers, or null for an Auto end, with max above min (above 0 when min is null). max may also be a percentile',
       )
     }
     expect(
