@@ -14,6 +14,15 @@
   font-size: var(--font-control);
 }
 
+/* However short the window, as at 400% zoom, the map keeps at least half
+   the room the bar shares with it: the bar scrolls in the rest (WCAG
+   1.4.10). Safe centring keeps its top reachable when it scrolls. */
+.collection-bar:not(.is-expanded) {
+  max-height: 50%;
+  overflow-y: auto;
+  align-items: safe center;
+}
+
 /* Never narrower than its title, so the datasets cannot cover its buttons:
    a long name shortens instead. */
 .collection-bar-heading {
@@ -313,6 +322,21 @@
 
 .collection-bar-dataset[aria-current='true'] .collection-bar-dataset-max {
   color: inherit;
+}
+
+/* Too short for previews: each dataset shows its name and score, in one
+   row, as with Previews off. */
+@media (max-height: 299.98px) {
+  .collection-bar.has-previews:not(.is-expanded) .collection-bar-preview {
+    display: none;
+  }
+
+  .collection-bar.has-previews:not(.is-expanded) .collection-bar-beside {
+    position: static;
+    margin-left: 2px;
+    border-color: transparent;
+    background: transparent;
+  }
 }
 
 /* Expanded: the previews as a grid over the canvas, scrolling down, with

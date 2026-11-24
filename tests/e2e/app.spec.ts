@@ -1380,6 +1380,30 @@ test('keeps the collection bar buttons clear of its datasets @smoke', async ({
   await expect(previews).toHaveAttribute('aria-pressed', 'false')
   await expectButtonsClear('narrow, names only')
 
+  // At 400% zoom of a 1280 × 720 window, the map keeps half the room the bar
+  // shares with it, the bar stays clear of the layer sheet, and the previews
+  // give way to the names (EXP-298).
+  await previews.click()
+  await expect(previews).toHaveAttribute('aria-pressed', 'true')
+  await page.setViewportSize({ width: 320, height: 180 })
+  const room = await page.evaluate(() => {
+    const box = (selector: string) =>
+      document.querySelector(selector)?.getBoundingClientRect()
+    const preview = document.querySelector('.collection-bar-preview')
+    return {
+      map: Math.round(box('.viewport-frame')?.height ?? 0),
+      barUnderSheet: Math.max(
+        0,
+        Math.round(
+          (box('.collection-bar')?.bottom ?? 0) - (box('.shell-layer-sheet')?.top ?? 0),
+        ),
+      ),
+      previewShown: preview !== null && getComputedStyle(preview).display !== 'none',
+    }
+  })
+  expect(room.map).toBeGreaterThan(30)
+  expect(room).toMatchObject({ barUnderSheet: 0, previewShown: false })
+
   expectAxeFindingsMatchBaseline(findings)
 })
 

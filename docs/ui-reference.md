@@ -161,6 +161,11 @@ the canvas, a `nav` named "Collection":
 - While the collection is read: "Reading the collection…". If it cannot be
   read: "The collection could not be opened." with the reason
   (`role="alert"`).
+- In a short window, as at 400% zoom, the bar takes at most half the room
+  it shares with the map and scrolls in it. Under 300 px high the previews
+  give way to the labels and scores, with `Show {label} beside` after the
+  label, as with previews off; `Previews` stays pressed, and they come back
+  when the window is taller.
 
 `useDatasetCollection` (`src/features/collection/useDatasetCollection.ts`)
 reads the collection, opens its first dataset when the link names none
