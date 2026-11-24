@@ -20,7 +20,8 @@ plan's four questions the same day
 ([Answered Questions](#answered-questions)); D3, D5, the failure rule and
 Later carry the answers.
 
-The plan rests on a code map made on 2026-11-24 at `24f0fd2`. It is cited
+The plan rests on a code map made on 2026-11-24 at `24f0fd2` and
+rechecked the same day at `fe50d70`. It is cited
 below as `file:line`; line numbers drift as the code changes.
 
 Sizes are for one developer: **S** ≤ 1 day, **M** 2–4 days, **L** 1–2 weeks.
@@ -118,14 +119,29 @@ What the work can build on:
   - Channels are added (`lighter`), except a single RGB channel, which is
     drawn over (`:73-93`). So tiles can be drawn in any order.
   - The level is `loader.bestLevel(2 ** zoom)` (`MorphologyCanvas.tsx:455`).
-    Each channel has a `MorphologyTileStore` cache and scheduler. While a
-    level loads, ready tiles of another level stand in (`:350-384`).
+    While a level loads, ready tiles of another level stand in
+    (`:350-384`).
+  - A `MorphologyTileStore` makes a `TileCache` and a
+    `TileRequestScheduler` for each channel (`morphologyTileStore.ts:60-80`),
+    sharing one `TileRequestSlots` when given a request limit (`:49-56`).
+    A cache holds 72, 120 or 180 tiles, by performance budget
+    (`performanceBudget.ts:18-41`).
   - The flat Visium image loads with `crossOrigin = 'anonymous'`
     (`morphologyTileStore.ts:157-158`). TIFF and Zarr tiles are
     `ImageBitmap`s decoded from fetched bytes. A canvas drawn from either
     can be read back.
   - `persist: false` on a tile fetch reads the IndexedDB byte-range cache
     without adding to it (`imagePyramid.ts:103-108`, plan 26-D8).
+- **Failed tiles.**
+  - A failed read is read again after 1, 2 and 4 s
+    (`TILE_RETRY_DELAYS_MS`, `tileCache.ts:77-81`). The scheduler asks
+    again when the time comes, while a canvas still wants the tile
+    (`tileRequestScheduler.ts:85-87`, `:224-252`). Since
+    [PR #426](https://github.com/cellgeni/explorer/pull/426), a timer that
+    fires early waits again.
+  - Once the retries are spent, the cache keeps the error until the tile
+    is evicted or the cache is cleared (`tileCache.ts:77-80`). It has no
+    way to forget one tile: `clear()` empties it (`:217-227`).
 - **The deck.gl layers** come from
   `createOverviewLayers(cells, boundaries, options)` (`deckLayers.ts:166`),
   called with ViewerCore's inputs (`ViewerCore.tsx:1147-1173`).
@@ -218,6 +234,13 @@ answers the same day; the others stand as proposed.
     own.
   - Reads use `persist: false`, so they do not evict what the canvas and
     the readers keep in the byte-range cache.
+  - The screenshot has its own `TileCache` and scheduler for each channel,
+    with the channel's colour and contrast, holding one grid tile's tiles,
+    and empties them when it ends. A read of hundreds of tiles at another
+    level would otherwise push the canvas's tiles out of its cache (72–180
+    tiles), and `Retry` would get back the error of a tile whose retries
+    were spent. Its requests are limited to the budget's
+    `maxConcurrentTileRequests` (2, 4 or 6).
 - **D5. Every loaded cell.** The screenshot draws without the render cap's
   sample: zoomed out, the Xenium demo shows all 1.4 million cells, not
   about 250,000. Points keep the screen's size. It is one frame, drawn
@@ -288,7 +311,8 @@ answers the same day; the others stand as proposed.
    - the read estimate and the notes (D7).
 3. **Each grid tile**, row by row:
    1. **Image.** Every channel's tiles under the grid tile are fetched
-      through the channel's tile store (`persist: false`). They are drawn
+      through the screenshot's own caches (D4; `persist: false`). They are
+      drawn
       into a scratch 2D canvas as they arrive, with the canvas's rules
       (`morphologyCanvas.ts:66-121`), the context scaled by N and the view
       state's target moved to the grid tile.
@@ -300,9 +324,10 @@ answers the same day; the others stand as proposed.
       task as `redraw`, before the browser can clear it.
 
    If the off-screen Deck loses its context, the screenshot fails and says
-   so. A tile that fails is read once more. If it fails again, the screenshot
-   fails, names the channel and offers `Retry`: a figure with a hole in it
-   is worse than none.
+   so. A tile that fails is read again after 1, 2 and 4 s, as the canvas's
+   tiles are. Once those retries are spent, the screenshot fails, names the
+   channel and offers `Retry`, which starts again with new caches: a figure
+   with a hole in it is worse than none.
 
 4. **Overlays.** One SVG over the whole frame in CSS pixels, from the
    snapshot's models, drawn onto the PNG's canvas at N× through an
@@ -311,8 +336,9 @@ answers the same day; the others stand as proposed.
 5. **Writing.** `toBlob('image/png')`. Then the `pHYs` and `tEXt` chunks
    are inserted after `IHDR` (D11), and `downloadBlob` saves the file.
 6. **Clean-up.** The off-screen Deck is finalized and its context lost, as
-   `ReleasingDeck` does. The canvases are emptied (width 0). `Cancel`
-   aborts the tile fetches and the decode requests.
+   `ReleasingDeck` does. The canvases are emptied (width 0) and the
+   screenshot's tile caches cleared. `Cancel` aborts the tile fetches and
+   the decode requests.
 
 **The off-screen Deck** has its own canvas, never in the page. Its layers
 come from `createOverviewLayers` with the snapshot's inputs and three
@@ -351,11 +377,15 @@ buffers. The spike chooses (task A).
   - fast-check tests: the tiles cover the frame exactly, without overlap,
     on whole device pixels.
   - The level at N× equals the level at 1× for a frame N times larger.
-- [ ] **C. The image.** (M) `ScreenshotImageComposer`: fetch, draw and
-      composite per grid tile, with progress and abort.
+- [ ] **C. The image.** (M) `ScreenshotImageComposer`: its own tile caches
+      (D4); fetch, draw and composite per grid tile, with progress and
+      abort.
   - Tests with a fake loader and a recording 2D context: levels, flipped
     and swapped placements, an origin offset (MERSCOPE), the flat image,
-    a z plane, and a tile that fails twice.
+    a z plane, a tile whose retries are spent, and `Retry` reading it
+    again.
+  - The canvas's caches hold the same tiles before and after a
+    screenshot.
 - [ ] **D. The deck.gl tiles.** (M) The off-screen renderer the spike
       chooses.
   - Tests that its layers carry the overrides, and that it loses its
@@ -407,6 +437,7 @@ buffers. The spike chooses (task A).
 | WebGL shrinks a large drawing buffer silently  | A tile drawn small and stretched                                                                               | Tiles of at most 4,096 px (D9); check `drawingBufferWidth` and fail rather than stretch    |
 | Many image tiles at 4× and 8×                  | Minutes on a slow host (BioImage Archive, 3–10 MB/s)                                                           | The estimate and the question (D4), progress, `Cancel`                                     |
 | The read evicts the byte-range cache           | The canvas and the readers lose their cached bytes                                                             | `persist: false` (D4)                                                                      |
+| The read evicts the canvas's decoded tiles     | The canvas fetches and decodes its tiles again                                                                 | The screenshot's own caches (D4)                                                           |
 | Seams at tile edges                            | Lines across the PNG                                                                                           | Tiles on whole device pixels (D3, D9); the spike checks                                    |
 | A hidden tab                                   | No animation frames; the Deck may not draw                                                                     | `redraw` called directly; the spike checks                                                 |
 | A large PNG                                    | Seconds to encode; 512 MiB of pixels at the limit                                                              | The size limit (D10); `toBlob` is asynchronous                                             |
