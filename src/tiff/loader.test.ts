@@ -692,6 +692,30 @@ describe('TiffPyramidLoader', () => {
     )
   })
 
+  // The OME-XML names the file as written; the URL percent-encodes it
+  // (EXP-331).
+  it('finds the channel of a multi-file OME-TIFF whose name has a space', async () => {
+    mockTiff({
+      width: 300,
+      height: 200,
+      tileWidth: 100,
+      tileHeight: 100,
+      imageDescription: twoFileOmeXml.replaceAll('stain_', 'stain '),
+    })
+    stubZchunkStoreFetch(
+      zchunkStoreManifest({ width: 300, height: 200, tile: 100, channels: [0, 1] }),
+      { sidecarUrl: 'https://example.test/run/images/.zchunkstore' },
+    )
+
+    const loader = await openTiff('https://example.test/run/images/stain%200001.ome.tif')
+
+    await loader.fetchTileBytes(0, 2, 1)
+    expect(vi.mocked(fetch)).toHaveBeenLastCalledWith(
+      'https://example.test/run/images/stain%200001.ome.tif',
+      expect.objectContaining({ headers: { Range: 'bytes=1105-1105' } }),
+    )
+  })
+
   it.each([
     ['level 0 width', { width: 400, height: 200, tile: 100 }],
     ['level 0 height', { width: 300, height: 100, tile: 100 }],

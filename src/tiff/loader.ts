@@ -67,7 +67,11 @@ import {
   ndpiTileDecodeMetadata,
 } from './ndpi'
 import { decodeTiffStripBand } from '../codecs/tiffStrips'
-import { TIFF_COMPRESSION_JPEG, TIFF_COMPRESSION_NONE } from '../codecs/tiffTile'
+import {
+  JPEG_2000_COMPRESSION_CODES,
+  TIFF_COMPRESSION_JPEG,
+  TIFF_COMPRESSION_NONE,
+} from '../codecs/tiffTile'
 import { sharedStripDecodePool } from '../workers/tileDecodePool'
 import { abortable } from '../utils/abortable'
 import { notifyFallback, type FallbackNotifier } from '../data/fallbackNotice'
@@ -345,7 +349,7 @@ async function openTiffImage(
     (async () => {
       const image = await tiff.getImage(selection.ifdIndex ?? 0)
       const decodeMetadata = await readTileDecodeMetadata(tiff, image.getFileDirectory())
-      refuseSignedSamples(decodeMetadata, options)
+      refuseUnreadableSamples(decodeMetadata, options)
       return { firstImage: image, decodeMetadata }
     })(),
     // A file in memory has its tile offsets at hand.
@@ -739,7 +743,7 @@ async function openTopLevelPyramid(
     channelDirectories.map((directory) => readTileDecodeMetadata(file.tiff, directory)),
   )
   const decodeMetadata = levelDecodeMetadata[0] ?? {}
-  refuseSignedSamples(decodeMetadata, options)
+  refuseUnreadableSamples(decodeMetadata, options)
   const units: UnitsDescriptor = {
     dataUnit: 'micrometer',
     imageUnit: 'pixel',
@@ -1893,7 +1897,7 @@ function hasEveryTile(
 // One file of a multi-file OME-TIFF: its OME-XML lists channels stored in
 // other files.
 function isMultiFileOmeTiff(url: string, channels: readonly TiffChannelInfo[]): boolean {
-  const fileName = new URL(url).pathname.split('/').at(-1)
+  const fileName = decodedFileName(url)
 
   return channels.some(
     (channel) => channel.fileName !== undefined && channel.fileName !== fileName,
@@ -1901,13 +1905,25 @@ function isMultiFileOmeTiff(url: string, channels: readonly TiffChannelInfo[]): 
 }
 
 function channelIndexForUrl(url: string, channels: readonly TiffChannelInfo[]): number {
-  const fileName = new URL(url).pathname.split('/').at(-1)
+  const fileName = decodedFileName(url)
 
   if (fileName === undefined) {
     return 0
   }
 
   return channels.find((channel) => channel.fileName === fileName)?.index ?? 0
+}
+
+// The file's name as OME-XML writes it: "stain 0001.ome.tif" for
+// …/stain%200001.ome.tif (EXP-331).
+function decodedFileName(url: string): string | undefined {
+  const segment = new URL(url).pathname.split('/').at(-1)
+  if (segment === undefined) return undefined
+  try {
+    return decodeURIComponent(segment)
+  } catch {
+    return segment
+  }
 }
 
 export function tiffImageSelectionUrl(url: string, ifdIndex: number): string {
@@ -1943,10 +1959,12 @@ function parseTiffImageSelection(url: string): TiffImageSelection {
 
 // Signed samples would be read as unsigned (-500 as 65036), so an image
 // storing them is refused (EXP-015). Label images read them as IDs.
-function refuseSignedSamples(
+function refuseUnreadableSamples(
   decodeMetadata: TiffTileDecodeMetadata,
   options: Pick<OpenImagePyramidOptions, 'labels'>,
 ): void {
+  refuseUnreadableSampleBits(decodeMetadata, options)
+
   if (
     decodeMetadata.sampleFormat !== TIFF_SAMPLE_FORMAT_SIGNED ||
     options.labels === true
@@ -1958,6 +1976,35 @@ function refuseSignedSamples(
 
   throw new Error(
     `The image stores signed ${bits}-bit samples (TIFF SampleFormat 2), which the viewer cannot show. Save it with unsigned 8- or 16-bit samples.`,
+  )
+}
+
+// Tiles are read as whole 8- or 16-bit samples (32-bit in a label image), or
+// as JPEG's 8 or 12 bits, or as JPEG 2000 decodes them. A bilevel mask or
+// packed 12-bit samples were read a byte per sample and drawn scrambled
+// (EXP-330); strips and re-tiled levels already refuse them.
+function refuseUnreadableSampleBits(
+  decodeMetadata: TiffTileDecodeMetadata,
+  options: Pick<OpenImagePyramidOptions, 'labels'>,
+): void {
+  const compression = decodeMetadata.compression ?? TIFF_COMPRESSION_NONE
+  if (JPEG_2000_COMPRESSION_CODES.has(compression)) return
+
+  const bitsPerSample =
+    decodeMetadata.bitsPerSample === undefined ||
+    decodeMetadata.bitsPerSample.length === 0
+      ? [8]
+      : decodeMetadata.bitsPerSample
+  const bits = bitsPerSample[0] ?? 8
+  const readable =
+    compression === TIFF_COMPRESSION_JPEG
+      ? bits === 8 || bits === 12
+      : bits === 8 || bits === 16 || (options.labels === true && bits === 32)
+
+  if (readable && bitsPerSample.every((value) => value === bits)) return
+
+  throw new Error(
+    `The image stores ${bitsPerSample.join('/')}-bit samples, which the viewer cannot read from its tiles. Save it with 8- or 16-bit samples.`,
   )
 }
 

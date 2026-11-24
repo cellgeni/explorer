@@ -119,9 +119,11 @@ locate each channel's plane in a 2D image:
 - Planes are numbered in `DimensionOrder`, first letter after `XY` fastest.
 - A `TiffData` stores `PlaneCount` planes from its `FirstC`/`FirstZ`/`FirstT`
   position in consecutive IFDs from `IFD` (default 0), in its `UUID@FileName`
-  file or this one. `PlaneCount` defaults to 1 when `IFD` is given and to every
-  remaining plane otherwise, so Xenium and Atera's `<TiffData PlaneCount="13"/>`
-  maps z to IFD z.
+  file or this one. The name is matched against the address's decoded last
+  part, so `stain 0001.ome.tif` is the file at `…/stain%200001.ome.tif`.
+  `PlaneCount` defaults to 1 when `IFD` is given and to every remaining plane
+  otherwise, so Xenium and Atera's `<TiffData PlaneCount="13"/>` maps z to IFD
+  z.
 - Without any `TiffData`, plane N is IFD N.
 
 Each channel gets `zPlanes` (IFD and file per z) and the loader gets
@@ -176,7 +178,10 @@ tile across them.
   [Stripped TIFFs](#stripped-tiffs)), but tiled pyramids load faster.
 - **Unsigned 8- or 16-bit samples**, 1, 3, or 4 samples per pixel. An image
   whose `SampleFormat` is 2 (signed) is refused when it opens, with a message;
-  label images read signed IDs. Float images fail.
+  label images read signed IDs. So is one of other depths, such as a 1-bit
+  mask or packed 12-bit or 32-bit samples, which tiles cannot hold whole. JPEG
+  tiles may be 12-bit, JPEG 2000 tiles any depth OpenJPEG decodes, and label
+  images 32-bit. Float images fail.
 - **Compression.** A tile without a `Compression` tag is read as uncompressed,
   the TIFF default.
 - **Byte ranges.** Each tile is a `Range` `GET` that must return `206`.
@@ -456,6 +461,12 @@ default window is 0 to 4,095.
 `geotiff` loops until the decode worker, and with it the tab, runs out of
 memory. The built-in decoder handles every 12-bit code and undoes horizontal
 differencing (Predictor 2) itself, in the file's byte order.
+
+**Predictor 2 with `geotiff`.** `geotiff` undoes horizontal differencing on
+samples in the machine's (little-endian) byte order, which garbles a
+big-endian file's 16-bit samples. For Deflate and the other codecs it decodes,
+it is asked for none, and the differencing is undone here in the file's byte
+order, as for LZW.
 
 **JPEG colour.** A three-component JPEG tile holds RGB or YCbCr. An Adobe or
 JFIF marker in the tile or `JPEGTables` decides; otherwise `Photometric`
