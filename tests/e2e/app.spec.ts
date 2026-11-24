@@ -963,6 +963,56 @@ test.describe('at 390 × 844 px', () => {
   })
 })
 
+// The top bar's popovers hang from their buttons, so on a phone those near
+// the middle or the edge ran off the screen, and in a short window Help ran
+// off the bottom and scrolled the page (EXP-297, EXP-301).
+test('keeps the top bar popovers on a phone screen and in a short window @smoke', async ({
+  page,
+}) => {
+  test.setTimeout(120_000)
+  await routeTinyH5adFixture(page)
+  await page.setViewportSize({ width: 320, height: 640 })
+  await page.goto('/?dataset=%2Fh5ad-smoke.h5ad')
+  await expect(page.getByRole('status').filter({ hasText: '4 cells' })).toBeVisible({
+    timeout: H5AD_LOAD_TIMEOUT_MS,
+  })
+
+  const onScreen = async (name: string) => {
+    const box = await page.getByRole('dialog', { name }).boundingBox()
+    expect(box, name).not.toBeNull()
+    const { x, width } = box ?? { x: 0, width: 0 }
+    expect(x, `${name} left edge`).toBeGreaterThanOrEqual(0)
+    expect(x + width, `${name} right edge`).toBeLessThanOrEqual(320)
+  }
+  for (const name of ['Tools', 'Panels', 'Help']) {
+    await page.getByRole('button', { name: new RegExp(`^${name}`) }).click()
+    await onScreen(name)
+    await page.keyboard.press('Escape')
+  }
+
+  // Help in a landscape phone's height: it scrolls inside itself from its
+  // top, and the top bar stays on the screen.
+  await page.setViewportSize({ width: 844, height: 390 })
+  await page.getByRole('button', { name: 'Help', exact: true }).click()
+  const help = page.getByRole('dialog', { name: 'Help' })
+  await expect(help).toBeFocused()
+  const state = await help.evaluate((panel) => ({
+    bottom: panel.getBoundingClientRect().bottom,
+    scrolls: panel.scrollHeight > panel.clientHeight,
+    scrollTop: panel.scrollTop,
+    barTop: document.querySelector('.shell-top-bar')?.getBoundingClientRect().top,
+  }))
+  expect(state).toEqual({
+    bottom: expect.any(Number),
+    scrolls: true,
+    scrollTop: 0,
+    barTop: 0,
+  })
+  expect(state.bottom).toBeLessThanOrEqual(390)
+  await page.keyboard.press('Tab')
+  await expect(help.getByRole('link', { name: 'User guide' })).toBeFocused()
+})
+
 test('opens a shared H5AD link coloured by a metadata track @smoke', async ({
   baseURL,
   page,
