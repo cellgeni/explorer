@@ -143,6 +143,7 @@ import { useRecentDatasets } from './features/start/recentDatasets'
 import { useExamplesIndex } from './features/start/useExamplesIndex'
 import { datasetDisplayName, documentTitle } from './features/app-shell/documentTitle'
 import { isTextEntryTarget } from './features/app-shell/activeToolModel'
+import { focusSpatialView } from './features/app-shell/spatialViewFocus'
 import {
   TRANSCRIPT_GENE_LEGEND_ID,
   viewerLegendSections,
@@ -5292,7 +5293,7 @@ export function App({ dependencies }: AppProps = {}) {
   const viewerTileCount = 1 + linkedSections.length
   const viewerRegion = (
     <section className="viewer-region" aria-labelledby="viewer-heading">
-      <h2 id="viewer-heading" className="visually-hidden">
+      <h2 id="viewer-heading" className="visually-hidden" tabIndex={-1}>
         Spatial View
       </h2>
 
@@ -5516,7 +5517,14 @@ export function App({ dependencies }: AppProps = {}) {
     </section>
   )
   const skipLink = (
-    <a className="skip-link" href="#viewer-heading">
+    <a
+      className="skip-link"
+      href="#viewer-heading"
+      onClick={(event) => {
+        event.preventDefault()
+        focusSpatialView(document)
+      }}
+    >
       Skip To Spatial View
     </a>
   )

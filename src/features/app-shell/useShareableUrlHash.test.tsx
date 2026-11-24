@@ -475,6 +475,33 @@ describe('useShareableUrlHash', () => {
     },
   )
 
+  it.each(['popstate', 'hashchange'] as const)(
+    'keeps the open dataset when an in-page anchor sets the hash (%s)',
+    (eventName) => {
+      const onHistoryDatasetChange = vi.fn()
+      render(
+        <ShareableUrlHashProbe
+          datasetUrl="https://example.test/a"
+          onHistoryDatasetChange={onHistoryDatasetChange}
+        />,
+      )
+      act(() => {
+        vi.advanceTimersByTime(160)
+      })
+      const written = window.location.hash
+      expect(written).toContain('dataset=')
+
+      // A fragment link, such as the skip link's #viewer-heading.
+      window.history.pushState(null, '', '/#viewer-heading')
+      act(() => {
+        window.dispatchEvent(new Event(eventName))
+      })
+
+      expect(onHistoryDatasetChange).not.toHaveBeenCalled()
+      expect(window.location.hash).toBe(written)
+    },
+  )
+
   it('reloads when Back reaches another dataset, and writes nothing more', () => {
     const onHistoryDatasetChange = vi.fn()
     const { rerender } = render(

@@ -316,6 +316,19 @@ export function useShareableUrlHash({
     // Back, Forward, or a link typed or pasted into the address bar.
     function handleAddressChange() {
       if (leavingRef.current) return
+      // An in-page anchor, such as #viewer-heading, names no state: put back
+      // the address it replaced rather than reload.
+      if (
+        window.location.hash !== '' &&
+        Object.keys(parseShareableState(window.location.hash)).length === 0
+      ) {
+        window.history.replaceState(
+          null,
+          '',
+          `${window.location.pathname}${window.location.search}${addressHashRef.current}`,
+        )
+        return
+      }
       if (
         linkedDatasetUrl() === datasetUrlRef.current.trim() &&
         window.location.hash === addressHashRef.current

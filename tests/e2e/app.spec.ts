@@ -756,10 +756,14 @@ test('runs the first five review tasks with the keyboard alone @smoke', async ({
   await page.keyboard.press('Space')
   await expect(clusterA).not.toBeChecked()
 
-  // 4. Open a cell: Enter opens the one at the centre of the view. Zoom out
-  // until one is there.
+  // 4. Open a cell: the skip link moves to the view without changing the
+  // address, which would reload the page; Enter then opens the cell at the
+  // centre of the view. Zoom out until one is there.
   const canvas = page.getByRole('img', { name: 'Spatial viewer canvas area' })
-  await tabTo(page, canvas)
+  await page.getByRole('link', { name: 'Skip To Spatial View' }).focus()
+  await page.keyboard.press('Enter')
+  await expect(canvas).toBeFocused()
+  expect(page.url()).not.toContain('viewer-heading')
   const cellCard = page.getByRole('region', { name: 'Cell', exact: true })
   for (let step = 0; step < 8 && !(await cellCard.isVisible()); step += 1) {
     await page.keyboard.press('Enter')
