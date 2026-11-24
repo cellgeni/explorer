@@ -484,20 +484,7 @@ function annotationSizeGrouping(annotation: Pick<Annotation, 'id' | 'label'>): {
 
 export const QUERY_ANNOTATION_SET_ID = 'queries'
 
-// More categories than this, and a column labels cells rather than grouping
-// them.
-const ID_LIKE_CATEGORY_LIMIT = 500
-
-// H5AD and SpatialData columns that identify cells or ontology terms rather
-// than group them (15.1-I). They are listed apart, under "More columns".
-export function isIdLikeAnnotationGroup(group: AnnotationGroupOption): boolean {
-  const label = group.label.toLowerCase()
-  return (
-    label.endsWith('_ontology_term_id') ||
-    label === 'observation_joinid' ||
-    group.groupCount > ID_LIKE_CATEGORY_LIMIT
-  )
-}
+export { isIdLikeAnnotationGroup } from '../../data/annotation'
 
 // The set chosen when a dataset's sets are listed: Xenium's graphclust, or
 // the first set. "All" stacked every clustering and was a poor default.

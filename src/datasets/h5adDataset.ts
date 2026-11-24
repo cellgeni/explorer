@@ -105,10 +105,11 @@ import {
   type VisiumUnits,
 } from './visiumFormat'
 import { throwIfAborted } from '../utils/abort'
-import type {
-  Annotation,
-  AnnotationGroupOption,
-  LoadDatasetAnnotationsOptions,
+import {
+  isIdLikeAnnotationGroup,
+  type Annotation,
+  type AnnotationGroupOption,
+  type LoadDatasetAnnotationsOptions,
 } from '../data/annotation'
 
 export interface AnnDataH5adDatasetOptions {
@@ -992,6 +993,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
         options.groupId !== undefined &&
         options.groupId !== 'all' &&
         groupId !== options.groupId
+      ) {
+        continue
+      }
+
+      // "All" leaves out the columns that name cells, which the set picker
+      // lists apart: each would be one class per cell (a Census file's
+      // observation_joinid). Picked by name, one still loads.
+      if (
+        (options.groupId === undefined || options.groupId === 'all') &&
+        isIdLikeAnnotationGroup({ label: track.label, groupCount: track.categoryCount })
       ) {
         continue
       }

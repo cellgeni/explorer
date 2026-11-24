@@ -22,6 +22,24 @@ export interface AnnotationGroupOption {
   readonly groupCount: number
 }
 
+// More categories than this, and a column labels cells rather than grouping
+// them.
+const ID_LIKE_CATEGORY_LIMIT = 500
+
+// H5AD and SpatialData columns that identify cells or ontology terms rather
+// than group them (15.1-I). They are listed apart, under "More columns", and
+// "All" leaves them out: each would be one class per cell.
+export function isIdLikeAnnotationGroup(
+  group: Pick<AnnotationGroupOption, 'label' | 'groupCount'>,
+): boolean {
+  const label = group.label.toLowerCase()
+  return (
+    label.endsWith('_ontology_term_id') ||
+    label === 'observation_joinid' ||
+    group.groupCount > ID_LIKE_CATEGORY_LIMIT
+  )
+}
+
 export interface LoadDatasetAnnotationsOptions {
   readonly groupId?: string
   readonly signal?: AbortSignal
