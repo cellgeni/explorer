@@ -98,7 +98,7 @@ import {
   type RoiDraft,
 } from './viewerRoiInteraction'
 import { MeasurementOverlay, type MeasurementState } from './viewerMeasurementOverlay'
-import { readViewportMessage } from './viewerStatus'
+import { readViewportMessage, viewportErrorTexts } from './viewerStatus'
 import {
   createCellBoundaryLayerGeometry,
   createCellBoundaryLayerStyle,
@@ -695,6 +695,16 @@ function ViewerSurface({
     draft: null,
     line: null,
   }))
+  // So does a half-drawn measurement: Esc turns Measure off mid-drag, and the
+  // release is not seen, so turning it on again would bring the line back.
+  const [measurementDraftEnabled, setMeasurementDraftEnabled] =
+    useState(measurementEnabled)
+  if (measurementDraftEnabled !== measurementEnabled) {
+    setMeasurementDraftEnabled(measurementEnabled)
+    setMeasurementState((currentState) =>
+      currentState.draft === null ? currentState : { ...currentState, draft: null },
+    )
+  }
   const [mouseCoordinate, setMouseCoordinate] = useState<MouseCoordinate | null>(null)
   const [magicLensScreen, setMagicLensScreen] = useState<ScreenPoint | null>(null)
   const [transcriptHover, setTranscriptHover] =
@@ -1387,19 +1397,32 @@ function ViewerSurface({
     [loadingTasks],
   )
   // The error message last dismissed; the Issues card keeps the error, and a
-  // different error is shown again.
+  // different error is shown again. Once no load has that error (a retry,
+  // another dataset), the same text later is a new failure and is shown too.
   const [dismissedViewportError, setDismissedViewportError] = useState<string | null>(
     null,
   )
+  const viewportErrorMessages = {
+    ...(errorMessage === undefined ? {} : { errorMessage }),
+    ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
+    ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
+  }
+  if (
+    dismissedViewportError !== null &&
+    !viewportErrorTexts(
+      status,
+      imageStatus,
+      boundaryStatus,
+      viewportErrorMessages,
+    ).includes(dismissedViewportError)
+  ) {
+    setDismissedViewportError(null)
+  }
   const readMessage = readViewportMessage(
     status,
     imageStatus,
     boundaryStatus,
-    {
-      ...(errorMessage === undefined ? {} : { errorMessage }),
-      ...(imageErrorMessage === undefined ? {} : { imageErrorMessage }),
-      ...(boundaryErrorMessage === undefined ? {} : { boundaryErrorMessage }),
-    },
+    viewportErrorMessages,
     loadingTaskIds,
   )
   const viewportMessage =
@@ -1534,7 +1557,8 @@ function ViewerSurface({
           return
         }
 
-        if (activeToolHint !== null) return
+        // Hidden cells and bins cannot be picked (15.2-C).
+        if (activeToolHint !== null || !cellLayersVisible) return
 
         const [x = 0, deckY = 0] = viewState.target
         const reach = KEYBOARD_PICK_RADIUS_PIXELS / scaleFromZoom(viewState.zoom)
@@ -1570,6 +1594,7 @@ function ViewerSurface({
     },
     [
       canTrackMouseCoordinates,
+      cellLayersVisible,
       cells,
       initialViewState,
       activeToolHint,
@@ -1662,7 +1687,9 @@ function ViewerSurface({
         return
       }
 
-      if (onCellClick === undefined) {
+      // A click deck.gl picked nothing for looks the cell up by place, unless
+      // the cells are hidden.
+      if (onCellClick === undefined || !cellLayersVisible) {
         return
       }
 
@@ -1688,6 +1715,7 @@ function ViewerSurface({
     [
       boundaries,
       cellById,
+      cellLayersVisible,
       onCellBoundaryClick,
       onCellClick,
       cells,
@@ -1956,7 +1984,14 @@ function ViewerSurface({
   }, [clearMouseCoordinate, onMagicLensLeave, onTranscriptHover])
   const handleRoiPointerDown = useCallback(
     (event: PointerEvent<HTMLDivElement>) => {
-      if (roiMode === 'idle' || viewport.width <= 0 || viewport.height <= 0) {
+      // The primary button only: a right press opens the context menu, and
+      // its release may never reach the page.
+      if (
+        roiMode === 'idle' ||
+        event.button !== 0 ||
+        viewport.width <= 0 ||
+        viewport.height <= 0
+      ) {
         return
       }
 
@@ -2033,6 +2068,7 @@ function ViewerSurface({
       if (
         !measurementEnabled ||
         !canTrackMouseCoordinates ||
+        event.button !== 0 ||
         viewport.width <= 0 ||
         viewport.height <= 0
       ) {

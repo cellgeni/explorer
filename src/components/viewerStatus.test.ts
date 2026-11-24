@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ViewerLoadStatus } from './viewerCoreTypes'
-import { readViewportMessage } from './viewerStatus'
+import { readViewportMessage, viewportErrorTexts } from './viewerStatus'
 
 const NO_TASKS: ReadonlySet<string> = new Set()
 
@@ -82,5 +82,16 @@ describe('readViewportMessage', () => {
       kind: 'error',
       text: 'OME-TIFF image load failed.',
     })
+  })
+})
+
+describe('viewportErrorTexts', () => {
+  it('lists every load in error, including those under a higher message', () => {
+    expect(viewportErrorTexts('ready', 'ready', 'loading', {})).toEqual([])
+    expect(
+      viewportErrorTexts('loading', 'error', 'error', {
+        boundaryErrorMessage: 'cell_boundaries.parquet is missing.',
+      }),
+    ).toEqual(['OME-TIFF image load failed.', 'cell_boundaries.parquet is missing.'])
   })
 })
