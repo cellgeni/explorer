@@ -180,6 +180,9 @@ export interface OverviewLayerOptions {
   readonly cellBoundaryPickable?: boolean
   readonly pointSizeZoomDelta?: number
   readonly pointSizeFullViewScale?: number
+  // How many cell points the full view draws: a crowded dataset draws them
+  // smaller (overviewCellRadiusMaxPixels).
+  readonly pointSizeCellCount?: number
   // No screen-pixel cap on point radii, so points with a physical size keep
   // it at every zoom.
   readonly trueSizePoints?: boolean

@@ -198,25 +198,33 @@ export function createGeneExpressionScatterLayer(
   })
 }
 
+// `pointCount` is how many cell points the full view draws; more than
+// CROWDED_POINT_COUNT draw smaller there (crowdedRadiusMaxPixels).
 export function overviewCellRadiusMaxPixels(
   zoomDelta: number | undefined,
   fullViewScale = 1,
+  pointCount?: number,
 ): number {
-  return zoomResponsiveRadiusMaxPixels(
+  return crowdedRadiusMaxPixels(
     zoomDelta,
     OVERVIEW_FULL_VIEW_RADIUS_MAX_PIXELS * normalizedFullViewScale(fullViewScale),
     DEFAULT_CELL_RADIUS_MAX_PIXELS,
+    pointCount,
+    CELL_RADIUS_MIN_PIXELS,
   )
 }
 
 export function geneExpressionRadiusMaxPixels(
   zoomDelta: number | undefined,
   fullViewScale = 1,
+  pointCount?: number,
 ): number {
-  return zoomResponsiveRadiusMaxPixels(
+  return crowdedRadiusMaxPixels(
     zoomDelta,
     GENE_EXPRESSION_FULL_VIEW_RADIUS_MAX_PIXELS * normalizedFullViewScale(fullViewScale),
     DEFAULT_GENE_EXPRESSION_RADIUS_MAX_PIXELS,
+    pointCount,
+    GENE_EXPRESSION_RADIUS_MIN_PIXELS,
   )
 }
 
@@ -272,6 +280,42 @@ export function cellsWithoutVisibleBoundaryIds(
   }
 
   return cells.filter((cell) => !boundaryCellIds.has(cell.id))
+}
+
+// Up to this many points keep the full-view size. Points of a larger dataset
+// are packed closer on screen, by the square root of their number, so they are
+// drawn smaller to match: overlapping points cost GPU fill on every frame, and
+// a million cells at the usual size made each frame of a pan take 0.2 s.
+const CROWDED_POINT_COUNT = 20_000
+
+// The point size cap for `pointCount` points: smaller at the full view than
+// zoomResponsiveRadiusMaxPixels for a crowded dataset, then twice as large per
+// zoom level, as the points spread apart, until it reaches the usual cap. Never
+// below `minPixels`, the layer's smallest radius.
+function crowdedRadiusMaxPixels(
+  zoomDelta: number | undefined,
+  fullViewPixels: number,
+  closeViewPixels: number,
+  pointCount: number | undefined,
+  minPixels: number,
+): number {
+  const usual = zoomResponsiveRadiusMaxPixels(zoomDelta, fullViewPixels, closeViewPixels)
+
+  if (
+    zoomDelta === undefined ||
+    !Number.isFinite(zoomDelta) ||
+    pointCount === undefined ||
+    !(pointCount > CROWDED_POINT_COUNT)
+  ) {
+    return usual
+  }
+
+  const crowded =
+    fullViewPixels *
+    Math.sqrt(CROWDED_POINT_COUNT / pointCount) *
+    2 ** Math.max(zoomDelta, 0)
+
+  return Math.max(minPixels, Math.min(usual, roundToTenth(crowded)))
 }
 
 function zoomResponsiveRadiusMaxPixels(

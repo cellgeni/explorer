@@ -405,6 +405,68 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('samples every-cell overview points only while the view moves', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells: readonly OverviewCellDatum[] = Array.from(
+      { length: 10 },
+      (_value, index) => ({
+        ...overviewCellDatum(),
+        id: `overview-cell-${index}`,
+        position: [index, -index, 0],
+      }),
+    )
+    const sampledFraction = () => {
+      const layer = deckGlMock.layers.find(
+        (candidate) =>
+          (candidate as { readonly id?: string }).id === 'cells-overview-scatter',
+      ) as { readonly props?: { readonly filterRange?: number[][] } } | undefined
+
+      return layer?.props?.filterRange?.[0]?.[1]
+    }
+    const moveTo = (x: number) => {
+      act(() => {
+        deckGlMock.onViewStateChange?.({
+          viewState: { target: [x, -4, 0], zoom: 4, minZoom: -8, maxZoom: 12 },
+        })
+      })
+    }
+
+    render(
+      <ViewerCore
+        cells={cells}
+        fitCells={cells}
+        clipOverviewCellsToViewport={false}
+        overviewRenderCellLimit={null}
+        movingOverviewRenderCellLimit={4}
+        initialViewStateOverride={{ target: [4, -4, 0], zoom: 4 }}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(sampledFraction()).toBe(1)
+
+    // Each frame of a pan draws 4 of the 10 cells, from the first one on.
+    moveTo(5)
+    expect(sampledFraction()).toBeCloseTo(0.4)
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    moveTo(6)
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    expect(sampledFraction()).toBeCloseTo(0.4)
+
+    // Once the view keeps still, every cell draws again.
+    await act(async () => {
+      vi.advanceTimersByTime(100)
+    })
+    expect(sampledFraction()).toBe(1)
+  })
+
   it('renders selected 2um grid cells as coarse 16um bins until close zoom', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)

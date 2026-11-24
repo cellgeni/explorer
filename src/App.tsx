@@ -5379,6 +5379,7 @@ export function App({ dependencies }: AppProps = {}) {
             imageStatus={viewerImageStatus}
             boundaryStatus={viewerBoundaryState.status}
             overviewRenderCellLimit={viewerOverviewRenderCellLimit}
+            movingOverviewRenderCellLimit={performanceBudget.overviewRenderCellLimit}
             clipOverviewCellsToViewport={!isAnnDataPlatform(platformAdapter)}
             maxConcurrentTileRequests={performanceBudget.maxConcurrentTileRequests}
             tileCacheMaxTiles={performanceBudget.tileCacheMaxTiles}

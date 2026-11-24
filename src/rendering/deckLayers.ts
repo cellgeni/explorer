@@ -251,6 +251,7 @@ export function createOverviewLayers(
             : overviewCellRadiusMaxPixels(
                 options.pointSizeZoomDelta,
                 pointSizeFullViewScale,
+                options.pointSizeCellCount,
               ),
         ...(cellPointPacking === undefined
           ? {}
@@ -286,6 +287,7 @@ export function createOverviewLayers(
           : geneExpressionRadiusMaxPixels(
               options.pointSizeZoomDelta,
               pointSizeFullViewScale,
+              options.pointSizeCellCount,
             ),
     },
   )

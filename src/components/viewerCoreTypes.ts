@@ -124,6 +124,10 @@ export interface ViewerCoreProps {
   // Fits the data to the view whenever it changes (the F key).
   readonly fitRequestKey?: number
   readonly overviewRenderCellLimit?: number | null
+  // When overviewRenderCellLimit is null and every cell draws, the cells
+  // drawn while the view moves, so pans and zooms do not draw them all on
+  // every frame.
+  readonly movingOverviewRenderCellLimit?: number
   readonly clipOverviewCellsToViewport?: boolean
   readonly maxConcurrentTileRequests?: number
   readonly tileCacheMaxTiles?: number
