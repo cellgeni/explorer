@@ -138,6 +138,21 @@ export class MorphologyTileStore {
   }
 }
 
+// The browser says only "The source image cannot be decoded." for an image
+// that is missing, blocked by CORS or damaged, so the error names the address
+// (EXP-327).
+export class FlatImageLoadError extends Error {
+  constructor(url: string, cause?: unknown) {
+    super(
+      cause instanceof Error && cause.message.length > 0
+        ? `Failed to load flat morphology image ${url}: ${cause.message}`
+        : `Failed to load flat morphology image ${url}`,
+      cause === undefined ? undefined : { cause },
+    )
+    this.name = 'FlatImageLoadError'
+  }
+}
+
 function decodeFlatImage(url: string): Promise<HTMLImageElement> {
   const image = new Image()
   image.crossOrigin = 'anonymous'
@@ -150,7 +165,7 @@ function decodeFlatImage(url: string): Promise<HTMLImageElement> {
             resolve()
           }
           image.onerror = () => {
-            reject(new Error(`Failed to load flat morphology image ${url}`))
+            reject(new FlatImageLoadError(url))
           }
         })
 
@@ -159,9 +174,9 @@ function decodeFlatImage(url: string): Promise<HTMLImageElement> {
   return (ready ?? image.decode()).then(
     () => image,
     (error: unknown) => {
-      throw error instanceof Error
+      throw error instanceof FlatImageLoadError
         ? error
-        : new Error(`Failed to load flat morphology image ${url}`)
+        : new FlatImageLoadError(url, error)
     },
   )
 }

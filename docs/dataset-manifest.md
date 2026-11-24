@@ -458,9 +458,11 @@ How defaults combine with other settings:
 
 ## Errors And Diagnostics
 
-- A manifest that cannot be read (when entered directly) or does not validate
-  appears in the Issues list, in the info drawer's Diagnostics section, as
-  "Dataset manifest is invalid", with the field at fault.
+- A manifest that does not validate appears in the Issues list, in the info
+  drawer's Diagnostics section, as "Dataset manifest is invalid", with the
+  field at fault. One that cannot be read (when entered directly, as the
+  gallery examples are) appears as "Dataset manifest could not be read", with
+  advice for its HTTP status, or for a request that got no response.
 - A file named in the manifest that is missing fails where it is read, and the
   message shows the manifest path and the full URL. For files read by byte
   range, a `404`, or a `403` from a bucket that denies listing, is titled "File

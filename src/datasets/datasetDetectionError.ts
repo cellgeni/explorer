@@ -78,6 +78,15 @@ export class DatasetAddressError extends Error {
   }
 }
 
+// A zip that holds nothing read from a zip, such as a zipped Xenium run: the
+// advice is to unzip it, not to check its files (EXP-327).
+export class UnsupportedZipError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'UnsupportedZipError'
+  }
+}
+
 const LISTED_FILE_LIMIT = 5
 
 export function classifyDatasetDetection(
