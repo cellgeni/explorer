@@ -106,6 +106,17 @@
   opacity: 0.52;
 }
 
+.gene-set-symbols-notice {
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-2);
+  background: var(--warning-soft);
+  color: var(--text-1);
+  font-size: var(--font-caption);
+  overflow-wrap: anywhere;
+}
+
 .gene-set-list {
   display: grid;
   gap: 4px;

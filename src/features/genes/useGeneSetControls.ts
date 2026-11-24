@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { GeneSelectionModel } from '../sections/cellsSectionModel'
 import {
-  defaultGeneSetName,
   filterGeneOptions,
-  parseGeneSetSymbols,
+  geneSetSymbolsNotice,
+  matchGeneSetSymbols,
   savedGeneSetId,
+  unnamedGeneSetName,
   withGeneSetAt,
   type SavedGeneSet,
 } from './geneControlsModel'
@@ -27,7 +28,9 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
     selected,
   } = genes
   const [geneSearch, setGeneSearch] = useState('')
-  const [geneSetSymbols, setGeneSetSymbols] = useState('')
+  const [geneSetSymbols, setTypedGeneSetSymbols] = useState('')
+  // Which applied symbols matched no gene, until the symbols change.
+  const [geneSetSymbolsMessage, setGeneSetSymbolsMessage] = useState<string | null>(null)
   const [geneSetName, setGeneSetName] = useState('')
   const lastGenePanelLoadingUrlRef = useRef<string | null>(null)
 
@@ -41,7 +44,8 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
 
     lastGenePanelLoadingUrlRef.current = panelState.url
     setGeneSearch('')
-    setGeneSetSymbols('')
+    setTypedGeneSetSymbols('')
+    setGeneSetSymbolsMessage(null)
     setGeneSetName('')
   }, [panelState])
 
@@ -57,24 +61,36 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
     geneSearch,
     geneSetName,
     geneSetSymbols,
+    geneSetSymbolsMessage,
+    // Save Set's name for the selection when none is typed.
+    unnamedSetName: unnamedGeneSetName(selected, savedGeneSets),
     savedGeneSets,
     setGeneSearch,
     setGeneSetName,
-    setGeneSetSymbols,
+    setGeneSetSymbols: (value: string) => {
+      setTypedGeneSetSymbols(value)
+      setGeneSetSymbolsMessage(null)
+    },
     // Adds a gene from the search list, which also clears the search.
     pickGene: (gene: string) => {
       onToggle(gene)
       setGeneSearch('')
     },
+    // Symbols that match no gene are named under the button; with none
+    // matching, the selection stays.
     applyGeneSetSymbols: () => {
-      const parsed = parseGeneSetSymbols(geneSetSymbols, options, aliases)
+      const match = matchGeneSetSymbols(geneSetSymbols, options, aliases)
 
-      if (parsed.length === 0) {
+      setGeneSetSymbolsMessage(geneSetSymbolsNotice(match))
+      if (match.genes.length === 0) {
+        log(`Applied symbols: none of ${match.unmatched.length.toLocaleString()} matched`)
         return
       }
 
-      log(`Applied symbols: ${parsed.length.toLocaleString()} genes`)
-      onApply(parsed)
+      log(
+        `Applied symbols: ${match.genes.length.toLocaleString()} genes, ${match.unmatched.length.toLocaleString()} unmatched`,
+      )
+      onApply(match.genes)
       setGeneSearch('')
     },
     saveSelectedGeneSet: () => {
@@ -82,7 +98,8 @@ export function useGeneSetControls(genes: GeneSelectionModel) {
         return
       }
 
-      const name = geneSetName.trim() || defaultGeneSetName(selected)
+      // Unnamed, it does not replace a saved set of other genes.
+      const name = geneSetName.trim() || unnamedGeneSetName(selected, savedGeneSets)
       const savedSet: SavedGeneSet = {
         id: savedGeneSetId(name),
         name,

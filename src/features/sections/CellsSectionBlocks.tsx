@@ -1,4 +1,4 @@
-import { useId } from 'react'
+import { useId, useRef } from 'react'
 import type { ContinuousCellMetadataTrack } from '../../data/customAnnotations'
 import {
   GENE_EXPRESSION_COLOR_SCALE_OPTIONS,
@@ -17,7 +17,6 @@ import { COMBINE_GENES_HELP, EXPRESSION_DETAIL_HELP } from '../shell/helpText'
 import { isObservationColorMode } from '../app-shell/appShellModel'
 import { GeneOptionList } from '../genes/GeneOptionList'
 import {
-  defaultGeneSetName,
   formatGeneScaleValue,
   geneSearchEmptyMessage,
   isGeneExpressionDetailMode,
@@ -213,6 +212,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
     geneSearch,
     geneSetName,
     geneSetSymbols,
+    geneSetSymbolsMessage,
     pickGene,
     removeSavedGeneSet,
     saveSelectedGeneSet,
@@ -220,7 +220,9 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
     setGeneSearch,
     setGeneSetName,
     setGeneSetSymbols,
+    unnamedSetName,
   } = useGeneSetControls(genes)
+  const searchRef = useRef<HTMLInputElement>(null)
   const isPanelReady = genes.panelState.status === 'ready'
   const selectedGenes = genes.selected
   const selectedGeneSet = new Set(selectedGenes)
@@ -229,6 +231,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
     <>
       <label htmlFor={searchInputId}>Gene selection</label>
       <input
+        ref={searchRef}
         id={searchInputId}
         type="search"
         autoComplete="off"
@@ -269,7 +272,13 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
           noun: 'genes',
           aliases,
         })}
-        onToggleGene={pickGene}
+        onToggleGene={(gene, keyboard) => {
+          const searched = geneSearch !== ''
+          pickGene(gene)
+          // The search clears for the next gene, so a keyboard pick goes back
+          // to it; without a search, the list keeps focus.
+          if (keyboard && searched) searchRef.current?.focus()
+        }}
       />
 
       <label htmlFor={symbolsInputId}>Gene set symbols</label>
@@ -305,6 +314,11 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
           Save Set
         </button>
       </div>
+      {geneSetSymbolsMessage === null ? null : (
+        <p className="gene-set-symbols-notice" role="status">
+          {geneSetSymbolsMessage}
+        </p>
+      )}
 
       <label htmlFor={setNameInputId}>Set name</label>
       <input
@@ -313,7 +327,7 @@ export function GenePicker({ genes }: { readonly genes: GeneSelectionModel }) {
         autoComplete="off"
         spellCheck={false}
         value={geneSetName}
-        placeholder={defaultGeneSetName(selectedGenes)}
+        placeholder={unnamedSetName}
         title="Gene set name"
         onChange={(event) => {
           setGeneSetName(event.currentTarget.value)

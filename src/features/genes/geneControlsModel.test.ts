@@ -27,6 +27,9 @@ import {
   parseGeneExpressionScoreMode,
   formatGeneSetsLink,
   parseGeneSetSymbols,
+  geneSetSymbolsNotice,
+  matchGeneSetSymbols,
+  unnamedGeneSetName,
   parseGeneSetsLink,
   rememberedGeneExpressionScale,
   savedGeneSetId,
@@ -280,6 +283,54 @@ describe('geneControlsModel', () => {
       'Gad1',
     ])
     expect(defaultGeneSetName([])).toBe('Selected genes')
+  })
+
+  it('lists the typed symbols that match no gene', () => {
+    const match = matchGeneSetSymbols('gad1, Foo; ACTB foo BAR2', ['Actb', 'Gad1'])
+
+    // Once each, as first typed, in typed order.
+    expect(match).toEqual({ genes: ['Actb', 'Gad1'], unmatched: ['Foo', 'BAR2'] })
+    expect(geneSetSymbolsNotice(match)).toBe(
+      'Applied 2 genes. No gene in this dataset matches Foo or BAR2.',
+    )
+    expect(geneSetSymbolsNotice(matchGeneSetSymbols('Actb', ['Actb']))).toBeNull()
+    expect(
+      geneSetSymbolsNotice(matchGeneSetSymbols('x1 x2 x3 x4 x5 x6 x7 Actb', ['Actb'])),
+    ).toBe(
+      'Applied 1 gene. No gene in this dataset matches x1, x2, x3, x4, x5 and 2 more.',
+    )
+    expect(geneSetSymbolsNotice(matchGeneSetSymbols('nope', ['Actb']))).toBe(
+      'No gene in this dataset matches nope. The selection is unchanged.',
+    )
+  })
+
+  it('numbers an unnamed set whose default name a set of other genes has', () => {
+    const saved = (genes: readonly string[]) => {
+      const name = defaultGeneSetName(genes)
+      return { id: savedGeneSetId(name), name, genes, scoreMode: 'sum' as const }
+    }
+    const proliferation = ['CCNB1', 'CDK1', 'MKI67', 'TOP2A']
+    const other = ['CCNB1', 'CDK1', 'MKI67', 'PCNA']
+
+    expect(unnamedGeneSetName(other, [])).toBe('CCNB1, CDK1, MKI67 +1')
+    expect(unnamedGeneSetName(other, [saved(proliferation)])).toBe(
+      'CCNB1, CDK1, MKI67 +1 (2)',
+    )
+    expect(
+      unnamedGeneSetName(other, [
+        saved(proliferation),
+        {
+          id: savedGeneSetId('CCNB1, CDK1, MKI67 +1 (2)'),
+          name: 'CCNB1, CDK1, MKI67 +1 (2)',
+          genes: ['CCNB1', 'CDK1', 'MKI67', 'AURKA'],
+          scoreMode: 'sum',
+        },
+      ]),
+    ).toBe('CCNB1, CDK1, MKI67 +1 (3)')
+    // The same genes again take their set's name, and replace it.
+    expect(unnamedGeneSetName(proliferation, [saved(proliferation)])).toBe(
+      'CCNB1, CDK1, MKI67 +1',
+    )
   })
 
   it('matches gene aliases in search and gene-set symbols', () => {

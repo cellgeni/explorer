@@ -27,9 +27,10 @@ describe('GeneOptionList', () => {
     fireEvent.scroll(list, { target: { scrollTop: 200 * 28 } })
 
     const lastGene = within(list).getByRole('button', { name: 'Gene199' })
-    fireEvent.click(lastGene)
+    fireEvent.click(lastGene, { detail: 1 })
 
-    expect(onToggleGene).toHaveBeenCalledWith('Gene199')
+    // A mouse click, not Enter or Space.
+    expect(onToggleGene).toHaveBeenCalledWith('Gene199', false)
   })
 
   it('keeps the rows under the scroll position when a picked gene leaves the list', () => {

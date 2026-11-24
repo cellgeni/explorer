@@ -457,8 +457,23 @@ export function parseGeneSetSymbols(
   availableGenes: readonly string[],
   aliases?: ReadonlyMap<string, string>,
 ): readonly string[] {
-  if (value.trim().length === 0 || availableGenes.length === 0) {
-    return []
+  return matchGeneSetSymbols(value, availableGenes, aliases).genes
+}
+
+export interface GeneSetSymbolMatch {
+  // The genes matched, sorted.
+  readonly genes: readonly string[]
+  // The symbols that match no gene, once each, as typed and in typed order.
+  readonly unmatched: readonly string[]
+}
+
+export function matchGeneSetSymbols(
+  value: string,
+  availableGenes: readonly string[],
+  aliases?: ReadonlyMap<string, string>,
+): GeneSetSymbolMatch {
+  if (value.trim().length === 0) {
+    return { genes: [], unmatched: [] }
   }
 
   const availableGenesByNormalizedName = new Map<string, string>()
@@ -478,9 +493,11 @@ export function parseGeneSetSymbols(
 
   const selectedGenes = new Set<string>()
   const parsedGenes: string[] = []
+  const unmatched = new Map<string, string>()
 
   for (const symbol of value.split(GENE_SET_SYMBOL_SPLIT_PATTERN)) {
-    const normalizedSymbol = symbol.trim().toLowerCase()
+    const trimmedSymbol = symbol.trim()
+    const normalizedSymbol = trimmedSymbol.toLowerCase()
 
     if (normalizedSymbol.length === 0) {
       continue
@@ -488,7 +505,12 @@ export function parseGeneSetSymbols(
 
     const gene = availableGenesByNormalizedName.get(normalizedSymbol)
 
-    if (gene === undefined || selectedGenes.has(gene)) {
+    if (gene === undefined) {
+      if (!unmatched.has(normalizedSymbol)) unmatched.set(normalizedSymbol, trimmedSymbol)
+      continue
+    }
+
+    if (selectedGenes.has(gene)) {
       continue
     }
 
@@ -496,7 +518,39 @@ export function parseGeneSetSymbols(
     parsedGenes.push(gene)
   }
 
-  return parsedGenes.sort((left, right) => left.localeCompare(right))
+  return {
+    genes: parsedGenes.sort((left, right) => left.localeCompare(right)),
+    unmatched: [...unmatched.values()],
+  }
+}
+
+const UNMATCHED_SYMBOLS_SHOWN = 5
+
+// Under Apply Symbols when some symbols match no gene: which ones, the first
+// few by name.
+export function geneSetSymbolsNotice({
+  genes,
+  unmatched,
+}: GeneSetSymbolMatch): string | null {
+  if (unmatched.length === 0) return null
+
+  const shown = unmatched.slice(0, UNMATCHED_SYMBOLS_SHOWN)
+  const more = unmatched.length - shown.length
+  const names =
+    more === 0
+      ? joinNames(shown)
+      : `${shown.join(', ')} and ${more.toLocaleString()} more`
+  const missing = `No gene in this dataset matches ${names}.`
+
+  return genes.length === 0
+    ? `${missing} The selection is unchanged.`
+    : `Applied ${genes.length.toLocaleString()} ${genes.length === 1 ? 'gene' : 'genes'}. ${missing}`
+}
+
+function joinNames(names: readonly string[]): string {
+  return names.length <= 1
+    ? (names[0] ?? '')
+    : `${names.slice(0, -1).join(', ')} or ${names[names.length - 1] ?? ''}`
 }
 
 export function defaultGeneSetName(genes: readonly string[]): string {
@@ -509,6 +563,30 @@ export function defaultGeneSetName(genes: readonly string[]): string {
   }
 
   return `${genes.slice(0, 3).join(', ')} +${genes.length - 3}`
+}
+
+// The name Save Set gives a set when none is typed: the default for its
+// genes, numbered ("CCNB1, CDK1, MKI67 +1 (2)") where a saved set of other
+// genes has it, since saving under a saved name replaces that set.
+export function unnamedGeneSetName(
+  genes: readonly string[],
+  savedSets: readonly SavedGeneSet[],
+): string {
+  const base = defaultGeneSetName(genes)
+  const wanted = new Set(genes)
+
+  for (let number = 1; ; number += 1) {
+    const name = number === 1 ? base : `${base} (${number.toLocaleString()})`
+    const taken = savedSets.find((set) => set.id === savedGeneSetId(name))
+
+    if (
+      taken === undefined ||
+      (taken.genes.length === wanted.size &&
+        taken.genes.every((gene) => wanted.has(gene)))
+    ) {
+      return name
+    }
+  }
 }
 
 // A removed gene set put back at its old place (15.3-C). A set saved since
