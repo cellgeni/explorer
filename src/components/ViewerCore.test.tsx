@@ -203,40 +203,6 @@ describe('ViewerCore', () => {
     expect(screen.getByText('HTTP 500 response: HTTP 500')).toBeInTheDocument()
   })
 
-  it('shows a dismissed error again once it has cleared and the same failure comes back', () => {
-    const text = 'Network request failed: Failed to fetch'
-    const { rerender } = render(
-      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    // A retry works, then a later read fails the same way.
-    rerender(<ViewerCore imageStatus="ready" />)
-    rerender(<ViewerCore imageStatus="error" imageErrorMessage={text} />)
-    expect(screen.getByText(text)).toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    // Another dataset: loading, then the same failure.
-    rerender(<ViewerCore status="loading" />)
-    rerender(<ViewerCore status="error" errorMessage={text} />)
-    expect(screen.getByText(text)).toBeInTheDocument()
-  })
-
-  it('keeps a dismissed error hidden while a message above it shows', () => {
-    const text = 'Network request failed: Failed to fetch'
-    const { rerender } = render(
-      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
-    )
-
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    // The cells reload over the image error, which is still there.
-    rerender(<ViewerCore status="loading" imageStatus="error" imageErrorMessage={text} />)
-    expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
-    rerender(<ViewerCore status="ready" imageStatus="error" imageErrorMessage={text} />)
-
-    expect(screen.queryByText(text)).toBeNull()
-  })
-
   it('renders grid-cell polygons without overview cells', () => {
     render(<ViewerCore gridCells={gridCellColumns()} />)
 
@@ -741,6 +707,40 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('Loading cell boundaries')).toBeInTheDocument()
     expect(screen.queryByText('Loading cell boundaries…')).not.toBeInTheDocument()
+  })
+
+  it('shows a dismissed error again once it has cleared and the same failure comes back', () => {
+    const text = 'Network request failed: Failed to fetch'
+    const { rerender } = render(
+      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // A retry works, then a later read fails the same way.
+    rerender(<ViewerCore imageStatus="ready" />)
+    rerender(<ViewerCore imageStatus="error" imageErrorMessage={text} />)
+    expect(screen.getByText(text)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // Another dataset: loading, then the same failure.
+    rerender(<ViewerCore status="loading" />)
+    rerender(<ViewerCore status="error" errorMessage={text} />)
+    expect(screen.getByText(text)).toBeInTheDocument()
+  })
+
+  it('keeps a dismissed error hidden while a message above it shows', () => {
+    const text = 'Network request failed: Failed to fetch'
+    const { rerender } = render(
+      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // The cells reload over the image error, which is still there.
+    rerender(<ViewerCore status="loading" imageStatus="error" imageErrorMessage={text} />)
+    expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
+    rerender(<ViewerCore status="ready" imageStatus="error" imageErrorMessage={text} />)
+
+    expect(screen.queryByText(text)).toBeNull()
   })
 
   it('draws positive gene expression cells even when an overview proxy is already styled', () => {
