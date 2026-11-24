@@ -2777,21 +2777,6 @@ describe('ViewerCore', () => {
   })
 })
 
-// Cell IDs that count how often they are walked.
-function countedIds(ids: readonly string[]): {
-  readonly cellIds: readonly CellId[]
-  readonly passes: () => number
-} {
-  let passes = 0
-  const cellIds = new Proxy(ids.map(asCellId), {
-    get(target, property, receiver) {
-      if (property === Symbol.iterator) passes += 1
-      return Reflect.get(target, property, receiver) as unknown
-    },
-  })
-  return { cellIds, passes: () => passes }
-}
-
 function overviewCellDatum(): OverviewCellDatum {
   return {
     id: 'overview-cell-1',
@@ -2888,4 +2873,19 @@ function imageLoaderFixture(): TiffPyramidLoader {
     url: 'https://example.test/sample.ome.tif',
     channels: [],
   } as unknown as TiffPyramidLoader
+}
+
+// Cell IDs that count how often they are walked.
+function countedIds(ids: readonly string[]): {
+  readonly cellIds: readonly CellId[]
+  readonly passes: () => number
+} {
+  let passes = 0
+  const cellIds = new Proxy(ids.map(asCellId), {
+    get(target, property, receiver) {
+      if (property === Symbol.iterator) passes += 1
+      return Reflect.get(target, property, receiver) as unknown
+    },
+  })
+  return { cellIds, passes: () => passes }
 }
