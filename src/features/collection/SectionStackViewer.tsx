@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -14,6 +15,8 @@ import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import { Button, FitIcon, IconButton, Slider, Switch } from '../../components/ui'
 import { fittedVolumeViewState } from '../../components/volumeViewerModel'
+import { handleOrbitKey, orbitCanvasProps } from '../../components/orbitKeyboard'
+import { VolumeViewerHint } from '../../components/VolumeViewerHint'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
@@ -89,8 +92,8 @@ export function SectionStackViewer({
 }: SectionStackViewerProps) {
   const containerRef = useRef<HTMLElement>(null)
   useFocusHandOff(containerRef)
-  // The canvas host, hidden from assistive technology, whose deck.gl root
-  // leaves the tab order once loaded.
+  // The canvas host, the Tab stop that hands keys to deck.gl's root, which
+  // leaves the tab order once loaded (orbitKeyboard.ts).
   const canvasHostRef = useRef<HTMLDivElement>(null)
   const handleDeckLoad = useCallback(() => {
     removeDeckFromTabOrder(canvasHostRef.current)
@@ -103,6 +106,7 @@ export function SectionStackViewer({
   const [depthScaleLog2, setDepthScaleLog2] = useState<number | null>(null)
   const [showContext, setShowContext] = useState(true)
   const [viewState, setViewState] = useState<OrbitViewState | null>(null)
+  const keysId = useId()
   const [hover, setHover] = useState<StackHover | null>(null)
   const readPreviews = useMemo(() => previewsReader(sections, store), [sections, store])
   const previews = useSyncExternalStore(store?.subscribe ?? noSubscription, readPreviews)
@@ -256,7 +260,19 @@ export function SectionStackViewer({
         setHover(null)
       }}
     >
-      <div className="volume-viewer-canvas" aria-hidden="true" ref={canvasHostRef}>
+      <div
+        className="volume-viewer-canvas"
+        ref={canvasHostRef}
+        {...orbitCanvasProps(
+          cellsMode ? '3D cells canvas area' : '3D section stack canvas area',
+          keysId,
+        )}
+        onKeyDown={(event) => {
+          handleOrbitKey(event, () => {
+            setViewState(null)
+          })
+        }}
+      >
         <MemoDeckGL
           Deck={ReleasingDeck}
           views={SECTION_STACK_VIEW}
@@ -377,9 +393,7 @@ export function SectionStackViewer({
           {hover.text}
         </PointerTooltip>
       )}
-      <p className="volume-viewer-hint">
-        Drag to rotate · Shift-drag to pan · Scroll to zoom
-      </p>
+      <VolumeViewerHint keysId={keysId} />
     </section>
   )
 }

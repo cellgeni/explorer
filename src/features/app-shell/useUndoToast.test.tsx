@@ -50,6 +50,33 @@ describe('useUndoToast', () => {
     expect(undoSpy).not.toHaveBeenCalled()
   })
 
+  it('names its shortcut in the status, as the toast is far from the removal (EXP-318)', () => {
+    render(<Probe />)
+    fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+    expect(screen.getByRole('status')).toHaveTextContent('Removed Cluster 3UndoCtrl+Z')
+    expect(screen.getByRole('button', { name: 'Undo' })).toHaveAttribute(
+      'aria-keyshortcuts',
+      'Control+Z Meta+Z',
+    )
+  })
+
+  it('names Cmd+Z on Apple devices', () => {
+    const userAgent = vi
+      .spyOn(navigator, 'userAgent', 'get')
+      .mockReturnValue(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+      )
+    try {
+      render(<Probe />)
+      fireEvent.click(screen.getByRole('button', { name: 'Remove' }))
+
+      expect(screen.getByRole('status')).toHaveTextContent('Cmd+Z')
+    } finally {
+      userAgent.mockRestore()
+    }
+  })
+
   it('undoes once, then goes', () => {
     render(<Probe />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove' }))

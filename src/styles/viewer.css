@@ -1186,6 +1186,36 @@
   pointer-events: none;
 }
 
+/* The keys' line shows instead of the pointer's while the canvas has focus;
+   it is read as the canvas's description either way (EXP-319). */
+.volume-viewer-hint-keys {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.volume-viewer-canvas:focus-within ~ .volume-viewer-hint .volume-viewer-hint-pointer {
+  display: none;
+}
+
+.volume-viewer-canvas:focus-within ~ .volume-viewer-hint .volume-viewer-hint-keys {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+/* The canvas fills the view, so its ring is drawn inside it. */
+.volume-viewer-canvas:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
 /* Serial sections stacked in 3D, over every viewer: on the canvas colour,
    so cells read as they do in the views. */
 .section-stack {

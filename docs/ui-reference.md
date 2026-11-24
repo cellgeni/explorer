@@ -1227,6 +1227,11 @@ channels (the first six, in channel order) as a volume on black, with their
 colours and contrast windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
 scrolling zooms.
 
+The canvas is a Tab stop named "3D view canvas area" (`orbitKeyboard.ts`).
+Focused, Shift with an arrow key rotates, arrow keys pan, + and − zoom, and
+Home returns to the first view; the hint under the canvas lists these keys
+in place of the pointer ones.
+
 | Control     | Type                                  | Default       | Notes                                                                   |
 | ----------- | ------------------------------------- | ------------- | ----------------------------------------------------------------------- |
 | `Rendering` | Segmented: Max intensity, Translucent | Max intensity | Brightest value along each line of sight, or nearer structures in front |
@@ -1251,7 +1256,8 @@ open dataset at its x, y and z (a third column of obsm `spatial`), as balls
 on the `Gene scale`, or by the annotation set's classes. Cells that score, or
 are in a shown class, are solid; the others are a faint outline. Other
 `Cell color` modes draw every cell grey. Drag rotates, Shift-drag pans, and
-scrolling zooms. The top line gives the cells and their z range ("201,789
+scrolling zooms; the canvas, "3D cells canvas area", takes the
+[3D view](#3d-view)'s keys. The top line gives the cells and their z range ("201,789
 cells, z 0 to 780 µm").
 
 | Control       | Type                           | Default                                  | Notes                                                                                     |
@@ -1487,7 +1493,9 @@ After a removal, a toast at the bottom of the canvas says what was removed,
 such as "Removed kmeans 3: Cluster 1", with `Undo` and `Dismiss`
 (`UndoToast`, `src/features/app-shell/useUndoToast.ts`, 15.3-C). It goes after
 8 s, but not while the pointer or focus is on it; Ctrl+Z or Cmd+Z also undoes,
-except in a text field. A newer removal or another dataset replaces it.
+from anywhere but a text field. The toast shows the shortcut (Cmd+Z on Apple
+devices), so a screen reader announces it with the removal, as focus stays
+where the removal was. A newer removal or another dataset replaces it.
 
 | Removal                             | Undo                                                                                                                    |
 | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
