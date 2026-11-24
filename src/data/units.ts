@@ -17,8 +17,12 @@ export function withSquareMicrometers(value: string): string {
 // "943,210 µm²": whole numbers once an area is large, so the figure stays
 // short, and a decimal or two below that.
 export function formatSquareMicrometers(value: number): string {
+  return formatArea(value)
+}
+
+// The same in the data's unit: µm², or "units²" where a dataset's units are
+// unknown (EXP-052).
+export function formatArea(value: number, unitLabel: string = MICROMETERS): string {
   const digits = value < 10 ? 2 : value < 1_000 ? 1 : 0
-  return withSquareMicrometers(
-    value.toLocaleString(undefined, { maximumFractionDigits: digits }),
-  )
+  return `${value.toLocaleString(undefined, { maximumFractionDigits: digits })} ${unitLabel}²`
 }

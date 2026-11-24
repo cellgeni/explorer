@@ -21,6 +21,8 @@ interface CellInfoPanelProps {
   readonly annotationLabels?: readonly string[]
   // The cell's nuclei drawn in the view.
   readonly nuclei?: readonly CellBoundaryDatum[]
+  // The data's length unit for the nucleus rows: µm, or "units".
+  readonly unitLabel?: string | undefined
   readonly state: CellDetailState
   readonly transcriptDistributionState: CellTranscriptDistributionState
   readonly transcriptDistributionVisible?: boolean
@@ -36,6 +38,7 @@ export function CellInfoPanel({
   cell,
   annotationLabels = EMPTY_ANNOTATION_LABELS,
   nuclei = EMPTY_NUCLEI,
+  unitLabel,
   state,
   transcriptDistributionState,
   transcriptDistributionVisible = true,
@@ -70,6 +73,23 @@ export function CellInfoPanel({
       >
         {variant === 'observations' ? (
           <>
+            {/* A Visium spot's barcode, which no observation may hold. */}
+            <div>
+              <dt>ID</dt>
+              <dd title={cell.id}>{cell.id}</dd>
+            </div>
+            {annotationLabels.length === 0 ? null : (
+              <div>
+                <dt>Annotations</dt>
+                <dd className="cell-annotation-values">
+                  {annotationLabels.map((label, labelIndex) => (
+                    <span className="cell-annotation-chip" key={`${label}:${labelIndex}`}>
+                      {label}
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
             {metadataEntries.length === 0 ? (
               <div>
                 <dt>Observations</dt>
@@ -78,7 +98,7 @@ export function CellInfoPanel({
             ) : (
               <MetadataRows entries={metadataEntries} />
             )}
-            <CellNucleusRows nuclei={nuclei} />
+            <CellNucleusRows nuclei={nuclei} unitLabel={unitLabel} />
           </>
         ) : (
           <>
@@ -100,7 +120,7 @@ export function CellInfoPanel({
               <dt>Nuclei</dt>
               <dd>{formatOptionalNumber(cell.nucleusCount)}</dd>
             </div>
-            <CellNucleusRows nuclei={nuclei} />
+            <CellNucleusRows nuclei={nuclei} unitLabel={unitLabel} />
             <div>
               <dt>Segmentation</dt>
               <dd title={formatOptionalText(cell.segmentationMethod)}>

@@ -62,6 +62,35 @@ describe('CellInfoPanel', () => {
     )
 
     expect(screen.getByText('Nucleus').nextElementSibling).toHaveTextContent('16 µm²')
+
+    // Where a dataset's units are unknown.
+    rerender(
+      <CellInfoPanel
+        cell={cellDatum()}
+        nuclei={[nucleus('cell-1', 4)]}
+        unitLabel="units"
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        variant="observations"
+      />,
+    )
+    expect(screen.getByText('Nucleus').nextElementSibling).toHaveTextContent('16 units²')
+  })
+
+  it('names the cell and its annotations in the observations variant', () => {
+    render(
+      <CellInfoPanel
+        cell={cellDatum({ metadata: { n_genes: 12 } })}
+        annotationLabels={['T cell']}
+        state={{ status: 'idle' }}
+        transcriptDistributionState={{ status: 'idle' }}
+        variant="observations"
+      />,
+    )
+
+    expect(screen.getByText('ID').nextElementSibling).toHaveTextContent('cell-1')
+    expect(screen.getByText('Annotations').nextElementSibling).toHaveTextContent('T cell')
+    expect(screen.getByText('n_genes')).toBeInTheDocument()
   })
 
   it('shows unavailable values when optional cell metadata is absent', () => {

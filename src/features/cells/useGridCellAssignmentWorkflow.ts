@@ -96,12 +96,15 @@ export function useGridCellAssignmentWorkflow({
   const { appendDebugEvent } = callbacks
   const { isVisiumHdDataset, rowBudget, selectedBinSize } = controls
   const { loadState, selectedGridCell } = data
+  // The URL, not the state object: zooming across the level-of-detail
+  // threshold replaces an equal ready state, which would read the bin again.
+  const readyUrl = loadState.status === 'ready' ? loadState.url : null
   const { getSpatialDataset } = loaders
   const { gridCellAssignmentAbortRef, gridCellAssignmentRequestIdRef } = refs
   const { setGridCellAssignmentState } = setters
 
   useEffect(() => {
-    if (!isVisiumHdDataset || selectedGridCell === null || loadState.status !== 'ready') {
+    if (!isVisiumHdDataset || selectedGridCell === null || readyUrl === null) {
       const requestId = invalidateLatestRequest({
         abortRef: gridCellAssignmentAbortRef,
         requestIdRef: gridCellAssignmentRequestIdRef,
@@ -146,7 +149,7 @@ export function useGridCellAssignmentWorkflow({
     })
 
     void (async () => {
-      const dataset = await getSpatialDataset(loadState.url)
+      const dataset = await getSpatialDataset(readyUrl)
 
       if (!hasBarcodeMappingAssignments(dataset)) {
         throw new Error('Active dataset does not expose Visium HD barcode mappings.')
@@ -215,7 +218,7 @@ export function useGridCellAssignmentWorkflow({
     gridCellAssignmentAbortRef,
     gridCellAssignmentRequestIdRef,
     isVisiumHdDataset,
-    loadState,
+    readyUrl,
     rowBudget,
     selectedBinSize,
     selectedGridCell,

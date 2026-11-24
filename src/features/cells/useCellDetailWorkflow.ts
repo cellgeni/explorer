@@ -120,9 +120,12 @@ export function useCellDetailWorkflow({
   // The cell whose loads were cancelled. Its loads start again only once
   // another cell, or another dataset, is selected.
   const cancelledCellKeyRef = useRef<string | null>(null)
+  // The URL, not the state object: the Visium HD level of detail and bin
+  // size replace an equal ready state, which would read the cell again.
+  const readyUrl = loadState.status === 'ready' ? loadState.url : null
 
   useEffect(() => {
-    if (selectedCell === null || loadState.status !== 'ready') {
+    if (selectedCell === null || readyUrl === null) {
       invalidateLatestRequest({
         abortRef: cellDetailAbortRef,
         requestIdRef: cellDetailRequestIdRef,
@@ -131,7 +134,7 @@ export function useCellDetailWorkflow({
       return
     }
 
-    if (cancelledCellKeyRef.current === cellRequestKey(loadState.url, selectedCell.id)) {
+    if (cancelledCellKeyRef.current === cellRequestKey(readyUrl, selectedCell.id)) {
       return
     }
 
@@ -146,7 +149,7 @@ export function useCellDetailWorkflow({
         return
       }
 
-      setCellDetailState(cellDetailLoading(loadState.url, selectedCell.id))
+      setCellDetailState(cellDetailLoading(readyUrl, selectedCell.id))
     })
     appendDebugEvent(`Cell details started: ${shortIdentifier(selectedCell.id)}`, {
       coalesceKey: 'cell-details',
@@ -155,7 +158,7 @@ export function useCellDetailWorkflow({
     void (async () => {
       const datasetCell = overviewCellToDatasetCell(selectedCell)
       const [stats, boundaryElement] = await Promise.all([
-        loadRoiGeneStats(loadState.url, [datasetCell], {
+        loadRoiGeneStats(readyUrl, [datasetCell], {
           signal: request.signal,
           cellLimit: 1,
           geneLimit: CELL_GENE_EXPRESSION_LIMIT,
@@ -163,7 +166,7 @@ export function useCellDetailWorkflow({
           onFallback: appendFallbackNotice,
         }),
         loadSelectedCellBoundary(
-          loadState.url,
+          readyUrl,
           selectedCell,
           loadBoundaryElements,
           request.signal,
@@ -176,7 +179,7 @@ export function useCellDetailWorkflow({
 
       setCellDetailState(
         cellDetailReady({
-          url: loadState.url,
+          url: readyUrl,
           cellId: selectedCell.id,
           expression: cellExpressionSummaryFromStats(stats),
           shape: summarizeCellShape(selectedCell, boundaryElement),
@@ -197,7 +200,7 @@ export function useCellDetailWorkflow({
 
         setCellDetailState(
           cellDetailFailed(
-            loadState.url,
+            readyUrl,
             selectedCell.id,
             createStructuredLoadError('Cell details', error),
           ),
@@ -221,17 +224,13 @@ export function useCellDetailWorkflow({
     cellDetailRequestIdRef,
     loadBoundaryElements,
     loadRoiGeneStats,
-    loadState,
+    readyUrl,
     selectedCell,
     setCellDetailState,
   ])
 
   useEffect(() => {
-    if (
-      !transcriptDistributionEnabled ||
-      selectedCell === null ||
-      loadState.status !== 'ready'
-    ) {
+    if (!transcriptDistributionEnabled || selectedCell === null || readyUrl === null) {
       const requestId = invalidateLatestRequest({
         abortRef: cellTranscriptDistributionAbortRef,
         requestIdRef: cellTranscriptDistributionRequestIdRef,
@@ -244,7 +243,7 @@ export function useCellDetailWorkflow({
       return
     }
 
-    if (cancelledCellKeyRef.current === cellRequestKey(loadState.url, selectedCell.id)) {
+    if (cancelledCellKeyRef.current === cellRequestKey(readyUrl, selectedCell.id)) {
       const requestId = invalidateLatestRequest({
         abortRef: cellTranscriptDistributionAbortRef,
         requestIdRef: cellTranscriptDistributionRequestIdRef,
@@ -276,7 +275,7 @@ export function useCellDetailWorkflow({
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState(
             cellTranscriptDistributionFailed(
-              loadState.url,
+              readyUrl,
               selectedCell.id,
               createStructuredLoadError('Cell transcripts', error),
             ),
@@ -297,7 +296,7 @@ export function useCellDetailWorkflow({
       queueMicrotask(() => {
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState(
-            cellTranscriptDistributionLoading(loadState.url, selectedCell.id),
+            cellTranscriptDistributionLoading(readyUrl, selectedCell.id),
           )
         }
       })
@@ -321,7 +320,7 @@ export function useCellDetailWorkflow({
         if (cellTranscriptDistributionRequestIdRef.current === requestId) {
           setCellTranscriptDistributionState(
             cellTranscriptDistributionFailed(
-              loadState.url,
+              readyUrl,
               selectedCell.id,
               createStructuredLoadError('Cell transcripts', error),
             ),
@@ -343,7 +342,7 @@ export function useCellDetailWorkflow({
       }
 
       setCellTranscriptDistributionState(
-        cellTranscriptDistributionLoading(loadState.url, selectedCell.id),
+        cellTranscriptDistributionLoading(readyUrl, selectedCell.id),
       )
     })
     appendDebugEvent(
@@ -351,7 +350,7 @@ export function useCellDetailWorkflow({
       { coalesceKey: 'cell-transcripts' },
     )
 
-    void loadCellTranscriptDistribution(loadState.url, asCellId(selectedCell.id), {
+    void loadCellTranscriptDistribution(readyUrl, asCellId(selectedCell.id), {
       signal: request.signal,
       limit: CELL_TRANSCRIPT_DISTRIBUTION_LIMIT,
       minQv: DEFAULT_CELL_TRANSCRIPT_MIN_QV,
@@ -364,7 +363,7 @@ export function useCellDetailWorkflow({
         }
 
         setCellTranscriptDistributionState(
-          cellTranscriptDistributionReady(loadState.url, selectedCell.id, distribution),
+          cellTranscriptDistributionReady(readyUrl, selectedCell.id, distribution),
         )
         appendDebugEvent(
           `Cell transcript z distribution ready: ${distribution.zCount.toLocaleString()} z records in ${formatElapsed(
@@ -380,7 +379,7 @@ export function useCellDetailWorkflow({
 
         setCellTranscriptDistributionState(
           cellTranscriptDistributionFailed(
-            loadState.url,
+            readyUrl,
             selectedCell.id,
             createStructuredLoadError('Cell transcripts', error),
           ),
@@ -406,18 +405,18 @@ export function useCellDetailWorkflow({
     cellTranscriptDistributionAbortRef,
     cellTranscriptDistributionRequestIdRef,
     loadCellTranscriptDistribution,
-    loadState,
+    readyUrl,
     selectedCell,
     setCellTranscriptDistributionState,
     transcriptDistributionEnabled,
   ])
 
   const cancelCellDetails = useCallback(() => {
-    if (selectedCell === null || loadState.status !== 'ready') {
+    if (selectedCell === null || readyUrl === null) {
       return
     }
 
-    cancelledCellKeyRef.current = cellRequestKey(loadState.url, selectedCell.id)
+    cancelledCellKeyRef.current = cellRequestKey(readyUrl, selectedCell.id)
     invalidateLatestRequest({
       abortRef: cellDetailAbortRef,
       requestIdRef: cellDetailRequestIdRef,
@@ -439,7 +438,7 @@ export function useCellDetailWorkflow({
     cellDetailRequestIdRef,
     cellTranscriptDistributionAbortRef,
     cellTranscriptDistributionRequestIdRef,
-    loadState,
+    readyUrl,
     selectedCell,
     setCellDetailState,
     setCellTranscriptDistributionState,

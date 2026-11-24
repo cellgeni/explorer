@@ -1,4 +1,5 @@
-import { withSquareMicrometers } from '../../data/units'
+import { ringVertexCount } from '../../components/viewerMeasurements'
+import { MICROMETERS } from '../../data/units'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import { CellExpressionProfilePanel } from './CellExpressionProfilePanel'
 import { CellNucleusRows } from './CellNucleusRows'
@@ -14,6 +15,7 @@ const EMPTY_NUCLEI: readonly CellBoundaryDatum[] = []
 export function BoundaryCellInfoPanel({
   cell,
   nuclei = EMPTY_NUCLEI,
+  unitLabel = MICROMETERS,
   expressionStatus,
   expressionProfileState = IDLE_CELL_EXPRESSION_PROFILE_STATE,
   onLoadExpressionProfile,
@@ -21,6 +23,8 @@ export function BoundaryCellInfoPanel({
   readonly cell: CellBoundaryDatum
   // The cell's nuclei drawn in the view.
   readonly nuclei?: readonly CellBoundaryDatum[]
+  // µm, or "units" where a dataset's are unknown (EXP-052).
+  readonly unitLabel?: string | undefined
   readonly expressionStatus?: CellGeneExpressionStatus | undefined
   readonly expressionProfileState?: CellExpressionProfileState | undefined
   readonly onLoadExpressionProfile?: (() => void) | undefined
@@ -47,13 +51,13 @@ export function BoundaryCellInfoPanel({
         </div>
         <div>
           <dt>Vertices</dt>
-          <dd>{cell.polygon.length.toLocaleString()}</dd>
+          <dd>{ringVertexCount(cell.polygon).toLocaleString()}</dd>
         </div>
         <div>
           <dt>Area</dt>
-          <dd>{withSquareMicrometers(formatBoundaryArea(cell))}</dd>
+          <dd>{`${formatBoundaryArea(cell)} ${unitLabel}²`}</dd>
         </div>
-        <CellNucleusRows nuclei={nuclei} />
+        <CellNucleusRows nuclei={nuclei} unitLabel={unitLabel} />
       </dl>
 
       <div className="cell-expression-panel">

@@ -26,6 +26,7 @@ function Probe({
   getSpatialDataset,
   rowBudget,
   selectedGridCell = DEFAULT_GRID_CELL,
+  loadStateVersion = 0,
   onReady,
 }: {
   readonly getSpatialDataset: Parameters<
@@ -33,6 +34,8 @@ function Probe({
   >[0]['loaders']['getSpatialDataset']
   readonly rowBudget: number | undefined
   readonly selectedGridCell?: GridCellDatum | null
+  // A new, equal ready state for each version, as the level of detail makes.
+  readonly loadStateVersion?: number
   readonly onReady: (snapshot: Snapshot) => void
 }) {
   const [assignmentState, setGridCellAssignmentState] = React.useState<
@@ -48,9 +51,10 @@ function Probe({
     () => ({
       status: 'ready',
       url: 'https://example.test/visium',
-      cellCount: 1,
+      // The same count for every version: only the object is new.
+      cellCount: 1 + loadStateVersion * 0,
     }),
-    [],
+    [loadStateVersion],
   )
 
   useGridCellAssignmentWorkflow({
@@ -129,6 +133,44 @@ describe('useGridCellAssignmentWorkflow', () => {
         inCell: true,
       },
     })
+  })
+
+  it('reads a bin once while the ready state is replaced by an equal one', async () => {
+    const barcodeMappingAssignments = vi.fn(async () => [
+      { binId: 'BC-1', cellId: 'cellid_000000001-1', inNucleus: false, inCell: true },
+    ])
+    const getSpatialDataset: SpatialDatasetLoader = vi.fn(
+      async () =>
+        ({
+          barcodeMappingAssignments,
+        }) as unknown as Awaited<ReturnType<SpatialDatasetLoader>>,
+    )
+    const snapshots: Snapshot[] = []
+    const probe = (version: number) => (
+      <Probe
+        getSpatialDataset={getSpatialDataset}
+        rowBudget={undefined}
+        loadStateVersion={version}
+        onReady={(nextSnapshot) => {
+          snapshots.push(nextSnapshot)
+        }}
+      />
+    )
+    const { rerender } = render(probe(0))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Zooming across the level-of-detail threshold.
+    rerender(probe(1))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(barcodeMappingAssignments).toHaveBeenCalledTimes(1)
+    expect(snapshots.at(-1)?.assignmentState.status).toBe('ready')
   })
 
   it("names the cell holding most of a coarse bin's 2 µm barcodes", async () => {
