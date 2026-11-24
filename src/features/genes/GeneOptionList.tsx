@@ -12,7 +12,8 @@ interface GeneOptionListProps {
   readonly emptyMessage?: string
   // A change, such as a new search, scrolls the list back to the top.
   readonly scrollResetKey?: string
-  readonly onToggleGene: (gene: string) => void
+  // `keyboard` when the pick came from Enter or Space.
+  readonly onToggleGene: (gene: string, keyboard: boolean) => void
 }
 
 export function GeneOptionList({
@@ -28,6 +29,9 @@ export function GeneOptionList({
   const scrollResetKeyRef = useRef(scrollResetKey)
   const [scrollTop, setScrollTop] = useState(0)
   const selectedGeneSet = useMemo(() => new Set(selectedGenes), [selectedGenes])
+  // Where a gene was picked, so focus can stay in the list when the gene
+  // leaves it with its button (EXP-294).
+  const pickedIndexRef = useRef<number | null>(null)
 
   // The rows drawn follow the list's own scroll position whenever the genes
   // change. Picking a gene takes it out of the list but leaves the list
@@ -35,9 +39,23 @@ export function GeneOptionList({
   useLayoutEffect(() => {
     const list = listRef.current
 
+    const pickedIndex = pickedIndexRef.current
+    pickedIndexRef.current = null
+
     if (scrollResetKeyRef.current !== scrollResetKey) {
       scrollResetKeyRef.current = scrollResetKey
       if (list !== null) list.scrollTop = 0
+    } else if (
+      pickedIndex !== null &&
+      genes.length > 0 &&
+      (document.activeElement === null || document.activeElement === document.body)
+    ) {
+      // The gene now in the picked one's place, which is drawn, as the list
+      // has not scrolled.
+      const index = Math.min(pickedIndex, genes.length - 1)
+      list
+        ?.querySelector<HTMLButtonElement>(`[aria-posinset="${index + 1}"] button`)
+        ?.focus()
     }
 
     setScrollTop(list?.scrollTop ?? 0)
@@ -100,8 +118,10 @@ export function GeneOptionList({
                 type="button"
                 className={selectedGeneSet.has(gene) ? 'selected' : undefined}
                 title={alias === undefined ? gene : `${gene} (${alias})`}
-                onClick={() => {
-                  onToggleGene(gene)
+                onClick={(event) => {
+                  pickedIndexRef.current = geneIndex
+                  // A click from Enter or Space has no click count.
+                  onToggleGene(gene, event.detail === 0)
                 }}
               >
                 {gene}

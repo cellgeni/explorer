@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
+import { genePanelLoadReady, type SavedGeneSet } from '../genes/geneControlsModel'
 import { testCellsSectionModel } from '../../test/sectionModels'
-import type { CellColourModel } from './cellsSectionModel'
+import type { CellColourModel, GeneSelectionModel } from './cellsSectionModel'
 import { GeneExpressionControls, GenePicker } from './CellsSectionBlocks'
 
 function renderScale(overrides: Partial<CellColourModel> = {}) {
@@ -185,5 +187,134 @@ describe('Saved gene sets', () => {
     expect(screen.getByRole('group', { name: 'Saved gene sets' })).toHaveTextContent(
       'CAFs',
     )
+  })
+})
+
+const PANEL = ['ACTB', 'GAPDH', 'GFAP', 'MBP', 'SNAP25', 'TOP2A']
+
+// A picker whose selection and saved sets change, as App's do.
+function StatefulPicker({
+  options = PANEL,
+  onApply,
+}: {
+  readonly options?: readonly string[]
+  readonly onApply?: (genes: readonly string[]) => void
+}) {
+  const [selected, setSelected] = useState<readonly string[]>([])
+  const [savedSets, setSavedSets] = useState<readonly SavedGeneSet[]>([])
+  const { genes } = testCellsSectionModel({
+    genes: {
+      panelState: genePanelLoadReady('https://example.test/d', options),
+      options,
+      selected,
+      savedSets,
+      onToggle: (gene) => {
+        setSelected((current) =>
+          current.includes(gene)
+            ? current.filter((name) => name !== gene)
+            : [...current, gene].sort(),
+        )
+      },
+      onApply: (next) => {
+        onApply?.(next)
+        setSelected(next)
+      },
+      onSavedSetsChange: setSavedSets,
+    } satisfies Partial<GeneSelectionModel>,
+  })
+
+  return <GenePicker genes={genes} />
+}
+
+describe('Apply Symbols', () => {
+  it('names the symbols that match no gene', () => {
+    render(<StatefulPicker />)
+
+    fireEvent.change(screen.getByLabelText('Gene set symbols'), {
+      target: { value: 'actb, GAPDH, NOTAGENE, foo1, notagene' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Symbols' }))
+
+    expect(screen.getByLabelText('Selected genes')).toHaveTextContent('ACTBGAPDH')
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Applied 2 genes. No gene in this dataset matches NOTAGENE or foo1.',
+    )
+
+    // Editing the symbols clears it.
+    fireEvent.change(screen.getByLabelText('Gene set symbols'), {
+      target: { value: 'MBP' },
+    })
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('keeps the selection and says so when no symbol matches', () => {
+    const applied: (readonly string[])[] = []
+    render(<StatefulPicker onApply={(genes) => applied.push(genes)} />)
+
+    fireEvent.change(screen.getByLabelText('Gene set symbols'), {
+      target: { value: 'NOTAGENE' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Symbols' }))
+
+    expect(applied).toEqual([])
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'No gene in this dataset matches NOTAGENE. The selection is unchanged.',
+    )
+  })
+})
+
+describe('Save Set without a name', () => {
+  it('keeps a saved set of other genes that has the default name', () => {
+    render(<StatefulPicker options={['CCNB1', 'CDK1', 'MKI67', 'PCNA', 'TOP2A']} />)
+    const symbols = screen.getByLabelText('Gene set symbols')
+    const apply = screen.getByRole('button', { name: 'Apply Symbols' })
+
+    fireEvent.change(symbols, { target: { value: 'CCNB1 CDK1 MKI67 TOP2A' } })
+    fireEvent.click(apply)
+    fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
+    fireEvent.change(symbols, { target: { value: 'CCNB1 CDK1 MKI67 PCNA' } })
+    fireEvent.click(apply)
+
+    // The name it will take, shown in the empty name field.
+    expect(screen.getByLabelText('Set name')).toHaveAttribute(
+      'placeholder',
+      'CCNB1, CDK1, MKI67 +1 (2)',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Save Set' }))
+
+    expect(
+      screen.getByRole('button', { name: 'Apply CCNB1, CDK1, MKI67 +1' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Apply CCNB1, CDK1, MKI67 +1 (2)' }),
+    ).toBeVisible()
+  })
+})
+
+describe('Gene picker focus', () => {
+  it('moves to the next gene when one is picked from the list with the keyboard', () => {
+    render(<StatefulPicker />)
+    const gfap = screen.getByRole('button', { name: 'GFAP' })
+    gfap.focus()
+
+    // Enter on a button clicks it with no click count.
+    fireEvent.click(gfap, { detail: 0 })
+
+    expect(screen.getByLabelText('Selected genes')).toHaveTextContent('GFAP')
+    expect(screen.getByRole('button', { name: 'MBP' })).toHaveFocus()
+  })
+
+  it('goes back to the cleared search after a gene found by searching', () => {
+    render(<StatefulPicker />)
+    const search = screen.getByLabelText('Gene selection')
+
+    fireEvent.change(search, { target: { value: 'snap' } })
+    const snap25 = screen.getByRole('button', { name: 'SNAP25' })
+    snap25.focus()
+    fireEvent.click(snap25, { detail: 0 })
+
+    expect(screen.getByLabelText('Selected genes')).toHaveTextContent('SNAP25')
+    expect(search).toHaveFocus()
+    expect(search).toHaveValue('')
   })
 })
