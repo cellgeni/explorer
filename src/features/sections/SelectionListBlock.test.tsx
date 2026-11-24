@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it } from 'vitest'
 import { micrometers } from '../../data/coords'
 import type { SavedSelection } from '../roi/selectionListModel'
@@ -105,6 +106,52 @@ describe('SelectionListPanel', () => {
     fireEvent.keyDown(second, { key: 'Escape' })
     fireEvent.blur(second)
     expect(model.onRename).toHaveBeenCalledTimes(1)
+  })
+
+  it('puts focus back on Rename when Enter or Esc closes the field', () => {
+    renderPanel()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Cortex' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename Cortex' }), {
+      key: 'Escape',
+    })
+    expect(screen.getByRole('button', { name: 'Rename Cortex' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename ROI 2' }))
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Rename ROI 2' }), {
+      key: 'Enter',
+    })
+    expect(screen.getByRole('button', { name: 'Rename ROI 2' })).toHaveFocus()
+
+    // Leaving the field for somewhere else leaves focus there.
+    fireEvent.click(screen.getByRole('button', { name: 'Rename Cortex' }))
+    const goTo = screen.getByRole('button', { name: 'Go to ROI 2' })
+    goTo.focus()
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Rename Cortex' }))
+    expect(goTo).toHaveFocus()
+  })
+
+  it('moves focus to the next Delete, then the heading, as rows go', () => {
+    function Harness() {
+      const [selections, setSelections] = useState(SELECTIONS)
+      const model = testAnnotationsSectionModel({
+        selections: {
+          selections,
+          activeId: null,
+          onDelete: (id) => {
+            setSelections((current) => current.filter((selection) => selection.id !== id))
+          },
+        },
+      }).selections
+      return <SelectionListPanel selections={model} />
+    }
+    render(<Harness />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Cortex' }))
+    expect(screen.getByRole('button', { name: 'Delete ROI 2' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete ROI 2' }))
+    expect(screen.getByRole('heading', { name: 'Selections' })).toHaveFocus()
   })
 
   it('cannot show a selection while the queries cannot run', () => {

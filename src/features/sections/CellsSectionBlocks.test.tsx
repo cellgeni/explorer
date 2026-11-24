@@ -148,4 +148,16 @@ describe('Saved gene sets', () => {
     )
     expect(screen.getByRole('button', { name: 'Add CAFs' })).toBeEnabled()
   })
+
+  it('names the chips and the saved sets as groups', () => {
+    const { genes } = testCellsSectionModel({
+      genes: { selected: ['PIP'], savedSets: [caf] },
+    })
+    render(<GenePicker genes={genes} />)
+
+    expect(screen.getByRole('group', { name: 'Selected genes' })).toHaveTextContent('PIP')
+    expect(screen.getByRole('group', { name: 'Saved gene sets' })).toHaveTextContent(
+      'CAFs',
+    )
+  })
 })

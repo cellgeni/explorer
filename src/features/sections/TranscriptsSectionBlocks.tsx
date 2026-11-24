@@ -145,7 +145,11 @@ export function TranscriptFeatureControls({
       </select>
 
       {selected.length === 0 ? null : (
-        <div className="gene-chip-row" aria-label="Transcript selected features">
+        <div
+          className="gene-chip-row"
+          role="group"
+          aria-label="Transcript selected features"
+        >
           {selected.map((gene) => (
             <Chip
               key={gene}
@@ -178,7 +182,11 @@ export function TranscriptFeatureControls({
       />
 
       {search.trim() === '' ? null : (
-        <div className="gene-option-list" aria-label="Transcript feature options">
+        <div
+          className="gene-option-list"
+          role="group"
+          aria-label="Transcript feature options"
+        >
           {filteredFeatures.length === 0 ? (
             <span className="option-empty">
               {geneSearchEmptyMessage(search, selected, { noun: 'features' })}
@@ -305,18 +313,10 @@ export function TranscriptFilterControls({ transcripts }: TranscriptsProps) {
         <label htmlFor={minQvInputId}>Min QV</label>
         <InfoTip title="Min QV">{MIN_QV_HELP}</InfoTip>
       </div>
-      <input
+      <MinQvInput
         id={minQvInputId}
-        type="number"
-        inputMode="numeric"
-        min="0"
-        max="40"
-        step="1"
         value={transcripts.minQv}
-        title="Transcript minimum QV"
-        onChange={(event) => {
-          transcripts.onMinQvChange(event.currentTarget.valueAsNumber)
-        }}
+        onChange={transcripts.onMinQvChange}
       />
 
       <label className="dataset-toggle" htmlFor={geneOnlyInputId}>
@@ -403,6 +403,60 @@ export function TranscriptDetails({
       onPinTranscript={transcripts.onPinTranscript}
       onClearPinnedTranscript={transcripts.onClearPinnedTranscript}
       onLoadExactViewport={transcripts.onLoadExactViewport}
+    />
+  )
+}
+
+// Applies on Enter or when left, as Exact budget beside it does: each
+// keystroke used to apply (typing 35 applied 3 first, each restarting the
+// read), and an emptied field gave 20 back. Esc puts the value back.
+function MinQvInput({
+  id,
+  value,
+  onChange,
+}: {
+  readonly id: string
+  readonly value: number
+  readonly onChange: (value: number) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const revertedRef = useRef(false)
+  const commit = () => {
+    const typed = draft
+    setDraft(null)
+    if (revertedRef.current) {
+      revertedRef.current = false
+      return
+    }
+    if (typed === null || typed.trim() === '') return
+    const next = Number(typed)
+    if (Number.isFinite(next) && next !== value) onChange(next)
+  }
+
+  return (
+    <input
+      id={id}
+      type="number"
+      inputMode="numeric"
+      min="0"
+      max="40"
+      step="1"
+      value={draft ?? String(value)}
+      title="Transcript minimum QV"
+      onChange={(event) => {
+        revertedRef.current = false
+        setDraft(event.currentTarget.value)
+      }}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          commit()
+        } else if (event.key === 'Escape' && draft !== null) {
+          revertedRef.current = true
+          setDraft(null)
+        }
+      }}
     />
   )
 }

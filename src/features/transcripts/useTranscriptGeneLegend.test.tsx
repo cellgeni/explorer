@@ -119,6 +119,36 @@ describe('useTranscriptGeneLegend', () => {
     expect(result.current.hiddenGenes.size).toBe(0)
   })
 
+  it('forgets a hidden gene taken out of the selection, so Show All goes', () => {
+    let genes: readonly string[] = ['SNAP25', 'GFAP']
+    const { result, rerender } = renderHook(() => useHarness('feature', READY, genes))
+
+    act(() => {
+      result.current.model.onVisibilityChange('GFAP', false)
+    })
+    expect(result.current.model.hiddenCount).toBe(1)
+
+    genes = ['SNAP25']
+    rerender()
+    expect(result.current.model.hiddenCount).toBe(0)
+    expect(result.current.hiddenGenes.size).toBe(0)
+
+    // Picked again, it shows.
+    genes = ['SNAP25', 'GFAP']
+    rerender()
+    expect(result.current.model.items[1]).toMatchObject({ gene: 'GFAP', visible: true })
+  })
+
+  it('titles counts as points, or as transcripts in the gene marker bins', () => {
+    expect(renderHook(() => useHarness('feature')).result.current.model.countTitle).toBe(
+      'Points loaded in view',
+    )
+    expect(
+      renderHook(() => useHarness('quality', DENSITY, ['SNAP25', 'GFAP'], 'gene')).result
+        .current.model.countTitle,
+    ).toBe('Transcripts in view, from the gene marker bins')
+  })
+
   it('says why there is no list for quality colours or density', () => {
     const quality = renderHook(() => useHarness('quality'))
     expect(quality.result.current.model.active).toBe(false)
@@ -243,6 +273,23 @@ describe('useTranscriptGeneLegend', () => {
     act(() => {
       result.current.model.onShowAll()
     })
+    expect(result.current.hiddenGenes.size).toBe(0)
+  })
+
+  it('forgets a hidden gene set once it is deleted', () => {
+    let geneSets: readonly (typeof ASTROCYTES)[] = [ASTROCYTES]
+    const { result, rerender } = renderHook(() =>
+      useHarness('gene-set', READY, ['SNAP25', 'GFAP'], 'thermal', geneSets),
+    )
+
+    act(() => {
+      result.current.model.onVisibilityChange(ASTROCYTES.id, false)
+    })
+    expect(result.current.model.hiddenCount).toBe(1)
+
+    geneSets = []
+    rerender()
+    expect(result.current.model.hiddenCount).toBe(0)
     expect(result.current.hiddenGenes.size).toBe(0)
   })
 

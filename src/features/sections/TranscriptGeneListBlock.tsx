@@ -83,7 +83,7 @@ export function TranscriptGeneList({
                 </small>
               )}
             </span>
-            <small title="Points loaded in view">{item.count.toLocaleString()}</small>
+            <small title={model.countTitle}>{item.count.toLocaleString()}</small>
           </li>
         ))}
       </ul>
