@@ -76,6 +76,23 @@ interface ShellLayoutProps {
   readonly children: ReactNode
 }
 
+// The parts of the shell that open over the canvas and over one another.
+type ShellLayer = 'info' | 'structure' | 'cards' | 'sheet' | 'window'
+
+const SHELL_LAYERS: readonly (readonly [string, ShellLayer])[] = [
+  ['.shell-floating', 'window'],
+  ['.shell-card-stack', 'cards'],
+  ['.shell-info-drawer', 'info'],
+  ['.store-structure-drawer', 'structure'],
+  ['.shell-layer-sheet', 'sheet'],
+]
+
+function shellLayerOf(target: EventTarget | null): ShellLayer | null {
+  if (!(target instanceof Element)) return null
+  const found = SHELL_LAYERS.find(([selector]) => target.closest(selector) !== null)
+  return found === undefined ? null : found[1]
+}
+
 // The shell (plan 15.2): the top bar, the canvas with ⓘ's
 // dataset info drawer and the cards over it, the Embedding, Plots and Cell
 // Query windows at its top right, opened from the top bar, the collection bar
@@ -106,7 +123,17 @@ export function ShellLayout({
 }: ShellLayoutProps) {
   const { infoOpen, embeddingOpen, plotsOpen, queryOpen } = panels
   const narrow = useNarrowScreen()
+  // The drawers, cards, windows and layer sheet overlap where the canvas is
+  // small. The one last opened, pressed or focused is drawn over the others
+  // (EXP-299, EXP-300), so focus never lands on a control another covers and
+  // a press on any part of one brings it forward (shell.css, data-front).
+  const [frontLayer, setFrontLayer] = useState<ShellLayer | null>(null)
+  const bringForward = (target: EventTarget | null) => {
+    const layer = shellLayerOf(target)
+    if (layer !== null) setFrontLayer(layer)
+  }
   const setInfoOpen = (open: boolean) => {
+    if (open) setFrontLayer('info')
     onPanelsChange({ ...panels, infoOpen: open })
   }
   // Under 860 px each window is full width, so opening one closes the
@@ -155,13 +182,17 @@ export function ShellLayout({
   )
   const canvasRef = useRef<HTMLDivElement>(null)
   // A window opening where the open Dataset info drawer would cover it
-  // closes the drawer (EXP-029). Windows already open keep their place.
+  // closes the drawer (EXP-029), as does any window under 860 px, where both
+  // take the canvas's width. Windows already open keep their place.
   const drawerClosedFor = (rightOffset: number | undefined, width: number) => {
+    if (!infoOpen) return {}
+    if (narrow) return { infoOpen: false }
+
     // Read when a window opens, from the one canvas the shell draws.
     const canvas = document.querySelector('.shell-canvas')
     const drawer = canvas?.querySelector('.shell-info-drawer')
 
-    if (!infoOpen || narrow || canvas == null || drawer == null) return {}
+    if (canvas == null || drawer == null) return {}
 
     const canvasBox = canvas.getBoundingClientRect()
     // Not laid out yet: nothing to measure.
@@ -175,7 +206,15 @@ export function ShellLayout({
       ? { infoOpen: false }
       : {}
   }
+  // A window that opens comes to the front; under 860 px it also folds the
+  // layer sheet, which would cover it.
+  const windowOpened = (panel: PanelToggle['panel']) => {
+    setFrontWindow(panel)
+    setFrontLayer('window')
+    if (narrow) setSheetExpanded(false)
+  }
   const setEmbeddingOpen = (open: boolean) => {
+    if (open && !embeddingOpen) windowOpened('embedding')
     onPanelsChange({
       ...panels,
       ...(open && narrow ? narrowClosed : {}),
@@ -184,6 +223,7 @@ export function ShellLayout({
     })
   }
   const setPlotsOpen = (open: boolean) => {
+    if (open && !plotsOpen) windowOpened('plots')
     onPanelsChange({
       ...panels,
       ...(open && narrow ? narrowClosed : {}),
@@ -192,6 +232,7 @@ export function ShellLayout({
     })
   }
   const setQueryOpen = (open: boolean) => {
+    if (open && !queryOpen) windowOpened('query')
     onPanelsChange({
       ...panels,
       ...(open && narrow ? narrowClosed : {}),
@@ -210,10 +251,25 @@ export function ShellLayout({
   // On narrow screens the panel is a bottom sheet that starts as a 56 px
   // handle (15.2-I).
   const [sheetExpanded, setSheetExpanded] = useState(false)
+  const expandSheet = (expanded: boolean) => {
+    if (expanded) setFrontLayer('sheet')
+    setSheetExpanded(expanded)
+  }
   const togglePanel = useEffectEvent(() => {
-    if (narrow) setSheetExpanded((current) => !current)
+    if (narrow) expandSheet(!sheetExpanded)
     else setPanelCollapsed((current) => !current)
   })
+  // A card that opens comes to the front, unless focus is in another window
+  // or drawer, as when a row of Cell Query opens its cell's card: that stays
+  // in front. Under 860 px, where the card docks at the bottom, it also folds
+  // the layer sheet.
+  const cardShown = useCallback(() => {
+    const holder = shellLayerOf(document.activeElement)
+    if (holder === null || holder === 'cards' || holder === 'sheet') {
+      setFrontLayer('cards')
+    }
+    if (narrow) setSheetExpanded(false)
+  }, [narrow])
 
   // \ hides or shows the layer panel, except while typing.
   useEffect(() => {
@@ -271,7 +327,7 @@ export function ShellLayout({
         narrow
           ? {
               expanded: sheetExpanded,
-              onExpandedChange: setSheetExpanded,
+              onExpandedChange: expandSheet,
               summary: sheetSummary(layerPanel),
             }
           : undefined
@@ -299,6 +355,13 @@ export function ShellLayout({
               ? 'shell-body is-panel-collapsed'
               : 'shell-body'
         }
+        data-front={frontLayer ?? undefined}
+        onPointerDownCapture={(event) => {
+          bringForward(event.target)
+        }}
+        onFocusCapture={(event) => {
+          bringForward(event.target)
+        }}
       >
         <div className="shell-main">
           <div
@@ -314,7 +377,7 @@ export function ShellLayout({
             />
             {children}
             {storeStructure}
-            <CardStack cards={cards} />
+            <CardStack cards={cards} onCardShown={cardShown} />
             {embedding === null ? null : (
               <EmbeddingWindow
                 embedding={embedding}

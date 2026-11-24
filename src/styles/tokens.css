@@ -88,6 +88,9 @@
   --z-cards: 10;
   --z-panel: 12;
   --z-drawer: 14;
+  /* The drawer, cards, window or layer sheet last opened, pressed or
+     focused (ShellLayout's data-front). */
+  --z-front: 15;
   --z-popover: 16;
   --z-toast: 18;
 }

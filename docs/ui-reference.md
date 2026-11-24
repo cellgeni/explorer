@@ -714,11 +714,22 @@ Cards are 360 px wide and stack at the top left of the canvas in this order.
 The stack ends above the legend and loading list at the bottom left (at least
 240 px tall), and scrolls when the cards outgrow it; a card that appears
 scrolls into view. While
-the info drawer is open they move to its right. Closing a card clears what it
-shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
+the info drawer is open they move to its right, unless that leaves them under
+300 px (a window under about 1064 px with the layer panel open): then they
+stay at the left, over the drawer. Closing a card clears what it shows. Selection, Cell and Transcript cards have `Go To`, which shows what the
 card is about (`zoomToBbox`). A card that closes while it holds keyboard
 focus hands it to the card now in its place, or to the spatial view. In the
 Selection card's tabs, the arrow keys, `Home` and `End` move between tabs.
+
+**Which is in front.** Where the canvas is small, the info drawer, the store
+structure drawer, the cards, the Embedding, Plots and Cell Query windows and,
+under 860 px, the layer sheet overlap. The one last opened, pressed or
+focused is drawn over the others (`data-front` on `.shell-body`, set by
+`ShellLayout`; EXP-299, EXP-300): a card that appears or shows another cell
+(unless focus is in a window or drawer, as when a row of Cell Query opens
+its cell's card), a window or drawer that opens, the sheet expanded, or a
+press or Tab into any part of one. So keyboard focus never lands on a control another covers,
+and a press on what shows of a covered one brings it forward.
 
 | Card                     | Shown when                                                    | Close                                       |
 | ------------------------ | ------------------------------------------------------------- | ------------------------------------------- |
@@ -1499,7 +1510,9 @@ once, and the spots change when the reload is ready.
 
 `Browse Store` opens "Store structure" (`StoreStructureDrawer`,
 `src/features/store-structure/`): 560 px wide, on the right over the canvas,
-and not modal, so it can sit beside the info drawer. Esc or its `Close`
+and not modal, so it can sit beside the info drawer: with the drawer open it
+narrows to the room beside it, down to 280 px (a 1024 px window), and below
+that the one last opened or used is in front. Esc or its `Close`
 button (`Close Store structure`, `Close Parquet file` or `Close HDF5 file`,
 after its title) closes it. It keeps what it read while closed: `Browse Store` on
 the same address shows the same tree, and another address reads that store.
@@ -1719,8 +1732,10 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   to at most 65% of the screen. It is the same panel as on wide screens, so a
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
-  layer sheet's handle. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others. Where a link
+  layer sheet's handle, and the zoom buttons, scale bar, legend and toasts
+  rise above them. The Embedding, Plots and Cell Query panels take the
+  canvas's width, one at a time: opening one closes the others and the
+  Dataset info drawer. Opening a window or a card folds the layer sheet. Where a link
   or a wider screen left several open, the one in front shows (else the first
   in the top bar's order), its button alone pressed; the others show again
   once the screen is 860 px or wider.

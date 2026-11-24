@@ -388,10 +388,12 @@ describe('ShellLayout', () => {
     function PanelsHarness({
       initial,
       plots = testPlotsModel(),
+      cards = NO_CARDS,
       children = <div>canvas</div>,
     }: {
       readonly initial: ShellPanelState
       readonly plots?: PlotsModel
+      readonly cards?: CardStackModel
       readonly children?: ReactNode
     }) {
       const [panels, setPanels] = useState(initial)
@@ -418,7 +420,7 @@ describe('ShellLayout', () => {
           cells={testCellsSectionModel()}
           transcripts={testTranscriptsSectionModel()}
           annotations={testAnnotationsSectionModel()}
-          cards={NO_CARDS}
+          cards={cards}
           embedding={testEmbeddingModel()}
           plots={plots}
           panels={panels}
@@ -494,6 +496,128 @@ describe('ShellLayout', () => {
       fireEvent.pointerDown(within(plotsWindow()).getByRole('heading', { name: 'Plots' }))
       expect(plotsWindow()).toHaveClass('is-front')
       expect(embeddingWindow).not.toHaveClass('is-front')
+    })
+
+    // The drawers, cards, windows and sheet overlap where the canvas is
+    // small; the one last opened, pressed or focused is in front (EXP-299,
+    // EXP-300), so focus never lands on a covered control.
+    it('brings the drawer, card or window last opened or used to the front', () => {
+      stubScreenWidth(false)
+      const { container, rerender } = render(
+        <PanelsHarness initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }} />,
+      )
+      const body = container.querySelector('.shell-body')
+      expect(body).not.toHaveAttribute('data-front')
+
+      // A card that appears.
+      rerender(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }}
+          cards={LENS_CARD}
+        />,
+      )
+      expect(body).toHaveAttribute('data-front', 'cards')
+
+      // A window that opens after it.
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Plots' }))
+      expect(body).toHaveAttribute('data-front', 'window')
+      expect(plotsWindow()).toHaveClass('is-front')
+
+      // Tabbing into the card, or pressing it, brings it back.
+      act(() => {
+        within(screen.getByRole('region', { name: 'Magic Lens' }))
+          .getAllByRole('button')[0]
+          ?.focus()
+      })
+      expect(body).toHaveAttribute('data-front', 'cards')
+      fireEvent.pointerDown(within(plotsWindow()).getByRole('heading', { name: 'Plots' }))
+      expect(body).toHaveAttribute('data-front', 'window')
+
+      // The info drawer, opened last.
+      fireEvent.click(screen.getByRole('button', { name: /^Dataset info/ }))
+      expect(body).toHaveAttribute('data-front', 'info')
+
+      // A press on the canvas changes nothing.
+      fireEvent.pointerDown(screen.getByText('canvas'))
+      expect(body).toHaveAttribute('data-front', 'info')
+    })
+
+    it('keeps the window that holds focus in front of a card it opens', () => {
+      stubScreenWidth(false)
+      const { container, rerender } = render(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], plotsOpen: true }}
+        />,
+      )
+      act(() => {
+        screen.getByRole('button', { name: 'Close plots' }).focus()
+      })
+      expect(container.querySelector('.shell-body')).toHaveAttribute(
+        'data-front',
+        'window',
+      )
+
+      // As a row of Cell Query opens its cell's card.
+      rerender(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], plotsOpen: true }}
+          cards={LENS_CARD}
+        />,
+      )
+      expect(container.querySelector('.shell-body')).toHaveAttribute(
+        'data-front',
+        'window',
+      )
+    })
+
+    it('folds the layer sheet and closes the info drawer for a window under 860 px', () => {
+      stubScreenWidth(true)
+      const { container } = render(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], infoOpen: true }}
+        />,
+      )
+      const handle = screen.getByRole('button', { name: /^Layers/ })
+      fireEvent.click(handle)
+      expect(container.querySelector('.shell-body')).toHaveAttribute(
+        'data-front',
+        'sheet',
+      )
+      expect(handle).toHaveAttribute('aria-expanded', 'true')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Panels' }))
+      fireEvent.click(
+        within(screen.getByRole('dialog', { name: 'Panels' })).getByRole('button', {
+          name: 'Plots',
+        }),
+      )
+
+      expect(plotsWindow()).toBeVisible()
+      expect(handle).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('dialog', { name: 'Dataset info' })).toBeNull()
+      expect(container.querySelector('.shell-body')).toHaveAttribute(
+        'data-front',
+        'window',
+      )
+    })
+
+    it('folds the layer sheet for a card that opens under 860 px', () => {
+      stubScreenWidth(true)
+      const { rerender } = render(
+        <PanelsHarness initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }} />,
+      )
+      const handle = screen.getByRole('button', { name: /^Layers/ })
+      fireEvent.click(handle)
+      expect(handle).toHaveAttribute('aria-expanded', 'true')
+
+      rerender(
+        <PanelsHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'] }}
+          cards={LENS_CARD}
+        />,
+      )
+      expect(handle).toHaveAttribute('aria-expanded', 'false')
     })
 
     it('shows one window at a time under 860 px', () => {

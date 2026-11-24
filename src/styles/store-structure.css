@@ -27,6 +27,12 @@
   width: min(560px, 100%);
 }
 
+/* Beside the open info drawer, where the canvas holds both, as the docs
+   promise; the one last opened or used is in front where it does not. */
+.shell-body:not(.is-narrow) .has-info-drawer .store-structure-drawer {
+  width: min(560px, max(280px, 100% - 380px));
+}
+
 /* The tree takes the room the header and details leave. The body still
    scrolls (ui.css) where the drawer is too short for the header, the tree's
    least height and the details. */
@@ -145,15 +151,18 @@
   font-size: var(--font-control);
 }
 
+/* The buttons wrap under the filter in a narrow drawer, as beside the info
+   drawer at 1024 px. */
 .store-structure-tools {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-1);
   align-items: center;
 }
 
 .store-structure-filter {
   flex: 1 1 auto;
-  min-width: 0;
+  min-width: min(160px, 100%);
   padding: 5px 8px;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-2);
