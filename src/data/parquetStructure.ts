@@ -88,6 +88,10 @@ export interface ParquetStructure {
   readonly keyValueMetadata: readonly ParquetKeyValue[]
   // The footer as hyparquet parsed it, to read rows without reading it again.
   readonly metadata: FileMetaData
+  // A file in a zip, as opened for the footer. A deflated entry is inflated
+  // whole on its first read, so the rows read uses this one rather than
+  // opening, downloading and inflating the entry again.
+  readonly zipFile?: AsyncBuffer
 }
 
 export interface ReadParquetStructureOptions {
@@ -157,7 +161,11 @@ export async function readParquetStructure(
     throw httpReadError(parquetFileAddress(ref), error) ?? error
   }
 
-  return parquetStructureFromMetadata(metadata, { ref, byteLength: file.byteLength })
+  const structure = parquetStructureFromMetadata(metadata, {
+    ref,
+    byteLength: file.byteLength,
+  })
+  return ref.zipPath === undefined ? structure : { ...structure, zipFile: file }
 }
 
 // The leading magic, the footer's length and the trailing magic.

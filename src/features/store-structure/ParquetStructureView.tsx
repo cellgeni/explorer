@@ -47,11 +47,14 @@ import type { ParquetFileState } from './useStoreStructure'
 export function ParquetFileView({
   state,
   readRows,
+  active = true,
   onRetry,
   onBack,
 }: {
   readonly state: ParquetFileState
   readonly readRows: ParquetRowsReader
+  // Whether the file is shown; a rows read stops when it is not.
+  readonly active?: boolean
   readonly onRetry: () => void
   // Set when the file was opened from a store's tree.
   readonly onBack?: () => void
@@ -105,6 +108,7 @@ export function ParquetFileView({
           key={`${state.target.url}\n${state.target.zipPath ?? ''}`}
           structure={state.value}
           readRows={readRows}
+          active={active}
           back={back}
         />
       )
@@ -138,15 +142,17 @@ const FILE_TABS = [
 function ParquetStructureBrowser({
   structure,
   readRows,
+  active,
   back,
 }: {
   readonly structure: ParquetStructure
   readonly readRows: ParquetRowsReader
+  readonly active: boolean
   readonly back: ReactNode
 }) {
   const conventions = parquetConventions(structure)
   const [tab, setTab] = useState<FileTab>('columns')
-  const rows = useParquetRows(structure, readRows)
+  const rows = useParquetRows(structure, readRows, active)
   const bound = previewReadBound(structure)
 
   return (
@@ -207,7 +213,12 @@ function ParquetStructureBrowser({
         />
       </div>
       {tab === 'rows' ? (
-        <ParquetRowsPanel structure={structure} state={rows.state} onRead={rows.read} />
+        <ParquetRowsPanel
+          structure={structure}
+          state={rows.state}
+          onRead={rows.read}
+          onReadMore={rows.readMore}
+        />
       ) : null}
     </div>
   )

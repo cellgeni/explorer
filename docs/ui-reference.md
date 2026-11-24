@@ -1500,14 +1500,18 @@ from the first row group that holds rows. Flat columns are read from the
 start of their chunk page by page, from the page headers, until the pages hold
 enough values, and decoded with hyparquet's `readColumn`; nested columns go
 through `parquetReadObjects` with `useOffsetIndex`. The ranges are fetched in
-parallel with `cache: 'no-store'`, and the footer is not read again.
+parallel with `cache: 'no-store'`, and the footer is not read again; a file
+in a zip is read through the entry opened for its footer, so a deflated entry
+is downloaded and inflated once. Columns are read 40 at a time
+(`PARQUET_PREVIEW_COLUMNS`), each a request. Closing the drawer or `Back to
+Store` stops a read, and `Read Rows` offers it again.
 
-| State   | Shows                                                                                                                                                                                                    |
-| ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Asking  | When the row group's compressed size is over 8 MB (`AUTO_READ_ROWS_BYTES`): which row group, that only first pages are read, the most it can read, and `Read Rows`. Smaller files read on opening `Rows` |
-| Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                              |
-| Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                  |
-| Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON)              |
+| State   | Shows                                                                                                                                                                                                                                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Asking  | When the row group's compressed size is over 8 MB (`AUTO_READ_ROWS_BYTES`): which row group, that only first pages are read, the most it can read, and `Read Rows`. Smaller files read on opening `Rows`                                                                                                                                       |
+| Reading | "Reading the first rows…" (`role="status"`)                                                                                                                                                                                                                                                                                                    |
+| Failed  | The error's title, message and next step (`role="alert"`), with `Retry`                                                                                                                                                                                                                                                                        |
+| Read    | "First 20 rows of N, from row group G; read B", and a table "First rows": row numbers in the file, column names with their types, values (`null`, WKB as `Polygon, 25 points`, bytes, JSON). Text is cut at 60 characters; its tooltip holds up to 2,000. A file of more columns says "Columns 1 to 40 of N" and offers `Read 40 More Columns` |
 
 #### HDF5 File View
 

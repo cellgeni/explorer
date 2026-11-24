@@ -412,12 +412,21 @@ export function isWkbColumn(structure: ParquetStructure, name: string): boolean 
 }
 
 const PREVIEW_TEXT_LIMIT = 60
+// A cell's tooltip shows its value whole, up to this.
+export const PREVIEW_TITLE_LIMIT = 2_000
 
-// A previewed value as shown in its cell, or null for a null.
+// A previewed value as shown in its cell, or null for a null; `limit` is
+// where text is cut.
 export function formatPreviewValue(
   value: unknown,
-  { wkb = false }: { readonly wkb?: boolean } = {},
+  {
+    wkb = false,
+    limit = PREVIEW_TEXT_LIMIT,
+  }: { readonly wkb?: boolean; readonly limit?: number } = {},
 ): string | null {
+  const truncate = (text: string) =>
+    text.length > limit ? `${text.slice(0, limit)}…` : text
+
   if (value === null || value === undefined) return null
   if (value instanceof Uint8Array) return wkb ? wkbSummary(value) : bytesSummary(value)
   if (value instanceof Date) {
@@ -442,10 +451,6 @@ export function formatPreviewValue(
         ),
       )
   }
-}
-
-function truncate(text: string): string {
-  return text.length > PREVIEW_TEXT_LIMIT ? `${text.slice(0, PREVIEW_TEXT_LIMIT)}…` : text
 }
 
 function bytesSummary(bytes: Uint8Array): string {
