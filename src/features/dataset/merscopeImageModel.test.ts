@@ -64,10 +64,14 @@ describe('MERSCOPE image choice', () => {
     })
   })
 
-  it('shows pyramid sizes in KB or MB', () => {
-    expect(formatMerscopeImageSize(19_873)).toBe('19 KB')
-    expect(formatMerscopeImageSize(4.25 * MB)).toBe('4.3 MB')
-    expect(formatMerscopeImageSize(332_683_540)).toBe('317 MB')
+  it('shows pyramid sizes in KiB or MiB, the unit of the 100 MiB limit', () => {
+    expect(formatMerscopeImageSize(19_873)).toBe('19 KiB')
+    expect(formatMerscopeImageSize(1_023.4 * 1024)).toBe('1,023 KiB')
+    expect(formatMerscopeImageSize(1_023.6 * 1024)).toBe('1.0 MiB')
+    expect(formatMerscopeImageSize(4.25 * MB)).toBe('4.3 MiB')
+    expect(formatMerscopeImageSize(9.97 * MB)).toBe('10 MiB')
+    expect(formatMerscopeImageSize(332_683_540)).toBe('317 MiB')
+    expect(formatMerscopeImageSize(2_000 * MB)).toBe('2,000 MiB')
   })
 
   it('keeps the choice in the link once the .vzg is read', () => {

@@ -305,7 +305,7 @@ function CellTranscriptZDistributionPanel({
           </div>
           <div className="cell-z-axis" aria-hidden="true">
             <span>{formatZValue(distribution.minZ)}</span>
-            <span>Z location (um)</span>
+            <span>Z location (µm)</span>
             <span>{formatZValue(distribution.maxZ)}</span>
           </div>
           <p className="cell-z-caption">
@@ -399,10 +399,27 @@ function formatMetric(value: number | undefined, unit?: string): string {
 
 function formatMetadataValue(value: string | number | boolean): string {
   if (typeof value === 'number') {
-    return formatNumber(value)
+    return formatObservationNumber(value)
   }
 
   return String(value)
+}
+
+// Obs values are often fractions, scores and probabilities (doublet_score
+// 0.0123, S_score -0.04, 0.9876), so below 10 they keep four significant
+// digits rather than one decimal, which wrote those 0, -0 and 1.
+function formatObservationNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return String(value)
+  }
+
+  if (value === 0) {
+    return '0'
+  }
+
+  return Math.abs(value) >= 10
+    ? value.toLocaleString(undefined, { maximumFractionDigits: 1 })
+    : value.toLocaleString(undefined, { maximumSignificantDigits: 4 })
 }
 
 function formatLoadError(error: CellLoadErrorSummary): string {

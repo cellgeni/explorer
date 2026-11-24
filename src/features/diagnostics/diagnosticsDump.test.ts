@@ -224,6 +224,78 @@ describe('createDiagnosticsDump', () => {
       telemetryEvents: [{ name: 'load' }],
     })
   })
+
+  // A ready exact layer holds every drawn point, up to 1,000,000; the dump
+  // wrote them all, twice while the layer reloaded (EXP-250).
+  it('writes the transcript layer as counts, not its points', () => {
+    const points = Array.from({ length: 5_000 }, (_, index) => ({
+      id: `tx-${index}`,
+      featureName: `Gene${index % 30}`,
+      position: { x: index, y: index },
+    }))
+    const groups = [{ featureName: 'Gene0', count: 167 }]
+    const ready = {
+      status: 'ready',
+      url: 'https://example.test/output',
+      points,
+      groups,
+      visibleTranscriptEstimate: 5_000,
+      hitPointLimit: false,
+      durationMs: 12,
+    }
+    const bins = Array.from({ length: 400 }, (_, index) => ({ id: `bin-${index}` }))
+
+    const layers = [
+      ready,
+      {
+        status: 'loading',
+        url: 'https://example.test/output',
+        visibleTranscriptEstimate: 6_000,
+        previousLayer: { kind: 'exact', points },
+        previousState: ready,
+      },
+      {
+        status: 'aggregate',
+        message: 'Density',
+        source: 'native-zarr',
+        mode: 'density',
+        bins,
+        featureNames: ['Gene0'],
+        visibleTranscriptEstimate: 90_000,
+      },
+    ].map((transcriptLayerState) => {
+      const dump = createDiagnosticsDump({ ...DUMP_OPTIONS, transcriptLayerState }) as {
+        readonly states: { readonly transcripts: { readonly layer: unknown } }
+      }
+      return dump.states.transcripts.layer
+    })
+
+    expect(layers).toEqual([
+      expect.objectContaining({
+        status: 'ready',
+        pointCount: 5_000,
+        groupCount: 1,
+        hitPointLimit: false,
+        durationMs: 12,
+      }),
+      expect.objectContaining({
+        status: 'loading',
+        visibleTranscriptEstimate: 6_000,
+        previousLayer: expect.objectContaining({ kind: 'exact', pointCount: 5_000 }),
+        previousState: expect.objectContaining({ status: 'ready', pointCount: 5_000 }),
+      }),
+      expect.objectContaining({
+        status: 'aggregate',
+        source: 'native-zarr',
+        binCount: 400,
+        featureNames: ['Gene0'],
+      }),
+    ])
+    const text = JSON.stringify(layers)
+    expect(text).not.toContain('tx-1')
+    expect(text).not.toContain('bin-1')
+    expect(text.length).toBeLessThan(2_000)
+  })
 })
 
 describe('diagnosticsDumpFileName', () => {

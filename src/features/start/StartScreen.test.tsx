@@ -4,8 +4,10 @@ import {
   render,
   renderHook,
   screen,
+  waitFor,
   within,
 } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { testDatasetInfoModel, testDatasetLibraryModel } from '../../test/sectionModels'
 import { DEMO_DATASET_URL } from '../../store/viewerStore'
@@ -23,6 +25,7 @@ import {
   type CollectionExample,
   type DatasetExample,
 } from './examplesIndex'
+import type { RecentDataset } from './recentDatasets'
 import { StartScreen } from './StartScreen'
 import { useExamplesIndex } from './useExamplesIndex'
 
@@ -261,6 +264,116 @@ describe('StartScreen', () => {
     expect(within(start).getByRole('alert')).toHaveTextContent(
       'Dataset not foundNothing answered at https://example.test/missing.Check the address.',
     )
+  })
+})
+
+// Controls that take themselves away would otherwise leave focus on the page.
+describe('StartScreen focus', () => {
+  const RUNS: readonly RecentDataset[] = [
+    { url: 'https://example.test/run-1', name: 'run-1' },
+    { url: 'https://example.test/run-2', name: 'run-2' },
+    { url: 'https://example.test/run-3', name: 'run-3' },
+  ]
+
+  function RecentStartScreen() {
+    const [recent, setRecent] = useState(RUNS)
+
+    return (
+      <StartScreen
+        open={testDatasetInfoModel().open}
+        library={testDatasetLibraryModel({
+          examples: { status: 'ready', examples: [] },
+          recent,
+          onRemoveRecent: (url) => {
+            setRecent((current) => current.filter((entry) => entry.url !== url))
+          },
+        })}
+        error={null}
+      />
+    )
+  }
+
+  function removeButton(name: string) {
+    return screen.getByRole('button', { name: `Remove ${name} from recent datasets` })
+  }
+
+  function remove(name: string) {
+    const button = removeButton(name)
+    button.focus()
+    fireEvent.click(button)
+  }
+
+  it('moves to the next Remove, then the address field once Recent is empty', async () => {
+    render(<RecentStartScreen />)
+
+    remove('run-2')
+    expect(removeButton('run-3')).toHaveFocus()
+
+    remove('run-3')
+    expect(removeButton('run-1')).toHaveFocus()
+
+    remove('run-1')
+    expect(screen.queryByRole('list', { name: 'Recent datasets' })).toBeNull()
+    await waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Dataset or image URL' })).toHaveFocus()
+    })
+  })
+
+  it('follows Retry to "Loading examples…" and then to the examples', () => {
+    const open = testDatasetInfoModel().open
+    const library = testDatasetLibraryModel({
+      examples: { status: 'error', message: 'HTTP 503' },
+    })
+    const { rerender } = render(
+      <StartScreen open={open} library={library} error={null} />,
+    )
+    const retry = screen.getByRole('button', { name: 'Retry' })
+
+    retry.focus()
+    fireEvent.click(retry)
+    expect(library.onRetryExamples).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <StartScreen
+        open={open}
+        library={{ ...library, examples: { status: 'loading' } }}
+        error={null}
+      />,
+    )
+    expect(screen.getByText('Loading examples…')).toHaveFocus()
+
+    // A second failure offers Retry again.
+    rerender(<StartScreen open={open} library={library} error={null} />)
+    expect(screen.getByRole('button', { name: 'Retry' })).toHaveFocus()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    rerender(
+      <StartScreen
+        open={open}
+        library={{ ...library, examples: { status: 'ready', examples: [SKIN] } }}
+        error={null}
+      />,
+    )
+    expect(screen.getByRole('link', { name: SKIN.name })).toHaveFocus()
+  })
+
+  it('leaves focus alone when the examples arrive without a Retry', () => {
+    const open = testDatasetInfoModel().open
+    const library = testDatasetLibraryModel({ examples: { status: 'loading' } })
+    const { rerender } = render(
+      <StartScreen open={open} library={library} error={null} />,
+    )
+    const address = screen.getByRole('textbox', { name: 'Dataset or image URL' })
+    address.focus()
+
+    rerender(
+      <StartScreen
+        open={open}
+        library={{ ...library, examples: { status: 'ready', examples: [SKIN] } }}
+        error={null}
+      />,
+    )
+    expect(address).toHaveFocus()
   })
 })
 

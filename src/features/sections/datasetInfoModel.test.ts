@@ -189,6 +189,7 @@ describe('datasetFacts', () => {
     geneCount: 5001,
     channelCount: 4,
     zPlaneCount: 1,
+    imageLoading: false,
     hasFlatImage: false,
     imageSize: {
       width: 40_960,
@@ -236,6 +237,13 @@ describe('datasetFacts', () => {
     expect(datasetFacts({ ...xenium, channelCount: 1, zPlaneCount: 15 })[3]?.value).toBe(
       '1 channel · 15 z planes',
     )
+  })
+
+  it('says the image is loading until its channels are known', () => {
+    const loading = { ...xenium, channelCount: 0, imageSize: null, imageLoading: true }
+
+    expect(datasetFacts(loading)[3]).toEqual({ label: 'Image', value: 'Loading…' })
+    expect(datasetFacts({ ...loading, imageLoading: false })[3]?.value).toBe('None')
   })
 
   it('gives an image size in µm when it is small, and only pixels when uncalibrated', () => {

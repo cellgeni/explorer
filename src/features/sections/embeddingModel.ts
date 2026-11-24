@@ -64,12 +64,18 @@ export function useEmbeddingModel({
   setSelectedKind,
 }: EmbeddingModelInput): EmbeddingModel {
   const loading = analysisEmbeddingState.status === 'loading'
+  const options = analysisEmbeddingOptionsForState(analysisEmbeddingState)
 
   return {
     copy,
     loading,
-    options: analysisEmbeddingOptionsForState(analysisEmbeddingState),
-    selectedKind: activeEmbedding?.kind ?? selectedKind,
+    options,
+    // The view the user picked while it is one to pick, which the next Load
+    // reads (an AnnData file loads one obsm key at a time), else the one
+    // shown.
+    selectedKind: options.some((option) => option.kind === selectedKind)
+      ? selectedKind
+      : (activeEmbedding?.kind ?? selectedKind),
     onKindChange: (kind) => {
       setSelectedKind(kind)
       appendDebugEvent(`Embedding view: ${kind}`)

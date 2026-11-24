@@ -75,6 +75,11 @@ describe('store structure model', () => {
     expect(formatShape([3, 21_571, 19_505])).toBe('3 × 21,571 × 19,505')
     expect(formatBytes(512)).toBe('512 B')
     expect(formatBytes(1_260_000_000)).toBe('1.26 GB')
+    // Rounded before the unit is picked, never "1,000 KB".
+    expect(formatBytes(999_400)).toBe('999 KB')
+    expect(formatBytes(999_999)).toBe('1 MB')
+    expect(formatBytes(999_600_000)).toBe('1 GB')
+    expect(formatBytes(999)).toBe('999 B')
   })
 
   it("names a node's role from its attributes", () => {
@@ -148,6 +153,13 @@ describe('store structure model', () => {
     expect(filterStructure(tree.root, 'nothing')?.matchCount).toBe(0)
     // With a '/', the whole path is matched.
     expect(filterStructure(tree.root, 's/cl')?.matchCount).toBe(2)
+    // As the details show it, with a leading '/'.
+    expect(filterStructure(tree.root, '/obs/cluster')?.visible).toEqual(
+      new Set(['obs/cluster/codes', 'obs/cluster', 'obs', '']),
+    )
+    // As the Parquet details show a nested field: a dotted path.
+    expect(filterStructure(tree.root, 'cluster.codes')?.matchCount).toBe(1)
+    expect(filterStructure(tree.root, 'nothing.here')?.matchCount).toBe(0)
   })
 
   it('gives nodes of HTTP stores an address of their own', () => {
@@ -183,6 +195,15 @@ describe('store structure model', () => {
     // Unlisted, but where SpatialData writes it.
     expect(of(consolidated, 'shapes/cells')).toEqual({
       url: 'https://bucket.test/sample.zarr/shapes/cells/shapes.parquet',
+    })
+    // Before a query that grants the store.
+    expect(
+      of(
+        { ...consolidated, url: 'https://bucket.test/sample.zarr?token=abc' },
+        'shapes/cells',
+      ),
+    ).toEqual({
+      url: 'https://bucket.test/sample.zarr/shapes/cells/shapes.parquet?token=abc',
     })
     // Points are a folder of parts.
     expect(of(consolidated, 'points/tx')).toBeNull()

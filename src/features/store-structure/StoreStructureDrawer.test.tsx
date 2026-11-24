@@ -31,7 +31,7 @@ import {
   type ZarrStructure,
 } from '../../zarr/zarrStructure'
 import { H5FileView } from './H5StructureView'
-import { StoreStructureDrawer } from './StoreStructureDrawer'
+import { StoreStructureDrawer, StoreStructureView } from './StoreStructureDrawer'
 import { useStoreStructure } from './useStoreStructure'
 
 const STORE_URL = `${ANNDATA_ZARR_FIXTURE_ORIGIN}/tiny.zarr`
@@ -90,6 +90,126 @@ function drawer() {
   return screen.getByRole('dialog', { name: 'Store structure' })
 }
 
+function flatStore(flat: Parameters<typeof structureFromFlatNodes>[0]['flat']) {
+  return structureFromFlatNodes({
+    url: 'https://bucket.test/sample.zarr',
+    source: 'consolidated',
+    zarrFormat: 2,
+    listing: null,
+    truncated: false,
+    flat,
+  })
+}
+
+function renderStoreView(structure: ZarrStructure) {
+  render(
+    <StoreStructureView
+      state={{ status: 'ready', target: structure.url, value: structure }}
+      onRetry={() => undefined}
+      onBrowseFile={() => undefined}
+    />,
+  )
+  return screen.getByRole('tree', { name: 'Store contents' })
+}
+
+const SMALL_STORE = [
+  { path: '', kind: 'group' },
+  { path: 'obs', kind: 'group' },
+  { path: 'obs/cluster', kind: 'group' },
+  { path: 'obs/cluster/codes', kind: 'array' },
+  { path: 'var', kind: 'group' },
+  { path: 'var/gene', kind: 'array' },
+] as const
+
+describe('the structure tree', () => {
+  const row = (path: string) => screen.getByTitle(`Show details of ${path}`)
+
+  it('is one tab stop, with rows as tree items at their levels', () => {
+    const tree = renderStoreView(flatStore([...SMALL_STORE]))
+    fireEvent.click(screen.getByRole('button', { name: 'Expand All' }))
+
+    const rows = within(tree).getAllByRole('treeitem')
+    expect(rows).toHaveLength(6)
+    expect(rows.filter((item) => item.tabIndex === 0)).toEqual([row('/')])
+    expect(row('obs/cluster/codes')).toHaveAttribute('aria-level', '4')
+    expect(row('obs')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('var/gene')).not.toHaveAttribute('aria-expanded')
+    expect(tree.querySelectorAll('button')).toHaveLength(0)
+  })
+
+  it('moves with the arrow keys, Home and End, and opens and closes groups', () => {
+    renderStoreView(flatStore([...SMALL_STORE]))
+    const key = (key: string) => {
+      fireEvent.keyDown(document.activeElement as HTMLElement, { key })
+    }
+    row('/').focus()
+
+    key('ArrowDown')
+    expect(row('obs')).toHaveFocus()
+    expect(row('obs')).toHaveAttribute('tabindex', '0')
+    expect(row('/')).toHaveAttribute('tabindex', '-1')
+    // obs is open (a small store opens the root's child groups).
+    key('ArrowRight')
+    expect(row('obs/cluster')).toHaveFocus()
+    key('ArrowRight')
+    expect(row('obs/cluster')).toHaveAttribute('aria-expanded', 'true')
+    key('ArrowRight')
+    expect(row('obs/cluster/codes')).toHaveFocus()
+    key('ArrowLeft')
+    expect(row('obs/cluster')).toHaveFocus()
+    key('ArrowLeft')
+    expect(row('obs/cluster')).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByTitle('Show details of obs/cluster/codes')).toBeNull()
+    key('End')
+    expect(row('var/gene')).toHaveFocus()
+    key('ArrowUp')
+    expect(row('var')).toHaveFocus()
+    key('Home')
+    expect(row('/')).toHaveFocus()
+
+    // Enter shows a row's details; moving does not.
+    key('ArrowDown')
+    expect(screen.queryByRole('region', { name: 'obs' })).toBeNull()
+    key('Enter')
+    expect(screen.getByRole('region', { name: 'obs' })).toBeInTheDocument()
+    expect(row('obs')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps the root open on Collapse All while filtering', () => {
+    renderStoreView(flatStore([...SMALL_STORE]))
+    fireEvent.change(screen.getByPlaceholderText('Filter by name or path'), {
+      target: { value: 'codes' },
+    })
+    expect(row('obs/cluster/codes')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse All' }))
+
+    expect(row('/')).toHaveAttribute('aria-expanded', 'true')
+    expect(row('obs')).toHaveAttribute('aria-expanded', 'false')
+  })
+
+  it('moves focus to the first row Show More adds', () => {
+    renderStoreView(
+      flatStore([
+        { path: '', kind: 'group' },
+        ...Array.from({ length: 450 }, (_, index) => ({
+          path: `item${String(index).padStart(3, '0')}`,
+          kind: 'group' as const,
+        })),
+      ]),
+    )
+    const more = screen.getByTitle('Show more of the 450 items in the root')
+    expect(more).toHaveTextContent('Show More (250 hidden)')
+    more.focus()
+
+    fireEvent.keyDown(more, { key: 'Enter' })
+
+    expect(screen.queryByTitle('Show more of the 450 items in the root')).toBeNull()
+    expect(row('item200')).toHaveFocus()
+    expect(row('item200')).toHaveAttribute('tabindex', '0')
+  })
+})
+
 describe('StoreStructureDrawer', () => {
   it('reads the store and shows its tree, summary and node details', async () => {
     render(<Harness />)
@@ -102,7 +222,7 @@ describe('StoreStructureDrawer', () => {
     expect(within(drawer()).getByText('13 groups · 14 arrays')).toBeInTheDocument()
 
     // A small store opens the root's child groups.
-    fireEvent.click(screen.getByRole('button', { name: 'Expand cluster' }))
+    fireEvent.click(screen.getByTitle('Expand cluster'))
     fireEvent.click(screen.getByTitle('Show details of obs/cluster/codes'))
 
     const details = screen.getByRole('region', { name: 'codes' })
@@ -113,7 +233,7 @@ describe('StoreStructureDrawer', () => {
       within(details).getByText(`${STORE_URL}/obs/cluster/codes`),
     ).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse obs' }))
+    fireEvent.click(screen.getByTitle('Collapse obs'))
     expect(screen.queryByTitle('Show details of obs/cluster')).not.toBeInTheDocument()
   })
 
@@ -132,7 +252,7 @@ describe('StoreStructureDrawer', () => {
     expect(screen.queryByTitle('Show details of obs')).not.toBeInTheDocument()
 
     // A group the filter opened closes on request.
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse obsm' }))
+    fireEvent.click(screen.getByTitle('Collapse obsm'))
     expect(screen.queryByTitle('Show details of obsm/X_umap')).not.toBeInTheDocument()
 
     // A matching group keeps its contents, closed.
@@ -142,7 +262,7 @@ describe('StoreStructureDrawer', () => {
     expect(
       screen.queryByTitle('Show details of obs/cluster/codes'),
     ).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Expand cluster' }))
+    fireEvent.click(screen.getByTitle('Expand cluster'))
     expect(screen.getByTitle('Show details of obs/cluster/codes')).toBeInTheDocument()
   })
 
@@ -267,11 +387,16 @@ describe('StoreStructureDrawer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Browse' }))
     await within(drawer()).findByText('Contents')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand cells' }))
+    fireEvent.click(screen.getByTitle('Expand cells'))
     fireEvent.click(screen.getByTitle('Show details of shapes/cells/shapes.parquet'))
-    fireEvent.click(screen.getByRole('button', { name: 'Browse File' }))
+    const browseFile = screen.getByRole('button', { name: 'Browse File' })
+    browseFile.focus()
+    fireEvent.click(browseFile)
 
     const dialog = screen.getByRole('dialog', { name: 'Parquet file' })
+    // Focus goes with the view, not left on a button the drawer hid.
+    expect(document.activeElement?.closest('[hidden]')).toBeNull()
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
     expect(
       await within(dialog).findByText('GeoParquet 1.1.0, pandas, Arrow schema'),
     ).toBeInTheDocument()
@@ -282,11 +407,15 @@ describe('StoreStructureDrawer', () => {
     expect(within(dialog).getByText('WKB geometry')).toBeInTheDocument()
     expect(within(dialog).getByText('pandas index')).toBeInTheDocument()
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Back to Store' }))
+    const back = within(dialog).getByRole('button', { name: 'Back to Store' })
+    back.focus()
+    fireEvent.click(back)
     expect(drawer()).toBeVisible()
+    // Back where it was in the store.
+    expect(screen.getByRole('button', { name: 'Browse File' })).toHaveFocus()
     expect(
       screen.getByTitle('Show details of shapes/cells/shapes.parquet'),
-    ).toHaveAttribute('aria-current', 'true')
+    ).toHaveAttribute('aria-selected', 'true')
     expect(read).toHaveBeenCalledTimes(1)
   })
 
@@ -323,7 +452,7 @@ describe('StoreStructureDrawer', () => {
     // The tree keeps its selection, and the rows are not read again.
     fireEvent.click(within(dialog).getByRole('button', { name: 'Columns' }))
     expect(screen.getByTitle('Show details of geometry')).toHaveAttribute(
-      'aria-current',
+      'aria-selected',
       'true',
     )
     fireEvent.click(within(dialog).getByRole('button', { name: 'Rows' }))

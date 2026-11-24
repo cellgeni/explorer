@@ -83,6 +83,8 @@ describe('parquet structure model', () => {
       ],
       [{ name: 'a', num_children: 1, logical_type: { type: 'LIST' } }, 'list', 'LIST'],
       [{ name: 'a', num_children: 2 }, 'struct', null],
+      // Read, and shown in Rows, as a timestamp.
+      [{ name: 'a', type: 'INT96' }, 'timestamp[ns]', null],
     ]
 
     for (const [element, type, annotation] of cases) {
@@ -133,6 +135,11 @@ describe('parquet structure model', () => {
 
   it('formats statistics and sizes', () => {
     expect(formatStatValue(10.5)).toBe('10.5')
+    // A small p-value is not 0.
+    expect(formatStatValue(2.5e-7)).toBe('2.5e-7')
+    expect(formatStatValue(-0.000_012_345_678)).toBe('-0.0000123457')
+    expect(formatStatValue(0.0123)).toBe('0.0123')
+    expect(formatStatValue(0)).toBe('0')
     expect(formatStatValue(12_345_678_901n)).toBe('12,345,678,901')
     expect(formatStatValue('a'.repeat(100))).toBe(`"${'a'.repeat(80)}…"`)
     expect(formatStatValue(new Date(Date.UTC(2024, 0, 2)))).toBe(

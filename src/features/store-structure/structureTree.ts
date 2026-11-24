@@ -22,7 +22,9 @@ export interface StructureFilter {
 }
 
 // Nodes whose name contains the query, ignoring case, or whose path does
-// when the query has a '/'. Null for an empty query.
+// when the query has a '/'. A path matches as the details show it, with a
+// leading '/' (`/obs/cluster`), and a dotted query also matches as a path, as
+// the Parquet details show a nested field (`a.b`). Null for an empty query.
 export function filterStructure<N extends StructureTreeNode<N>>(
   root: N,
   query: string,
@@ -41,10 +43,25 @@ export function filterStructure<N extends StructureTreeNode<N>>(
     visible.add(node.path)
     node.children.forEach(showAll)
   }
-  const byPath = needle.includes('/')
+  const pathNeedles = [
+    ...(needle.includes('/') ? [needle] : []),
+    ...(needle.includes('.') && needle.replaceAll('.', '/') !== needle
+      ? [needle.replaceAll('.', '/')]
+      : []),
+  ]
+  const matchesNode = (node: N) => {
+    if (node.path === '') return false
+    if (pathNeedles.length === 0) return node.name.toLowerCase().includes(needle)
+
+    const path = `/${node.path.toLowerCase()}`
+    return (
+      // A dotted query still matches a name with dots.
+      (!needle.includes('/') && node.name.toLowerCase().includes(needle)) ||
+      pathNeedles.some((pathNeedle) => path.includes(pathNeedle))
+    )
+  }
   const visit = (node: N): boolean => {
-    const matches =
-      node.path !== '' && (byPath ? node.path : node.name).toLowerCase().includes(needle)
+    const matches = matchesNode(node)
     let anyChild = false
 
     for (const child of node.children) {

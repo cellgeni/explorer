@@ -58,7 +58,8 @@ const PHYSICAL_TYPES: Readonly<Record<string, string>> = {
   BOOLEAN: 'boolean',
   INT32: 'int32',
   INT64: 'int64',
-  INT96: 'int96',
+  // A legacy timestamp, which readers (Arrow, and the Rows view) show as one.
+  INT96: 'timestamp[ns]',
   FLOAT: 'float',
   DOUBLE: 'double',
   BYTE_ARRAY: 'binary',
@@ -352,7 +353,11 @@ export function formatStatValue(value: ParquetStatValue): string {
 }
 
 function formatNumber(value: number): string {
-  return value.toLocaleString(undefined, { maximumFractionDigits: 6 })
+  // Six significant digits below 0.001, as "4e-7", so a small p-value or
+  // fraction is not written as 0.
+  return value !== 0 && Math.abs(value) < 0.001
+    ? String(Number(value.toPrecision(6)))
+    : value.toLocaleString(undefined, { maximumFractionDigits: 6 })
 }
 
 // Compressed and uncompressed sizes, with the ratio when it is worth saying.
@@ -412,12 +417,21 @@ export function isWkbColumn(structure: ParquetStructure, name: string): boolean 
 }
 
 const PREVIEW_TEXT_LIMIT = 60
+// A cell's tooltip shows its value whole, up to this.
+export const PREVIEW_TITLE_LIMIT = 2_000
 
-// A previewed value as shown in its cell, or null for a null.
+// A previewed value as shown in its cell, or null for a null; `limit` is
+// where text is cut.
 export function formatPreviewValue(
   value: unknown,
-  { wkb = false }: { readonly wkb?: boolean } = {},
+  {
+    wkb = false,
+    limit = PREVIEW_TEXT_LIMIT,
+  }: { readonly wkb?: boolean; readonly limit?: number } = {},
 ): string | null {
+  const truncate = (text: string) =>
+    text.length > limit ? `${text.slice(0, limit)}…` : text
+
   if (value === null || value === undefined) return null
   if (value instanceof Uint8Array) return wkb ? wkbSummary(value) : bytesSummary(value)
   if (value instanceof Date) {
@@ -442,10 +456,6 @@ export function formatPreviewValue(
         ),
       )
   }
-}
-
-function truncate(text: string): string {
-  return text.length > PREVIEW_TEXT_LIMIT ? `${text.slice(0, PREVIEW_TEXT_LIMIT)}…` : text
 }
 
 function bytesSummary(bytes: Uint8Array): string {

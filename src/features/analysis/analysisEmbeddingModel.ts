@@ -77,11 +77,38 @@ export function analysisEmbeddingLoadCancelled<ErrorType>(
     : analysisEmbeddingOptionsReady(state.url, state.options)
 }
 
+// Back to the list of embeddings to load, or idle when the dataset listed
+// none, from any state: a Visium HD bin-size switch drops the last tier's
+// projection, which names that tier's bins.
+export function analysisEmbeddingCleared<ErrorType>(
+  state: AnalysisEmbeddingState<ErrorType>,
+): AnalysisEmbeddingState<ErrorType> {
+  if (state.status === 'idle' || state.status === 'available') {
+    return state
+  }
+
+  const options = state.status === 'error' ? undefined : state.options
+  return options === undefined || options.length === 0
+    ? IDLE_ANALYSIS_EMBEDDING_STATE
+    : analysisEmbeddingOptionsReady(state.url, options)
+}
+
 export function analysisEmbeddingLoadFailed<ErrorType>(
   url: string,
   error: ErrorType,
 ): AnalysisEmbeddingState<ErrorType> {
   return { status: 'error', url, error }
+}
+
+const pointIdsByEmbedding = new WeakMap<AnalysisEmbedding, ReadonlySet<string>>()
+
+function embeddingPointIds(embedding: AnalysisEmbedding): ReadonlySet<string> {
+  let ids = pointIdsByEmbedding.get(embedding)
+  if (ids === undefined) {
+    ids = new Set(embedding.points.map((point) => point.id))
+    pointIdsByEmbedding.set(embedding, ids)
+  }
+  return ids
 }
 
 export function analysisEmbeddingStatusCopy<ErrorType>(
@@ -105,7 +132,18 @@ export function analysisEmbeddingStatusCopy<ErrorType>(
       return 'No projection'
     }
 
-    const linkedCount = roiElementIds.length + (selectedElementId === null ? 0 : 1)
+    // The plotted points the ROI and selection light, each once: an ROI can
+    // hold cells the projection leaves out, and the selected cell can be in
+    // the ROI.
+    const plotted = embeddingPointIds(activeEmbedding)
+    const linked = new Set<string>()
+    for (const elementId of roiElementIds) {
+      if (plotted.has(elementId)) linked.add(elementId)
+    }
+    if (selectedElementId !== null && plotted.has(selectedElementId)) {
+      linked.add(selectedElementId)
+    }
+    const linkedCount = linked.size
 
     return linkedCount === 0
       ? `${activeEmbedding.label}: ${activeEmbedding.points.length.toLocaleString()} ${elementLabel}`

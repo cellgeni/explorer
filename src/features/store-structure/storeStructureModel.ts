@@ -3,6 +3,7 @@ import { isIcechunkUrl } from '../../zarr/icechunkUrl'
 import { isOmeZarrImageUrl } from '../../zarr/omeZarrUrl'
 import type { ZarrStructure, ZarrStructureNode } from '../../zarr/zarrStructure'
 import { isZarrZipUrl } from '../../zarr/zarrZipUrl'
+import { folderFileUrl } from '../../utils/folderUrl'
 
 // Addresses whose structure Browse Store can show: a `.zarr` store or a group
 // inside one, a Zarr metadata file, a zipped store, or an Icechunk
@@ -36,7 +37,12 @@ export function formatBytes(bytes: number): string {
   let value = bytes
   let unit = 0
 
-  while (value >= 1000 && unit < BYTE_UNITS.length - 1) {
+  // Rounded to three digits before the unit is picked, so 999,999 bytes
+  // reads "1 MB", not "1,000 KB".
+  while (
+    unit < BYTE_UNITS.length - 1 &&
+    (unit === 0 ? value : Number(value.toPrecision(3))) >= 1000
+  ) {
     value /= 1000
     unit += 1
   }
@@ -239,7 +245,8 @@ export function parquetFileOf(
     return null
   }
 
-  return { url: `${url}/shapes.parquet` }
+  // Into the path, before a query that grants the store (a signed address).
+  return { url: folderFileUrl(url, 'shapes.parquet') }
 }
 
 // Groups opened at first: the root, and its child groups when the store is

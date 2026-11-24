@@ -3,6 +3,7 @@ import type { AnalysisEmbedding } from '../../data/analysisEmbeddings'
 import { asCellId } from '../../data/cellid'
 import {
   IDLE_ANALYSIS_EMBEDDING_STATE,
+  analysisEmbeddingCleared,
   analysisEmbeddingLoadCancelled,
   analysisEmbeddingLoadFailed,
   analysisEmbeddingLoadReady,
@@ -138,6 +139,19 @@ describe('analysisEmbeddingStatusCopy', () => {
     expect(analysisEmbeddingStatusCopy(state, embedding, [], null, 'bins')).toBe(
       'UMAP: 2 bins',
     )
+    // An ROI cell the projection leaves out lights nothing, and the selected
+    // cell in the ROI lights one point (EXP-289).
+    expect(
+      analysisEmbeddingStatusCopy(
+        state,
+        embedding,
+        ['aaaaaaaa-1', 'not-plotted-1', 'not-plotted-2'],
+        'aaaaaaaa-1',
+      ),
+    ).toBe('UMAP: 1 linked')
+    expect(
+      analysisEmbeddingStatusCopy(state, embedding, ['not-plotted-1'], 'not-plotted-2'),
+    ).toBe('UMAP: 2 cells')
     expect(analysisEmbeddingOptionsForState(state)).toEqual([
       {
         kind: 'umap',
@@ -145,5 +159,28 @@ describe('analysisEmbeddingStatusCopy', () => {
         sourcePath: 'analysis/umap/projection.csv',
       },
     ])
+  })
+})
+
+describe('analysisEmbeddingCleared', () => {
+  // A Visium HD bin-size switch drops the last tier's projection (EXP-253).
+  it('goes back to the listed options, or idle when the dataset listed none', () => {
+    const url = 'https://example.test/output'
+    const options = [{ kind: 'umap' as const, label: 'UMAP', sourcePath: 'obsm/X_umap' }]
+
+    expect(analysisEmbeddingCleared(analysisEmbeddingLoadReady(url, [embedding]))).toBe(
+      IDLE_ANALYSIS_EMBEDDING_STATE,
+    )
+    expect(
+      analysisEmbeddingCleared(analysisEmbeddingLoadReady(url, [embedding], options)),
+    ).toEqual(analysisEmbeddingOptionsReady(url, options))
+    expect(analysisEmbeddingCleared(analysisEmbeddingLoadStarted(url))).toBe(
+      IDLE_ANALYSIS_EMBEDDING_STATE,
+    )
+    expect(
+      analysisEmbeddingCleared(analysisEmbeddingLoadFailed(url, new Error('failed'))),
+    ).toBe(IDLE_ANALYSIS_EMBEDDING_STATE)
+    const available = analysisEmbeddingOptionsReady(url, options)
+    expect(analysisEmbeddingCleared(available)).toBe(available)
   })
 })

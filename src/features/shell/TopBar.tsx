@@ -543,7 +543,7 @@ function ShareButton({
   readonly info: DatasetInfoModel
   readonly iconOnly: boolean
 }) {
-  const { copy, message } = useCopyLinkStatus(info.share)
+  const { copy, copies, message } = useCopyLinkStatus(info.share)
   const title = 'Copy a link that opens this dataset with the current view'
 
   return (
@@ -568,7 +568,7 @@ function ShareButton({
         </Button>
       )}
       <span role="status" className="shell-share-status">
-        {message}
+        {message === '' ? null : <span key={copies}>{message}</span>}
       </span>
     </span>
   )

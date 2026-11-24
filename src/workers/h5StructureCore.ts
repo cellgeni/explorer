@@ -67,9 +67,25 @@ export function walkH5Structure(
     options.onProgress(count())
   }
 
-  const visitGroup = (
+  // A group's node, its children filled in as the walk reaches it. The walk
+  // goes level by level, so a deep branch (or a loop of hard links, which
+  // has no end) cannot spend the object budget before the root's other
+  // children are listed.
+  interface PendingGroup {
+    readonly group: H5wasmGroup
+    readonly path: string
+    // Where the group is in the file: a soft link's target, not its path.
+    readonly filePath: string
+    readonly depth: number
+    readonly node: { -readonly [Key in keyof H5StructureNode]: H5StructureNode[Key] }
+    readonly children: H5StructureNode[]
+  }
+  const pending: PendingGroup[] = []
+
+  const groupNode = (
     group: H5wasmGroup,
     path: string,
+    filePath: string,
     name: string,
     depth: number,
   ): H5StructureNode => {
@@ -77,51 +93,87 @@ export function walkH5Structure(
     const attrs = readAttributes(group)
     check()
     const children: H5StructureNode[] = []
-    let unlisted = false
+    const node = { path, name, kind: 'group' as const, ...attrs, children }
+    pending.push({ group, path, filePath, depth, node, children })
+    return node
+  }
+
+  const markUnlisted = (entry: PendingGroup) => {
+    entry.node.unlisted = true
+    truncated = true
+  }
+
+  const listChildren = (entry: PendingGroup) => {
+    const { group, path, filePath, depth } = entry
+    let names: readonly string[]
+
+    try {
+      names = group.keys()
+    } catch {
+      // HDF5 resolves at most 16 soft links in one path; past that, or in a
+      // damaged file, a group cannot be listed.
+      markUnlisted(entry)
+      return
+    }
+    check()
 
     if (depth >= MAX_H5_STRUCTURE_DEPTH) {
-      unlisted = group.keys().length > 0
-      truncated ||= unlisted
-    } else {
-      const names = group.keys()
-      check()
-
-      for (const childName of names) {
-        if (count() >= maxNodes) {
-          unlisted = true
-          truncated = true
-          break
-        }
-
-        const childPath = path === '' ? childName : `${path}/${childName}`
-        const child = visitEntity(group.get(childName), childPath, childName, depth + 1)
-        check()
-
-        if (child !== null) children.push(child)
-        report()
-      }
+      if (names.length > 0) markUnlisted(entry)
+      return
     }
 
-    return {
-      path,
-      name,
-      kind: 'group',
-      ...attrs,
-      ...(unlisted ? { unlisted: true } : {}),
-      children,
+    for (const childName of names) {
+      if (count() >= maxNodes) {
+        markUnlisted(entry)
+        break
+      }
+
+      const childPath = path === '' ? childName : `${path}/${childName}`
+      const ownPath = filePath === '' ? childName : `${filePath}/${childName}`
+      const target = safely(() => group.get_link(`/${ownPath}`))
+      const childFilePath =
+        typeof target === 'string' ? softLinkTargetPath(filePath, target) : ownPath
+
+      // A soft link to this group or one above it would be walked again and
+      // again, until HDF5 refuses the path.
+      if (typeof target === 'string' && encloses(childFilePath, filePath)) {
+        otherCount += 1
+        entry.children.push({
+          path: childPath,
+          name: childName,
+          kind: 'soft-link',
+          attributes: {},
+          skippedAttributes: [],
+          link: { target, enclosing: true },
+          children: [],
+        })
+        continue
+      }
+
+      const child = visitEntity(
+        safely(() => group.get(childName)),
+        childPath,
+        childFilePath,
+        childName,
+        depth + 1,
+      )
+      check()
+
+      if (child !== null) entry.children.push(child)
+      report()
     }
   }
 
   const visitEntity = (
     entity: unknown,
     path: string,
+    filePath: string,
     name: string,
     depth: number,
   ): H5StructureNode | null => {
     if (entity instanceof h5wasm.Group) {
-      return visitGroup(entity, path, name, depth)
+      return groupNode(entity, path, filePath, name, depth)
     }
-
     if (entity instanceof h5wasm.Dataset) {
       datasetCount += 1
       const dataset = datasetInfo(entity)
@@ -177,9 +229,29 @@ export function walkH5Structure(
     return null
   }
 
-  const root = visitGroup(file, '', rootName, 0)
+  const root = groupNode(file, '', '', rootName, 0)
+
+  for (let index = 0; index < pending.length; index += 1) {
+    listChildren(pending[index]!)
+  }
+
   options.onProgress?.(count())
   return { root, groupCount, datasetCount, otherCount, truncated }
+}
+
+// Where a soft link points, as a path from the root without the leading
+// slash: an absolute target, or one relative to the link's group.
+function softLinkTargetPath(groupPath: string, target: string): string {
+  const joined = target.startsWith('/') ? target : `${groupPath}/${target}`
+  return joined
+    .split('/')
+    .filter((part) => part !== '' && part !== '.')
+    .join('/')
+}
+
+// Whether `outer` is `inner` or a group above it; '' is the root.
+function encloses(outer: string, inner: string): boolean {
+  return outer === '' || outer === inner || inner.startsWith(`${outer}/`)
 }
 
 function readAttributes(entity: { readonly attrs: unknown }): {
@@ -446,8 +518,9 @@ function nestedByShape(values: readonly unknown[], shape: readonly number[]): un
 }
 
 // The block's strings, read by hyperslab as h5wasm's slice does, without its
-// reclaim of the whole dataspace. HDF5 allocated each string; they are left
-// for the worker's end, a few kilobytes per preview.
+// reclaim of the whole dataspace. HDF5 allocated each string with malloc, so
+// each is freed once decoded; left, a block of long strings stayed in the
+// worker's heap on every read (100 strings of 1 MiB: about 115 MB a read).
 function readVariableStrings(
   module: H5Module,
   dataset: H5wasmDataset,
@@ -482,17 +555,23 @@ function readVariableStrings(
       elements * pointerBytes,
     )
     const read = metadata.cset === 1 ? module.UTF8ToString : module.AsciiToString
-    const strings: string[] = []
+    const stringPointers: number[] = []
 
     for (let index = 0; index < elements; index += 1) {
-      const pointer =
+      stringPointers.push(
         pointerBytes === 8
           ? Number(view.getBigUint64(index * 8, true))
-          : view.getUint32(index * 4, true)
-      strings.push(pointer === 0 ? '' : read(pointer))
+          : view.getUint32(index * 4, true),
+      )
     }
 
-    return strings
+    try {
+      return stringPointers.map((pointer) => (pointer === 0 ? '' : read(pointer)))
+    } finally {
+      for (const pointer of stringPointers) {
+        if (pointer !== 0) module._free(pointer)
+      }
+    }
   } finally {
     module._free(pointers)
   }

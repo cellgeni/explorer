@@ -3,7 +3,9 @@ import { micrometers } from '../../data/coords'
 import type { GeneExpressionBatch } from '../../datasets/spatialDataset'
 import type { CellBoundaryDatum } from '../../rendering/deckLayers'
 import {
+  projectedBoundaryCellCount,
   projectVisiumHdExpressionToBoundaryCells,
+  visiumHdBinBarcodeShares,
   visiumHdExpressionBinIds,
   type VisiumHdExpressionCellAssignment,
 } from './visiumHdExpressionProjection'
@@ -51,20 +53,24 @@ describe('Visium HD expression projection', () => {
       boundaries,
     )
 
+    // Each bin's count is shared by its cells' part of its barcodes: the
+    // first bin's 4 barcodes give cell-a 12 × 2/4 = 6 and cell-b 12 × 1/4 = 3
+    // (the barcode outside every cell keeps its part); the second bin's 2
+    // give cell-b 6 × 1/2 = 3, the off-screen cell's part drawn nowhere.
     expect(result.mappedBinCount).toBe(2)
     expect(result.mappedCellCount).toBe(2)
-    expect(result.batch.maxCount).toBe(8)
+    expect(result.batch.maxCount).toBe(6)
     expect(result.batch.elements).toEqual([
       {
         id: 'cell-a',
         position: { x: micrometers(5), y: micrometers(5) },
-        count: 8,
+        count: 6,
         cellArea: 100,
       },
       {
         id: 'cell-b',
         position: { x: micrometers(17), y: micrometers(5) },
-        count: 7,
+        count: 6,
         cellArea: 100,
       },
       {
@@ -74,6 +80,48 @@ describe('Visium HD expression projection', () => {
         cellArea: 100,
       },
     ])
+  })
+
+  it("counts each bin's barcodes and its cells' part of them", () => {
+    const shares = visiumHdBinBarcodeShares([
+      assignment('bin-1', 'cell-a'),
+      assignment('bin-1', 'cell-a'),
+      { ...assignment('bin-1', 'cell-b'), inCell: false, inNucleus: true },
+      { ...assignment('bin-1', 'cell-c'), inCell: false, inNucleus: false },
+      { ...assignment('bin-1', 'cell-a'), cellId: null },
+      assignment('bin-2', 'cell-b'),
+    ])
+
+    expect(shares.get('bin-1')).toEqual({
+      barcodeCount: 5,
+      cells: new Map([
+        ['cell-a', 2],
+        ['cell-b', 1],
+      ]),
+    })
+    expect(shares.get('bin-2')).toEqual({
+      barcodeCount: 1,
+      cells: new Map([['cell-b', 1]]),
+    })
+  })
+
+  // A MultiPolygon cell's later parts are `<cell_id>#2`, …; the mappings
+  // name the cell, so the batch gives its count to the first part.
+  it("finds a cell's projected count by its own ID or its cell's", () => {
+    const batch: GeneExpressionBatch = {
+      elements: [
+        { id: 'cell-a', position: { x: micrometers(0), y: micrometers(0) }, count: 4 },
+        { id: 'cell-b', position: { x: micrometers(0), y: micrometers(0) }, count: 0 },
+      ],
+      genes: ['Actb'],
+      population: 'all',
+      maxCount: 4,
+    }
+
+    expect(projectedBoundaryCellCount(batch, 'cell-a')).toBe(4)
+    expect(projectedBoundaryCellCount(batch, 'cell-a#2')).toBe(4)
+    expect(projectedBoundaryCellCount(batch, 'cell-b')).toBe(0)
+    expect(projectedBoundaryCellCount(batch, 'cell-z')).toBeUndefined()
   })
 
   it('deduplicates expression bin ids before requesting barcode mappings', () => {
