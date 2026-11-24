@@ -281,7 +281,8 @@
   color: var(--text-1);
 }
 
-.ui-segmented button[aria-pressed='true'] {
+.ui-segmented button[aria-pressed='true'],
+.ui-segmented button[aria-pressed='true']:hover:not(:disabled) {
   background: var(--accent);
   color: var(--accent-contrast);
 }

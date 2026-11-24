@@ -1038,7 +1038,10 @@
   color: var(--text-1);
 }
 
-.shell-tool[aria-pressed='true'] {
+/* The hover rule is more specific, so the pressed look names hover too:
+   a tool just clicked keeps it under the pointer (EXP-312). */
+.shell-tool[aria-pressed='true'],
+.shell-tool[aria-pressed='true']:hover:not([aria-disabled='true']) {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -1258,6 +1261,12 @@
   background: var(--surface-2);
   color: var(--text-1);
   font-size: var(--font-control);
+}
+
+/* Boundary limit on Visium HD (EXP-313). */
+.shell-setting-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 /* Dataset info drawer (15.2-F gives it sections). */
@@ -1675,11 +1684,12 @@
   text-align: left;
 }
 
-.shell-tool-menu-item:hover {
+.shell-tool-menu-item:hover:not([aria-disabled='true']) {
   background: var(--surface-2);
 }
 
-.shell-tool-menu-item[aria-pressed='true'] {
+.shell-tool-menu-item[aria-pressed='true'],
+.shell-tool-menu-item[aria-pressed='true']:hover:not([aria-disabled='true']) {
   background: var(--accent-soft);
   color: var(--accent);
 }
