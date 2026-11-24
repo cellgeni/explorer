@@ -381,6 +381,36 @@ describe('UI primitives', () => {
     expect(tooltip).not.toBeVisible()
   })
 
+  // WCAG 1.4.13: a tooltip shown by hovering leaves focus elsewhere, and
+  // Escape still hides it (EXP-306).
+  it('hides a tooltip shown by hovering when Escape is pressed elsewhere', () => {
+    vi.useFakeTimers()
+    render(
+      <>
+        <input aria-label="Elsewhere" title="Elsewhere" />
+        <Tooltip title="Box selection">
+          <button type="button">Box</button>
+        </Tooltip>
+      </>,
+    )
+    const elsewhere = screen.getByRole('textbox', { name: 'Elsewhere' })
+    elsewhere.focus()
+    const tooltip = screen.getByRole('tooltip', { hidden: true })
+
+    fireEvent.pointerEnter(screen.getByRole('button', { name: 'Box' }))
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+    expect(tooltip).toBeVisible()
+
+    // Handled, so the press does nothing else.
+    expect(fireEvent.keyDown(elsewhere, { key: 'Escape' })).toBe(false)
+    expect(tooltip).not.toBeVisible()
+    expect(elsewhere).toHaveFocus()
+    // Hidden, the tooltip leaves Escape alone.
+    expect(fireEvent.keyDown(elsewhere, { key: 'Escape' })).toBe(true)
+  })
+
   it('marks the Escape that closes a popover or a shown tooltip as handled', () => {
     render(
       <>

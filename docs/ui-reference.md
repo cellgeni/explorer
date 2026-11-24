@@ -250,7 +250,10 @@ new tab (`src/features/shell/docLinks.ts`).
 
 **Info tips** (`InfoTip`, `src/components/ui/InfoTip.tsx`, 15.3-B): a small ⓘ
 after some labels explains the term on hover, keyboard focus or a tap, and
-describes its button (`About {term}`) for screen readers. The texts are in
+describes its button (`About {term}`) for screen readers. Like every tooltip
+(`Tooltip`), it moves back inside the window where it would run past an edge,
+stays while the pointer moves onto it to read it, and Escape hides it
+wherever focus is (WCAG 1.4.13). The texts are in
 `src/features/shell/helpText.ts`:
 
 | Beside                                   | Explains                                                                 |

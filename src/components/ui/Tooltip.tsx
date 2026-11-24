@@ -2,11 +2,13 @@ import {
   cloneElement,
   useEffect,
   useId,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from 'react'
 import { classNames } from './classNames'
+import { useKeepOnScreen } from './useKeepOnScreen'
 
 const SHOW_DELAY_MS = 400
 
@@ -28,7 +30,9 @@ export interface TooltipProps {
 }
 
 // A styled tooltip, shown after a short hover or at once on keyboard focus,
-// and hidden by Escape.
+// and hidden by Escape wherever focus is. It stays inside the window, and the
+// pointer can move onto it to read it, as WCAG 1.4.13 asks (EXP-306): it is
+// part of the anchor, and a bridge in the stylesheet spans the gap to it.
 export function Tooltip({
   title,
   children,
@@ -38,8 +42,28 @@ export function Tooltip({
   detail,
 }: TooltipProps) {
   const id = useId()
+  const tooltipRef = useRef<HTMLSpanElement>(null)
   const [visible, setVisible] = useState(false)
   const [hovering, setHovering] = useState(false)
+
+  useKeepOnScreen(tooltipRef, visible)
+
+  // Escape hides a shown tooltip, however it was shown: a hover leaves focus
+  // elsewhere. Taken in the capture phase and marked handled, so the press
+  // does nothing else, such as leaving the active tool.
+  useEffect(() => {
+    if (!visible) return
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== 'Escape' || event.defaultPrevented) return
+      event.preventDefault()
+      setHovering(false)
+      setVisible(false)
+    }
+    document.addEventListener('keydown', handleKeyDown, true)
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown, true)
+    }
+  }, [visible])
 
   useEffect(() => {
     if (!hovering) return
@@ -67,15 +91,10 @@ export function Tooltip({
         setVisible(true)
       }}
       onBlur={hide}
-      onKeyDown={(event) => {
-        if (event.key !== 'Escape' || !visible) return
-        // Hiding a shown tooltip is all this press does.
-        event.preventDefault()
-        hide()
-      }}
     >
       {cloneElement(children, { 'aria-describedby': id })}
       <span
+        ref={tooltipRef}
         role="tooltip"
         id={id}
         className={classNames(
