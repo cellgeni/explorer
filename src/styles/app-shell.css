@@ -10,9 +10,13 @@
   background: var(--canvas);
 }
 
+/* One row, not the shell's top bar row and canvas, so the box is centred on
+   the screen; it scrolls where the screen is too short for it (EXP-303). */
 .app-error-shell {
   display: grid;
-  place-items: center;
+  grid-template-rows: minmax(0, 1fr);
+  place-items: safe center;
+  overflow-y: auto;
   padding: 24px;
   background: var(--surface-0);
 }

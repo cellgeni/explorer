@@ -1716,7 +1716,8 @@ With debug info on, the deck.gl layer count and the
 
 ## Narrow Screens
 
-Under 860 px wide (`useNarrowScreen`) the shell folds up:
+Under 860 px wide (`useNarrowScreen`, `max-width: 859.98px`, the query every
+stylesheet's narrow rules use too) the shell folds up:
 
 - The tools fold into a menu: its button shows the active tool ("Tools:
   Pan"), and it lists each tool with its key and, when off, why. Picking one
@@ -1739,6 +1740,8 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   or a wider screen left several open, the one in front shows (else the first
   in the top bar's order), its button alone pressed; the others show again
   once the screen is 860 px or wider.
+- A full-width panel's grip changes only its height (up and down arrow
+  keys), so the width it has on a wider screen stays.
 
 On any screen, a popover from the top bar (the menus, Help, Settings and the
 tools' options) opens under its button but stays 8 px inside the window
