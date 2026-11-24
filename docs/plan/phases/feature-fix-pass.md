@@ -52,3 +52,40 @@ Fixes recorded:
       record it, and selecting the size again retries it. A tissue image that
       fails during the switch is reported as a morphology error, not as a
       failed tier. Only a dataset's first load fails it.
+
+## Code Review (2026-11-19 To 2026-11-24)
+
+A code and documentation review in ten passes read every source file in
+full. Each finding was shown by a failing test or browser check, and the
+repair tasks were done almost all one PR each, with regression tests. Findings are
+numbered EXP-001 to EXP-332 and tasks T01 to T207; each fix PR's description
+gives its finding, the change and its tests. The first pass's report is on
+branch `claude/review-document-4602a9`
+([#199](https://github.com/cellgeni/explorer/pull/199), closed without
+merging and kept as the record). The later passes' reports were not
+committed.
+
+| Pass | Date       | Scope                                                    | Findings    | P1  | P2  | P3  | Tasks     | Fix PRs      |
+| ---- | ---------- | -------------------------------------------------------- | ----------- | --- | --- | --- | --------- | ------------ |
+| 1    | 2026-11-19 | The whole repository, and 141 docs claims traced to code | EXP-001–042 | 4   | 9   | 29  | T01–T45   | #203 to #252 |
+| 2    | 2026-11-21 | Images and rendering                                     | EXP-043–061 | 0   | 2   | 17  | T46–T57   | #255 to #267 |
+| 3    | 2026-11-21 | HTTP, HDF5, archives, workers and Zarr                   | EXP-062–094 | 0   | 3   | 30  | T58–T76   | #269 to #287 |
+| 4    | 2026-11-21 | Platform readers                                         | EXP-095–112 | 1   | 5   | 12  | T77–T90   | #289 to #302 |
+| 5    | 2026-11-22 | Dataset loading and state                                | EXP-113–141 | 1   | 7   | 21  | T91–T105  | #304 to #318 |
+| 6    | 2026-11-22 | Plots, Cell Query and shared scientific code             | EXP-142–172 | 0   | 5   | 26  | T106–T125 | #320 to #339 |
+| 7    | 2026-11-22 | User state and exports, data contracts and detection     | EXP-173–220 | 0   | 7   | 41  | T126–T147 | #340 to #361 |
+| 8    | 2026-11-23 | Other dataset code, collections and 3D                   | EXP-221–249 | 1   | 4   | 24  | T148–T165 | #363 to #380 |
+| 9    | 2026-11-23 | UI shell logic and components, and the HDF5 file browser | EXP-250–294 | 0   | 10  | 35  | T166–T186 | #382 to #402 |
+| 10   | 2026-11-24 | Stylesheets, an accessibility sweep, and sampled files   | EXP-295–332 | 0   | 4   | 34  | T187–T207 | #404 to #424 |
+
+In all, 332 findings (no P0, 7 P1, 56 P2, 269 P3) and 207 tasks, all merged
+by 2026-11-24 (`24f0fd2`). The PR ranges hold a few PRs that are not review
+fixes.
+
+Not covered: no pass read hosted data or ran a `@live` test, so Xenium,
+Atera and Visium HD, which have no offline fixture, were checked in code
+and unit tests but not in a browser, nor were the Magic Lens, the
+transcript and bin cards or the Transcripts section; no screen reader was
+used; and only Chromium was run. Each pass also listed
+leads, suspicions with no trigger shown; only the single-key shortcut lead
+became an [open item](../open-items.md).

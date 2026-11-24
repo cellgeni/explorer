@@ -43,5 +43,9 @@ Known gaps:
 - [ ] The 3D view: OME-TIFF z-stacks and custom layers, cells and transcripts
       in 3D, the GPU's real 3D texture limit, and keeping the view in the
       share link.
+- [ ] Custom image layers (OME-TIFF and OME-Zarr) have no `Z plane`
+      control.
 - [ ] No IndexedDB caching of OME-Zarr chunks.
-- [ ] No smoke test; the nightly examples test loads one OME-Zarr image.
+- [ ] One smoke test opens an OME-Zarr z-stack, to check that the 3D volume
+      view gives back its WebGL context (#203); the nightly examples test
+      loads one OME-Zarr image.

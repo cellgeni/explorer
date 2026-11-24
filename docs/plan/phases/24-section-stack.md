@@ -81,7 +81,9 @@ hovering names the section and the Aqp4 score.
 - [ ] The 3D camera is not kept in the link.
 - [ ] Every cell is drawn 10 µm across, so Visium spots are smaller than in
       the main view, as in the side-by-side panels.
-- [ ] Unit and App tests only; no E2E test.
+- [ ] No E2E test of what the stack draws. Smoke tests open it only to check
+      that its WebGL context is given back (#203) and that axe finds nothing
+      (#235).
 
 ## Follow-Up (2026-11-20): Cells Placed In 3D In One Dataset
 
@@ -146,11 +148,14 @@ Known gaps:
 - [ ] A depth only from obsm `spatial`: not an obs column such as `z_um`, nor
       `uns` per-section depths, nor other platforms' z (Xenium cells have
       none; transcripts do).
-- [ ] The cells of one file cannot be opened a section at a time, nor shown
-      side by side: the file is not split into a collection.
+- [x] The cells of one file cannot be opened a section at a time, nor shown
+      side by side: the file is not split into a collection. Closed by the
+      next follow-up (#202, 2026-11-20).
 - [ ] Other `Cell color` modes (transcript count, cell area, metadata) draw
       every cell grey, as in the stack.
-- [ ] Unit and App tests only; no E2E test.
+- [ ] No E2E test of what the 3D cell view draws. Smoke tests open it only
+      to check that its WebGL context is given back (#203) and that axe finds
+      nothing (#235).
 
 ## Follow-Up (2026-11-20): Sections Of One Table
 
@@ -218,4 +223,6 @@ Known gaps:
 - [ ] Each section copies its rows' coordinates and obs columns, about one
       table's worth across all its sections; `embeddings()` reads the
       table's whole obsm matrix for each section.
-- [ ] Unit tests only; no App or E2E test of a split collection.
+- [ ] No App test of a split collection, and no E2E test of what it shows:
+      a smoke test opens one (`collection=` naming an `.h5ad`) only to check
+      the WebGL contexts of its panels and 3D views (#203).
