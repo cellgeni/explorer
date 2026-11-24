@@ -65,7 +65,8 @@
   min-height: 24px;
 }
 
-.collection-bar-action[aria-pressed='true'] {
+.collection-bar-action[aria-pressed='true'],
+.collection-bar-action[aria-pressed='true']:hover:not(:disabled) {
   color: var(--accent);
 }
 
@@ -185,7 +186,8 @@
   margin-left: 2px;
 }
 
-.collection-bar-beside[aria-pressed='true'] {
+.collection-bar-beside[aria-pressed='true'],
+.collection-bar-beside[aria-pressed='true']:hover:not(:disabled) {
   color: var(--accent);
 }
 

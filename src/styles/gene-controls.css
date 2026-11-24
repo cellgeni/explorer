@@ -93,7 +93,7 @@
   letter-spacing: 0;
 }
 
-.gene-set-actions button:hover,
+.gene-set-actions button:hover:not(:disabled),
 .gene-set-apply:hover,
 .gene-set-add:not(:disabled):hover,
 .gene-set-remove:hover {

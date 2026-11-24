@@ -158,6 +158,15 @@ h2 {
   line-height: 1.25;
 }
 
+/* A disabled field looks it, as Select and NumberField do (EXP-313). */
+.dataset-form input:disabled,
+.analysis-section input:disabled,
+.analysis-section select:disabled,
+.analysis-section textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .analysis-section textarea.gene-set-symbols {
   height: 24px;
   min-height: 24px;
@@ -292,7 +301,8 @@ h2 {
   font-weight: 750;
 }
 
-.visium-bin-segmented button[aria-pressed='true'] {
+.visium-bin-segmented button[aria-pressed='true'],
+.visium-bin-segmented button[aria-pressed='true']:not(:disabled):hover {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -366,7 +376,7 @@ h2 {
     transform 160ms ease;
 }
 
-.dataset-form button:hover {
+.dataset-form button:hover:not(:disabled) {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -401,8 +411,8 @@ h2 {
   letter-spacing: 0;
 }
 
-.secondary-action:hover,
-.secondary-file-action:hover {
+.secondary-action:hover:not(:disabled),
+.secondary-file-action:hover:not(:has(+ input:disabled)) {
   background: var(--accent);
   color: var(--accent-contrast);
 }
@@ -414,7 +424,8 @@ a.secondary-action {
   text-decoration: none;
 }
 
-.secondary-action:disabled {
+.secondary-action:disabled,
+.secondary-file-action:has(+ input:disabled) {
   cursor: not-allowed;
   opacity: 0.58;
 }

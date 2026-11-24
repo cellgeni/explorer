@@ -369,7 +369,7 @@
   font-weight: 700;
 }
 
-.activity-log button:hover {
+.activity-log button:hover:not(:disabled) {
   background: var(--accent);
   color: var(--accent-contrast);
 }

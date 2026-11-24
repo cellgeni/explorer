@@ -44,6 +44,10 @@ The panel's sections and the cards are made of blocks from
 `src/features/sections/` and `src/features/cards/`, each taking a model built
 in `App.tsx` (see [architecture.md](architecture.md#section-models)).
 
+A pressed control (a tool, a Segmented option, a toggle) keeps its pressed
+look under the pointer. A disabled field, button or Import File is dimmed and
+does not change under the pointer.
+
 `src/main.tsx` wraps `App` in `AppErrorBoundary`
 (`src/components/AppErrorBoundary.tsx`), which shows "Application error" with a
 `Retry` button if rendering throws.
