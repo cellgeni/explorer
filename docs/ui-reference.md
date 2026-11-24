@@ -284,9 +284,10 @@ the top of the canvas says what to do, such as "Drag to draw a box. Esc
 cancels." (under the main view's name, with sections shown beside it). The tools are one tab stop, on the active tool; the arrow keys,
 `Home` and `End` move between them (the ARIA toolbar pattern). Esc, anywhere
 except a text field, returns to Pan and drops a
-half-drawn shape; finishing a box or lasso also returns to Pan. An Esc that
-closes a popover, the info drawer, the Embedding or Plots panel or a shown
-tooltip does only that, and the tool stays.
+half-drawn shape or measurement; finishing a box or lasso also returns to Pan.
+A tool draws with the primary button only, not a right or middle press. An
+Esc that closes a popover, the info drawer, the Embedding or Plots panel or a
+shown tooltip does only that, and the tool stays.
 
 - **Box selection** and **Lasso selection** draw a selection (see
   [ROI drawing](#roi-drawing)); its results open in the Selection card. On an
@@ -346,7 +347,8 @@ field.
 | Annotations         | All           | "2 shapes"                                           | GeoJSON shapes                                          |
 
 Hidden layers leave the deck.gl layer list (`cellsVisible` in
-`createOverviewLayers`), so they cannot be hovered or picked. The link keeps
+`createOverviewLayers`), so they cannot be hovered or picked; with Cells
+hidden, neither Enter nor a click on a cell's place opens it. The link keeps
 them (`hidden=`) and the open sections (`panel=`). Hidden annotation classes
 are kept as `hiddenClasses=`, and sets hidden with their eye as `hiddenSets=`.
 Alt-click on a class's checkbox shows only that class, as do Shift-click

@@ -34,6 +34,7 @@ type MockDeckHover = (info: {
 type MockDeckClick = (info: {
   readonly layer?: { readonly id: string }
   readonly object?: unknown
+  readonly coordinate?: readonly number[]
   readonly x: number
   readonly y: number
 }) => void
@@ -730,6 +731,40 @@ describe('ViewerCore', () => {
 
     expect(screen.getByText('Loading cell boundaries')).toBeInTheDocument()
     expect(screen.queryByText('Loading cell boundaries…')).not.toBeInTheDocument()
+  })
+
+  it('shows a dismissed error again once it has cleared and the same failure comes back', () => {
+    const text = 'Network request failed: Failed to fetch'
+    const { rerender } = render(
+      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // A retry works, then a later read fails the same way.
+    rerender(<ViewerCore imageStatus="ready" />)
+    rerender(<ViewerCore imageStatus="error" imageErrorMessage={text} />)
+    expect(screen.getByText(text)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // Another dataset: loading, then the same failure.
+    rerender(<ViewerCore status="loading" />)
+    rerender(<ViewerCore status="error" errorMessage={text} />)
+    expect(screen.getByText(text)).toBeInTheDocument()
+  })
+
+  it('keeps a dismissed error hidden while a message above it shows', () => {
+    const text = 'Network request failed: Failed to fetch'
+    const { rerender } = render(
+      <ViewerCore imageStatus="error" imageErrorMessage={text} />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
+    // The cells reload over the image error, which is still there.
+    rerender(<ViewerCore status="loading" imageStatus="error" imageErrorMessage={text} />)
+    expect(screen.getByText('Loading overview cells…')).toBeInTheDocument()
+    rerender(<ViewerCore status="ready" imageStatus="error" imageErrorMessage={text} />)
+
+    expect(screen.queryByText(text)).toBeNull()
   })
 
   it('draws positive gene expression cells even when an overview proxy is already styled', () => {
@@ -1709,6 +1744,50 @@ describe('ViewerCore', () => {
     expect(onCellClick).toHaveBeenCalledTimes(1)
   })
 
+  it('does not open hidden cells by Enter or by a click on their place', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cell = overviewCellDatum()
+    const outline: CellBoundaryDatum = {
+      id: cell.id,
+      polygon: [
+        [-5, -5, 0],
+        [5, -5, 0],
+        [5, 5, 0],
+        [-5, 5, 0],
+      ],
+      fillColor: [32, 102, 83, 34],
+      lineColor: [174, 241, 214, 230],
+    }
+    const onCellClick = vi.fn()
+    const viewer = (cellLayersVisible: boolean) => (
+      <ViewerCore
+        cells={[cell]}
+        boundaries={[outline]}
+        cellLayersVisible={cellLayersVisible}
+        onCellClick={onCellClick}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: 4 }}
+      />
+    )
+    const { rerender } = render(viewer(true))
+    const canvas = screen.getByRole('img', { name: 'Spatial viewer canvas area' })
+
+    // Shown: deck.gl picked nothing, and the click's place finds the cell.
+    act(() => {
+      deckGlMock.onClick?.({ coordinate: [0, 0, 0], x: 100, y: 50 })
+    })
+    fireEvent.keyDown(canvas, { key: 'Enter' })
+    expect(onCellClick).toHaveBeenCalledTimes(2)
+
+    rerender(viewer(false))
+    act(() => {
+      deckGlMock.onClick?.({ coordinate: [0, 0, 0], x: 100, y: 50 })
+    })
+    fireEvent.keyDown(canvas, { key: 'Enter' })
+
+    expect(onCellClick).toHaveBeenCalledTimes(2)
+  })
+
   it('fits the measured canvas, and zooms, fits and goes to regions (15.2-E)', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
       ...rect,
@@ -2316,6 +2395,68 @@ describe('ViewerCore', () => {
     })
   })
 
+  it('does not bring back a measurement Esc cancelled mid-drag', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const cells = [overviewCellDatum()]
+    const viewer = (measurementEnabled: boolean) => (
+      <ViewerCore
+        cells={cells}
+        measurementEnabled={measurementEnabled}
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -4 }}
+      />
+    )
+    const { rerender } = render(viewer(true))
+    const measurementLayer = document.querySelector('.measurement-draw-layer')
+
+    if (!(measurementLayer instanceof HTMLElement)) {
+      throw new Error('Expected measurement draw layer.')
+    }
+
+    fireEvent.pointerDown(measurementLayer, { clientX: 100, clientY: 50, pointerId: 1 })
+    fireEvent.pointerMove(measurementLayer, { clientX: 116, clientY: 50, pointerId: 1 })
+    expect(await screen.findByText('256 µm')).toBeInTheDocument()
+
+    // Esc turns Measure off (App's returnToPan); the release comes after.
+    rerender(viewer(false))
+    fireEvent.pointerUp(measurementLayer, { clientX: 116, clientY: 50, pointerId: 1 })
+    rerender(viewer(true))
+    fireEvent.pointerMove(measurementLayer, { clientX: 132, clientY: 50, pointerId: 1 })
+
+    expect(screen.queryByText('256 µm')).toBeNull()
+    expect(screen.queryByText('512 µm')).toBeNull()
+  })
+
+  it('starts a measurement on the primary button only', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    render(
+      <ViewerCore
+        cells={[overviewCellDatum()]}
+        measurementEnabled
+        initialViewStateOverride={{ target: [0, 0, 0], zoom: -4 }}
+      />,
+    )
+    const measurementLayer = document.querySelector('.measurement-draw-layer')
+
+    if (!(measurementLayer instanceof HTMLElement)) {
+      throw new Error('Expected measurement draw layer.')
+    }
+
+    fireEvent.pointerDown(measurementLayer, {
+      clientX: 100,
+      clientY: 50,
+      pointerId: 1,
+      button: 2,
+    })
+    fireEvent.pointerMove(measurementLayer, { clientX: 116, clientY: 50, pointerId: 1 })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.queryByText('256 µm')).toBeNull()
+  })
+
   it('reports cursor magic lens movement and renders the lens overlay', async () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -2408,6 +2549,25 @@ describe('ViewerCore', () => {
         }),
       )
     })
+  })
+
+  it.each([
+    ['right', 2],
+    ['middle', 1],
+  ])('does not start a Box selection on a %s-button press', (_name, button) => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    render(<ViewerCore roiMode="box" />)
+    const roiLayer = document.querySelector('.roi-draw-layer')
+
+    if (!(roiLayer instanceof HTMLElement)) {
+      throw new Error('Expected ROI draw layer.')
+    }
+
+    fireEvent.pointerDown(roiLayer, { clientX: 100, clientY: 50, pointerId: 1, button })
+    fireEvent.pointerMove(roiLayer, { clientX: 116, clientY: 66, pointerId: 1 })
+
+    expect(document.querySelector('.roi-rectangle')).toBeNull()
   })
 
   it('emits a data-space bounding box after drawing a box ROI', async () => {
