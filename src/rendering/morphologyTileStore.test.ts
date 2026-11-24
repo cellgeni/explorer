@@ -82,6 +82,30 @@ describe('morphology tile store (plan 23-D11)', () => {
     store.flatImage('https://example.test/other.png')
     expect(store.flatImage('https://example.test/hires.png')).not.toBe(first)
   })
+
+  it('names the address when the browser cannot decode a flat image (EXP-327)', async () => {
+    // Chromium's decode() rejects so for a missing, blocked or damaged image.
+    class FailingDecodeImage {
+      crossOrigin = ''
+      src = ''
+      decode(): Promise<void> {
+        return Promise.reject(new Error('The source image cannot be decoded.'))
+      }
+    }
+    vi.stubGlobal('Image', FailingDecodeImage)
+
+    try {
+      await expect(
+        new MorphologyTileStore().flatImage('https://example.test/hires.png'),
+      ).rejects.toMatchObject({
+        name: 'FlatImageLoadError',
+        message:
+          'Failed to load flat morphology image https://example.test/hires.png: The source image cannot be decoded.',
+      })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe('tile decode workers', () => {

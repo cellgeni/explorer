@@ -26,6 +26,7 @@ import {
   datasetDetectionError,
   isTimedOutProbe,
   isWebAddress,
+  UnsupportedZipError,
 } from './datasetDetectionError'
 import { parseAnnDataSectionUrl, type AnnDataSectionRef } from './annDataSections'
 import { icechunkCompanionFileUrl, isIcechunkUrl } from '../zarr/icechunkUrl'
@@ -763,7 +764,7 @@ async function detectZarrZip(
     }
   }
 
-  throw new Error(
+  throw new UnsupportedZipError(
     `The zip at ${url} holds a Zarr store (${rootLabel}) that is neither SpatialData nor an OME-Zarr image. Only those are read from a zip; unzip other stores and host them as folders.`,
   )
 }
@@ -781,7 +782,7 @@ async function detectZippedRun(
   const root = await registerZippedRunFolder(url, options)
 
   if (root.atera === undefined) {
-    throw new Error(
+    throw new UnsupportedZipError(
       root.xenium === undefined
         ? `${noStoreMessage} Nor does it hold an Atera run (${ATERA_EXPERIMENT_FILE}). A zip can hold a SpatialData store, an OME-Zarr image, or an Atera run folder.`
         : `The zip at ${url} holds a Xenium run (${root.xenium}experiment.xenium). Only Atera runs can be opened from a zip; unzip the run and host its folder.`,

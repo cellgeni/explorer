@@ -95,7 +95,10 @@ export function createStructuredLoadError(
   const message = readErrorMessage(error)
   const normalizedMessage = message.toLowerCase()
   const detail = readErrorDetail(error)
-  const rangeReadStatus = readRangeReadFailureStatus(normalizedMessage)
+  const fetchFailureStatus = readFetchFailureStatus(normalizedMessage)
+  // 403, 404 and 5xx mean the file was never served, however it was read.
+  const failedReadStatus =
+    readRangeReadFailureStatus(normalizedMessage) ?? fetchFailureStatus
   const detection = readDatasetDetectionError(error)
   // Replaces the CORS advice when a read that got no response went from this
   // HTTPS page to a plain-http address (src/features/errors/insecureRequest.ts).
@@ -154,7 +157,7 @@ export function createStructuredLoadError(
     )
   }
 
-  if (rangeReadStatus === 403 || rangeReadStatus === 404) {
+  if (failedReadStatus === 403 || failedReadStatus === 404) {
     return withOptionalDetail(
       {
         source,
@@ -162,7 +165,7 @@ export function createStructuredLoadError(
         title: 'File not found or not readable',
         message,
         action:
-          rangeReadStatus === 403
+          failedReadStatus === 403
             ? 'Check the file path and that the object is publicly readable. Buckets that deny listing return HTTP 403 for missing files.'
             : 'Check the file path, then reload.',
       },
@@ -181,6 +184,38 @@ export function createStructuredLoadError(
         title: 'File not found',
         message,
         action: 'Check the file path, then reload.',
+      },
+      detail,
+    )
+  }
+
+  // Thrown by detection for a zip that holds nothing read from a zip, such as
+  // a zipped Xenium run (src/datasets/datasetDetectionError.ts).
+  if (error instanceof Error && error.name === 'UnsupportedZipError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: 'Zip contents not supported',
+        message,
+        action:
+          'Unzip it, host the folder, and open the folder. A zip opens only when it holds a SpatialData store, an OME-Zarr image, or an Atera run.',
+      },
+      detail,
+    )
+  }
+
+  // A Visium tissue image or other flat image the browser could not load
+  // (src/rendering/morphologyTileStore.ts).
+  if (error instanceof Error && error.name === 'FlatImageLoadError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'decode',
+        title: 'Image could not be loaded',
+        message,
+        action:
+          'Check that the image is at this address and that its host allows reads from this site (CORS). The browser reports a missing, blocked or damaged image the same way.',
       },
       detail,
     )
@@ -304,7 +339,7 @@ export function createStructuredLoadError(
     )
   }
 
-  if (rangeReadStatus !== undefined && isServerErrorStatus(rangeReadStatus)) {
+  if (failedReadStatus !== undefined && isServerErrorStatus(failedReadStatus)) {
     return withOptionalDetail(
       {
         source,
@@ -321,6 +356,13 @@ export function createStructuredLoadError(
   // read or does not validate. Matched by name to keep this module free of
   // data-layer imports.
   if (error instanceof Error && error.name === 'DatasetManifestError') {
+    if (isManifestReadError(normalizedMessage)) {
+      return withOptionalDetail(
+        manifestReadError(source, message, normalizedMessage, insecureAction),
+        detail,
+      )
+    }
+
     return withOptionalDetail(
       {
         source,
@@ -334,9 +376,23 @@ export function createStructuredLoadError(
     )
   }
 
+  const rangeReadStatus = readRangeReadFailureStatus(normalizedMessage)
+
+  if (
+    rangeReadStatus !== undefined &&
+    rangeReadStatus !== 200 &&
+    normalizedMessage.includes('expected http 206')
+  ) {
+    return withOptionalDetail(
+      { source, ...httpStatusError(rangeReadStatus), message },
+      detail,
+    )
+  }
+
   if (
     normalizedMessage.includes('cannot be range-read') ||
-    normalizedMessage.includes('expected http 206')
+    normalizedMessage.includes('expected http 206') ||
+    /\bignored (?:the|a) range request\b/.test(normalizedMessage)
   ) {
     return withOptionalDetail(
       {
@@ -368,7 +424,8 @@ export function createStructuredLoadError(
     )
   }
 
-  const httpStatus = /\bhttp\s+(\d{3})\b/i.exec(message)?.[1]
+  const httpStatus =
+    /\bhttp\s+(\d{3})\b/i.exec(message)?.[1] ?? fetchFailureStatus?.toString()
 
   if (httpStatus !== undefined) {
     return withOptionalDetail(
@@ -390,17 +447,24 @@ export function createStructuredLoadError(
     )
   }
 
-  if (isCellsParquetDecodeError(source, normalizedMessage)) {
+  if (isParquetDecodeError(source, normalizedMessage)) {
+    // The file the reader names, such as Visium HD's tissue_positions.parquet;
+    // a bare decoder message is about the overview's cells.parquet.
+    const file = /\bunable to decode ([^\s:]+\.parquet)\b/i.exec(message)?.[1]
+
     return withOptionalDetail(
       {
         source,
         code: 'parquet-decode',
-        title: 'cells.parquet decode failed',
-        message: normalizedMessage.includes('unable to decode cells.parquet')
-          ? message
-          : `The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it: ${message}.`,
+        title: `${file ?? 'cells.parquet'} decode failed`,
+        message:
+          file === undefined
+            ? `The overview cells.parquet file was reachable, but the browser Parquet reader could not decode it: ${withFullStop(message)}`
+            : message,
         action:
-          'Rewrite cells.parquet with a browser-compatible Parquet encoding or use an alternate overview reader for this dataset.',
+          file === undefined || file === 'cells.parquet'
+            ? 'Rewrite cells.parquet with a browser-compatible Parquet encoding or use an alternate overview reader for this dataset.'
+            : `Rewrite ${file} with a browser-compatible Parquet encoding.`,
       },
       detail,
     )
@@ -537,6 +601,20 @@ export function createStructuredLoadError(
         message,
         action:
           'The file was not loaded. Host it where it answers Range requests, or use an H5AD file of 300 MB or smaller.',
+      },
+      detail,
+    )
+  }
+
+  if (isBrowserLoadLimitError(error, normalizedMessage)) {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'size-limit',
+        title: 'File too large to load',
+        message,
+        action:
+          'The file was not loaded, and retrying will not help: it is read whole, which the browser allows up to 300 MiB. Save the data as H5AD or AnnData Zarr, which are read in parts.',
       },
       detail,
     )
@@ -752,7 +830,7 @@ function isH5adReferenceUnavailableError(
   )
 }
 
-function isCellsParquetDecodeError(
+function isParquetDecodeError(
   source: LoadErrorSource,
   normalizedMessage: string,
 ): boolean {
@@ -761,10 +839,76 @@ function isCellsParquetDecodeError(
   }
 
   return (
-    normalizedMessage.includes('unable to decode cells.parquet') ||
+    /\bunable to decode [^\s:]+\.parquet\b/.test(normalizedMessage) ||
     normalizedMessage.includes('offset is outside the bounds of the dataview') ||
     normalizedMessage.includes('out of bounds access') ||
     normalizedMessage.includes('invalid typed array length')
+  )
+}
+
+function withFullStop(text: string): string {
+  return /[.!?]$/.test(text) ? text : `${text}.`
+}
+
+// The status in hyparquet's and the byte-range cache's wording ("fetch failed
+// 429", "fetch with range failed 403", "fetch head failed 404") and in a zip
+// read's ("failed http request <url>, status: 429 for bytes=…").
+function readFetchFailureStatus(normalizedMessage: string): number | undefined {
+  const status =
+    /\bfetch (?:with range |head )?failed (\d{3})\b/.exec(normalizedMessage)?.[1] ??
+    /\bfailed http request\b.*\bstatus: (\d{3})\b/.exec(normalizedMessage)?.[1]
+
+  return status === undefined ? undefined : Number(status)
+}
+
+// DatasetManifestError's "could not be read (HTTP 404)" or "could not be
+// fetched (…)" (src/datasets/datasetFactory.ts): the file was not read, so no
+// field is at fault.
+function isManifestReadError(normalizedMessage: string): boolean {
+  return /: could not be (?:read|fetched) \(/.test(normalizedMessage)
+}
+
+function manifestReadError(
+  source: LoadErrorSource,
+  message: string,
+  normalizedMessage: string,
+  insecureAction: string | undefined,
+): Omit<StructuredLoadError, 'detail'> {
+  const status = /\(http (\d{3})\)/.exec(normalizedMessage)?.[1]
+  const title = 'Dataset manifest could not be read'
+
+  if (status === undefined) {
+    return {
+      source,
+      code: 'network',
+      title,
+      message,
+      action:
+        insecureAction ??
+        "Check the manifest's address and the network connection, then the host's CORS rules: they must allow reads from this site.",
+    }
+  }
+
+  const statusError = httpStatusError(Number(status))
+
+  return {
+    source,
+    code: statusError.code,
+    title,
+    message,
+    action:
+      status === '403' || status === '404'
+        ? "Check the manifest's address and that the file is publicly readable. Buckets that deny listing answer HTTP 403 for missing files."
+        : statusError.action,
+  }
+}
+
+function isBrowserLoadLimitError(error: unknown, normalizedMessage: string): boolean {
+  return (
+    (error instanceof Error &&
+      (error.name === 'VisiumMatrixTooLargeError' ||
+        error.name === 'MerscopeCsvTooLargeError')) ||
+    normalizedMessage.includes('browser load limit')
   )
 }
 

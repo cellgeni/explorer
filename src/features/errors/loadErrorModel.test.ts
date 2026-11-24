@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest'
+import { asyncBufferFromUrl } from 'hyparquet'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DuckDbExtensionLoadError } from '../../data/duckdb'
 import { FileNotListedError } from '../../data/folderListing'
 import {
@@ -12,6 +13,13 @@ import {
   ParquetFileNotFoundError,
 } from '../../data/parquetStructure'
 import { ZarrStructureNotFoundError } from '../../zarr/zarrStructure'
+import { detectSpatialDataset } from '../../datasets/datasetFactory'
+import { MerscopeCsvTooLargeError } from '../../datasets/merscopeTableReader'
+import { VisiumMatrixTooLargeError } from '../../datasets/visiumFormat'
+import { FlatImageLoadError } from '../../rendering/morphologyTileStore'
+import { byteRangeFetcher, zipArchive } from '../../test/zipFixtures'
+import { buildTiff, stubRangeFetch } from '../../test/tiffFixtures'
+import { clearOpenTiffFiles, openTiff } from '../../tiff/loader'
 import {
   collectStructuredLoadErrors,
   createStructuredLoadError,
@@ -21,16 +29,38 @@ import {
 } from './loadErrorModel'
 
 describe('loadErrorModel', () => {
-  it('classifies dataset manifest errors before the HTTP status they mention', () => {
-    const error = Object.assign(
-      new Error('explorer.json: could not be read (HTTP 500).'),
-      { name: 'DatasetManifestError' },
-    )
+  it('tells a manifest that could not be read from an invalid one (EXP-327)', () => {
+    const manifestError = (message: string) =>
+      createStructuredLoadError(
+        'Dataset overview',
+        Object.assign(new Error(message), { name: 'DatasetManifestError' }),
+      )
 
-    expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+    expect(manifestError('explorer.json: could not be read (HTTP 500).')).toMatchObject({
+      code: 'http',
+      title: 'Dataset manifest could not be read',
+      message: 'explorer.json: could not be read (HTTP 500).',
+      action: expect.stringContaining('The host failed to serve the file') as string,
+    })
+    expect(manifestError('run.json: could not be read (HTTP 404).').action).toContain(
+      'Buckets that deny listing',
+    )
+    expect(manifestError('run.json: could not be read (HTTP 429).').action).toContain(
+      'limiting how often',
+    )
+    expect(manifestError('run.json: could not be read (HTTP 401).').code).toBe(
+      'access-denied',
+    )
+    expect(
+      manifestError('run.json: could not be fetched (Failed to fetch).'),
+    ).toMatchObject({ code: 'network', title: 'Dataset manifest could not be read' })
+    // A field at fault is still an invalid manifest.
+    expect(
+      manifestError('run.json: files.h5ad must be a non-empty string.'),
+    ).toMatchObject({
       code: 'manifest',
       title: 'Dataset manifest is invalid',
-      message: 'explorer.json: could not be read (HTTP 500).',
+      action: expect.stringContaining('Fix the field') as string,
     })
   })
 
@@ -582,4 +612,194 @@ async function rangeProbeError(status: number): Promise<unknown> {
     () => new Error(`Range probe unexpectedly passed for HTTP ${status}`),
     (error: unknown) => error,
   )
+}
+
+describe('errors as the readers word them (EXP-327, EXP-328)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    clearOpenTiffFiles()
+  })
+
+  it('reads a manifest answered HTTP 404 as unreadable, not invalid', async () => {
+    const error = await failureOf(() =>
+      detectSpatialDataset('https://example.test/examples/run.json', {
+        fetcher: async () => new Response(null, { status: 404 }),
+      }),
+    )
+
+    expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+      code: 'http',
+      title: 'Dataset manifest could not be read',
+    })
+  })
+
+  it('tells a zipped Xenium run to be unzipped, not to check experiment.xenium', async () => {
+    const zip = 'https://example.test/zips/xenium_outs.zip'
+    const fetcher = byteRangeFetcher(
+      new Map([
+        [
+          zip,
+          zipArchive([
+            { name: 'outs/experiment.xenium', data: new TextEncoder().encode('{}') },
+          ]),
+        ],
+      ]),
+    )
+    const error = createStructuredLoadError(
+      'Dataset overview',
+      await failureOf(() => detectSpatialDataset(zip, { fetcher })),
+    )
+
+    expect(error).toMatchObject({
+      code: 'unsupported',
+      title: 'Zip contents not supported',
+    })
+    expect(error.message).toContain('unzip the run and host its folder')
+    expect(error.action).not.toContain('experiment.xenium')
+  })
+
+  it('keeps the status of a TIFF tile read that was not answered 206', async () => {
+    const url = 'https://example.test/slide.ome.tif'
+    const fetcher = stubRangeFetch(
+      url,
+      buildTiff([
+        {
+          width: 512,
+          height: 512,
+          tile: 256,
+          subfileType: 0,
+          description: '',
+          value: (i) => i + 1,
+        },
+      ]),
+    )
+    const loader = await openTiff(url)
+    const tileError = async (status: number) => {
+      fetcher.mockImplementation(async () => new Response(null, { status }))
+      return createStructuredLoadError(
+        'Image tiles',
+        await failureOf(() => loader.fetchTileBytes(0, 1, 1)),
+      )
+    }
+
+    expect(await tileError(429)).toMatchObject({ title: 'Too many requests' })
+    expect(await tileError(401)).toMatchObject({ code: 'access-denied' })
+    expect(await tileError(410)).toMatchObject({
+      code: 'http',
+      title: 'HTTP 410 response',
+    })
+    // A host that ignores Range still says so.
+    expect(
+      createStructuredLoadError(
+        'Image tiles',
+        new Error('Expected HTTP 206 for TIFF Range request, received 200.'),
+      ),
+    ).toMatchObject({ code: 'range-not-supported' })
+  })
+
+  it('reads a host that ignored a zip or HDF5 range request as missing Range support', () => {
+    for (const message of [
+      'failed http request https://example.test/run_outs.zip, the host ignored the range request (HTTP 200 for bytes=0-99)',
+      'matrix.h5 ignored a range request (HTTP 200 for bytes=0-1023).',
+    ]) {
+      expect(
+        createStructuredLoadError('Dataset overview', new Error(message)),
+      ).toMatchObject({ code: 'range-not-supported' })
+    }
+  })
+
+  it("names the status in hyparquet's and a zip read's wording", async () => {
+    const parquetError = async (status: number) => {
+      const file = await asyncBufferFromUrl({
+        url: 'https://example.test/run/tissue_positions.parquet',
+        byteLength: 1_000,
+        fetch: async () => new Response(null, { status }),
+      })
+      return createStructuredLoadError(
+        'Dataset overview',
+        await failureOf(async () => file.slice(0, 10)),
+      )
+    }
+
+    expect(await parquetError(429)).toMatchObject({ title: 'Too many requests' })
+    expect(await parquetError(503)).toMatchObject({
+      code: 'http',
+      title: 'Host server error',
+    })
+    expect(await parquetError(403)).toMatchObject({
+      title: 'File not found or not readable',
+      action: expect.stringContaining('Buckets that deny listing') as string,
+    })
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        new Error(
+          'failed http request https://example.test/run_outs.zip, status: 429 for bytes=0-9: Too Many Requests',
+        ),
+      ),
+    ).toMatchObject({ title: 'Too many requests' })
+  })
+
+  it('reads a Visium matrix or MERSCOPE table over the load limit as a size limit', () => {
+    for (const error of [
+      new VisiumMatrixTooLargeError('https://example.test/matrix.h5', 400 * 1024 * 1024),
+      new MerscopeCsvTooLargeError(
+        'https://example.test/cell_by_gene.csv',
+        400 * 1024 * 1024,
+      ),
+    ]) {
+      expect(createStructuredLoadError('Dataset overview', error)).toMatchObject({
+        code: 'size-limit',
+        title: 'File too large to load',
+        action: expect.stringContaining('retrying will not help') as string,
+      })
+    }
+  })
+
+  it('names the Parquet file that failed to decode, with one full stop', () => {
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        new Error(
+          'Unable to decode tissue_positions.parquet: Offset is outside the bounds of the DataView.',
+        ),
+      ),
+    ).toMatchObject({
+      code: 'parquet-decode',
+      title: 'tissue_positions.parquet decode failed',
+      message:
+        'Unable to decode tissue_positions.parquet: Offset is outside the bounds of the DataView.',
+      action:
+        'Rewrite tissue_positions.parquet with a browser-compatible Parquet encoding.',
+    })
+    expect(
+      createStructuredLoadError(
+        'Dataset overview',
+        new RangeError('Offset is outside the bounds of the DataView.'),
+      ).message,
+    ).toMatch(/could not decode it: Offset is outside the bounds of the DataView\.$/)
+  })
+
+  it('names the address of a flat image the browser could not load', () => {
+    const error = createStructuredLoadError(
+      'Image tiles',
+      new FlatImageLoadError(
+        'https://example.test/visium/spatial/tissue_hires_image.png',
+        new Error('The source image cannot be decoded.'),
+      ),
+    )
+
+    expect(error).toMatchObject({ code: 'decode', title: 'Image could not be loaded' })
+    expect(formatStructuredError(error)).toContain('tissue_hires_image.png')
+    expect(error.action).toContain('CORS')
+  })
+})
+
+async function failureOf(run: () => Promise<unknown>): Promise<unknown> {
+  try {
+    await run()
+  } catch (error) {
+    return error
+  }
+  throw new Error('The read was expected to fail')
 }

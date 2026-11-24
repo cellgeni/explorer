@@ -444,7 +444,11 @@ All screen↔data conversions go through `coords.ts`.
   a server error ("Host server error"), a `401` as "Access denied", a `429` as
   "Too many requests", and any other error status by its number, not as
   blocked Range requests. Only a success other than `206` means the host
-  ignores Range.
+  ignores Range. The error model (`src/features/errors/loadErrorModel.ts`)
+  reads the status the same way from a TIFF tile read, from hyparquet's and
+  the byte-range cache's wording ("fetch failed 429") and from a zip read's,
+  and reports a zip or HDF5 read answered with the whole file as ignored
+  Range.
 - **Missing files on hosts that hide errors.** A file the registered folder
   listing does not include fails the Range probe without a request
   (`FileNotListedError`, "File not found"). Without a listing, a request that
