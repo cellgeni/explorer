@@ -1383,14 +1383,14 @@ where the drawer would cover it, as Plots and Cell Query would at about
 `src/features/shell/floatingWindowModel.ts`). Windows already open, moved or
 not, stay where they are.
 
-| Section              | Contents                                                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dataset              | Platform, exact counts (cells, spots or bins; genes), image ("4 channels · 15 z planes", "Tissue image", "None"), pixel size in µm/px, address |
-| Slide images         | For an SVS image: the label, the macro (the whole glass slide), and the thumbnail; see [Slide Images](#slide-images)                           |
-| About                | The manifest's name, description, source, licence and citation, when it has them                                                               |
-| View options         | The Visium summary and library, and the SpatialData coordinate system, image and scale, on those platforms                                     |
-| Open another dataset | The open-dataset form, with `Boundary limit` under Advanced                                                                                    |
-| Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode   |
+| Section              | Contents                                                                                                                                                                                                       |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dataset              | Platform, exact counts (cells, spots or bins; genes), the dataset's own image without custom layers ("4 channels · 15 z planes", "Tissue image", "Loading…", "None"), image size, pixel size in µm/px, address |
+| Slide images         | For an SVS image: the label, the macro (the whole glass slide), and the thumbnail; see [Slide Images](#slide-images)                                                                                           |
+| About                | The manifest's name, description, source, licence and citation, when it has them                                                                                                                               |
+| View options         | The Visium summary and library, and the SpatialData coordinate system, image and scale, on those platforms                                                                                                     |
+| Open another dataset | The open-dataset form, with `Boundary limit` under Advanced                                                                                                                                                    |
+| Diagnostics          | `Diagnose Dataset`, the download, the report, "Data access notes (n)", load issues and the activity log; the layer stack lines in debug mode                                                                   |
 
 ### Slide Images
 
@@ -1655,8 +1655,9 @@ that is its colour mode here. `cellBounds` and `nucleusBounds` are always
 written, because a load picks their default by platform when a link is silent,
 and `boundaryLimit` only when it differs from the device's own limit, so each
 reader keeps theirs. Version 1 links, which wrote every value, still open as
-before. `Share` in the top bar and `Copy Link` copy the link for the current
-state, which the address shows up to 160 ms later, and say "Link copied".
+before. `Share` in the top bar copies the link for the current state, which
+the address shows up to 160 ms later, and says "Link copied" for 2.5 s after
+the latest copy.
 Until the dataset a link names has opened, failed or been cancelled, or
 another dataset is opening, the address and the copied link stay the link it
 was opened with: the load applies its `card`, `roi`, `channels` and `z`

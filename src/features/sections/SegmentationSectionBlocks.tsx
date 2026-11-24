@@ -3,6 +3,7 @@ import { Select } from '../../components/ui'
 import {
   SEGMENTATION_FILE_ACCEPT,
   SEGMENTATION_FORMAT_LABELS,
+  segmentationDisplayName,
   type SegmentationCoordinates,
   type SegmentationFormat,
 } from '../../datasets/segmentationSource'
@@ -158,7 +159,7 @@ function SegmentationImportForm({
       </form>
       {loading ? (
         <p className="segmentation-status" role="status">
-          Reading {state.source.url.slice(state.source.url.lastIndexOf('/') + 1)}
+          Reading {segmentationDisplayName(state.source)}
           {state.shapeCount === undefined
             ? '...'
             : `: ${state.shapeCount.toLocaleString()} outlines`}
