@@ -1,6 +1,6 @@
 import { OrbitView, type OrbitViewState } from '@deck.gl/core'
 import { DeckGL } from '@deck.gl/react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { ImagePyramidVolumeLevel } from '../data/imagePyramid'
 import { volumeExtent } from '../data/imageVolume'
 import {
@@ -8,9 +8,12 @@ import {
   type VolumeLayerChannel,
   type VolumeRenderMode,
 } from '../rendering/volumeLayer'
+import { removeDeckFromTabOrder } from './deckTabOrder'
+import { handleOrbitKey, orbitCanvasProps } from './orbitKeyboard'
 import { ReleasingDeck } from './releasingDeck'
 import { Button, FitIcon, IconButton, Segmented, Slider } from './ui'
 import { fittedVolumeViewState, volumeStatus } from './volumeViewerModel'
+import { VolumeViewerHint } from './VolumeViewerHint'
 
 // The z-stack drawn in 3D (plan: 3D view), over the 2D view, which stays
 // mounted underneath so leaving 3D returns to the same place.
@@ -63,6 +66,13 @@ export function VolumeViewer({
   const [depthScaleLog2, setDepthScaleLog2] = useState(0)
   const [densityPercent, setDensityPercent] = useState(50)
   const [viewState, setViewState] = useState<OrbitViewState | null>(null)
+  // The canvas host is the Tab stop and hands keys to deck.gl's root, which
+  // leaves the tab order (orbitKeyboard.ts).
+  const canvasHostRef = useRef<HTMLDivElement>(null)
+  const keysId = useId()
+  const handleDeckLoad = useCallback(() => {
+    removeDeckFromTabOrder(canvasHostRef.current)
+  }, [])
   const depthScale = 2 ** depthScaleLog2
   const extent = useMemo(
     () => (level === null ? null : volumeExtent(level, depthScale)),
@@ -115,7 +125,16 @@ export function VolumeViewer({
 
   return (
     <section className="volume-viewer" aria-label="3D view" ref={containerRef}>
-      <div className="volume-viewer-canvas">
+      <div
+        className="volume-viewer-canvas"
+        ref={canvasHostRef}
+        {...orbitCanvasProps('3D view canvas area', keysId)}
+        onKeyDown={(event) => {
+          handleOrbitKey(event, () => {
+            setViewState(null)
+          })
+        }}
+      >
         <DeckGL
           Deck={ReleasingDeck}
           views={VOLUME_VIEW}
@@ -125,6 +144,7 @@ export function VolumeViewer({
           }}
           controller
           layers={layers}
+          onLoad={handleDeckLoad}
         />
       </div>
       <div className="volume-viewer-toolbar" role="group" aria-label="3D view settings">
@@ -183,9 +203,7 @@ export function VolumeViewer({
           </p>
         )}
       </div>
-      <p className="volume-viewer-hint">
-        Drag to rotate · Shift-drag to pan · Scroll to zoom
-      </p>
+      <VolumeViewerHint keysId={keysId} />
     </section>
   )
 }

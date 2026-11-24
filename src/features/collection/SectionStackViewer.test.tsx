@@ -11,6 +11,8 @@ import { SectionStackViewer } from './SectionStackViewer'
 interface DeckProps {
   readonly views?: { readonly id?: string }
   readonly onHover?: (info: unknown) => void
+  readonly viewState?: { readonly rotationOrbit?: number }
+  readonly onViewStateChange?: (change: { readonly viewState: unknown }) => void
 }
 
 // deck.gl has no WebGL in jsdom: each render of a DeckGL is recorded.
@@ -135,6 +137,26 @@ describe('SectionStackViewer', () => {
 
     expect(screen.getByText(/z 5 µm/)).toBeInTheDocument()
     expect(stackRenders()).toHaveLength(before)
+  })
+
+  it('moves from the keyboard on its named canvas, and Home resets it (EXP-319)', () => {
+    deck.renders.length = 0
+    render(<CellView depths={[0, 5, 10]} />)
+    const canvas = screen.getByRole('img', { name: '3D cells canvas area' })
+    const shown = () =>
+      deck.renders.filter(({ viewId }) => viewId === 'section-stack').at(-1)?.props
+
+    expect(canvas).toHaveAttribute('tabindex', '0')
+    expect(canvas).toHaveAccessibleDescription(
+      'Shift+arrows rotate · Arrows pan · + and − zoom · Home resets',
+    )
+    const fitted = shown()?.viewState
+    act(() => {
+      shown()?.onViewStateChange?.({ viewState: { ...fitted, rotationOrbit: 90 } })
+    })
+    expect(shown()?.viewState?.rotationOrbit).toBe(90)
+    fireEvent.keyDown(canvas, { key: 'Home', code: 'Home' })
+    expect(shown()?.viewState).toEqual(fitted)
   })
 
   // (-0.04).toFixed(1) is "-0.0", written "-0" (EXP-248).

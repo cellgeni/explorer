@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import type { OrbitViewState } from '@deck.gl/core'
 import { describe, expect, it, vi } from 'vitest'
 import type { ImagePyramidVolumeLevel } from '../data/imagePyramid'
 import { volumeTextureData } from '../data/imageVolume'
@@ -6,12 +7,24 @@ import type { VolumeLayer, VolumeLayerChannel } from '../rendering/volumeLayer'
 import { VolumeViewer, type VolumeViewerProps } from './VolumeViewer'
 import { fittedVolumeViewState, volumeStatus } from './volumeViewerModel'
 
-const deckGlMock = vi.hoisted(() => ({ layers: [] as readonly unknown[] }))
+interface DeckGlMockProps {
+  readonly layers?: readonly unknown[]
+  readonly viewState?: OrbitViewState
+  readonly onViewStateChange?: (change: { readonly viewState: OrbitViewState }) => void
+  readonly onLoad?: () => void
+}
 
+const deckGlMock = vi.hoisted(() => ({
+  layers: [] as readonly unknown[],
+  props: {} as DeckGlMockProps,
+}))
+
+// deck.gl's event root takes keyboard focus, as mjolnir.js sets it up.
 vi.mock('@deck.gl/react', () => ({
-  DeckGL: ({ layers = [] }: { readonly layers?: readonly unknown[] }) => {
-    deckGlMock.layers = layers
-    return <div data-testid="deckgl" />
+  DeckGL: (props: DeckGlMockProps) => {
+    deckGlMock.layers = props.layers ?? []
+    deckGlMock.props = props
+    return <div className="deck-events-root" data-testid="deckgl" tabIndex={0} />
   },
 }))
 
@@ -97,6 +110,32 @@ describe('VolumeViewer', () => {
 
     expect(volumeLayer().props.extent).toEqual([512, 256, 512])
     expect(within(view).getByText('×4')).toBeTruthy()
+  })
+
+  it('moves from the keyboard on its named canvas, and Home resets it (EXP-319)', () => {
+    const { view } = renderViewer()
+    const canvas = within(view).getByRole('img', { name: '3D view canvas area' })
+
+    expect(canvas).toHaveAttribute('tabindex', '0')
+    expect(canvas).toHaveAccessibleDescription(
+      'Shift+arrows rotate · Arrows pan · + and − zoom · Home resets',
+    )
+    // deck.gl's own root, which takes the keys the canvas hands it, leaves
+    // the Tab order once loaded.
+    act(() => {
+      deckGlMock.props.onLoad?.()
+    })
+    expect(within(view).getByTestId('deckgl')).toHaveAttribute('tabindex', '-1')
+
+    const fitted = deckGlMock.props.viewState
+    act(() => {
+      deckGlMock.props.onViewStateChange?.({
+        viewState: { ...fitted!, rotationOrbit: 90 },
+      })
+    })
+    expect(deckGlMock.props.viewState?.rotationOrbit).toBe(90)
+    fireEvent.keyDown(canvas, { key: 'Home', code: 'Home' })
+    expect(deckGlMock.props.viewState).toEqual(fitted)
   })
 
   it('returns to 2D', () => {
