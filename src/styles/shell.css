@@ -817,6 +817,29 @@
   max-width: calc(100% - 380px - 2 * var(--space-3));
 }
 
+/* Where the canvas beside the layer panel leaves under 300 px beside the
+   drawer (a window under about 1064 px), the cards stay at the left, over
+   the drawer, rather than squeeze; the one last opened or used is in front. */
+@media (max-width: 1063.98px) {
+  .shell-body:not(.is-narrow, .is-panel-collapsed)
+    .shell-canvas.has-info-drawer
+    .shell-card-stack {
+    left: var(--space-3);
+    max-width: calc(100% - 2 * var(--space-3));
+  }
+}
+
+/* The drawers, cards, windows and layer sheet overlap where the canvas is
+   small: the one last opened, pressed or focused is drawn over the others
+   (ShellLayout's data-front; EXP-299, EXP-300). */
+.shell-body[data-front='info'] .shell-info-drawer,
+.shell-body[data-front='structure'] .store-structure-drawer,
+.shell-body[data-front='cards'] .shell-card-stack,
+.shell-body[data-front='sheet'] .shell-layer-sheet,
+.shell-body[data-front='window'] .shell-floating.is-front {
+  z-index: var(--z-front);
+}
+
 .shell-card-slot {
   flex: 0 0 auto;
 }
@@ -1608,6 +1631,13 @@
 
 .shell-body.is-narrow .viewport-navigation.without-scale-bar {
   bottom: calc(12px + var(--canvas-bottom-sheet-height, 0px));
+}
+
+/* Toasts, too, rise above a docked card. */
+.shell-body.is-narrow .viewer-toasts {
+  bottom: calc(
+    max(16px, env(safe-area-inset-bottom)) + var(--canvas-bottom-sheet-height, 0px)
+  );
 }
 
 .shell-body.is-narrow .viewport-scale-bar {

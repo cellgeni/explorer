@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -25,8 +26,15 @@ import type {
 } from './cardModels'
 
 // The cards (plan 15.2-D), top left over the canvas: Selection,
-// Cell (Spot, Bin), Transcript and Magic Lens.
-export function CardStack({ cards }: { readonly cards: CardStackModel }) {
+// Cell (Spot, Bin), Transcript and Magic Lens. onCardShown is told when a
+// card appears, or shows another cell, so the shell can bring it forward.
+export function CardStack({
+  cards,
+  onCardShown,
+}: {
+  readonly cards: CardStackModel
+  readonly onCardShown?: (() => void) | undefined
+}) {
   const { selection, cell, transcript, magicLens, unitLabel } = cards
 
   if (selection === null && cell === null && transcript === null && magicLens === null) {
@@ -36,22 +44,22 @@ export function CardStack({ cards }: { readonly cards: CardStackModel }) {
   return (
     <div className="shell-card-stack">
       {selection === null ? null : (
-        <CardSlot key={`selection:${selection.variant}`}>
+        <CardSlot key={`selection:${selection.variant}`} onShown={onCardShown}>
           <SelectionCard card={selection} />
         </CardSlot>
       )}
       {cell === null ? null : (
-        <CardSlot key={cellKey(cell)}>
+        <CardSlot key={cellKey(cell)} onShown={onCardShown}>
           <CellCard card={cell} unitLabel={unitLabel} />
         </CardSlot>
       )}
       {transcript === null ? null : (
-        <CardSlot key="transcript">
+        <CardSlot key="transcript" onShown={onCardShown}>
           <TranscriptCard card={transcript} />
         </CardSlot>
       )}
       {magicLens === null ? null : (
-        <CardSlot key="magic-lens">
+        <CardSlot key="magic-lens" onShown={onCardShown}>
           <MagicLensCard card={magicLens} />
         </CardSlot>
       )}
@@ -60,13 +68,24 @@ export function CardStack({ cards }: { readonly cards: CardStackModel }) {
 }
 
 // A card that appears, or a new cell, scrolls into view if the stack has
-// grown past the canvas. A card that closes while it holds focus hands focus
-// to the card now in its place, or else to the canvas (15.5-D).
-function CardSlot({ children }: { readonly children: ReactNode }) {
+// grown past the canvas, and says so. A card that closes while it holds
+// focus hands focus to the card now in its place, or else to the canvas
+// (15.5-D).
+function CardSlot({
+  children,
+  onShown,
+}: {
+  readonly children: ReactNode
+  readonly onShown?: (() => void) | undefined
+}) {
   const ref = useRef<HTMLDivElement>(null)
+  const shown = useEffectEvent(() => {
+    onShown?.()
+  })
 
   useEffect(() => {
     ref.current?.scrollIntoView?.({ block: 'nearest' })
+    shown()
   }, [])
 
   // A layout cleanup runs while the card is still in the page.
