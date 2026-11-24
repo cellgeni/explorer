@@ -1,4 +1,12 @@
-import { useEffect, useId, useMemo, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react'
 import { Button, ChevronRightIcon } from '../../components/ui'
 import { classNames } from '../../components/ui/classNames'
 import { formatCount, formatJson } from './storeStructureModel'
@@ -47,8 +55,14 @@ export function StructureBrowser<N extends StructureTreeNode<N>>({
   renderDetails,
 }: StructureBrowserProps<N>) {
   const filterId = useId()
+  const treeRef = useRef<HTMLUListElement>(null)
   const [expanded, setExpanded] = useState(initialExpanded)
   const [selectedPath, setSelectedPath] = useState('')
+  // The row that is the tree's one tab stop, by its key.
+  const [focusKey, setFocusKey] = useState('')
+  // A row to focus once it is drawn: the first that Show More adds, as Show
+  // More's own row then goes.
+  const pendingFocusKeyRef = useRef<string | null>(null)
   const [query, setQuery] = useState('')
   // Groups closed while a filter opens every match's ancestors.
   const [filterCollapsed, setFilterCollapsed] = useState<ReadonlySet<string>>(new Set())
@@ -67,6 +81,73 @@ export function StructureBrowser<N extends StructureTreeNode<N>>({
     }
 
     setExpanded((current) => toggled(current, path))
+  }
+
+  const visible = filter?.visible ?? null
+  const shownKeys = shownRowKeys(root, visible, isExpanded, childLimits)
+  // The focused row, else the selected one, else the root, so the tree
+  // always has its tab stop.
+  const tabStopKey = shownKeys.has(focusKey)
+    ? focusKey
+    : shownKeys.has(selected.path)
+      ? selected.path
+      : ''
+
+  useEffect(() => {
+    const key = pendingFocusKeyRef.current
+    if (key === null) return
+    pendingFocusKeyRef.current = null
+    treeRows(treeRef.current)
+      .find((row) => row.dataset.key === key)
+      ?.focus()
+  }, [childLimits])
+
+  // Arrow keys move between rows, Right and Left open and close groups,
+  // Enter and Space show a row's details (or more rows), as in a file tree.
+  const handleKeyDown = (event: KeyboardEvent<HTMLUListElement>) => {
+    if (event.altKey || event.ctrlKey || event.metaKey) return
+    const rows = treeRows(treeRef.current)
+    const row =
+      event.target instanceof Element
+        ? event.target.closest<HTMLElement>('[role="treeitem"]')
+        : null
+    if (row === null) return
+    const index = rows.indexOf(row)
+    const path = row.dataset.path
+    const expandedState = row.getAttribute('aria-expanded')
+    let target: HTMLElement | undefined
+
+    switch (event.key) {
+      case 'ArrowDown':
+        target = rows[index + 1]
+        break
+      case 'ArrowUp':
+        target = rows[index - 1]
+        break
+      case 'Home':
+        target = rows[0]
+        break
+      case 'End':
+        target = rows.at(-1)
+        break
+      case 'ArrowRight':
+        if (expandedState === 'false' && path !== undefined) toggle(path)
+        else if (expandedState === 'true') target = rows[index + 1]
+        break
+      case 'ArrowLeft':
+        if (expandedState === 'true' && path !== undefined) toggle(path)
+        else target = parentRow(row)
+        break
+      case 'Enter':
+      case ' ':
+        row.click()
+        break
+      default:
+        return
+    }
+
+    event.preventDefault()
+    target?.focus()
   }
 
   return (
@@ -106,7 +187,9 @@ export function StructureBrowser<N extends StructureTreeNode<N>>({
             variant="ghost"
             onClick={() => {
               setExpanded(new Set(['']))
-              setFilterCollapsed(new Set(allBranchPaths(root)))
+              setFilterCollapsed(
+                new Set(allBranchPaths(root).filter((path) => path !== '')),
+              )
             }}
           >
             Collapse All
@@ -121,18 +204,30 @@ export function StructureBrowser<N extends StructureTreeNode<N>>({
         )}
       </div>
       <div className="store-structure-tree">
-        <ul aria-label={treeLabel}>
+        <ul
+          ref={treeRef}
+          role="tree"
+          aria-label={treeLabel}
+          onKeyDown={handleKeyDown}
+          onFocus={(event) => {
+            const key =
+              event.target instanceof HTMLElement ? event.target.dataset.key : undefined
+            if (key !== undefined) setFocusKey(key)
+          }}
+        >
           <TreeItem
             node={root}
             depth={0}
             selectedPath={selected.path}
-            visible={filter?.visible ?? null}
+            tabStopKey={tabStopKey}
+            visible={visible}
             isExpanded={isExpanded}
             childLimits={childLimits}
             describe={describe}
             onToggle={toggle}
             onSelect={setSelectedPath}
-            onShowMore={(path, limit) => {
+            onShowMore={(path, limit, firstAdded) => {
+              pendingFocusKeyRef.current = firstAdded
               setChildLimits((current) => new Map(current).set(path, limit))
             }}
           />
@@ -150,10 +245,59 @@ function toggled(set: ReadonlySet<string>, path: string): ReadonlySet<string> {
   return next
 }
 
+// A row's key: its node's path, or the path of the group whose Show More it is.
+function moreRowKey(path: string): string {
+  return `\u0000more:${path}`
+}
+
+function shownChildren<N extends StructureTreeNode<N>>(
+  node: N,
+  visible: ReadonlySet<string> | null,
+): readonly N[] {
+  return visible === null
+    ? node.children
+    : node.children.filter((child) => visible.has(child.path))
+}
+
+// The keys of the rows drawn, as TreeItem draws them.
+function shownRowKeys<N extends StructureTreeNode<N>>(
+  root: N,
+  visible: ReadonlySet<string> | null,
+  isExpanded: (path: string) => boolean,
+  childLimits: ReadonlyMap<string, number>,
+): ReadonlySet<string> {
+  const keys = new Set<string>()
+  const visit = (node: N) => {
+    keys.add(node.path)
+    const children = shownChildren(node, visible)
+    if (children.length === 0 || !isExpanded(node.path)) return
+    const limit = childLimits.get(node.path) ?? CHILD_PAGE_SIZE
+    children.slice(0, limit).forEach(visit)
+    if (limit < children.length) keys.add(moreRowKey(node.path))
+  }
+  visit(root)
+  return keys
+}
+
+function treeRows(tree: HTMLElement | null): HTMLElement[] {
+  return tree === null
+    ? []
+    : Array.from(tree.querySelectorAll<HTMLElement>('[role="treeitem"]'))
+}
+
+// The row of the group a row is in: rows sit in a <li> beside their group.
+function parentRow(row: HTMLElement): HTMLElement | undefined {
+  const parent = row.closest('[role="group"]')?.parentElement?.firstElementChild
+  return parent instanceof HTMLElement && parent.getAttribute('role') === 'treeitem'
+    ? parent
+    : undefined
+}
+
 interface TreeItemProps<N extends StructureTreeNode<N>> {
   readonly node: N
   readonly depth: number
   readonly selectedPath: string
+  readonly tabStopKey: string
   // Paths shown while filtering; null shows every node.
   readonly visible: ReadonlySet<string> | null
   readonly isExpanded: (path: string) => boolean
@@ -161,15 +305,13 @@ interface TreeItemProps<N extends StructureTreeNode<N>> {
   readonly describe: (node: N) => StructureNodeLabel
   readonly onToggle: (path: string) => void
   readonly onSelect: (path: string) => void
-  readonly onShowMore: (path: string, limit: number) => void
+  readonly onShowMore: (path: string, limit: number, firstAdded: string) => void
 }
 
 function TreeItem<N extends StructureTreeNode<N>>(props: TreeItemProps<N>) {
-  const { node, depth, selectedPath, visible, isExpanded, childLimits } = props
-  const children =
-    visible === null
-      ? node.children
-      : node.children.filter((child) => visible.has(child.path))
+  const { node, depth, selectedPath, tabStopKey, visible, isExpanded, childLimits } =
+    props
+  const children = shownChildren(node, visible)
   const hasChildren = children.length > 0
   const open = hasChildren && isExpanded(node.path)
   const limit = childLimits.get(node.path) ?? CHILD_PAGE_SIZE
@@ -177,38 +319,43 @@ function TreeItem<N extends StructureTreeNode<N>>(props: TreeItemProps<N>) {
   const label = props.describe(node)
   const name = node.path === '' ? 'the root' : node.name
   const isSelected = node.path === selectedPath
+  const moreKey = moreRowKey(node.path)
+  const firstHidden = children[shown.length]
 
   return (
-    <li>
+    <li role="none">
       <div
+        role="treeitem"
         className={classNames('store-structure-row', isSelected && 'is-selected')}
         style={{ paddingLeft: `${depth * 14}px` }}
+        data-key={node.path}
+        data-path={node.path}
+        aria-level={depth + 1}
+        aria-expanded={hasChildren ? open : undefined}
+        aria-selected={isSelected}
+        tabIndex={tabStopKey === node.path ? 0 : -1}
+        title={`Show details of ${node.path === '' ? '/' : node.path}`}
+        onClick={() => {
+          props.onSelect(node.path)
+        }}
       >
         {hasChildren ? (
-          <button
-            type="button"
+          // The keyboard opens groups with Right and Left; this is for the mouse.
+          <span
             className="store-structure-toggle"
-            aria-expanded={open}
-            aria-label={`${open ? 'Collapse' : 'Expand'} ${name}`}
+            aria-hidden="true"
             title={`${open ? 'Collapse' : 'Expand'} ${name}`}
-            onClick={() => {
+            onClick={(event) => {
+              event.stopPropagation()
               props.onToggle(node.path)
             }}
           >
             <ChevronRightIcon />
-          </button>
+          </span>
         ) : (
           <span className="store-structure-toggle" aria-hidden="true" />
         )}
-        <button
-          type="button"
-          className="store-structure-node"
-          aria-current={isSelected ? 'true' : undefined}
-          title={`Show details of ${node.path === '' ? '/' : node.path}`}
-          onClick={() => {
-            props.onSelect(node.path)
-          }}
-        >
+        <span className="store-structure-node">
           <NodeIcon kind={label.icon} label={label.kind} />
           <span className="store-structure-name">{node.name}</span>
           {label.badges.map((badge) => (
@@ -223,33 +370,38 @@ function TreeItem<N extends StructureTreeNode<N>>(props: TreeItemProps<N>) {
             </span>
           ))}
           <span className="store-structure-meta">{label.meta}</span>
-        </button>
+        </span>
       </div>
       {open ? (
-        <ul>
+        <ul role="group">
           {shown.map((child) => (
             <TreeItem key={child.path} {...props} node={child} depth={depth + 1} />
           ))}
-          {shown.length < children.length ? (
-            <li>
+          {firstHidden === undefined ? null : (
+            <li role="none">
               <div
-                className="store-structure-row"
+                role="treeitem"
+                className="store-structure-row store-structure-more"
                 style={{ paddingLeft: `${(depth + 1) * 14}px` }}
+                data-key={moreKey}
+                aria-level={depth + 2}
+                tabIndex={tabStopKey === moreKey ? 0 : -1}
+                title={`Show more of the ${children.length.toLocaleString()} items in ${name}`}
+                onClick={() => {
+                  props.onShowMore(
+                    node.path,
+                    limit + CHILD_PAGE_SIZE * 5,
+                    firstHidden.path,
+                  )
+                }}
               >
                 <span className="store-structure-toggle" aria-hidden="true" />
-                <Button
-                  title={`Show more of the ${children.length.toLocaleString()} items in ${name}`}
-                  variant="ghost"
-                  className="store-structure-more"
-                  onClick={() => {
-                    props.onShowMore(node.path, limit + CHILD_PAGE_SIZE * 5)
-                  }}
-                >
+                <span className="store-structure-node">
                   Show More ({(children.length - shown.length).toLocaleString()} hidden)
-                </Button>
+                </span>
               </div>
             </li>
-          ) : null}
+          )}
         </ul>
       ) : null}
     </li>
