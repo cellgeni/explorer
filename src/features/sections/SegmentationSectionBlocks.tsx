@@ -129,28 +129,30 @@ function SegmentationImportForm({
           />
         </div>
         <div className="roi-action-row">
-          <label
-            className="secondary-file-action"
-            htmlFor={fileInputId}
-            title="Open a segmentation file"
-          >
-            Open File
-          </label>
-          <input
-            id={fileInputId}
-            className="visually-hidden-file"
-            type="file"
-            accept={SEGMENTATION_FILE_ACCEPT}
-            disabled={loading}
-            onChange={(event) => {
-              const file = event.currentTarget.files?.[0]
-              event.currentTarget.value = ''
+          <span className="file-action">
+            <label
+              className="secondary-file-action"
+              htmlFor={fileInputId}
+              title="Open a segmentation file"
+            >
+              Open File
+            </label>
+            <input
+              id={fileInputId}
+              className="visually-hidden-file"
+              type="file"
+              accept={SEGMENTATION_FILE_ACCEPT}
+              disabled={loading}
+              onChange={(event) => {
+                const file = event.currentTarget.files?.[0]
+                event.currentTarget.value = ''
 
-              if (file !== undefined) {
-                setInputError(segmentation.onLoadFile(file, options))
-              }
-            }}
-          />
+                if (file !== undefined) {
+                  setInputError(segmentation.onLoadFile(file, options))
+                }
+              }}
+            />
+          </span>
         </div>
         <small className="segmentation-hint">
           A label mask (TIFF or OME-Zarr, 0 is background) or polygons (GeoJSON, WKT or

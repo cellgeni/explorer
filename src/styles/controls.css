@@ -61,7 +61,9 @@
 /* Cancel (15.3-D). The list lets pointer events through to the canvas;
    its buttons take them. */
 .loading-indicator .loading-task-cancel {
-  min-height: 20px;
+  /* 24 px, the smallest target WCAG 2.5.8 allows; several tasks can be
+     cancelled at once (EXP-321). */
+  min-height: 24px;
   padding: 0 6px;
   font-size: var(--font-control);
   pointer-events: auto;
@@ -459,6 +461,32 @@ a.secondary-action {
   clip: rect(0 0 0 0);
   border: 0;
   white-space: nowrap;
+}
+
+/* A file button: its label and the clipped input, which sits on the label
+   so that focusing it scrolls the label into view (EXP-315). */
+.file-action {
+  position: relative;
+  display: grid;
+  min-width: 0;
+}
+
+/* Outranks `.analysis-section input`, which made the input as wide as the
+   panel. */
+.file-action > .visually-hidden-file {
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+}
+
+/* The file input is clipped, so the label before it shows its focus
+   (Import File, Import GeoJSON, Open File; EXP-315). */
+.secondary-file-action:has(+ .visually-hidden-file:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 3px;
 }
 
 .layer-section {

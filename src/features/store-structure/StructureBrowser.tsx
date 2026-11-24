@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useId,
   useMemo,
@@ -513,11 +514,38 @@ export function JsonBlock({
   readonly value: unknown
 }) {
   const json = formatJson(value)
+  // A block that scrolls is a named Tab stop, so the keyboard can scroll
+  // it (EXP-320); one that fits is not.
+  const [scrolls, setScrolls] = useState(false)
+  const watchOverflow = useCallback((pre: HTMLPreElement | null) => {
+    if (pre === null) return
+    const measure = () => {
+      setScrolls(pre.scrollHeight > pre.clientHeight || pre.scrollWidth > pre.clientWidth)
+    }
+    measure()
+    // Another node's JSON replaces the text in the same block.
+    const text = new MutationObserver(measure)
+    text.observe(pre, { characterData: true, childList: true, subtree: true })
+    const resize =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    resize?.observe(pre)
+    return () => {
+      text.disconnect()
+      resize?.disconnect()
+    }
+  }, [])
 
   return (
     <div className="store-structure-json">
       {title === undefined ? null : <h4>{title}</h4>}
-      <pre>{json.text}</pre>
+      <pre
+        ref={watchOverflow}
+        tabIndex={scrolls ? 0 : undefined}
+        role={scrolls ? 'region' : undefined}
+        aria-label={scrolls ? (title ?? 'Metadata') : undefined}
+      >
+        {json.text}
+      </pre>
       {json.cut ? (
         <p className="store-structure-empty">
           Showing the first {json.shown.toLocaleString()} of{' '}

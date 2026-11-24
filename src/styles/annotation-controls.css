@@ -59,6 +59,8 @@
   /* Rows out of view skip layout and paint. */
   content-visibility: auto;
   contain-intrinsic-size: auto 30px;
+  /* Room for the remove button's focus ring (EXP-315). */
+  overflow-clip-margin: 6px;
 }
 
 .annotation-color-picker {
@@ -339,6 +341,9 @@
   /* Long sets list every class; rows out of view skip layout and paint. */
   content-visibility: auto;
   contain-intrinsic-size: auto 28px;
+  /* That also clips paint at the row's edge; the margin leaves room for a
+     focus ring (EXP-315). */
+  overflow-clip-margin: 6px;
   min-width: 0;
   color: var(--text-1);
   font-size: var(--font-caption);

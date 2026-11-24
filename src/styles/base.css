@@ -63,9 +63,10 @@ summary:focus-visible,
   outline-offset: 3px;
 }
 
+/* Above the top bar and everything else while focused (EXP-315). */
 .skip-link {
   position: fixed;
-  z-index: 10;
+  z-index: calc(var(--z-toast) + 1);
   top: max(12px, env(safe-area-inset-top));
   left: max(12px, env(safe-area-inset-left));
   padding: 10px 12px;
