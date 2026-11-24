@@ -1703,7 +1703,8 @@ With debug info on, the deck.gl layer count and the
 
 ## Narrow Screens
 
-Under 860 px wide (`useNarrowScreen`) the shell folds up:
+Under 860 px wide (`useNarrowScreen`, `max-width: 859.98px`, the query every
+stylesheet's narrow rules use too) the shell folds up:
 
 - The tools fold into a menu: its button shows the active tool ("Tools:
   Pan"), and it lists each tool with its key and, when off, why. Picking one
@@ -1720,7 +1721,9 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others. Where a link
+  canvas's width, one at a time: opening one closes the others. Their grip
+  then changes only their height (up and down arrow keys), so the width each
+  has on a wider screen stays. Where a link
   or a wider screen left several open, the one in front shows (else the first
   in the top bar's order), its button alone pressed; the others show again
   once the screen is 860 px or wider.

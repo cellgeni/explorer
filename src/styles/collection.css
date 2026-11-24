@@ -209,7 +209,7 @@
 }
 
 /* Narrow, the bar's heading keeps only the kicker and its buttons. */
-@media (max-width: 860px) {
+@media (max-width: 859.98px) {
   .collection-bar:not(.is-expanded)
     .collection-bar-heading
     > :not(.collection-bar-title) {

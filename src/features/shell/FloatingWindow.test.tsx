@@ -74,6 +74,39 @@ describe('FloatingWindow', () => {
     expect(grip).toHaveAccessibleDescription('12 px from the top, 548 px from the right')
   })
 
+  // Under 860 px a window is full width: its grip changes only the height,
+  // so the width it has on wide screens stays (EXP-302).
+  it('changes only the height of a full-width window', () => {
+    stubResizeObserver()
+    const props = {
+      title: 'Cell Query',
+      status: 'No dataset',
+      closeTitle: 'Close cell query',
+      controlName: 'cell query panel',
+      className: 'shell-query',
+      bodyClassName: 'shell-query-body',
+      defaultSize: QUERY_WINDOW_SIZE,
+      minSize: QUERY_WINDOW_MIN_SIZE,
+      open: true,
+      onClose: vi.fn(),
+      children: <p>Conditions</p>,
+    }
+    const { rerender } = render(<FloatingWindow {...props} fullWidth />)
+    const grip = screen.getByRole('button', { name: 'Resize the cell query panel' })
+    expect(grip).toHaveAccessibleDescription(`${QUERY_WINDOW_SIZE.height} px high`)
+    expect(grip.title).toContain('up and down arrow keys')
+
+    for (const key of ['ArrowLeft', 'ArrowLeft', 'ArrowRight', 'ArrowLeft']) {
+      fireEvent.keyDown(grip, { key })
+    }
+    fireEvent.keyDown(grip, { key: 'ArrowDown' })
+    expect(grip).toHaveAccessibleDescription(`${QUERY_WINDOW_SIZE.height + 20} px high`)
+
+    rerender(<FloatingWindow {...props} />)
+    const panel = screen.getByRole('region', { name: 'Cell Query' })
+    expect(panel.style.width).toBe(`${QUERY_WINDOW_SIZE.width}px`)
+  })
+
   it('leaves a field on the first Esc and closes on the second, as the drawer', () => {
     stubResizeObserver()
     const onClose = vi.fn()

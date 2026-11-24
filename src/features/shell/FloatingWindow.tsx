@@ -242,8 +242,9 @@ export function FloatingWindow({
     if (drag === null) return
 
     // The window is anchored top right, so dragging the grip left widens it.
+    // A full-width window keeps the width it has on wide screens (EXP-302).
     resize(() => ({
-      width: drag.size.width + (drag.x - event.clientX),
+      width: fullWidth ? drag.size.width : drag.size.width + (drag.x - event.clientX),
       height: drag.size.height + (event.clientY - drag.y),
     }))
   }
@@ -261,7 +262,8 @@ export function FloatingWindow({
       ArrowUp: { width: 0, height: -KEY_STEP },
     }
     const step = delta[event.key]
-    if (step === undefined) return
+    // Full width, only the height changes; Left and Right are left alone.
+    if (step === undefined || (fullWidth && step.width !== 0)) return
 
     event.preventDefault()
     pinPlace()
@@ -396,7 +398,11 @@ export function FloatingWindow({
       <button
         type="button"
         className="shell-floating-resize"
-        title={`Resize the ${controlName}: drag, or use the arrow keys`}
+        title={
+          fullWidth
+            ? `Resize the ${controlName}'s height: drag, or use the up and down arrow keys`
+            : `Resize the ${controlName}: drag, or use the arrow keys`
+        }
         aria-label={`Resize the ${controlName}`}
         aria-describedby={sizeId}
         onPointerDown={handlePointerDown}
