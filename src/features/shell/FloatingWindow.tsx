@@ -350,15 +350,17 @@ export function FloatingWindow({
       style={windowStyle()}
       onPointerDownCapture={onActivate}
       onFocus={onActivate}
+      // Focusable, so Esc in a field can leave it for the window.
+      tabIndex={-1}
       onKeyDown={(event) => {
-        if (
-          event.key !== 'Escape' ||
-          event.defaultPrevented ||
-          isTextEntryTarget(event.target)
-        ) {
+        if (event.key !== 'Escape' || event.defaultPrevented) return
+        event.preventDefault()
+        // Esc in a field leaves the field, as in the Dataset info drawer; a
+        // second Esc closes the window.
+        if (isTextEntryTarget(event.target)) {
+          panelRef.current?.focus()
           return
         }
-        event.preventDefault()
         onClose()
       }}
     >

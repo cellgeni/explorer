@@ -73,4 +73,34 @@ describe('FloatingWindow', () => {
     expect(panel.style.width).toBe('500px')
     expect(grip).toHaveAccessibleDescription('12 px from the top, 548 px from the right')
   })
+
+  it('leaves a field on the first Esc and closes on the second, as the drawer', () => {
+    stubResizeObserver()
+    const onClose = vi.fn()
+    render(
+      <FloatingWindow
+        title="Cell Query"
+        status="Ready"
+        closeTitle="Close cell query"
+        controlName="cell query panel"
+        className="shell-query"
+        bodyClassName="shell-query-body"
+        defaultSize={QUERY_WINDOW_SIZE}
+        minSize={QUERY_WINDOW_MIN_SIZE}
+        open
+        onClose={onClose}
+      >
+        <input aria-label="Value" type="text" title="Value" />
+      </FloatingWindow>,
+    )
+    const field = screen.getByRole('textbox', { name: 'Value' })
+    field.focus()
+
+    fireEvent.keyDown(field, { key: 'Escape' })
+    expect(screen.getByRole('region', { name: 'Cell Query' })).toHaveFocus()
+    expect(onClose).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
 })
