@@ -54,6 +54,16 @@ that is not `outs`, `explorer.json` or `experiment.xenium`, or the host for a
 dataset served from its root (`127.0.0.1:8080`). The favicon is
 `public/favicon.svg`.
 
+With forced colours on (Windows High Contrast; `src/styles/forced-colors.css`),
+the user's system colours replace the theme. Class swatches, size bars and
+colour scales keep their own colours, as the canvas still draws them. Pressed,
+on, selected and current controls (tools, panel toggles, Segmented options,
+switches, the Tools menu, the collection bar's open dataset and toggles, the
+selected structure tree and Cell Query rows) are drawn in Highlight and
+HighlightText, and the selected card tab is underlined in Highlight. Bars that
+show an amount are drawn in CanvasText, and the layer panel's selects keep the
+system arrow.
+
 ## Start Screen
 
 Until a dataset opens, the canvas shows the start screen

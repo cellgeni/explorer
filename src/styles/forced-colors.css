@@ -1,0 +1,137 @@
+/*
+ * Forced colours (Windows High Contrast, EXP-314).
+ *
+ * The browser then replaces text, background and border colours with the
+ * user's system colours and drops background gradients, so anything that
+ * shows a state or a value by colour alone would vanish. Here:
+ * - data colours (class swatches, colour scales) keep their own colours, as
+ *   the canvas still draws them;
+ * - pressed, on, selected and current states use Highlight and
+ *   HighlightText, as native selected items do;
+ * - bars that show an amount are drawn in CanvasText.
+ * System colours are kept as written in forced colours.
+ */
+@media (forced-colors: active) {
+  .viewer-legend-swatch,
+  .viewer-legend-gradient,
+  .annotation-color-swatch,
+  .annotation-size-bar,
+  .plots-heatmap-swatch,
+  .plots-heatmap-bar,
+  .gene-scale-preview,
+  .transcript-density-scale-preview,
+  .collection-bar-scale-ramp,
+  .section-stack-scale-ramp {
+    forced-color-adjust: none;
+  }
+
+  .viewer-legend-swatch,
+  .annotation-color-swatch {
+    border-color: CanvasText;
+  }
+
+  /* Amounts. */
+  .cell-z-bar,
+  .cell-expression-bar::before,
+  .roi-gene-bar::before,
+  .magic-lens-gene-bar::before,
+  .viewer-magic-lens-hud li i::before,
+  .channel-histogram-bar,
+  .transcript-budget-meter span {
+    background: CanvasText;
+  }
+
+  /* Pressed, on, selected and current: Highlight and HighlightText, as
+     native selected items. forced-color-adjust: none stops the browser
+     drawing a Canvas backplate behind the text, which would hide it; the
+     parts inside take HighlightText too, and the focus ring a system
+     colour. !important, as in the reduced-motion rules (responsive.css),
+     keeps this look under the pointer, over the hover rules. */
+  .shell-tool[aria-pressed='true'],
+  .shell-panel-toggle[aria-pressed='true'],
+  .shell-tool-menu-item[aria-pressed='true'],
+  .ui-segmented button[aria-pressed='true'],
+  .coordinate-unit-segmented button[aria-pressed='true'],
+  .visium-bin-segmented button[aria-pressed='true'],
+  .collection-bar-action[aria-pressed='true'],
+  .collection-bar-beside[aria-pressed='true'],
+  .store-structure-row.is-selected,
+  .cell-query-row.is-selected,
+  .collection-bar-dataset[aria-current='true'] {
+    forced-color-adjust: none;
+    border-color: Highlight !important;
+    background: Highlight !important;
+    color: HighlightText !important;
+  }
+
+  :is(
+      .shell-panel-toggle[aria-pressed='true'],
+      .shell-tool-menu-item[aria-pressed='true'],
+      .store-structure-row.is-selected,
+      .cell-query-row.is-selected,
+      .collection-bar-dataset[aria-current='true']
+    )
+    * {
+    color: HighlightText !important;
+  }
+
+  :is(
+    .shell-tool[aria-pressed='true'],
+    .shell-panel-toggle[aria-pressed='true'],
+    .shell-tool-menu-item[aria-pressed='true'],
+    .ui-segmented button[aria-pressed='true'],
+    .coordinate-unit-segmented button[aria-pressed='true'],
+    .visium-bin-segmented button[aria-pressed='true'],
+    .collection-bar-action[aria-pressed='true'],
+    .collection-bar-beside[aria-pressed='true'],
+    .store-structure-row.is-selected,
+    .collection-bar-dataset[aria-current='true']
+  ):focus-visible {
+    outline-color: CanvasText;
+  }
+
+  .ui-switch-track {
+    border-color: CanvasText;
+  }
+
+  .ui-switch-thumb {
+    background: CanvasText;
+  }
+
+  .ui-switch[aria-checked='true'] .ui-switch-track {
+    border-color: Highlight;
+    background: Highlight;
+  }
+
+  .ui-switch[aria-checked='true'] .ui-switch-thumb {
+    background: HighlightText;
+  }
+
+  /* A transparent border would turn CanvasText, as dark as the selected
+     tab's. */
+  .shell-card-tabs [role='tab'] {
+    border-bottom-color: Canvas;
+  }
+
+  .shell-card-tabs [role='tab'][aria-selected='true'] {
+    border-bottom-color: Highlight;
+  }
+
+  .selection-list li.is-active,
+  .roi-gene-list li:has(.roi-gene-row-button[aria-pressed='true']),
+  .magic-lens-gene-list li.is-selected,
+  .ui-chip.is-selected,
+  .collection-bar-dataset[data-beside='true'] {
+    border-color: Highlight;
+  }
+
+  .viewer-magic-lens-hud li.is-selected span,
+  .viewer-magic-lens-hud li.is-selected strong {
+    color: Highlight;
+  }
+
+  /* The select arrow is a gradient, which forced colours drop. */
+  .analysis-section select {
+    appearance: auto;
+  }
+}
