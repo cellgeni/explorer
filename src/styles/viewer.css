@@ -212,7 +212,10 @@
   background:
     radial-gradient(circle at center, var(--highlight-faint), transparent 62%),
     var(--accent-faint);
+  /* A dark line inside the light rim keeps 3:1 over a bright image
+     (EXP-311). */
   box-shadow:
+    inset 0 0 0 1.5px var(--overlay-shade),
     0 0 0 1px var(--highlight-border),
     var(--shadow-1);
   transform: translate(-50%, -50%);
@@ -404,6 +407,19 @@
   pointer-events: none;
 }
 
+/* Under a lasso's or saved selection's stroke, a dark line 1 px wider on
+   each side with a light halo outside it, as the box has, so the outline
+   keeps 3:1 over bright and dark images (EXP-311). A shadow on the lasso
+   itself would also darken its fill. */
+.roi-path-casing {
+  fill: none;
+  stroke: var(--overlay-shade);
+  stroke-width: 3.5;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1px var(--overlay-halo));
+}
+
 .roi-lasso-path {
   fill: color-mix(
     in srgb,
@@ -414,7 +430,6 @@
   stroke-width: 1.5;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 1px var(--overlay-halo));
 }
 
 .roi-lasso-path.is-draft {
@@ -443,7 +458,6 @@
   stroke-dasharray: 6 4;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 1px var(--overlay-halo));
 }
 
 .measurement-draw-layer {
@@ -715,6 +729,11 @@
   box-sizing: border-box;
   border: 1.5px solid var(--accent);
   background: color-mix(in srgb, var(--accent) 14%, transparent);
+  /* Dark inside and light outside, as the selection box, for 3:1 over a
+     bright or a dark image (EXP-311). */
+  box-shadow:
+    inset 0 0 0 1px var(--overlay-shade),
+    0 0 0 1px var(--overlay-halo);
   pointer-events: none;
 }
 
@@ -982,9 +1001,14 @@
   font-variant-numeric: tabular-nums;
 }
 
-.viewer-legend-categories li.is-hidden .viewer-legend-label,
 .viewer-legend-categories li.is-hidden .viewer-legend-swatch {
   opacity: 0.45;
+}
+
+/* --text-3 rather than opacity keeps a hidden class's name at 4.5:1
+   (EXP-310). */
+.viewer-legend-categories li.is-hidden .viewer-legend-label {
+  color: var(--text-3);
 }
 
 /* Selected cell, spot or bin (ViewerSelectionOverlay.tsx). */

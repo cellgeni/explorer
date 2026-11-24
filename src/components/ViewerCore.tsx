@@ -2281,17 +2281,20 @@ function ViewerSurface({
           {savedSelectionPaths.length === 0 ? null : (
             <svg className="roi-path-svg" focusable="false" aria-hidden="true">
               {savedSelectionPaths.map((path) => (
-                <path
-                  key={path.id}
-                  className="roi-saved-path"
-                  d={path.d}
-                  style={{ '--selection-color': path.color } as CSSProperties}
-                />
+                <g key={path.id}>
+                  <path className="roi-path-casing" d={path.d} />
+                  <path
+                    className="roi-saved-path"
+                    d={path.d}
+                    style={{ '--selection-color': path.color } as CSSProperties}
+                  />
+                </g>
               ))}
             </svg>
           )}
           {roiPathOverlay === null ? null : (
             <svg className="roi-path-svg" focusable="false" aria-hidden="true">
+              <path className="roi-path-casing" d={roiPathOverlay.d} />
               <path
                 className={`roi-lasso-path${roiPathOverlay.isDraft ? ' is-draft' : ''}`}
                 d={roiPathOverlay.d}

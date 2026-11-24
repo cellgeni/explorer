@@ -279,7 +279,8 @@ tooltip does only that, and the tool stays.
   image they draw a GeoJSON shape instead.
 - **Measure**: drag in the view to measure; see
   [Distance measurement](#distance-measurement).
-- **Magic Lens** is the cursor lens (D14): a circle follows the mouse and the
+- **Magic Lens** is the cursor lens (D14): a circle follows the mouse (a
+  light rim with a dark line inside it, for bright and dark images) and the
   Magic Lens card summarises the transcripts (Xenium, Atera) or expression
   (Visium HD) under it; queries are debounced by 320 ms. It is not offered on
   images, and says "Unavailable" where the platform cannot scan (Visium,
@@ -478,8 +479,11 @@ Loaded state:
   unchecking all and searching shows one family of classes. Escape clears it. Each row has a colour
   picker (the colour the dataset stores for the class, such as Atera's
   Azimuth colours, else the first palette colour no other class has, so a removed class's colour is used again), a visibility checkbox, the label without the set prefix, a bar of
-  its size, its cell count and share of the set, and `×`. With the eye shut,
-  cells, previews and the legend go back to the default colouring; with
+  its size, its cell count and share of the set, and `×`. An unchecked
+  class's name turns grey (`--text-3`, which keeps 4.5:1) and its size bar
+  dims. With the eye shut,
+  cells, previews and the legend go back to the default colouring, the set's
+  names turn grey and its swatches and size bars dim; with
   every class unchecked, all cells fade. Visium spots hidden off the tissue
   are not counted, here or in the legend.
 - **Metadata tracks**: every track, with its label, cell count, range, and
@@ -1252,7 +1256,8 @@ for each of these, scales first and category lists last:
   those in Cells › Clusters: Visium spots hidden off the tissue are left
   out. Alt-click (Option-click), Shift-click or Enter on a class's checkbox,
   here or in Cells › Clusters, shows only that class, or every class again
-  when it is the only one shown. Cells of hidden classes, and cells in no class, fade to a
+  when it is the only one shown. A hidden class's name turns grey and its
+  swatch dims. Cells of hidden classes, and cells in no class, fade to a
   faint grey (fill and outline at 15% of the usual opacity), so the tissue
   still shows but the shown classes stand out.
 - `Cell color` Metadata: the track name and its range. Cells whose value is
@@ -1366,14 +1371,18 @@ it. Lasso: drag freehand (points at least 4 screen px
 apart, at least 3 points); when it is finished, points within 1 screen px of
 the path are left out, which keeps a share link's `roi=` short. ROIs smaller than 1 µm × 1 µm are ignored. Each
 ROI drawn on cells, spots or bins is added to Annotations › Selections as
-"ROI n" and shown in the Selection card.
+"ROI n" and shown in the Selection card. A box has a dark line inside its
+coloured edge and a light one outside it; a lasso, and the dashed outline of
+each saved selection, a dark line on both sides of its stroke and a light
+one outside that, so outlines keep 3:1 over bright and dark images.
 
 ### Minimap
 
 The minimap (Phase 15.4-D, `src/components/ViewerMinimap.tsx`) shows the
 whole dataset at the bottom right, above the zoom buttons: up to 168 px on its
 longer side, in the shape of the dataset's extent. The view is a box in the
-accent colour (at least 6 px, so it stays visible when zoomed in). A click
+accent colour (at least 6 px, so it stays visible when zoomed in), with a
+dark line inside and a light one outside for bright and dark images. A click
 centres the view there, keeping the zoom, and dragging moves it along.
 
 - With an image, it draws the image's enabled channels at the coarsest
@@ -1558,6 +1567,8 @@ Once read:
 | `Expand All` / `Collapse All` | Opens every group / closes all but the root                                                                                                                                                          |
 | Tree                          | Groups, then folders, arrays and files, in natural name order. The root and, for stores under 200 nodes, its child groups start open. Over 200 children, `Show More` shows more                      |
 | Details                       | Path, kind, role, shape (with dimension names), data type, chunks or shards, codecs, fill value, order, decoded size, stored size, attributes, the Zarr metadata, and the node's address with `Copy` |
+
+The selected tree node has a tint and an accent bar at its left.
 
 A path in the filter also matches as the details write it, with a leading
 `/` (`/obs/cluster`), and a dotted one as a Parquet field's path (`a.b`).

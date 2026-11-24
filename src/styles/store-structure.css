@@ -213,8 +213,11 @@
   outline-offset: -2px;
 }
 
+/* The bar marks the selected row at 3:1 or more, which the tint alone
+   does not (EXP-311), as in the Cell Query list. */
 .store-structure-row.is-selected {
   background: var(--accent-soft);
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
 .store-structure-toggle {

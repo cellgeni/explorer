@@ -245,8 +245,14 @@
   background: var(--surface-2);
 }
 
-.annotation-set.is-hidden .annotation-set-rows {
+/* A hidden set dims its swatches and size bars, and its text turns
+   --text-3, which keeps 4.5:1 (EXP-310). */
+.annotation-set.is-hidden :is(.annotation-color-swatch, .annotation-size-track) {
   opacity: 0.48;
+}
+
+.annotation-set.is-hidden .annotation-set-row {
+  color: var(--text-3);
 }
 
 .annotation-set-heading {
@@ -338,9 +344,12 @@
   font-size: var(--font-caption);
 }
 
-.annotation-set-row.is-hidden .annotation-set-label,
 .annotation-set-row.is-hidden .annotation-size-track {
   opacity: 0.45;
+}
+
+.annotation-set-row.is-hidden .annotation-set-label {
+  color: var(--text-3);
 }
 
 .annotation-set-label {
@@ -355,6 +364,7 @@
 .annotation-set-row small {
   justify-self: end;
   color: var(--text-2);
+  font-size: var(--font-caption);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;

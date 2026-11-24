@@ -41,6 +41,13 @@ button {
   touch-action: manipulation;
 }
 
+/* --text-3 keeps placeholders at 4.5:1 or more on every surface; the
+   browser's default grey is 3.6:1 on --surface-2 (EXP-309). */
+::placeholder {
+  color: var(--text-3);
+  opacity: 1;
+}
+
 /* Every slider uses the accent, rather than the browser's default blue. */
 input[type='range'] {
   accent-color: var(--accent);
