@@ -91,6 +91,8 @@ describe('CellInfoPanel', () => {
     expect(screen.getByText('ID').nextElementSibling).toHaveTextContent('cell-1')
     expect(screen.getByText('Annotations').nextElementSibling).toHaveTextContent('T cell')
     expect(screen.getByText('n_genes')).toBeInTheDocument()
+    // The chip wraps a long name, and names it in full on hover (EXP-307).
+    expect(screen.getByText('T cell')).toHaveAttribute('title', 'T cell')
   })
 
   it('shows unavailable values when optional cell metadata is absent', () => {

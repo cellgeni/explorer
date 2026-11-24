@@ -113,7 +113,8 @@ function CategoryLegend({
       <ul className="viewer-legend-categories">
         {shown.map((item) => (
           <li key={item.id} className={item.visible ? undefined : 'is-hidden'}>
-            <label>
+            {/* The full name on hover, as the label is cut at 260 px. */}
+            <label title={item.label}>
               <input
                 type="checkbox"
                 checked={item.visible}

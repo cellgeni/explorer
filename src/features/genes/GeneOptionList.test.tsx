@@ -33,6 +33,20 @@ describe('GeneOptionList', () => {
     expect(onToggleGene).toHaveBeenCalledWith('Gene199', false)
   })
 
+  // The buttons grow with the font size and text spacing; the rows follow
+  // the one measured rather than overlap (EXP-308).
+  it('spaces the rows by the height of their buttons', () => {
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(31)
+    const genes = Array.from({ length: 20 }, (_value, index) => `Gene${index}`)
+    render(<GeneOptionList genes={genes} selectedGenes={[]} onToggleGene={vi.fn()} />)
+
+    const list = screen.getByRole('list', { name: 'Gene options' })
+    const rows = within(list).getAllByRole('listitem')
+    expect(rows[1]).toHaveStyle({ top: '35px' })
+    expect(list).toHaveStyle({ height: `${7 * 35}px` })
+    vi.restoreAllMocks()
+  })
+
   it('keeps the rows under the scroll position when a picked gene leaves the list', () => {
     const genes = Array.from(
       { length: 200 },

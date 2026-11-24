@@ -1,6 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 
+// The row pitch at the default font size: 24 px buttons 4 px apart. The
+// buttons grow with the font size and text spacing, and the pitch follows
+// the first one drawn (EXP-308).
 const GENE_OPTION_ROW_HEIGHT = 28
+const GENE_OPTION_ROW_GAP = 4
 const GENE_OPTION_VISIBLE_ROWS = 7
 const GENE_OPTION_OVERSCAN_ROWS = 4
 
@@ -28,6 +32,21 @@ export function GeneOptionList({
   const listRef = useRef<HTMLDivElement>(null)
   const scrollResetKeyRef = useRef(scrollResetKey)
   const [scrollTop, setScrollTop] = useState(0)
+  const [rowHeight, setRowHeight] = useState(GENE_OPTION_ROW_HEIGHT)
+  const measureRow = useCallback((button: HTMLButtonElement | null) => {
+    if (button === null) return
+    const measure = () => {
+      const height = button.offsetHeight
+      if (height > 0) setRowHeight(height + GENE_OPTION_ROW_GAP)
+    }
+    measure()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(measure)
+    observer.observe(button)
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
   const selectedGeneSet = useMemo(() => new Set(selectedGenes), [selectedGenes])
   // Where a gene was picked, so focus can stay in the list when the gene
   // leaves it with its button (EXP-294).
@@ -69,14 +88,13 @@ export function GeneOptionList({
     )
   }
 
-  const viewportHeight =
-    Math.min(genes.length, GENE_OPTION_VISIBLE_ROWS) * GENE_OPTION_ROW_HEIGHT
-  const totalHeight = genes.length * GENE_OPTION_ROW_HEIGHT
+  const viewportHeight = Math.min(genes.length, GENE_OPTION_VISIBLE_ROWS) * rowHeight
+  const totalHeight = genes.length * rowHeight
   const maxScrollTop = Math.max(0, totalHeight - viewportHeight)
   const currentScrollTop = Math.min(scrollTop, maxScrollTop)
   const startIndex = Math.max(
     0,
-    Math.floor(currentScrollTop / GENE_OPTION_ROW_HEIGHT) - GENE_OPTION_OVERSCAN_ROWS,
+    Math.floor(currentScrollTop / rowHeight) - GENE_OPTION_OVERSCAN_ROWS,
   )
   const endIndex = Math.min(
     genes.length,
@@ -112,9 +130,10 @@ export function GeneOptionList({
               className="gene-option-item"
               aria-setsize={genes.length}
               aria-posinset={geneIndex + 1}
-              style={{ top: `${geneIndex * GENE_OPTION_ROW_HEIGHT}px` }}
+              style={{ top: `${geneIndex * rowHeight}px` }}
             >
               <button
+                ref={visibleIndex === 0 ? measureRow : undefined}
                 type="button"
                 className={selectedGeneSet.has(gene) ? 'selected' : undefined}
                 title={alias === undefined ? gene : `${gene} (${alias})`}
