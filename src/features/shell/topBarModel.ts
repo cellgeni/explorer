@@ -3,6 +3,7 @@ import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import { PLATFORM_NAMES, type AppPlatformKind } from '../app-shell/platformAdapter'
 import type { MagicLensScope } from '../roi/magicLensModel'
 import type { RoiDrawMode } from '../../components/ViewerCore'
+import type { ScreenshotModel } from '../screenshot/screenshotModel'
 import { TOOL_LABELS, TOOL_ORDER, TOOL_SHORTCUT_KEYS } from './shortcuts'
 
 // The top bar (plan 15.2-B): the dataset name, a
@@ -16,6 +17,8 @@ export interface TopBarModel {
   readonly magicLens: MagicLensToolModel | null
   readonly debugMode: boolean
   readonly onDebugModeChange: (enabled: boolean) => void
+  // The Screenshot button's popover (plan 27); null hides the button.
+  readonly screenshot: ScreenshotModel | null
 }
 
 // The chip says what is open, and while a dataset loads, which one. It is
@@ -174,6 +177,7 @@ export interface TopBarModelInput {
   readonly onReturnToPan: () => void
   readonly onRoiModeChange: (mode: RoiDrawMode) => void
   readonly platform: AppPlatformKind
+  readonly screenshot?: ScreenshotModel | null
   readonly setDebugMode: (enabled: boolean) => void
 }
 
@@ -202,6 +206,7 @@ export function useTopBarModel({
   onReturnToPan,
   onRoiModeChange,
   platform,
+  screenshot = null,
   setDebugMode,
 }: TopBarModelInput): TopBarModel {
   const options = toolOptions({
@@ -272,5 +277,6 @@ export function useTopBarModel({
       setDebugMode(enabled)
       appendDebugEvent(enabled ? 'Debug info shown' : 'Debug info hidden')
     },
+    screenshot,
   }
 }

@@ -15,6 +15,7 @@ import {
 } from '../rendering/morphologyCanvas'
 import { tileSchedulingForLoader } from '../rendering/morphologyTileScheduling'
 import { MorphologyTileStore } from '../rendering/morphologyTileStore'
+import { visibleMorphologyChannels } from './morphologyCanvasChannels'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
@@ -405,29 +406,6 @@ function requestedTilesWillRetry(requests: readonly ChannelRequest[]): boolean {
       return entry?.state === 'error' && entry.retryAt !== undefined
     }),
   )
-}
-
-function visibleMorphologyChannels(
-  loader: ImagePyramidLoader | null | undefined,
-  channels: readonly MorphologyCanvasChannel[] | undefined,
-): readonly MorphologyCanvasChannel[] {
-  if (channels !== undefined && channels.length > 0) {
-    return channels.filter((channel) => channel.enabled)
-  }
-
-  if (loader === null || loader === undefined) {
-    return []
-  }
-
-  return [
-    {
-      id: loader.url,
-      loader,
-      enabled: true,
-      color: [255, 255, 255],
-      opacity: 1,
-    },
-  ]
 }
 
 interface ChannelRequestPlan {

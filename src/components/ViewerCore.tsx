@@ -14,6 +14,15 @@ import { removeDeckFromTabOrder } from './deckTabOrder'
 import { ReleasingDeck } from './releasingDeck'
 import type { LinkedViewChannel } from './linkedView'
 import { MorphologyCanvas } from './MorphologyCanvas'
+import { visibleMorphologyChannels } from './morphologyCanvasChannels'
+import { screenshotLayerOptions } from '../features/screenshot/screenshotDeck'
+import { screenshotSelectionPaths } from '../features/screenshot/screenshotOverlay'
+import {
+  SCREENSHOT_DEFAULT_TILE_REQUESTS,
+  screenshotFrame,
+} from '../features/screenshot/screenshotPlan'
+import type { ScreenshotRunner } from '../features/screenshot/screenshotRunner'
+import type { ScreenshotSnapshot } from '../features/screenshot/screenshotRun'
 import { LoadingIndicator, type LoadingTaskSummary } from './AppStatusPanels'
 import { CloseIcon, FitIcon, IconButton, MinusIcon, PlusIcon } from './ui'
 import { useKeepFocus } from './ui/useKeepFocus'
@@ -166,7 +175,7 @@ import type {
   TranscriptAggregateDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
-import type { OverviewViewState } from '../rendering/deckLayers'
+import type { OverviewLayerOptions, OverviewViewState } from '../rendering/deckLayers'
 import {
   DEFAULT_CELL_BOUNDARY_OPACITY,
   DEFAULT_CELL_FILL_OPACITY,
@@ -333,6 +342,7 @@ export function ViewerCore({
   axes = false,
   scaleBar = true,
   fitRequestKey = 0,
+  screenshot = null,
   overviewRenderCellLimit,
   movingOverviewRenderCellLimit,
   clipOverviewCellsToViewport = true,
@@ -424,6 +434,7 @@ export function ViewerCore({
       loadingTasks={loadingTasks}
       {...(onCancelLoadingTask === undefined ? {} : { onCancelLoadingTask })}
       legendSections={legend ? legendSections : EMPTY_LEGEND_SECTIONS}
+      screenshotLegendSections={legendSections}
       showZoomLevel={showZoomLevel}
       selectionHighlight={selectionHighlight}
       {...(onClearSelection === undefined ? {} : { onClearSelection })}
@@ -448,6 +459,7 @@ export function ViewerCore({
       scaleBar={scaleBar}
       minimapPoints={minimapDots}
       fitRequestKey={fitRequestKey}
+      screenshot={screenshot}
       {...(overviewRenderCellLimit === undefined ? {} : { overviewRenderCellLimit })}
       {...(movingOverviewRenderCellLimit === undefined
         ? {}
@@ -520,6 +532,8 @@ interface ViewerSurfaceProps {
   readonly loadingTasks: readonly LoadingTaskSummary[]
   readonly onCancelLoadingTask?: (id: string) => void
   readonly legendSections: readonly ViewerLegendSection[]
+  // The legend's sections whether or not Settings shows it, for screenshots.
+  readonly screenshotLegendSections: readonly ViewerLegendSection[]
   readonly showZoomLevel: boolean
   readonly selectionHighlight: ViewerSelectionHighlight | null
   readonly onClearSelection?: () => void
@@ -546,6 +560,7 @@ interface ViewerSurfaceProps {
   readonly scaleBar: boolean
   readonly minimapPoints: readonly (readonly [number, number])[]
   readonly fitRequestKey: number
+  readonly screenshot: ScreenshotRunner | null
   readonly overviewRenderCellLimit?: number | null
   readonly movingOverviewRenderCellLimit?: number
   readonly clipOverviewCellsToViewport: boolean
@@ -614,6 +629,7 @@ function ViewerSurface({
   loadingTasks,
   onCancelLoadingTask,
   legendSections,
+  screenshotLegendSections,
   showZoomLevel,
   selectionHighlight,
   onClearSelection,
@@ -636,6 +652,7 @@ function ViewerSurface({
   scaleBar,
   minimapPoints: minimapDots,
   fitRequestKey,
+  screenshot,
   overviewRenderCellLimit,
   movingOverviewRenderCellLimit,
   clipOverviewCellsToViewport,
@@ -1144,33 +1161,32 @@ function ViewerSurface({
       cellBoundaryFillEnabled,
     ],
   )
-  const layers = useMemo(
-    () =>
-      createOverviewLayers(cells, boundaries, {
-        cellsVisible: cellLayersVisible,
-        cellFillOpacity,
-        cellBoundaryOpacity,
-        cellPointPickable,
-        cellBoundaryFillEnabled,
-        cellBoundaryPickable: cellBoundaryHoverEnabled,
-        nucleusBoundaries,
-        gridCells: gridCellPacking,
-        cellBoundaryGeometry: boundaryLayerGeometry,
-        cellBoundaryStyle: boundaryLayerStyle,
-        geneExpressionActive,
-        geneExpressionOverlayElements,
-        transcriptAggregateBins,
-        transcriptPoints,
-        geometricAnnotations,
-        transcriptOpacity,
-        transcriptPointSize,
-        pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
-        pointSizeFullViewScale,
-        pointSizeCellCount: fullViewCellPointCount,
-        trueSizePoints,
-        cellPointScale,
-        cellPointPacking,
-      }),
+  const overviewLayerOptions = useMemo<OverviewLayerOptions>(
+    () => ({
+      cellsVisible: cellLayersVisible,
+      cellFillOpacity,
+      cellBoundaryOpacity,
+      cellPointPickable,
+      cellBoundaryFillEnabled,
+      cellBoundaryPickable: cellBoundaryHoverEnabled,
+      nucleusBoundaries,
+      gridCells: gridCellPacking,
+      cellBoundaryGeometry: boundaryLayerGeometry,
+      cellBoundaryStyle: boundaryLayerStyle,
+      geneExpressionActive,
+      geneExpressionOverlayElements,
+      transcriptAggregateBins,
+      transcriptPoints,
+      geometricAnnotations,
+      transcriptOpacity,
+      transcriptPointSize,
+      pointSizeZoomDelta: viewState.zoom - fittedViewZoom,
+      pointSizeFullViewScale,
+      pointSizeCellCount: fullViewCellPointCount,
+      trueSizePoints,
+      cellPointScale,
+      cellPointPacking,
+    }),
     [
       cellBoundaryOpacity,
       cellLayersVisible,
@@ -1180,9 +1196,7 @@ function ViewerSurface({
       cellBoundaryHoverEnabled,
       boundaryLayerGeometry,
       boundaryLayerStyle,
-      boundaries,
       nucleusBoundaries,
-      cells,
       cellPointPacking,
       gridCellPacking,
       geneExpressionActive,
@@ -1199,6 +1213,10 @@ function ViewerSurface({
       viewState.zoom,
       fittedViewZoom,
     ],
+  )
+  const layers = useMemo(
+    () => createOverviewLayers(cells, boundaries, overviewLayerOptions),
+    [boundaries, cells, overviewLayerOptions],
   )
   // A lost WebGL context draws the view again on a new canvas (EXP-325), with
   // new layers: deck.gl cannot reuse a layer its old Deck finalized.
@@ -1502,6 +1520,81 @@ function ViewerSurface({
       viewState,
       viewport,
     ],
+  )
+  // Screenshots (plan 27): the view as it is when one is taken, built only
+  // then. The runner never changes, so connecting it redraws nothing.
+  const viewChangedAtRef = useRef(0)
+  useEffect(() => {
+    viewChangedAtRef.current = performance.now()
+  }, [viewState])
+  const activeSelectionOutlineColor = selectionOutlines.find(
+    (outline) => outline.active,
+  )?.color
+  const screenshotSnapshotRef = useRef<() => ScreenshotSnapshot | null>(() => null)
+  useLayoutEffect(() => {
+    screenshotSnapshotRef.current = () => {
+      if (!viewportMeasured || !canTrackMouseCoordinates) return null
+      const frame = screenshotFrame(viewport)
+
+      return {
+        viewState,
+        viewport: frame,
+        image: {
+          channels: visibleMorphologyChannels(imageLoader, imageChannels),
+          flatImage,
+          opacity: imageOpacity,
+        },
+        layers: hasSpatialData
+          ? () =>
+              createOverviewLayers(
+                cells,
+                boundaries,
+                screenshotLayerOptions(overviewLayerOptions),
+              )
+          : null,
+        overlays: {
+          scaleBar: scaleBarModel(
+            viewState,
+            frame,
+            coordinateUnit,
+            micrometersPerPixel,
+            physicalUnitLabel,
+          ),
+          axes: viewerAxesModel(
+            viewState,
+            frame,
+            coordinateUnit,
+            micrometersPerPixel,
+            physicalUnitLabel,
+          ),
+          legend: screenshotLegendSections,
+          selections: screenshotSelectionPaths(
+            selectionOutlines,
+            displayedRoiSelection,
+            activeSelectionOutlineColor ?? null,
+            viewState,
+            frame,
+          ),
+        },
+        cells: hasCells
+          ? {
+              inView: visibleCellCount,
+              onScreen: Math.min(
+                visibleCellCount,
+                Math.round(visibleCellCount * cellPointSample),
+              ),
+            }
+          : null,
+        unitLabel: physicalUnitLabel,
+        maxConcurrentTileRequests:
+          maxConcurrentTileRequests ?? SCREENSHOT_DEFAULT_TILE_REQUESTS,
+        viewChangedAt: viewChangedAtRef.current,
+      }
+    }
+  })
+  useEffect(
+    () => screenshot?.connect(() => screenshotSnapshotRef.current()),
+    [screenshot],
   )
   const flushMouseCoordinate = useCallback(() => {
     mouseCoordinateFrameRef.current = null

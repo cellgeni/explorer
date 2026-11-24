@@ -1124,10 +1124,11 @@
   color: var(--accent);
 }
 
-/* The names take about 400 px with Share, Help and Settings, which the bar's
-   right side has from 1100 px, with the Measure options showing too; below
-   that only the icons show, and the names are still read. */
-@media (max-width: 1099.98px) {
+/* The names take about 400 px with Screenshot's camera, Share, Help and
+   Settings, which the bar's right side has from 1180 px, with the Measure
+   options showing too and in a wide fallback font; below that only the
+   icons show, and the names are still read. */
+@media (max-width: 1179.98px) {
   .shell-panel-toggle.ui-button {
     width: 28px;
     padding: 0;
@@ -1165,6 +1166,120 @@
 
 .shell-share-status:empty {
   display: none;
+}
+
+/* Screenshot's name takes about 115 px more, which the bar has from 1340 px
+   beside the panel names; below that only the camera shows, and the name
+   is still read. */
+@media (max-width: 1339.98px) {
+  .shell-screenshot-trigger.ui-button {
+    width: 28px;
+    padding: 0;
+  }
+
+  .shell-screenshot-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* Screenshot (plan 27-D1): its options, size and progress. */
+.shell-screenshot {
+  width: 320px;
+}
+
+.shell-screenshot-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Background's names need the popover's width. */
+.shell-screenshot-row.is-stacked {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.shell-screenshot-row.is-stacked .ui-segmented {
+  display: grid;
+}
+
+.shell-screenshot-size,
+.shell-screenshot-note {
+  margin: 0;
+  color: var(--text-2);
+  font-size: var(--font-control);
+  font-variant-numeric: tabular-nums;
+}
+
+.shell-screenshot-include {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.shell-screenshot-include legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+}
+
+/* Rows 24 px high, so each box is a 24 px target (WCAG 2.5.8). */
+.shell-screenshot-include .ui-checkbox {
+  min-height: 24px;
+}
+
+.shell-screenshot-notes {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-2);
+  background: var(--warning-soft);
+  color: var(--text-1);
+  font-size: var(--font-control);
+  list-style: none;
+}
+
+.shell-screenshot-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  font-size: var(--font-control);
+}
+
+.shell-screenshot-progress progress {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.shell-screenshot-error {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.shell-screenshot-error p,
+.shell-screenshot-ask {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--font-control);
+}
+
+.shell-screenshot-actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
 }
 
 .shell-shortcuts {

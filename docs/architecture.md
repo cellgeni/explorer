@@ -336,6 +336,18 @@ lets tests replace them.
   WebGL context live, and Chromium keeps 16 per page and drops the oldest,
   which is the 2D view's. `ReleasingDeck` loses the context and stops
   luma.gl's canvas observers once its canvas has left the page.
+- Screenshots (`src/features/screenshot/`, plan 27) draw the view again off
+  screen. App makes one `ScreenshotRunner`; ViewerCore connects its snapshot
+  to it (the view, the frame, the image channels, a function that builds the
+  layers with every loaded cell, and the overlay models), and the top bar's
+  popover starts it. `drawScreenshot` draws the frame in tiles of at most
+  4,096 px: the image through a `ScreenshotImageComposer`, with its own
+  `TileCache`s at the level the PNG needs, then the layers through a
+  `ScreenshotDeckRenderer`, a `ReleasingDeck` of its own whose canvas sits
+  hidden in the page and is copied out in the same task each tile is drawn,
+  then the scale bar, legend, axes and selections as one SVG. `pngChunks`
+  adds the dpi and text chunks. The Deck loses its context as soon as the
+  screenshot ends.
 
 ## Default Colours
 

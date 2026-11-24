@@ -20,6 +20,9 @@ plan's four questions the same day
 ([Answered Questions](#answered-questions)); D3, D5, the failure rule and
 Later carry the answers.
 
+Built the same day, tasks A to I: [Spike Results](#spike-results-2026-11-24)
+and [As Built](#as-built-2026-11-24).
+
 The plan rests on a code map made on 2026-11-24 at `24f0fd2` and
 rechecked the same day at `fe50d70`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -88,6 +91,87 @@ Non-goals:
   readouts, tool hints, a selection or measurement still being drawn, the
   minimap and the zoom buttons.
 - Keeping the popover's choices in the link.
+
+## Spike Results (2026-11-24)
+
+Task A, on the built screenshot rather than a throwaway one. A
+production build in headless Chromium on the Mac's GPU (Apple M3, ANGLE
+Metal), a 1,500 × 900 window and a frame of 1,140 × 852 CSS px, with the
+Xenium demo.
+
+- **WebGL limits.** The renderbuffer, viewport and texture limits are
+  16,384. Drawing buffers asked for at 4,096, 8,192 and 16,384 px a side
+  were all granted at that size.
+
+| View                      | PNG              | Image read                           | Time from `Save PNG` | PNG size | JS heap at load, and at most while saving |
+| ------------------------- | ---------------- | ------------------------------------ | -------------------- | -------- | ----------------------------------------- |
+| Brain, 2×                 | 2,280 × 1,704 px | 4 tiles, 3.47 MB, cached             | 0.50 s               | 5.0 MiB  | 550, 562 MiB                              |
+| Brain, 4×                 | 4,560 × 3,408 px | 6 tiles, 3.47 MB, cached             | 0.98 s               | 16.6 MiB | 758, 557 MiB                              |
+| Whole slide, 4×, on White | 4,560 × 3,408 px | 6 tiles, 3.67 MB; 5 fetches, 3.5 MiB | 1.57 s               | 4.5 MiB  | 1,302, 1,314 MiB                          |
+
+- **Every cell.** The whole slide drew all 1,414,155 cells; the screen
+  showed about 250,000. The tab grew 12 MiB, far under task A's 2 GB.
+- **The brain view's tiles were cached.** At 0.088 and 0.044 µm per PNG
+  pixel both scales read level 0, which the canvas had read, so the bytes
+  came from the byte-range cache and nothing was fetched.
+- **No seam** where a 4,096 px tile edge crosses points, in a crop of the
+  PNG around it.
+- **The hidden host is gone after every run**, and the end-to-end test
+  counts one live WebGL context after a screenshot and no loss on the page.
+- **The off-screen Deck stays.** It made each screenshot in a second or
+  two, so the framebuffer alternative was not tried. GPU memory was not
+  measured.
+- **No animation frame, no cells.** deck.gl applies the layers it is given
+  before its device is ready in an animation frame. In a hidden page,
+  where `requestAnimationFrame` stops (the Browser pane when it is not
+  shown), the PNG had the image and no cells. The renderer now runs one
+  frame itself after `onLoad` (`animationLoop.redraw()`); the hidden pane
+  then drew the cells.
+- **Not measured:** `toBlob` at 8,192 and 16,384 px, and the time with the
+  render cap's sample against every cell.
+- **The `@live` test** (a 4× screenshot of the whole slide) passed in
+  1.8 minutes, nearly all of it the dataset's load.
+
+## As Built (2026-11-24)
+
+All of D1 to D12, with these differences from the plan:
+
+- **A runner, not a request prop** (task G). App makes one
+  `ScreenshotRunner` and passes it to ViewerCore as `screenshot` and to the
+  top bar through its model. ViewerCore connects a function that returns
+  the snapshot of its view; the popover starts, cancels and retries
+  through the runner, and reads its state with `useSyncExternalStore`. The
+  snapshot holds a function that makes the layers, so no layer or typed
+  array goes into React props, and the live DeckGL does not render again
+  (ViewerCore's test checks it).
+- **No `planScreenshot`** (task B). The plan is small functions in
+  `screenshotPlan.ts`: the size and the limit, the grid, each tile's view
+  state, each channel's level and reads, the print size and the notes.
+  The popover counts the read itself.
+- **A pool, not a scheduler** (task C). The image composer keeps its own
+  `TileCache` per channel, holding twice the request limit plus 8 tiles,
+  and reads through a pool of `maxConcurrentTileRequests` workers rather
+  than a `TileRequestScheduler`. It reads again after each of
+  `TILE_RETRY_DELAYS_MS` itself.
+- **The legend at the bottom left**, where the screen's notification stack
+  puts it, not the top right (D6). It leaves out classes hidden on the
+  screen, and lists those past what fits as "N more".
+- **An image with no channel list** (a loader's image in white) gets its
+  contrast from the screenshot's first tile, as the canvas's cache does
+  from its own, so the two can differ a little.
+- **The default scale** is 2×, or the largest scale under the limit when
+  2× is over it.
+- **Level of detail keyed on zoom** (grid cells, transcript density
+  squares) follows the screen's zoom: the Deck draws at that zoom with
+  `useDevicePixels: N`.
+- **Top-bar labels.** `Screenshot` shows its label from 1,340 px and is
+  an icon alone below that; the panel toggles' labels now show from
+  1,180 px rather than 1,100 px. Measured with the Mac's font and with
+  Verdana (wider, as on Linux), the bar has room at 861, 1,180 and
+  1,340 px.
+- **End-to-end** (task I): the offline smoke test uses a 64² TIFF with one
+  imported outline rather than an AnnData manifest. It compares the PNG,
+  halved, with a screenshot of the frame: the mean difference was 0.09 of 255. The axe test opens the popover.
 
 ## Current State
 
@@ -355,7 +439,7 @@ buffers. The spike chooses (task A).
 
 ## Tasks
 
-- [ ] **A. Spike.** (M) A throwaway screenshot of the Xenium demo
+- [x] **A. Spike.** (M) A throwaway screenshot of the Xenium demo
       (1,414,155 cells, four channels) in a production build in headless
       Chromium on the Mac's GPU. Record in this file:
   - the off-screen Deck: time to the first frame with every cell and with
@@ -370,14 +454,14 @@ buffers. The spike chooses (task A).
     MB and time;
   - revisit D5, D9 and D10 if a 4× screenshot of the whole slide takes
     over a minute, or the tab grows by more than 2 GB.
-- [ ] **B. The plan.** (S) `planScreenshot` in
+- [x] **B. The plan.** (S) `planScreenshot` in
       `src/features/screenshot/screenshotPlan.ts`: size and limit (D10),
       the tile grid (D9), levels and tiles per channel (D4), the read
       estimate and the notes (D7).
   - fast-check tests: the tiles cover the frame exactly, without overlap,
     on whole device pixels.
   - The level at N× equals the level at 1× for a frame N times larger.
-- [ ] **C. The image.** (M) `ScreenshotImageComposer`: its own tile caches
+- [x] **C. The image.** (M) `ScreenshotImageComposer`: its own tile caches
       (D4); fetch, draw and composite per grid tile, with progress and
       abort.
   - Tests with a fake loader and a recording 2D context: levels, flipped
@@ -386,29 +470,29 @@ buffers. The spike chooses (task A).
     again.
   - The canvas's caches hold the same tiles before and after a
     screenshot.
-- [ ] **D. The deck.gl tiles.** (M) The off-screen renderer the spike
+- [x] **D. The deck.gl tiles.** (M) The off-screen renderer the spike
       chooses.
   - Tests that its layers carry the overrides, and that it loses its
     context when done (count live contexts with a `WeakRef` wrapper on
     `getContext`, as for the 3D overlays).
-- [ ] **E. Overlays.** (M) One SVG from the models: the scale bar, the
+- [x] **E. Overlays.** (M) One SVG from the models: the scale bar, the
       legend's continuous and category sections, the axes and the
       selections, in the colours D8 gives each background. Tests on the
       SVG.
-- [ ] **F. The PNG file.** (S) Insert `pHYs` and `tEXt` chunks with their
+- [x] **F. The PNG file.** (S) Insert `pHYs` and `tEXt` chunks with their
       CRC-32 (D11); the file name. Tests read the chunks back.
-- [ ] **G. ViewerCore and the runner.** (M)
+- [x] **G. ViewerCore and the runner.** (M)
   - A `screenshotRequest` prop, as `focusRequest` is, carrying the
     options. ViewerCore takes the snapshot and runs it.
   - Progress and `Cancel` in `loadingTasks`; one at a time; cancelled by a
     dataset change (D12).
   - The no-redraw guard: opening the popover and taking a screenshot must
     not render the live DeckGL, which costs about 9 s per render headless.
-- [ ] **H. The popover.** (M) `ScreenshotButton` in `TopBar.tsx`: scale,
+- [x] **H. The popover.** (M) `ScreenshotButton` in `TopBar.tsx`: scale,
       the size line, `DPI`, include, background, the notes, the read
       question, `Save PNG`, progress and `Cancel`. Tests in
       `TopBar.test.tsx` on a fake runner.
-- [ ] **I. Docs and end-to-end tests.** (M)
+- [x] **I. Docs and end-to-end tests.** (M)
   - Docs: [Docs To Update](#docs-to-update).
   - Playwright on an offline fixture (a local OME-TIFF with cells under an
     AnnData manifest): a 2× screenshot; check the download's size, its

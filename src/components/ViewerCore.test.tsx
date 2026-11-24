@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LinkedViewChannel } from './linkedView'
+import { ScreenshotRunner } from '../features/screenshot/screenshotRunner'
 import { ViewerCore, type ViewerViewportDetail } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
 import type {
@@ -3044,6 +3045,71 @@ describe('ViewerCore', () => {
       },
     })
     expect(selection.points).toHaveLength(4)
+  })
+
+  it('connects a screenshot of its view without drawing the view again (plan 27)', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+    const runner = new ScreenshotRunner()
+    const cells = ['a', 'b', 'c', 'd'].map((id, index) => ({
+      ...overviewCellDatum(),
+      id,
+      position: [index * 10, 0, 0] as [number, number, number],
+    }))
+    const legendSections = [
+      {
+        kind: 'categories' as const,
+        id: 'clusters',
+        title: 'Clusters',
+        items: [{ id: '1', label: 'One', color: '#f00', count: 4, visible: true }],
+      },
+    ]
+    render(
+      <ViewerCore
+        cells={cells}
+        screenshot={runner}
+        legend={false}
+        legendSections={legendSections}
+        scaleBar={false}
+        overviewRenderCellLimit={1}
+        roiSelection={{
+          kind: 'box',
+          bbox: {
+            minX: micrometers(0),
+            maxX: micrometers(10),
+            minY: micrometers(0),
+            maxY: micrometers(10),
+          },
+        }}
+      />,
+    )
+    await waitFor(() => {
+      expect(runner.preview()).not.toBeNull()
+    })
+    const renderCountBefore = deckGlMock.renderCount
+    const snapshot = runner.preview()
+
+    expect(snapshot?.viewport).toEqual({ width: 200, height: 100 })
+    expect(snapshot?.cells).toEqual({ inView: 4, onScreen: 1 })
+    // Include starts from Settings, so the snapshot keeps what Settings hides.
+    expect(snapshot?.overlays.legend).toEqual(legendSections)
+    expect(snapshot?.overlays.scaleBar).not.toBeNull()
+    expect(snapshot?.overlays.selections).toEqual([
+      expect.objectContaining({ saved: false, color: null }),
+    ])
+
+    const layers = (snapshot?.layers?.() ?? []).flat() as {
+      readonly id: string
+      readonly props: { readonly pickable?: boolean; readonly filterRange?: unknown }
+    }[]
+    const points = layers.find((layer) => layer.id === 'cells-overview-scatter')
+    expect(points?.props.pickable).toBe(false)
+    expect(points?.props.filterRange).toEqual([
+      [0, 1],
+      [0, 0.5],
+    ])
+    expect(deckGlMock.layers).not.toContain(points)
+    expect(deckGlMock.renderCount).toBe(renderCountBefore)
   })
 })
 

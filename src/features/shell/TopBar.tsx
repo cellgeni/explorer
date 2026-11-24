@@ -29,6 +29,7 @@ import {
   Tooltip,
 } from '../../components/ui'
 import { withMicrometers } from '../../data/units'
+import { ScreenshotButton } from '../screenshot/ScreenshotButton'
 import { isTextEntryTarget, type ActiveTool } from '../app-shell/activeToolModel'
 import { BoundaryLimitField, OpenDatasetForm } from '../sections/DatasetInfoBlocks'
 import type { DatasetInfoModel, OpenDatasetModel } from '../sections/datasetInfoModel'
@@ -176,6 +177,9 @@ export function TopBar({
           <PanelMenu panels={panels} />
         ) : (
           <PanelToggles panels={panels} />
+        )}
+        {model.screenshot === null ? null : (
+          <ScreenshotButton screenshot={model.screenshot} iconOnly={narrow} />
         )}
         <ShareButton info={info} iconOnly={narrow} />
         <HelpMenu />

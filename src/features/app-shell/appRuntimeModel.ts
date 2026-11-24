@@ -27,6 +27,8 @@ export type LoadingTaskArea =
   | 'magic-lens'
   | 'selection'
   | 'cell'
+  // A screenshot being drawn (plan 27); no section shows it.
+  | 'screenshot'
 
 export interface LoadingTask {
   readonly id: string
@@ -52,6 +54,7 @@ export type CancellableLoadingTaskId =
   | 'cell-transcripts'
   | 'roi-cells'
   | 'roi-genes'
+  | 'screenshot'
 
 const CANCELLABLE_LOADING_TASK_IDS: ReadonlySet<string> =
   new Set<CancellableLoadingTaskId>([
@@ -64,6 +67,7 @@ const CANCELLABLE_LOADING_TASK_IDS: ReadonlySet<string> =
     'cell-transcripts',
     'roi-cells',
     'roi-genes',
+    'screenshot',
   ])
 
 export function isCancellableLoadingTaskId(id: string): id is CancellableLoadingTaskId {
@@ -123,6 +127,10 @@ interface LoadingTaskStateInputs {
   readonly transcriptLoadProgress?: number | undefined
   // An image's imported segmentation being read, and what it has read.
   readonly segmentationLoading?: { readonly detail?: string } | undefined
+  // A screenshot being drawn: how far it has got (plan 27-D12).
+  readonly screenshotLoading?:
+    | { readonly detail: string; readonly progress?: number | undefined }
+    | undefined
   // An image's outlines are its imported segmentation's, in the
   // Segmentation section.
   readonly boundariesAreSegmentation?: boolean
@@ -185,6 +193,7 @@ export function createLoadingTasks({
   magicLensLoadingScopeLabel = 'Lens',
   transcriptLoadProgress,
   segmentationLoading,
+  screenshotLoading,
   boundariesAreSegmentation = false,
 }: LoadingTaskStateInputs): readonly LoadingTask[] {
   const tasks: LoadingTask[] = []
@@ -396,6 +405,18 @@ export function createLoadingTasks({
       id: 'roi-transcripts',
       area: 'selection',
       label: 'Exporting ROI transcripts',
+    })
+  }
+
+  if (screenshotLoading !== undefined) {
+    tasks.push({
+      id: 'screenshot',
+      area: 'screenshot',
+      label: 'Screenshot',
+      detail: screenshotLoading.detail,
+      ...(screenshotLoading.progress === undefined
+        ? {}
+        : { progress: screenshotLoading.progress }),
     })
   }
 
