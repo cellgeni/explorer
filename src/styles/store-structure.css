@@ -369,6 +369,13 @@
   white-space: pre;
 }
 
+/* A block that scrolls is a Tab stop (JsonBlock); the ring is drawn inside
+   it, as the drawer clips its sides. */
+.store-structure-json pre:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: -3px;
+}
+
 .store-structure-empty {
   margin: 0;
   color: var(--text-3);

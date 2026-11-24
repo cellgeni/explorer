@@ -63,6 +63,12 @@
   white-space: nowrap;
 }
 
+/* The list clips what lies outside it, so the focus ring is drawn inside
+   the button (EXP-315). */
+.gene-option-list button:focus-visible {
+  outline-offset: -3px;
+}
+
 .option-empty {
   color: var(--text-3);
   font-size: var(--font-control);

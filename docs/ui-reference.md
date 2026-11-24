@@ -459,6 +459,10 @@ its name. Names that differ but would make the same IDs (`My Labels.csv` and
 are told apart: the later one's IDs are numbered (`custom:my-labels-csv-2:`),
 so it does not replace the other's labels.
 
+`Import File`, like `Import GeoJSON` and the segmentation's `Open File`, is the
+label of a hidden file input that sits on it: Tab focuses the input, and the
+label shows the focus ring.
+
 Loaded state:
 
 - **Loaded annotations**: one list per set, largest class first, listing
@@ -1268,7 +1272,8 @@ Keyboard (`src/components/viewerNavigation.ts`; focus the spatial view first,
 except for `F`). The skip link, the page's first Tab stop, focuses the view
 without changing the address (`src/features/app-shell/spatialViewFocus.ts`);
 with the start screen or a 3D view over it, it focuses the region's heading
-instead, so the next Tab enters what covers it.
+instead, so the next Tab enters what covers it. While focused it is drawn over
+the top bar and every other layer.
 
 | Key                | Action                                          |
 | ------------------ | ----------------------------------------------- |
@@ -1381,7 +1386,7 @@ the coordinate readout says the same.
   more) and viewport messages ("Loading overview cells…", "Reading OME-TIFF
   image…", errors).
 - Tasks that can be stopped have `Cancel` in the loading indicator (Phase
-  15.3-D), named after the task ("Cancel querying ROI genes"). They are never
+  15.3-D), named after the task ("Cancel querying ROI genes"), 24 px tall. They are never
   folded into "+n more". Cancelling stops the requests and returns that part
   to how it was before; it is not an error, and the activity log says
   "Cancelled …".
@@ -1539,6 +1544,10 @@ Right opens a group or moves into it, Left closes it or moves to its group,
 and Enter or Space shows a row's details. Moving does not change the
 details. The chevron opens and closes a group with the mouse. `Show More` is
 a row too, and focus moves to the first row it adds.
+
+A JSON block in the details (attributes, metadata) that scrolls is a Tab stop
+named after its heading ("Attributes", or "Metadata"), so the arrow keys can
+scroll it; one that fits is not.
 
 A Parquet file in a zip or a listed folder, and a SpatialData shapes group
 whose `shapes.parquet` is not listed (`parquetFileOf`), have `Browse File` in

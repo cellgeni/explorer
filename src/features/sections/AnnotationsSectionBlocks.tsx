@@ -139,25 +139,27 @@ export function AnnotationSetControls({ sets }: { readonly sets: AnnotationSetsM
       >
         Export Annotations
       </button>
-      <label
-        className="secondary-file-action"
-        htmlFor={importInputId}
-        title="Import annotation file"
-      >
-        Import File
-      </label>
-      <input
-        id={importInputId}
-        className="visually-hidden-file"
-        type="file"
-        accept=".csv,.tsv,.txt,.json,application/json,text/csv,text/tab-separated-values"
-        disabled={!loadEnabled}
-        onChange={(event) => {
-          const file = event.currentTarget.files?.[0] ?? null
-          sets.onImportFile(file)
-          event.currentTarget.value = ''
-        }}
-      />
+      <span className="file-action">
+        <label
+          className="secondary-file-action"
+          htmlFor={importInputId}
+          title="Import annotation file"
+        >
+          Import File
+        </label>
+        <input
+          id={importInputId}
+          className="visually-hidden-file"
+          type="file"
+          accept=".csv,.tsv,.txt,.json,application/json,text/csv,text/tab-separated-values"
+          disabled={!loadEnabled}
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0] ?? null
+            sets.onImportFile(file)
+            event.currentTarget.value = ''
+          }}
+        />
+      </span>
       <form
         className="annotation-url-import"
         aria-label="Import annotation URL"
@@ -274,25 +276,27 @@ export function GeometricShapesPanel({
         <small>{shapes.length.toLocaleString()} loaded</small>
       </div>
       <div className="roi-action-row">
-        <label
-          className="secondary-file-action"
-          htmlFor={importInputId}
-          title="Import GeoJSON"
-        >
-          Import GeoJSON
-        </label>
-        <input
-          id={importInputId}
-          className="visually-hidden-file"
-          type="file"
-          accept=".geojson,.json,application/geo+json,application/json"
-          disabled={!model.enabled}
-          onChange={(event) => {
-            const file = event.currentTarget.files?.[0] ?? null
-            model.onImportFile(file, unit)
-            event.currentTarget.value = ''
-          }}
-        />
+        <span className="file-action">
+          <label
+            className="secondary-file-action"
+            htmlFor={importInputId}
+            title="Import GeoJSON"
+          >
+            Import GeoJSON
+          </label>
+          <input
+            id={importInputId}
+            className="visually-hidden-file"
+            type="file"
+            accept=".geojson,.json,application/geo+json,application/json"
+            disabled={!model.enabled}
+            onChange={(event) => {
+              const file = event.currentTarget.files?.[0] ?? null
+              model.onImportFile(file, unit)
+              event.currentTarget.value = ''
+            }}
+          />
+        </span>
         <button
           type="button"
           className="secondary-action"
