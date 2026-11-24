@@ -15,6 +15,7 @@ import {
   type GeneValuesReadEstimate,
   type GeneValuesRowIds,
 } from './geneValues'
+import { mapWithConcurrency } from '../utils/mapWithConcurrency'
 import { waitForSharedLoad, type SharedLoad } from '../utils/sharedLoad'
 import {
   dropSharedH5WorkerFile,
@@ -1478,28 +1479,6 @@ function warmupCellFeatureMatrixRowTargets(
     id: intToCellId(0, index + 1),
     row: Math.floor((index * maxRow) / (targetCount - 1)),
   }))
-}
-
-async function mapWithConcurrency<T>(
-  items: readonly T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<void>,
-): Promise<void> {
-  const workerCount = Math.min(Math.max(1, concurrency), items.length)
-  let cursor = 0
-
-  await Promise.all(
-    Array.from({ length: workerCount }, async () => {
-      while (cursor < items.length) {
-        const item = items[cursor]
-        cursor += 1
-
-        if (item !== undefined) {
-          await mapper(item)
-        }
-      }
-    }),
-  )
 }
 
 async function loadH5MatrixUncached(
