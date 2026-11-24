@@ -197,6 +197,10 @@ From a run of `npm test` and the repository:
   `pages.yml` deploying `main`.
 - The eight review tasks run live with `scripts/review-tasks.mjs` (15.5-E),
   by hand against the dev server, not in CI.
+- Recount on 2026-11-24 (`24f0fd2`): 396 Vitest files with 3,835 tests;
+  28 smoke and 18 live tests in `app.spec.ts`, plus the 11 examples and the
+  gallery in `examples.spec.ts`. Coverage was 90.9% of statements, 80.8% of
+  branches, 92.4% of functions and 91.2% of lines.
 - Recount on 2026-11-16 (`bea26d2`): 292 Vitest files with 2,468 tests,
   73 s locally. 14 smoke tests (the two MERSCOPE tests added) and 11 live
   ones in `app.spec.ts`, plus the 9 examples and the gallery in
@@ -259,14 +263,18 @@ From a run of `npm test` and the repository:
       Since 2026-11-17 it fails only on critical advisories, because
       `picomatch` advisory GHSA-fc5q-39xc-vjpf (high) covers every release up
       to 4.0.7 and has no fix. It reaches only Vite, Vitest,
-      typescript-eslint and `patch-package`.
+      typescript-eslint and `patch-package`. 4.0.7 was still the latest
+      release on 2026-11-24.
 - [ ] Deploy previews for pull requests. `pages.yml` deploys only pushes to
       `main`. See [Open Items](open-items.md) for what a preview would need.
 - [ ] A committed Xenium-shaped golden fixture bundle. Unit tests build their
       Xenium data in code, and the smoke tests have no Xenium dataset.
 - [ ] E2E for SpatialData (shapes and labels stores), and smoke tests for
       OME-Zarr and image-only TIFF. Only the nightly examples load an OME-Zarr
-      and a QPTIFF image.
+      and a QPTIFF image. Partly done (checked 2026-11-24): smoke tests load a
+      Zarr v3 SpatialData store with an image, circles and a sharded table,
+      an OME-Zarr z-stack in the 3D view, and OME-TIFF images and a plain
+      TIFF with a label mask; see [Open Items](open-items.md).
 - [ ] E2E for what shipped without it (checked 2026-11-16): dataset
       collections (the bar, previews, the grid, side by side and `compare=`),
       Browse Store and Browse File, SVS, NDPI and plain TIFF, GeoJSON import
@@ -275,14 +283,22 @@ From a run of `npm test` and the repository:
       test runs in desktop Chromium, and one smoke test at 390 × 844 (the
       layer sheet and the Panels menu, through `openControls`); the rest
       assume the desktop layout. The axe walk does not reach the collection
-      bar, side-by-side panels or the structure drawer.
+      bar, side-by-side panels or the structure drawer. Partly done (checked
+      2026-11-24): smoke tests open collections (the bar, previews, side by
+      side and Stack in 3D) and a plain TIFF, run at four phone and
+      short-window sizes, and axe the collection bar and the 3D views; see
+      [Open Items](open-items.md) for what is left.
 - [ ] Unit coverage is thin where it is hardest to see by eye (V8 report of
       2026-11-12): `gridBinLayer.ts` (0% of branches), `viewerPicking.ts`
       (28% of lines; the polygon hit test never runs), the chunk cache in
       `zarrDecode.worker.ts` (0%), `visiumHdOverview.ts` (55% of branches)
       and `omeZarrPixels.ts` (22% of branches). S3 listing pagination in
       `zarrFolderLister.ts` (`IsTruncated`, `NextContinuationToken`) is not
-      tested.
+      tested. On 2026-11-24: `gridBinLayer.ts` 25% of branches (two picking
+      tests), `viewerPicking.ts` 82% of lines (through the `ViewerCore`
+      tests), `zarrDecode.worker.ts` 37% of lines (one test, that a failed
+      decode is kept; eviction is not tested), `visiumHdOverview.ts` 57% and
+      `omeZarrPixels.ts` 23% of branches; pagination is still not tested.
 
 ### Closed Open Items
 

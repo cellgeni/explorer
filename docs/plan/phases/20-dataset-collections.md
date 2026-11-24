@@ -101,9 +101,11 @@ Measured in the browser:
       or tools. Every cell is drawn 10 µm across, so Visium spots are smaller
       than in the main view, and Visium HD and image-only datasets have no
       preview, so they cannot be panels.
-- [ ] Side by side has unit and App tests but no E2E test, and has been
-      checked in the browser only on SPCOX sections marked as one coordinate
-      system, which are not truly registered.
+- [ ] Side by side has unit and App tests but no E2E test of what the
+      panels draw (a smoke test opens them only to check that their WebGL
+      contexts are given back, #203), and has been checked in the browser
+      only on SPCOX sections marked as one coordinate system, which are not
+      truly registered.
 
 ## Closed Open Items
 

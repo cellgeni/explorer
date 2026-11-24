@@ -214,8 +214,10 @@ describe('tile request scheduler', () => {
     }
 
     // Fails each tile's first read, which may be read again a second later.
+    // Before then, as the cache does, it hands back the failure unread.
     function flakyCache() {
       const requested: string[] = []
+      const failures = new Map<string, TileCacheEntry>()
 
       return {
         requested,
@@ -226,27 +228,38 @@ describe('tile request scheduler', () => {
           row: number,
         ): Promise<TileCacheEntry> {
           const key = `${level}:${col}:${row}`
-          const failed = !requested.includes(key)
+          const failure = failures.get(key)
+
+          if (
+            failure?.state === 'error' &&
+            failure.retryAt !== undefined &&
+            Date.now() < failure.retryAt
+          ) {
+            return Promise.resolve(failure)
+          }
+
           requested.push(key)
 
-          return Promise.resolve(
-            failed
-              ? {
-                  state: 'error',
-                  bounds,
-                  error: new TypeError('Failed to fetch'),
-                  failures: 1,
-                  retryAt: Date.now() + 1_000,
-                }
-              : ({
-                  state: 'ready',
-                  level,
-                  bounds,
-                  bitmap: {} as ImageBitmap,
-                  sourceWidth: 1,
-                  sourceHeight: 1,
-                } as unknown as TileCacheEntry),
-          )
+          if (failure === undefined) {
+            const failed: TileCacheEntry = {
+              state: 'error',
+              bounds,
+              error: new TypeError('Failed to fetch'),
+              failures: 1,
+              retryAt: Date.now() + 1_000,
+            }
+            failures.set(key, failed)
+            return Promise.resolve(failed)
+          }
+
+          return Promise.resolve({
+            state: 'ready',
+            level,
+            bounds,
+            bitmap: {} as ImageBitmap,
+            sourceWidth: 1,
+            sourceHeight: 1,
+          } as unknown as TileCacheEntry)
         },
       }
     }
@@ -273,6 +286,43 @@ describe('tile request scheduler', () => {
         expect(cache.requested).toEqual(['0:0:0', '0:0:0'])
         expect(onSettled).toHaveBeenCalledTimes(2)
       } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // Timers can fire a millisecond before Date.now() reaches their time,
+    // when the cache would hand the failure back unread.
+    it('waits again when its timer fires before the retry time', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+      let now = 0
+      const dateNow = vi.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        const cache = flakyCache()
+        const onSettled = vi.fn()
+        const scheduler = new TileRequestScheduler(cache)
+
+        scheduler.update({
+          loader: 'image',
+          level: 0,
+          tiles: tiles(0),
+          maxConcurrentRequests: 1,
+          onSettled,
+        })
+        await vi.advanceTimersByTimeAsync(0)
+        expect(onSettled).toHaveBeenCalledOnce()
+
+        // The timer fires with Date.now() a millisecond short.
+        now = 999
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(cache.requested).toEqual(['0:0:0'])
+        expect(onSettled).toHaveBeenCalledOnce()
+
+        now = 1_000
+        await vi.advanceTimersByTimeAsync(1)
+        expect(cache.requested).toEqual(['0:0:0', '0:0:0'])
+        expect(onSettled).toHaveBeenCalledTimes(2)
+      } finally {
+        dateNow.mockRestore()
         vi.useRealTimers()
       }
     })

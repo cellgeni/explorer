@@ -221,6 +221,10 @@ export class TileRequestScheduler<Loader> {
     return true
   }
 
+  // `time` is the cache's retryAt, in Date.now() ms. Timers keep another clock
+  // and can fire a millisecond before Date.now() reaches it; the cache would
+  // then hand back the failure unread, and the tile would settle (and its
+  // canvas redraw) once more, so an early timer waits again.
   private retryAt(tile: QueuedTile, time: number): void {
     clearTimeout(this.retries.get(tile.key))
     this.retries.set(
@@ -234,6 +238,11 @@ export class TileRequestScheduler<Loader> {
             this.queue.some((queued) => queued.key === tile.key) ||
             !this.wantedTiles().some((wanted) => wanted.key === tile.key)
           ) {
+            return
+          }
+
+          if (Date.now() < time) {
+            this.retryAt(tile, time)
             return
           }
 
