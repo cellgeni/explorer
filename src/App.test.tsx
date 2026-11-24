@@ -3918,6 +3918,61 @@ describe('App', () => {
     }
   })
 
+  it.each(['Box selection', 'Lasso selection'])(
+    'leaves the Magic Lens for %s, so its scan does not run (EXP-281)',
+    async (toolName) => {
+      const viewport = installAppViewportFixture(
+        appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),
+      )
+      const cell = {
+        id: intToCellId(1, 1),
+        position: { x: micrometers(10), y: micrometers(20) },
+        transcriptCount: 8,
+        cellArea: 22,
+      }
+      const loadRoiCells = vi.fn<RoiCellsLoader>(async () => [cell])
+
+      try {
+        render(
+          <TestApp
+            loadDatasetOverview={vi.fn<DatasetOverviewLoader>(async () => [
+              { ...cell, cellId: cell.id },
+            ])}
+            loadGenePanel={vi.fn(async () => ['Actb'])}
+            loadRoiCells={loadRoiCells}
+            loadRoiTranscripts={vi.fn<RoiTranscriptsLoader>(async () => [])}
+          />,
+        )
+        openControls('open-dataset')
+        fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+
+        const lensTool = screen.getByRole('button', { name: 'Magic Lens' })
+        const tool = screen.getByRole('button', { name: toolName })
+        await waitFor(() => {
+          expect(lensTool).toHaveAttribute('aria-disabled', 'false')
+          expect(tool).toHaveAttribute('aria-disabled', 'false')
+        })
+
+        fireEvent.click(lensTool)
+        fireEvent.pointerMove(
+          screen.getByRole('img', { name: 'Spatial viewer canvas area' }),
+          { clientX: 500, clientY: 500 },
+        )
+        // Within the lens's 320 ms debounce.
+        fireEvent.click(tool)
+        expect(tool).toHaveAttribute('aria-pressed', 'true')
+
+        // Past the debounce and the mocked reads.
+        await new Promise((resolve) => setTimeout(resolve, 900))
+        expect(loadRoiCells).not.toHaveBeenCalled()
+        expect(screen.queryByRole('region', { name: 'Magic Lens' })).toBeNull()
+      } finally {
+        viewport.restore()
+      }
+    },
+    20_000,
+  )
+
   it('scans exact circle cells while cursor magic lens is enabled', async () => {
     const viewport = installAppViewportFixture(
       appViewportRectFixture({ width: 1000, height: 1000, right: 1000, bottom: 1000 }),

@@ -233,7 +233,10 @@ View (`F`, `\`, `?`, anywhere but in a text field), and In the view (arrows,
 
 The tool letters, `F`, `\` and `?` work anywhere except in a text field, and
 leave keys with Ctrl, Alt or Cmd alone (`useToolShortcuts`; `\` in
-`ShellLayout`, `?` in `TopBar`).
+`ShellLayout`, `?` in `TopBar`). A letter is the one typed, or, where the
+layout types another script (Cyrillic, Greek) or an input method has the key,
+the letter at that place on a US keyboard (`event.code`). `\` also works typed
+with AltGr (German, French, Spanish, Nordic layouts) or Option on a Mac.
 
 Help's guides are the [User guide](user-guide.md), "What can I open?"
 ([Loading data](user-guide.md#loading-data)),
@@ -273,7 +276,9 @@ tooltip does only that, and the tool stays.
   (Visium HD) under it; queries are debounced by 320 ms. It is not offered on
   images, and says "Unavailable" where the platform cannot scan (Visium,
   MERSCOPE, H5AD, SpatialData). It has no QV filter: the `Min QV` setting
-  changed nothing (F21) and was removed in 15.5-C.
+  changed nothing (F21) and was removed in 15.5-C. Any other tool (Pan, Box
+  selection, Lasso selection, Measure) leaves it: a pending or running scan
+  stops and its card closes.
 
 ### Settings
 
