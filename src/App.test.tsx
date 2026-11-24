@@ -550,6 +550,95 @@ describe('App', () => {
     }
   })
 
+  // The 16 µm projection stayed on screen for the 8 µm bins, and points on
+  // it selected nothing (EXP-253).
+  it('drops a Visium HD tier projection when the bin size changes', async () => {
+    const visiumUrl = 'https://example.test/visium-hd'
+    window.history.replaceState(
+      null,
+      '',
+      `/#xv=2&dataset=${encodeURIComponent(visiumUrl)}&view=20,10,0,4`,
+    )
+    const viewport = installAppViewportFixture()
+    const sixteen = visiumOverviewFixture()
+    const eight = {
+      ...sixteen,
+      binSizeMicrometers: 8 as const,
+      grid: { ...sixteen.grid, id: 'grid-8um', binSizeMicrometers: micrometers(8) },
+      gridCells: { ...sixteen.gridCells, gridId: 'grid-8um', ids: ['BC8-1', 'BC8-2'] },
+    }
+    const detectSpatialDataset = createVisiumHdDetectorMock(
+      visiumHdDetectionFixture({
+        baseUrl: visiumUrl,
+        bins: [
+          visiumHdBinFixture(),
+          visiumHdBinFixture({
+            binSizeMicrometers: 8,
+            outputPath: 'binned_outputs/square_008um',
+            tissuePositionsPath:
+              'binned_outputs/square_008um/spatial/tissue_positions.parquet',
+            scalefactorsPath:
+              'binned_outputs/square_008um/spatial/scalefactors_json.json',
+            filteredMatrixH5Path:
+              'binned_outputs/square_008um/filtered_feature_bc_matrix.h5',
+          }),
+        ],
+      }),
+    )
+    const readBinnedOverview = vi.fn(async (binSize?: number) =>
+      binSize === 8 ? eight : sixteen,
+    )
+    const visiumDataset = createVisiumHdDatasetMock({
+      overview: sixteen,
+      overrides: {
+        readBinnedOverview,
+        genePanel: vi.fn(async () => ['A2M']),
+        matrix: vi.fn(async () => ({ geneNames: ['A2M'], cells: new Map() })),
+      },
+    })
+    const loadAnalysisEmbeddings: ReturnType<typeof vi.fn<AnalysisEmbeddingsLoader>> =
+      vi.fn(async () => [
+        {
+          kind: 'umap',
+          label: 'UMAP',
+          sourcePath: 'binned_outputs/square_016um/analysis/umap/projection.csv',
+          points: [
+            { id: 'BC-1', x: 0, y: 0 },
+            { id: 'BC-2', x: 10, y: 10 },
+          ],
+        },
+      ])
+
+    try {
+      render(
+        <TestApp
+          detectSpatialDataset={detectSpatialDataset}
+          getSpatialDataset={createSpatialDatasetLoaderMock(visiumDataset)}
+          loadAnalysisEmbeddings={loadAnalysisEmbeddings}
+        />,
+      )
+      openControls('diagnostics')
+      await screen.findAllByText(/Visium HD ready/)
+
+      openControls('embedding')
+      fireEvent.click(screen.getByTitle('Load embeddings'))
+      expect(await screen.findByText('UMAP: 2 bins')).toBeInTheDocument()
+
+      openControls('spot-options')
+      const bins = screen.getByRole('region', { name: 'Visium HD dataset' })
+      fireEvent.click(within(bins).getByRole('button', { name: '8 µm' }))
+      await waitFor(() => {
+        expect(readBinnedOverview).toHaveBeenLastCalledWith(8)
+      })
+      expect(await within(bins).findByText(/at 8 µm/)).toBeInTheDocument()
+
+      expect(screen.queryByText('UMAP: 2 bins')).toBeNull()
+      expect(screen.queryByRole('img', { name: 'UMAP embedding, 2 bins' })).toBeNull()
+    } finally {
+      viewport.restore()
+    }
+  })
+
   it('draws a Visium HD ROI, exports barcodes, and links barcode embeddings', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
     window.history.replaceState(null, '', `/#dataset=${encodeURIComponent(visiumUrl)}`)

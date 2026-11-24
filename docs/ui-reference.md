@@ -847,8 +847,8 @@ button).
 
 | Control                                                   | Notes                                                                                                                                                            |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Embedding view`                                          | Dataset options (H5AD/SpatialData `obsm` keys) or UMAP / t-SNE                                                                                                   |
-| `Load Embeddings`                                         | Loads the projection                                                                                                                                             |
+| `Embedding view`                                          | Dataset options (H5AD/SpatialData `obsm` keys) or UMAP / t-SNE. A view picked but not loaded stays picked, and the plot keeps the loaded one until Load          |
+| `Load Embeddings`                                         | Loads the projection. On Visium HD a bin-size switch drops it, since it names that bin size's bins                                                               |
 | Scatter plot (`src/features/analysis/EmbeddingPanel.tsx`) | Up to 120,000 points; coloured by annotation when active; ROI members yellow; selection pink. Click selects the nearest cell or bin and centres the spatial view |
 
 ## Plots Panel

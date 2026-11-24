@@ -228,7 +228,10 @@ import type { CellGeneExpressionStatus } from './features/cells/cellGeneExpressi
 import { useCellDetailWorkflow } from './features/cells/useCellDetailWorkflow'
 import { useGridCellAssignmentWorkflow } from './features/cells/useGridCellAssignmentWorkflow'
 import { useSelectedGridCellScore } from './features/cells/useSelectedGridCellScore'
-import { analysisEmbeddingStatusCopy } from './features/analysis/analysisEmbeddingModel'
+import {
+  analysisEmbeddingCleared,
+  analysisEmbeddingStatusCopy,
+} from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
@@ -1519,12 +1522,22 @@ export function App({ dependencies }: AppProps = {}) {
     activeSelectedGridCell,
   )
   const embeddingElementLabel = platformAdapter.labels.embeddingElementPlural
-  const embeddingCopy = analysisEmbeddingStatusCopy(
-    analysisEmbeddingState,
-    activeEmbedding,
-    roiCellIds,
-    selectedEmbeddingElementId,
-    embeddingElementLabel,
+  const embeddingCopy = useMemo(
+    () =>
+      analysisEmbeddingStatusCopy(
+        analysisEmbeddingState,
+        activeEmbedding,
+        roiCellIds,
+        selectedEmbeddingElementId,
+        embeddingElementLabel,
+      ),
+    [
+      activeEmbedding,
+      analysisEmbeddingState,
+      embeddingElementLabel,
+      roiCellIds,
+      selectedEmbeddingElementId,
+    ],
   )
   const cellDetailCopy = cellDetailStatusCopy(cellDetailState, selectedCell)
   const selectedCellAnnotationLabels = useMemo(
@@ -2896,7 +2909,18 @@ export function App({ dependencies }: AppProps = {}) {
   const handleBeforeVisiumHdBinSizeChange = useCallback(() => {
     clearVisiumHdRoiState()
     clearVisiumHdExpressionProfileState()
-  }, [clearVisiumHdExpressionProfileState, clearVisiumHdRoiState])
+    // A tier's projection names that tier's bins, so it goes with the tier,
+    // and a read for it that has not finished is dropped.
+    invalidateLatestRequest({
+      abortRef: analysisEmbeddingAbortRef,
+      requestIdRef: analysisEmbeddingRequestId,
+    })
+    setAnalysisEmbeddingState(analysisEmbeddingCleared)
+  }, [
+    clearVisiumHdExpressionProfileState,
+    clearVisiumHdRoiState,
+    setAnalysisEmbeddingState,
+  ])
 
   const {
     annotationImportError,
@@ -4933,7 +4957,7 @@ export function App({ dependencies }: AppProps = {}) {
     appendDebugEvent,
     copy: embeddingCopy,
     datasetReady: loadState.status === 'ready',
-    elementLabel: isVisiumHdDataset ? 'bins' : 'cells',
+    elementLabel: embeddingElementLabel,
     onLoad: handleLoadAnalysisEmbeddings,
     onSelectElement: handleEmbeddingElementSelect,
     roiElementIds: roiCellIds,
