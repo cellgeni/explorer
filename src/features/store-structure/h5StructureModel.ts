@@ -5,6 +5,7 @@ import {
   MAX_WHOLE_VLEN_PREVIEW_ELEMENTS,
   h5PreviewBlock,
   hasVariableLength,
+  isVariableLengthString,
   type H5DatasetInfo,
   type H5Dtype,
   type H5Filter,
@@ -316,6 +317,10 @@ export function h5PreviewReadBound(dataset: H5DatasetInfo): number | null {
   const { shape, chunks, dtype } = dataset
 
   if (shape === null) return null
+
+  // A ragged array or a compound with variable-length members is read whole,
+  // its parts from the global heap, so a block's heap IDs do not bound it.
+  if (hasVariableLength(dtype) && !isVariableLengthString(dtype)) return null
 
   const elementBytes = hasVariableLength(dtype) ? HEAP_ID_BYTES : dtype.size
 

@@ -82,9 +82,14 @@ export interface H5StructureNode {
   readonly dataset?: H5DatasetInfo
   // A committed datatype's type.
   readonly dtype?: H5Dtype
-  // A soft link whose target is missing, or an external link. Soft links to
-  // objects that exist are shown as those objects.
-  readonly link?: { readonly target: string; readonly file?: string }
+  // A soft link whose target is missing or encloses it, or an external
+  // link. Other soft links to objects that exist are shown as those objects.
+  readonly link?: {
+    readonly target: string
+    readonly file?: string
+    // A soft link to the group it is in or one above, which is not followed.
+    readonly enclosing?: true
+  }
   // The walk stopped before listing this group's children.
   readonly unlisted?: boolean
   readonly children: readonly H5StructureNode[]
@@ -129,6 +134,16 @@ export function h5PreviewBlock(shape: readonly number[]): number[] {
 
 // A variable-length string, or a type holding one: h5wasm 0.10 frees these
 // for the whole dataspace after a slice, which aborts its module.
+// A variable-length string, which a preview reads by hyperslab, block by
+// block; other variable-length types are read whole.
+export function isVariableLengthString(dtype: H5Dtype): boolean {
+  return (
+    dtype.typeClass === H5T_CLASS.STRING &&
+    dtype.vlen &&
+    (dtype.size === 4 || dtype.size === 8)
+  )
+}
+
 export function hasVariableLength(dtype: H5Dtype): boolean {
   return (
     dtype.vlen ||

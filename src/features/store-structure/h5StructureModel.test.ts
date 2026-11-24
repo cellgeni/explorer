@@ -143,6 +143,34 @@ describe('h5PreviewReadBound', () => {
       h5PreviewReadBound(dataset({ shape: [1000, 30_000], maxShape: [1000, 30_000] })),
     ).toBe((99 * 30_000 + 20) * 4)
   })
+
+  // A ragged dataset is read whole, its parts from the global heap, so a
+  // block's heap IDs (1.6 KB) said nothing of the 15.7 MB it fetched
+  // (EXP-259). Unknown, it waits for Read Values.
+  it('gives no bound for variable-length types other than strings', () => {
+    const ragged = dtype({ typeClass: H5T_CLASS.VLEN, vlen: true, base: dtype({}) })
+    expect(h5PreviewReadBound(dataset({ dtype: ragged }))).toBeNull()
+    expect(
+      h5PreviewReadBound(
+        dataset({
+          dtype: dtype({
+            typeClass: H5T_CLASS.COMPOUND,
+            size: 24,
+            members: [
+              { name: 'id', dtype: dtype({}) },
+              { name: 'parts', dtype: ragged },
+            ],
+          }),
+        }),
+      ),
+    ).toBeNull()
+    // Strings are read by hyperslab, block by block.
+    expect(
+      h5PreviewReadBound(
+        dataset({ dtype: dtype({ typeClass: H5T_CLASS.STRING, vlen: true, size: 8 }) }),
+      ),
+    ).toBe(100 * 16)
+  })
 })
 
 describe('h5PreviewUnavailable', () => {
