@@ -738,6 +738,65 @@ describe('ShellLayout', () => {
       expect(screen.queryByRole('region', { name: 'Cell Query' })).toBeNull()
     })
 
+    it('shows one window when a link names three under 860 px, all three when wide', () => {
+      const setNarrow = stubScreenWidthChange(true)
+      render(
+        <QueryHarness
+          initial={{
+            ...DEFAULT_SHELL_PANELS,
+            expanded: ['cells'],
+            embeddingOpen: true,
+            plotsOpen: true,
+            queryOpen: true,
+          }}
+        />,
+      )
+      const shown = () =>
+        ['Embedding', 'Plots', 'Cell Query'].filter(
+          (name) => screen.queryByRole('region', { name }) !== null,
+        )
+
+      expect(shown()).toEqual(['Embedding'])
+      fireEvent.click(screen.getByRole('button', { name: 'Panels' }))
+      const menu = screen.getByRole('dialog', { name: 'Panels' })
+      expect(
+        ['Embedding', 'Plots', 'Query'].map((name) =>
+          within(menu).getByRole('button', { name }).getAttribute('aria-pressed'),
+        ),
+      ).toEqual(['true', 'false', 'false'])
+
+      setNarrow(false)
+      expect(shown()).toEqual(['Embedding', 'Plots', 'Cell Query'])
+    })
+
+    it('measures a resized Cell Query window when it opens again (EXP-278)', () => {
+      // A 1100 px canvas and a 380 px drawer: 520 px is clear of it, the 720
+      // px the window was resized to is not.
+      stubLayout({
+        'shell-canvas': { left: 0, right: 1100, width: 1100, height: 700 },
+        'shell-info-drawer': { left: 0, right: 380, width: 380, height: 700 },
+      })
+      stubScreenWidth(false)
+      render(
+        <QueryHarness
+          initial={{ ...DEFAULT_SHELL_PANELS, expanded: ['cells'], queryOpen: true }}
+        />,
+      )
+      const grip = screen.getByRole('button', { name: 'Resize the cell query panel' })
+      for (let step = 0; step < 10; step += 1)
+        fireEvent.keyDown(grip, { key: 'ArrowLeft' })
+      expect(queryWindow().style.width).toBe('720px')
+      fireEvent.click(screen.getByRole('button', { name: 'Close cell query' }))
+      fireEvent.click(screen.getByRole('button', { name: /^Dataset info/ }))
+      expect(screen.getByRole('dialog', { name: 'Dataset info' })).toBeVisible()
+
+      const toggles = screen.getByRole('group', { name: 'Panels' })
+      fireEvent.click(within(toggles).getByRole('button', { name: 'Query' }))
+
+      expect(queryWindow()).toBeVisible()
+      expect(screen.queryByRole('dialog', { name: 'Dataset info' })).toBeNull()
+    })
+
     it('scrolls and reads the table without drawing the viewer again (23-D5)', async () => {
       stubScreenWidth(false)
       let viewerRenders = 0

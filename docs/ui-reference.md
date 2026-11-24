@@ -843,7 +843,9 @@ on, a circle and a compact summary also follow the mouse
 
 The Embedding panel (UMAP, t-SNE or the dataset's `obsm` views) opens from
 `Embedding` in the top bar and closes with `Close embedding` or Esc
-(`src/features/shell/EmbeddingWindow.tsx`). It sits at the top right of the
+(`src/features/shell/EmbeddingWindow.tsx`). In a field of this, Plots or
+Cell Query, the first Esc leaves the field and the second closes the window,
+as in the info drawer. It sits at the top right of the
 canvas, 360 × 400 px at first; the grip at its bottom left (`Resize the
 embedding panel`) resizes it by dragging or with the arrow keys, from 280 ×
 260 px up to the canvas, and the plot redraws at its new size. The grip's
@@ -1398,8 +1400,8 @@ it; Esc in a text field, such as the address, first leaves the field. Its
 sections render only while it is open. A window opened from the Panels group
 where the drawer would cover it, as Plots and Cell Query would at about
 1024 px wide, closes the drawer as it opens (`windowOpensUnderDrawer` in
-`src/features/shell/floatingWindowModel.ts`). Windows already open, moved or
-not, stay where they are.
+`src/features/shell/floatingWindowModel.ts`), at the width it was last
+resized to. Windows already open, moved or not, stay where they are.
 
 | Section              | Contents                                                                                                                                                                                                       |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -1676,7 +1678,10 @@ Under 860 px wide (`useNarrowScreen`) the shell folds up:
   gene search or other half-done entry survives a resize across 860 px.
 - Cards dock at the bottom of the canvas as full-width sheets, above the
   layer sheet's handle. The Embedding, Plots and Cell Query panels take the
-  canvas's width, one at a time: opening one closes the others.
+  canvas's width, one at a time: opening one closes the others. Where a link
+  or a wider screen left several open, the one in front shows (else the first
+  in the top bar's order), its button alone pressed; the others show again
+  once the screen is 860 px or wider.
 
 ## Platform Availability
 

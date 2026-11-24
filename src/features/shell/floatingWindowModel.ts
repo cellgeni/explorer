@@ -46,3 +46,17 @@ export function windowOpensUnderDrawer(options: {
   const left = options.canvasWidth - (options.rightOffset ?? RIGHT_INSET) - options.width
   return left < options.drawerRight
 }
+
+export type ShellWindow = 'embedding' | 'plots' | 'query'
+
+// Under 860 px each window is full width, so one shows at a time (22-D8,
+// 23-D9): the one in front, else the first open in the top bar's order. A
+// link or a wider screen can leave several open; they show again when the
+// screen is wide.
+export function narrowShownWindow(
+  open: Readonly<Record<ShellWindow, boolean>>,
+  front: ShellWindow | null,
+): ShellWindow | null {
+  if (front !== null && open[front]) return front
+  return (['embedding', 'plots', 'query'] as const).find((window) => open[window]) ?? null
+}

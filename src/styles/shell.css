@@ -66,6 +66,11 @@
   color: var(--text-1);
 }
 
+/* Focused by Esc from a field, as the Dataset info drawer is. */
+.shell-floating:focus {
+  outline: none;
+}
+
 .shell-floating[hidden] {
   display: none;
 }
