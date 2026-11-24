@@ -81,8 +81,13 @@ export class TileRequestSlots {
 // Several canvases can share a scheduler, each naming itself as a client: the
 // tiles wanted are those of every client, the lowest priority first, and a
 // tile is cancelled once no client wants it.
+//
+// A tile whose read failed and may be read again (the cache's retryAt) is
+// asked for again once that time comes, if a client still wants it, so it is
+// drawn without waiting for the view to move.
 export class TileRequestScheduler<Loader> {
   private readonly inFlight = new Map<string, AbortController>()
+  private readonly retries = new Map<string, ReturnType<typeof setTimeout>>()
   // In-flight tiles that count against the limit.
   private readonly holdingSlots = new Set<string>()
   private readonly clients = new Map<unknown, ClientTiles>()
@@ -153,6 +158,11 @@ export class TileRequestScheduler<Loader> {
       controller.abort()
     }
 
+    for (const timer of this.retries.values()) {
+      clearTimeout(timer)
+    }
+    this.retries.clear()
+
     const freed = this.holdingSlots.size
     this.inFlight.clear()
     this.holdingSlots.clear()
@@ -211,6 +221,30 @@ export class TileRequestScheduler<Loader> {
     return true
   }
 
+  private retryAt(tile: QueuedTile, time: number): void {
+    clearTimeout(this.retries.get(tile.key))
+    this.retries.set(
+      tile.key,
+      setTimeout(
+        () => {
+          this.retries.delete(tile.key)
+
+          if (
+            this.inFlight.has(tile.key) ||
+            this.queue.some((queued) => queued.key === tile.key) ||
+            !this.wantedTiles().some((wanted) => wanted.key === tile.key)
+          ) {
+            return
+          }
+
+          this.queue.unshift(tile)
+          this.pump()
+        },
+        Math.max(0, time - Date.now()),
+      ),
+    )
+  }
+
   private pump(): void {
     const loader = this.loader
 
@@ -242,6 +276,10 @@ export class TileRequestScheduler<Loader> {
           entry !== null &&
           !(entry.state === 'error' && entry.error.name === 'AbortError')
         ) {
+          if (entry.state === 'error' && entry.retryAt !== undefined) {
+            this.retryAt(tile, entry.retryAt)
+          }
+
           for (const client of this.clients.values()) {
             if (client.keys.has(tile.key)) {
               client.onSettled()

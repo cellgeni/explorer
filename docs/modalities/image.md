@@ -491,10 +491,16 @@ transform.
   redeploy, ends the pool: its pending tiles fail with the error, and the next
   tile starts a new worker, as the OME-Zarr pool does.
 - `TileCache` (`src/tiff/tileCache.ts`) is an LRU of decoded bitmaps keyed by
-  `level:col:row`.
+  `level:col:row`. A tile whose read fails (a dropped connection, a 503 or a
+  worker that ended) is read again when asked for after 1 s, then 2 s, then
+  4 s (`TILE_RETRY_DELAYS_MS`). The Image layer's error is shown only once the
+  fourth read fails; the tile then keeps its error until it is evicted or the
+  contrast changes.
 - `TileRequestScheduler` (`src/tiff/tileRequestScheduler.ts`) loads the tiles
   in view, nearest first. When the view moves, tiles still in view keep
-  loading and only those that left it are cancelled.
+  loading and only those that left it are cancelled. A failed tile still in
+  view is asked for again when its wait ends, so it is drawn without the view
+  moving.
 - **Runs of tiles.** Each tile fetch is told which tiles the scheduler still
   has queued at its level. A tiled TIFF level (OME-TIFF, QPTIFF, SVS, page
   pyramids) reads, in one request, the queued tiles stored back to back with

@@ -205,6 +205,111 @@ describe('tile request scheduler', () => {
     expect(cache.pending).toHaveLength(4)
   })
 
+  describe('a failed tile (EXP-296)', () => {
+    const bounds = {
+      minX: micrometers(0),
+      maxX: micrometers(1),
+      minY: micrometers(0),
+      maxY: micrometers(1),
+    }
+
+    // Fails each tile's first read, which may be read again a second later.
+    function flakyCache() {
+      const requested: string[] = []
+
+      return {
+        requested,
+        request(
+          _loader: string,
+          level: number,
+          col: number,
+          row: number,
+        ): Promise<TileCacheEntry> {
+          const key = `${level}:${col}:${row}`
+          const failed = !requested.includes(key)
+          requested.push(key)
+
+          return Promise.resolve(
+            failed
+              ? {
+                  state: 'error',
+                  bounds,
+                  error: new TypeError('Failed to fetch'),
+                  failures: 1,
+                  retryAt: Date.now() + 1_000,
+                }
+              : ({
+                  state: 'ready',
+                  level,
+                  bounds,
+                  bitmap: {} as ImageBitmap,
+                  sourceWidth: 1,
+                  sourceHeight: 1,
+                } as unknown as TileCacheEntry),
+          )
+        },
+      }
+    }
+
+    it('is asked for again once its retry time comes, with the view still', async () => {
+      vi.useFakeTimers()
+      try {
+        const cache = flakyCache()
+        const onSettled = vi.fn()
+        const scheduler = new TileRequestScheduler(cache)
+
+        scheduler.update({
+          loader: 'image',
+          level: 0,
+          tiles: tiles(0),
+          maxConcurrentRequests: 1,
+          onSettled,
+        })
+        await vi.advanceTimersByTimeAsync(999)
+        expect(cache.requested).toEqual(['0:0:0'])
+        expect(onSettled).toHaveBeenCalledOnce()
+
+        await vi.advanceTimersByTimeAsync(1)
+        expect(cache.requested).toEqual(['0:0:0', '0:0:0'])
+        expect(onSettled).toHaveBeenCalledTimes(2)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('is not asked for again once no client wants it, or after a cancel', async () => {
+      vi.useFakeTimers()
+      try {
+        const cache = flakyCache()
+        const scheduler = new TileRequestScheduler(cache)
+        const update = (...cols: number[]) => {
+          scheduler.update({
+            loader: 'image',
+            level: 0,
+            tiles: tiles(...cols),
+            maxConcurrentRequests: 1,
+            onSettled: () => {},
+          })
+        }
+
+        update(0)
+        await vi.advanceTimersByTimeAsync(0)
+        update(1)
+        await vi.advanceTimersByTimeAsync(2_000)
+        // Tile 1 failed too, and was read again; tile 0 was not.
+        expect(cache.requested).toEqual(['0:0:0', '0:1:0', '0:1:0'])
+
+        update(2)
+        await vi.advanceTimersByTimeAsync(0)
+        scheduler.cancel()
+        await vi.advanceTimersByTimeAsync(2_000)
+        expect(cache.requested).toEqual(['0:0:0', '0:1:0', '0:1:0', '0:2:0'])
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
   describe('shared by several canvases (plan 23-D11)', () => {
     const update = (
       scheduler: TileRequestScheduler<string>,

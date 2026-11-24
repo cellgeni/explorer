@@ -13,6 +13,8 @@ interface MockTileRequest {
   readonly key: string
   readonly promise: Promise<TileCacheEntry>
   readonly resolve: () => void
+  // Fails the read; the tile may be read again from retryAt, as the cache's.
+  readonly fail: (retryAt: number) => void
 }
 
 const tileCacheMock = vi.hoisted(() => {
@@ -45,14 +47,34 @@ const tileCacheMock = vi.hoisted(() => {
       const key = this.key(level, col, row)
       const existing = this.entries.get(key)
 
-      if (existing !== undefined) {
+      if (
+        existing !== undefined &&
+        !(
+          existing.state === 'error' &&
+          existing.retryAt !== undefined &&
+          Date.now() >= existing.retryAt
+        )
+      ) {
         return existing.state === 'loading' ? existing.promise : Promise.resolve(existing)
       }
 
       const bounds = loader.tileBounds(level, col, row)
       const sourceSize = loader.tileSourceSize(level, col, row)
       let resolveRequest = () => {}
+      let failRequest: (retryAt: number) => void = () => {}
       const promise = new Promise<TileCacheEntry>((resolve) => {
+        failRequest = (retryAt) => {
+          const failed: TileCacheEntry = {
+            state: 'error',
+            bounds,
+            error: new TypeError('Failed to fetch'),
+            failures: 1,
+            retryAt,
+          }
+
+          this.entries.set(key, failed)
+          resolve(failed)
+        }
         resolveRequest = () => {
           const ready: TileCacheEntry = {
             state: 'ready',
@@ -75,7 +97,7 @@ const tileCacheMock = vi.hoisted(() => {
       }
 
       this.entries.set(key, loading)
-      requests.push({ key, promise, resolve: resolveRequest })
+      requests.push({ key, promise, resolve: resolveRequest, fail: failRequest })
       return promise
     }
 
@@ -252,6 +274,52 @@ describe('MorphologyCanvas', () => {
     expect(leftmostDrawAfterZoom).toBeLessThan(leftmostDrawBeforeZoom)
     await waitFor(() => {
       expect(tileCacheMock.requests).toHaveLength(3)
+    })
+  })
+
+  it('reads a failed tile again and draws it, with the view still (EXP-296)', async () => {
+    const context = canvasContext()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+      context as unknown as CanvasRenderingContext2D,
+    )
+
+    render(
+      <MorphologyCanvas
+        loader={mockLoader()}
+        viewState={viewState}
+        maxConcurrentTileRequests={2}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(tileCacheMock.requests).toHaveLength(2)
+    })
+    await act(async () => {
+      tileCacheMock.requests[0]?.resolve()
+      tileCacheMock.requests[1]?.fail(Date.now() + 20)
+      await Promise.all([
+        tileCacheMock.requests[0]?.promise,
+        tileCacheMock.requests[1]?.promise,
+      ])
+    })
+    // The ready tile, drawn as it came and again once the other failed.
+    await waitFor(() => {
+      expect(context.drawImage).toHaveBeenCalledTimes(2)
+    })
+
+    // Once its retry time comes, the tile is asked for again.
+    await waitFor(() => {
+      expect(tileCacheMock.requests).toHaveLength(3)
+    })
+    expect(tileCacheMock.requests[2]?.key).toBe(tileCacheMock.requests[1]?.key)
+
+    await act(async () => {
+      tileCacheMock.requests[2]?.resolve()
+      await tileCacheMock.requests[2]?.promise
+    })
+    await waitFor(() => {
+      expect(context.drawImage).toHaveBeenCalledTimes(4)
     })
   })
 
