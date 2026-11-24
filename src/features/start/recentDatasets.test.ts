@@ -168,6 +168,52 @@ describe('recent datasets', () => {
     ])
   })
 
+  it('takes off an entry another tab removed when its × is pressed (EXP-329)', () => {
+    const storage = memoryStorage()
+    writeRecentDatasets(storage, [dataset(1), dataset(2)])
+    const { result } = renderHook(() => useRecentDatasets(storage))
+
+    // The other tab removes run-1; this one still lists it.
+    writeRecentDatasets(storage, [dataset(2)])
+    act(() => {
+      result.current.remove(dataset(1).url)
+    })
+
+    expect(result.current.recent).toEqual([dataset(2)])
+    expect(readRecentDatasets(storage)).toEqual([dataset(2)])
+  })
+
+  it('clears a signature saved before EXP-026 from the list and storage (EXP-329)', () => {
+    const storage = memoryStorage()
+    const signed =
+      'https://bucket.s3.amazonaws.com/run.h5ad?X-Amz-Credential=AKIA%2F20261110&X-Amz-Signature=abc123'
+    storage.setItem(
+      RECENT_DATASETS_KEY,
+      JSON.stringify([
+        { url: signed, name: 'run.h5ad', platform: 'h5ad' },
+        dataset(1),
+        // The same dataset by its plain address: one entry, still openable.
+        { url: 'https://bucket.s3.amazonaws.com/run.h5ad', name: 'run' },
+      ]),
+    )
+
+    const { result } = renderHook(() => useRecentDatasets(storage))
+
+    expect(result.current.recent).toEqual([
+      {
+        url: 'https://bucket.s3.amazonaws.com/run.h5ad',
+        name: 'run.h5ad',
+        platform: 'h5ad',
+      },
+      dataset(1),
+    ])
+    // Written back once the app runs, before any other change.
+    expect(storage.getItem(RECENT_DATASETS_KEY)).not.toMatch(
+      /Signature|Credential|abc123/,
+    )
+    expect(readRecentDatasets(storage)).toEqual(result.current.recent)
+  })
+
   it('keeps the list for the page when storage refuses', () => {
     const refusing = memoryStorage()
     refusing.getItem = () => {

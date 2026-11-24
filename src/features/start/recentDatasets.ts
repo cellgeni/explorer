@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { urlWithoutCredentials } from '../../utils/urlCredentials'
 
 // Recently opened datasets (plan 15.3-A), newest first, kept in
@@ -44,7 +44,9 @@ export function readRecentDatasets(
   return readStoredRecentDatasets(storage) ?? []
 }
 
-// Null when there is no storage or it cannot be read.
+// Null when there is no storage or it cannot be read. Entries are read as
+// they are now stored, so a signed address kept whole before EXP-026 shows
+// no signature (EXP-329).
 function readStoredRecentDatasets(
   storage: Pick<Storage, 'getItem'> | null,
 ): readonly RecentDataset[] | null {
@@ -54,10 +56,50 @@ function readStoredRecentDatasets(
     if (raw === null) return []
     const parsed: unknown = JSON.parse(raw)
     return Array.isArray(parsed)
-      ? parsed.filter(isRecentDataset).slice(0, MAX_RECENT_DATASETS)
+      ? storedEntries(parsed.filter(isRecentDataset)).slice(0, MAX_RECENT_DATASETS)
       : []
   } catch {
     return null
+  }
+}
+
+// Each entry without credentials, once per address. Two addresses of one
+// dataset, signed and not, keep the place of the first and stay openable
+// (EXP-234).
+function storedEntries(entries: readonly RecentDataset[]): readonly RecentDataset[] {
+  const kept: RecentDataset[] = []
+
+  for (const entry of entries.map(recentDatasetEntry)) {
+    const index = kept.findIndex((known) => known.url === entry.url)
+    const known = kept[index]
+
+    if (known === undefined) {
+      kept.push(entry)
+    } else if (known.signed === true && entry.signed !== true) {
+      kept[index] = {
+        url: known.url,
+        name: known.name,
+        ...(known.platform === undefined ? {} : { platform: known.platform }),
+      }
+    }
+  }
+
+  return kept
+}
+
+// Writes the stored list back as it is read, when that differs: a signed
+// address saved before EXP-026 then leaves storage when the app first runs,
+// not when eight newer entries push it out.
+function tidyStoredRecentDatasets(storage: Storage | null): void {
+  const stored = readStoredRecentDatasets(storage)
+  if (stored === null) return
+  try {
+    const raw = storage?.getItem(RECENT_DATASETS_KEY) ?? null
+    if (raw !== null && raw !== JSON.stringify(stored)) {
+      writeRecentDatasets(storage, stored)
+    }
+  } catch {
+    // Not remembered.
   }
 }
 
@@ -125,13 +167,26 @@ export function useRecentDatasets(
   const [recent, setRecent] = useState(() => readRecentDatasets(store))
   const recentRef = useRef(recent)
 
+  useEffect(() => {
+    tidyStoredRecentDatasets(store)
+  }, [store])
+
   // `change` returns null when there is nothing to change.
   const update = useCallback(
     (change: (current: readonly RecentDataset[]) => readonly RecentDataset[] | null) => {
       // Another tab may have changed the list since this one read it; without
       // storage the list lasts as long as the page.
-      const next = change(readStoredRecentDatasets(store) ?? recentRef.current)
-      if (next === null) return
+      const stored = readStoredRecentDatasets(store)
+      const next = change(stored ?? recentRef.current)
+      if (next === null) {
+        // Nothing to change in storage, but the list shown here may be behind
+        // it: × on an entry another tab removed takes it off (EXP-329).
+        if (stored !== null && !sameRecentDatasets(stored, recentRef.current)) {
+          recentRef.current = stored
+          setRecent(stored)
+        }
+        return
+      }
       recentRef.current = next
       writeRecentDatasets(store, next)
       setRecent(next)
@@ -166,4 +221,11 @@ export function useRecentDatasets(
   )
 
   return { recent, add, remove }
+}
+
+function sameRecentDatasets(
+  first: readonly RecentDataset[],
+  second: readonly RecentDataset[],
+): boolean {
+  return JSON.stringify(first) === JSON.stringify(second)
 }
