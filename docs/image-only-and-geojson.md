@@ -38,7 +38,7 @@ TIFF requirements:
   another.
   The OME-XML must locate each plane (`TiffData`, or none for planes stored in
   IFD order), and each plane needs its own `SubIFDs` pyramid. Only the first
-  time point is shown.
+  time point of an OME-TIFF is shown.
 
 NDPI slides are also read as they come from the scanner: each pyramid level
 is one large JPEG, which the viewer reads in bands of rows and decodes in
@@ -76,8 +76,9 @@ without a channel axis, opens on the plane its OMERO rendering settings name
 (`omero.rdefs.defaultZ`), or the middle plane, and `Z plane` shows another;
 the depth is shown when the `z` axis declares a length unit. `View` › `3D`
 shows the whole z-stack in 3D at a resolution the GPU can hold. Each channel and
-plane opens as a `#c=N&z=M` loader. Only one time point is shown:
-`omero.rdefs.defaultT`, or the first.
+plane opens as a `#c=N&z=M` loader. An image with a `t` axis opens at
+`omero.rdefs.defaultT`, or the first time point, and `Time point` shows
+another at the same z plane; `Play time points` steps through them.
 
 ## Platform Behavior
 
@@ -165,7 +166,7 @@ segmentation is open at a time, and opening another dataset drops it.
 | Format         | Names                                       | What is read                                                                                                                                                                                                                                                                                                              |
 | -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Label TIFF     | `.tif`, `.tiff`, `.ome.tif`                 | An integer mask, 0 background, one label per cell: 8-, 16- or 32-bit, unsigned (Cellpose's `_cp_masks.tif`, which is 32-bit over 65,535 cells) or signed, or 32-bit float holding whole numbers. Tiled or stripped; uncompressed, LZW or Deflate, with or without a predictor. Pyramid levels as `SubIFDs`, as for images |
-| Label OME-Zarr | `.zarr`, `zarr.json`, `.zattrs`             | An OME-Zarr label image, including a `bioformats2raw` store, read as an [AnnData `labels`](./dataset-collections.md#labels) image is. From a URL only                                                                                                                                                                     |
+| Label OME-Zarr | `.zarr`, `zarr.json`, `.zattrs`             | An OME-Zarr label image, including a `bioformats2raw` store, read as an [AnnData `labels`](./dataset-collections.md#labels) image is. From a URL only. With `z` or `t` axes it follows the image's z plane and time point                                                                                                 |
 | GeoJSON        | `.geojson`, `.json`, gzipped too            | A FeatureCollection, or a bare array of features as QuPath exports them, read as it downloads, one feature at a time. Polygon and MultiPolygon features; others are skipped. Other JSON, such as newline-delimited features, is refused once its first object closes                                                      |
 | WKT            | `.wkt`, `.csv`, `.tsv`, `.txt`, gzipped too | One WKT `POLYGON` or `MULTIPOLYGON` a line, or a comma, tab or semicolon table: the geometry column is named (`geometry`, `wkt`, `polygon`, `boundary`, `outline`, …) or is the first whose values are WKT. WKT left unquoted in a CSV is read too. 2D to 4D, and EWKT `SRID=n;`                                          |
 | Parquet        | `.parquet`, `.geoparquet`, `.pq`            | GeoParquet WKB (its `primary_column`), a `geometry` or `wkt` column of WKB or WKT, or one row per vertex (`cell_id` with `vertex_x` and `vertex_y`, or `x` and `y`) as Xenium's `cell_boundaries.parquet`, a cell's rows together                                                                                         |

@@ -18,13 +18,14 @@ import type {
   GeometricAnnotationDatum,
   TranscriptPointDatum,
 } from '../rendering/deckLayers'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import type { ImagePyramidLoader, ImagePyramidPlane } from '../data/imagePyramid'
 import type { GridCellColumns } from '../rendering/gridCellColumns'
 import type { LoadingTaskSummary } from './AppStatusPanels'
 import type { ScreenshotRunner } from '../features/screenshot/screenshotRunner'
 import type {
   FlatMorphologyCanvasImage,
   MorphologyCanvasChannel,
+  MorphologyCanvasFrame,
 } from './MorphologyCanvas'
 import type { ScreenPoint, ViewerDistanceUnit } from './viewerMeasurements'
 
@@ -53,6 +54,8 @@ export interface ViewerCoreProps {
   readonly geometricAnnotations?: readonly GeometricAnnotationDatum[]
   readonly imageLoader?: ImagePyramidLoader | null
   readonly imageChannels?: readonly MorphologyCanvasChannel[]
+  // The plane the image channels show, and Play's read-ahead (plan 28).
+  readonly imageFrame?: ViewerImageFrame | null
   readonly flatImage?: FlatMorphologyCanvasImage | null
   readonly imageOpacity?: number
   // False hides cells, boundaries and bins, and stops them being picked.
@@ -235,4 +238,17 @@ export interface ViewerSelectionOutline {
   readonly color: string
   readonly active: boolean
   readonly selection: RoiSelection
+}
+
+// The dataset image's plane for the main canvas (plan 28): it keeps the plane
+// it shows until the next is whole, and reads the next time points ahead.
+export interface ViewerImageFrame {
+  readonly frame: MorphologyCanvasFrame | undefined
+  // How long a new plane waits to be whole; the canvas's own by default.
+  readonly fallbackMs?: number
+  readonly onShown: (frame: MorphologyCanvasFrame) => void
+  readonly prefetchPlanes: readonly ImagePyramidPlane[]
+  // The plane of the cell outlines drawn, while they follow the image's
+  // plane: a new plane waits for its outlines too (28-D9).
+  readonly outlinesPlane?: string
 }

@@ -18,7 +18,7 @@ import { MorphologyTileStore } from '../rendering/morphologyTileStore'
 import { visibleMorphologyChannels } from './morphologyCanvasChannels'
 import type { DisplayWindow } from '../codecs/jpeg2000'
 import type { CssViewportSize } from '../rendering/morphologyCanvas'
-import type { ImagePyramidLoader } from '../data/imagePyramid'
+import type { ImagePyramidLoader, ImagePyramidPlane } from '../data/imagePyramid'
 import type {
   MorphologyTileChannel,
   MorphologyTileChannelSpec,
@@ -28,6 +28,14 @@ import type { TileRequestScheduler } from '../tiff/tileRequestScheduler'
 import type { OverviewViewState } from '../rendering/deckLayers'
 
 const MAX_CONCURRENT_TILE_REQUESTS = 4
+// How long a slider step waits for its whole plane before its tiles draw as
+// they come (plan 28-D6).
+const FRAME_FALLBACK_MS = 2000
+// Played planes kept for replay, in 256-pixel tiles for each tile the cache
+// limit allows (plan 28-D8).
+const REPLAY_TILES_PER_CACHE_TILE = 4
+const REPLAY_TILE_PIXELS = 256 * 256
+const NO_PLANES: readonly ImagePyramidPlane[] = []
 
 export interface MorphologyCanvasProps {
   readonly loader?: ImagePyramidLoader | null
@@ -43,6 +51,35 @@ export interface MorphologyCanvasProps {
   readonly tileStore?: MorphologyTileStore
   // Among canvases sharing a store, lower is read first.
   readonly tilePriority?: number
+  // The plane of a dataset image with z planes or time points that the
+  // channels show (plan 28). When it changes to another plane of the same
+  // image, the canvas keeps drawing the plane it shows until the visible
+  // tiles of the new one have loaded, then draws it whole (28-D6).
+  readonly frame?: MorphologyCanvasFrame
+  // How long a new plane waits to be whole before its tiles draw as they
+  // come; Infinity waits as long as it takes, as Play does.
+  readonly frameFallbackMs?: number
+  // The plane of the outlines drawn over the image, while they follow its
+  // plane: a new frame also waits until they are its own (28-D9).
+  readonly outlinesPlane?: string
+  // Called once a frame's visible tiles are drawn (read, or failed for good)
+  // with its outlines.
+  readonly onFrameShown?: (frame: MorphologyCanvasFrame) => void
+  // Other planes of the image whose visible tiles are read but not drawn,
+  // the first first, such as the next time points while Play runs (28-D8).
+  readonly prefetchPlanes?: readonly ImagePyramidPlane[]
+}
+
+export interface MorphologyCanvasFrame {
+  // The image, the same at every plane.
+  readonly image: string
+  readonly plane: string
+}
+
+// The plane on the canvas, and the channels it was drawn with.
+interface ShownFrame {
+  readonly frame: MorphologyCanvasFrame | undefined
+  readonly channels: readonly MorphologyCanvasChannel[]
 }
 
 export interface MorphologyCanvasChannel {
@@ -85,6 +122,11 @@ export function MorphologyCanvas({
   onTileCacheEviction,
   tileStore,
   tilePriority = 0,
+  frame,
+  frameFallbackMs = FRAME_FALLBACK_MS,
+  outlinesPlane,
+  onFrameShown,
+  prefetchPlanes = NO_PLANES,
 }: MorphologyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [ownTileStore] = useState(() => new MorphologyTileStore())
@@ -103,10 +145,38 @@ export function MorphologyCanvas({
     () => visibleMorphologyChannels(loader, channels),
     [channels, loader],
   )
+  // Each prefetch plane's channels; a loader keeps one loader for each plane,
+  // so these are the loaders the plane is later shown with.
+  const prefetchChannels = useMemo(
+    () =>
+      prefetchPlanes
+        .map((plane) =>
+          renderChannels.flatMap((channel) => {
+            const planeLoader = channel.loader.atPlane?.(plane)
+
+            return planeLoader === undefined || planeLoader === channel.loader
+              ? []
+              : [{ ...channel, loader: planeLoader }]
+          }),
+        )
+        .filter((planeChannels) => planeChannels.length > 0),
+    [prefetchPlanes, renderChannels],
+  )
+  const frameImage = frame?.image
+  const framePlane = frame?.plane
+  const shownRef = useRef<ShownFrame | null>(null)
+  // When the shown plane stopped being the one asked for.
+  const heldSinceRef = useRef<number | null>(null)
+  const reportedFrameRef = useRef<MorphologyCanvasFrame | null>(null)
+  const onFrameShownRef = useRef(onFrameShown)
 
   useEffect(() => {
     onTileErrorRef.current = onTileError
   }, [onTileError])
+
+  useEffect(() => {
+    onFrameShownRef.current = onFrameShown
+  }, [onFrameShown])
 
   useEffect(
     () => () => {
@@ -185,7 +255,31 @@ export function MorphologyCanvas({
       return
     }
 
+    const currentFrame =
+      frameImage === undefined || framePlane === undefined
+        ? undefined
+        : { image: frameImage, plane: framePlane }
+    const outlinesAreReady =
+      outlinesPlane === undefined || outlinesPlane === currentFrame?.plane
+    const reportShown = () => {
+      const reported = reportedFrameRef.current
+
+      if (
+        currentFrame === undefined ||
+        !outlinesAreReady ||
+        (reported?.image === currentFrame.image && reported.plane === currentFrame.plane)
+      ) {
+        return
+      }
+
+      reportedFrameRef.current = currentFrame
+      onFrameShownRef.current?.(currentFrame)
+    }
+
     if (renderChannels.length === 0) {
+      shownRef.current = null
+      heldSinceRef.current = null
+      reportShown()
       syncCanvasBackingStore(canvas, context, viewport)
 
       if (
@@ -222,30 +316,97 @@ export function MorphologyCanvas({
       1,
       Math.floor(maxConcurrentTileRequests / renderChannels.length),
     )
-    const plans = renderChannels.map((channel) =>
+    const plan = (channel: MorphologyCanvasChannel, prefetch: boolean) =>
       planChannelRequest({
         bbox,
         baseMaxConcurrentRequests: basePerChannelConcurrency,
         channel,
         maxCacheTiles: tileCacheMaxTiles,
         ...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction }),
-        prefetch: store.prefetch,
+        prefetch,
+        ...(currentFrame === undefined ? {} : { replayImage: currentFrame.image }),
         viewState,
         ...(onTileError === undefined ? {} : { onTileError }),
-      }),
-    )
+      })
+    const plans = renderChannels.map((channel) => plan(channel, store.prefetch))
+    // Another plane of the same image is held on the canvas until this one
+    // is whole, or until the fallback time passes.
+    const shown = shownRef.current
+    const holding =
+      currentFrame !== undefined &&
+      shown?.frame?.image === currentFrame.image &&
+      shown.frame.plane !== currentFrame.plane
+
+    if (!holding) {
+      heldSinceRef.current = null
+    }
+
+    const now = Date.now()
+    const heldSince = holding ? (heldSinceRef.current ??= now) : now
+    const fallbackAt = heldSince + frameFallbackMs
+    let waitForWholeFrame = holding && now < fallbackAt
+    const planKeys = new Set(plans.map((channelPlan) => channelPlan.spec.key))
+    const heldIds = new Set(renderChannels.map((channel) => channel.id))
+    const heldPlans = waitForWholeFrame
+      ? (shown?.channels ?? [])
+          .filter((channel) => heldIds.has(channel.id))
+          .map((channel) => plan(channel, false))
+          .filter((channelPlan) => !planKeys.has(channelPlan.spec.key))
+      : []
+    const heldKeys = new Set(heldPlans.map((channelPlan) => channelPlan.spec.key))
+    const prefetchPlans = prefetchChannels
+      .flat()
+      .map((channel) => plan(channel, false))
+      .filter(
+        (channelPlan, index, all) =>
+          !planKeys.has(channelPlan.spec.key) &&
+          !heldKeys.has(channelPlan.spec.key) &&
+          all.findIndex((other) => other.spec.key === channelPlan.spec.key) === index,
+      )
+    const allPlans = [...plans, ...prefetchPlans, ...heldPlans]
     const held = store.use(
       canvasKey,
-      plans.map((plan) => plan.spec),
+      allPlans.map((channelPlan) => channelPlan.spec),
+      currentFrame === undefined
+        ? {}
+        : {
+            replayPixels:
+              REPLAY_TILES_PER_CACHE_TILE * tileCacheMaxTiles * REPLAY_TILE_PIXELS,
+          },
     )
-    const channelRequests = plans.map((plan, index) =>
-      channelRequest(plan, held[index] as MorphologyTileChannel),
+    const requests = allPlans.map((channelPlan, index) =>
+      channelRequest(channelPlan, held[index] as MorphologyTileChannel),
     )
+    const channelRequests = requests.slice(0, plans.length)
+    const prefetchRequests = requests.slice(
+      plans.length,
+      plans.length + prefetchPlans.length,
+    )
+    const heldRequests = requests.slice(plans.length + prefetchPlans.length)
     let cancelled = false
     let drewCurrentRequest = false
+    let drewHeldFrame = false
 
     const drawReadyTiles = () => {
       if (cancelled || drewCurrentRequest) {
+        return
+      }
+
+      const visibleTilesAreWhole = visibleTilesAreSettled(channelRequests)
+
+      if (waitForWholeFrame && !(visibleTilesAreWhole && outlinesAreReady)) {
+        // The held plane, once for this view: its tiles do not change.
+        if (!drewHeldFrame) {
+          drewHeldFrame = true
+          const heldBatches = channelTileBatches(heldRequests, {
+            requestedLevelOnly: false,
+          })
+
+          if (tileBatchesHaveTiles(heldBatches)) {
+            syncCanvasBackingStore(canvas, context, viewport)
+            drawMorphologyTileChannels(context, heldBatches, viewState, viewport)
+          }
+        }
         return
       }
 
@@ -261,8 +422,14 @@ export function MorphologyCanvas({
       // A tile that failed and will be read again draws when it comes.
       drewCurrentRequest =
         currentRequestIsReady && !requestedTilesWillRetry(channelRequests)
+      waitForWholeFrame = false
+      shownRef.current = { frame: currentFrame, channels: renderChannels }
       syncCanvasBackingStore(canvas, context, viewport)
       drawMorphologyTileChannels(context, batches, viewState, viewport)
+
+      if (visibleTilesAreWhole) {
+        reportShown()
+      }
     }
 
     drawRef.current = drawReadyTiles
@@ -282,16 +449,50 @@ export function MorphologyCanvas({
       })
     }
 
+    // Read one tile at a time for each prefetched channel, so the shown
+    // plane's reads go first.
+    for (const request of prefetchRequests) {
+      request.scheduler.update({
+        loader: request.channel.loader,
+        level: request.level,
+        tiles: request.tiles,
+        maxConcurrentRequests: 1,
+        onSettled: () => {},
+        client: canvasKey,
+        priority: tilePriority,
+      })
+    }
+
+    // The held plane's tiles are drawn as they are; reads still running for
+    // it stop.
+    for (const request of heldRequests) {
+      request.scheduler.release(canvasKey)
+    }
+
+    const fallbackTimer =
+      waitForWholeFrame && Number.isFinite(fallbackAt)
+        ? setTimeout(() => {
+            waitForWholeFrame = false
+            drawRef.current?.()
+          }, fallbackAt - now)
+        : undefined
+
     return () => {
       cancelled = true
+      clearTimeout(fallbackTimer)
     }
   }, [
     canvasKey,
     flatImage,
     flatImageElement,
+    frameFallbackMs,
+    frameImage,
+    framePlane,
+    outlinesPlane,
     maxConcurrentTileRequests,
     onTileCacheEviction,
     onTileError,
+    prefetchChannels,
     renderChannels,
     store,
     tileCacheMaxTiles,
@@ -399,6 +600,37 @@ function requestedTilesAreReadyToDraw(requests: readonly ChannelRequest[]): bool
   return true
 }
 
+// The visible tiles at the requested level are read, or failed for good.
+function visibleTilesAreSettled(requests: readonly ChannelRequest[]): boolean {
+  for (const request of requests) {
+    const { loader } = request.channel
+
+    for (const tile of request.tiles) {
+      if (
+        !bboxesOverlap(loader.tileBounds(request.level, tile.col, tile.row), request.bbox)
+      ) {
+        continue
+      }
+
+      const entry = request.cache.get(request.level, tile.col, tile.row)
+
+      if (
+        entry === undefined ||
+        entry.state === 'loading' ||
+        (entry.state === 'error' && entry.retryAt !== undefined)
+      ) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+function bboxesOverlap(a: BBox, b: BBox): boolean {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY
+}
+
 function requestedTilesWillRetry(requests: readonly ChannelRequest[]): boolean {
   return requests.some((request) =>
     request.tiles.some((tile) => {
@@ -427,6 +659,8 @@ function planChannelRequest(options: {
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onTileError?: (error: Error) => void
   readonly prefetch: boolean
+  // The image whose planes the channel's caches are kept for, for replay.
+  readonly replayImage?: string
   readonly viewState: OverviewViewState
 }): ChannelRequestPlan {
   const { loader } = options.channel
@@ -452,6 +686,11 @@ function planChannelRequest(options: {
   return {
     spec: {
       key: channelCacheKey(options.channel),
+      ...(options.replayImage === undefined
+        ? {}
+        : {
+            replayGroup: `${options.channel.id}:${options.replayImage}:${channelStyleKey(options.channel)}`,
+          }),
       cacheOptions: (heldChannels) => {
         const normalMaxTiles = Math.max(
           24,
@@ -507,12 +746,16 @@ function channelRequest(
 // Tiles are decoded in the channel's colour and contrast, so a cache holds
 // one of each: a new colour, like a new window, needs a cache of its own.
 function channelCacheKey(channel: MorphologyCanvasChannel): string {
+  return `${channel.id}:${channel.loader.url}:${channelStyleKey(channel)}`
+}
+
+function channelStyleKey(channel: MorphologyCanvasChannel): string {
   const contrastKey =
     channel.contrast === undefined
       ? 'auto'
       : `${channel.contrast.lo.toString()}:${channel.contrast.hi.toString()}`
   const alphaKey = channel.alphaFromIntensity === false ? 'opaque' : 'intensity-alpha'
-  return `${channel.id}:${channel.loader.url}:${contrastKey}:${channel.color.join(',')}:${alphaKey}`
+  return `${contrastKey}:${channel.color.join(',')}:${alphaKey}`
 }
 
 // Not clamped to x, y >= 0: an image can sit at a negative origin (MERSCOPE

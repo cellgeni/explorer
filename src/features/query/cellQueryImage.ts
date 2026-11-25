@@ -168,6 +168,7 @@ export function imageColumnNeeds(
         channelId: spec.channelId,
         level: spec.level,
         z: spec.z ?? null,
+        timePoint: spec.timePoint ?? null,
         radius: spec.radius ?? null,
         threshold: spec.stat === 'above' ? (spec.threshold ?? null) : null,
       },

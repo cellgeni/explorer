@@ -144,7 +144,10 @@ import {
   useOpenDatasetPreviewStore,
 } from './features/collection/useCollectionPreviews'
 import { LinkedViewChannel } from './components/linkedView'
-import type { InitialViewStateOverride } from './components/viewerCoreTypes'
+import type {
+  InitialViewStateOverride,
+  ViewerImageFrame,
+} from './components/viewerCoreTypes'
 import {
   collectionEntryFor,
   type DatasetCollectionEntry,
@@ -251,7 +254,13 @@ import {
 } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
-import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
+import { useMorphologyPlaneWorkflow } from './features/morphology/useMorphologyPlaneWorkflow'
+import {
+  morphologyImageFrame,
+  morphologyImagePlane,
+  ShownMorphologyFrame,
+} from './features/morphology/morphologyFrame'
+import { useTimePointPlayback } from './features/morphology/useTimePointPlayback'
 import { MorphologyVolumeView } from './features/morphology/MorphologyVolumeView'
 import { morphologyVolumeLevels } from './features/morphology/useMorphologyVolumeWorkflow'
 import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
@@ -2578,6 +2587,83 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [appendDebugEvent, setPinnedTranscript],
   )
+  const {
+    requestedZPlane: requestedMorphologyZPlane,
+    requestedTimePoint: requestedMorphologyTimePoint,
+    selectMorphologyZPlane,
+    selectMorphologyTimePoint,
+  } = useMorphologyPlaneWorkflow({
+    callbacks: { appendDebugEvent },
+    data: { morphologyImage },
+    refs: { loadRequestIdRef: loadRequestId },
+    setters: { setMorphologyImage, setMorphologyState },
+  })
+  // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
+  // dataset it was opened on: another dataset opens in 2D.
+  const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
+  const volumeViewAvailable = useMemo(
+    () => morphologyVolumeLevels(morphologyImage).length > 0,
+    [morphologyImage],
+  )
+  const volumeViewShown =
+    volumeViewAvailable &&
+    volumeViewDatasetUrl !== null &&
+    volumeViewDatasetUrl === loadedDatasetUrl
+  // The dataset image's plane, and the plane the canvas shows while the next
+  // one loads (plan 28-D6).
+  const morphologyFrame = useMemo(
+    () => morphologyImageFrame(morphologyImage),
+    [morphologyImage],
+  )
+  const [shownMorphologyFrame] = useState(() => new ShownMorphologyFrame())
+  // The plane the 3D view draws, which the plane controls follow in 3D: the
+  // 2D canvas under it shows a new time point before its volume is read
+  // (28-D11).
+  const [shownVolumeFrame] = useState(() => new ShownMorphologyFrame())
+  // Play (plan 28-G), stopped by the 3D view, a screenshot or a plane that
+  // fails to open.
+  const timePointPlayback = useTimePointPlayback({
+    image: morphologyImage,
+    shownFrame: shownMorphologyFrame,
+    enabled:
+      !volumeViewShown &&
+      screenshotState.status !== 'running' &&
+      morphologyState.status !== 'error',
+    prefetchCount: performanceBudget.timePointPrefetch,
+    selectTimePoint: selectMorphologyTimePoint,
+  })
+  // The plane of the cell outlines drawn, while they follow the image's
+  // plane (28-D9): a new plane waits for its outlines too.
+  const imageOutlinesPlane =
+    layerVisibility.cells &&
+    platformAdapter.cellBoundaryLoadingEnabled(showCellBoundaries) &&
+    (boundaryState.status === 'loading' || boundaryState.status === 'ready')
+      ? boundaryState.plane
+      : undefined
+  const viewerImageFrame = useMemo<ViewerImageFrame>(
+    () => ({
+      frame: morphologyFrame,
+      // Play waits for each time point however long it takes (28-D6).
+      ...(timePointPlayback.playing ? { fallbackMs: Infinity } : {}),
+      onShown: shownMorphologyFrame.show,
+      prefetchPlanes: timePointPlayback.prefetchPlanes,
+      ...(imageOutlinesPlane === undefined ? {} : { outlinesPlane: imageOutlinesPlane }),
+    }),
+    [
+      imageOutlinesPlane,
+      morphologyFrame,
+      shownMorphologyFrame,
+      timePointPlayback.playing,
+      timePointPlayback.prefetchPlanes,
+    ],
+  )
+  // While Play runs the link keeps the time point it started from (28-D12).
+  const shareableMorphologyTimePoint =
+    timePointPlayback.startTimePoint ??
+    morphologyImage?.timeSeries?.timePoint ??
+    (morphologyImage === null && linkImageOpening
+      ? initialShareableState.morphologyTimePoint
+      : undefined)
   const { handleViewportChange } = useViewportDataWorkflow({
     callbacks: {
       appendDebugEvent,
@@ -2598,6 +2684,12 @@ export function App({ dependencies }: AppProps = {}) {
         platformAdapter.kind === 'image'
           ? importedSegmentation.viewportCellCount
           : undefined,
+      boundaryPlane:
+        morphologyImage === null ||
+        (morphologyImage.zStack === undefined && morphologyImage.timeSeries === undefined)
+          ? undefined
+          : morphologyImagePlane(morphologyImage),
+      boundaryPrefetchPlanes: timePointPlayback.prefetchPlanes,
     },
     data: {
       loadState,
@@ -3612,24 +3704,6 @@ export function App({ dependencies }: AppProps = {}) {
         setMorphologyState,
       },
     })
-  const { requestedZPlane: requestedMorphologyZPlane, selectMorphologyZPlane } =
-    useMorphologyZPlaneWorkflow({
-      callbacks: { appendDebugEvent },
-      data: { morphologyImage },
-      refs: { loadRequestIdRef: loadRequestId },
-      setters: { setMorphologyImage, setMorphologyState },
-    })
-  // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
-  // dataset it was opened on: another dataset opens in 2D.
-  const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
-  const volumeViewAvailable = useMemo(
-    () => morphologyVolumeLevels(morphologyImage).length > 0,
-    [morphologyImage],
-  )
-  const volumeViewShown =
-    volumeViewAvailable &&
-    volumeViewDatasetUrl !== null &&
-    volumeViewDatasetUrl === loadedDatasetUrl
   // The 3D view of cells placed in 3D (a third spatial coordinate), over the
   // 2D view like the image's, and kept open the same way. One 3D view shows
   // at a time.
@@ -4336,6 +4410,7 @@ export function App({ dependencies }: AppProps = {}) {
       measurementUnit,
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
       morphologyZPlane: shareableMorphologyZPlane,
+      morphologyTimePoint: shareableMorphologyTimePoint,
       imageView: shareableImageView,
       cellView: shareableCellView,
       observationColorMode,
@@ -4521,6 +4596,7 @@ export function App({ dependencies }: AppProps = {}) {
               genePanelState.status === 'ready' ? genePanelState.genes.length : null,
             channelCount: morphologyImage?.channelLoaders.length ?? 0,
             zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
+            timePointCount: morphologyImage?.timeSeries?.sizeT ?? 1,
             imageLoading: morphologyState.status === 'loading',
             hasFlatImage: flatMorphologyImage !== null,
             imageSize: datasetImageSize(
@@ -4826,6 +4902,12 @@ export function App({ dependencies }: AppProps = {}) {
     morphologyZStack: morphologyImage?.zStack,
     requestedMorphologyZPlane,
     selectMorphologyZPlane,
+    morphologyTimeSeries: morphologyImage?.timeSeries,
+    requestedMorphologyTimePoint,
+    selectMorphologyTimePoint,
+    morphologyFrame,
+    shownMorphologyFrame: volumeViewShown ? shownVolumeFrame : shownMorphologyFrame,
+    timePointPlayback,
     setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
     setImageLayerOpacity,
     updateMorphologyChannel,
@@ -5277,6 +5359,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadCellOutlines: loadActiveCellOutlines,
     imageChannels: cellQueryImageChannels,
     imageZPlane: morphologyImage?.zStack?.zPlane ?? null,
+    imageTimePoint: morphologyImage?.timeSeries?.timePoint ?? null,
     appendDebugEvent,
   })
 
@@ -5485,6 +5568,7 @@ export function App({ dependencies }: AppProps = {}) {
               }
               imageLoader={morphologyImage?.loader ?? null}
               imageChannels={morphologyCanvasChannels}
+              imageFrame={viewerImageFrame}
               flatImage={flatMorphologyImage}
               imageOpacity={
                 morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1
@@ -5588,6 +5672,7 @@ export function App({ dependencies }: AppProps = {}) {
             <MorphologyVolumeView
               image={morphologyImage}
               settings={morphologyChannelSettings}
+              shownFrame={shownVolumeFrame}
               onClose={() => {
                 setVolumeViewOpen(false)
               }}

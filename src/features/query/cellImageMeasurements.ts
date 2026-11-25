@@ -29,6 +29,8 @@ export interface CellImageMeasurementSpec {
   readonly level: number
   // The z plane of a z-stack, or null.
   readonly z: number | null
+  // The time point of a time series, or null (plan 28-D14).
+  readonly timePoint: number | null
   // Micrometres, for cells without an area; null where cells have one.
   readonly radius: number | null
   // Null when only the mean is wanted.
@@ -61,7 +63,11 @@ export interface CellImageMeasurementContext {
   readonly cells: readonly CellImageCell[]
   // The channel's loader at a plane, or null when the canvas does not show
   // that plane.
-  readonly loaderFor: (channelId: string, z: number | null) => CellImageLoader | null
+  readonly loaderFor: (
+    channelId: string,
+    z: number | null,
+    timePoint: number | null,
+  ) => CellImageLoader | null
   readonly onMeasured?: (
     spec: CellImageMeasurementSpec,
     ms: number,
@@ -116,6 +122,7 @@ export function cellImageMeasurementKey(spec: CellImageMeasurementSpec): string 
     spec.channelId,
     spec.level,
     spec.z ?? '',
+    spec.timePoint ?? '',
     spec.radius ?? '',
     spec.threshold ?? '',
   ].join('|')
@@ -388,14 +395,19 @@ export class CellImageMeasurements {
     const context = this.context
     if (context === null) return
 
-    const loader = context.loaderFor(entry.spec.channelId, entry.spec.z)
+    const { z, timePoint } = entry.spec
+    const loader = context.loaderFor(entry.spec.channelId, z, timePoint)
     if (loader === null) {
+      const plane = [
+        z === null ? null : `plane ${z.toString()}`,
+        timePoint === null ? null : `time point ${timePoint.toString()}`,
+      ].filter((part) => part !== null)
       this.settle(entry, {
         status: 'error',
         message:
-          entry.spec.z === null
+          plane.length === 0
             ? 'The image no longer has this channel.'
-            : `Show plane ${entry.spec.z.toString()} on the canvas to measure it.`,
+            : `Show ${plane.join(' at ')} on the canvas to measure it.`,
       })
       return
     }

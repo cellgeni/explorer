@@ -70,6 +70,38 @@ export interface ImagePyramidZStack {
   readonly defaultZPlane?: number
 }
 
+// An image with more than one time point (plan 28). The loader reads one;
+// `atPlane` gives the others.
+export interface ImagePyramidTimeSeries {
+  readonly sizeT: number
+  // The time point the loader itself reads.
+  readonly defaultTimePoint: number
+  // Time between points, when the time axis gives a unit, in that unit's
+  // symbol: { value: 1.5, unit: 'min' }.
+  readonly timeStep?: { readonly value: number; readonly unit: string }
+}
+
+// A plane of an image with z planes or time points. An axis left out keeps
+// the loader's index.
+export interface ImagePyramidPlane {
+  readonly z?: number
+  readonly t?: number
+}
+
+// A plane as one string, "z:t" with an axis left out empty: the canvas's frame
+// and outlines read at a plane are named so (plan 28).
+export function imagePlaneKey(plane: ImagePyramidPlane): string {
+  return `${plane.z?.toString() ?? ''}:${plane.t?.toString() ?? ''}`
+}
+
+export function imagePlaneFromKey(key: string): ImagePyramidPlane {
+  const [z = '', t = ''] = key.split(':')
+  return {
+    ...(z === '' ? {} : { z: Number(z) }),
+    ...(t === '' ? {} : { t: Number(t) }),
+  }
+}
+
 export type ImagePyramidPixelArray =
   | Uint8Array
   | Uint16Array
@@ -177,6 +209,8 @@ export interface ImagePyramidLoader {
   // Set for a z-stack whose channels list their `zPlanes`. The loader itself
   // reads one plane; other planes open as other loaders.
   readonly zStack?: ImagePyramidZStack
+  // Set for an image with more than one time point.
+  readonly timeSeries?: ImagePyramidTimeSeries
   // Set when every tile is cut from bands or blocks that are read and
   // decoded once for many tiles (NDPI), so a large uncompressed tile is no
   // heavier to load than its neighbours.
@@ -256,6 +290,11 @@ export interface ImagePyramidLoader {
     signal?: AbortSignal,
     onProgress?: (planesRead: number) => void,
   ): Promise<ImagePyramidVolume>
+  // The same channel at another z plane or time point, made from what this
+  // loader has already opened, without requests. Its URL names the plane, so
+  // caches keyed by URL keep planes apart. It returns this loader at its own
+  // plane. Unset for loaders that open each plane from its URL (TIFF).
+  atPlane?(plane: ImagePyramidPlane): ImagePyramidLoader
   // A small picture of the whole image over the image's extent, such as an
   // SVS slide's thumbnail, which the minimap draws instead of the coarsest
   // level. It has the image's channels.

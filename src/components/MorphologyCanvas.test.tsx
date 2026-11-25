@@ -11,6 +11,8 @@ import type { TiffChunk, TiffLevelMeta } from '../tiff/loader'
 
 interface MockTileRequest {
   readonly key: string
+  // The loader's URL: each plane of an image has its own.
+  readonly url: string
   readonly promise: Promise<TileCacheEntry>
   readonly resolve: () => void
   // Fails the read; the tile may be read again from retryAt, as the cache's.
@@ -97,7 +99,13 @@ const tileCacheMock = vi.hoisted(() => {
       }
 
       this.entries.set(key, loading)
-      requests.push({ key, promise, resolve: resolveRequest, fail: failRequest })
+      requests.push({
+        key,
+        url: loader.url,
+        promise,
+        resolve: resolveRequest,
+        fail: failRequest,
+      })
       return promise
     }
 
@@ -124,6 +132,10 @@ const tileCacheMock = vi.hoisted(() => {
       }
 
       return ready
+    }
+
+    readyPixels(): number {
+      return [...this.entries.values()].filter((entry) => entry.state === 'ready').length
     }
 
     clear(): void {
@@ -539,6 +551,303 @@ describe('MorphologyCanvas', () => {
     })
   })
 
+  describe('at the planes of an image (plan 28)', () => {
+    const channelsAt = (loader: TiffPyramidLoader) => [
+      { id: 'DNA', loader, enabled: true, color: [0, 0, 255] as const },
+    ]
+    const frameAt = (t: number) => ({ image: 'planes', plane: `:${t.toString()}` })
+
+    async function resolveRequests(requests: readonly MockTileRequest[]) {
+      await act(async () => {
+        for (const request of requests) request.resolve()
+        await Promise.all(requests.map((request) => request.promise))
+      })
+    }
+
+    function requestsAt(t: number): MockTileRequest[] {
+      return tileCacheMock.requests.filter((request) =>
+        request.url.endsWith(`#t=${t.toString()}`),
+      )
+    }
+
+    it('keeps the shown plane until the visible tiles of the next are read (28-D6)', async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const at = planeLoaders()
+      const onFrameShown = vi.fn()
+      const { rerender } = render(
+        <MorphologyCanvas
+          channels={channelsAt(at(0))}
+          frame={frameAt(0)}
+          onFrameShown={onFrameShown}
+          viewState={viewState}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(requestsAt(0)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(0))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenCalledWith(frameAt(0))
+      })
+      const drawsAtZero = context.drawImage.mock.calls.length
+
+      rerender(
+        <MorphologyCanvas
+          channels={channelsAt(at(1))}
+          frame={frameAt(1)}
+          onFrameShown={onFrameShown}
+          viewState={viewState}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      const clearsWhileHeld = context.clearRect.mock.calls.length
+      // The shown plane is drawn again, and not the half-read one.
+      expect(context.drawImage.mock.calls.length).toBe(drawsAtZero * 2)
+
+      await resolveRequests(requestsAt(1).slice(0, 1))
+      expect(context.clearRect.mock.calls.length).toBe(clearsWhileHeld)
+      expect(onFrameShown).toHaveBeenCalledTimes(1)
+
+      await resolveRequests(requestsAt(1).slice(1))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(1))
+      })
+      expect(context.clearRect.mock.calls.length).toBe(clearsWhileHeld + 1)
+      expect(context.drawImage.mock.calls.length).toBe(drawsAtZero * 2 + 2)
+    })
+
+    it('waits for the outlines of the next plane too (28-D9)', async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const at = planeLoaders()
+      const onFrameShown = vi.fn()
+      const canvasAt = (t: number, outlinesAt: number) => (
+        <MorphologyCanvas
+          channels={channelsAt(at(t))}
+          frame={frameAt(t)}
+          outlinesPlane={frameAt(outlinesAt).plane}
+          onFrameShown={onFrameShown}
+          prefetchPlanes={[{ t: 1 }]}
+          viewState={viewState}
+        />
+      )
+      const { rerender } = render(canvasAt(0, 0))
+
+      await waitFor(() => {
+        expect(requestsAt(0)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(0))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(1)
+      })
+      await resolveRequests(requestsAt(1))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(1).slice(1))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(0))
+      })
+      const clearsAtZero = context.clearRect.mock.calls.length
+
+      // Time point 1's tiles are read, but its outlines are not.
+      rerender(canvasAt(1, 0))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(onFrameShown).toHaveBeenCalledTimes(1)
+      const drawsHeld = context.drawImage.mock.calls.length
+
+      rerender(canvasAt(1, 1))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(1))
+      })
+      expect(context.clearRect.mock.calls.length).toBeGreaterThan(clearsAtZero)
+      expect(context.drawImage.mock.calls.length).toBe(drawsHeld + 2)
+    })
+
+    it("draws a slow plane's tiles as they come after the fallback time", async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const at = planeLoaders()
+      const { rerender } = render(
+        <MorphologyCanvas
+          channels={channelsAt(at(0))}
+          frame={frameAt(0)}
+          frameFallbackMs={40}
+          viewState={viewState}
+        />,
+      )
+
+      await waitFor(() => {
+        expect(requestsAt(0)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(0))
+      rerender(
+        <MorphologyCanvas
+          channels={channelsAt(at(1))}
+          frame={frameAt(1)}
+          frameFallbackMs={40}
+          viewState={viewState}
+        />,
+      )
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(1).slice(0, 1))
+      const drawsBeforeFallback = context.drawImage.mock.calls.length
+
+      // The one tile read is drawn once the time passes.
+      await waitFor(() => {
+        expect(context.drawImage.mock.calls.length).toBe(drawsBeforeFallback + 1)
+      })
+    })
+
+    it('shows the last plane asked for when another step comes first', async () => {
+      mockCanvasContext()
+      const at = planeLoaders()
+      const onFrameShown = vi.fn()
+      const canvasAt = (t: number) => (
+        <MorphologyCanvas
+          channels={channelsAt(at(t))}
+          frame={frameAt(t)}
+          onFrameShown={onFrameShown}
+          viewState={viewState}
+        />
+      )
+      const { rerender } = render(canvasAt(0))
+
+      await waitFor(() => {
+        expect(requestsAt(0)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(0))
+      rerender(canvasAt(1))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      rerender(canvasAt(2))
+      await waitFor(() => {
+        expect(requestsAt(2)).toHaveLength(2)
+      })
+
+      await resolveRequests(requestsAt(1))
+      await resolveRequests(requestsAt(2))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(2))
+      })
+      expect(onFrameShown.mock.calls.map(([frame]) => frame)).toEqual([
+        frameAt(0),
+        frameAt(2),
+      ])
+    })
+
+    it('reads the next planes without drawing them, and replays played ones (28-D8)', async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const at = planeLoaders()
+      const onFrameShown = vi.fn()
+      const canvasAt = (t: number, prefetch: readonly number[]) => (
+        <MorphologyCanvas
+          channels={channelsAt(at(t))}
+          frame={frameAt(t)}
+          onFrameShown={onFrameShown}
+          prefetchPlanes={prefetch.map((next) => ({ t: next }))}
+          viewState={viewState}
+        />
+      )
+      const { rerender } = render(canvasAt(0, [1, 2]))
+
+      // The shown plane is read first; each next plane a tile at a time.
+      await waitFor(() => {
+        expect(tileCacheMock.requests).toHaveLength(4)
+      })
+      expect(tileCacheMock.requests.slice(0, 2)).toEqual(requestsAt(0))
+      expect(requestsAt(1)).toHaveLength(1)
+      expect(requestsAt(2)).toHaveLength(1)
+      await resolveRequests(requestsAt(1))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(1).slice(1))
+      expect(context.drawImage).not.toHaveBeenCalled()
+
+      await resolveRequests(requestsAt(0))
+      const drawsAtZero = context.drawImage.mock.calls.length
+
+      // The next plane is whole already: it is drawn at once.
+      rerender(canvasAt(1, [2, 3]))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(1))
+      })
+      expect(requestsAt(1)).toHaveLength(2)
+      expect(context.drawImage.mock.calls.length).toBe(drawsAtZero + 2)
+      await waitFor(() => {
+        expect(requestsAt(3)).toHaveLength(1)
+      })
+
+      // Back to a played plane: drawn from memory.
+      rerender(canvasAt(0, []))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(0))
+      })
+      expect(requestsAt(0)).toHaveLength(2)
+    })
+
+    it('reads the next planes again when the view moves', async () => {
+      mockCanvasContext()
+      const at = planeLoaders({
+        tilesForBbox: (bbox) =>
+          bbox.minX > 0
+            ? [
+                { col: 2, row: 0 },
+                { col: 3, row: 0 },
+              ]
+            : [
+                { col: 0, row: 0 },
+                { col: 1, row: 0 },
+              ],
+      })
+      const canvasWith = (view: OverviewViewState) => (
+        <MorphologyCanvas
+          channels={channelsAt(at(0))}
+          frame={frameAt(0)}
+          prefetchPlanes={[{ t: 1 }]}
+          viewState={view}
+        />
+      )
+      const { rerender } = render(canvasWith(viewState))
+
+      await waitFor(() => {
+        expect(requestsAt(1).map((request) => request.key)).toEqual(['0:0:0'])
+      })
+
+      // The read for the old view stops; the new view's tiles are read,
+      // nearest its centre first.
+      rerender(canvasWith({ ...viewState, target: [250, -25, 0] }))
+
+      await waitFor(() => {
+        expect(requestsAt(1).map((request) => request.key)).toEqual(['0:0:0', '0:3:0'])
+      })
+    })
+  })
+
   describe('with a tile store shared by several canvases (plan 23-D11)', () => {
     it('reads a tile two canvases show once', async () => {
       mockCanvasContext()
@@ -679,6 +988,30 @@ function mockLoader(
     }),
     tileSourceSize: () => ({ width: 64, height: 64 }),
   } as unknown as TiffPyramidLoader
+}
+
+// One loader for each time point of an image, each making the others, as an
+// OME-Zarr loader's `atPlane` does.
+function planeLoaders(
+  options: { readonly tilesForBbox?: (bbox: BBox) => readonly TileIndex[] } = {},
+): (t: number) => TiffPyramidLoader {
+  const loaders = new Map<number, TiffPyramidLoader>()
+  const at = (t: number): TiffPyramidLoader => {
+    let loader = loaders.get(t)
+
+    if (loader === undefined) {
+      loader = {
+        ...mockLoader(options),
+        url: `https://example.test/planes.ome.zarr#t=${t.toString()}`,
+        atPlane: (plane: { readonly t?: number }) => at(plane.t ?? t),
+      } as unknown as TiffPyramidLoader
+      loaders.set(t, loader)
+    }
+
+    return loader
+  }
+
+  return at
 }
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {

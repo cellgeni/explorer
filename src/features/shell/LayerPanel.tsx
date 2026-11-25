@@ -31,6 +31,7 @@ import {
   CustomImageLayers,
   ImageChannelControls,
   ImageOpacityControl,
+  ImageTimePointControl,
   ImageVolumeViewControl,
   ImageZPlaneControl,
 } from '../sections/ImageSectionBlocks'
@@ -348,6 +349,7 @@ function ImageSection({
       <div className="layer-opacity-controls">
         <ImageOpacityControl image={image} />
         <ImageZPlaneControl image={image} />
+        <ImageTimePointControl image={image} />
         <ImageVolumeViewControl image={image} />
       </div>
       <VisiumTissueImageSelect visium={viewOptions.visium} />

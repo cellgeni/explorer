@@ -19,7 +19,12 @@ import type {
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { AnalysisEmbedding, AnalysisEmbeddingKind } from '../data/analysisEmbeddings'
 import type { AnalysisEmbeddingOption } from '../data/analysisEmbeddings'
-import { placedImageExtent, type ImagePyramidLoader } from '../data/imagePyramid'
+import {
+  imagePlaneKey,
+  placedImageExtent,
+  type ImagePyramidLoader,
+  type ImagePyramidPlane,
+} from '../data/imagePyramid'
 import { datasetFileUrl } from '../data/datasetFiles'
 import {
   openOmeZarrImageWithOptions,
@@ -75,6 +80,7 @@ import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import type {
   DatasetMeta,
   ElementBatch,
+  ElementReadOptions,
   GeneExpressionBatch,
   ImageSource,
   SegmentationInfo,
@@ -402,14 +408,30 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  async elements(bbox: BBox): Promise<ElementBatch<SpatialElementId>> {
+  async elements(
+    bbox: BBox,
+    options: ElementReadOptions = {},
+  ): Promise<ElementBatch<SpatialElementId>> {
     const source = await this.boundarySource()
 
     if (source?.kind === 'labels') {
+      const plane = options.plane ?? {}
       const regions = await Promise.all(
-        source.entries.map((entry) => this.labelElements(entry, bbox)),
+        source.entries.map((entry) => this.labelElements(entry, bbox, plane)),
       )
-      return { elements: regions.flat() }
+      const readers = await Promise.all(
+        source.entries.map((entry) => this.labelsReader(entry)),
+      )
+      const following = readers.filter((reader) => reader.followsPlanes)
+      const notice = following
+        .map((reader) => reader.planeNotice(plane))
+        .find((text) => text !== undefined)
+
+      return {
+        elements: regions.flat(),
+        ...(following.length === 0 ? {} : { plane: imagePlaneKey(plane) }),
+        ...(notice === undefined ? {} : { planeNotice: notice }),
+      }
     }
 
     this.shapeElements = viewportElements(
@@ -1090,6 +1112,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
   private async labelElements(
     entry: SpatialDataPlacedElement,
     bbox: BBox,
+    plane: ImagePyramidPlane,
   ): Promise<readonly SpatialElement[]> {
     const cellIds = this.labelCellIdsByRegion.get(entry.element.name)
 
@@ -1108,7 +1131,11 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
         minY: bbox.minY / scale,
         maxY: bbox.maxY / scale,
       },
-      { maxPixels: LABEL_OUTLINE_MAX_PIXELS, include: (label) => cellIds.has(label) },
+      {
+        maxPixels: LABEL_OUTLINE_MAX_PIXELS,
+        include: (label) => cellIds.has(label),
+        plane,
+      },
     )
 
     return outlines.flatMap((outline) => {

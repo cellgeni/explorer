@@ -1,4 +1,5 @@
 import { micrometers, type BBox, type DataPoint } from '../data/coords'
+import { imagePlaneKey, type ImagePyramidPlane } from '../data/imagePyramid'
 import { MAX_BOUNDARY_VIEWPORT_CELL_LIMIT } from '../rendering/boundaryViewport'
 import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import type { LabelLevelGeometry, LabelOutlineReader } from './spatialDataLabels'
@@ -45,17 +46,26 @@ export interface ImportedSegmentation {
   // The outlines meeting `bbox`, or none and `overLimit` when there are more
   // than can be drawn, or the mask cannot be traced finely enough there. A
   // mask, whose count is only known once traced, also stops at `cellLimit`.
-  outlines(
-    bbox: BBox,
-    options?: { readonly signal?: AbortSignal; readonly cellLimit?: number },
-  ): Promise<ElementBatch>
+  outlines(bbox: BBox, options?: ImportedSegmentationReadOptions): Promise<ElementBatch>
+}
+
+export interface ImportedSegmentationReadOptions {
+  readonly signal?: AbortSignal
+  readonly cellLimit?: number
+  // The image's plane, for a Zarr mask with z or t axes (plan 28-D9).
+  readonly plane?: ImagePyramidPlane
 }
 
 // The parts of a label outline reader a mask segmentation uses, whatever
 // reads its chunks.
 type LabelOutlines = Pick<
   LabelOutlineReader<LabelLevelGeometry>,
-  'levels' | 'levelForBounds' | 'windowPixels' | 'outlines'
+  | 'levels'
+  | 'levelForBounds'
+  | 'windowPixels'
+  | 'outlines'
+  | 'followsPlanes'
+  | 'planeNotice'
 >
 
 // A mask is traced only from pyramid levels at most this much coarser than
@@ -307,9 +317,15 @@ class LabelSegmentation implements ImportedSegmentation {
 
   async outlines(
     bbox: BBox,
-    options: { readonly signal?: AbortSignal; readonly cellLimit?: number } = {},
+    options: ImportedSegmentationReadOptions = {},
   ): Promise<ElementBatch> {
     const level = this.reader.levelForBounds(bbox, LABEL_OUTLINE_MAX_PIXELS)
+    const plane = options.plane ?? {}
+    const notice = this.reader.followsPlanes ? this.reader.planeNotice(plane) : undefined
+    const planeFields = {
+      ...(this.reader.followsPlanes ? { plane: imagePlaneKey(plane) } : {}),
+      ...(notice === undefined ? {} : { planeNotice: notice }),
+    }
 
     if (
       this.reader.windowPixels(level, bbox) > LABEL_OUTLINE_MAX_PIXELS ||
@@ -320,6 +336,7 @@ class LabelSegmentation implements ImportedSegmentation {
 
     const outlines = await this.reader.outlines(bbox, {
       maxPixels: LABEL_OUTLINE_MAX_PIXELS,
+      plane,
       ...(options.signal === undefined ? {} : { signal: options.signal }),
     })
     const area = overlapArea(bbox, this.extent)
@@ -336,6 +353,7 @@ class LabelSegmentation implements ImportedSegmentation {
     }
 
     return {
+      ...planeFields,
       elements: outlines.map((outline) => {
         const cached = this.elementsByRing.get(outline.ring)
 

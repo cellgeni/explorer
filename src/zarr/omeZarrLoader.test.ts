@@ -892,6 +892,152 @@ describe('OME-Zarr image loader', () => {
     expect(omeZarrPlaneSelectionUrl(`${rootUrl}#c=1`, 2)).toBe(`${rootUrl}#c=1&z=2`)
   })
 
+  // Plan 28: time points.
+  it('opens a time series on the time point omero rendering settings name, else the first', async () => {
+    const rootPath = '/images/movie.ome.zarr'
+    const open = (omero?: unknown) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(timeLapseOmeZarrFiles(rootPath, { omero })),
+      })
+    const withDefaultT = await open({ rdefs: { defaultT: 2 } })
+
+    expect(withDefaultT.timeSeries).toEqual({ sizeT: 4, defaultTimePoint: 2 })
+    // z opens on the middle plane, as for other z-stacks.
+    await expect(firstPixel(withDefaultT)).resolves.toBe(50 * 2 + 1 + 1)
+
+    for (const omero of [undefined, { rdefs: { defaultT: 4 } }]) {
+      const loader = await open(omero)
+
+      expect(loader.timeSeries?.defaultTimePoint).toBe(0)
+      await expect(firstPixel(loader)).resolves.toBe(2)
+    }
+
+    // One time point is not a time series.
+    const still = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(timeLapseOmeZarrFiles(rootPath, { sizeT: 1 })),
+    })
+
+    expect(still.timeSeries).toBeUndefined()
+  })
+
+  it('selects a time point with a t hash parameter and keeps it in channel URLs', async () => {
+    const rootUrl = 'https://example.test/images/movie.ome.zarr'
+    const fetcher = fetcherForFiles(timeLapseOmeZarrFiles('/images/movie.ome.zarr'))
+    const open = (hash: string) =>
+      openOmeZarrImageWithOptions(`${rootUrl}${hash}`, { fetcher })
+    const timeThree = await open('#t=3')
+
+    expect(timeThree.timeSeries?.defaultTimePoint).toBe(3)
+    await expect(firstPixel(timeThree)).resolves.toBe(50 * 3 + 1 + 1)
+    expect(timeThree.channels[1]?.sourceUrl).toBe(`${rootUrl}#t=3&c=1`)
+
+    const channelOne = await open('#c=1&t=1&z=0')
+
+    await expect(firstPixel(channelOne)).resolves.toBe(50 + 10 + 0 + 1)
+    expect(channelOne.channels[1]?.sourceUrl).toBe(`${rootUrl}#t=1&z=0&c=1`)
+
+    for (const hash of ['#t=4', '#t=-1', '#t=one', '#t=']) {
+      await expect(firstPixel(await open(hash))).resolves.toBe(2)
+    }
+  })
+
+  it('makes a loader at another plane without requests', async () => {
+    // A path of its own: decoded chunks are cached by URL across tests.
+    const rootUrl = 'https://example.test/images/planes.ome.zarr'
+    const fetcher = fetcherForFiles(timeLapseOmeZarrFiles('/images/planes.ome.zarr'))
+    const loader = await openOmeZarrImageWithOptions(rootUrl, {
+      fetcher,
+      decodePool: null,
+    })
+    const requestsBefore = requestedPaths(fetcher).length
+    const later = loader.atPlane({ t: 3 })
+
+    expect(requestedPaths(fetcher)).toHaveLength(requestsBefore)
+    expect(later.url).toBe(`${rootUrl}#t=3&z=1`)
+    expect(later.timeSeries).toEqual({ sizeT: 4, defaultTimePoint: 3 })
+    expect(later.zStack).toEqual({ sizeZ: 3, defaultZPlane: 1 })
+    await expect(firstPixel(later)).resolves.toBe(50 * 3 + 1 + 1)
+
+    // The loader's own plane maps back to it, from a derived loader too.
+    expect(loader.atPlane({ t: 0, z: 1 })).toBe(loader)
+    expect(later.atPlane({ t: 0 })).toBe(loader)
+    // A plane asked for again gets the same loader, so its tile requests
+    // carry on.
+    expect(loader.atPlane({ t: 3 })).toBe(later)
+    expect(later.atPlane({ z: 1 })).toBe(later)
+
+    // An axis left out keeps the loader's index; indices are clamped.
+    const deeper = later.atPlane({ z: 2 })
+
+    expect(deeper.url).toBe(`${rootUrl}#t=3&z=2`)
+    await expect(firstPixel(deeper)).resolves.toBe(50 * 3 + 2 + 1)
+    expect(loader.atPlane({ t: 99, z: -4 }).url).toBe(`${rootUrl}#t=3&z=0`)
+    // Reading the new planes requested only their chunks.
+    expect(requestedPaths(fetcher).slice(requestsBefore)).toEqual([
+      '/images/planes.ome.zarr/0/3.0.1.0.0',
+      '/images/planes.ome.zarr/0/3.0.2.0.0',
+    ])
+
+    // A channel's loader keeps its channel.
+    const channelOne = await openOmeZarrImageWithOptions(`${rootUrl}#c=1`, {
+      fetcher,
+      decodePool: null,
+    })
+    const channelOneLater = channelOne.atPlane({ t: 2 })
+
+    expect(channelOneLater.url).toBe(`${rootUrl}#c=1&t=2&z=1`)
+    await expect(firstPixel(channelOneLater)).resolves.toBe(50 * 2 + 10 + 1 + 1)
+  })
+
+  it('reports the time step only when the t axis has a time unit', async () => {
+    const rootPath = '/images/movie.ome.zarr'
+    const open = (options: { readonly tUnit?: string; readonly tScale?: number }) =>
+      openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+        fetcher: fetcherForFiles(timeLapseOmeZarrFiles(rootPath, options)),
+      })
+
+    expect((await open({ tUnit: 'minute', tScale: 1.5 })).timeSeries?.timeStep).toEqual({
+      value: 1.5,
+      unit: 'min',
+    })
+    expect((await open({ tUnit: 'seconds' })).timeSeries?.timeStep).toEqual({
+      value: 1,
+      unit: 's',
+    })
+
+    for (const options of [{ tUnit: 'meter', tScale: 2 }, { tScale: 2 }]) {
+      expect((await open(options)).timeSeries?.timeStep).toBeUndefined()
+    }
+  })
+
+  it('finds a time axis by name without a type, beside no channel axis', async () => {
+    // As OME-Zarr 0.3 writes it (IDR idr0109A): axes are names only.
+    const rootPath = '/images/cells.ome.zarr'
+    const files = new Map([
+      [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+      [
+        `${rootPath}/.zattrs`,
+        jsonBytes({
+          multiscales: [
+            { version: '0.3', axes: ['t', 'y', 'x'], datasets: [{ path: '0' }] },
+          ],
+        }),
+      ],
+      [`${rootPath}/0/.zarray`, jsonBytes(v2ArrayMetadata([3, 2, 2], [1, 2, 2]))],
+      [`${rootPath}/0/0.0.0`, new Uint8Array(4).fill(1)],
+      [`${rootPath}/0/1.0.0`, new Uint8Array(4).fill(2)],
+      [`${rootPath}/0/2.0.0`, new Uint8Array(4).fill(3)],
+    ])
+    const loader = await openOmeZarrImageWithOptions(`https://example.test${rootPath}`, {
+      fetcher: fetcherForFiles(files),
+      decodePool: null,
+    })
+
+    expect(loader.timeSeries).toEqual({ sizeT: 3, defaultTimePoint: 0 })
+    expect(loader.zStack).toBeUndefined()
+    await expect(firstPixel(loader.atPlane({ t: 2 }))).resolves.toBe(3)
+  })
+
   it('reports the z spacing only when the z axis has a length unit', async () => {
     const rootPath = '/images/stack.ome.zarr'
     const open = (zAxisUnit?: string) =>
@@ -972,7 +1118,7 @@ describe('OME-Zarr image loader', () => {
     expect(image.channelLoaders[1]?.loader.url).toBe(`${rootUrl}#c=1`)
     await expect(channelFirstPixels(image.channelLoaders)).resolves.toEqual([3, 13])
 
-    const firstPlane = await image.zStack?.openPlane(0)
+    const firstPlane = await image.openPlane?.({ z: 0 })
 
     expect(firstPlane?.zStack?.zPlane).toBe(0)
     expect(firstPlane?.channelLoaders.map((channel) => channel.loader.url)).toEqual([
@@ -990,6 +1136,68 @@ describe('OME-Zarr image loader', () => {
     })
 
     await expect(channelFirstPixels(restored.channelLoaders)).resolves.toEqual([2, 12])
+  })
+
+  // Plan 28-D5.
+  it('opens other time points of a morphology image without opening loaders', async () => {
+    const rootUrl = 'https://example.test/images/series.ome.zarr'
+    const fetcher = fetcherForFiles(
+      timeLapseOmeZarrFiles('/images/series.ome.zarr', {
+        omero: { rdefs: { defaultT: 1 } },
+        tUnit: 'second',
+        tScale: 30,
+      }),
+    )
+    const openImage = vi.fn((url: string) =>
+      openOmeZarrImageWithOptions(url, { fetcher }),
+    )
+    const baseLoader = await openImage(rootUrl)
+    const image = await morphologyImageFromPyramidLoader(rootUrl, baseLoader, {
+      openImage,
+    })
+
+    expect(image.timeSeries).toEqual({
+      sizeT: 4,
+      timePoint: 1,
+      timeStep: { value: 30, unit: 's' },
+    })
+    expect(image.zStack).toMatchObject({ sizeZ: 3, zPlane: 1 })
+    expect(image.channelLoaders[0]?.loader).toBe(baseLoader)
+    await expect(channelFirstPixels(image.channelLoaders)).resolves.toEqual([52, 62])
+
+    openImage.mockClear()
+    const later = await image.openPlane?.({ t: 3 })
+
+    expect(openImage).not.toHaveBeenCalled()
+    expect(later?.timeSeries?.timePoint).toBe(3)
+    expect(later?.zStack?.zPlane).toBe(1)
+    expect(later?.channelLoaders.map((channel) => channel.loader.url)).toEqual([
+      `${rootUrl}#t=3&z=1`,
+      `${rootUrl}#c=1&t=3&z=1`,
+    ])
+    await expect(channelFirstPixels(later?.channelLoaders ?? [])).resolves.toEqual([
+      152, 162,
+    ])
+
+    // z changes keep the time point; the image's plane gives its loaders back.
+    const deeper = await later?.openPlane?.({ z: 2 })
+
+    expect(deeper?.timeSeries?.timePoint).toBe(3)
+    await expect(channelFirstPixels(deeper?.channelLoaders ?? [])).resolves.toEqual([
+      153, 163,
+    ])
+    expect((await deeper?.openPlane?.({ z: 1, t: 1 }))?.channelLoaders).toBe(
+      image.channelLoaders,
+    )
+
+    // A restored time point opens there.
+    const restored = await morphologyImageFromPyramidLoader(rootUrl, baseLoader, {
+      openImage,
+      timePoint: 2,
+    })
+
+    expect(restored.timeSeries?.timePoint).toBe(2)
+    await expect(channelFirstPixels(restored.channelLoaders)).resolves.toEqual([102, 112])
   })
 
   it('opens other z planes of a z-stack without a channel axis', async () => {
@@ -1047,7 +1255,7 @@ describe('OME-Zarr image loader', () => {
     expect(image.channelLoaders[0]?.loader).toBe(baseLoader)
     await expect(channelFirstPixels(image.channelLoaders)).resolves.toEqual([2])
 
-    const firstPlane = await image.zStack?.openPlane(0)
+    const firstPlane = await image.openPlane?.({ z: 0 })
 
     expect(firstPlane?.channelLoaders.map((channel) => channel.loader.url)).toEqual([
       `${rootUrl}#z=0`,
@@ -1410,6 +1618,69 @@ function zStackOmeZarrFiles(
         `${rootPath}/0/${c.toString()}.${z.toString()}.0.0`,
         new Uint8Array(4).fill(10 * c + z + 1),
       )
+    }
+  }
+
+  return files
+}
+
+// Axes t, c, z, y, x: `sizeT` time points, 2 channels and 3 z planes of 2 x 2
+// pixels, each chunk one plane filled with 50t + 10c + z + 1.
+function timeLapseOmeZarrFiles(
+  rootPath: string,
+  options: {
+    readonly omero?: unknown
+    readonly sizeT?: number
+    readonly tUnit?: string
+    readonly tScale?: number
+  } = {},
+): Map<string, Uint8Array> {
+  const sizeT = options.sizeT ?? 4
+  const files = new Map([
+    [`${rootPath}/.zgroup`, jsonBytes({ zarr_format: 2 })],
+    [
+      `${rootPath}/.zattrs`,
+      jsonBytes({
+        ...(options.omero === undefined ? {} : { omero: options.omero }),
+        multiscales: [
+          {
+            axes: [
+              {
+                name: 't',
+                type: 'time',
+                ...(options.tUnit === undefined ? {} : { unit: options.tUnit }),
+              },
+              { name: 'c', type: 'channel' },
+              { name: 'z', type: 'space' },
+              { name: 'y', type: 'space' },
+              { name: 'x', type: 'space' },
+            ],
+            datasets: [
+              {
+                path: '0',
+                coordinateTransformations: [
+                  { type: 'scale', scale: [options.tScale ?? 1, 1, 1, 1, 1] },
+                ],
+              },
+            ],
+          },
+        ],
+      }),
+    ],
+    [
+      `${rootPath}/0/.zarray`,
+      jsonBytes(v2ArrayMetadata([sizeT, 2, 3, 2, 2], [1, 1, 1, 2, 2])),
+    ],
+  ])
+
+  for (let t = 0; t < sizeT; t += 1) {
+    for (const c of [0, 1]) {
+      for (const z of [0, 1, 2]) {
+        files.set(
+          `${rootPath}/0/${t.toString()}.${c.toString()}.${z.toString()}.0.0`,
+          new Uint8Array(4).fill(50 * t + 10 * c + z + 1),
+        )
+      }
     }
   }
 

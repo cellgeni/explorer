@@ -55,12 +55,22 @@ describe('layer section summaries', () => {
               contrastMax: 1,
             },
           ],
-          zStack: { sizeZ: 15, zPlane: 7, micrometersPerPlane: 3, openPlane: vi.fn() },
+          zStack: { sizeZ: 15, zPlane: 7, micrometersPerPlane: 3 },
           customLayers: { layers: [{ id: 'x' } as never] },
         }),
         true,
       ),
     ).toBe('1 of 2 channels · z 8 of 15 · +1 layer')
+    // The time point being opened, as for z.
+    expect(
+      imageSummary(
+        testImageSectionModel({
+          timeSeries: { sizeT: 40, timePoint: 21 },
+          requestedTimePoint: 22,
+        }),
+        true,
+      ),
+    ).toBe('t 23 of 40')
   })
 
   it('says what colours the cells', () => {

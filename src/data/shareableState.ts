@@ -102,6 +102,8 @@ export interface ShareableState {
   readonly morphologyEnabledChannelIds?: readonly string[]
   // Zero-based z plane of a z-stack dataset image.
   readonly morphologyZPlane?: number
+  // Zero-based time point of a time series dataset image (plan 28): `t=`.
+  readonly morphologyTimePoint?: number
   // `3d` when an OME-Zarr z-stack is shown in the 3D view: `imageView=`.
   readonly imageView?: string
   // `3d` when cells placed in 3D (a third spatial coordinate) are shown in
@@ -204,6 +206,7 @@ export function parseShareableState(hash: string): ShareableState {
     unescapeCsvEntry,
   )
   const morphologyZPlane = parseNonNegativeInteger(params.get('z'))
+  const morphologyTimePoint = parseNonNegativeInteger(params.get('t'))
   const imageView = readString(params, 'imageView')
   const cellView = readString(params, 'cellView')
   const transcriptOverlay = parseBoolean(params.get('tx'))
@@ -434,6 +437,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (morphologyZPlane !== undefined) {
     state.morphologyZPlane = morphologyZPlane
+  }
+
+  if (morphologyTimePoint !== undefined) {
+    state.morphologyTimePoint = morphologyTimePoint
   }
 
   if (imageView !== undefined) {
@@ -708,6 +715,13 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.morphologyZPlane !== undefined && Number.isFinite(state.morphologyZPlane)) {
     params.set('z', Math.max(0, Math.floor(state.morphologyZPlane)).toString())
+  }
+
+  if (
+    state.morphologyTimePoint !== undefined &&
+    Number.isFinite(state.morphologyTimePoint)
+  ) {
+    params.set('t', Math.max(0, Math.floor(state.morphologyTimePoint)).toString())
   }
 
   setOptionalString(params, 'imageView', state.imageView)

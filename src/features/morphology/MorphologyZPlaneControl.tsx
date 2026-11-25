@@ -10,26 +10,27 @@ interface MorphologyZPlaneControlProps {
   readonly zStack: ZStackSummary
   // The plane being opened, shown until it replaces `zStack.zPlane`.
   readonly requestedZPlane: number | null
+  // False while the canvas still shows another plane (plan 28-D6).
+  readonly frameShown?: boolean
   readonly onZPlaneChange: (zPlane: number) => void
 }
 
 export function MorphologyZPlaneControl({
   zStack,
   requestedZPlane,
+  frameShown = true,
   onZPlaneChange,
 }: MorphologyZPlaneControlProps) {
   const inputId = useId()
   const zPlane = requestedZPlane ?? zStack.zPlane
   const label = morphologyZPlaneLabel(zStack, zPlane)
+  const busy = requestedZPlane !== null || !frameShown
 
   return (
-    <div
-      className="layer-opacity-control z-plane-control"
-      aria-busy={requestedZPlane !== null}
-    >
+    <div className="layer-opacity-control z-plane-control" aria-busy={busy}>
       <div className="layer-opacity-header">
         <label htmlFor={inputId}>Z plane</label>
-        <span>{requestedZPlane === null ? label : `${label} …`}</span>
+        <span>{busy ? `${label} …` : label}</span>
       </div>
       <input
         id={inputId}

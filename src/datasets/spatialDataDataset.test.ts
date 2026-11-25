@@ -617,6 +617,70 @@ describe('SpatialDataDataset units and labels', () => {
   })
 })
 
+describe('SpatialDataDataset labels at a plane (plan 28-D9)', () => {
+  it("traces the labels at the image's time point", async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(labelsStoreFixture({ timeLapse: true })),
+      openImage: imageOpenerFixture(),
+    })
+    const bbox = {
+      minX: micrometers(0),
+      maxX: micrometers(12),
+      minY: micrometers(0),
+      maxY: micrometers(8),
+    }
+    const cellB = async (t: number) => {
+      const batch = await dataset.elements(bbox, { plane: { t } })
+      const element = batch.elements.find((candidate) => candidate.id === 'cell-b')
+      const ring =
+        element?.geometry.kind === 'polygon' ? (element.geometry.rings[0] ?? []) : []
+      return {
+        plane: batch.plane,
+        planeNotice: batch.planeNotice,
+        minX: Math.min(...ring.map((point) => point.x)),
+      }
+    }
+
+    await expect(cellB(0)).resolves.toEqual({
+      plane: ':0',
+      planeNotice: undefined,
+      minX: 10,
+    })
+    await expect(cellB(1)).resolves.toEqual({
+      plane: ':1',
+      planeNotice: undefined,
+      minX: 8,
+    })
+    // Past the labels' time points: the last, with a notice.
+    await expect(cellB(4)).resolves.toEqual({
+      plane: ':4',
+      planeNotice: 'The labels have 2 time points; later ones show the last.',
+      minX: 8,
+    })
+  })
+
+  it('names no plane for labels without z or t', async () => {
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher: inMemoryZarrFetcher(labelsStoreFixture()),
+      openImage: imageOpenerFixture(),
+    })
+    const batch = await dataset.elements(
+      {
+        minX: micrometers(0),
+        maxX: micrometers(12),
+        minY: micrometers(0),
+        maxY: micrometers(8),
+      },
+      { plane: { t: 3 } },
+    )
+
+    expect(batch.elements).toHaveLength(2)
+    expect(batch.plane).toBeUndefined()
+  })
+})
+
 describe('SpatialDataDataset with one labels element per field of view', () => {
   it('traces the outlines of every labels region the table annotates', async () => {
     const dataset = new SpatialDataDataset({
@@ -1117,11 +1181,15 @@ function longTableFixture(rows: number): ReadonlyMap<string, Uint8Array> {
 
 // Labels raster (6 x 4 pixels in two 3-column chunks) annotated by a table
 // whose instance key holds strings and whose `cell_labels` column holds the
-// label ids. Label pixels are 2 global units.
+// label ids. Label pixels are 2 global units. `timeLapse` gives the raster a
+// `t` axis of 2 time points, one chunk each; at the second, label 2 is one
+// pixel further left.
 function labelsStoreFixture(
-  options: { readonly nucleusBoundaries?: boolean } = {},
+  options: { readonly nucleusBoundaries?: boolean; readonly timeLapse?: boolean } = {},
 ): ReadonlyMap<string, Uint8Array> {
   const YX = { name: 'yx', axes: [{ name: 'y' }, { name: 'x' }] }
+  const labelAxes =
+    options.timeLapse === true ? [{ name: 't', type: 'time' }, ...YX.axes] : YX.axes
   const metadata: Record<string, unknown> = {
     '.zgroup': { zarr_format: 2 },
     '.zattrs': { spatialdata_attrs: { version: '0.1' } },
@@ -1143,9 +1211,14 @@ function labelsStoreFixture(
       'image-label': { version: '0.4' },
       multiscales: [
         {
-          axes: YX.axes,
+          axes: labelAxes,
           datasets: [
-            { path: '0', coordinateTransformations: [{ type: 'scale', scale: [1, 1] }] },
+            {
+              path: '0',
+              coordinateTransformations: [
+                { type: 'scale', scale: labelAxes.map(() => 1) },
+              ],
+            },
           ],
           coordinateTransformations: [
             {
@@ -1158,7 +1231,10 @@ function labelsStoreFixture(
         },
       ],
     },
-    'labels/seg/0/.zarray': { ...arrayMeta([4, 6], '<i4'), chunks: [4, 3] },
+    'labels/seg/0/.zarray':
+      options.timeLapse === true
+        ? { ...arrayMeta([2, 4, 6], '<i4'), chunks: [1, 4, 3] }
+        : { ...arrayMeta([4, 6], '<i4'), chunks: [4, 3] },
     'tables/.zgroup': { zarr_format: 2 },
     'tables/table/.zgroup': { zarr_format: 2 },
     'tables/table/.zattrs': {
@@ -1199,14 +1275,27 @@ function labelsStoreFixture(
   //   0 0 0 | 0 0 0
   const leftChunk = new Int32Array([1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0])
   const rightChunk = new Int32Array([1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 0, 0])
+  // The second time point's right chunk, with label 2 a column left.
+  const laterRightChunk = new Int32Array([1, 0, 0, 1, 2, 0, 0, 2, 0, 0, 0, 0])
+  const labelChunks: [string, Uint8Array][] =
+    options.timeLapse === true
+      ? [
+          ['/labels/seg/0/0.0.0', bytes(leftChunk)],
+          ['/labels/seg/0/0.0.1', bytes(rightChunk)],
+          ['/labels/seg/0/1.0.0', bytes(leftChunk)],
+          ['/labels/seg/0/1.0.1', bytes(laterRightChunk)],
+        ]
+      : [
+          ['/labels/seg/0/0.0', bytes(leftChunk)],
+          ['/labels/seg/0/0.1', bytes(rightChunk)],
+        ]
 
   return new Map<string, Uint8Array>([
     [
       '/zmetadata',
       encoder.encode(JSON.stringify({ zarr_consolidated_format: 1, metadata })),
     ],
-    ['/labels/seg/0/0.0', bytes(leftChunk)],
-    ['/labels/seg/0/0.1', bytes(rightChunk)],
+    ...labelChunks,
     ['/tables/table/obs/_index/0', fixedStrings(['cell-a', 'cell-b'], 6)],
     ['/tables/table/obs/cell_id/0', fixedStrings(['aa', 'bb'], 2)],
     ['/tables/table/obs/cell_labels/0', bytes(new BigInt64Array([1n, 2n]))],
