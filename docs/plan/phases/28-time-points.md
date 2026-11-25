@@ -31,6 +31,11 @@ G, Play) followed, also the same day: [Spike Results](#spike-results-2026-11-25)
 and [M2 Results](#m2-results-2026-11-25). M3 (tasks H and I, labels at a
 plane) came next: [M3 Results](#m3-results-2026-11-25).
 
+**M4 (tasks J to L) has not been implemented.** Two parts were built ahead
+of it, in PR 431: the 3D view at the chosen time point (part of
+J) and two gallery examples (part of L). The rest is listed in
+[M4 Status](#m4-status-2026-11-25).
+
 The plan rests on a code map made on 2026-11-25 at `d52cc1c`. It is cited
 below as `file:line`; line numbers drift as the code changes.
 
@@ -442,13 +447,13 @@ new time point until the outlines read at its plane have come (D9).
 
 ## Order And Size
 
-| Milestone            | Contents | Size         |
-| -------------------- | -------- | ------------ |
-| M0 — Spike           | A        | S            |
-| M1 — Choosing a time | B to D   | About 1 week |
-| M2 — Play            | E to G   | About 1 week |
-| M3 — Labels follow   | H, I     | About 1 week |
-| M4 — The rest        | J to L   | About 4 days |
+| Milestone            | Contents | Size                                                                   |
+| -------------------- | -------- | ---------------------------------------------------------------------- |
+| M0 — Spike           | A        | S                                                                      |
+| M1 — Choosing a time | B to D   | About 1 week                                                           |
+| M2 — Play            | E to G   | About 1 week                                                           |
+| M3 — Labels follow   | H, I     | About 1 week                                                           |
+| M4 — The rest        | J to L   | About 4 days; not implemented (see [M4 Status](#m4-status-2026-11-25)) |
 
 - M1 is useful on its own: a slider, the link and `defaultT`. It can merge
   before Play.
@@ -612,9 +617,23 @@ Tasks H and I, on the plan's branch.
 - **Not yet**: the SpatialData fixture with a `t` axis and the end-to-end
   test (task L).
 
-## M4 Results (2026-11-25)
+## M4 Status (2026-11-25)
 
-- **3D at a time point** (task J, D11):
+M4 has not been implemented. Two parts were built ahead of it; the rest is
+open.
+
+- **Not implemented:**
+  - task J: the time point in the screenshot PNG's Description (D14), and
+    Cell Query's image columns paused during Play (D14). Play already stops
+    for a screenshot (M2), and Cell Query's image columns are keyed by the
+    time point (M1);
+  - task K: the docs pass over [Docs To Update](#docs-to-update);
+  - task L: the SpatialData fixture with a `t` axis and its generator, the
+    Playwright end-to-end test, the axe test with the control shown, and the
+    nightly `@live` test that plays five time points.
+- **Gallery examples** (part of task L): `examples/idr/idr0052-mitosis.json`
+  and `examples/idr/idr0051-tailbud.json`; see [Data](#data).
+- **3D at a time point** (part of task J, D11):
   - `useMorphologyVolumeWorkflow` keys volumes by image root, level and time
     point. A time step keeps the drawn volumes as `held` while the new time
     point's channels are read, and draws them together once each is read or

@@ -129,7 +129,11 @@ Features:
       is not kept in the link (see
       [Phase 9](phases/09-ome-zarr.md)). Time points, Play and labels that
       follow the image's plane are in [Phase 28](phases/28-time-points.md)
-      (PR 431, 2026-11-25).
+      (PR 431, 2026-11-25). Its M4 has not been implemented: the screenshot
+      PNG's time point, Cell Query paused during Play, the docs pass, the
+      SpatialData `t` fixture, end-to-end, axe and nightly live tests
+      ([M4 Status](phases/28-time-points.md#m4-status-2026-11-25)). Only the
+      3D view at a time point and two gallery examples were built.
 - [ ] H5AD: `/layers/*` and `/raw/X`, and richer schema diagnostics. Only
       `/X` is read. Worker-backed lazy Range reads are done (2026-11-17): a
       plain `.h5ad` over 64 MiB is read by range in the H5 worker, walking

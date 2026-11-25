@@ -60,7 +60,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 25](docs/plan/phases/25-imported-segmentations.md)                                 | Segmentations imported onto images (masks, polygons)     | Done (2026-11-19)                                                |
 | [Phase 26](docs/plan/phases/26-image-channel-conditions.md)                               | Cell query on image channels: mean and % above per cell  | M1 and M2 done (2026-11-19): TIFF and OME-Zarr images            |
 | [Phase 27](docs/plan/phases/27-screenshot.md)                                             | Screenshot: the spatial view as a high-resolution PNG    | Done (2026-11-24)                                                |
-| [Phase 28](docs/plan/phases/28-time-points.md)                                            | Time points: a `t` slider and Play for OME-Zarr images   | M1–M3 built (2026-11-25), in PR 431                              |
+| [Phase 28](docs/plan/phases/28-time-points.md)                                            | Time points: a `t` slider and Play for OME-Zarr images   | M1–M3 built (2026-11-25), PR 431; M4 not implemented             |
 
 **Done** means a phase's tasks shipped. Most phase files also keep a Known
 Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)
