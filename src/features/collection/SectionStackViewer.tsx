@@ -15,6 +15,8 @@ import { PointerTooltip } from '../../components/PointerTooltip'
 import { ReleasingDeck } from '../../components/releasingDeck'
 import { Button, FitIcon, IconButton, Slider, Switch } from '../../components/ui'
 import { fittedVolumeViewState } from '../../components/volumeViewerModel'
+import { OrbitAxes } from '../../components/OrbitAxes'
+import { viewAlongAxis, type OrbitAxisName } from '../../components/orbitAxesModel'
 import { handleOrbitKey, orbitCanvasProps } from '../../components/orbitKeyboard'
 import { VolumeViewerHint } from '../../components/VolumeViewerHint'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
@@ -218,6 +220,14 @@ export function SectionStackViewer({
     },
     [cellsMode, genes, hoverTooltips, inputs, sections, stack.targets],
   )
+  // Stays the same while nothing moves, as the axes are redrawn on each hover
+  // otherwise.
+  const lookAlong = useCallback(
+    (name: OrbitAxisName) => {
+      setViewState(viewAlongAxis(shownViewState, name))
+    },
+    [shownViewState],
+  )
   const handleViewStateChange = useCallback(
     ({ viewState: next }: { readonly viewState: unknown }) => {
       setViewState(next as OrbitViewState)
@@ -268,9 +278,13 @@ export function SectionStackViewer({
           keysId,
         )}
         onKeyDown={(event) => {
-          handleOrbitKey(event, () => {
-            setViewState(null)
-          })
+          handleOrbitKey(
+            event,
+            () => {
+              setViewState(null)
+            },
+            lookAlong,
+          )
         }}
       >
         <MemoDeckGL
@@ -285,6 +299,11 @@ export function SectionStackViewer({
           onLoad={handleDeckLoad}
         />
       </div>
+      <OrbitAxes
+        rotationX={shownViewState.rotationX ?? 0}
+        rotationOrbit={shownViewState.rotationOrbit ?? 0}
+        onLookAlong={lookAlong}
+      />
       <div
         className="volume-viewer-toolbar"
         role="group"

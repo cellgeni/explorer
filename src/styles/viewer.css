@@ -1182,14 +1182,22 @@
   pointer-events: none;
 }
 
+/* It wraps to keep clear of the status, 420 px wide at the bottom left. */
 .volume-viewer-hint {
   position: absolute;
   right: 12px;
   bottom: 12px;
+  max-width: max(240px, 100% - 468px);
   margin: 0;
   color: rgb(255 255 255 / 70%);
   font-size: var(--font-control);
+  text-align: right;
+  text-wrap: balance;
   pointer-events: none;
+}
+
+.volume-viewer-hint-phrase {
+  white-space: nowrap;
 }
 
 /* The keys' line shows instead of the pointer's while the canvas has focus;
@@ -1220,6 +1228,62 @@
 .volume-viewer-canvas:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: -3px;
+}
+
+/* The axes indicator (OrbitAxes.tsx), top right: x red, y green and z blue,
+   as in most 3D tools, each labelled in dark on its own colour. On a phone
+   it shrinks to keep clear of the 260 px settings beside it. Only the
+   labels take the pointer; a click turns the view to look along the axis. */
+.orbit-axes {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: clamp(64px, 100% - 288px, 88px);
+  height: auto;
+  aspect-ratio: 1;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.orbit-axis line {
+  stroke: var(--orbit-axis-color);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.orbit-axis-target {
+  fill: transparent;
+  cursor: pointer;
+  pointer-events: all;
+}
+
+.orbit-axis-label {
+  fill: var(--orbit-axis-color);
+}
+
+.orbit-axis:hover .orbit-axis-target {
+  stroke: var(--orbit-axis-color);
+  stroke-width: 2;
+}
+
+.orbit-axis text {
+  fill: var(--canvas);
+  font-size: 12px;
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.orbit-axis-x {
+  --orbit-axis-color: #ff7369;
+}
+
+.orbit-axis-y {
+  --orbit-axis-color: #67d58a;
+}
+
+.orbit-axis-z {
+  --orbit-axis-color: #62a8ff;
 }
 
 /* Serial sections stacked in 3D, over every viewer: on the canvas colour,
