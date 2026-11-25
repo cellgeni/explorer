@@ -960,6 +960,10 @@ describe('OME-Zarr image loader', () => {
     // The loader's own plane maps back to it, from a derived loader too.
     expect(loader.atPlane({ t: 0, z: 1 })).toBe(loader)
     expect(later.atPlane({ t: 0 })).toBe(loader)
+    // A plane asked for again gets the same loader, so its tile requests
+    // carry on.
+    expect(loader.atPlane({ t: 3 })).toBe(later)
+    expect(later.atPlane({ z: 1 })).toBe(later)
 
     // An axis left out keeps the loader's index; indices are clamped.
     const deeper = later.atPlane({ z: 2 })

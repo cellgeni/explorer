@@ -5,12 +5,16 @@ import type {
   MorphologyImageZStack,
 } from '../../data/morphologyImage'
 import { percentToOpacity } from '../../rendering/layerOpacity'
+import type { MorphologyCanvasFrame } from '../../components/MorphologyCanvas'
 import type { AppendDebugEvent } from '../app-shell/appRuntimeModel'
 import type {
   CustomMorphologyLayer,
   CustomMorphologyLayerLoadState,
 } from '../morphology/customMorphologyLayers'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
+import type { ShownMorphologyFrame } from '../morphology/morphologyFrame'
+import type { TimePointPlaybackControls } from '../morphology/MorphologyTimePointControl'
+import type { TimePointPlayback } from '../morphology/useTimePointPlayback'
 
 // The dataset image: opacity, z plane, time point, channels and custom image
 // layers (plan 15.2-A). Opacities are 0–1; the controls show percent.
@@ -23,6 +27,11 @@ export interface ImageSectionModel {
   readonly timeSeries: MorphologyImageTimeSeries | undefined
   readonly requestedTimePoint: number | null
   readonly onTimePointChange: (timePoint: number) => void
+  // Play, Speed and Loop; null in the 3D view (plan 28-D11).
+  readonly playback: TimePointPlaybackControls | null
+  // The image's plane, and the plane the canvas shows (28-D6).
+  readonly frame: MorphologyCanvasFrame | undefined
+  readonly shownFrame: ShownMorphologyFrame
   // Set when the dataset image is a z-stack the 3D view can show.
   readonly volumeView: ImageVolumeViewModel | null
   readonly channels: readonly MorphologyImageChannel[]
@@ -73,6 +82,9 @@ export interface ImageSectionModelInput {
   readonly morphologyTimeSeries: MorphologyImageTimeSeries | undefined
   readonly requestedMorphologyTimePoint: number | null
   readonly selectMorphologyTimePoint: (timePoint: number) => void
+  readonly morphologyFrame: MorphologyCanvasFrame | undefined
+  readonly shownMorphologyFrame: ShownMorphologyFrame
+  readonly timePointPlayback: TimePointPlayback
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
   readonly updateMorphologyChannel: ImageSectionModel['onUpdateChannel']
@@ -107,6 +119,9 @@ export function useImageSectionModel({
   morphologyTimeSeries,
   requestedMorphologyTimePoint,
   selectMorphologyTimePoint,
+  morphologyFrame,
+  shownMorphologyFrame,
+  timePointPlayback,
   setCustomLayerOpacity,
   setImageLayerOpacity,
   updateMorphologyChannel,
@@ -127,7 +142,36 @@ export function useImageSectionModel({
     onZPlaneChange: selectMorphologyZPlane,
     timeSeries: morphologyTimeSeries,
     requestedTimePoint: requestedMorphologyTimePoint,
-    onTimePointChange: selectMorphologyTimePoint,
+    // Moving the slider stops Play (28-D10).
+    onTimePointChange: (timePoint) => {
+      timePointPlayback.pause()
+      selectMorphologyTimePoint(timePoint)
+    },
+    playback: volumeViewOpen
+      ? null
+      : {
+          playing: timePointPlayback.playing,
+          speed: timePointPlayback.speed,
+          loop: timePointPlayback.loop,
+          onPlayingChange: (playing) => {
+            if (playing) {
+              timePointPlayback.play()
+            } else {
+              timePointPlayback.pause()
+            }
+            appendDebugEvent(playing ? 'Time points: play' : 'Time points: pause')
+          },
+          onSpeedChange: (speed) => {
+            timePointPlayback.setSpeed(speed)
+            appendDebugEvent(`Time points: ${speed.toString()} per second`)
+          },
+          onLoopChange: (loop) => {
+            timePointPlayback.setLoop(loop)
+            appendDebugEvent(loop ? 'Time points: loop' : 'Time points: no loop')
+          },
+        },
+    frame: morphologyFrame,
+    shownFrame: shownMorphologyFrame,
     volumeView: volumeViewAvailable
       ? {
           open: volumeViewOpen,

@@ -109,6 +109,9 @@ describe('TileCache', () => {
         sourceHeight: imagePixels(1),
       },
     ])
+    expect(cache.readyPixels()).toBe(2)
+    cache.clear()
+    expect(cache.readyPixels()).toBe(0)
   })
 
   it('forwards loader-specific tile decode metadata to the decoder', async () => {

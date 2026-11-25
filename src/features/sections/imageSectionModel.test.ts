@@ -1,6 +1,25 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { ShownMorphologyFrame } from '../morphology/morphologyFrame'
+import type { TimePointPlayback } from '../morphology/useTimePointPlayback'
 import { useImageSectionModel, type ImageSectionModelInput } from './imageSectionModel'
+
+function testTimePointPlayback(
+  overrides: Partial<TimePointPlayback> = {},
+): TimePointPlayback {
+  return {
+    playing: false,
+    speed: 5,
+    loop: true,
+    startTimePoint: null,
+    prefetchPlanes: [],
+    play: vi.fn(),
+    pause: vi.fn(),
+    setSpeed: vi.fn(),
+    setLoop: vi.fn(),
+    ...overrides,
+  }
+}
 
 function input(overrides: Partial<ImageSectionModelInput> = {}): ImageSectionModelInput {
   return {
@@ -22,6 +41,9 @@ function input(overrides: Partial<ImageSectionModelInput> = {}): ImageSectionMod
     morphologyTimeSeries: undefined,
     requestedMorphologyTimePoint: null,
     selectMorphologyTimePoint: vi.fn(),
+    morphologyFrame: undefined,
+    shownMorphologyFrame: new ShownMorphologyFrame(),
+    timePointPlayback: testTimePointPlayback(),
     setCustomLayerOpacity: vi.fn(),
     setImageLayerOpacity: vi.fn(),
     updateMorphologyChannel: vi.fn(),
@@ -88,5 +110,31 @@ describe('useImageSectionModel', () => {
     result.current.volumeView?.onOpenChange(false)
     expect(options.setVolumeViewOpen).toHaveBeenCalledWith(false)
     expect(options.appendDebugEvent).toHaveBeenCalledWith('Image view: 2D')
+  })
+
+  it('stops Play when the slider moves, and offers no Play in 3D (plan 28)', () => {
+    const playback = testTimePointPlayback({ playing: true })
+    const options = input({ timePointPlayback: playback })
+    const { result } = renderHook(() => useImageSectionModel(options))
+
+    expect(result.current.playback?.playing).toBe(true)
+    result.current.onTimePointChange(7)
+    expect(playback.pause).toHaveBeenCalledOnce()
+    expect(options.selectMorphologyTimePoint).toHaveBeenCalledWith(7)
+
+    result.current.playback?.onPlayingChange(false)
+    expect(playback.pause).toHaveBeenCalledTimes(2)
+    expect(options.appendDebugEvent).toHaveBeenCalledWith('Time points: pause')
+    result.current.playback?.onSpeedChange(10)
+    expect(playback.setSpeed).toHaveBeenCalledWith(10)
+
+    const in3d = input({
+      timePointPlayback: playback,
+      volumeViewAvailable: true,
+      volumeViewOpen: true,
+    })
+    expect(
+      renderHook(() => useImageSectionModel(in3d)).result.current.playback,
+    ).toBeNull()
   })
 })

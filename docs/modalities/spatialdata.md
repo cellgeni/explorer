@@ -393,7 +393,8 @@ nucleus checkbox shown only when `summary().nuclei` names an element
   are dropped.
 - Labels read only `z = 0` and `t = 0`. Images open on
   `omero.rdefs.defaultZ`, else the middle plane, and have the `Z plane`
-  control like other z-stacks; an image with a `t` axis has `Time point`.
+  control like other z-stacks; an image with a `t` axis has `Time point`
+  and `Play time points`.
   spatialdata 0.9.0 does not write a `t` axis, so such a store is written by
   other tools ([Phase 28](../plan/phases/28-time-points.md)).
 - Polygon holes, and every part of a MultiPolygon but the largest, are

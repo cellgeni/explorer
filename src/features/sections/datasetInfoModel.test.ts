@@ -41,6 +41,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
       boundaryCellLimit: 50_000,
       maxConcurrentTileRequests: 4,
       tileCacheMaxTiles: 120,
+      timePointPrefetch: 2,
       telemetryEventLimit: 120,
     },
     setBoundaryCellLimit: vi.fn(),

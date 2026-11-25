@@ -27,6 +27,7 @@ import type {
   TranscriptFeatureModel,
   TranscriptsSectionModel,
 } from '../features/sections/transcriptsSectionModel'
+import { ShownMorphologyFrame } from '../features/morphology/morphologyFrame'
 import type {
   MeasureToolModel,
   ViewSettingsModel,
@@ -58,6 +59,9 @@ export function testImageSectionModel(
     timeSeries: undefined,
     requestedTimePoint: null,
     onTimePointChange: vi.fn(),
+    playback: null,
+    frame: undefined,
+    shownFrame: new ShownMorphologyFrame(),
     volumeView: null,
     channels: [],
     channelSettings: [],

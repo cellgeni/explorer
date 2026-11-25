@@ -142,7 +142,10 @@ import {
   useOpenDatasetPreviewStore,
 } from './features/collection/useCollectionPreviews'
 import { LinkedViewChannel } from './components/linkedView'
-import type { InitialViewStateOverride } from './components/viewerCoreTypes'
+import type {
+  InitialViewStateOverride,
+  ViewerImageFrame,
+} from './components/viewerCoreTypes'
 import {
   collectionEntryFor,
   type DatasetCollectionEntry,
@@ -250,6 +253,11 @@ import {
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
 import { useMorphologyPlaneWorkflow } from './features/morphology/useMorphologyPlaneWorkflow'
+import {
+  morphologyImageFrame,
+  ShownMorphologyFrame,
+} from './features/morphology/morphologyFrame'
+import { useTimePointPlayback } from './features/morphology/useTimePointPlayback'
 import { MorphologyVolumeView } from './features/morphology/MorphologyVolumeView'
 import { morphologyVolumeLevels } from './features/morphology/useMorphologyVolumeWorkflow'
 import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
@@ -1971,11 +1979,6 @@ export function App({ dependencies }: AppProps = {}) {
     (morphologyImage === null && linkImageOpening
       ? initialShareableState.morphologyZPlane
       : undefined)
-  const shareableMorphologyTimePoint =
-    morphologyImage?.timeSeries?.timePoint ??
-    (morphologyImage === null && linkImageOpening
-      ? initialShareableState.morphologyTimePoint
-      : undefined)
   const magicLensIsCursorActive =
     magicLensScope === 'cursor' && magicLensActive && magicLensLoadEnabled
   const magicLensCanScan =
@@ -3637,6 +3640,47 @@ export function App({ dependencies }: AppProps = {}) {
     volumeViewAvailable &&
     volumeViewDatasetUrl !== null &&
     volumeViewDatasetUrl === loadedDatasetUrl
+  // The dataset image's plane, and the plane the canvas shows while the next
+  // one loads (plan 28-D6).
+  const morphologyFrame = useMemo(
+    () => morphologyImageFrame(morphologyImage),
+    [morphologyImage],
+  )
+  const [shownMorphologyFrame] = useState(() => new ShownMorphologyFrame())
+  // Play (plan 28-G), stopped by the 3D view, a screenshot or a plane that
+  // fails to open.
+  const timePointPlayback = useTimePointPlayback({
+    image: morphologyImage,
+    shownFrame: shownMorphologyFrame,
+    enabled:
+      !volumeViewShown &&
+      screenshotState.status !== 'running' &&
+      morphologyState.status !== 'error',
+    prefetchCount: performanceBudget.timePointPrefetch,
+    selectTimePoint: selectMorphologyTimePoint,
+  })
+  const viewerImageFrame = useMemo<ViewerImageFrame>(
+    () => ({
+      frame: morphologyFrame,
+      // Play waits for each time point however long it takes (28-D6).
+      ...(timePointPlayback.playing ? { fallbackMs: Infinity } : {}),
+      onShown: shownMorphologyFrame.show,
+      prefetchPlanes: timePointPlayback.prefetchPlanes,
+    }),
+    [
+      morphologyFrame,
+      shownMorphologyFrame,
+      timePointPlayback.playing,
+      timePointPlayback.prefetchPlanes,
+    ],
+  )
+  // While Play runs the link keeps the time point it started from (28-D12).
+  const shareableMorphologyTimePoint =
+    timePointPlayback.startTimePoint ??
+    morphologyImage?.timeSeries?.timePoint ??
+    (morphologyImage === null && linkImageOpening
+      ? initialShareableState.morphologyTimePoint
+      : undefined)
   // The 3D view of cells placed in 3D (a third spatial coordinate), over the
   // 2D view like the image's, and kept open the same way. One 3D view shows
   // at a time.
@@ -4794,6 +4838,9 @@ export function App({ dependencies }: AppProps = {}) {
     morphologyTimeSeries: morphologyImage?.timeSeries,
     requestedMorphologyTimePoint,
     selectMorphologyTimePoint,
+    morphologyFrame,
+    shownMorphologyFrame,
+    timePointPlayback,
     setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
     setImageLayerOpacity,
     updateMorphologyChannel,
@@ -5454,6 +5501,7 @@ export function App({ dependencies }: AppProps = {}) {
               }
               imageLoader={morphologyImage?.loader ?? null}
               imageChannels={morphologyCanvasChannels}
+              imageFrame={viewerImageFrame}
               flatImage={flatMorphologyImage}
               imageOpacity={
                 morphologyCanvasChannels.length === 0 ? renderedImageOpacity : 1

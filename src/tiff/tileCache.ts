@@ -214,6 +214,19 @@ export class TileCache {
     return ready
   }
 
+  // Pixels of the decoded tiles held, for a limit over several caches.
+  readyPixels(): number {
+    let pixels = 0
+
+    for (const entry of this.cache.values()) {
+      if (entry.state === 'ready') {
+        pixels += entry.sourceWidth * entry.sourceHeight
+      }
+    }
+
+    return pixels
+  }
+
   clear(): void {
     for (const entry of this.cache.values()) {
       if (entry.state === 'ready') {

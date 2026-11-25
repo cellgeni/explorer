@@ -549,7 +549,14 @@ transform.
   else the middle plane, and other planes open as `#z=N` loaders. The time
   axis is the first named `t` or typed `time`; `t` starts at `#t=N`, else
   `defaultT`, else 0, and `Time point` shows another. Other planes and time
-  points are made from the opened loaders without requests (`atPlane`).
+  points are made from the opened loaders without requests (`atPlane`); a
+  loader keeps the last 16 it made, so a plane asked for again gets the same
+  loader and its tile reads carry on.
+- The canvas keeps the plane it shows until the visible tiles of a new z
+  plane or time point have loaded, then draws it whole; a slider step draws
+  tile by tile after 2 s. `Play time points` reads the next 1, 2 or 3 time
+  points (by performance budget) one tile at a time per channel, and keeps
+  played ones for replay up to 4 × the tile cache limit in 256-pixel tiles.
 - µm/px is the product of multiscale and dataset `scale` values for x, and
   for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
   the image's extent and fit). Units are converted from any length the
@@ -750,8 +757,9 @@ fails, tiles are decoded and sampled on the main thread.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points have no `Play`
-  yet ([Phase 28](../plan/phases/28-time-points.md)).
+- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points play in 2D only,
+  and labels do not follow them yet
+  ([Phase 28](../plan/phases/28-time-points.md)).
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
 - The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or

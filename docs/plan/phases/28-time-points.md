@@ -26,7 +26,9 @@ plan's four questions the same day
 the answers.
 
 M1 (tasks B to D, choosing a time point) was built the same day:
-[M1 Results](#m1-results-2026-11-25).
+[M1 Results](#m1-results-2026-11-25). The spike (task A) and M2 (tasks E to
+G, Play) followed, also the same day: [Spike Results](#spike-results-2026-11-25)
+and [M2 Results](#m2-results-2026-11-25).
 
 The plan rests on a code map made on 2026-11-25 at `d52cc1c`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -231,12 +233,14 @@ same day; the others stand as proposed.
 
   While it waits past the interval, the label shows `…` and the control
   is `aria-busy`, as the z control is now. Caching works like this:
-  - The next K time points are prefetched while one is shown, at lower
-    priority than the shown one: K is 1 on the compact budget, 2 balanced
-    and 3 expanded.
+  - The next K time points are prefetched while one is shown, one tile at
+    a time for each channel, so the shown one's reads go first: K is 1 on
+    the compact budget, 2 balanced and 3 expanded.
   - Shown time points stay in a cache of up to 4 × `tileCacheMaxTiles`
-    tiles (288, 480 or 720), so a short loop replays from memory.
-    idr0052A's 40 time points × 3 channels at 256 px are 120 tiles.
+    tiles of 256 × 256 pixels (288, 480 or 720; about 72, 120 or 180 MB),
+    so a short loop replays from memory. It is counted in pixels, so larger
+    tiles count for more. idr0052A's 40 time points × 3 channels at 256 px
+    are 120 tiles.
   - Panning, zooming, a z change or a channel change restarts the
     prefetch.
 
@@ -292,21 +296,26 @@ same day; the others stand as proposed.
 
 ## How Play Runs
 
-1. `Play` takes the shown plane `{ z, t }` and the speed.
-2. For the next K time points, it makes their channel loaders with
-   `atPlane` (D5). These need no requests.
-3. Each planned time point is handed to the canvas as a prefetch plane.
-   The canvas requests its tiles for the current view and level at low
-   priority, and reports when they are all ready.
-4. It reads the same time points' label outlines for the view's bounds
-   through the dataset (D9).
-5. When the interval has passed and the next time point is whole, it sets
-   the `MorphologyImage` and the boundary plane together. The canvas draws
-   from warm caches in one draw.
-6. The shown time point moves into the replay cache, and step 2 runs for
-   the next one. If `Loop` is off, Play stops at the last time point.
-7. Anything in D10 stops it. Prefetches are aborted and their bitmaps
-   closed, unless they are in the replay cache.
+As built in M2:
+
+1. `Play` (`useTimePointPlayback`) hands the canvas the next K time points
+   at the shown z plane as prefetch planes. The canvas makes their channel
+   loaders with `atPlane` (D5), without requests, and reads their visible
+   tiles at the current level, one at a time for each channel.
+2. Once the canvas reports the shown time point drawn whole, a timer of
+   1/speed seconds starts. When it fires, the next time point is asked for
+   through the plane workflow, as a slider step is.
+3. The canvas keeps drawing the shown time point until the visible tiles of
+   the new one are read (D6), then draws it in one draw and reports it. A
+   prefetched time point is usually whole already, so it shows at once.
+4. The time point it replaced stays in the tile store's replay cache, and
+   step 1 runs for the next ones. With `Loop` off, Play stops after the last
+   time point.
+5. Anything in D10 stops it. Prefetch reads are aborted; read tiles stay in
+   the replay cache.
+
+M3 adds outlines: the canvas's report waits for the time point's outlines
+too (D9).
 
 ## Data
 
@@ -339,7 +348,7 @@ same day; the others stand as proposed.
 
 ## Tasks
 
-- [ ] **A. Spike.** (S) In a production build, in Playwright with Metal
+- [x] **A. Spike.** (S) In a production build, in Playwright with Metal
       WebGL, record in this file:
   - On idr0052A, for one z step today: requests (metadata and chunks),
     time to the first tile, and time to the whole frame. Then the same
@@ -367,17 +376,17 @@ same day; the others stand as proposed.
 - [x] **D. The slider.** (S) `MorphologyTimePointControl` beside the z
       control, and the plane workflow generalised from
       `useMorphologyZPlaneWorkflow`. Tests as for the z control.
-- [ ] **E. Whole-frame swaps.** (M) The canvas keeps the old plane's caches
+- [x] **E. Whole-frame swaps.** (M) The canvas keeps the old plane's caches
       until the new plane's tiles at the requested level are ready (D6),
       with the 2 s fallback for slider steps.
   - Tests with a fake loader: no partial draw, the fallback, and a swap
     cancelled by another step.
-- [ ] **F. Prefetch and the replay cache.** (M) Prefetch planes for the
+- [x] **F. Prefetch and the replay cache.** (M) Prefetch planes for the
       canvas: tiles requested without drawing, at low priority, with a
       ready report. The replay cache and its tile limit (D8).
   - Tests: priority over the shown plane, eviction closes bitmaps, a view
     change restarts the prefetch.
-- [ ] **G. Play.** (M) `useTimePointPlayback`: the interval and readiness
+- [x] **G. Play.** (M) `useTimePointPlayback`: the interval and readiness
       gate (D8), `Speed`, `Loop`, the stop rules (D10), and the icons.
   - Tests with fake timers: a slow time point delays the next one; it
     never skips; each D10 stop.
@@ -454,6 +463,82 @@ Tasks B to D, on the plan's branch.
   `rdefs`; time point 31 shows the cell later in mitosis; a reload restores
   `t=30` from the link. 3,919 unit tests pass.
 - **Not yet**: the spike's request counts and timings (task A).
+
+## Spike Results (2026-11-25)
+
+A production build of `main` (`d52cc1c`) and of the M1 branch, each served
+by `vite preview`, measured in Playwright with Metal WebGL at 1500 × 900 on
+idr0052A from livingobjects.ebi.ac.uk, a fresh browser context per run. The
+counts include the minimap, which draws the image too.
+
+| Step                | Metadata requests | Chunk requests | First draw | Whole frame |
+| ------------------- | ----------------- | -------------- | ---------- | ----------- |
+| z, `main` (reopens) | 36                | 9              | 310–335 ms | 370–435 ms  |
+| z, with `atPlane`   | 0                 | 6              | 45–60 ms   | 120–165 ms  |
+| t, with `atPlane`   | 0                 | 6              | 185–195 ms | 305–450 ms  |
+
+- Each step reads about 355 KB, one chunk per channel for the canvas and
+  one for the minimap. The t steps drew first about 140 ms later than the z
+  steps. Both make the same requests through the same code, so the gap is in
+  how fast the host answers them, perhaps from its cache.
+- **Steady rate without prefetch**, stepping as soon as each frame was
+  whole: idr0052A 270–350 ms per time point (about 3 a second; one step of
+  5.3 s was a stalled request), and idr0109A at the whole-image zoom about
+  340 ms (2.9 a second, 480 KB per step). Reading one time point at a time
+  cannot reach the default speed of 5, which is why M2 prefetches.
+- **Bitmap memory** per time point at the default view: idr0052A 0.75 MB
+  (3 channels × 256 × 256 RGBA), idr0109A 1.32 MB (640 × 540). The replay
+  limit in D8 was changed to count pixels rather than tiles, so a 512-pixel
+  tile counts as four.
+- **The 2 s fallback** (D6) stays: whole frames took well under 0.5 s.
+- **Label tracing** is measured in M3, with task H: until then labels read
+  only `t = 0`.
+
+## M2 Results (2026-11-25)
+
+Tasks E to G, on the plan's branch.
+
+- **Whole-frame swaps** (`MorphologyCanvas.tsx`): the canvas takes a `frame`
+  (image and plane). On a change to another plane of the same image it keeps
+  drawing the shown plane's tiles, at the current view, until the new
+  plane's visible tiles at the requested level are read or failed for good;
+  then it draws the new plane at once and calls `onFrameShown`. After
+  `frameFallbackMs` (2 s; Infinity while playing) tiles draw as they come.
+  The minimap gets the frame too. A step made while another is pending
+  replaces it; the shown plane stays until the newest is whole.
+- **Prefetch and replay** (`morphologyTileStore.ts`): `prefetchPlanes`
+  makes each plane's loaders with `atPlane` and reads their visible tiles,
+  one at a time per channel. A loader now keeps the last 16 loaders it made,
+  so a prefetched plane is shown with the same loader and its reads carry
+  on. Channels of a replay group (one channel of one image in one colour
+  and contrast) that no canvas draws stay in the store, the most recent
+  first, up to the pixel limit in D8; a contrast or colour change drops
+  them. New caches are sized without counting kept channels.
+- **Play** (`useTimePointPlayback.ts`): `Play time points` / `Pause time
+points` left of the slider, `Speed` and `Loop` under it, hidden in 3D.
+  The next time point is asked for 1/speed seconds after the shown one was
+  drawn whole. Play stops for good on a slider move, another image, the 3D
+  view, a screenshot, a plane that fails to open, or a hidden page. While it
+  runs, the link keeps the time point it started from (D12). The shown frame
+  lives outside React state (`ShownMorphologyFrame`), so each shown time
+  point re-renders only the plane controls; both plane controls stay
+  `aria-busy` until the canvas shows their plane.
+- **Measured** in the same production set-up as the spike, on the M2 build:
+
+  | Image    | Speed | Played time points | Rate     | Partial draws |
+  | -------- | ----- | ------------------ | -------- | ------------- |
+  | idr0052A | 5     | 29 in 6.1 s        | 4.8 / s  | 0             |
+  | idr0052A | 10    | 49 in 6.1 s        | 8.0 / s  | 0             |
+  | idr0052A | 20    | 45 in 6.2 s        | 7.3 / s  | 0             |
+  | idr0052A | 20    | 283 in 16.1 s      | 17.5 / s | 0             |
+  | idr0109A | 5     | 39 in 8.1 s        | 4.8 / s  | 0             |
+
+  The 16 s run played the 40 time points from the network once (234
+  requests) and then replayed them from memory with no requests. Reading from
+  the host reached about 7–8 time points a second.
+
+- **Not yet**: labels at a plane (M3); Cell Query paused during Play, the
+  3D volume key with `t`, and the screenshot PNG's time point (task J).
 
 ## Risks
 

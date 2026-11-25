@@ -63,6 +63,10 @@ const VOLUME_SLAB_CONCURRENCY = 4
 // can abort a volume read, and cancelling a volume read can abort a tile read.
 // Such a read is made again, this many times.
 const FOREIGN_ABORT_RETRIES = 3
+// Planes a root loader keeps its derived loaders for, so a plane asked for
+// again (by the shown image, a prefetch, or the replay of a played time point)
+// gets the same loader, and its tile requests are not restarted.
+const CACHED_PLANE_LOADERS = 16
 const RGB_CHANNELS: readonly {
   readonly name: string
   readonly color: readonly [number, number, number]
@@ -466,6 +470,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly options: OmeZarrLoaderOptions
   // The loader `atPlane` derives planes from: this one, unless it was derived.
   private readonly root: OmeZarrImagePyramidLoader
+  // On the root: loaders derived for other planes, by plane, most recent last.
+  private readonly planeLoaders = new Map<string, OmeZarrImagePyramidLoader>()
   private readonly levels: readonly OmeZarrLevelMeta[]
   private readonly axes: readonly OmeZarrAxis[]
   private readonly xAxis: number
@@ -562,9 +568,17 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
 
     const z = this.zAxis === undefined ? undefined : planeIndices[this.zAxis]
     const t = this.tAxis === undefined ? undefined : planeIndices[this.tAxis]
-    const { zStack, timeSeries } = this.options
+    const key = planeIndices.join(',')
+    const known = this.planeLoaders.get(key)
 
-    return new OmeZarrImagePyramidLoader(
+    if (known !== undefined) {
+      this.planeLoaders.delete(key)
+      this.planeLoaders.set(key, known)
+      return known
+    }
+
+    const { zStack, timeSeries } = this.options
+    const loader = new OmeZarrImagePyramidLoader(
       {
         ...this.options,
         url: omeZarrSelectionUrl(this.url, { zIndex: z, tIndex: t }),
@@ -578,6 +592,18 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
       },
       root,
     )
+
+    this.planeLoaders.set(key, loader)
+
+    for (const oldest of this.planeLoaders.keys()) {
+      if (this.planeLoaders.size <= CACHED_PLANE_LOADERS) {
+        break
+      }
+
+      this.planeLoaders.delete(oldest)
+    }
+
+    return loader
   }
 
   private planeIndexOn(axis: number | undefined): number | undefined {

@@ -214,6 +214,7 @@ import type {
   ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
+  ViewerImageFrame,
 } from './viewerCoreTypes'
 export type {
   InitialViewStateOverride,
@@ -232,6 +233,7 @@ export type {
   ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
+  ViewerImageFrame,
 } from './viewerCoreTypes'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
@@ -290,6 +292,7 @@ export function ViewerCore({
   geometricAnnotations = EMPTY_GEOMETRIC_ANNOTATIONS,
   imageLoader = null,
   imageChannels = EMPTY_IMAGE_CHANNELS,
+  imageFrame = null,
   flatImage = null,
   imageOpacity = 1,
   cellLayersVisible = true,
@@ -417,6 +420,7 @@ export function ViewerCore({
       geometricAnnotations={geometricAnnotations}
       imageLoader={imageLoader}
       imageChannels={imageChannels}
+      imageFrame={imageFrame}
       flatImage={flatImage}
       imageOpacity={imageOpacity}
       cellLayersVisible={cellLayersVisible}
@@ -515,6 +519,7 @@ interface ViewerSurfaceProps {
   readonly geometricAnnotations: readonly GeometricAnnotationDatum[]
   readonly imageLoader: ImagePyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
+  readonly imageFrame: ViewerImageFrame | null
   readonly flatImage: FlatMorphologyCanvasImage | null
   readonly imageOpacity: number
   readonly cellLayersVisible: boolean
@@ -612,6 +617,7 @@ function ViewerSurface({
   geometricAnnotations,
   imageLoader,
   imageChannels,
+  imageFrame,
   flatImage,
   imageOpacity,
   cellLayersVisible,
@@ -2394,6 +2400,16 @@ function ViewerSurface({
           loader={imageLoader}
           opacity={imageOpacity}
           viewState={viewState}
+          {...(imageFrame === null
+            ? {}
+            : {
+                ...(imageFrame.frame === undefined ? {} : { frame: imageFrame.frame }),
+                ...(imageFrame.fallbackMs === undefined
+                  ? {}
+                  : { frameFallbackMs: imageFrame.fallbackMs }),
+                onFrameShown: imageFrame.onShown,
+                prefetchPlanes: imageFrame.prefetchPlanes,
+              })}
           {...(maxConcurrentTileRequests === undefined
             ? {}
             : { maxConcurrentTileRequests })}
@@ -2543,6 +2559,7 @@ function ViewerSurface({
           layout={minimapView}
           imageLoader={imageLoader}
           imageChannels={imageChannels}
+          imageFrame={imageFrame?.frame}
           flatImage={flatImage}
           points={minimapDots}
           viewBbox={viewportBbox}

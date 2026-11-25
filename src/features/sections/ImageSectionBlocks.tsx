@@ -4,6 +4,7 @@ import { opacityToPercent } from '../../rendering/layerOpacity'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
 import { MorphologyTimePointControl } from '../morphology/MorphologyTimePointControl'
 import { MorphologyZPlaneControl } from '../morphology/MorphologyZPlaneControl'
+import { useMorphologyFrameShown } from '../morphology/morphologyFrame'
 import type { CustomImageLayersModel, ImageSectionModel } from './imageSectionModel'
 
 export function ImageOpacityControl({ image }: { readonly image: ImageSectionModel }) {
@@ -34,6 +35,8 @@ export function ImageOpacityControl({ image }: { readonly image: ImageSectionMod
 }
 
 export function ImageZPlaneControl({ image }: { readonly image: ImageSectionModel }) {
+  const frameShown = useMorphologyFrameShown(image.shownFrame, image.frame)
+
   if (image.zStack === undefined) {
     return null
   }
@@ -42,12 +45,15 @@ export function ImageZPlaneControl({ image }: { readonly image: ImageSectionMode
     <MorphologyZPlaneControl
       zStack={image.zStack}
       requestedZPlane={image.requestedZPlane}
+      frameShown={frameShown}
       onZPlaneChange={image.onZPlaneChange}
     />
   )
 }
 
 export function ImageTimePointControl({ image }: { readonly image: ImageSectionModel }) {
+  const frameShown = useMorphologyFrameShown(image.shownFrame, image.frame)
+
   if (image.timeSeries === undefined) {
     return null
   }
@@ -56,7 +62,9 @@ export function ImageTimePointControl({ image }: { readonly image: ImageSectionM
     <MorphologyTimePointControl
       timeSeries={image.timeSeries}
       requestedTimePoint={image.requestedTimePoint}
+      frameShown={frameShown}
       onTimePointChange={image.onTimePointChange}
+      playback={image.playback}
     />
   )
 }

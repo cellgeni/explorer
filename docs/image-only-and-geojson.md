@@ -78,7 +78,7 @@ the depth is shown when the `z` axis declares a length unit. `View` › `3D`
 shows the whole z-stack in 3D at a resolution the GPU can hold. Each channel and
 plane opens as a `#c=N&z=M` loader. An image with a `t` axis opens at
 `omero.rdefs.defaultT`, or the first time point, and `Time point` shows
-another at the same z plane.
+another at the same z plane; `Play time points` steps through them.
 
 ## Platform Behavior
 

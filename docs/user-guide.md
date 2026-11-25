@@ -302,7 +302,14 @@ picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr
 rendering settings name. For an OME-Zarr with time points (a time-lapse, such
 as IDR's idr0052A), `Time point` picks the time shown; it opens at the time
 point the OMERO rendering settings name, else the first, and keeps the z
-plane. Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
+plane. `Play time points` steps through them at the chosen `Speed`, and
+`Loop` starts again from the first. Each time point is shown once it has
+loaded, so a slow one holds the last a little longer; moving the slider,
+switching to 3D or taking a screenshot stops it. The next time points load
+while one is shown, and played ones stay in memory, so a second loop replays
+without reading them again. A new z plane or time point replaces the old one
+whole once it has loaded, or tile by tile after 2 s on a slow connection.
+Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
 whole stack as a volume you can rotate, with `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled

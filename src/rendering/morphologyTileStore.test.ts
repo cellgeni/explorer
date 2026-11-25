@@ -63,6 +63,84 @@ describe('morphology tile store (plan 23-D11)', () => {
     expect(clear).toHaveBeenCalledOnce()
   })
 
+  describe('replay (plan 28-D8)', () => {
+    // A channel at time point `t`, holding `pixels` of decoded tiles.
+    function planeSpec(t: number, group = 'dapi'): MorphologyTileChannelSpec {
+      return { ...spec(`${group}#t=${t.toString()}`), replayGroup: group }
+    }
+    function holding(channel: { readonly cache: unknown } | undefined, pixels: number) {
+      vi.spyOn(
+        channel!.cache as { readyPixels: () => number },
+        'readyPixels',
+      ).mockReturnValue(pixels)
+      return vi.spyOn(channel!.cache as { clear: () => void }, 'clear')
+    }
+
+    it('keeps a played plane for its group, and gives it back', () => {
+      const store = new MorphologyTileStore()
+      const [first] = store.use('a', [planeSpec(0)], { replayPixels: 100 })
+      const clear = holding(first, 60)
+
+      store.use('a', [planeSpec(1)], { replayPixels: 100 })
+
+      expect(clear).not.toHaveBeenCalled()
+      expect(store.use('a', [planeSpec(0)], { replayPixels: 100 })[0]).toBe(first)
+    })
+
+    it('drops the least recently drawn planes past the limit, closing their tiles', () => {
+      const store = new MorphologyTileStore()
+      const [first] = store.use('a', [planeSpec(0)], { replayPixels: 100 })
+      const firstClear = holding(first, 60)
+      const [second] = store.use('a', [planeSpec(1)], { replayPixels: 100 })
+      const secondClear = holding(second, 60)
+
+      store.use('a', [planeSpec(2)], { replayPixels: 100 })
+
+      expect(firstClear).toHaveBeenCalledOnce()
+      expect(secondClear).not.toHaveBeenCalled()
+    })
+
+    it('drops kept planes once no canvas draws their group', () => {
+      const store = new MorphologyTileStore()
+      const [first] = store.use('a', [planeSpec(0)], { replayPixels: 100 })
+      const clear = holding(first, 10)
+
+      store.use('a', [planeSpec(1)], { replayPixels: 100 })
+      store.use('a', [planeSpec(1, 'cd3')], { replayPixels: 100 })
+
+      expect(clear).toHaveBeenCalledOnce()
+    })
+
+    it('keeps nothing without a limit, and sizes new caches without kept ones', () => {
+      const store = new MorphologyTileStore()
+      const [first] = store.use('a', [planeSpec(0)])
+      const clear = holding(first, 10)
+      store.use('a', [planeSpec(1)])
+
+      expect(clear).toHaveBeenCalledOnce()
+
+      const held: number[] = []
+      store.use('a', [planeSpec(2)], { replayPixels: 100 })
+      store.use(
+        'a',
+        [
+          {
+            key: 'dapi#t=3',
+            replayGroup: 'dapi',
+            cacheOptions: (heldChannels) => {
+              held.push(heldChannels)
+              return { maxTiles: 24, decodeTile: vi.fn() }
+            },
+          },
+        ],
+        { replayPixels: 100 },
+      )
+
+      // Time point 2 is kept, and not counted.
+      expect(held).toEqual([0])
+    })
+  })
+
   it('clears every channel when disposed', () => {
     const store = new MorphologyTileStore()
     const channels = store.use('a', [spec('dapi'), spec('cd3')])
