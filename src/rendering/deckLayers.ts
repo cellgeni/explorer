@@ -38,7 +38,6 @@ export type {
   BoundaryElementsToLayerDataOptions,
   CellBoundaryDatum,
   CellBoundaryLayerGeometry,
-  CellBoundaryLayerGeometryOptions,
   CellBoundaryLayerStyle,
   GeneExpressionElementStyleIndex,
   GeneExpressionElementStyleOptions,
@@ -67,6 +66,7 @@ export {
   createCellBoundaryLayerStyle,
   styleCellBoundariesByCells,
   styleCellBoundariesByGeneExpression,
+  styleCellBoundaryByGeneExpression,
 } from './cellBoundaryRenderer'
 export { overviewCellsToLayerData } from './cellPointRenderer'
 export {
@@ -180,12 +180,14 @@ export function createOverviewLayers(
     cellBoundaryFillEnabled ||
     options.geneExpressionActive === true ||
     geneExpressionOverlayElements.length > 0
+  // Outlines fill when their cells are coloured or gene expression colours
+  // them, not for expression overlay points alone.
+  const boundaryFillDrawn =
+    cellBoundaryFillEnabled || options.geneExpressionActive === true
   const cellBoundaryGeometry =
     options.cellBoundaryGeometry ??
     (boundaries.length > 0
-      ? createCellBoundaryLayerGeometry(boundaries, {
-          includeFill: boundaryFillLayerEnabled,
-        })
+      ? createCellBoundaryLayerGeometry(boundaries)
       : EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY)
   const cellBoundaryStyle = options.cellBoundaryStyle ?? EMPTY_CELL_BOUNDARY_LAYER_STYLE
   const transcriptDensityBins = options.transcriptAggregateBins ?? []
@@ -226,10 +228,9 @@ export function createOverviewLayers(
   if (cellsVisible) {
     layers.push(
       ...createCellBoundaryLayers({
-        boundaries,
         geometry: cellBoundaryGeometry,
         style: cellBoundaryStyle,
-        fillEnabled: effectiveBoundaryFillEnabled,
+        fillEnabled: boundaryFillDrawn,
         cellFillOpacity,
         cellBoundaryOpacity,
         pickable: options.cellBoundaryPickable === true,

@@ -9,11 +9,6 @@ import { formatCoordinateValue, safeMicrometersPerPixel } from './viewerMeasurem
 // One zoom level, for the + and - keys and the zoom buttons alike.
 export const ZOOM_STEP = 1
 
-export interface BoundaryStyleViewport {
-  readonly bbox: BBox
-  readonly zoom: number
-}
-
 export interface MouseCoordinate {
   readonly xMicrometers: number
   readonly yMicrometers: number
@@ -195,20 +190,6 @@ export function equivalentViewportSize(
   return (
     nearlyEqual(left.width, right.width, 0.5) &&
     nearlyEqual(left.height, right.height, 0.5)
-  )
-}
-
-export function equivalentBoundaryStyleViewport(
-  left: BoundaryStyleViewport | null,
-  right: BoundaryStyleViewport,
-): boolean {
-  return (
-    left !== null &&
-    nearlyEqual(left.zoom, right.zoom, 0.001) &&
-    nearlyEqual(left.bbox.minX, right.bbox.minX, 0.5) &&
-    nearlyEqual(left.bbox.maxX, right.bbox.maxX, 0.5) &&
-    nearlyEqual(left.bbox.minY, right.bbox.minY, 0.5) &&
-    nearlyEqual(left.bbox.maxY, right.bbox.maxY, 0.5)
   )
 }
 

@@ -66,10 +66,6 @@ export interface GridCellDatum {
   readonly expressionGenes?: readonly string[]
 }
 
-export interface CellBoundaryLayerGeometryOptions {
-  readonly includeFill?: boolean
-}
-
 export interface BoundaryElementsToLayerDataOptions {
   readonly fillColor?: Color
   readonly lineColor?: Color
@@ -91,13 +87,13 @@ export interface CellBoundaryFillGeometryData {
   }
 }
 
+// The outlines packed once: the paths, the fills and the hit areas draw the
+// same rings, whatever colours them.
 export interface CellBoundaryLayerGeometry {
   readonly pathLayerData: CellBoundaryPathGeometryData
   readonly fillLayerData: CellBoundaryFillGeometryData
-  readonly pathCellIds: readonly string[]
-  readonly fillCellIds: readonly string[]
-  readonly pathLineColors: readonly Color[]
-  readonly fillColors: readonly Color[]
+  // The outline of each ring: those with three or more vertices.
+  readonly boundaries: readonly CellBoundaryDatum[]
   readonly boundaryCellIds: ReadonlySet<string>
 }
 

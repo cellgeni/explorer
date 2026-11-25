@@ -6,7 +6,10 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { boundaryElementsToLayerData } from '../../rendering/deckLayers'
+import {
+  boundaryElementsToLayerData,
+  type CellBoundaryDatum,
+} from '../../rendering/deckLayers'
 import type {
   GeneExpressionBatch,
   SpatialElement,
@@ -91,6 +94,7 @@ interface UseVisiumHdExpressionProjectionWorkflowOptions {
 const IDLE_VISIUM_HD_EXPRESSION_PROJECTION_STATE: VisiumHdExpressionProjectionState = {
   status: 'idle',
 }
+const NO_BOUNDARIES: readonly CellBoundaryDatum[] = []
 
 function visiumHdExpressionProjectionUnavailable(
   reason: string,
@@ -149,9 +153,11 @@ export function useVisiumHdExpressionProjectionWorkflow({
   )
   const requestIdRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
+  // Only Visium HD projects bins onto outlines; others skip the copy.
   const boundaries = useMemo(
-    () => boundaryElementsToLayerData(boundaryElements),
-    [boundaryElements],
+    () =>
+      isVisiumHdDataset ? boundaryElementsToLayerData(boundaryElements) : NO_BOUNDARIES,
+    [boundaryElements, isVisiumHdDataset],
   )
 
   useEffect(() => {
