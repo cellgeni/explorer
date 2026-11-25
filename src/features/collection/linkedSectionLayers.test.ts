@@ -7,6 +7,8 @@ import {
   LINKED_SCORES_LAYER_ID,
   linkedSectionLayers,
   scoredCells,
+  sectionOverlay,
+  valueLabel,
   type LinkedSectionLayerOptions,
 } from './linkedSectionLayers'
 
@@ -128,6 +130,48 @@ describe('linkedSectionLayers', () => {
     expect(colors.slice(0, 4)).toEqual([255, 0, 0, 255])
     expect(colors[7]).toBe(48)
     expect(colors[11]).toBe(48)
+  })
+
+  it('colours cells by their value of the track, fading those without one', () => {
+    const values = {
+      values: Float64Array.of(10, Number.NaN, 5),
+      count: 2,
+      min: 5,
+      max: 10,
+    }
+    const overlay = {
+      kind: 'values' as const,
+      values,
+      track: { id: 'h5ad:qv', label: 'qv', min: 0, max: 10 },
+    }
+    const layers = linkedSectionLayers(section, overlay, OPTIONS)
+
+    expect(layers).toHaveLength(1)
+    const colors = [...props(layers[0]).data.attributes.getFillColor!.value]
+    expect(colors.slice(0, 4)).toEqual([253, 231, 37, 235])
+    expect(colors.slice(4, 8)).toEqual([72, 68, 58, 48])
+    expect(colors.slice(8, 12)).toEqual([33, 145, 140, 235])
+    expect(valueLabel(overlay, 2)).toBe('qv 5')
+    expect(valueLabel(overlay, 1)).toBeUndefined()
+  })
+
+  it('colours by the track in place of the genes, once its values are read', () => {
+    const values = { values: Float64Array.of(1), count: 1, min: 1, max: 1 }
+    const metadata = { id: 'h5ad:qv', label: 'qv', min: 0, max: 2 }
+    const coloring = { genes: ['Aqp4'], annotations: null, metadata, classColors: {} }
+    const scores = {
+      positions: new Float32Array(2),
+      scores: Float32Array.of(3),
+      maxScore: 3,
+    }
+
+    expect(sectionOverlay({ scores, classes: null, values }, coloring)).toEqual({
+      kind: 'values',
+      values,
+      track: metadata,
+    })
+    // While they are read, the cells are drawn uncoloured, not by the genes.
+    expect(sectionOverlay({ scores, classes: null, values: null }, coloring)).toBeNull()
   })
 
   it('reuses the attribute arrays between frames', () => {

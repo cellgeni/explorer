@@ -35,6 +35,7 @@ function fakeDatasets() {
   }[] = []
   const overviewCalls: string[] = []
   const annotationCalls: { url: string; groupId?: string }[] = []
+  const trackCalls: { url: string; trackId: string }[] = []
   const loaders: CollectionPreviewLoaders = {
     detectSpatialDataset: vi.fn(async (baseUrl: string) => ({
       platform: 'h5ad' as const,
@@ -71,6 +72,11 @@ function fakeDatasets() {
         })
         return [{ id: 'analysis:type:a', label: 'type: A', cellIds: ['c0'] }]
       },
+      metadataTracks: async () => [{ id: 'h5ad:qv' }],
+      metadataTrackValues: async (trackId: string) => {
+        trackCalls.push({ url, trackId })
+        return [{ cellId: 'c1', value: 30 }]
+      },
     })) as unknown as CollectionPreviewLoaders['getSpatialDataset'],
     loadDatasetOverview: vi.fn(),
     loadGeneExpression: vi.fn(),
@@ -81,6 +87,7 @@ function fakeDatasets() {
     loaders,
     overviewCalls,
     annotationCalls,
+    trackCalls,
     expressions,
     finishOverview(url: string) {
       overviews.get(url)?.resolve([
@@ -268,6 +275,122 @@ describe('CollectionPreviewStore', () => {
     await flush()
     expect(store.entry(A).classes).toBe(null)
     expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4']])
+  })
+
+  it('reads the values of a metadata track in place of the genes', async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A], fake.loaders)
+    store.setRequest({
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      annotationGroupId: null,
+      metadataTrackId: 'h5ad:qv',
+    })
+    store.start()
+    store.setVisible(A, true)
+    await flush()
+    fake.finishOverview(A)
+    await flush()
+    await flush()
+
+    expect(fake.expressions).toEqual([])
+    expect(fake.trackCalls).toEqual([{ url: A, trackId: 'h5ad:qv' }])
+    expect([...(store.entry(A).values?.values ?? [])]).toEqual([Number.NaN, 30])
+    expect(store.entry(A).scores).toBe(null)
+
+    // Back to genes: the values go, and the scores are read.
+    store.setRequest({
+      genes: ['Aqp4'],
+      scoreMode: 'sum',
+      annotationGroupId: null,
+      metadataTrackId: null,
+    })
+    await flush()
+    expect(store.entry(A).values).toBe(null)
+    expect(fake.expressions.map((call) => call.genes)).toEqual([['Aqp4']])
+  })
+
+  it("takes the open dataset's values from the main view, not a read", async () => {
+    const fake = fakeDatasets()
+    store = new CollectionPreviewStore([A, B], fake.loaders)
+    store.setRequest({
+      genes: [],
+      scoreMode: 'sum',
+      annotationGroupId: null,
+      metadataTrackId: 'h5ad:qv',
+    })
+    // The main view is still reading them.
+    store.setOpenTrack({ url: A, trackId: 'h5ad:qv', values: null })
+    store.start()
+    store.setVisible(A, true)
+    store.setVisible(B, true)
+    await flush()
+    fake.finishOverview(A)
+    fake.finishOverview(B)
+    await flush()
+    await flush()
+
+    // B, another dataset, is read; A waits for the main view.
+    expect(fake.trackCalls).toEqual([{ url: B, trackId: 'h5ad:qv' }])
+    expect(store.entry(A)).toMatchObject({ values: null, loading: true })
+
+    const values = [
+      { cellId: 'c0', value: 1 },
+      { cellId: 'c1', value: 5 },
+    ]
+    store.setOpenTrack({ url: A, trackId: 'h5ad:qv', values })
+    const entry = store.entry(A)
+    expect(entry.loading).toBe(false)
+    expect([...(entry.values?.values ?? [])]).toEqual([1, 5])
+    // The same object while the values stay the same.
+    store.setVisible(C, true)
+    store.setOpenTrack({ url: A, trackId: 'h5ad:qv', values })
+    expect(store.entry(A).values).toBe(entry.values)
+
+    // Given no more, A reads the track itself.
+    store.setOpenTrack(null)
+    await flush()
+    expect(fake.trackCalls).toEqual([
+      { url: B, trackId: 'h5ad:qv' },
+      { url: A, trackId: 'h5ad:qv' },
+    ])
+  })
+
+  // Sections of a block each held one depth, so the open one's range (0 to
+  // 0) coloured every section alike.
+  it('runs the colours over the values of every preview read', async () => {
+    const fake = fakeDatasets()
+    const valuesByUrl: Record<string, readonly unknown[]> = {
+      [B]: [{ cellId: 'c0', value: 60 }],
+      [C]: [{ cellId: 'c1', value: 120 }],
+    }
+    const getSpatialDataset = vi.fn(async (url: string) => ({
+      ...(await fake.loaders.getSpatialDataset(url)),
+      metadataTrackValues: async () => valuesByUrl[url],
+    })) as unknown as CollectionPreviewLoaders['getSpatialDataset']
+    store = new CollectionPreviewStore(URLS, { ...fake.loaders, getSpatialDataset })
+    store.setRequest({
+      genes: [],
+      scoreMode: 'sum',
+      annotationGroupId: null,
+      metadataTrackId: 'h5ad:qv',
+    })
+    store.setOpenTrack({
+      url: A,
+      trackId: 'h5ad:qv',
+      values: [{ cellId: 'c0', value: 0 }],
+    })
+    const track = { id: 'h5ad:qv', label: 'z_um', min: 0, max: 0 }
+    store.start()
+    for (const url of URLS) store.setVisible(url, true)
+    await flush()
+    for (const url of URLS) fake.finishOverview(url)
+    await flush()
+    await flush()
+
+    expect(store.valueRange(track)).toEqual({ ...track, min: 0, max: 120 })
+    // The same object until a preview changes.
+    expect(store.valueRange(track)).toBe(store.valueRange(track))
   })
 
   // A class the open dataset lacks took the next palette colour in each

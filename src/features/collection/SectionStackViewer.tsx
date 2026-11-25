@@ -19,7 +19,9 @@ import { OrbitAxes } from '../../components/OrbitAxes'
 import { viewAlongAxis, type OrbitAxisName } from '../../components/orbitAxesModel'
 import { handleOrbitKey, orbitCanvasProps } from '../../components/orbitKeyboard'
 import { VolumeViewerHint } from '../../components/VolumeViewerHint'
+import { metadataScaleGradient } from '../../rendering/cellStyling'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
+import { metadataValueText } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   formatPercentile,
@@ -113,13 +115,18 @@ export function SectionStackViewer({
   const readPreviews = useMemo(() => previewsReader(sections, store), [sections, store])
   const previews = useSyncExternalStore(store?.subscribe ?? noSubscription, readPreviews)
   const { annotations, colorScale, scaleRange } = coloring
-  const genes = annotations === null ? coloring.genes : NO_GENES
+  // Read with the previews, whose version it follows, as classColors is.
+  const metadata =
+    coloring.metadata === null
+      ? null
+      : (store?.valueRange(coloring.metadata) ?? coloring.metadata)
+  const genes = annotations === null && metadata === null ? coloring.genes : NO_GENES
   // Read with the previews, whose version it follows.
   const classColors =
     annotations === null
       ? NO_CLASS_COLORS
       : (store?.classColors(annotations.colors) ?? annotations.colors)
-  const colored = annotations !== null || genes.length > 0
+  const colored = annotations !== null || metadata !== null || genes.length > 0
   const percentile = geneScalePercentile(scaleRange)
   const sharedScale = typeof scaleRange.max === 'number'
   const cellsMode = mode === 'cells'
@@ -139,13 +146,18 @@ export function SectionStackViewer({
   const colorings = useMemo(
     () =>
       previews.map((preview) => {
-        const overlay = sectionOverlay(preview, { genes, annotations, classColors })
+        const overlay = sectionOverlay(preview, {
+          genes,
+          annotations,
+          metadata,
+          classColors,
+        })
         const top = overlay?.kind === 'scores' ? ownTop(overlay.scores, percentile) : 0
         const { min, max } = geneScaleBounds(scaleRange, top)
 
         return { overlay, scaleMin: min, scaleMax: max }
       }),
-    [annotations, classColors, genes, percentile, previews, scaleRange],
+    [annotations, classColors, genes, metadata, percentile, previews, scaleRange],
   )
   const inputs = useMemo(
     (): readonly (StackSectionInput | null)[] =>
@@ -339,9 +351,11 @@ export function SectionStackViewer({
         {colored ? (
           <Switch
             title={
-              annotations === null
-                ? 'Show the cells that do not score for the genes faintly, as an outline of the tissue'
-                : 'Show the cells outside the shown classes faintly, as an outline of the tissue'
+              annotations !== null
+                ? 'Show the cells outside the shown classes faintly, as an outline of the tissue'
+                : metadata !== null
+                  ? `Show the cells without a value of ${metadata.label} faintly, as an outline of the tissue`
+                  : 'Show the cells that do not score for the genes faintly, as an outline of the tissue'
             }
             label="Other cells"
             checked={showContext}
@@ -377,6 +391,25 @@ export function SectionStackViewer({
             </span>
           </div>
         ) : null}
+        {metadata === null ? null : (
+          <div
+            className="section-stack-scale"
+            title={
+              cellsMode
+                ? `${metadata.label} from its lowest to its highest value, as in the 2D view`
+                : `Every section uses this scale, the range of ${metadata.label} across the sections; a section without the track is not coloured`
+            }
+          >
+            <span className="section-stack-scale-genes">{metadata.label}</span>
+            <span>{metadataValueText(metadata.min)}</span>
+            <span
+              className="section-stack-scale-ramp"
+              style={{ background: metadataScaleGradient() }}
+              aria-hidden="true"
+            />
+            <span>{metadataValueText(metadata.max)}</span>
+          </div>
+        )}
         <div className="volume-viewer-actions">
           <IconButton
             title="Reset the 3D view"

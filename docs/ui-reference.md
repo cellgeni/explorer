@@ -127,8 +127,9 @@ the canvas, a `nav` named "Collection":
   selected, the gene (or "N genes") and the previews' scale: `0 – p99`
   (each its own percentile), or the range typed in Gene scale, which they
   share. With cells coloured by an annotation
-  set, the set's name and "N hidden". Under 860 px only "Collection" and
-  its buttons stay.
+  set, the set's name and "N hidden"; by a metadata track, the track's name
+  and the range every preview shares (`7 – 1,964`). Under 860 px only
+  "Collection" and its buttons stay.
 - A button per dataset, in groups labelled with their `group`, in one row
   that scrolls sideways. Each shows a 112 × 64 px preview, the dataset's
   label and its own top (`top 32`, with the highest score in its title),
@@ -1317,9 +1318,11 @@ collection's [3D stack](./dataset-collections.md#3d-stack) viewer, covers the
 canvas when the Cells section's `View` is `3D`. It draws every cell of the
 open dataset at its x, y and z (a third column of obsm `spatial`), as balls
 10 µm across, coloured as the stack colours a section: by the selected genes
-on the `Gene scale`, or by the annotation set's classes. Cells that score, or
-are in a shown class, are solid; the others are a faint outline. Other
-`Cell color` modes draw every cell grey. Drag rotates, Shift-drag pans, and
+on the `Gene scale`, by the annotation set's classes, or by the metadata
+track's values over its range, in the 2D view's metadata colours. Cells that
+score, are in a shown class, or have a value of the track are solid; the
+others are a faint outline. `Transcript count` and `Cell area` draw every
+cell grey. Drag rotates, Shift-drag pans, and
 scrolling zooms; the canvas, "3D cells canvas area", takes the
 [3D view](#3d-view)'s keys and axes. The top line gives the cells and their z range ("201,789
 cells, z 0 to 780 µm").
@@ -1327,12 +1330,14 @@ cells, z 0 to 780 µm").
 | Control       | Type                           | Default                                  | Notes                                                                                     |
 | ------------- | ------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
 | `Depth`       | Slider ×¼–×128, in powers of 2 | About a quarter as deep as wide, at most | Stretches z; ×1 is the cells' true depth                                                  |
-| `Other cells` | Switch                         | On                                       | With genes or an annotation set: the faint outline of the cells not coloured              |
+| `Other cells` | Switch                         | On                                       | With genes, an annotation set or a track: the faint outline of the cells not coloured     |
 | Gene scale    | The genes and a ramp           |                                          | Up to the `Gene scale` percentile of the scores above 0 (p99 on Auto), or the typed range |
+| Track scale   | The track and a ramp           |                                          | `Metadata` only: the track's lowest and highest value, as the legend gives them           |
 | Reset (fit)   | Icon button                    |                                          | Back to the first view of all the cells                                                   |
 | `2D View`     | Button                         |                                          | Returns to the 2D view, which kept its place                                              |
 
-Hovering a cell gives its z and the cell and its class, or its score. While
+Hovering a cell gives its z and the cell and its class or value, or its
+score. While
 the cells or what colours them are read, the status says so; a section whose
 cells were read but whose colours could not be is drawn grey and named under
 "Colours could not be read". `2D View` hands keyboard focus back to the

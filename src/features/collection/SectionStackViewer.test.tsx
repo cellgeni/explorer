@@ -13,6 +13,7 @@ interface DeckProps {
   readonly onHover?: (info: unknown) => void
   readonly viewState?: { readonly rotationX?: number; readonly rotationOrbit?: number }
   readonly onViewStateChange?: (change: { readonly viewState: unknown }) => void
+  readonly layers?: readonly { readonly id: string }[]
 }
 
 // deck.gl has no WebGL in jsdom: each render of a DeckGL is recorded.
@@ -31,6 +32,7 @@ const NO_ENTRY: PreviewEntry = {
   cells: null,
   scores: null,
   classes: null,
+  values: null,
   loading: false,
   unavailable: null,
   error: null,
@@ -43,6 +45,7 @@ function fakeStore(entries: Readonly<Record<string, Partial<PreviewEntry>>>) {
   return {
     subscribe: () => () => undefined,
     getVersion: () => 0,
+    valueRange: <T,>(track: T): T => track,
     entry: (url: string): PreviewEntry => {
       let entry = built.get(url)
       if (entry === undefined) {
@@ -87,14 +90,19 @@ const COLORING: LinkedSectionsColoring = {
   colorScale: 'plasma',
   scaleRange: { min: null, max: null },
   annotations: null,
+  metadata: null,
 }
 const SECTION = entryFor('s1')
 
 function CellView({
   depths,
+  coloring = COLORING,
+  entry = {},
   onClose = vi.fn(),
 }: {
   readonly depths: readonly number[]
+  readonly coloring?: LinkedSectionsColoring
+  readonly entry?: Partial<PreviewEntry>
   readonly onClose?: () => void
 }) {
   const cells = cellsAt(
@@ -109,8 +117,8 @@ function CellView({
     <SectionStackViewer
       mode="cells"
       sections={[{ entry: SECTION, z: 0 }]}
-      store={fakeStore({ [SECTION.url]: { cells } })}
-      coloring={COLORING}
+      store={fakeStore({ [SECTION.url]: { cells, ...entry } })}
+      coloring={coloring}
       cellPointScale={1}
       hoverTooltips
       onClose={onClose}
@@ -169,6 +177,55 @@ describe('SectionStackViewer', () => {
 
     // Side on, z up.
     expect(shown()?.viewState).toMatchObject({ rotationX: -90, rotationOrbit: 0 })
+  })
+
+  it('colours the cells by a metadata track, with its range beside them', () => {
+    deck.renders.length = 0
+    const metadata = { id: 'h5ad:qv', label: 'qv', min: 7.5, max: 40 }
+    render(
+      <CellView
+        depths={[0, 5, 10]}
+        coloring={{ ...COLORING, genes: ['Aqp4'], metadata }}
+        entry={{
+          values: {
+            values: Float64Array.of(7.5, Number.NaN, 40),
+            count: 2,
+            min: 7.5,
+            max: 40,
+          },
+        }}
+      />,
+    )
+    const layers = deck.renders.filter(({ viewId }) => viewId === 'section-stack').at(-1)
+      ?.props.layers
+
+    expect(layers?.map(({ id }) => id)).toEqual([
+      'section-stack-0-values',
+      'section-stack-0-context',
+    ])
+    const scale = screen.getByTitle(/qv from its lowest to its highest value/)
+    expect(scale).toHaveTextContent('qv7.540')
+    // The track, not the genes, colours the cells.
+    expect(screen.queryByText('Aqp4')).toBeNull()
+    expect(screen.getByRole('switch', { name: 'Other cells' })).toHaveAttribute(
+      'title',
+      expect.stringContaining('without a value of qv'),
+    )
+  })
+
+  it('says the colours are being read while the track is', () => {
+    render(
+      <CellView
+        depths={[0, 5]}
+        coloring={{
+          ...COLORING,
+          metadata: { id: 'h5ad:qv', label: 'qv', min: 0, max: 1 },
+        }}
+        entry={{ loading: true }}
+      />,
+    )
+
+    expect(screen.getByText('Reading colours')).toBeInTheDocument()
   })
 
   // (-0.04).toFixed(1) is "-0.0", written "-0" (EXP-248).

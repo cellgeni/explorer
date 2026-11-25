@@ -1,17 +1,21 @@
 import type { Layer } from '@deck.gl/core'
 import { OrthographicView } from '@deck.gl/core'
 import { ScatterplotLayer } from '@deck.gl/layers'
+import { metadataColor } from '../../rendering/cellStyling'
 import {
   DEFAULT_OVERVIEW_CELL_FILL_RGB,
   geneExpressionColor,
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import { metadataValueText } from '../annotations/annotationModel'
 import type { CollectionBarAnnotations } from './CollectionBar'
 import {
   shownClassOf,
   type PreviewCells,
+  type PreviewMetadataTrack,
   type PreviewScores,
+  type PreviewValues,
 } from './collectionPreviewData'
 import { hexRgb, type PreviewOverlay } from './collectionPreviewRaster'
 import type { PreviewEntry } from './collectionPreviewStore'
@@ -39,7 +43,8 @@ const CELL_RGBA = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 200] as const
 // Cells scoring 0, behind those that score, like GENE_EXPRESSION_ZERO_FILL_COLOR
 // but a little stronger, as the panel has no image under it.
 const UNSCORED_CELL_RGBA = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 120] as const
-// Cells in no shown class, a faint outline of the tissue.
+// Cells in no shown class, or without a value of the track, a faint outline
+// of the tissue.
 const FADED_CELL_RGBA = [...DEFAULT_OVERVIEW_CELL_FILL_RGB, 48] as const
 const SCORED_CELL_ALPHA = 235
 
@@ -64,17 +69,19 @@ export interface LinkedScoredCells {
 
 // What a section's cells are coloured by: the annotation set's classes in
 // `classColors` (the preview store's, one per class across the collection),
-// the hidden ones faded, or else the genes' scores. Null draws the cells
-// only, as while what they are coloured by is read.
+// the hidden ones faded, else a metadata track's values, or else the genes'
+// scores. Null draws the cells only, as while what they are coloured by is
+// read.
 export function sectionOverlay(
-  preview: Pick<PreviewEntry, 'scores' | 'classes'> | null,
+  preview: Pick<PreviewEntry, 'scores' | 'classes' | 'values'> | null,
   coloring: {
     readonly genes: readonly string[]
     readonly annotations: CollectionBarAnnotations | null
+    readonly metadata: PreviewMetadataTrack | null
     readonly classColors: Readonly<Record<string, string>>
   },
 ): PreviewOverlay | null {
-  const { annotations } = coloring
+  const { annotations, metadata } = coloring
 
   if (annotations !== null) {
     const classes = preview?.classes ?? null
@@ -88,6 +95,11 @@ export function sectionOverlay(
         annotations.hiddenIds.has(id) ? null : (colors[id] ?? null),
       ),
     }
+  }
+
+  if (metadata !== null) {
+    const values = preview?.values ?? null
+    return values === null ? null : { kind: 'values', values, track: metadata }
   }
 
   const scores = preview?.scores ?? null
@@ -106,7 +118,12 @@ export function linkedSectionLayers(
     getRadius: LINKED_SECTION_CELL_RADIUS_MICROMETERS,
   } as const
   const cellCount = cells.positions.length / 2
-  const classColors = overlay?.kind === 'classes' ? classColorAttribute(overlay) : null
+  const classColors =
+    overlay?.kind === 'classes'
+      ? classColorAttribute(overlay)
+      : overlay?.kind === 'values'
+        ? valueColorAttribute(overlay)
+        : null
   const layers: Layer[] = [
     new ScatterplotLayer({
       id: LINKED_CELLS_LAYER_ID,
@@ -164,6 +181,10 @@ const classColorsCache = new WeakMap<
   Int32Array,
   { readonly key: string; readonly colors: Uint8Array }
 >()
+const valueColorsCache = new WeakMap<
+  PreviewValues,
+  { readonly key: string; readonly colors: Uint8Array }
+>()
 const scoredCellsCache = new WeakMap<
   PreviewScores,
   { readonly key: string; readonly cells: LinkedScoredCells }
@@ -203,6 +224,44 @@ function classColorAttribute(
   })
 
   classColorsCache.set(overlay.classOf, { key, colors })
+  return colors
+}
+
+// A cell's value of the track colouring it, as "qv 21.5"; undefined without
+// one.
+export function valueLabel(
+  overlay: PreviewOverlay | null,
+  cell: number,
+): string | undefined {
+  if (overlay?.kind !== 'values') return undefined
+
+  const value = overlay.values.values[cell] ?? Number.NaN
+  return Number.isFinite(value)
+    ? `${overlay.track.label} ${metadataValueText(value)}`
+    : undefined
+}
+
+// Each cell in the metadata colour of its value, or faded without one.
+function valueColorAttribute(
+  overlay: Extract<PreviewOverlay, { readonly kind: 'values' }>,
+): Uint8Array {
+  const { values, track } = overlay
+  const key = `${track.min}|${track.max}`
+  const cached = valueColorsCache.get(values)
+  if (cached?.key === key) return cached.colors
+
+  const colors = new Uint8Array(values.values.length * 4)
+
+  values.values.forEach((value, index) => {
+    if (!Number.isFinite(value)) {
+      colors.set(FADED_CELL_RGBA, index * 4)
+      return
+    }
+    const color = metadataColor(value, track.min, track.max)
+    colors.set([color[0], color[1], color[2], SCORED_CELL_ALPHA], index * 4)
+  })
+
+  valueColorsCache.set(values, { key, colors })
   return colors
 }
 

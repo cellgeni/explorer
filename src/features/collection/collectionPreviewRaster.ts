@@ -1,10 +1,16 @@
+import { metadataColor } from '../../rendering/cellStyling'
 import {
   geneExpressionColor,
   geneExpressionIntensity,
 } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { geneScaleBottom, geneScoreSpread } from '../genes/geneScaleRange'
-import type { PreviewCells, PreviewScores } from './collectionPreviewData'
+import type {
+  PreviewCells,
+  PreviewMetadataTrack,
+  PreviewScores,
+  PreviewValues,
+} from './collectionPreviewData'
 
 // Beyond this many cells, a preview draws every Nth of them, in grey or in
 // its class colour: more do not change a preview of this size. Scored cells
@@ -16,7 +22,8 @@ const RARE_CLASS_DRAWN_CELLS = 64
 
 // A collection preview as pixels: every cell in grey, so the tissue shows,
 // and over them either the cells that score above zero in the gene colour
-// scale, or the cells of the shown classes in their class colours. A pixel
+// scale, the cells of the shown classes in their class colours, or the cells
+// with a value of a metadata track in the main view's metadata colours. A pixel
 // shared by several cells takes the highest score, so a few expressing cells
 // stay visible among many that do not; a cell of a shown class covers the
 // grey of hidden ones, which is dimmer, as hidden classes fade in the main
@@ -30,6 +37,12 @@ export type PreviewOverlay =
       readonly classOf: Int32Array
       // Each class's colour as #rrggbb, or null for a hidden class.
       readonly colors: readonly (string | null)[]
+    }
+  | {
+      readonly kind: 'values'
+      readonly values: PreviewValues
+      // The track, whose range the colours run over.
+      readonly track: PreviewMetadataTrack
     }
 
 export interface PreviewRasterOptions {
@@ -111,7 +124,10 @@ export function rasterizePreview(
     }
   }
 
-  const tissue = overlay?.kind === 'classes' ? FADED_TISSUE_RGBA : TISSUE_RGBA
+  const tissue =
+    overlay?.kind === 'classes' || overlay?.kind === 'values'
+      ? FADED_TISSUE_RGBA
+      : TISSUE_RGBA
   const cellStride = Math.max(
     1,
     Math.ceil(cells.positions.length / 2 / PREVIEW_MAX_DRAWN_CELLS),
@@ -155,6 +171,26 @@ export function rasterizePreview(
       },
       (index) =>
         everyStrideth(index) || drawnWhole[overlay.classOf[index] ?? -1] === true,
+    )
+
+    return { pixels, scaleMax: 0 }
+  }
+
+  if (overlay?.kind === 'values') {
+    const { values, track } = overlay
+
+    forEachPixel(
+      cells.positions,
+      (pixel, index) => {
+        const value = values.values[index] ?? Number.NaN
+        if (!Number.isFinite(value)) return
+        const color = metadataColor(value, track.min, track.max)
+        pixels[pixel * 4] = color[0]
+        pixels[pixel * 4 + 1] = color[1]
+        pixels[pixel * 4 + 2] = color[2]
+        pixels[pixel * 4 + 3] = 255
+      },
+      everyStrideth,
     )
 
     return { pixels, scaleMax: 0 }

@@ -5,6 +5,7 @@ import {
   type PreviewCells,
   type PreviewClasses,
   type PreviewScores,
+  type PreviewValues,
 } from './collectionPreviewData'
 import {
   sectionStackLayers,
@@ -40,6 +41,14 @@ const CLASSES: PreviewClasses = {
   classOf: Int32Array.from([0, 1, 0]),
   members: [Uint32Array.of(0, 2), Uint32Array.of(1)],
 }
+// Cell 1 has no value.
+const VALUES: PreviewValues = {
+  values: Float64Array.of(0, Number.NaN, 10),
+  count: 2,
+  min: 0,
+  max: 10,
+}
+const TRACK = { id: 'h5ad:qv', label: 'qv', min: 0, max: 10 }
 // The same cells placed in 3D, and their scores with each one's z.
 const DEEP_CELLS: PreviewCells = {
   ...CELLS,
@@ -151,6 +160,40 @@ describe('sectionStackLayers', () => {
     const picked = stackPick(pick('section-stack-0-classes', 1), targets)
     expect(picked).toEqual({ section: 0, kind: 'cell', index: 2 })
     expect(stackPickText(picked!, 'S1', input, [])).toBe('S1 · cell-2 · Neuron')
+  })
+
+  it('draws cells with a value of the track solid, those without as the outline', () => {
+    const input = section({ overlay: { kind: 'values', values: VALUES, track: TRACK } })
+    const { layers, targets } = sectionStackLayers([input], OPTIONS)
+
+    expect(layers.map((layer) => props(layer).id)).toEqual([
+      'section-stack-0-values',
+      'section-stack-0-context',
+    ])
+    const shown = props(layers[0])
+    expect([...shown.data.attributes.getPosition!.value]).toEqual([0, -0, 30, -5])
+    // The main view's metadata colours, lowest to highest.
+    expect([...shown.data.attributes.getFillColor!.value]).toEqual([
+      68, 1, 84, 255, 253, 231, 37, 255,
+    ])
+    expect([...props(layers[1]).data.attributes.getPosition!.value]).toEqual([10, -20])
+
+    const picked = stackPick(pick('section-stack-0-values', 1), targets)
+    expect(picked).toEqual({ section: 0, kind: 'cell', index: 2 })
+    expect(stackPickText(picked!, 'S1', input, [])).toBe('S1 · cell-2 · qv 10')
+
+    // Another range recolours the same cells.
+    const wider = sectionStackLayers(
+      [
+        section({
+          overlay: { kind: 'values', values: VALUES, track: { ...TRACK, max: 20 } },
+        }),
+      ],
+      OPTIONS,
+    )
+    expect([...props(wider.layers[0]).data.attributes.getFillColor!.value]).toEqual([
+      68, 1, 84, 255, 33, 145, 140, 255,
+    ])
   })
 
   it('hands deck.gl the same data while only the depth changes', () => {

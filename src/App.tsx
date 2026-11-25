@@ -123,6 +123,8 @@ import {
   type CollectionView,
 } from './features/collection/collectionModel'
 import { useDatasetCollection } from './features/collection/useDatasetCollection'
+import type { PreviewMetadataTrack } from './features/collection/collectionPreviewData'
+import type { OpenTrackValues } from './features/collection/collectionPreviewStore'
 import {
   LinkedSections,
   type LinkedSectionsColoring,
@@ -4640,6 +4642,40 @@ export function App({ dependencies }: AppProps = {}) {
     loadedAnnotationGroupId,
     observationColorMode,
   ])
+  // Previews take the main view's metadata track, and its range, while cells
+  // are coloured by it.
+  const previewTrack =
+    observationColorMode === 'metadata' ? selectedCellMetadataTrack : null
+  const previewTrackId = previewTrack?.id ?? null
+  const previewTrackLabel = previewTrack?.label ?? ''
+  const previewTrackMin = previewTrack?.min ?? 0
+  const previewTrackMax = previewTrack?.max ?? 0
+  const previewTrackValues = previewTrack?.values ?? null
+  const collectionPreviewMetadata = useMemo(
+    (): PreviewMetadataTrack | null =>
+      previewTrackId === null
+        ? null
+        : {
+            id: previewTrackId,
+            label: previewTrackLabel,
+            min: previewTrackMin,
+            max: previewTrackMax,
+          },
+    [previewTrackId, previewTrackLabel, previewTrackMax, previewTrackMin],
+  )
+  // The open dataset's values of the track, as the main view has read or
+  // imported them, for its own preview and 3D view.
+  const openTrackValues = useCallback(
+    (url: string | null | undefined): OpenTrackValues | null =>
+      previewTrackId === null || url === null || url === undefined
+        ? null
+        : { url, trackId: previewTrackId, values: previewTrackValues },
+    [previewTrackId, previewTrackValues],
+  )
+  const collectionOpenTrack = useMemo(
+    () => openTrackValues(collectionEntry?.url),
+    [collectionEntry?.url, openTrackValues],
+  )
   const collectionPreviewGenes =
     observationColorMode === 'gene-expression' ? selectedGenes : NO_PREVIEW_GENES
   // Read by the bar's previews and by the sections shown side by side.
@@ -4649,6 +4685,8 @@ export function App({ dependencies }: AppProps = {}) {
     genes: collectionPreviewGenes,
     scoreMode: geneExpressionScoreMode,
     annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
+    metadataTrackId: collectionPreviewMetadata?.id ?? null,
+    openTrack: collectionOpenTrack,
     paused: isLoading,
   })
   // How the sections beside the open dataset, and those stacked in 3D, colour
@@ -4659,10 +4697,12 @@ export function App({ dependencies }: AppProps = {}) {
       colorScale: geneExpressionColorScale,
       scaleRange: geneExpressionScaleRange,
       annotations: collectionPreviewAnnotations,
+      metadata: collectionPreviewMetadata,
     }),
     [
       collectionPreviewAnnotations,
       collectionPreviewGenes,
+      collectionPreviewMetadata,
       geneExpressionColorScale,
       geneExpressionScaleRange,
     ],
@@ -4682,12 +4722,18 @@ export function App({ dependencies }: AppProps = {}) {
   }, [collectionPreviewStore, linkedSectionsKey])
   // The open dataset's cells in the 3D view, read as a section's are, from
   // the dataset the main view has open.
+  const cellViewOpenTrack = useMemo(
+    () => openTrackValues(loadedDatasetUrl),
+    [loadedDatasetUrl, openTrackValues],
+  )
   const cellViewStore = useOpenDatasetPreviewStore({
     url: cellViewShown ? loadedDatasetUrl : null,
     loaders: collectionPreviewLoaders,
     genes: collectionPreviewGenes,
     scoreMode: geneExpressionScoreMode,
     annotationGroupId: collectionPreviewAnnotations?.groupId ?? null,
+    metadataTrackId: collectionPreviewMetadata?.id ?? null,
+    openTrack: cellViewOpenTrack,
     paused: isLoading,
   })
   const cellViewSections = useMemo(
@@ -5678,6 +5724,7 @@ export function App({ dependencies }: AppProps = {}) {
                 colorScale: geneExpressionColorScale,
                 scaleRange: geneExpressionScaleRange,
                 annotations: collectionPreviewAnnotations,
+                metadata: collectionPreviewMetadata,
               }}
               beside={{
                 shown: linkedSections,

@@ -27,7 +27,7 @@ import {
 } from '../genes/geneScaleRange'
 import type { CollectionBarAnnotations } from './CollectionBar'
 import { collectionEntryLabel } from './collectionModel'
-import type { PreviewBounds } from './collectionPreviewData'
+import type { PreviewBounds, PreviewMetadataTrack } from './collectionPreviewData'
 import type { PreviewOverlay } from './collectionPreviewRaster'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import {
@@ -37,6 +37,7 @@ import {
   linkedSectionLayers,
   scoredCells,
   sectionOverlay,
+  valueLabel,
 } from './linkedSectionLayers'
 import { useCollectionPreviewUpdates } from './useCollectionPreviews'
 import { useFocusHandOff } from './useFocusHandOff'
@@ -45,7 +46,8 @@ import { useFocusHandOff } from './useFocusHandOff'
 // viewer of one section's cells from its collection preview. They share the
 // main view's camera through the linked view channel: pan or zoom any and the
 // rest follow. Cells are coloured as the main view colours them: by the
-// selected genes, on the Gene scale, or by the annotation set's classes.
+// selected genes, on the Gene scale, by the annotation set's classes, or by a
+// metadata track.
 
 export interface LinkedSectionsColoring {
   // The genes cells are coloured by; none draws the cells only.
@@ -54,6 +56,8 @@ export interface LinkedSectionsColoring {
   readonly scaleRange: GeneScaleRange
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotations: CollectionBarAnnotations | null
+  // The metadata track the cells are coloured by, in place of the genes.
+  readonly metadata: PreviewMetadataTrack | null
 }
 
 interface LinkedSectionsProps {
@@ -92,6 +96,13 @@ export function LinkedSections({
     coloring.annotations === null
       ? NO_CLASS_COLORS
       : (store?.classColors(coloring.annotations.colors) ?? coloring.annotations.colors)
+  // The track over the range the bar and the stack use.
+  const metadata =
+    coloring.metadata === null
+      ? null
+      : (store?.valueRange(coloring.metadata) ?? coloring.metadata)
+  const shownColoring =
+    metadata === coloring.metadata ? coloring : { ...coloring, metadata }
 
   return (
     <>
@@ -101,7 +112,7 @@ export function LinkedSections({
           entry={entry}
           preview={store?.entry(entry.url) ?? null}
           channel={channel}
-          coloring={coloring}
+          coloring={shownColoring}
           classColors={classColors}
           cellPointScale={cellPointScale}
           pointSizeFullViewScale={pointSizeFullViewScale}
@@ -153,8 +164,10 @@ function LinkedSectionPanel({
   const cells = preview?.cells ?? null
   const scores = preview?.scores ?? null
   const classes = preview?.classes ?? null
-  const { annotations, colorScale, scaleRange } = coloring
-  const showsGenes = annotations === null && coloring.genes.length > 0
+  const values = preview?.values ?? null
+  const { annotations, metadata, colorScale, scaleRange } = coloring
+  const showsGenes =
+    annotations === null && metadata === null && coloring.genes.length > 0
   // The zoom at which the section fills a 720 px canvas, from which the main
   // view sizes its points.
   const fittedZoom = useMemo(
@@ -178,10 +191,10 @@ function LinkedSectionPanel({
   const overlay = useMemo(
     () =>
       sectionOverlay(
-        { scores, classes },
-        { genes: coloring.genes, annotations, classColors },
+        { scores, classes, values },
+        { genes: coloring.genes, annotations, metadata, classColors },
       ),
-    [annotations, classColors, classes, coloring.genes, scores],
+    [annotations, classColors, classes, coloring.genes, metadata, scores, values],
   )
   // On Auto or a percentile top, each section tops out at that percentile of
   // its own scores above 0, as the main view does; a typed top is shared.
@@ -325,7 +338,7 @@ function deckExtent(bounds: PreviewBounds) {
   }
 }
 
-// The hovered cell: its ID and class, or its score for the genes.
+// The hovered cell: its ID and class or value, or its score for the genes.
 function hoverText(
   info: PickingInfo,
   preview: PreviewEntry | null,
@@ -355,7 +368,7 @@ function hoverText(
     shownClass >= 0 ? shownClass : (preview.classes?.classOf[info.index] ?? -1)
   const classLabel =
     overlay?.kind === 'classes' ? preview.classes?.classes[classIndex]?.label : undefined
-  const parts = [cellId, classLabel].filter(
+  const parts = [cellId, classLabel, valueLabel(overlay, info.index)].filter(
     (part): part is string => part !== undefined && part !== '',
   )
 

@@ -34,6 +34,7 @@ const READY: PreviewEntry = {
   cells: {} as PreviewCells,
   scores: null,
   classes: null,
+  values: null,
   loading: false,
   unavailable: null,
   error: null,

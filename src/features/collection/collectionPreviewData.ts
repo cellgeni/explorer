@@ -16,8 +16,8 @@ import { throwIfAborted } from '../../utils/abort'
 import type { Annotation } from '../../data/annotation'
 
 // What a collection preview reads: every cell's position once per dataset,
-// and the selected genes' scores per gene selection, or the classes of the
-// selected annotation set. Datasets open through
+// and the selected genes' scores per gene selection, the classes of the
+// selected annotation set, or the values of a metadata track. Datasets open through
 // the same per-URL caches as the main view, so a previewed dataset opens
 // faster when chosen. The panels of sections shown side by side draw the
 // same data.
@@ -83,6 +83,33 @@ export interface PreviewClasses {
   readonly members: readonly Uint32Array[]
 }
 
+export interface PreviewValues {
+  // Each drawn cell's value of the track, or NaN without one.
+  readonly values: Float64Array
+  // The cells with a value, and the lowest and highest of them (Infinity
+  // and -Infinity without one).
+  readonly count: number
+  readonly min: number
+  readonly max: number
+}
+
+// The metadata track cells are coloured by: the main view's, over one range
+// in every section (CollectionPreviewStore.valueRange), so a colour means one
+// value throughout. A section reads the track of the same ID; one without it
+// draws its cells uncoloured.
+export interface PreviewMetadataTrack {
+  readonly id: string
+  readonly label: string
+  readonly min: number
+  readonly max: number
+}
+
+// A track's values, as a dataset gives them.
+export interface PreviewCellValue {
+  readonly cellId: string
+  readonly value: number
+}
+
 const shownClassOfCache = new WeakMap<
   PreviewClasses,
   { readonly key: string; readonly classOf: Int32Array }
@@ -130,6 +157,12 @@ export interface PreviewSource {
     groupId: string,
     signal?: AbortSignal,
   ) => Promise<PreviewClasses>
+  // The values of a metadata track, for the drawn cells.
+  readonly values: (
+    cells: PreviewCells,
+    trackId: string,
+    signal?: AbortSignal,
+  ) => Promise<PreviewValues>
 }
 
 export type PreviewUnavailable =
@@ -207,6 +240,10 @@ export async function openPreviewSource(
           }),
           classSignal,
         ),
+      // Xenium has no metadata tracks of its own; imported ones belong to
+      // the open dataset, which the main view gives (CollectionPreviewStore).
+      values: async (cells, _trackId, valueSignal) =>
+        previewValues(cells, [], valueSignal),
     }
   }
 
@@ -218,6 +255,8 @@ export async function openPreviewSource(
   }
 
   const hasAnnotations = hasMethod(opened, 'annotations')
+  const hasTracks =
+    hasMethod(opened, 'metadataTracks') && hasMethod(opened, 'metadataTrackValues')
   // Each read asks for the dataset again rather than keeping it, so a dataset
   // the cache has disposed is opened again (see datasetCache.ts).
   const dataset = () => previewDataset(url, loaders)
@@ -250,6 +289,13 @@ export async function openPreviewSource(
           : [],
         classSignal,
       ),
+    // A dataset without the track draws its cells without values.
+    values: async (cells, trackId, valueSignal) =>
+      previewValues(
+        cells,
+        hasTracks ? await trackValues(await dataset(), trackId, valueSignal) : [],
+        valueSignal,
+      ),
   }
 }
 
@@ -266,6 +312,25 @@ interface PreviewDataset {
     readonly groupId?: string
     readonly signal?: AbortSignal
   }): Promise<readonly Annotation<string>[]>
+  metadataTracks(): Promise<readonly { readonly id: string }[]>
+  metadataTrackValues(
+    trackId: string,
+    options: { readonly signal?: AbortSignal },
+  ): Promise<readonly PreviewCellValue[]>
+}
+
+// The track's values, or none when the dataset has no track of that ID, as
+// asking for a missing one is an error.
+async function trackValues(
+  dataset: PreviewDataset,
+  trackId: string,
+  signal: AbortSignal | undefined,
+): Promise<readonly PreviewCellValue[]> {
+  const tracks = await dataset.metadataTracks()
+  throwIfAborted(signal)
+  if (!tracks.some((track) => track.id === trackId)) return []
+
+  return dataset.metadataTrackValues(trackId, signal === undefined ? {} : { signal })
 }
 
 async function previewDataset(
@@ -445,6 +510,39 @@ function previewClasses(
     classOf,
     members,
   }
+}
+
+// A track's values by drawn cell. A missing value (NaN, as AnnData stores
+// one) or an infinite one is no value, as in the main view, and so is a cell
+// the track does not list.
+export function previewValues(
+  cells: PreviewCells,
+  values: readonly PreviewCellValue[],
+  signal?: AbortSignal,
+): PreviewValues {
+  throwIfAborted(signal)
+
+  const cellIndex = previewCellIndex(cells)
+  const byCell = new Float64Array(cells.cellIds.length).fill(Number.NaN)
+
+  for (const { cellId, value } of values) {
+    const index = cellIndex.get(cellId)
+    if (index === undefined || !Number.isFinite(value)) continue
+    byCell[index] = value
+  }
+
+  let count = 0
+  let min = Infinity
+  let max = -Infinity
+
+  for (const value of byCell) {
+    if (Number.isNaN(value)) continue
+    count += 1
+    if (value < min) min = value
+    if (value > max) max = value
+  }
+
+  return { values: byCell, count, min, max }
 }
 
 async function rejectLargeWholeFile(

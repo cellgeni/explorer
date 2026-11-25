@@ -80,6 +80,8 @@ function Bar({
     genes: previews?.genes ?? [],
     scoreMode: previews?.scoreMode ?? 'sum',
     annotationGroupId: previews?.annotations?.groupId ?? null,
+    metadataTrackId: null,
+    openTrack: null,
     paused: previews?.paused ?? false,
   })
 

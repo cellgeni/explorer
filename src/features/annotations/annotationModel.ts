@@ -571,7 +571,7 @@ export function metadataTrackRange(
   return `${metadataValueText(track.min)}-${metadataValueText(track.max)}`
 }
 
-function metadataValueText(value: number): string {
+export function metadataValueText(value: number): string {
   if (Number.isInteger(value)) return value.toLocaleString()
 
   return value.toLocaleString(
