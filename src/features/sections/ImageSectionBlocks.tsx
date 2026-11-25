@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent } from 'react'
 import { Segmented } from '../../components/ui'
 import { opacityToPercent } from '../../rendering/layerOpacity'
 import { MorphologyChannelControls } from '../morphology/MorphologyChannelControls'
+import { MorphologyTimePointControl } from '../morphology/MorphologyTimePointControl'
 import { MorphologyZPlaneControl } from '../morphology/MorphologyZPlaneControl'
 import type { CustomImageLayersModel, ImageSectionModel } from './imageSectionModel'
 
@@ -42,6 +43,20 @@ export function ImageZPlaneControl({ image }: { readonly image: ImageSectionMode
       zStack={image.zStack}
       requestedZPlane={image.requestedZPlane}
       onZPlaneChange={image.onZPlaneChange}
+    />
+  )
+}
+
+export function ImageTimePointControl({ image }: { readonly image: ImageSectionModel }) {
+  if (image.timeSeries === undefined) {
+    return null
+  }
+
+  return (
+    <MorphologyTimePointControl
+      timeSeries={image.timeSeries}
+      requestedTimePoint={image.requestedTimePoint}
+      onTimePointChange={image.onTimePointChange}
     />
   )
 }

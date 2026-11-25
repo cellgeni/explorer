@@ -241,6 +241,8 @@ export interface CellQueryModelInput {
   readonly imageChannels: readonly CellQueryImageChannel[]
   // The plane the canvas shows of a z-stack, or null.
   readonly imageZPlane: number | null
+  // The time point the canvas shows of a time series, or null (plan 28).
+  readonly imageTimePoint?: number | null
   readonly appendDebugEvent: AppendDebugEvent
   readonly createSession?: () => CellQuerySession
   readonly createImageMeasurements?: () => CellImageMeasurements
@@ -326,6 +328,7 @@ export function useCellQueryModel({
   loadCellOutlines,
   imageChannels,
   imageZPlane,
+  imageTimePoint = null,
   appendDebugEvent,
   createSession = createCellQuerySession,
   createImageMeasurements = createCellImageMeasurements,
@@ -451,6 +454,7 @@ export function useCellQueryModel({
       ...cellQueryImageColumns({
         channels: imageChannelList,
         z: imageZPlane ?? undefined,
+        timePoint: imageTimePoint ?? undefined,
         radius: imageRadius,
         channelsInUse: imageNeeds.channelsInUse,
       }),
@@ -459,6 +463,7 @@ export function useCellQueryModel({
       imageChannelList,
       imageNeeds.channelsInUse,
       imageRadius,
+      imageTimePoint,
       imageZPlane,
       nonImageColumns,
     ],
@@ -466,9 +471,9 @@ export function useCellQueryModel({
 
   // Measures what the image columns need while the window is open; another
   // dataset, or other cells, start again.
-  const imageChannelsRef = useRef({ imageChannels, imageZPlane })
+  const imageChannelsRef = useRef({ imageChannels, imageZPlane, imageTimePoint })
   useEffect(() => {
-    imageChannelsRef.current = { imageChannels, imageZPlane }
+    imageChannelsRef.current = { imageChannels, imageZPlane, imageTimePoint }
   })
   useEffect(() => {
     measurements.reset()
@@ -476,9 +481,11 @@ export function useCellQueryModel({
   useEffect(() => {
     measurements.sync(active ? imageNeeds.needs : [], {
       cells,
-      loaderFor: (channelId, z) => {
+      loaderFor: (channelId, z, timePoint) => {
         const current = imageChannelsRef.current
-        if (z !== current.imageZPlane) return null
+        if (z !== current.imageZPlane || timePoint !== current.imageTimePoint) {
+          return null
+        }
         return (
           current.imageChannels.find((channel) => channel.id === channelId)?.loader ??
           null

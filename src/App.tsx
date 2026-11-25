@@ -249,7 +249,7 @@ import {
 } from './features/analysis/analysisEmbeddingModel'
 import { useAnalysisEmbeddingWorkflow } from './features/analysis/useAnalysisEmbeddingWorkflow'
 import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkflow'
-import { useMorphologyZPlaneWorkflow } from './features/morphology/useMorphologyZPlaneWorkflow'
+import { useMorphologyPlaneWorkflow } from './features/morphology/useMorphologyPlaneWorkflow'
 import { MorphologyVolumeView } from './features/morphology/MorphologyVolumeView'
 import { morphologyVolumeLevels } from './features/morphology/useMorphologyVolumeWorkflow'
 import { customMorphologyLayerChannels } from './features/morphology/customMorphologyLayers'
@@ -1971,6 +1971,11 @@ export function App({ dependencies }: AppProps = {}) {
     (morphologyImage === null && linkImageOpening
       ? initialShareableState.morphologyZPlane
       : undefined)
+  const shareableMorphologyTimePoint =
+    morphologyImage?.timeSeries?.timePoint ??
+    (morphologyImage === null && linkImageOpening
+      ? initialShareableState.morphologyTimePoint
+      : undefined)
   const magicLensIsCursorActive =
     magicLensScope === 'cursor' && magicLensActive && magicLensLoadEnabled
   const magicLensCanScan =
@@ -3610,13 +3615,17 @@ export function App({ dependencies }: AppProps = {}) {
         setMorphologyState,
       },
     })
-  const { requestedZPlane: requestedMorphologyZPlane, selectMorphologyZPlane } =
-    useMorphologyZPlaneWorkflow({
-      callbacks: { appendDebugEvent },
-      data: { morphologyImage },
-      refs: { loadRequestIdRef: loadRequestId },
-      setters: { setMorphologyImage, setMorphologyState },
-    })
+  const {
+    requestedZPlane: requestedMorphologyZPlane,
+    requestedTimePoint: requestedMorphologyTimePoint,
+    selectMorphologyZPlane,
+    selectMorphologyTimePoint,
+  } = useMorphologyPlaneWorkflow({
+    callbacks: { appendDebugEvent },
+    data: { morphologyImage },
+    refs: { loadRequestIdRef: loadRequestId },
+    setters: { setMorphologyImage, setMorphologyState },
+  })
   // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
   // dataset it was opened on: another dataset opens in 2D.
   const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
@@ -4334,6 +4343,7 @@ export function App({ dependencies }: AppProps = {}) {
       measurementUnit,
       morphologyEnabledChannelIds: shareableMorphologyEnabledChannelIds,
       morphologyZPlane: shareableMorphologyZPlane,
+      morphologyTimePoint: shareableMorphologyTimePoint,
       imageView: shareableImageView,
       cellView: shareableCellView,
       observationColorMode,
@@ -4519,6 +4529,7 @@ export function App({ dependencies }: AppProps = {}) {
               genePanelState.status === 'ready' ? genePanelState.genes.length : null,
             channelCount: morphologyImage?.channelLoaders.length ?? 0,
             zPlaneCount: morphologyImage?.zStack?.sizeZ ?? 1,
+            timePointCount: morphologyImage?.timeSeries?.sizeT ?? 1,
             imageLoading: morphologyState.status === 'loading',
             hasFlatImage: flatMorphologyImage !== null,
             imageSize: datasetImageSize(
@@ -4780,6 +4791,9 @@ export function App({ dependencies }: AppProps = {}) {
     morphologyZStack: morphologyImage?.zStack,
     requestedMorphologyZPlane,
     selectMorphologyZPlane,
+    morphologyTimeSeries: morphologyImage?.timeSeries,
+    requestedMorphologyTimePoint,
+    selectMorphologyTimePoint,
     setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
     setImageLayerOpacity,
     updateMorphologyChannel,
@@ -5231,6 +5245,7 @@ export function App({ dependencies }: AppProps = {}) {
     loadCellOutlines: loadActiveCellOutlines,
     imageChannels: cellQueryImageChannels,
     imageZPlane: morphologyImage?.zStack?.zPlane ?? null,
+    imageTimePoint: morphologyImage?.timeSeries?.timePoint ?? null,
     appendDebugEvent,
   })
 

@@ -17,7 +17,9 @@ import {
   type ImagePyramidDecodedTile,
   type ImagePyramidLoader,
   type ImagePyramidPixelArray,
+  type ImagePyramidPlane,
   type ImagePyramidTilePixels,
+  type ImagePyramidTimeSeries,
   type ImagePyramidTileRenderOptions,
   type ImagePyramidVolume,
   type ImagePyramidVolumeLevel,
@@ -25,6 +27,7 @@ import {
 } from '../data/imagePyramid'
 import type { TileSamples, TileSampling } from '../data/tileSamples'
 import { micrometersPerLengthUnit } from '../data/lengthUnits'
+import { timeUnitSymbol } from '../data/timeUnits'
 import type { Array as ZarrArray, DataType } from 'zarrita'
 import {
   consolidatedZarrStore,
@@ -100,6 +103,7 @@ interface OmeZarrImageSelection {
   readonly sourceUrl: string
   readonly channelIndex?: number
   readonly zIndex?: number
+  readonly tIndex?: number
 }
 
 interface OmeZarrAxis {
@@ -153,12 +157,14 @@ interface OmeZarrLoaderOptions {
   readonly xAxis: number
   readonly yAxis: number
   readonly zAxis?: number
+  readonly tAxis?: number
   readonly channelAxis?: number
   readonly selectedChannelIndex?: number
   // Index read on each axis other than x, y and channel, at level 0.
   readonly planeIndices: readonly number[]
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly zStack?: ImagePyramidZStack
+  readonly timeSeries?: ImagePyramidTimeSeries
   readonly units: UnitsDescriptor
   readonly origin?: { readonly x: number; readonly y: number }
   readonly placement?: ImageFramePlacement
@@ -212,6 +218,7 @@ export async function openOmeZarrImageWithOptions(
   const yAxis = findRequiredAxis(axes, 'y')
   const channelAxis = findOptionalChannelAxis(axes)
   const zAxis = findOptionalZAxis(axes)
+  const tAxis = findOptionalTAxis(axes)
   const declaredLevels = await Promise.all(
     multiscale.datasets.map(async (dataset) => {
       const array =
@@ -261,18 +268,18 @@ export async function openOmeZarrImageWithOptions(
     shape: firstArray.shape,
     attrs: group.attrs,
     zAxis,
+    tAxis,
     ...(selection.zIndex === undefined ? {} : { selectedZIndex: selection.zIndex }),
+    ...(selection.tIndex === undefined ? {} : { selectedTIndex: selection.tIndex }),
   })
   const sizeZ = zAxis === undefined ? 1 : (firstArray.shape[zAxis] ?? 1)
+  const sizeT = tAxis === undefined ? 1 : (firstArray.shape[tAxis] ?? 1)
   const channels = buildOmeZarrChannels({
     array: firstArray,
     attrs: group.attrs,
     channelAxis,
     // Channel loaders read the plane this URL selects.
-    sourceUrl:
-      selection.zIndex === undefined
-        ? selection.sourceUrl
-        : omeZarrPlaneSelectionUrl(selection.sourceUrl, selection.zIndex),
+    sourceUrl: omeZarrSelectionUrl(selection.sourceUrl, selection),
     ...(sizeZ > 1 ? { sizeZ } : {}),
   })
   const micrometersPerPlane =
@@ -292,6 +299,18 @@ export async function openOmeZarrImageWithOptions(
           ...(micrometersPerPlane === undefined ? {} : { micrometersPerPlane }),
           defaultZPlane: planeIndices[zAxis] ?? 0,
         }
+  const timeStep =
+    tAxis === undefined
+      ? undefined
+      : timeStepForAxis({ axis: tAxis, axes, dataset: firstDataset, multiscale })
+  const timeSeries: ImagePyramidTimeSeries | undefined =
+    tAxis === undefined || sizeT <= 1 || channels.length === 0
+      ? undefined
+      : {
+          sizeT,
+          defaultTimePoint: planeIndices[tAxis] ?? 0,
+          ...(timeStep === undefined ? {} : { timeStep }),
+        }
 
   return new OmeZarrImagePyramidLoader({
     url,
@@ -301,6 +320,7 @@ export async function openOmeZarrImageWithOptions(
     xAxis,
     yAxis,
     ...(zStack === undefined || zAxis === undefined ? {} : { zAxis }),
+    ...(timeSeries === undefined || tAxis === undefined ? {} : { tAxis }),
     ...(channelAxis === undefined ? {} : { channelAxis }),
     ...(selection.channelIndex === undefined
       ? {}
@@ -308,6 +328,7 @@ export async function openOmeZarrImageWithOptions(
     planeIndices,
     channels,
     ...(zStack === undefined ? {} : { zStack }),
+    ...(timeSeries === undefined ? {} : { timeSeries }),
     units,
     ...(planarTransform === undefined
       ? {}
@@ -402,6 +423,23 @@ export function omeZarrPlaneSelectionUrl(url: string, zIndex: number): string {
   return withHashParameter(url, 'z', zIndex)
 }
 
+// The image read at the z plane and time point a selection names; an index
+// left out is the image's own.
+function omeZarrSelectionUrl(
+  url: string,
+  selection: {
+    readonly zIndex?: number | undefined
+    readonly tIndex?: number | undefined
+  },
+): string {
+  const withTime =
+    selection.tIndex === undefined ? url : withHashParameter(url, 't', selection.tIndex)
+
+  return selection.zIndex === undefined
+    ? withTime
+    : withHashParameter(withTime, 'z', selection.zIndex)
+}
+
 function withHashParameter(url: string, name: string, value: number): string {
   const parsedUrl = new URL(url)
   const params = new URLSearchParams(
@@ -423,12 +461,17 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   readonly imageHeight: ImagePixels
   readonly channels: readonly ImagePyramidChannelInfo[]
   readonly zStack?: ImagePyramidZStack
+  readonly timeSeries?: ImagePyramidTimeSeries
   readonly placement?: ImageFramePlacement
+  private readonly options: OmeZarrLoaderOptions
+  // The loader `atPlane` derives planes from: this one, unless it was derived.
+  private readonly root: OmeZarrImagePyramidLoader
   private readonly levels: readonly OmeZarrLevelMeta[]
   private readonly axes: readonly OmeZarrAxis[]
   private readonly xAxis: number
   private readonly yAxis: number
   private readonly zAxis: number | undefined
+  private readonly tAxis: number | undefined
   private readonly channelAxis: number | undefined
   private readonly selectedChannelIndex: number | undefined
   private readonly planeIndices: readonly number[]
@@ -438,19 +481,22 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   private readonly createBitmap: (imageData: ImageData) => Promise<ImageBitmap>
   private readonly decodePool: ZarrDecodePool | null
 
-  constructor(options: OmeZarrLoaderOptions) {
+  constructor(options: OmeZarrLoaderOptions, root?: OmeZarrImagePyramidLoader) {
     const firstLevel = options.levels[0]
 
     if (firstLevel === undefined) {
       throw new Error('OME-Zarr image requires at least one pyramid level.')
     }
 
+    this.options = options
+    this.root = root ?? this
     this.url = options.url
     this.levels = options.levels
     this.axes = options.axes
     this.xAxis = options.xAxis
     this.yAxis = options.yAxis
     this.zAxis = options.zAxis
+    this.tAxis = options.tAxis
     this.channelAxis = options.channelAxis
     this.selectedChannelIndex = options.selectedChannelIndex
     this.planeIndices = options.planeIndices
@@ -458,6 +504,10 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
 
     if (options.zStack !== undefined) {
       this.zStack = options.zStack
+    }
+
+    if (options.timeSeries !== undefined) {
+      this.timeSeries = options.timeSeries
     }
 
     if (options.placement !== undefined) {
@@ -475,6 +525,63 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     this.sourceKey = options.sourceUrl
     this.createBitmap = options.createBitmap
     this.decodePool = options.decodePool ?? null
+  }
+
+  // Planes are derived from the loader that was opened, so its own plane maps
+  // back to it, and to its URL and caches.
+  atPlane(plane: ImagePyramidPlane): OmeZarrImagePyramidLoader {
+    const root = this.root
+
+    if (root !== this) {
+      const z = plane.z ?? this.planeIndexOn(this.zAxis)
+      const t = plane.t ?? this.planeIndexOn(this.tAxis)
+
+      return root.atPlane({
+        ...(z === undefined ? {} : { z }),
+        ...(t === undefined ? {} : { t }),
+      })
+    }
+
+    const shape = this.levelMetaFor(0).array.shape
+    const planeIndices = [...this.planeIndices]
+    const select = (axis: number | undefined, index: number | undefined) => {
+      if (axis !== undefined && index !== undefined && Number.isFinite(index)) {
+        planeIndices[axis] = Math.min(
+          Math.max(0, Math.round(index)),
+          Math.max(0, (shape[axis] ?? 1) - 1),
+        )
+      }
+    }
+
+    select(this.zAxis, plane.z)
+    select(this.tAxis, plane.t)
+
+    if (planeIndices.every((index, axis) => index === this.planeIndices[axis])) {
+      return this
+    }
+
+    const z = this.zAxis === undefined ? undefined : planeIndices[this.zAxis]
+    const t = this.tAxis === undefined ? undefined : planeIndices[this.tAxis]
+    const { zStack, timeSeries } = this.options
+
+    return new OmeZarrImagePyramidLoader(
+      {
+        ...this.options,
+        url: omeZarrSelectionUrl(this.url, { zIndex: z, tIndex: t }),
+        planeIndices,
+        ...(zStack === undefined || z === undefined
+          ? {}
+          : { zStack: { ...zStack, defaultZPlane: z } }),
+        ...(timeSeries === undefined || t === undefined
+          ? {}
+          : { timeSeries: { ...timeSeries, defaultTimePoint: t } }),
+      },
+      root,
+    )
+  }
+
+  private planeIndexOn(axis: number | undefined): number | undefined {
+    return axis === undefined ? undefined : this.planeIndices[axis]
   }
 
   bestLevel(deckScale: number): number {
@@ -1131,12 +1238,14 @@ function parseOmeZarrImageSelection(url: string): OmeZarrImageSelection {
   const params = new URLSearchParams(hash)
   const channelIndex = hashParameterIndex(params.get('c') ?? params.get('channel'))
   const zIndex = hashParameterIndex(params.get('z'))
+  const tIndex = hashParameterIndex(params.get('t'))
   parsedUrl.hash = ''
 
   return {
     sourceUrl: parsedUrl.toString(),
     ...(channelIndex === undefined ? {} : { channelIndex }),
     ...(zIndex === undefined ? {} : { zIndex }),
+    ...(tIndex === undefined ? {} : { tIndex }),
   }
 }
 
@@ -1254,6 +1363,7 @@ function axesFromArray(
       name,
       ...(spatialAxisName(name) ? { type: 'space' } : {}),
       ...(name === 'c' ? { type: 'channel' } : {}),
+      ...(name === 't' ? { type: 'time' } : {}),
     }))
   }
 
@@ -1313,26 +1423,29 @@ function normalizeAxis(axis: unknown, index: number): OmeZarrAxis {
 // The index read on each axis other than x and y. On z: the plane the URL
 // selects, else the one OMERO rendering settings open on
 // (`omero.rdefs.defaultZ`), else the middle plane, as for other z-stacks. On t:
-// `omero.rdefs.defaultT`, else 0. bioformats2raw sets defaultZ to the middle of
-// a z-stack, whose first plane can be nearly empty.
+// the time point the URL selects, else `omero.rdefs.defaultT`, else 0.
+// bioformats2raw sets defaultZ to the middle of a z-stack, whose first plane
+// can be nearly empty.
 function initialPlaneIndices(options: {
   readonly axes: readonly OmeZarrAxis[]
   readonly shape: readonly number[]
   readonly attrs: Readonly<Record<string, unknown>>
   readonly zAxis: number | undefined
+  readonly tAxis: number | undefined
   readonly selectedZIndex?: number
+  readonly selectedTIndex?: number
 }): readonly number[] {
   const { attrs } = options
   const omero = objectRecord(attrs.omero) ?? objectRecord(objectRecord(attrs.ome)?.omero)
   const rdefs = objectRecord(omero?.rdefs)
 
-  return options.axes.map((axis, index) => {
+  return options.axes.map((_axis, index) => {
     const size = options.shape[index] ?? 1
     const preferred =
       index === options.zAxis
         ? [options.selectedZIndex, rdefs?.defaultZ, Math.floor((size - 1) / 2)]
-        : axis.name.toLowerCase() === 't' || axis.type === 'time'
-          ? [rdefs?.defaultT]
+        : index === options.tAxis
+          ? [options.selectedTIndex, rdefs?.defaultT]
           : []
 
     return (
@@ -1359,6 +1472,15 @@ function findRequiredAxis(axes: readonly OmeZarrAxis[], name: 'x' | 'y'): number
 
 function findOptionalZAxis(axes: readonly OmeZarrAxis[]): number | undefined {
   const index = axes.findIndex((axis) => axis.name.toLowerCase() === 'z')
+
+  return index >= 0 ? index : undefined
+}
+
+// The first axis named `t` or typed `time` (plan 28-D1).
+function findOptionalTAxis(axes: readonly OmeZarrAxis[]): number | undefined {
+  const index = axes.findIndex(
+    (axis) => axis.name.toLowerCase() === 't' || axis.type === 'time',
+  )
 
   return index >= 0 ? index : undefined
 }
@@ -1549,6 +1671,27 @@ function micrometersPerPlaneForAxis(options: {
     unitMultiplier
 
   return Number.isFinite(value) && value > 0 ? value : undefined
+}
+
+// Time between points along `axis`, when the axis declares a time unit, in
+// that unit's symbol (plan 28-D3).
+function timeStepForAxis(options: {
+  readonly axis: number
+  readonly axes: readonly OmeZarrAxis[]
+  readonly dataset: OmeZarrDatasetMetadata
+  readonly multiscale: OmeZarrMultiscaleMetadata
+}): { readonly value: number; readonly unit: string } | undefined {
+  const unit = timeUnitSymbol(options.axes[options.axis]?.unit)
+
+  if (unit === undefined) {
+    return undefined
+  }
+
+  const value =
+    scaleForAxis(options.axis, options.multiscale.coordinateTransformations) *
+    scaleForAxis(options.axis, options.dataset.coordinateTransformations)
+
+  return Number.isFinite(value) && value > 0 ? { value, unit } : undefined
 }
 
 // Plane spacing at a level in the units of the x and y pixel sizes: micrometres

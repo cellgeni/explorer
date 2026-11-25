@@ -391,9 +391,11 @@ nucleus checkbox shown only when `summary().nuclei` names an element
   listed only among the skipped elements in the activity log. Flips, x/y
   swaps, and turns by multiples of 90° are shown, and turns under 1e-4 rad
   are dropped.
-- Labels read only `z = 0`, and neither images nor labels have a `t` choice.
-  Images open on `omero.rdefs.defaultZ`, else the middle plane, and have the
-  `Z plane` control like other z-stacks.
+- Labels read only `z = 0` and `t = 0`. Images open on
+  `omero.rdefs.defaultZ`, else the middle plane, and have the `Z plane`
+  control like other z-stacks; an image with a `t` axis has `Time point`.
+  spatialdata 0.9.0 does not write a `t` axis, so such a store is written by
+  other tools ([Phase 28](../plan/phases/28-time-points.md)).
 - Polygon holes, and every part of a MultiPolygon but the largest, are
   dropped.
 - Shapes are read whole, not by viewport. spatialdata-io writes

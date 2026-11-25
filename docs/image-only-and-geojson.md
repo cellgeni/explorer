@@ -38,7 +38,7 @@ TIFF requirements:
   another.
   The OME-XML must locate each plane (`TiffData`, or none for planes stored in
   IFD order), and each plane needs its own `SubIFDs` pyramid. Only the first
-  time point is shown.
+  time point of an OME-TIFF is shown.
 
 NDPI slides are also read as they come from the scanner: each pyramid level
 is one large JPEG, which the viewer reads in bands of rows and decodes in
@@ -76,8 +76,9 @@ without a channel axis, opens on the plane its OMERO rendering settings name
 (`omero.rdefs.defaultZ`), or the middle plane, and `Z plane` shows another;
 the depth is shown when the `z` axis declares a length unit. `View` › `3D`
 shows the whole z-stack in 3D at a resolution the GPU can hold. Each channel and
-plane opens as a `#c=N&z=M` loader. Only one time point is shown:
-`omero.rdefs.defaultT`, or the first.
+plane opens as a `#c=N&z=M` loader. An image with a `t` axis opens at
+`omero.rdefs.defaultT`, or the first time point, and `Time point` shows
+another at the same z plane.
 
 ## Platform Behavior
 

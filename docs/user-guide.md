@@ -299,7 +299,10 @@ in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
 or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, the Atera 3D DAPI
 stack chosen under `Morphology`, or a BioImage Archive OME-Zarr), `Z plane`
 picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
-rendering settings name. For an OME-Zarr z-stack, `View` › `3D` shows the
+rendering settings name. For an OME-Zarr with time points (a time-lapse, such
+as IDR's idr0052A), `Time point` picks the time shown; it opens at the time
+point the OMERO rendering settings name, else the first, and keeps the z
+plane. Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
 whole stack as a volume you can rotate, with `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled

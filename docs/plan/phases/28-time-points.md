@@ -25,6 +25,9 @@ plan's four questions the same day
 ([Answered Questions](#answered-questions)); D6, D8, D11 and Later carry
 the answers.
 
+M1 (tasks B to D, choosing a time point) was built the same day:
+[M1 Results](#m1-results-2026-11-25).
+
 The plan rests on a code map made on 2026-11-25 at `d52cc1c`. It is cited
 below as `file:line`; line numbers drift as the code changes.
 
@@ -348,20 +351,20 @@ same day; the others stand as proposed.
   - Bitmap memory per time point.
   - Revisit K and the replay cache in D8, and the 2 s fallback in D6, if
     the numbers call for it.
-- [ ] **B. The loader.** (M) `findOptionalTAxis`; `#t=` parsed
+- [x] **B. The loader.** (M) `findOptionalTAxis`; `#t=` parsed
       (`parseOmeZarrImageSelection`) and kept in channel URLs; a
       `selectedTIndex` for `initialPlaneIndices`; `timeSeries` on the
       loader (`sizeT`, `defaultTimePoint`, `interval`); `atPlane` (D5).
   - Tests: `t` selection, `defaultT`, a `t` downsampled across levels,
     `atPlane` making no fetches, channels keeping `t`, the v3
     `dimension_names` case, a `t` axis without a channel axis.
-- [ ] **C. The plane in the app.** (M) `MorphologyImage` with
+- [x] **C. The plane in the app.** (M) `MorphologyImage` with
       `timeSeries` and `openPlane({ z?, t? })` (D4); the loader cache keyed
       `z:t`; `t` restored from the link (D2) and written to it (D12); the
       layer summary and dataset info (D7).
   - Tests in `morphologyImage.test.ts`, `shareableState.test.ts`,
     `layerPanelModel.test.ts` and `datasetInfoModel` tests.
-- [ ] **D. The slider.** (S) `MorphologyTimePointControl` beside the z
+- [x] **D. The slider.** (S) `MorphologyTimePointControl` beside the z
       control, and the plane workflow generalised from
       `useMorphologyZPlaneWorkflow`. Tests as for the z control.
 - [ ] **E. Whole-frame swaps.** (M) The canvas keeps the old plane's caches
@@ -421,6 +424,36 @@ same day; the others stand as proposed.
   after B.
 - One PR per milestone against `main`, in order. The total is about four
   weeks.
+
+## M1 Results (2026-11-25)
+
+Tasks B to D, on the plan's branch.
+
+- **The loader** (`omeZarrLoader.ts`): `findOptionalTAxis`; `#t=` parsed and
+  kept in channel URLs, written before `z` (`#c=1&t=3&z=1`); `timeSeries` with
+  `sizeT`, `defaultTimePoint` and `timeStep`; `atPlane`. A loader keeps the
+  one it was opened as its root, and every plane is derived from the root, so
+  the root's own plane gives the root back, with its URL and caches. Time
+  units have symbols in `timeUnits.ts`.
+- **The image** (`morphologyImage.ts`): `openPlane({ z?, t? })` moved from
+  `zStack` to the image, with `timeSeries` beside `zStack`. For a loader with
+  `atPlane`, the channels are opened once at the loader's plane and each plane
+  is derived from them; TIFF still opens each plane's `#ifd=`. The cache of 8
+  planes is keyed `z:t`.
+- **The workflow**: `useMorphologyZPlaneWorkflow` became
+  `useMorphologyPlaneWorkflow`. A z step and a time step share one request, so
+  a time step made while a z plane is opening keeps that z.
+- **The rest of M1**: `MorphologyTimePointControl` under `Z plane`; `t` in the
+  share link and restored on open; `t N of M` in the layer summary; time points
+  in dataset info.
+- **Taken from task J**: Cell Query's image columns are keyed by the time
+  point too (`time{n}` in the column ID, as `t` is the threshold's), so a
+  column measured at one time point is not shown at another. They are not yet
+  paused during Play (D14).
+- **Checked** in the dev build on idr0052A: it opens at `z=15&t=21` from
+  `rdefs`; time point 31 shows the cell later in mitosis; a reload restores
+  `t=30` from the link. 3,919 unit tests pass.
+- **Not yet**: the spike's request counts and timings (task A).
 
 ## Risks
 

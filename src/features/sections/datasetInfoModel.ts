@@ -70,6 +70,9 @@ export interface DatasetFactsInput {
   // The dataset image's channels; custom image layers are not the dataset's.
   readonly channelCount: number
   readonly zPlaneCount: number
+  // Time points of the dataset image; 1 unless it is a time series. Optional
+  // for callers that never have one.
+  readonly timePointCount?: number
   // The dataset image is still being read (it reads after the cells).
   readonly imageLoading: boolean
   // A single RGB tissue image (Visium) rather than channels.
@@ -165,9 +168,15 @@ function imageFact(input: DatasetFactsInput): string {
   const channels = `${input.channelCount.toLocaleString()} ${
     input.channelCount === 1 ? 'channel' : 'channels'
   }`
-  return input.zPlaneCount > 1
-    ? `${channels} · ${input.zPlaneCount.toLocaleString()} z planes`
-    : channels
+  const timePointCount = input.timePointCount ?? 1
+
+  return [
+    channels,
+    input.zPlaneCount > 1 ? `${input.zPlaneCount.toLocaleString()} z planes` : null,
+    timePointCount > 1 ? `${timePointCount.toLocaleString()} time points` : null,
+  ]
+    .filter((part) => part !== null)
+    .join(' · ')
 }
 
 // Platform, counts, image, its size, pixel size and address, exact where the top bar's

@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type {
   MorphologyImageChannel,
+  MorphologyImageTimeSeries,
   MorphologyImageZStack,
 } from '../../data/morphologyImage'
 import { percentToOpacity } from '../../rendering/layerOpacity'
@@ -11,14 +12,17 @@ import type {
 } from '../morphology/customMorphologyLayers'
 import type { MorphologyChannelSetting } from '../morphology/morphologyChannels'
 
-// The dataset image: opacity, z plane, channels and custom image layers
-// (plan 15.2-A). Opacities are 0–1; the controls show percent.
+// The dataset image: opacity, z plane, time point, channels and custom image
+// layers (plan 15.2-A). Opacities are 0–1; the controls show percent.
 export interface ImageSectionModel {
   readonly opacity: number
   readonly onOpacityPercentChange: (percent: number) => void
   readonly zStack: MorphologyImageZStack | undefined
   readonly requestedZPlane: number | null
   readonly onZPlaneChange: (zPlane: number) => void
+  readonly timeSeries: MorphologyImageTimeSeries | undefined
+  readonly requestedTimePoint: number | null
+  readonly onTimePointChange: (timePoint: number) => void
   // Set when the dataset image is a z-stack the 3D view can show.
   readonly volumeView: ImageVolumeViewModel | null
   readonly channels: readonly MorphologyImageChannel[]
@@ -66,6 +70,9 @@ export interface ImageSectionModelInput {
   readonly morphologyZStack: MorphologyImageZStack | undefined
   readonly requestedMorphologyZPlane: number | null
   readonly selectMorphologyZPlane: (zPlane: number) => void
+  readonly morphologyTimeSeries: MorphologyImageTimeSeries | undefined
+  readonly requestedMorphologyTimePoint: number | null
+  readonly selectMorphologyTimePoint: (timePoint: number) => void
   readonly setCustomLayerOpacity: (imageUrl: string, opacity: number) => void
   readonly setImageLayerOpacity: Dispatch<SetStateAction<number>>
   readonly updateMorphologyChannel: ImageSectionModel['onUpdateChannel']
@@ -97,6 +104,9 @@ export function useImageSectionModel({
   morphologyZStack,
   requestedMorphologyZPlane,
   selectMorphologyZPlane,
+  morphologyTimeSeries,
+  requestedMorphologyTimePoint,
+  selectMorphologyTimePoint,
   setCustomLayerOpacity,
   setImageLayerOpacity,
   updateMorphologyChannel,
@@ -115,6 +125,9 @@ export function useImageSectionModel({
     zStack: morphologyZStack,
     requestedZPlane: requestedMorphologyZPlane,
     onZPlaneChange: selectMorphologyZPlane,
+    timeSeries: morphologyTimeSeries,
+    requestedTimePoint: requestedMorphologyTimePoint,
+    onTimePointChange: selectMorphologyTimePoint,
     volumeView: volumeViewAvailable
       ? {
           open: volumeViewOpen,

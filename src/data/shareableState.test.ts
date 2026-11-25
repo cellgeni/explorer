@@ -320,6 +320,19 @@ describe('shareableState', () => {
     expect(parseShareableState('#z=1.5').morphologyZPlane).toBeUndefined()
   })
 
+  it('round-trips the time point beside the z plane and ignores invalid ones', () => {
+    const hash = formatShareableState({ morphologyZPlane: 15, morphologyTimePoint: 0 })
+
+    expect(hash).toContain('t=0')
+    expect(parseShareableState(hash)).toEqual({
+      linkVersion: 2,
+      morphologyZPlane: 15,
+      morphologyTimePoint: 0,
+    })
+    expect(parseShareableState('#t=-1').morphologyTimePoint).toBeUndefined()
+    expect(parseShareableState('#t=2.5').morphologyTimePoint).toBeUndefined()
+  })
+
   it('keeps a compact key for rounded view state comparisons', () => {
     const state = viewStateToShareable({
       target: [1.12349, 2.56789, 0],

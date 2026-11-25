@@ -546,8 +546,10 @@ transform.
 - Axes come from `axes`, else array dimension names, else by position. A 5D
   array (OME-Zarr 0.1 and 0.2) is `t, c, z, y, x`; other ranks end
   `…, c, y, x`. `x` and `y` are required. `z` starts at `omero.rdefs.defaultZ`,
-  else the middle plane, and other planes open as `#z=N` loaders; `t` is
-  `defaultT`, else 0.
+  else the middle plane, and other planes open as `#z=N` loaders. The time
+  axis is the first named `t` or typed `time`; `t` starts at `#t=N`, else
+  `defaultT`, else 0, and `Time point` shows another. Other planes and time
+  points are made from the opened loaders without requests (`atPlane`).
 - µm/px is the product of multiscale and dataset `scale` values for x, and
   for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
   the image's extent and fit). Units are converted from any length the
@@ -748,8 +750,8 @@ fails, tiles are decoded and sampled on the main thread.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only one time point of OME-Zarr images (`defaultT`, else 0) is shown, and
-  only `t = 0` of OME-TIFFs.
+- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points have no `Play`
+  yet ([Phase 28](../plan/phases/28-time-points.md)).
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
 - The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or

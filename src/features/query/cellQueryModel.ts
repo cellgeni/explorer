@@ -40,6 +40,8 @@ export interface CellQueryImageColumnSpec {
   readonly level: number
   // The z plane of a z-stack (26-D10).
   readonly z?: number
+  // The time point of a time series (plan 28-D14).
+  readonly timePoint?: number
   // `% above`'s threshold, in the image's units (26-D6).
   readonly threshold?: number
   // The disc's radius in micrometres, where cells have no area (26-D4).
@@ -171,14 +173,15 @@ export function trackColumnId(trackId: string): string {
 
 const IMAGE_COLUMN_PREFIX = 'image:'
 
-// `image:{stat}:{level}:[z{n}:][t{threshold}:][r{radius}:]{channel}`, the
-// channel last as it may hold colons (`Channel:0`, `{layer}:Channel:0`).
+// `image:{stat}:{level}:[z{n}:][time{n}:][t{threshold}:][r{radius}:]{channel}`,
+// the channel last as it may hold colons (`Channel:0`, `{layer}:Channel:0`).
 export function imageColumnId(spec: CellQueryImageColumnSpec): string {
   return [
     'image',
     spec.stat,
     spec.level.toString(),
     ...(spec.z === undefined ? [] : [`z${spec.z.toString()}`]),
+    ...(spec.timePoint === undefined ? [] : [`time${spec.timePoint.toString()}`]),
     ...(spec.stat === 'above' && spec.threshold !== undefined
       ? [`t${String(spec.threshold)}`]
       : []),
@@ -191,6 +194,7 @@ const LINK_NUMBER = String.raw`-?\d+(?:\.\d+)?(?:e[-+]?\d+)?`
 const IMAGE_COLUMN_PARTS: readonly (readonly [keyof CellQueryImageColumnSpec, RegExp])[] =
   [
     ['z', /^z(\d+)$/],
+    ['timePoint', /^time(\d+)$/],
     ['threshold', new RegExp(`^t(${LINK_NUMBER})$`, 'i')],
     ['radius', new RegExp(`^r(${LINK_NUMBER})$`, 'i')],
   ]
@@ -241,6 +245,7 @@ export function imageColumnLabel(
         : `% above ${formatCellQueryNumber(spec.threshold)}`
   const details = [
     ...(spec.z === undefined ? [] : [`z ${spec.z.toString()}`]),
+    ...(spec.timePoint === undefined ? [] : [`t ${spec.timePoint.toString()}`]),
     micrometersPerPixel === undefined
       ? `level ${spec.level.toString()}`
       : `${formatMicrometersPerPixel(micrometersPerPixel)} µm/px`,
@@ -272,11 +277,13 @@ export interface CellQueryImageChannelOption {
 export function cellQueryImageColumns({
   channels,
   z,
+  timePoint,
   radius,
   channelsInUse,
 }: {
   readonly channels: readonly CellQueryImageChannelOption[]
   readonly z: number | undefined
+  readonly timePoint?: number | undefined
   // For cells without an area.
   readonly radius: number | undefined
   readonly channelsInUse: readonly string[]
@@ -290,6 +297,7 @@ export function cellQueryImageColumns({
     const base = {
       level: channel.defaultLevel,
       ...(z === undefined ? {} : { z }),
+      ...(timePoint === undefined ? {} : { timePoint }),
       ...(radius === undefined ? {} : { radius }),
       channelId: channel.id,
     }
