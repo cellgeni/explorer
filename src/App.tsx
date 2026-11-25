@@ -349,7 +349,7 @@ import {
   geometricAnnotationsToLayerData,
   geneExpressionScoreSpread,
   nonFiniteScoreCount,
-  styleCellBoundariesByGeneExpression,
+  styleCellBoundaryByGeneExpression,
   styleGridCellByGeneExpression,
   unscoredGridCell,
 } from './rendering/deckLayers'
@@ -1315,17 +1315,11 @@ export function App({ dependencies }: AppProps = {}) {
     : EMPTY_GENE_EXPRESSION_ELEMENTS
   const geneExpressionColorsReady =
     isGeneExpressionColorMode && geneExpressionState.status === 'ready'
+  // The outlines as read: the viewer colours them itself, so an expression
+  // batch copies none of them (O4).
   const visibleBoundaryLayerData = showCellBoundaries
     ? boundaryLayerData
     : EMPTY_CELL_BOUNDARY_DATA
-  const expressionStyledBoundaryLayerData = useMemo(
-    () =>
-      styleCellBoundariesByGeneExpression(
-        visibleBoundaryLayerData,
-        viewerGeneExpressionElements,
-      ),
-    [viewerGeneExpressionElements, visibleBoundaryLayerData],
-  )
   const viewerBoundaryState = viewerBoundaryLoadState(boundaryState, nucleusBoundaryState)
   const visibleNucleusBoundaryLayerData = showNucleusBoundaries
     ? nucleusBoundaryLayerData
@@ -1334,7 +1328,7 @@ export function App({ dependencies }: AppProps = {}) {
     platformAdapter,
     {
       boundaryState,
-      expressionBoundaryCount: expressionStyledBoundaryLayerData.length,
+      expressionBoundaryCount: visibleBoundaryLayerData.length,
       showCellBoundaries,
     },
   )
@@ -1361,11 +1355,18 @@ export function App({ dependencies }: AppProps = {}) {
     spatialGridCells.length,
   )
   const activeSelectedBoundaryCell = useMemo(() => {
-    const cell = platformActiveBoundaryCell(
+    const drawnCell = platformActiveBoundaryCell(
       platformAdapter,
       selectedBoundaryCell,
-      expressionStyledBoundaryLayerData,
+      visibleBoundaryLayerData,
     )
+    const cell =
+      drawnCell === null
+        ? null
+        : styleCellBoundaryByGeneExpression(
+            drawnCell,
+            gridCellExpressionStyleIndex.expressionByElementId,
+          )
 
     // Expression is read by bins, which no segmented cell's ID matches, so a
     // cell's selected-gene score is its share of its bins' counts (EXP-254).
@@ -1383,9 +1384,10 @@ export function App({ dependencies }: AppProps = {}) {
     )
     return expressionCount === undefined ? cell : { ...cell, expressionCount }
   }, [
-    expressionStyledBoundaryLayerData,
+    gridCellExpressionStyleIndex,
     platformAdapter,
     selectedBoundaryCell,
+    visibleBoundaryLayerData,
     visiumHdExpressionProjectionState,
   ])
   const viewerMicrometersPerPixel =
@@ -3472,11 +3474,8 @@ export function App({ dependencies }: AppProps = {}) {
       : visibleNucleusBoundaryLayerData.filter((nucleus) => nucleus.cellId === cellId)
   }, [activeSelectedBoundaryCell, selectedCell, visibleNucleusBoundaryLayerData])
   const drawnBoundaryById = useMemo(
-    () =>
-      new Map(
-        expressionStyledBoundaryLayerData.map((boundary) => [boundary.id, boundary]),
-      ),
-    [expressionStyledBoundaryLayerData],
+    () => new Map(visibleBoundaryLayerData.map((boundary) => [boundary.id, boundary])),
+    [visibleBoundaryLayerData],
   )
   const selectionHighlight = useMemo(
     () =>
@@ -5409,7 +5408,7 @@ export function App({ dependencies }: AppProps = {}) {
               expressionElements={viewerGeneExpressionElements}
               geneExpressionActive={geneExpressionColorsReady}
               geneExpressionOverlayEnabled={geneExpressionOverlayEnabled}
-              boundaries={expressionStyledBoundaryLayerData}
+              boundaries={visibleBoundaryLayerData}
               nucleusBoundaries={visibleNucleusBoundaryLayerData}
               cellBoundaryHoverEnabled={platformAdapter.cellBoundaryHoverEnabled(
                 showCellBoundaries,
