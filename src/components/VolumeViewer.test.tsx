@@ -118,7 +118,7 @@ describe('VolumeViewer', () => {
 
     expect(canvas).toHaveAttribute('tabindex', '0')
     expect(canvas).toHaveAccessibleDescription(
-      'Shift+arrows rotate · Arrows pan · + and − zoom · Home resets',
+      'Shift+arrows rotate · Arrows pan · + and − zoom · X, Y, Z look along an axis · Home resets',
     )
     // deck.gl's own root, which takes the keys the canvas hands it, leaves
     // the Tab order once loaded.
@@ -136,6 +136,77 @@ describe('VolumeViewer', () => {
     expect(deckGlMock.props.viewState?.rotationOrbit).toBe(90)
     fireEvent.keyDown(canvas, { key: 'Home', code: 'Home' })
     expect(deckGlMock.props.viewState).toEqual(fitted)
+  })
+
+  it('shows where x, y and z point as the view turns', () => {
+    const { view } = renderViewer()
+    const axisEnd = (name: string) => {
+      const line = view.querySelector(`.orbit-axis-${name} line`)
+      return [Number(line?.getAttribute('x2')), Number(line?.getAttribute('y2'))]
+    }
+    const fitted = deckGlMock.props.viewState
+
+    // Straight down: x right, y down as in 2D, z at the viewer.
+    act(() => {
+      deckGlMock.props.onViewStateChange?.({
+        viewState: { ...fitted!, rotationX: 0, rotationOrbit: 0 },
+      })
+    })
+    expect(axisEnd('x')).toEqual([30, expect.closeTo(0)])
+    expect(axisEnd('y')).toEqual([0, 30])
+    expect(axisEnd('z')).toEqual([expect.closeTo(0), expect.closeTo(0)])
+
+    // A quarter turn about y brings z to the right, and x, now pointing
+    // away, behind the others and faded.
+    act(() => {
+      deckGlMock.props.onViewStateChange?.({
+        viewState: { ...fitted!, rotationX: 0, rotationOrbit: 90 },
+      })
+    })
+    expect(axisEnd('z')).toEqual([30, expect.closeTo(0)])
+    expect(view.querySelector('.orbit-axis')).toHaveClass('orbit-axis-x')
+    expect(view.querySelector('.orbit-axis-x')).toHaveAttribute('opacity', '0.55')
+  })
+
+  it('turns to look along an axis it is clicked on, then from the other side', () => {
+    const { view } = renderViewer()
+    const fitted = deckGlMock.props.viewState!
+    const axis = (name: string) => view.querySelector(`.orbit-axis-${name}`)!
+
+    expect(axis('z').querySelector('title')).toHaveTextContent(
+      'Turn the view so that z points at you (Z)',
+    )
+    fireEvent.click(axis('z'))
+    // Straight down, as in 2D, keeping the target and zoom; deck.gl glides
+    // there.
+    expect(deckGlMock.props.viewState).toMatchObject({
+      target: fitted.target,
+      zoom: fitted.zoom,
+      rotationX: 0,
+      rotationOrbit: 0,
+      transitionDuration: 500,
+    })
+
+    // deck.gl reports where the glide ends.
+    act(() => {
+      deckGlMock.props.onViewStateChange?.({
+        viewState: { ...fitted, rotationX: 0, rotationOrbit: 0 },
+      })
+    })
+    expect(axis('z').querySelector('title')).toHaveTextContent(
+      'Turn the view so that z points away from you (Z)',
+    )
+    fireEvent.click(axis('z'))
+    expect(deckGlMock.props.viewState).toMatchObject({ rotationX: 0, rotationOrbit: 180 })
+  })
+
+  it('looks along an axis on X, Y and Z from its canvas', () => {
+    const { view } = renderViewer()
+    const canvas = within(view).getByRole('img', { name: '3D view canvas area' })
+
+    fireEvent.keyDown(canvas, { key: 'y', code: 'KeyY' })
+    // Side on, z up.
+    expect(deckGlMock.props.viewState).toMatchObject({ rotationX: -90, rotationOrbit: 0 })
   })
 
   it('returns to 2D', () => {

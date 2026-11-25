@@ -1284,12 +1284,21 @@ field.
 the Image section's `View` is `3D`. It draws the dataset image's enabled
 channels (the first six, in channel order) as a volume on black, with their
 colours and contrast windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
-scrolling zooms.
+scrolling zooms. The axes at the top right (`OrbitAxes.tsx`) turn with the
+view to show which way the image's x (red), y (green) and z (blue) increase;
+at the first view y runs down the screen as in 2D. An axis pointing away from
+you fades behind the others. Clicking an axis ("Turn the view so that z
+points at you") turns the camera, over half a second unless the system asks
+for reduced motion, to look along that axis, keeping the zoom and centre. z
+gives the 2D view's top-down look and y a side view with z up. Clicked again,
+it turns to look from the other side. Like dragging, this belongs to the
+canvas, whose X, Y and Z keys do the same: the axes pass over each other as
+the view turns, so they are not Tab stops of their own.
 
 The canvas is a Tab stop named "3D view canvas area" (`orbitKeyboard.ts`).
-Focused, Shift with an arrow key rotates, arrow keys pan, + and − zoom, and
-Home returns to the first view; the hint under the canvas lists these keys
-in place of the pointer ones.
+Focused, Shift with an arrow key rotates, arrow keys pan, + and − zoom, X, Y
+and Z look along an axis, and Home returns to the first view; the hint under
+the canvas lists these keys in place of the pointer ones.
 
 | Control     | Type                                  | Default       | Notes                                                                   |
 | ----------- | ------------------------------------- | ------------- | ----------------------------------------------------------------------- |
@@ -1316,7 +1325,7 @@ on the `Gene scale`, or by the annotation set's classes. Cells that score, or
 are in a shown class, are solid; the others are a faint outline. Other
 `Cell color` modes draw every cell grey. Drag rotates, Shift-drag pans, and
 scrolling zooms; the canvas, "3D cells canvas area", takes the
-[3D view](#3d-view)'s keys. The top line gives the cells and their z range ("201,789
+[3D view](#3d-view)'s keys and axes. The top line gives the cells and their z range ("201,789
 cells, z 0 to 780 µm").
 
 | Control       | Type                           | Default                                  | Notes                                                                                     |

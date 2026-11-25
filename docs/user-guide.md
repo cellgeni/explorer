@@ -310,7 +310,8 @@ while one is shown, and played ones stay in memory, so a second loop replays
 without reading them again. A new z plane or time point replaces the old one
 whole once it has loaded, or tile by tile after 2 s on a slow connection.
 Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
-whole stack as a volume you can rotate, with `Max intensity` and
+whole stack as a volume you can rotate, with axes at the top right showing
+which way x, y and z run (click one to look along it), `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled
 channels and says so when more are on. Xenium, H5AD,

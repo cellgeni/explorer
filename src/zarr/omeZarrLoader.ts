@@ -41,6 +41,7 @@ import type { ZarrChunkSource, ZarrChunkWindow } from '../workers/zarrDecodeMess
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
 import { isIcechunkUrl } from './icechunkUrl'
 import { isZarrZipUrl } from './zarrZipUrl'
+import { openWholeShardReader } from './wholeShardReads'
 import {
   isSupportedPixelArray,
   newPixelArray,
@@ -55,9 +56,11 @@ const DEFAULT_TILE_SIZE = 256
 const MAX_VIRTUAL_TILE_SIZE = 512
 const DECODED_CHUNK_CACHE_MAX_BYTES = 256 * 1024 * 1024
 const MAX_SOURCE_PIXEL_SCREEN_SIZE = 1.5
-// Slabs of a volume read at once: enough to hide request latency when each
-// slab is one plane, few enough to keep decoded slabs small.
-const VOLUME_SLAB_CONCURRENCY = 4
+// Slabs of a volume read at once: enough to keep a browser's six connections
+// to an HTTP/1.1 host busy when each slab is one request, few enough to keep
+// decoded slabs small. Eight read a 1,937-plane sharded level from EBI in
+// 2.3 s, four in 3.2 s.
+const VOLUME_SLAB_CONCURRENCY = 8
 // zarrita shares a shard's pending index read among the reads that need it,
 // under the signal of the read that started it, so cancelling a 2D tile read
 // can abort a volume read, and cancelling a volume read can abort a tile read.
@@ -749,7 +752,8 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
   }
 
   // Reads the level in slabs one chunk deep, so each chunk is decoded once,
-  // several slabs at a time.
+  // several slabs at a time. A sharded level whose slabs take whole shards is
+  // read a shard deep, one request per shard.
   async loadVolume(
     level: number,
     signal?: AbortSignal,
@@ -764,7 +768,27 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
     const meta = this.levelMetaFor(level)
     const { width, height } = meta
     const depth = meta.array.shape[zAxis] ?? 1
-    const slabDepth = Math.max(1, meta.array.chunks[zAxis] ?? 1)
+    const projectionFor = (zStart: number, zEnd: number) =>
+      this.axes.map((_axis, axis) =>
+        axis === zAxis
+          ? zarr.slice(zStart, zEnd)
+          : axis === this.xAxis || axis === this.yAxis
+            ? zarr.slice(null)
+            : axis === this.channelAxis
+              ? (this.selectedChannelIndex ?? 0)
+              : this.planeIndexAt(meta, axis),
+      )
+    const shardReader = await openWholeShardReader(meta.array)
+    throwIfAborted(signal)
+    const shardDepth = shardReader?.shardShape[zAxis] ?? 0
+    const wholeShards =
+      shardReader !== null &&
+      shardDepth > 0 &&
+      shardReader.covers(projectionFor(0, Math.min(depth, shardDepth)))
+        ? shardReader
+        : null
+    const slabDepth =
+      wholeShards === null ? Math.max(1, meta.array.chunks[zAxis] ?? 1) : shardDepth
     const slabStarts = Array.from(
       { length: Math.ceil(depth / slabDepth) },
       (_value, index) => index * slabDepth,
@@ -777,16 +801,11 @@ export class OmeZarrImagePyramidLoader implements ImagePyramidLoader {
 
     const readSlab = async (zStart: number): Promise<void> => {
       const zEnd = Math.min(depth, zStart + slabDepth)
-      const projection = this.axes.map((_axis, axis) =>
-        axis === zAxis
-          ? zarr.slice(zStart, zEnd)
-          : axis === this.xAxis || axis === this.yAxis
-            ? zarr.slice(null)
-            : axis === this.channelAxis
-              ? (this.selectedChannelIndex ?? 0)
-              : this.planeIndexAt(meta, axis),
-      )
-      const slab = await getRetryingForeignAborts(meta.array, projection, signal)
+      const projection = projectionFor(zStart, zEnd)
+      const slab =
+        wholeShards?.covers(projection) === true
+          ? await wholeShards.get(projection, signal)
+          : await getRetryingForeignAborts(meta.array, projection, signal)
       throwIfAborted(signal)
 
       if (failed) {

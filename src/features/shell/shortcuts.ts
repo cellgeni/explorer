@@ -88,7 +88,7 @@ export interface ShortcutKeyEvent {
 // script (Cyrillic, Greek) or an input method has the key (key "Process"),
 // the letter at its place on a US keyboard. A layout's own Latin letters win,
 // so the keys move with AZERTY and Dvorak.
-function shortcutLetter(event: ShortcutKeyEvent): string | null {
+export function shortcutLetter(event: ShortcutKeyEvent): string | null {
   if (/^[a-z]$/i.test(event.key)) return event.key.toUpperCase()
   return /^Key([A-Z])$/.exec(event.code ?? '')?.[1] ?? null
 }
