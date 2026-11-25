@@ -6,7 +6,8 @@ import { morphologyImageFromPyramidLoader } from '../data/morphologyImage'
 import { ImageOnlyDataset } from '../datasets/imageOnlyDataset'
 import { sampleDecodedTile } from '../data/tileSamples'
 import { ICECHUNK_FIXTURE_ORIGIN, icechunkFixtureFetcher } from '../test/icechunkFixtures'
-import { byteRangeFetcher, zipArchive } from '../test/zipFixtures'
+import { shardedArrayFiles } from '../test/shardedZarrFixtures'
+import { byteRangeFetcher, type ByteRangeRequest, zipArchive } from '../test/zipFixtures'
 import { chunkWindowSamples, decodeChunk } from '../workers/zarrDecodeCore'
 import type { ZarrDecodeRequest, ZarrDecodeResponse } from '../workers/zarrDecodeMessages'
 import { ZarrDecodePool, type ZarrDecodeWorkerLike } from '../workers/zarrDecodePool'
@@ -1083,6 +1084,49 @@ describe('OME-Zarr image loader', () => {
     expect(progress).toEqual([1, 2, 3])
   })
 
+  it('reads a sharded z-stack a whole shard per request', async () => {
+    const rootUrl = 'https://example.test/images/sharded.ome.zarr'
+    const requests: ByteRangeRequest[] = []
+    const loader = await openOmeZarrImageWithOptions(rootUrl, {
+      fetcher: byteRangeFetcher(shardedZStackFiles(rootUrl, 1), requests),
+    })
+    const progress: number[] = []
+
+    requests.length = 0
+    const volume = await loader.loadVolume(0, undefined, (planes) => {
+      progress.push(planes)
+    })
+
+    // Planes 2 and 3 are in the missing shard.
+    expect(volume).toMatchObject({ width: 4, height: 3, depth: 5 })
+    expect(Array.from(volume.data)).toEqual(shardedZStackVoxels(0, [2, 3]))
+    expect(shardRequests(rootUrl, requests)).toEqual([
+      'GET c/0/0/0',
+      'GET c/1/0/0',
+      'GET c/2/0/0',
+    ])
+    expect(progress.at(-1)).toBe(5)
+  })
+
+  it('range-reads a sharded z-stack whose shards hold every channel', async () => {
+    const rootUrl = 'https://example.test/images/sharded-channels.ome.zarr'
+    const requests: ByteRangeRequest[] = []
+    const loader = await openOmeZarrImageWithOptions(`${rootUrl}#c=1`, {
+      fetcher: byteRangeFetcher(shardedZStackFiles(rootUrl, 2), requests),
+    })
+
+    requests.length = 0
+    const volume = await loader.loadVolume(0)
+    const reads = shardRequests(rootUrl, requests)
+
+    expect(Array.from(volume.data)).toEqual(shardedZStackVoxels(1, [2, 3]))
+    // Whole shards would read channel 0 too.
+    expect(reads).toContain('HEAD c/0/0/0/0')
+    expect(
+      reads.every((read) => read.startsWith('HEAD ') || read.includes('bytes=')),
+    ).toBe(true)
+  })
+
   it("reads a slab again when another read's abort reaches it", async () => {
     const rootUrl = 'https://example.test/images/stack.ome.zarr'
     const files = fetcherForFiles(zStackOmeZarrFiles('/images/stack.ome.zarr'))
@@ -1172,8 +1216,8 @@ describe('OME-Zarr image loader', () => {
     rejected = true
     await new Promise((resolve) => setTimeout(resolve, 50))
 
-    // The four slabs read at once, and no more.
-    expect(chunkReads).toHaveLength(4)
+    // The eight slabs read at once, and no more.
+    expect(chunkReads).toHaveLength(8)
     expect(progressAfterFailure).toBe(0)
   })
 
@@ -1426,6 +1470,83 @@ function v3OmeZarrFiles(rootPath: string): Map<string, Uint8Array> {
     [`${rootPath}/zarr.json`, jsonBytes(groupMetadata)],
     [`${rootPath}/0/zarr.json`, jsonBytes(v3ArrayMetadata([2, 10, 20], [1, 5, 5]))],
   ])
+}
+
+// An OME-NGFF 0.5 z-stack of 5 × 3 × 4 voxels (z, y, x) per channel, each
+// channel * 100 + z * 16 + y * 4 + x, in shards two planes deep that hold
+// every channel. The shard of planes 2 and 3 is missing.
+function shardedZStackFiles(rootUrl: string, channels: number): Map<string, Uint8Array> {
+  const spatialAxes = ['z', 'y', 'x'].map((name) => ({ name, type: 'space' }))
+  const axes =
+    channels > 1 ? [{ name: 'c', type: 'channel' }, ...spatialAxes] : spatialAxes
+  const withChannels = (spatial: readonly number[], channel: number) =>
+    channels > 1 ? [channel, ...spatial] : [...spatial]
+  const files = shardedArrayFiles({
+    arrayUrl: `${rootUrl}/0`,
+    shape: withChannels([5, 3, 4], channels),
+    shardShape: withChannels([2, 4, 4], channels),
+    chunkShape: withChannels([1, 2, 2], 1),
+    dimensionNames: axes.map((axis) => axis.name),
+    value: (index) => {
+      const [channel = 0, z = 0, y = 0, x = 0] = channels > 1 ? index : [0, ...index]
+      return channel * 100 + z * 16 + y * 4 + x
+    },
+    missingShard: (shard) => shard[channels > 1 ? 1 : 0] === 1,
+  })
+
+  files.set(
+    `${rootUrl}/zarr.json`,
+    jsonBytes({
+      zarr_format: 3,
+      node_type: 'group',
+      attributes: {
+        ome: {
+          version: '0.5',
+          multiscales: [
+            {
+              axes,
+              datasets: [
+                {
+                  path: '0',
+                  coordinateTransformations: [
+                    { type: 'scale', scale: axes.map(() => 1) },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    }),
+  )
+  return files
+}
+
+// A channel of shardedZStackFiles, plane after plane.
+function shardedZStackVoxels(channel: number, missingPlanes: readonly number[]) {
+  const voxels: number[] = []
+
+  for (let z = 0; z < 5; z += 1) {
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 4; x += 1) {
+        voxels.push(missingPlanes.includes(z) ? 0 : channel * 100 + z * 16 + y * 4 + x)
+      }
+    }
+  }
+
+  return voxels
+}
+
+// The requests for shards of level 0, as method, shard key and range.
+function shardRequests(rootUrl: string, requests: readonly ByteRangeRequest[]) {
+  return requests
+    .filter((request) => request.url.startsWith(`${rootUrl}/0/c/`))
+    .map((request) =>
+      [request.method, request.url.slice(`${rootUrl}/0/`.length), request.range ?? '']
+        .join(' ')
+        .trim(),
+    )
+    .sort()
 }
 
 function v2ArrayMetadata(

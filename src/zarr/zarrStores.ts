@@ -466,7 +466,20 @@ const arrayMetadataCache = new WeakMap<object, Promise<ZarrArrayMetadata | null>
 // Raw metadata of an opened array, for decoding its chunks elsewhere (for
 // example in a worker). Null for sharded arrays, whose chunks are not
 // standalone objects, and when the metadata cannot be read.
-export function zarrArrayMetadata(
+export async function zarrArrayMetadata(
+  array: zarr.Array<zarr.DataType, zarr.Readable>,
+): Promise<ZarrArrayMetadata | null> {
+  const stored = await zarrStoredArrayMetadata(array)
+
+  return stored === null ||
+    (stored.metadataKey === 'zarr.json' && isShardedMetadata(stored.metadata))
+    ? null
+    : stored
+}
+
+// Raw metadata of an opened array as stored, sharded or not; null when it
+// cannot be read.
+export function zarrStoredArrayMetadata(
   array: zarr.Array<zarr.DataType, zarr.Readable>,
 ): Promise<ZarrArrayMetadata | null> {
   const cached = arrayMetadataCache.get(array)
@@ -486,15 +499,7 @@ export function zarrArrayMetadata(
       }
 
       const metadata = recordOrNull(jsonFromBytes(bytes))
-
-      if (
-        metadata === null ||
-        (metadataKey === 'zarr.json' && isShardedMetadata(metadata))
-      ) {
-        return null
-      }
-
-      return { metadataKey, metadata }
+      return metadata === null ? null : { metadataKey, metadata }
     }
 
     return null
@@ -503,7 +508,7 @@ export function zarrArrayMetadata(
   return promise
 }
 
-function isShardedMetadata(metadata: Record<string, unknown>): boolean {
+export function isShardedMetadata(metadata: Record<string, unknown>): boolean {
   return (
     Array.isArray(metadata.codecs) &&
     metadata.codecs.some((codec) => recordOrNull(codec)?.name === 'sharding_indexed')
