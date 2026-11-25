@@ -269,6 +269,85 @@ describe('openPreviewSource', () => {
     expect([...classes.classOf]).toEqual([-1, 0])
   })
 
+  it('reads the values of a metadata track for the drawn cells', async () => {
+    const metadataTrackValues = vi.fn(async () => [
+      { cellId: 'c1', value: 2.5 },
+      { cellId: 'c2', value: Number.NaN },
+      { cellId: 'c3', value: -4 },
+      { cellId: 'not-drawn', value: 9 },
+    ])
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'h5ad', h5adUrl: URL_A, source: 'zarr' },
+        {
+          getSpatialDataset: vi.fn(
+            async () =>
+              ({
+                overview: async () => [
+                  point(0, 0, 'c1'),
+                  point(1, 0, 'c2'),
+                  point(2, 0, 'c3'),
+                  point(3, 0, 'c4'),
+                ],
+                geneExpression: vi.fn(),
+                metadataTracks: async () => [{ id: 'h5ad:qv' }],
+                metadataTrackValues,
+              }) as never,
+          ),
+        },
+      ),
+    )
+    const values = await source.values(await source.cells(), 'h5ad:qv')
+
+    expect(metadataTrackValues).toHaveBeenCalledWith('h5ad:qv', {})
+    // A stored NaN, and a cell the track does not list, have no value.
+    expect([...values.values]).toEqual([2.5, Number.NaN, -4, Number.NaN])
+    expect(values.count).toBe(2)
+  })
+
+  it('leaves a dataset without the track, or without tracks, uncoloured', async () => {
+    const metadataTrackValues = vi.fn()
+    const datasets = [
+      {
+        overview: async () => [point(0, 0, 'c1')],
+        geneExpression: vi.fn(),
+        metadataTracks: async () => [{ id: 'h5ad:other' }],
+        metadataTrackValues,
+      },
+      { overview: async () => [point(0, 0, 'c1')], geneExpression: vi.fn() },
+    ]
+
+    for (const dataset of datasets) {
+      const source = await openPreviewSource(
+        URL_A,
+        loaders(
+          { platform: 'h5ad', h5adUrl: URL_A, source: 'zarr' },
+          { getSpatialDataset: vi.fn(async () => dataset as never) },
+        ),
+      )
+      const values = await source.values(await source.cells(), 'h5ad:qv')
+
+      expect([...values.values]).toEqual([Number.NaN])
+      expect(values.count).toBe(0)
+    }
+    // Asking for a track the dataset lacks is an error, so it is not asked.
+    expect(metadataTrackValues).not.toHaveBeenCalled()
+  })
+
+  it('reads no values for Xenium, which has no tracks of its own', async () => {
+    const source = await openPreviewSource(
+      URL_A,
+      loaders(
+        { platform: 'xenium' },
+        { loadDatasetOverview: vi.fn(async () => [point(0, 0, 'a'), point(1, 1, 'b')]) },
+      ),
+    )
+    const values = await source.values(await source.cells(), 'import:qv')
+
+    expect(values.count).toBe(0)
+  })
+
   it('keeps every cell, however many', async () => {
     const many = Array.from({ length: 250_001 }, (_, index) => point(index, 0))
     const source = await openPreviewSource(

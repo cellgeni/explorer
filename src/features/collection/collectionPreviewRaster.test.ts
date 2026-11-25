@@ -181,6 +181,29 @@ describe('rasterizePreview', () => {
     expect(pixel(pixels, 0, 9)).toEqual([92, 88, 76, 72])
   })
 
+  it('colours cells by their value of the track, fading those without one', () => {
+    const { pixels, scaleMax } = rasterizePreview(
+      square,
+      {
+        kind: 'values',
+        values: {
+          values: Float64Array.of(0, 10, Number.NaN, 5),
+          count: 3,
+          min: 0,
+          max: 10,
+        },
+        track: { id: 'h5ad:qv', label: 'qv', min: 0, max: 10 },
+      },
+      OPTIONS,
+    )
+
+    expect(pixel(pixels, 0, 0)).toEqual([68, 1, 84, 255])
+    expect(pixel(pixels, 9, 0)).toEqual([253, 231, 37, 255])
+    expect(pixel(pixels, 9, 9)).toEqual([33, 145, 140, 255])
+    expect(pixel(pixels, 0, 9)).toEqual([92, 88, 76, 72])
+    expect(scaleMax).toBe(0)
+  })
+
   it('keeps the aspect ratio and centres the cells', () => {
     const wide = cells([
       [0, 0],

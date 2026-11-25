@@ -2,7 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import type { DatasetCollection } from '../../datasets/datasetCollection'
 import type { GeneExpressionScoreMode } from '../../rendering/deckLayerTypes'
 import type { CollectionPreviewLoaders } from './collectionPreviewData'
-import { CollectionPreviewStore } from './collectionPreviewStore'
+import { CollectionPreviewStore, type OpenTrackValues } from './collectionPreviewStore'
 
 interface PreviewStoreRequestOptions {
   readonly loaders: CollectionPreviewLoaders
@@ -10,6 +10,10 @@ interface PreviewStoreRequestOptions {
   readonly scoreMode: GeneExpressionScoreMode
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotationGroupId: string | null
+  // The metadata track the cells are coloured by, in place of the genes.
+  readonly metadataTrackId: string | null
+  // The open dataset's values of that track, as the main view has them.
+  readonly openTrack: OpenTrackValues | null
   readonly paused: boolean
 }
 
@@ -28,6 +32,8 @@ export function useCollectionPreviewStore({
   genes,
   scoreMode,
   annotationGroupId,
+  metadataTrackId,
+  openTrack,
   paused,
 }: UseCollectionPreviewStoreOptions): CollectionPreviewStore | null {
   const store = useMemo(
@@ -41,19 +47,28 @@ export function useCollectionPreviewStore({
     [collection, loaders],
   )
 
-  usePreviewStoreRequest(store, { genes, scoreMode, annotationGroupId, paused })
+  usePreviewStoreRequest(store, {
+    genes,
+    scoreMode,
+    annotationGroupId,
+    metadataTrackId,
+    openTrack,
+    paused,
+  })
   return store
 }
 
 // The open dataset read as a collection preview is, for the 3D view of its
-// cells: every cell, and the scores or classes that colour them. Null reads
-// nothing.
+// cells: every cell, and the scores, classes or values that colour them.
+// Null reads nothing.
 export function useOpenDatasetPreviewStore({
   url,
   loaders,
   genes,
   scoreMode,
   annotationGroupId,
+  metadataTrackId,
+  openTrack,
   paused,
 }: PreviewStoreRequestOptions & {
   readonly url: string | null
@@ -67,7 +82,14 @@ export function useOpenDatasetPreviewStore({
   useEffect(() => {
     if (url !== null) store?.setLinked([url])
   }, [store, url])
-  usePreviewStoreRequest(store, { genes, scoreMode, annotationGroupId, paused })
+  usePreviewStoreRequest(store, {
+    genes,
+    scoreMode,
+    annotationGroupId,
+    metadataTrackId,
+    openTrack,
+    paused,
+  })
   return store
 }
 
@@ -77,6 +99,8 @@ function usePreviewStoreRequest(
     genes,
     scoreMode,
     annotationGroupId,
+    metadataTrackId,
+    openTrack,
     paused,
   }: Omit<PreviewStoreRequestOptions, 'loaders'>,
 ): void {
@@ -94,8 +118,13 @@ function usePreviewStoreRequest(
       genes: genesKey === '' ? [] : genesKey.split('\u0000'),
       scoreMode,
       annotationGroupId,
+      metadataTrackId,
     })
-  }, [annotationGroupId, genesKey, scoreMode, store])
+  }, [annotationGroupId, genesKey, metadataTrackId, scoreMode, store])
+
+  useEffect(() => {
+    store?.setOpenTrack(openTrack)
+  }, [openTrack, store])
 
   useEffect(() => {
     if (store === null) return

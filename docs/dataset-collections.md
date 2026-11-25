@@ -278,7 +278,7 @@ shows, and the cells that score above zero for the selected genes in the
 gene colour scale, using the same `Combine genes` mode as the main view.
 Where several cells share a pixel, the highest score shows, as the main view
 draws the highest-scoring cells on top. Without genes, or when cells are
-coloured by something else, previews show the tissue only.
+coloured by transcript count or cell area, previews show the tissue only.
 
 While cells are coloured by an annotation set, previews show its classes in
 the main view's colours instead. A class the main view has not coloured yet
@@ -295,6 +295,21 @@ once per dataset and selection, like a gene. While a switch loads the next
 dataset's set, previews show the tissue only; the classes they read are kept,
 so they are coloured again, without another read, once it loads.
 
+While cells are coloured by a metadata track (`Cell color` › `Metadata`),
+previews show each cell's value of the track of the same ID in the main
+view's metadata colours. Every preview, panel beside the main view and the
+3D stack share one range: the open dataset's, widened to every value the
+previews have read, so a colour is one value in every section. Sections of a
+block can each hold a narrow part of the range, or one value (a depth such
+as `z_um`), which on the open section's range alone would colour every other
+section at its ends. The main view keeps its own range, the one its legend
+gives. The bar's left side names the track and gives the shared range, which
+can widen as previews further along are read. A dataset without the track,
+such as one whose table lacks the column, shows the tissue only; so does any
+dataset but the open one for an imported track, whose values only the open
+dataset has. The open dataset's preview takes the values the main view has
+read or imported.
+
 - **Each its own scale, or one.** On Auto, or with a percentile top
   (`geneRange=,p95`), each preview runs from 0 to its own 99th (or that)
   percentile, so it shows where a gene is high within that section and one
@@ -309,8 +324,9 @@ so they are coloured again, without another read, once it loads.
   levels across sections; each preview then shows its highest score
   (`max 92`).
 - **What is read.** A preview reads every cell's position once per dataset,
-  then the selected genes' scores for every cell, or the annotation set's
-  classes, whenever the selection changes. Positions
+  then the selected genes' scores for every cell, the annotation set's
+  classes, or the metadata track's values, whenever the selection changes.
+  Positions
   come from the same readers as the main view, so a previewed dataset
   opens faster when chosen. Beyond 200,000 cells, every Nth is drawn, but
   every cell that scores and every cell of a small shown class is, so a rare
@@ -403,9 +419,11 @@ viewers sit side by side, three in a row, four in a 2 by 2 grid; under
 - **Panels.** A panel draws the section's cells from its
   [preview](#previews) data: every cell as a point 10 µm across, coloured as
   the main view colours cells: by the selected genes on the `Gene scale`
-  (each section up to its own percentile, or a typed top shared by all), or
-  by the annotation set's classes, with hidden classes faded. Otherwise cells
-  are grey. Hovering a cell names it and its class, or gives its score. The
+  (each section up to its own percentile, or a typed top shared by all), by
+  the annotation set's classes, with hidden classes faded, or by a metadata
+  track's values, over the range the previews share, with cells without a
+  value faded. Otherwise cells are grey. Hovering a cell names it and its class or
+  value, or gives its score. The
   panel's name heads it, with its top (`top 32`) or highest score.
 - **What a panel does not show.** Images, cell boundaries, transcripts and
   the tools (selection, Magic Lens, measuring, cards) are the main view's
@@ -464,11 +482,13 @@ the button again, returns to them.
 - **What is drawn.** Each section's cells from its [preview](#previews) data,
   as balls 10 µm across, coloured as the main view colours cells: by the
   selected genes on the `Gene scale` (each section up to its own percentile,
-  or a typed top shared by all, as in the previews), or by the annotation
-  set's classes. Cells that score for the genes, or are in a shown class, are
-  solid. The others are a faint outline of the tissue that never hides a
-  coloured cell; `Other cells` turns it off. Without genes or an annotation
-  set, every cell is grey. `Cell point size` sizes the cells.
+  or a typed top shared by all, as in the previews), by the annotation set's
+  classes, or by a metadata track's values over the range the previews
+  share, shown beside `Depth`. Cells that score for the genes, are in a shown class,
+  or have a value of the track are solid. The others are a faint outline of
+  the tissue that never hides a coloured cell; `Other cells` turns it off.
+  Without genes, an annotation set or a metadata track, every cell is grey.
+  `Cell point size` sizes the cells.
 - **Depth.** Sections a few micrometres apart across millimetres of tissue
   are flat at their true spacing, so the stack opens stretched along z by a
   power of two, to about a quarter as deep as it is wide. `Depth` shows the

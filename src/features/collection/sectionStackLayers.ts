@@ -1,5 +1,6 @@
 import { OrbitView, type Layer, type LayerData, type PickingInfo } from '@deck.gl/core'
 import { ScatterplotLayer } from '@deck.gl/layers'
+import { metadataColor } from '../../rendering/cellStyling'
 import { DEFAULT_OVERVIEW_CELL_FILL_RGB } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
@@ -9,6 +10,7 @@ import {
   deckPositions,
   LINKED_SECTION_CELL_RADIUS_MICROMETERS,
   scoredCells,
+  valueLabel,
   type LinkedScoredCells,
 } from './linkedSectionLayers'
 
@@ -18,9 +20,10 @@ import {
 // depths (a dataset placing cells in 3D) are drawn at (x, -y, z), and the
 // model matrix stretches z the same way. Cells are balls 10
 // µm across that face the camera. The cells a section is coloured for (those
-// scoring for the genes, or in a shown class; every cell without colouring)
-// are drawn solid and hide what is behind them; the others are a faint
-// outline of the tissue that hides nothing.
+// scoring for the genes, in a shown class, or with a value of the metadata
+// track; every cell without colouring) are drawn solid and hide what is
+// behind them; the others are a faint outline of the tissue that hides
+// nothing.
 
 export const SECTION_STACK_VIEW = new OrbitView({
   id: 'section-stack',
@@ -146,7 +149,8 @@ export function sectionStackLayers(
       return
     }
 
-    const split = classSplit(cells, overlay)
+    const split =
+      overlay.kind === 'classes' ? classSplit(cells, overlay) : valueSplit(cells, overlay)
 
     if (options.showContext && split.faded.positions.length > 0) {
       context.push(contextLayer(id('context'), split.faded, modelMatrix, radius))
@@ -155,14 +159,14 @@ export function sectionStackLayers(
     if (split.shown.index.length > 0) {
       layers.push(
         new ScatterplotLayer({
-          id: id('classes'),
+          id: id(overlay.kind),
           data: pointData(split.shown, split.shown.colors),
           modelMatrix,
           pickable: true,
           ...radius,
         }) as Layer,
       )
-      targets.set(id('classes'), {
+      targets.set(id(overlay.kind), {
         section: index,
         kind: 'cell',
         order: split.shown.index,
@@ -236,7 +240,7 @@ export function stackPickText(
       ? section.classes?.classes[classIndex]?.label
       : undefined
 
-  return [sectionLabel, cellId, classLabel]
+  return [sectionLabel, cellId, classLabel, valueLabel(section.overlay, pick.index)]
     .filter((part): part is string => part !== undefined && part !== '')
     .join(' · ')
 }
@@ -370,6 +374,46 @@ function classSplit(
   }
 
   classSplitCache.set(overlay.classOf, { key, cells, split })
+  return split
+}
+
+// The cells with a value in the metadata colour of it, and those without one.
+// Cached per values read and range, as classSplit is.
+const valueSplitCache = new WeakMap<
+  Extract<PreviewOverlay, { readonly kind: 'values' }>['values'],
+  { readonly key: string; readonly cells: PreviewCells; readonly split: ClassSplit }
+>()
+
+function valueSplit(
+  cells: PreviewCells,
+  overlay: Extract<PreviewOverlay, { readonly kind: 'values' }>,
+): ClassSplit {
+  const { values, track } = overlay
+  const key = `${track.min}|${track.max}`
+  const cached = valueSplitCache.get(values)
+  if (cached?.key === key && cached.cells === cells) return cached.split
+
+  const points = cellPoints(cells)
+  const shown: number[] = []
+  const faded: number[] = []
+
+  values.values.forEach((value, cell) => {
+    ;(Number.isFinite(value) ? shown : faded).push(cell)
+  })
+
+  const colors = new Uint8Array(shown.length * 4)
+
+  shown.forEach((cell, index) => {
+    const color = metadataColor(values.values[cell] ?? 0, track.min, track.max)
+    colors.set([color[0], color[1], color[2], 255], index * 4)
+  })
+
+  const split: ClassSplit = {
+    shown: { ...gather(points, shown), colors, index: Uint32Array.from(shown) },
+    faded: gather(points, faded),
+  }
+
+  valueSplitCache.set(values, { key, cells, split })
   return split
 }
 

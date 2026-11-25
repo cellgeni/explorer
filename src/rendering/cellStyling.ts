@@ -273,7 +273,9 @@ function observationColor(
   ]
 }
 
-function metadataColor(value: number, min: number, max: number): Color {
+// A metadata track value's colour over the track's range; a track of one
+// value takes the middle colour.
+export function metadataColor(value: number, min: number, max: number): Color {
   const intensity =
     max <= min ? 0.5 : Math.min(1, Math.max(0, (value - min) / (max - min)))
   const low: Color = [68, 1, 84, 160]

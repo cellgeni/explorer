@@ -231,8 +231,8 @@ dataset. See [Side by Side](./dataset-collections.md#side-by-side).
 
 When the collection also gives each of those sections its depth (`z`), the
 bar's `Stack in 3D` button (three layers) stacks them all in 3D over the
-view, coloured by the selected genes or annotation set, so you can follow a
-gene or cell type through the block. Drag to rotate; `Depth` stretches the
+view, coloured by the selected genes, annotation set or metadata track, so
+you can follow a gene, cell type or measurement through the block. Drag to rotate; `Depth` stretches the
 stack along z, as serial sections are thin next to their width; `Other cells`
 shows or hides the faint outline of cells that are not highlighted. `2D View`
 returns to the view. See [3D Stack](./dataset-collections.md#3d-stack).
@@ -626,7 +626,7 @@ When `/obsm/spatial` (or `X_spatial`) has a third column, such as registered
 serial sections combined in one `.h5ad` or AnnData Zarr store with each
 section's depth, the 2D view shows every cell in one plane and Cells ›
 Appearance › `View` › `3D` shows them at their z, coloured by the selected
-genes or annotation set. Drag to rotate; `Depth` stretches z; `2D View`
+genes, annotation set or metadata track. Drag to rotate; `Depth` stretches z; `2D View`
 returns to the plane. See
 [3D Cell View](./ui-reference.md#3d-cell-view).
 

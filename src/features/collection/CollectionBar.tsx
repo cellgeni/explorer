@@ -21,8 +21,10 @@ import {
   collectionGroups,
   type DatasetCollectionEntry,
 } from '../../datasets/datasetCollection'
+import { metadataScaleGradient } from '../../rendering/cellStyling'
 import { geneExpressionScaleGradient } from '../../rendering/deckLayerColors'
 import type { GeneExpressionColorScale } from '../../rendering/deckLayerTypes'
+import { metadataValueText } from '../annotations/annotationModel'
 import { formatGeneScaleValue } from '../genes/geneControlsModel'
 import {
   AUTO_GENE_SCALE_RANGE,
@@ -39,7 +41,7 @@ import {
   type CollectionState,
   type CollectionView,
 } from './collectionModel'
-import { shownClassOf } from './collectionPreviewData'
+import { shownClassOf, type PreviewMetadataTrack } from './collectionPreviewData'
 import { rasterizePreview, type PreviewOverlay } from './collectionPreviewRaster'
 import type { CollectionPreviewStore, PreviewEntry } from './collectionPreviewStore'
 import { canShowBeside, MAX_LINKED_SECTIONS } from './linkedSectionsModel'
@@ -67,6 +69,8 @@ export interface CollectionBarPreviews {
   readonly scaleRange?: GeneScaleRange
   // The annotation set the cells are coloured by, in place of the genes.
   readonly annotations: CollectionBarAnnotations | null
+  // The metadata track the cells are coloured by, in place of the genes.
+  readonly metadata?: PreviewMetadataTrack | null
 }
 
 // The width of each preview in the grid, in CSS px, set by its Size slider.
@@ -172,7 +176,11 @@ export function CollectionBar({
     annotations === null
       ? NO_CLASS_COLORS
       : (store?.classColors(annotations.colors) ?? annotations.colors)
-  const genes = annotations === null ? (previews?.genes ?? NO_GENES) : NO_GENES
+  const track = annotations === null ? (previews?.metadata ?? null) : null
+  // Over the range of every preview read, which the panels and stack share.
+  const metadata = track === null ? null : (store?.valueRange(track) ?? track)
+  const genes =
+    annotations === null && metadata === null ? (previews?.genes ?? NO_GENES) : NO_GENES
 
   // Only the previews in view, and a little beyond, are read.
   useEffect(() => {
@@ -276,7 +284,7 @@ export function CollectionBar({
                   title={
                     stack.shown
                       ? 'Stacked in 3D. Click to return to the 2D view'
-                      : `Stack in 3D: show the ${stack.sectionCount.toLocaleString()} serial sections of the open dataset at their depths, coloured by the selected genes or annotation set`
+                      : `Stack in 3D: show the ${stack.sectionCount.toLocaleString()} serial sections of the open dataset at their depths, coloured by the selected genes, annotation set or metadata track`
                   }
                   aria-label="Stack in 3D"
                   aria-pressed={stack.shown}
@@ -320,6 +328,23 @@ export function CollectionBar({
                   ? formatGeneScaleValue(sharedScaleMax)
                   : `p${scalePercentile}`}
               </span>
+            </span>
+          </span>
+        ) : null}
+        {previewsShown && metadata !== null ? (
+          <span
+            className="collection-bar-scale"
+            title={`Every preview uses this scale, the range of ${metadata.label} in the open dataset and the previews read; a dataset without the track is not coloured`}
+          >
+            <span className="collection-bar-scale-genes">{metadata.label}</span>
+            <span className="collection-bar-scale-range">
+              <span>{metadataValueText(metadata.min)}</span>
+              <span
+                className="collection-bar-scale-ramp"
+                style={{ background: metadataScaleGradient() }}
+                aria-hidden="true"
+              />
+              <span>{metadataValueText(metadata.max)}</span>
             </span>
           </span>
         ) : null}
@@ -446,6 +471,7 @@ export function CollectionBar({
                             scalePercentile={sharedScale ? null : scalePercentile}
                             onDrawnTop={reportDrawnTop}
                             annotations={annotations}
+                            metadata={metadata}
                             classColors={classColors}
                           />
                           <span className="collection-bar-dataset-name">{label}</span>
@@ -502,6 +528,7 @@ function CollectionPreview({
   scalePercentile,
   onDrawnTop,
   annotations,
+  metadata,
   classColors,
 }: {
   readonly entry: PreviewEntry | null
@@ -514,6 +541,7 @@ function CollectionPreview({
   readonly scalePercentile: number | null
   readonly onDrawnTop: (url: string, top: number) => void
   readonly annotations: CollectionBarAnnotations | null
+  readonly metadata: PreviewMetadataTrack | null
   readonly classColors: Readonly<Record<string, string>>
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -521,6 +549,7 @@ function CollectionPreview({
   const cells = entry?.cells ?? null
   const scores = entry?.scores ?? null
   const classes = entry?.classes ?? null
+  const values = entry?.values ?? null
   const overlay = useMemo((): PreviewOverlay | null => {
     if (annotations !== null) {
       if (classes === null) return null
@@ -534,8 +563,12 @@ function CollectionPreview({
       }
     }
 
+    if (metadata !== null) {
+      return values === null ? null : { kind: 'values', values, track: metadata }
+    }
+
     return scores === null ? null : { kind: 'scores', scores }
-  }, [annotations, classColors, classes, scores])
+  }, [annotations, classColors, classes, metadata, scores, values])
 
   useEffect(() => {
     const canvas = canvasRef.current
