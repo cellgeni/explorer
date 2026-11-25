@@ -140,7 +140,6 @@ export interface ViewerCoreProps {
   readonly onImageTileError?: (error: Error) => void
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
-  readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void

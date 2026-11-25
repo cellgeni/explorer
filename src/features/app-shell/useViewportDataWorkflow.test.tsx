@@ -253,6 +253,48 @@ function Probe({
 }
 
 describe('useViewportDataWorkflow', () => {
+  it('keeps the viewport detail when the same view is reported again (O6)', async () => {
+    render(
+      <Probe
+        cellBoundaryLoadingEnabled={false}
+        geneExpressionLoadingEnabled={false}
+        loadBoundaryElements={vi.fn(async () => ({ elements: [] }))}
+        loadGeneExpression={vi.fn(async () => batch)}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />,
+    )
+
+    act(() => {
+      api.handleViewportChange(detail)
+    })
+    act(() => {
+      api.handleViewportChange({
+        ...detail,
+        bbox: { ...detail.bbox },
+        viewState: { ...detail.viewState, target: [...detail.viewState.target] },
+      })
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(snapshot.currentViewportDetail).toBe(detail)
+
+    const moved = {
+      ...detail,
+      viewState: { ...detail.viewState, zoom: detail.viewState.zoom + 1 },
+    }
+
+    act(() => {
+      api.handleViewportChange(moved)
+    })
+
+    expect(snapshot.currentViewportDetail).toBe(moved)
+  })
+
   it('records viewport state without loading Xenium detail layers when disabled', async () => {
     const loadBoundaryElements = vi.fn(async () => ({ elements: [] }))
     const loadGeneExpression = vi.fn(async () => batch)

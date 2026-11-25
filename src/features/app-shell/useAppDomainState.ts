@@ -554,7 +554,6 @@ export function useAppDomainState({
     useState<ViewerFocusRequest | null>(null)
   const [currentViewportDetail, setCurrentViewportDetail] =
     useState<ViewerViewportDetail | null>(null)
-  const [, setViewportCellCount] = useState<number | null>(null)
   const [datasetPlatform, setDatasetPlatform] = useState<Platform | null>(null)
   const [datasetAbout, setDatasetAbout] = useState<DatasetManifestAbout | null>(null)
   // The loaded dataset's manifest defaults, which its links leave out.
@@ -776,7 +775,6 @@ export function useAppDomainState({
       setSelectedGridCell,
       setShareableViewState,
       setSpatialFocusRequest,
-      setViewportCellCount,
       shareableViewState,
       spatialFocusRequest,
     },

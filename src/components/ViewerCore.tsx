@@ -351,7 +351,6 @@ export function ViewerCore({
   onImageTileError,
   onTileCacheEviction,
   onViewportChange,
-  onViewportCellCountChange,
   onCellClick,
   onCellBoundaryClick,
   onGridCellClick,
@@ -484,7 +483,6 @@ export function ViewerCore({
       {...(onImageTileError === undefined ? {} : { onImageTileError })}
       {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
-      {...(onViewportCellCountChange === undefined ? {} : { onViewportCellCountChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
       {...(onCellBoundaryClick === undefined ? {} : { onCellBoundaryClick })}
       {...(onGridCellClick === undefined ? {} : { onGridCellClick })}
@@ -583,7 +581,6 @@ interface ViewerSurfaceProps {
   readonly onImageTileError?: (error: Error) => void
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
-  readonly onViewportCellCountChange?: (cellCount: number) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
   readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
@@ -675,7 +672,6 @@ function ViewerSurface({
   onImageTileError,
   onTileCacheEviction,
   onViewportChange,
-  onViewportCellCountChange,
   onCellClick,
   onCellBoundaryClick,
   onGridCellClick,
@@ -2320,20 +2316,6 @@ function ViewerSurface({
       window.clearTimeout(timeout)
     }
   }, [boundaries.length, viewState.zoom, viewportBbox])
-
-  useEffect(() => {
-    if (onViewportCellCountChange === undefined || !hasSpatialData) {
-      return
-    }
-
-    const timeout = window.setTimeout(() => {
-      onViewportCellCountChange(estimatedViewportCellCount)
-    }, 80)
-
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [estimatedViewportCellCount, hasSpatialData, onViewportCellCountChange])
 
   useEffect(() => {
     if (onViewportChange === undefined || !hasSpatialData || viewportBbox === null) {

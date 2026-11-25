@@ -2350,7 +2350,7 @@ describe('ViewerCore', () => {
       bottom: 300,
     })
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
-    const onViewportCellCountChange = vi.fn()
+    const onViewportChange = vi.fn<(detail: ViewerViewportDetail) => void>()
     const cells = Array.from(
       { length: 100 },
       (_value, index): OverviewCellDatum => ({
@@ -2364,7 +2364,7 @@ describe('ViewerCore', () => {
     render(
       <ViewerCore
         cells={cells}
-        onViewportCellCountChange={onViewportCellCountChange}
+        onViewportChange={onViewportChange}
         // A broad view that shows part of the grid: the old 720 px fit.
         initialViewStateOverride={{
           target: [4500, -4500, 0],
@@ -2374,8 +2374,7 @@ describe('ViewerCore', () => {
     )
 
     await waitFor(() => {
-      expect(onViewportCellCountChange).toHaveBeenCalledWith(expect.any(Number) as number)
-      expect(onViewportCellCountChange).toHaveBeenLastCalledWith(17)
+      expect(onViewportChange.mock.lastCall?.[0].visibleCellCount).toBe(17)
     })
   })
 
