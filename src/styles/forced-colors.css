@@ -4,8 +4,8 @@
  * The browser then replaces text, background and border colours with the
  * user's system colours and drops background gradients, so anything that
  * shows a state or a value by colour alone would vanish. Here:
- * - data colours (class swatches, colour scales) keep their own colours, as
- *   the canvas still draws them;
+ * - data colours (class swatches, colour scales) and the 3D axes indicator
+ *   keep their own colours, as the canvas still draws them;
  * - pressed, on, selected and current states use Highlight and
  *   HighlightText, as native selected items do;
  * - bars that show an amount are drawn in CanvasText.
@@ -21,7 +21,8 @@
   .gene-scale-preview,
   .transcript-density-scale-preview,
   .collection-bar-scale-ramp,
-  .section-stack-scale-ramp {
+  .section-stack-scale-ramp,
+  .orbit-axes {
     forced-color-adjust: none;
   }
 

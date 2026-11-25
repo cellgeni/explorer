@@ -11,7 +11,7 @@ import { SectionStackViewer } from './SectionStackViewer'
 interface DeckProps {
   readonly views?: { readonly id?: string }
   readonly onHover?: (info: unknown) => void
-  readonly viewState?: { readonly rotationOrbit?: number }
+  readonly viewState?: { readonly rotationX?: number; readonly rotationOrbit?: number }
   readonly onViewStateChange?: (change: { readonly viewState: unknown }) => void
 }
 
@@ -148,7 +148,7 @@ describe('SectionStackViewer', () => {
 
     expect(canvas).toHaveAttribute('tabindex', '0')
     expect(canvas).toHaveAccessibleDescription(
-      'Shift+arrows rotate · Arrows pan · + and − zoom · Home resets',
+      'Shift+arrows rotate · Arrows pan · + and − zoom · X, Y, Z look along an axis · Home resets',
     )
     const fitted = shown()?.viewState
     act(() => {
@@ -157,6 +157,18 @@ describe('SectionStackViewer', () => {
     expect(shown()?.viewState?.rotationOrbit).toBe(90)
     fireEvent.keyDown(canvas, { key: 'Home', code: 'Home' })
     expect(shown()?.viewState).toEqual(fitted)
+  })
+
+  it('turns to look along an axis it is clicked on', () => {
+    deck.renders.length = 0
+    const { container } = render(<CellView depths={[0, 5, 10]} />)
+    const shown = () =>
+      deck.renders.filter(({ viewId }) => viewId === 'section-stack').at(-1)?.props
+
+    fireEvent.click(container.querySelector('.orbit-axis-y')!)
+
+    // Side on, z up.
+    expect(shown()?.viewState).toMatchObject({ rotationX: -90, rotationOrbit: 0 })
   })
 
   // (-0.04).toFixed(1) is "-0.0", written "-0" (EXP-248).

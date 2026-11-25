@@ -474,10 +474,14 @@ the button again, returns to them.
   power of two, to about a quarter as deep as it is wide. `Depth` shows the
   stretch (×1 is the true spacing) and changes it from ×¼ to ×128.
 - **Moving.** Drag to rotate, Shift-drag to pan, scroll to zoom; the
-  fit button returns to the first view. Hovering a cell names its section and
+  fit button returns to the first view. The axes at the top right turn with
+  the stack to show which way x (red), y (green) and z (blue) increase;
+  clicking one turns the stack to look along it (y shows the sections side on,
+  as layers), and clicking it again looks from the other side. Hovering a cell names its section and
   the cell and its class, or gives its score. The canvas is a Tab stop, as
   the [3D views](ui-reference.md#3d-view)' are: Shift with an arrow key
-  rotates, arrow keys pan, + and − zoom, and Home returns to the first view.
+  rotates, arrow keys pan, + and − zoom, X, Y and Z look along an axis, and
+  Home returns to the first view.
 - **What is read.** Every section of the stack is read, whether the bar shows
   it or not, four at a time. The panel lists the sections still being read,
   and names those it cannot show: images, Visium HD and large plain `.h5ad`

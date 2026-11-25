@@ -9,6 +9,8 @@ import {
   type VolumeRenderMode,
 } from '../rendering/volumeLayer'
 import { removeDeckFromTabOrder } from './deckTabOrder'
+import { OrbitAxes } from './OrbitAxes'
+import { viewAlongAxis, type OrbitAxisName } from './orbitAxesModel'
 import { handleOrbitKey, orbitCanvasProps } from './orbitKeyboard'
 import { ReleasingDeck } from './releasingDeck'
 import { Button, FitIcon, IconButton, Segmented, Slider } from './ui'
@@ -80,6 +82,9 @@ export function VolumeViewer({
   )
   const shownViewState =
     viewState ?? fittedVolumeViewState(extent ?? [1, 1, 1], size ?? DEFAULT_SIZE)
+  const lookAlong = (name: OrbitAxisName) => {
+    setViewState(viewAlongAxis(shownViewState, name))
+  }
   const layers = useMemo(
     () =>
       extent === null || channels.length === 0
@@ -130,9 +135,13 @@ export function VolumeViewer({
         ref={canvasHostRef}
         {...orbitCanvasProps('3D view canvas area', keysId)}
         onKeyDown={(event) => {
-          handleOrbitKey(event, () => {
-            setViewState(null)
-          })
+          handleOrbitKey(
+            event,
+            () => {
+              setViewState(null)
+            },
+            lookAlong,
+          )
         }}
       >
         <DeckGL
@@ -147,6 +156,11 @@ export function VolumeViewer({
           onLoad={handleDeckLoad}
         />
       </div>
+      <OrbitAxes
+        rotationX={shownViewState.rotationX ?? 0}
+        rotationOrbit={shownViewState.rotationOrbit ?? 0}
+        onLookAlong={lookAlong}
+      />
       <div className="volume-viewer-toolbar" role="group" aria-label="3D view settings">
         <Segmented
           title="How the volume is drawn"

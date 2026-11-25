@@ -3,12 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { handleOrbitKey, orbitCanvasProps } from './orbitKeyboard'
 
 // A canvas host as the 3D views draw it, with deck.gl's event root inside.
-function renderCanvas(onReset = vi.fn()) {
+function renderCanvas(onReset = vi.fn(), onLookAlong = vi.fn()) {
   render(
     <div
       {...orbitCanvasProps('3D view canvas area', 'keys')}
       onKeyDown={(event) => {
-        handleOrbitKey(event, onReset)
+        handleOrbitKey(event, onReset, onLookAlong)
       }}
     >
       <div className="deck-events-root" tabIndex={-1} />
@@ -22,7 +22,7 @@ function renderCanvas(onReset = vi.fn()) {
   root.addEventListener('keydown', (event) => {
     received.push(event)
   })
-  return { canvas, root, received, onReset }
+  return { canvas, root, received, onReset, onLookAlong }
 }
 
 describe('orbitKeyboard', () => {
@@ -55,6 +55,22 @@ describe('orbitKeyboard', () => {
 
     expect(fireEvent.keyDown(canvas, { key: 'Home', code: 'Home' })).toBe(false)
     expect(onReset).toHaveBeenCalledOnce()
+    expect(received).toEqual([])
+  })
+
+  it('looks along an axis on X, Y and Z, as the layout types them', () => {
+    const { canvas, received, onLookAlong } = renderCanvas()
+
+    expect(fireEvent.keyDown(canvas, { key: 'x', code: 'KeyX' })).toBe(false)
+    // AZERTY types z at the US W.
+    fireEvent.keyDown(canvas, { key: 'z', code: 'KeyW' })
+    // A Cyrillic layout: the key at the US Y.
+    fireEvent.keyDown(canvas, { key: 'н', code: 'KeyY' })
+    // Modifiers are left to the browser.
+    fireEvent.keyDown(canvas, { key: 'z', code: 'KeyZ', metaKey: true })
+    fireEvent.keyDown(canvas, { key: 'X', code: 'KeyX', shiftKey: true })
+
+    expect(onLookAlong.mock.calls).toEqual([['x'], ['z'], ['y']])
     expect(received).toEqual([])
   })
 

@@ -300,7 +300,8 @@ or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, the Atera 3D DAPI
 stack chosen under `Morphology`, or a BioImage Archive OME-Zarr), `Z plane`
 picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
 rendering settings name. For an OME-Zarr z-stack, `View` › `3D` shows the
-whole stack as a volume you can rotate, with `Max intensity` and
+whole stack as a volume you can rotate, with axes at the top right showing
+which way x, y and z run (click one to look along it), `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled
 channels and says so when more are on. Xenium, H5AD,
