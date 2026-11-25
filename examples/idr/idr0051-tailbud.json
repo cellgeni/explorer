@@ -1,0 +1,17 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "image",
+  "name": "Zebrafish tailbud, light-sheet time-lapse",
+  "description": "Light-sheet time-lapse of a zebrafish tailbud from the 22-somite stage with H2B-GFP nuclei, 79 time points 2 minutes apart, each a 201-plane z-stack, as OME-Zarr; opens at the middle time point, and Play under Time point shows the tail growing and somites forming. The image is a 333-pixel preview with no recorded pixel size, so the scale bar assumes 1 µm per pixel.",
+  "source": {
+    "repository": "Image Data Resource",
+    "accession": "idr0051",
+    "url": "https://idr.openmicroscopy.org/webclient/?show=project-552",
+    "license": "CC BY 4.0",
+    "citation": "Attardi A et al. (2018) Neuromesodermal progenitors are a conserved source of spinal cord with divergent growth dynamics. Development 145(21):dev166728. doi:10.1242/dev.166728"
+  },
+  "files": {
+    "image": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.5/idr0051/180712_H2B_22ss_Courtney1_20180712-163837_p00_c00_preview.zarr#t=39"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://cellgeni.github.io/explorer/schemas/explorer-manifest.v1.json",
+  "version": 1,
+  "platform": "image",
+  "name": "HeLa cell through mitosis, confocal time-lapse",
+  "description": "Confocal time-lapse of a genome-edited HeLa cell from prophase, imaged every 90 s for 60 min: 40 time points, each a 31-plane z-stack, with the Condensin subunit NCAPD2 tagged with mEGFP and DNA stained with SiR-DNA, as OME-Zarr; the store's mask of the cell is drawn as an outline that follows it from time point to time point, and Play under Time point shows the chromosomes separate and the cell divide.",
+  "source": {
+    "repository": "Image Data Resource",
+    "accession": "idr0052",
+    "url": "https://idr.openmicroscopy.org/webclient/?show=project-752",
+    "license": "CC BY 4.0",
+    "citation": "Walther N et al. (2018) A quantitative map of human Condensins provides new insights into mitotic chromosome architecture. J Cell Biol 217(7):2309-2328. doi:10.1083/jcb.201801048"
+  },
+  "files": {
+    "image": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0052A/5514375.zarr",
+    "segmentation": "https://livingobjects.ebi.ac.uk/idr/zarr/v0.4/idr0052A/5514375.zarr/labels/Cell"
+  },
+  "options": {
+    "segmentationFormat": "label-zarr"
+  },
+  "defaults": {
+    "channels": ["NCAPD2", "DNA"]
+  }
+}

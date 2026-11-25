@@ -335,6 +335,25 @@ new time point until the outlines read at its plane have come (D9).
   - The app does not open an OME-Zarr image's own `labels/` group. The
     label test imports `labels/Cell` as a segmentation, which uses
     `SpatialDataLabelsReader` (`importedSegmentation.ts:129-150`).
+  - The gallery example `examples/idr/idr0052-mitosis.json` names
+    `labels/Cell` as its segmentation (`label-zarr`).
+- **idr0051, the tailbud preview**
+  (`https://livingobjects.ebi.ac.uk/idr/zarr/v0.5/idr0051/180712_H2B_22ss_Courtney1_20180712-163837_p00_c00_preview.zarr`):
+  - OME-Zarr 0.5, sharded; axes `t, c, z, y, x`; 79 × 1 × 201 × 333 × 333
+    uint16; 2 levels. A shard per time point (13.3 MB at level 0) holds
+    one-plane inner chunks with Blosc Zstd.
+  - No pixel size or time step, here or in IDR (image 4007817 is the same
+    333-pixel preview), so the app assumes 1 µm per pixel; the study images
+    every 2 minutes. `rdefs` gives `defaultZ` 100 and `defaultT` 0.
+  - The signal fades over the series, and contrast is set on the opening
+    time point (D13), so the gallery example
+    `examples/idr/idr0051-tailbud.json` opens at `#t=39`.
+  - Play kept up at speed 5 and 10 (4.8 and 9.5 a second, first pass) and
+    reached 18 a second at speed 20 from the replay cache; the 3D view reads
+    one shard per time point. Licence CC BY 4.0. Attardi A et al. (2018)
+    Neuromesodermal progenitors are a conserved source of spinal cord with
+    divergent growth dynamics. _Development_ 145(21):dev166728.
+    doi:10.1242/dev.166728.
 - **idr0109A, image 12922361**, the heavy case
   (`https://livingobjects.ebi.ac.uk/idr/zarr/v0.3/idr0109A/12922361.zarr`):
   - OME-Zarr 0.3; axes `t, y, x` with no channel axis; 721 × 2160 × 2560
@@ -416,8 +435,10 @@ new time point until the outlines read at its plane have come (D9).
     time point with a known pixel and a known outline, the link restoring
     `t`. Run it on a port other than 4173.
   - The axe test with the control shown; the baseline stays `{}`.
-  - A gallery example for idr0052A in `examples/idr/`, opening at
-    `defaultT`, and a nightly `@live` test that plays five time points.
+  - Gallery examples in `examples/idr/` (done): idr0052A, opening at
+    `defaultT` with `labels/Cell` as its segmentation, and idr0051, opening
+    at its middle time point. Still to do: a nightly `@live` test that plays
+    five time points.
 
 ## Order And Size
 
