@@ -59,6 +59,7 @@ import {
 } from './datasets/segmentationSource'
 import { manifestSegmentationSource } from './datasets/datasetManifest'
 import { datasetManifestFor } from './data/datasetFiles'
+import { lazyIdLookup } from './data/lazyIdLookup'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
 import {
@@ -1446,15 +1447,16 @@ export function App({ dependencies }: AppProps = {}) {
   const annotationCopy = annotationStatusCopy(annotationState)
   const annotationGroupOptions =
     annotationGroupState.status === 'ready' ? annotationGroupState.groups : []
-  const overviewCellById = useMemo(() => {
-    const cellById = new Map<string, OverviewCellDatum>()
-
-    for (const cell of overviewCells) {
-      cellById.set(cell.id, cell)
-    }
-
-    return cellById
-  }, [overviewCells])
+  // Built on first use: the load reads none of it (optimization pass, O5).
+  const overviewCellById = useMemo(
+    () =>
+      lazyIdLookup(
+        overviewCells,
+        (cell) => cell.id,
+        (cell) => cell,
+      ),
+    [overviewCells],
+  )
   // Visium spots off the tissue are not placed while hidden, so annotation
   // counts, in the panel and the legend, leave them out (15.1-I, 15.5-E).
   const annotationPlacedCellIds =

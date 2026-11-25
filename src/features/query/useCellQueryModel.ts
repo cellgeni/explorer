@@ -7,6 +7,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { slug } from '../../utils/slug'
+import { lazyIdLookup, type IdLookup } from '../../data/lazyIdLookup'
 import type {
   ContinuousCellMetadataTrack,
   ContinuousCellMetadataValue,
@@ -585,7 +586,17 @@ export function useCellQueryModel({
     appendDebugEvent,
   })
 
-  const placedCellIds = useMemo(() => new Set(cells.map((cell) => cell.id)), [cells])
+  // Built when a column first counts its classes, not while Cell Query is
+  // closed (optimization pass, O5).
+  const placedCellIds = useMemo(
+    () =>
+      lazyIdLookup(
+        cells,
+        (cell) => cell.id,
+        () => true,
+      ),
+    [cells],
+  )
   const columnInputs = useMemo(() => {
     const inputs = new Map<string, ColumnInput>()
     for (const column of neededColumns) {
@@ -1236,10 +1247,12 @@ function sessionEntry(
   return entry
 }
 
+type PlacedCellIds = Pick<IdLookup<true>, 'has' | 'size'>
+
 interface ColumnInputContext {
   readonly cells: readonly OverviewCellDatum[]
   // The IDs on the map, which a class's count is of.
-  readonly placedCellIds: ReadonlySet<string>
+  readonly placedCellIds: PlacedCellIds
   readonly cellColumns: ReturnType<typeof overviewCellColumns>
   readonly annotations: readonly Annotation<string>[]
   readonly datasetSetLoads: ReadonlyMap<
@@ -1415,7 +1428,7 @@ function setClasses(
 // is of the cells on the map, as Clusters and Plots count them.
 function classesInput(
   columnId: string,
-  placedCellIds: ReadonlySet<string>,
+  placedCellIds: PlacedCellIds,
   classes: readonly CellQueryClassInput[],
 ): ColumnInput {
   return {
