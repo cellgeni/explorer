@@ -14,6 +14,19 @@
 //   --delay <ms>
 //     Answers each request this long after it arrives, as a distant host
 //     would. Requests wait in parallel.
+//   --log
+//     Prints a line per request: method, path, range, status, bytes and time.
+//   --fail <share>[:<status>]
+//     Answers this share of range requests (0 to 1) with <status> (503).
+//   --stall <share>[:<ms>]
+//     Holds this share of range requests for <ms> (90000) before answering,
+//     as the BioImage Archive sometimes does.
+//   --stall-body <share>[:<ms>]
+//     Sends the headers and half the body of this share of range requests,
+//     then waits <ms> (90000) before the rest.
+//   --seed <n>
+//     Seeds the choice of failed and stalled requests (1), so that a run can
+//     be repeated.
 import {
   createReadStream,
   existsSync,
@@ -42,9 +55,18 @@ const portIndex = args.indexOf('--port')
 const mirrorIndex = args.indexOf('--mirror')
 const delayIndex = args.indexOf('--delay')
 const delayMs = delayIndex < 0 ? 0 : Number(args[delayIndex + 1])
+const logRequests = args.includes('--log')
+const failure = shareOption('--fail', 503)
+const stall = shareOption('--stall', 90_000)
+const bodyStall = shareOption('--stall-body', 90_000)
+const seedIndex = args.indexOf('--seed')
+const random = seededRandom(seedIndex < 0 ? 1 : Number(args[seedIndex + 1]))
+const options =
+  '[--port N] [--delay MS] [--log] [--fail SHARE[:STATUS]] [--stall SHARE[:MS]] ' +
+  '[--stall-body SHARE[:MS]] [--seed N]'
 const usage =
-  'Usage: node scripts/range-server.mjs <folder> [--port N] [--delay MS]\n' +
-  '       node scripts/range-server.mjs --mirror <url> <file> [--port N] [--delay MS]'
+  `Usage: node scripts/range-server.mjs <folder> ${options}\n` +
+  `       node scripts/range-server.mjs --mirror <url> <file> ${options}`
 
 if (args.length === 0 || args.includes('--help')) {
   console.log(usage)
@@ -64,8 +86,29 @@ createServer((request, response) => {
     return
   }
 
-  delay(delayMs)
-    .then(() => serve(request, response))
+  const started = Date.now()
+  const fault = chooseFault(request)
+
+  if (logRequests) {
+    response.on('close', () => {
+      console.log(
+        `${request.method} ${request.url} ${request.headers.range ?? '-'} ` +
+          `${response.statusCode} ${bodyBytes.get(response) ?? 0} bytes ` +
+          `${Date.now() - started} ms${fault === null ? '' : ` (${fault.kind})`}`,
+      )
+    })
+  }
+
+  delay(delayMs + (fault?.kind === 'stall' ? fault.value : 0))
+    .then(() => {
+      if (fault?.kind === 'fail') {
+        response.writeHead(fault.value, CORS)
+        response.end()
+        return
+      }
+
+      return serve(request, response, fault?.kind === 'stall-body' ? fault.value : 0)
+    })
     .catch((error) => {
       console.error(`${request.method} ${request.url}: ${error.message}`)
 
@@ -79,11 +122,83 @@ createServer((request, response) => {
   console.log(`${source.description} on http://127.0.0.1:${port}/`)
 })
 
+// The body length of each response, for --log.
+const bodyBytes = new WeakMap()
+
 function delay(ms) {
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve()
 }
 
-async function serve(request, response) {
+// `--fail 0.1:500` gives { share: 0.1, value: 500 }; the value is optional.
+function shareOption(name, defaultValue) {
+  const index = args.indexOf(name)
+
+  if (index < 0) {
+    return null
+  }
+
+  const [share, value] = (args[index + 1] ?? '').split(':').map(Number)
+
+  if (!(share >= 0 && share <= 1)) {
+    throw new Error(`${name} takes a share from 0 to 1, not ${args[index + 1]}`)
+  }
+
+  return { share, value: Number.isFinite(value) ? value : defaultValue }
+}
+
+// Only GETs with a Range header can fail or stall: the reads the viewer
+// retries, not its HEAD probes or whole-file reads.
+function chooseFault(request) {
+  if (request.method !== 'GET' || request.headers.range === undefined) {
+    return null
+  }
+
+  for (const [kind, option] of [
+    ['fail', failure],
+    ['stall', stall],
+    ['stall-body', bodyStall],
+  ]) {
+    if (option !== null && random() < option.share) {
+      return { kind, value: option.value }
+    }
+  }
+
+  return null
+}
+
+// mulberry32: a small seeded generator, so a run's faults can be repeated.
+function seededRandom(seed) {
+  let state = seed >>> 0
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0
+    let value = state
+    value = Math.imul(value ^ (value >>> 15), value | 1)
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61)
+
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+// Sends half the body, waits, then sends the rest.
+async function pipeWithStall(body, response, stallMs) {
+  const chunks = []
+
+  for await (const chunk of body) {
+    chunks.push(chunk)
+  }
+
+  const bytes = Buffer.concat(chunks)
+  const half = Math.floor(bytes.length / 2)
+  response.write(bytes.subarray(0, half))
+  await delay(stallMs)
+
+  if (!response.destroyed) {
+    response.end(bytes.subarray(half))
+  }
+}
+
+async function serve(request, response, bodyStallMs = 0) {
   const path = decodeURIComponent(new URL(request.url, 'http://localhost').pathname)
   const file = await source.file(path)
 
@@ -104,6 +219,7 @@ async function serve(request, response) {
     }
 
     response.writeHead(200, { ...CORS, 'Content-Length': file.size })
+    bodyBytes.set(response, request.method === 'HEAD' ? 0 : file.size)
 
     if (request.method === 'HEAD') {
       response.end()
@@ -133,9 +249,12 @@ async function serve(request, response) {
     'Content-Length': end - start + 1,
     'Content-Range': `bytes ${start}-${end}/${file.size}`,
   })
+  bodyBytes.set(response, body === null ? 0 : end - start + 1)
 
   if (body === null) {
     response.end()
+  } else if (bodyStallMs > 0) {
+    await pipeWithStall(body, response, bodyStallMs)
   } else {
     body.pipe(response)
   }
