@@ -49,6 +49,11 @@ interface DatasetDiagnosticsWorkflowLoaders {
 
 interface DatasetDiagnosticsWorkflowRefs {
   readonly diagnosticsAbortRef: MutableRef<AbortController | null>
+  // The latest transcript hover, which App's state keeps only when the
+  // hovered transcript changes: its pointer position is the latest.
+  readonly latestTranscriptHoverRef?: {
+    readonly current: DiagnosticsDumpOptions['hoveredTranscript']
+  }
 }
 
 interface DatasetDiagnosticsWorkflowSetters {
@@ -84,7 +89,7 @@ export function useDatasetDiagnosticsWorkflow({
   const { appendDebugEvent, recordTelemetry } = callbacks
   const { visiumHdBinSizeMicrometers } = controls
   const { runDatasetDiagnostics } = loaders
-  const { diagnosticsAbortRef } = refs
+  const { diagnosticsAbortRef, latestTranscriptHoverRef } = refs
   const { setDiagnosticsState } = setters
   const {
     openPanels,
@@ -225,7 +230,10 @@ export function useDatasetDiagnosticsWorkflow({
             geneExpressionDetailMode,
             geneExpressionScoreMode,
             geneExpressionState,
-            hoveredTranscript,
+            hoveredTranscript:
+              hoveredTranscript === null
+                ? null
+                : (latestTranscriptHoverRef?.current ?? hoveredTranscript),
             loadState,
             manualTranscriptExactRequestKey,
             measurementEnabled,
@@ -274,6 +282,7 @@ export function useDatasetDiagnosticsWorkflow({
     geneExpressionScoreMode,
     geneExpressionState,
     hoveredTranscript,
+    latestTranscriptHoverRef,
     loadState,
     manualTranscriptExactRequestKey,
     measurementEnabled,

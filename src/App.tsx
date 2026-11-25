@@ -272,6 +272,7 @@ import { useVisiumHdMagicLensSummary } from './features/roi/useVisiumHdMagicLens
 import { useRoiWorkflow } from './features/roi/useRoiWorkflow'
 import { useSelectionList } from './features/roi/useSelectionList'
 import { useTranscriptGeneLegend } from './features/transcripts/useTranscriptGeneLegend'
+import { useTranscriptHover } from './features/transcripts/useTranscriptHover'
 import { selectionDatasetKey, selectionOutlines } from './features/roi/selectionListModel'
 import { referenceSampleIndices } from './features/roi/roiEnrichmentModel'
 import { useVisiumHdRoiWorkflow } from './features/roi/useVisiumHdRoiWorkflow'
@@ -741,7 +742,6 @@ export function App({ dependencies }: AppProps = {}) {
       setSelectedGridCell,
       setShareableViewState,
       setSpatialFocusRequest,
-      setViewportCellCount,
       shareableViewState,
       spatialFocusRequest,
     },
@@ -828,6 +828,8 @@ export function App({ dependencies }: AppProps = {}) {
   const datasetAbortRef = useRef<AbortController | null>(null)
   const datasetWarmupAbortRef = useRef<AbortController | null>(null)
   const diagnosticsAbortRef = useRef<AbortController | null>(null)
+  const { handleTranscriptHover, latestTranscriptHoverRef } =
+    useTranscriptHover(setHoveredTranscript)
   const analysisEmbeddingAbortRef = useRef<AbortController | null>(null)
   const boundaryAbortRef = useRef<AbortController | null>(null)
   const nucleusBoundaryAbortRef = useRef<AbortController | null>(null)
@@ -2175,7 +2177,7 @@ export function App({ dependencies }: AppProps = {}) {
       transcriptPointSize,
     },
     loaders: { runDatasetDiagnostics },
-    refs: { diagnosticsAbortRef },
+    refs: { diagnosticsAbortRef, latestTranscriptHoverRef },
     setters: { setDiagnosticsState },
   })
   const handleImageTileError = useCallback(
@@ -4061,7 +4063,6 @@ export function App({ dependencies }: AppProps = {}) {
       setVisiumControlState,
       setMerscopeImageState,
       setAteraImageState,
-      setViewportCellCount,
     },
   })
   // Cancel in the loading list (15.3-D). ViewerCore gets one stable
@@ -5630,9 +5631,8 @@ export function App({ dependencies }: AppProps = {}) {
               screenshot={screenshotRunner}
               onImageTileError={handleImageTileError}
               onTileCacheEviction={handleTileCacheEviction}
-              onViewportCellCountChange={setViewportCellCount}
               onViewportChange={handleViewportChange}
-              onTranscriptHover={setHoveredTranscript}
+              onTranscriptHover={handleTranscriptHover}
               onTranscriptClick={handlePinTranscript}
               onCellClick={handleViewerCellClick}
               onCellBoundaryClick={handleViewerCellBoundaryClick}

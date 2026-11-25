@@ -511,7 +511,6 @@ interface UseDatasetLifecycleSetters {
   readonly setVisiumControlState: Setter<VisiumControlState>
   readonly setMerscopeImageState: Setter<MerscopeImageControlState>
   readonly setAteraImageState: Setter<AteraImageControlState>
-  readonly setViewportCellCount: Setter<number | null>
 }
 
 // One dataset load (15.1-F). Until it commits, the dataset on screen stays,
@@ -699,7 +698,6 @@ export function useDatasetLifecycle({
     setVisiumControlState,
     setMerscopeImageState,
     setAteraImageState,
-    setViewportCellCount,
   },
 }: UseDatasetLifecycleOptions): UseDatasetLifecycleResult {
   const datasetWarmupRequestIdRef = useRef(0)
@@ -1282,7 +1280,6 @@ export function useDatasetLifecycle({
           setSelectedCell(null)
           setSelectedGridCell(null)
           setCurrentViewportDetail(null)
-          setViewportCellCount(null)
           setLoadState(datasetLoadStarted(requestedUrl))
           setMorphologyState(
             loadImage ? morphologyLoadStarted(requestedUrl) : IDLE_MORPHOLOGY_LOAD_STATE,

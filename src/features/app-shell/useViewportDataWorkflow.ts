@@ -246,7 +246,11 @@ export function useViewportDataWorkflow({
       }
 
       lastViewportDetailRef.current = detail
-      setCurrentViewportDetail(detail)
+      // The viewer reports its view again when a handler changes; the same
+      // view keeps its detail, so nothing that reads it is worked out again.
+      setCurrentViewportDetail((current) =>
+        current !== null && sameViewportDetail(current, detail) ? current : detail,
+      )
       const nextShareableViewState = viewStateToShareable(detail.viewState)
       setShareableViewState((current) =>
         shareableViewStateKey(current) === shareableViewStateKey(nextShareableViewState)
@@ -905,4 +909,21 @@ function formatProfileTimingDetail(
 
 function formatDurationMs(durationMs: number): string {
   return `${Math.round(durationMs).toLocaleString()} ms`
+}
+
+export function sameViewportDetail(
+  left: ViewerViewportDetail,
+  right: ViewerViewportDetail,
+): boolean {
+  return (
+    left.visibleCellCount === right.visibleCellCount &&
+    left.bbox.minX === right.bbox.minX &&
+    left.bbox.maxX === right.bbox.maxX &&
+    left.bbox.minY === right.bbox.minY &&
+    left.bbox.maxY === right.bbox.maxY &&
+    left.viewState.zoom === right.viewState.zoom &&
+    left.viewState.minZoom === right.viewState.minZoom &&
+    left.viewState.maxZoom === right.viewState.maxZoom &&
+    left.viewState.target.every((value, index) => value === right.viewState.target[index])
+  )
 }

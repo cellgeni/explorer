@@ -277,7 +277,6 @@ function Probe({
       setVisiumHdControlState,
       setSpatialDataControlState: noopSetter,
       setVisiumControlState: noopSetter,
-      setViewportCellCount: noopSetter,
       ...extraSetters,
     },
   })
