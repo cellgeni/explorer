@@ -75,4 +75,44 @@ describe('Zarr decode worker', () => {
 
     expect(loads).toBe(1)
   })
+
+  it("traces the labels of the window's plane in a chunk of several (plan 28-D9)", async () => {
+    const pool = new ZarrDecodePool({ size: 1, workerFactory: () => worker })
+    // Two time points of 2 x 2 pixels: label 1 at the first, 7 at the second.
+    const chunk = Int32Array.from([1, 1, 1, 0, 7, 0, 7, 7])
+    const trace = await pool.traceLabels({
+      source: {
+        metadataKey: '.zarray',
+        metadata: {
+          zarr_format: 2,
+          shape: [2, 2, 2],
+          chunks: [2, 2, 2],
+          dtype: '<i4',
+          compressor: null,
+          fill_value: 0,
+          order: 'C',
+          filters: null,
+          dimension_separator: '/',
+        },
+        chunkKey: '0/0/0',
+        coords: [0, 0, 0],
+      },
+      bytes: new Uint8Array(chunk.buffer),
+      window: {
+        xAxis: 2,
+        yAxis: 1,
+        x0: 0,
+        y0: 0,
+        width: 2,
+        height: 2,
+        fixedAxes: [{ axis: 0, index: 1 }],
+      },
+      levelX0: 0,
+      levelY0: 0,
+      levelWidth: 2,
+    })
+
+    expect(Array.from(trace.labels)).toEqual([7])
+    expect(Array.from(trace.pixelCounts)).toEqual([3])
+  })
 })

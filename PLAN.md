@@ -35,7 +35,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 4](docs/plan/phases/04-genes-annotations.md)                                       | Genes, gene sets, annotations, ROI, embeddings, HDF5     | Done; expression LOD redesigned in November                      |
 | [Phase 5](docs/plan/phases/05-production-polish.md)                                       | Production polish                                        | Done; reopened diagnostics fixed 2026-11-12                      |
 | [Feature-fix pass](docs/plan/phases/feature-fix-pass.md)                                  | Correctness before optimization                          | Ongoing; ten-pass code review fixed by 2026-11-24                |
-| [Optimization pass](docs/plan/phases/optimization-pass.md)                                | Interaction, memory, fetch/decode concurrency, rendering | Open. November rendering and expression work done                |
+| [Optimization pass](docs/plan/phases/optimization-pass.md)                                | Interaction, memory, fetch/decode concurrency, rendering | Planned 2026-11-25; November rendering and expression work done  |
 | [Phase 5.1](docs/plan/phases/05.1-transcripts.md)                                         | Transcript visualization with LOD                        | Done                                                             |
 | [Phase 6](docs/plan/phases/06-visium-hd.md)                                               | Visium HD                                                | MVP done; open items and 2 µm memory closed 2026-11-17           |
 | [Structural refactor](docs/plan/engineering.md#application-structure-and-refactor-record) | 14 recommendations from `OPTIMIZATIONS.md`               | All closed by 2026-06-28                                         |
@@ -60,6 +60,7 @@ Legend: `[x]` done · `[ ]` open · **Deferred** · **Dropped** · **Superseded*
 | [Phase 25](docs/plan/phases/25-imported-segmentations.md)                                 | Segmentations imported onto images (masks, polygons)     | Done (2026-11-19)                                                |
 | [Phase 26](docs/plan/phases/26-image-channel-conditions.md)                               | Cell query on image channels: mean and % above per cell  | M1 and M2 done (2026-11-19): TIFF and OME-Zarr images            |
 | [Phase 27](docs/plan/phases/27-screenshot.md)                                             | Screenshot: the spatial view as a high-resolution PNG    | Done (2026-11-24)                                                |
+| [Phase 28](docs/plan/phases/28-time-points.md)                                            | Time points: a `t` slider and Play for OME-Zarr images   | M1–M3 built (2026-11-25), PR 431; M4 not implemented             |
 
 **Done** means a phase's tasks shipped. Most phase files also keep a Known
 Gaps list whose items stay open; [Open Items](docs/plan/open-items.md)

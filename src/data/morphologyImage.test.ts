@@ -712,7 +712,7 @@ describe('morphology image loader', () => {
       `${imageUrl}#ifd=3`,
     ])
 
-    const firstPlane = await image.zStack?.openPlane(0)
+    const firstPlane = await image.openPlane?.({ z: 0 })
 
     expect(firstPlane?.zStack?.zPlane).toBe(0)
     expect(firstPlane?.loader).toBe(baseLoader)
@@ -721,11 +721,11 @@ describe('morphology image loader', () => {
     expect(firstPlane?.channelLoaders[1]?.loader.url).toBe(`${imageUrl}#ifd=1`)
 
     openImage.mockClear()
-    const middleAgain = await firstPlane?.zStack?.openPlane(1)
+    const middleAgain = await firstPlane?.openPlane?.({ z: 1 })
 
     expect(openImage).not.toHaveBeenCalled()
     expect(middleAgain?.channelLoaders).toBe(image.channelLoaders)
-    await expect(image.zStack?.openPlane(99)).resolves.toMatchObject({
+    await expect(image.openPlane?.({ z: 99 })).resolves.toMatchObject({
       zStack: { zPlane: 2 },
     })
   })

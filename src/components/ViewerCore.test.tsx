@@ -2175,7 +2175,7 @@ describe('ViewerCore', () => {
     expect(cellLayer?.props?.data?.attributes?.getFilterValue?.value?.[1]).toBe(1)
   })
 
-  it('defers boundary expression restyling until viewport movement is idle', async () => {
+  it('colours every outline by its expression at once, and a pan or a batch rebuilds none (O4)', async () => {
     vi.useFakeTimers()
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
@@ -2226,24 +2226,30 @@ describe('ViewerCore', () => {
       },
     ]
 
-    render(
-      <ViewerCore
-        cells={cells}
-        boundaries={boundaries}
-        cellBoundaryOpacity={1}
-        expressionElements={expressionElements}
-        geneExpressionActive
-        initialViewStateOverride={{ target: [0, 0, 0], zoom: 0 }}
-      />,
+    const props = {
+      cells,
+      boundaries,
+      cellBoundaryOpacity: 1,
+      cellBoundaryHoverEnabled: true,
+      geneExpressionActive: true,
+      initialViewStateOverride: { target: [0, 0, 0], zoom: 0 },
+    } as const
+    const { rerender } = render(
+      <ViewerCore {...props} expressionElements={expressionElements} />,
     )
 
-    await act(async () => {
-      vi.advanceTimersByTime(200)
-    })
-
+    // The cell out of view is coloured too, with no wait for the view.
     expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
-    expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
+    expect(boundaryPathColorAt(1)).toEqual([63, 165, 91, 220])
 
+    const layerData = (id: string) =>
+      (
+        deckGlMock.layers.find(
+          (layer) => (layer as { readonly id?: string }).id === id,
+        ) as { readonly props: { readonly data: unknown } } | undefined
+      )?.props.data
+    const pathData = boundaryPathLayerData()
+    const hitAreaData = layerData('cell-boundary-hit-areas')
     const currentViewState = deckGlMock.viewState
 
     if (currentViewState === undefined) {
@@ -2257,24 +2263,30 @@ describe('ViewerCore', () => {
           target: [1000, 0, 0],
         },
       })
+      vi.advanceTimersByTime(1000)
     })
 
-    expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
+    // A pan restyles nothing.
+    expect(boundaryPathLayerData()).toBe(pathData)
+
+    // A new batch colours the same rings.
+    rerender(
+      <ViewerCore
+        {...props}
+        expressionElements={[{ ...expressionElements[0]!, fillColor: [10, 20, 30, 220] }]}
+      />,
+    )
+
+    const nextPathData = boundaryPathLayerData() as typeof pathData & {
+      readonly geometryKey?: unknown
+    }
+
+    expect(nextPathData).not.toBe(pathData)
+    expect(nextPathData.startIndices).toBe(pathData.startIndices)
+    expect(nextPathData.geometryKey).toBe((pathData as typeof nextPathData).geometryKey)
+    expect(layerData('cell-boundary-hit-areas')).toBe(hitAreaData)
+    expect(boundaryPathColorAt(0)).toEqual([10, 20, 30, 220])
     expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
-
-    await act(async () => {
-      vi.advanceTimersByTime(159)
-    })
-
-    expect(boundaryPathColorAt(0)).toEqual([240, 128, 120, 220])
-    expect(boundaryPathColorAt(1)).toEqual([72, 68, 58, 160])
-
-    await act(async () => {
-      vi.advanceTimersByTime(1)
-    })
-
-    expect(boundaryPathColorAt(0)).toEqual([72, 68, 58, 160])
-    expect(boundaryPathColorAt(1)).toEqual([63, 165, 91, 220])
   })
 
   it('supports keyboard panning and zooming on the spatial view', async () => {

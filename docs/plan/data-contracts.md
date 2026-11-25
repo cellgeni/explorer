@@ -159,8 +159,14 @@ matrices.
 
 - Zarr v2 or v3; `multiscales[0]` from `attrs.ome` (OME-Zarr 0.5) or `attrs`.
   `x` and `y` axes are required. Z planes are chosen with the `Z plane`
-  control, starting at `omero.rdefs.defaultZ` or the middle plane; one `t` is
-  shown, `defaultT` or 0. A bioformats2raw store opens its first series.
+  control, starting at `omero.rdefs.defaultZ` or the middle plane. Time
+  points (an axis named `t` or typed `time`) are chosen with `Time point`,
+  starting at `#t=N`, `defaultT` or 0 (Phase 28). A bioformats2raw store opens
+  its first series.
+- Label images (SpatialData `labels`, AnnData attached labels, imported
+  OME-Zarr masks) with an axis named `z`, or named `t` or typed `time`, read
+  the image's z plane and time point, clamped to their own length and scaled
+  on a level downsampled along the axis. Other axes read index 0 (Phase 28).
 - µm/px is the product of multiscale and dataset `scale` values for `x`, with
   unit conversion; a missing scale gives 1 µm/px.
 - `omero.channels` gives names, colours, and windows. An image without a `c`

@@ -27,6 +27,9 @@ export interface MorphologyVolumeState {
   // Planes read of the channels still loading.
   readonly progress: { readonly planesRead: number; readonly planesTotal: number } | null
   readonly error: string | null
+  // The channels drawn are the image's time point's, all read: false while
+  // another time point's are drawn as this one's are read (plan 28-D11).
+  readonly frameShown: boolean
 }
 
 // The dataset image's levels the 3D view can read: an OME-Zarr z-stack's.
@@ -52,13 +55,16 @@ function enabledMorphologyChannels(
 }
 
 interface LoadedVolumes {
-  // The image and level the volumes belong to.
+  // The image, level and time point the volumes belong to.
   readonly key: string
   readonly volumes: ReadonlyMap<string, VolumeTextureData>
   // Planes read so far, by channel id.
   readonly progress: ReadonlyMap<string, number>
   // Why a channel could not be read; it is not read again for this source.
   readonly errors: ReadonlyMap<string, string>
+  // The volumes of the time point drawn before, drawn until this one's are
+  // all read (28-D11).
+  readonly held: ReadonlyMap<string, VolumeTextureData> | null
 }
 
 const NO_VOLUMES: LoadedVolumes = {
@@ -66,12 +72,15 @@ const NO_VOLUMES: LoadedVolumes = {
   volumes: new Map(),
   progress: new Map(),
   errors: new Map(),
+  held: null,
 }
 
 // Reads the enabled channels of a z-stack, whole, at the finest level that
-// fits the 3D view. Volumes are kept while the image and level stay, so
-// turning a channel off and on does not read it again; another z plane is the
-// same image. They are dropped with the 3D view.
+// fits the 3D view. Volumes are kept while the image, level and time point
+// stay, so turning a channel off and on does not read it again; another z
+// plane is the same image. Another time point is read whole while the last
+// one stays drawn, as the 2D view swaps whole planes (28-D11). Volumes are
+// dropped with the 3D view.
 export function useMorphologyVolumeWorkflow({
   image,
   settings,
@@ -95,12 +104,13 @@ export function useMorphologyVolumeWorkflow({
   const sourceKey =
     image === null || level === null
       ? null
-      : `${imageRootUrl(image.url)}\n${level.level.toString()}`
+      : volumeSourceKey(image.url, level.level, image.timeSeries?.timePoint)
   const [loaded, setLoaded] = useState<LoadedVolumes>(NO_VOLUMES)
 
-  // Another image or level: drop the volumes read for the last one.
+  // Another image, level or time point: drop the volumes read for the last
+  // one, holding what was drawn for a time point.
   if (loaded.key !== sourceKey && loaded !== NO_VOLUMES) {
-    setLoaded(NO_VOLUMES)
+    setLoaded(volumesFor(sourceKey, loaded))
   }
 
   // Reads in flight, by channel id, for the source they read.
@@ -114,6 +124,11 @@ export function useMorphologyVolumeWorkflow({
     (id) => !current.volumes.has(id) && !current.errors.has(id),
   )
   const missingKey = missingIds.join('\n')
+
+  // This time point's volumes are all read or failed: draw them instead.
+  if (current.held !== null && missingIds.length === 0) {
+    setLoaded({ ...current, held: null })
+  }
 
   useEffect(() => {
     const reads = readsRef.current
@@ -160,7 +175,7 @@ export function useMorphologyVolumeWorkflow({
         }
 
         setLoaded((state) =>
-          change(state.key === sourceKey ? state : { ...NO_VOLUMES, key: sourceKey }),
+          change(state.key === sourceKey ? state : volumesFor(sourceKey, state)),
         )
       }
 
@@ -226,7 +241,7 @@ export function useMorphologyVolumeWorkflow({
     }
   }, [])
 
-  const volumes = current.volumes
+  const volumes = current.held ?? current.volumes
   const loadedChannels = useMemo(
     () =>
       channels.flatMap((channel) => {
@@ -268,7 +283,30 @@ export function useMorphologyVolumeWorkflow({
             planesTotal: missingIds.length * level.depth,
           },
     error: error ?? null,
+    // Nothing is read when no level fits the 3D view.
+    frameShown: level === null || (current.held === null && missingIds.length === 0),
   }
+}
+
+// The volumes for a source: none, or for another time point of the image and
+// level, the last time point's drawn volumes, held while this one's are read.
+function volumesFor(key: string | null, last: LoadedVolumes): LoadedVolumes {
+  if (key === null || volumeImageKey(key) !== volumeImageKey(last.key)) {
+    return key === null ? NO_VOLUMES : { ...NO_VOLUMES, key }
+  }
+
+  const held = last.held ?? last.volumes
+  return { ...NO_VOLUMES, key, held: held.size === 0 ? null : held }
+}
+
+// The image root, level and time point. A plane loader's URL names its z
+// plane, which the volume covers.
+function volumeSourceKey(url: string, level: number, timePoint: number | undefined) {
+  return `${imageRootUrl(url)}\n${level.toString()}\n${timePoint?.toString() ?? ''}`
+}
+
+function volumeImageKey(key: string): string {
+  return key.slice(0, key.lastIndexOf('\n'))
 }
 
 function imageRootUrl(url: string): string {

@@ -114,6 +114,38 @@
       }
     },
     {
+      "id": "idr/idr0051-tailbud",
+      "path": "idr/idr0051-tailbud.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0051-tailbud.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0051-tailbud.json",
+      "platform": "image",
+      "name": "Zebrafish tailbud, light-sheet time-lapse",
+      "description": "Light-sheet time-lapse of a zebrafish tailbud from the 22-somite stage with H2B-GFP nuclei, 79 time points 2 minutes apart, each a 201-plane z-stack, as OME-Zarr; opens at the middle time point, and Play under Time point shows the tail growing and somites forming. The image is a 333-pixel preview with no recorded pixel size, so the scale bar assumes 1 µm per pixel.",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0051",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-552",
+        "license": "CC BY 4.0",
+        "citation": "Attardi A et al. (2018) Neuromesodermal progenitors are a conserved source of spinal cord with divergent growth dynamics. Development 145(21):dev166728. doi:10.1242/dev.166728"
+      }
+    },
+    {
+      "id": "idr/idr0052-mitosis",
+      "path": "idr/idr0052-mitosis.json",
+      "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0052-mitosis.json",
+      "viewerUrl": "https://cellgeni.github.io/explorer/?dataset=https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0052-mitosis.json",
+      "platform": "image",
+      "name": "HeLa cell through mitosis, confocal time-lapse",
+      "description": "Confocal time-lapse of a genome-edited HeLa cell from prophase, imaged every 90 s for 60 min: 40 time points, each a 31-plane z-stack, with the Condensin subunit NCAPD2 tagged with mEGFP and DNA stained with SiR-DNA, as OME-Zarr; the store's mask of the cell is drawn as an outline that follows it from time point to time point, and Play under Time point shows the chromosomes separate and the cell divide.",
+      "source": {
+        "repository": "Image Data Resource",
+        "accession": "idr0052",
+        "url": "https://idr.openmicroscopy.org/webclient/?show=project-752",
+        "license": "CC BY 4.0",
+        "citation": "Walther N et al. (2018) A quantitative map of human Condensins provides new insights into mitotic chromosome architecture. J Cell Biol 217(7):2309-2328. doi:10.1083/jcb.201801048"
+      }
+    },
+    {
       "id": "idr/idr0054-tonsil",
       "path": "idr/idr0054-tonsil.json",
       "manifestUrl": "https://raw.githubusercontent.com/cellgeni/explorer/main/examples/idr/idr0054-tonsil.json",

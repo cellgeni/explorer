@@ -299,12 +299,28 @@ in Settings, and the Measure tool (`M`) measures distances. For an OME-TIFF
 or OME-Zarr z-stack (such as Xenium `morphology.ome.tif`, the Atera 3D DAPI
 stack chosen under `Morphology`, or a BioImage Archive OME-Zarr), `Z plane`
 picks the plane shown; it opens at the middle plane, or at the plane an OME-Zarr's OMERO
-rendering settings name. For an OME-Zarr z-stack, `View` › `3D` shows the
+rendering settings name. For an OME-Zarr with time points (a time-lapse, such
+as IDR's idr0052A), `Time point` picks the time shown; it opens at the time
+point the OMERO rendering settings name, else the first, and keeps the z
+plane. `Play time points` steps through them at the chosen `Speed`, and
+`Loop` starts again from the first. Each time point is shown once it has
+loaded, so a slow one holds the last a little longer; moving the slider,
+switching to 3D or taking a screenshot stops it. The next time points load
+while one is shown, and played ones stay in memory, so a second loop replays
+without reading them again. A new z plane or time point replaces the old one
+whole once it has loaded, or tile by tile after 2 s on a slow connection.
+Label outlines with z planes or time points (SpatialData labels, AnnData
+labels, an imported OME-Zarr mask) follow the image, and a new plane is shown
+once its outlines have loaded too; cells and tables stay the same at every
+time point.
+Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
 whole stack as a volume you can rotate, with axes at the top right showing
 which way x, y and z run (click one to look along it), `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled
-channels and says so when more are on. Xenium, H5AD,
+channels and says so when more are on. In 3D, `Time point` loads that time
+point's volume and keeps showing the last one until it is ready; `Play` is
+2D only. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
 `nucleus_boundaries.parquet`, Atera nuclei, and a SpatialData store's

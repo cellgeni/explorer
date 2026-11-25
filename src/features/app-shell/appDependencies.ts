@@ -2,6 +2,7 @@ import {
   loadDatasetAnnotationGroups,
   loadDatasetAnnotations,
 } from '../../data/datasetAnnotations'
+import type { ImagePyramidPlane } from '../../data/imagePyramid'
 import { loadDatasetBoundaryElements } from '../../data/datasetBoundaries'
 import {
   loadDatasetAnalysisEmbeddings,
@@ -118,6 +119,8 @@ export type BoundaryElementsLoader = (
     // The boundary limit, for a source that only learns how many outlines a
     // box holds by reading them (an image's label mask).
     readonly cellLimit?: number
+    // The dataset image's plane, for label outlines that follow it (plan 28).
+    readonly plane?: ImagePyramidPlane
   },
 ) => Promise<ElementBatch>
 

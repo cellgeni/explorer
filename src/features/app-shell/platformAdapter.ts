@@ -624,7 +624,9 @@ export async function loadPlatformBoundaryElements(
     return { elements: [] }
   }
 
-  return dataset.elements(bbox)
+  return options.plane === undefined
+    ? dataset.elements(bbox)
+    : dataset.elements(bbox, { plane: options.plane })
 }
 
 // Box reads in flight at once for a dataset without its own read for given

@@ -1,7 +1,11 @@
 /// <reference lib="webworker" />
 
 import type * as zarr from 'zarrita'
-import { labelWindow, traceLabelEdges } from '../datasets/spatialDataLabelTrace'
+import {
+  fixedAxesOffset,
+  labelWindow,
+  traceLabelEdges,
+} from '../datasets/spatialDataLabelTrace'
 import { numericPixelsToRgba } from '../zarr/omeZarrPixels'
 import { decodeZarrCodec } from './zarrCodecCore'
 import {
@@ -182,6 +186,7 @@ async function traceLabels(message: ZarrTraceLabelsMessage): Promise<void> {
       window.yAxis,
       window.width,
       window.height,
+      fixedAxesOffset(chunk.stride, window.fixedAxes),
     )
     const trace = traceLabelEdges(
       labels,

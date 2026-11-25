@@ -58,7 +58,12 @@ import {
   type H5FileRangeStats,
   type H5TreeGroup,
 } from '../workers/h5FileMessages'
-import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import {
+  imagePlaneKey,
+  type ImagePyramidLoader,
+  type ImagePyramidOpener,
+  type ImagePyramidPlane,
+} from '../data/imagePyramid'
 import type { DatasetImageCoordinates } from './datasetManifest'
 import type { SpatialDataLabelsReader } from './spatialDataLabels'
 import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
@@ -77,6 +82,7 @@ import type {
 import type {
   DatasetMeta,
   ElementBatch,
+  ElementReadOptions,
   GeneExpressionBatch,
   GeneExpressionElement,
   ImageSource,
@@ -181,7 +187,8 @@ export interface AnnDataSection {
 }
 
 // What cell boundaries need from a label image's reader.
-export type AnnDataLabelsReader = Pick<SpatialDataLabelsReader, 'levels' | 'outlines'>
+export type AnnDataLabelsReader = Pick<SpatialDataLabelsReader, 'levels' | 'outlines'> &
+  Partial<Pick<SpatialDataLabelsReader, 'followsPlanes' | 'planeNotice'>>
 
 export type AnnDataLabelsOpener = (url: string) => Promise<AnnDataLabelsReader>
 
@@ -756,16 +763,18 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   // Visium spot outlines, or outlines traced from the attached label image;
   // other AnnData has no element geometry.
-  async elements(bbox?: BBox): Promise<ElementBatch<SpatialElementId>> {
+  async elements(
+    bbox?: BBox,
+    options: ElementReadOptions = {},
+  ): Promise<ElementBatch<SpatialElementId>> {
     const cache = await this.cache()
 
     if (cache.visium === null) {
-      return {
-        elements:
-          bbox === undefined || this.attachedImage?.labelsUrl === undefined
-            ? []
-            : await this.labelElements(cache, bbox),
+      if (bbox === undefined || this.attachedImage?.labelsUrl === undefined) {
+        return { elements: [] }
       }
+
+      return this.labelElements(cache, bbox, options.plane ?? {})
     }
 
     const spots = await this.spotElements()
@@ -1371,7 +1380,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private async labelElements(
     cache: H5adCache,
     bbox: BBox,
-  ): Promise<readonly SpatialElement<SpatialElementId>[]> {
+    plane: ImagePyramidPlane,
+  ): Promise<ElementBatch<SpatialElementId>> {
     const { byLabel: cellIds, error } = await this.labelCellsFor(cache)
 
     if (error !== undefined) {
@@ -1379,7 +1389,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
 
     if (cellIds.size === 0) {
-      return []
+      return { elements: [] }
     }
 
     const [reader, image] = await Promise.all([
@@ -1389,7 +1399,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const labels = reader.levels[0]
 
     if (labels === undefined || labels.width === 0 || labels.height === 0) {
-      return []
+      return { elements: [] }
     }
 
     const scaleX = (image.units.micrometersPerPixel * image.imageWidth) / labels.width
@@ -1404,10 +1414,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       {
         maxPixels: LABEL_OUTLINE_MAX_PIXELS,
         include: (label) => cellIds.has(label),
+        plane,
       },
     )
-
-    return outlines.flatMap((outline) => {
+    const notice = reader.followsPlanes === true ? reader.planeNotice?.(plane) : undefined
+    const elements = outlines.flatMap((outline) => {
       const cached = this.labelElementsByRing.get(outline.ring)
 
       if (cached !== undefined) {
@@ -1436,6 +1447,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       this.labelElementsByRing.set(outline.ring, element)
       return [element]
     })
+
+    return {
+      elements,
+      ...(reader.followsPlanes === true ? { plane: imagePlaneKey(plane) } : {}),
+      ...(notice === undefined ? {} : { planeNotice: notice }),
+    }
   }
 
   // Micrometres per coordinate unit along x and y: the attached image's pixel

@@ -12,6 +12,8 @@ export interface PerformanceBudget {
   readonly boundaryCellLimit: number
   readonly maxConcurrentTileRequests: number
   readonly tileCacheMaxTiles: number
+  // Time points read ahead while Play runs (plan 28-D8).
+  readonly timePointPrefetch: number
   readonly telemetryEventLimit: number
 }
 
@@ -21,6 +23,7 @@ const COMPACT_BUDGET: PerformanceBudget = {
   boundaryCellLimit: 2_500,
   maxConcurrentTileRequests: 2,
   tileCacheMaxTiles: 72,
+  timePointPrefetch: 1,
   telemetryEventLimit: 80,
 }
 
@@ -30,6 +33,7 @@ const BALANCED_BUDGET: PerformanceBudget = {
   boundaryCellLimit: 50_000,
   maxConcurrentTileRequests: 4,
   tileCacheMaxTiles: 120,
+  timePointPrefetch: 2,
   telemetryEventLimit: 120,
 }
 
@@ -39,6 +43,7 @@ const EXPANDED_BUDGET: PerformanceBudget = {
   boundaryCellLimit: 50_000,
   maxConcurrentTileRequests: 6,
   tileCacheMaxTiles: 180,
+  timePointPrefetch: 3,
   telemetryEventLimit: 160,
 }
 

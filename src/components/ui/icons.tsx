@@ -284,3 +284,21 @@ export function EyeOffIcon() {
     </svg>
   )
 }
+
+// Time points (plan 28-D16).
+
+export function PlayIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" />
+    </svg>
+  )
+}
+
+export function PauseIcon() {
+  return (
+    <svg className="ui-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+      <path d="M5.5 3.5v9M10.5 3.5v9" strokeWidth="2.25" />
+    </svg>
+  )
+}

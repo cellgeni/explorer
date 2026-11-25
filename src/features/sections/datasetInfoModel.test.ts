@@ -41,6 +41,7 @@ function input(overrides: Partial<DatasetInfoModelInput> = {}): DatasetInfoModel
       boundaryCellLimit: 50_000,
       maxConcurrentTileRequests: 4,
       tileCacheMaxTiles: 120,
+      timePointPrefetch: 2,
       telemetryEventLimit: 120,
     },
     setBoundaryCellLimit: vi.fn(),
@@ -237,6 +238,10 @@ describe('datasetFacts', () => {
     expect(datasetFacts({ ...xenium, channelCount: 1, zPlaneCount: 15 })[3]?.value).toBe(
       '1 channel · 15 z planes',
     )
+    expect(
+      datasetFacts({ ...xenium, channelCount: 3, zPlaneCount: 31, timePointCount: 40 })[3]
+        ?.value,
+    ).toBe('3 channels · 31 z planes · 40 time points')
   })
 
   it('says the image is loading until its channels are known', () => {

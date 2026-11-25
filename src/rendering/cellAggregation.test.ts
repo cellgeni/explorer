@@ -5,7 +5,6 @@ import {
   estimateOverviewCellCountInBbox,
   overviewAggregationBinMicrometers,
   overviewCellsExtentBbox,
-  overviewCellsIntersectingBbox,
   sampleOverviewCellsForRendering,
 } from './cellAggregation'
 import type { OverviewCellDatum, OverviewViewState } from './deckLayers'
@@ -107,33 +106,6 @@ describe('overview cell aggregation', () => {
       expressionGenes: ['Actb', 'Gad1'],
       cellCount: 2,
     })
-  })
-
-  it('keeps expression cells that are clipped by the viewport edge', () => {
-    const edgeCell: OverviewCellDatum = {
-      id: 'edge-bin',
-      position: [100, -200, 0],
-      radiusPixels: 4,
-      radiusMicrometers: 9,
-      fillColor: [240, 128, 120, 220],
-      expressionCount: 5,
-    }
-    const pointOnlyCell: OverviewCellDatum = {
-      id: 'edge-bin-without-radius',
-      position: [100, -200, 0],
-      radiusPixels: 4,
-      fillColor: [240, 128, 120, 220],
-      expressionCount: 5,
-    }
-    const clippedBbox = {
-      minX: micrometers(91),
-      maxX: micrometers(92),
-      minY: micrometers(196),
-      maxY: micrometers(204),
-    }
-
-    expect(overviewCellsIntersectingBbox([edgeCell], clippedBbox)).toEqual([edgeCell])
-    expect(overviewCellsIntersectingBbox([pointOnlyCell], clippedBbox)).toEqual([])
   })
 
   it('derives bin size from the current orthographic zoom', () => {

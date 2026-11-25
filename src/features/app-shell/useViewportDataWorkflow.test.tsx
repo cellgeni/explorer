@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import { asCellId } from '../../data/cellid'
 import { micrometers, type BBox } from '../../data/coords'
+import { imagePlaneKey, type ImagePyramidPlane } from '../../data/imagePyramid'
 import type { ShareableViewState } from '../../data/shareableState'
 import type { TelemetryEvent } from '../../data/telemetry'
 import type {
@@ -108,7 +109,9 @@ function Probe({
   selectedGenes = ['Actb'],
   viewportCellCount,
   visiumHdBinSizeMicrometers,
+  boundaryPlane,
 }: {
+  readonly boundaryPlane?: ImagePyramidPlane
   readonly loadBoundaryElements: Parameters<
     typeof useViewportDataWorkflow
   >[0]['loaders']['boundaryElements']
@@ -189,6 +192,7 @@ function Probe({
       geneExpressionScoreMode: 'sum',
       ...(visiumHdBinSizeMicrometers === undefined ? {} : { visiumHdBinSizeMicrometers }),
       viewportCellCount,
+      boundaryPlane,
     },
     data: {
       loadState,
@@ -671,6 +675,99 @@ describe('useViewportDataWorkflow', () => {
       cellCount: 1,
     })
     expect(snapshot.boundaryElements).toEqual([element])
+  })
+
+  it('reads cell outlines again at a new image plane, drawing the old until then (plan 28-D9)', async () => {
+    const outline = (id: string): SpatialElement => ({
+      id,
+      geometry: { kind: 'polygon', rings: [[{ x: micrometers(1), y: micrometers(2) }]] },
+    })
+    let releaseLater = () => {}
+    const loadBoundaryElements = vi.fn(
+      async (
+        _baseUrl: string,
+        _bbox: BBox,
+        options: { readonly plane?: ImagePyramidPlane } = {},
+      ) => {
+        const t = options.plane?.t ?? 0
+
+        if (t > 0) {
+          await new Promise<void>((resolve) => {
+            releaseLater = resolve
+          })
+        }
+
+        return {
+          elements: [outline(`t${t.toString()}`)],
+          plane: imagePlaneKey(options.plane ?? {}),
+          ...(t > 1
+            ? { planeNotice: 'The labels have 2 time points; later ones show the last.' }
+            : {}),
+        }
+      },
+    )
+    const loadGeneExpression = vi.fn(async () => batch)
+    const probe = (plane: ImagePyramidPlane) => (
+      <Probe
+        boundaryPlane={plane}
+        loadBoundaryElements={loadBoundaryElements}
+        loadGeneExpression={loadGeneExpression}
+        onReady={(nextApi, nextSnapshot) => {
+          api = nextApi
+          snapshot = nextSnapshot
+        }}
+      />
+    )
+    const { rerender } = render(probe({ z: 2, t: 0 }))
+
+    act(() => {
+      api.handleViewportChange(denseCellScaleDetail)
+    })
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(loadBoundaryElements).toHaveBeenLastCalledWith(
+      'https://example.test/output',
+      expect.anything(),
+      expect.objectContaining({ plane: { z: 2, t: 0 } }),
+    )
+    expect(snapshot.boundaryState).toMatchObject({ status: 'ready', plane: '2:0' })
+
+    // The same plane as a new object reads nothing.
+    rerender(probe({ z: 2, t: 0 }))
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(1)
+
+    rerender(probe({ z: 2, t: 1 }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(loadBoundaryElements).toHaveBeenCalledTimes(2)
+    // The drawn outlines and their plane stay while the next ones load.
+    expect(snapshot.boundaryState).toEqual({
+      status: 'loading',
+      url: 'https://example.test/output',
+      plane: '2:0',
+    })
+    expect(snapshot.boundaryElements.map((element) => element.id)).toEqual(['t0'])
+
+    await act(async () => {
+      releaseLater()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(snapshot.boundaryState).toMatchObject({ status: 'ready', plane: '2:1' })
+    expect(snapshot.boundaryElements.map((element) => element.id)).toEqual(['t1'])
+
+    rerender(probe({ z: 2, t: 5 }))
+    await act(async () => {
+      releaseLater()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(snapshot.debugMessages).toContain(
+      'The labels have 2 time points; later ones show the last.',
+    )
   })
 
   it('counts an imported segmentation in view when the viewer has no cells', async () => {

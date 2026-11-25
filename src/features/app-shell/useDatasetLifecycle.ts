@@ -1349,10 +1349,14 @@ export function useDatasetLifecycle({
           ...manifestDefaults.state,
           ...(shouldRestoreSharedState ? sharedState : {}),
         }
-        const restoredZPlane =
-          restoreState.morphologyZPlane === undefined
+        const restoredPlane = {
+          ...(restoreState.morphologyZPlane === undefined
             ? {}
-            : { zPlane: restoreState.morphologyZPlane }
+            : { zPlane: restoreState.morphologyZPlane }),
+          ...(restoreState.morphologyTimePoint === undefined
+            ? {}
+            : { timePoint: restoreState.morphologyTimePoint }),
+        }
         const restoredImageView = parseImageView(restoreState.imageView)
 
         if (restoredImageView !== undefined) {
@@ -1437,7 +1441,7 @@ export function useDatasetLifecycle({
                   ...(imageSource.openChannelLoader === undefined
                     ? {}
                     : { openImage: imageSource.openChannelLoader }),
-                  ...restoredZPlane,
+                  ...restoredPlane,
                 },
               )
             },
@@ -1840,7 +1844,7 @@ export function useDatasetLifecycle({
                     candidates: [imageUrl],
                     signal,
                     onFallback: notifyFallbackWhenCommitted,
-                    ...restoredZPlane,
+                    ...restoredPlane,
                     // A manifest's sidecar covers the 2D channel files only.
                     ...(imageChoice === '3d' ? { zchunkStoreUrl: null } : {}),
                   }),
@@ -2045,7 +2049,7 @@ export function useDatasetLifecycle({
               ...(imageSource.openChannelLoader === undefined
                 ? {}
                 : { openImage: imageSource.openChannelLoader }),
-              ...restoredZPlane,
+              ...restoredPlane,
             },
           )
 
@@ -2337,7 +2341,7 @@ export function useDatasetLifecycle({
             loadMorphologyImage(requestedUrl, {
               signal,
               onFallback: notifyFallbackWhenCommitted,
-              ...restoredZPlane,
+              ...restoredPlane,
             }),
           restoreState.morphologyEnabledChannelIds === undefined
             ? {}

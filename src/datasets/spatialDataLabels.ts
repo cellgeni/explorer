@@ -1,5 +1,6 @@
 import * as zarr from 'zarrita'
 import {
+  fixedAxesOffset,
   labelWindow,
   outerRing,
   traceLabelEdges,
@@ -11,6 +12,7 @@ import {
   IDENTITY_AFFINE,
   type Affine2D,
 } from './spatialDataTransforms'
+import type { ImagePyramidPlane } from '../data/imagePyramid'
 import { sharedZarrDecodePool, type ZarrDecodePool } from '../workers/zarrDecodePool'
 import {
   ZarrChunkUnavailableError,
@@ -50,6 +52,15 @@ export interface SpatialDataLabelLevel extends LabelLevelGeometry {
   readonly array: zarr.Array<zarr.DataType, zarr.Readable>
   readonly xAxis: number
   readonly yAxis: number
+  // Axes that follow the image's z plane and time point (plan 28-D9).
+  readonly zAxis?: number
+  readonly tAxis?: number
+}
+
+// An index inside a chunk on an axis other than x and y.
+export interface LabelFixedAxis {
+  readonly axis: number
+  readonly index: number
 }
 
 export interface SpatialDataLabelChunkTrace extends PackedLabelTrace {
@@ -77,6 +88,8 @@ export interface LabelChunkTraceRequest<Level extends LabelLevelGeometry> {
   readonly width: number
   readonly height: number
   readonly signal?: AbortSignal
+  // The image's plane, for labels that follow it (plan 28-D9).
+  readonly plane?: ImagePyramidPlane
 }
 
 export type LabelChunkTracer<Level extends LabelLevelGeometry> = (
@@ -84,9 +97,11 @@ export type LabelChunkTracer<Level extends LabelLevelGeometry> = (
 ) => Promise<PackedLabelTrace>
 
 // Decodes one chunk window and traces it, on the main thread or in a worker.
-// `coords` is the chunk's index on every axis of the Zarr array.
+// `coords` is the chunk's index on every axis of the Zarr array, and
+// `fixedAxes` the plane's index inside the chunk on the z and t axes.
 export interface SpatialDataLabelTraceRequest extends LabelChunkTraceRequest<SpatialDataLabelLevel> {
   readonly coords: readonly number[]
+  readonly fixedAxes: readonly LabelFixedAxis[]
 }
 
 export type SpatialDataLabelTracer = (
@@ -100,12 +115,18 @@ interface CachedRing {
 
 const DEFAULT_MAX_TRACE_CACHE_BYTES = 192 * 1024 * 1024
 const MAX_CACHED_RINGS = 250_000
+// Planes of each level whose joined rings are kept, the most recent; played
+// time points replay without joining their rings again.
+const MAX_RING_PLANES = 8
 // Outlines are simplified to within this many level pixels; smoothed
 // staircases are straight, so this drops most points without clipping small
 // cells.
 const RING_TOLERANCE_PIXELS = 0.25
 // Reads of one tile that another caller's cancellation may fail in a row.
 const FOREIGN_ABORT_RETRIES = 3
+// Stored bytes of label chunks that hold several planes, kept so each plane a
+// chunk holds does not read it again (plan 28-D9).
+const MAX_PLANE_CHUNK_CACHE_BYTES = 32 * 1024 * 1024
 
 export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (request) => {
   const { level } = request
@@ -120,6 +141,7 @@ export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (reques
     level.yAxis,
     request.width,
     request.height,
+    fixedAxesOffset(chunk.stride, request.fixedAxes),
   )
 
   return traceLabelEdges(
@@ -133,8 +155,11 @@ export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (reques
 }
 
 // Fetches the chunk on the main thread (so store error handling and missing
-// chunk tracking apply) and decodes and traces it in a worker.
+// chunk tracking apply) and decodes and traces it in a worker. A chunk that
+// holds several planes is read once for all of them.
 export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelTracer {
+  const planeChunks = new PlaneChunkBytes()
+
   return async (request) => {
     const { level } = request
     const arrayMetadata = await zarrArrayMetadata(level.array)
@@ -145,10 +170,18 @@ export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelT
 
     const chunkKey = zarrChunkKey(arrayMetadata.metadata, request.coords)
     const arrayPath = level.array.path === '/' ? '' : level.array.path
-    const bytes = await level.array.store.get(
-      `${arrayPath}/${chunkKey}` as `/${string}`,
-      request.signal === undefined ? undefined : { signal: request.signal },
+    const path = `${arrayPath}/${chunkKey}` as `/${string}`
+    const read = async () =>
+      level.array.store.get(
+        path,
+        request.signal === undefined ? undefined : { signal: request.signal },
+      )
+    const holdsPlanes = request.fixedAxes.some(
+      (fixed) => (level.array.chunks[fixed.axis] ?? 1) > 1,
     )
+    const bytes = holdsPlanes
+      ? await planeChunks.get(level.array.store, path, read)
+      : await read()
 
     try {
       return await pool.traceLabels({
@@ -161,7 +194,7 @@ export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelT
           y0: 0,
           width: request.width,
           height: request.height,
-          fixedAxes: [],
+          fixedAxes: request.fixedAxes,
         },
         levelX0: request.x0,
         levelY0: request.y0,
@@ -173,6 +206,73 @@ export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelT
       }
 
       return traceLabelChunkOnMainThread(request)
+    }
+  }
+}
+
+// Stored bytes of chunks by store and path, the least recently used dropped
+// past the limit. A read that fails is not kept.
+class PlaneChunkBytes {
+  private readonly storeIds = new WeakMap<object, number>()
+  private nextStoreId = 0
+  // Most recently used last; `size` is set once the read is done.
+  private readonly entries = new Map<
+    string,
+    { readonly bytes: Promise<Uint8Array | undefined>; size?: number }
+  >()
+  private cachedBytes = 0
+
+  get(
+    store: object,
+    path: string,
+    read: () => Promise<Uint8Array | undefined>,
+  ): Promise<Uint8Array | undefined> {
+    let storeId = this.storeIds.get(store)
+
+    if (storeId === undefined) {
+      storeId = this.nextStoreId
+      this.nextStoreId += 1
+      this.storeIds.set(store, storeId)
+    }
+
+    const key = `${storeId.toString()}:${path}`
+    const known = this.entries.get(key)
+
+    if (known !== undefined) {
+      this.entries.delete(key)
+      this.entries.set(key, known)
+      return known.bytes
+    }
+
+    const entry: { readonly bytes: Promise<Uint8Array | undefined>; size?: number } = {
+      bytes: read(),
+    }
+    this.entries.set(key, entry)
+    entry.bytes.then(
+      (bytes) => {
+        if (this.entries.get(key) !== entry) return
+        entry.size = bytes?.byteLength ?? 0
+        this.cachedBytes += entry.size
+        this.evict()
+      },
+      () => {
+        if (this.entries.get(key) === entry) this.entries.delete(key)
+      },
+    )
+    return entry.bytes
+  }
+
+  private evict(): void {
+    for (const [key, entry] of this.entries) {
+      if (this.cachedBytes <= MAX_PLANE_CHUNK_CACHE_BYTES || this.entries.size <= 1) {
+        return
+      }
+
+      // Reads still running stay.
+      if (entry.size !== undefined) {
+        this.entries.delete(key)
+        this.cachedBytes -= entry.size
+      }
     }
   }
 }
@@ -197,15 +297,27 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     SpatialDataLabelChunkTrace,
     ReadonlyMap<number, number>
   >()
-  private readonly rings = new Map<number, Map<number, CachedRing>>()
+  // Joined rings by level and plane, the most recently used last.
+  private readonly rings = new Map<string, Map<number, CachedRing>>()
   private readonly maxTraceCacheBytes: number
+  private readonly planeKeyFor: (level: Level, plane: ImagePyramidPlane) => string
+  private readonly planeNoticeFor: (plane: ImagePyramidPlane) => string | undefined
+  // The labels follow the image's z plane or time point (plan 28-D9).
+  readonly followsPlanes: boolean
   private cachedBytes = 0
 
   constructor(
     levels: readonly Level[],
     toTarget: Affine2D,
     tracer: LabelChunkTracer<Level>,
-    options: { readonly maxTraceCacheBytes?: number } = {},
+    options: {
+      readonly maxTraceCacheBytes?: number
+      // The plane a level reads for an image plane, as a key; one key for
+      // every plane (the default) means the labels do not follow the image.
+      readonly planeKey?: (level: Level, plane: ImagePyramidPlane) => string
+      readonly followsPlanes?: boolean
+      readonly planeNotice?: (plane: ImagePyramidPlane) => string | undefined
+    } = {},
   ) {
     if (levels.length === 0) {
       throw new Error('SpatialData labels element has no readable levels.')
@@ -216,6 +328,15 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     this.fromTarget = invertAffine(toTarget)
     this.tracer = tracer
     this.maxTraceCacheBytes = options.maxTraceCacheBytes ?? DEFAULT_MAX_TRACE_CACHE_BYTES
+    this.planeKeyFor = options.planeKey ?? (() => '')
+    this.planeNoticeFor = options.planeNotice ?? (() => undefined)
+    this.followsPlanes = options.followsPlanes ?? false
+  }
+
+  // Says when the labels have fewer planes than `plane` asks for, so the
+  // last is shown.
+  planeNotice(plane: ImagePyramidPlane): string | undefined {
+    return this.planeNoticeFor(plane)
   }
 
   // Finest level whose pixels covering `bounds` fit the budget.
@@ -290,8 +411,10 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     col: number,
     row: number,
     signal?: AbortSignal,
+    plane: ImagePyramidPlane = {},
   ): Promise<SpatialDataLabelChunkTrace> {
-    const key = `${level.toString()}/${col.toString()}/${row.toString()}`
+    const planeKey = this.planeKeyFor(this.levelMeta(level), plane)
+    const key = `${level.toString()}/${col.toString()}/${row.toString()}${planeKey === '' ? '' : `@${planeKey}`}`
     const existing = this.traces.get(key)
 
     if (existing !== undefined) {
@@ -301,7 +424,7 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
       return existing
     }
 
-    const promise = this.readAndTrace(level, col, row, signal).then(
+    const promise = this.readAndTrace(level, col, row, signal, plane).then(
       (trace) => {
         this.traceBytes.set(key, trace.approximateBytes)
         this.cachedBytes += trace.approximateBytes
@@ -325,11 +448,12 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     level: number,
     col: number,
     row: number,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    plane: ImagePyramidPlane,
   ): Promise<SpatialDataLabelChunkTrace> {
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this.trace(level, col, row, signal)
+        return await this.trace(level, col, row, signal, plane)
       } catch (error) {
         if (
           (error as { readonly name?: unknown } | null)?.name !== 'AbortError' ||
@@ -342,22 +466,31 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     }
   }
 
-  // Outlines of labels that overlap `bounds`. Only overlapping labels are
-  // joined, and joined rings are reused while their source chunks stay
-  // loaded, so panning only joins labels that newly come into view.
+  // Outlines of labels that overlap `bounds`, at the image's `plane` for
+  // labels that follow it. Only overlapping labels are joined, and joined
+  // rings are reused while their source chunks stay loaded, so panning only
+  // joins labels that newly come into view.
   async outlines(
     bounds: SpatialDataLabelBounds,
     options: {
       readonly maxPixels: number
       readonly signal?: AbortSignal
       readonly include?: (label: number) => boolean
+      readonly plane?: ImagePyramidPlane
     },
   ): Promise<readonly SpatialDataLabelOutline[]> {
     const level = this.levelForBounds(bounds, options.maxPixels)
     const window = this.pixelWindow(level, bounds)
+    const plane = options.plane ?? {}
     const traces = await Promise.all(
       this.chunksForBounds(level, bounds).map((chunk) =>
-        this.traceRetryingForeignAborts(level, chunk.col, chunk.row, options.signal),
+        this.traceRetryingForeignAborts(
+          level,
+          chunk.col,
+          chunk.row,
+          options.signal,
+          plane,
+        ),
       ),
     )
     const visible = new Set<number>()
@@ -383,7 +516,7 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
 
     const meta = this.levelMeta(level)
     const affine = this.levelToTarget(level)
-    const rings = this.ringCache(level)
+    const rings = this.ringCache(level, this.planeKeyFor(meta, plane))
     const outlines: SpatialDataLabelOutline[] = []
 
     for (const label of visible) {
@@ -446,12 +579,23 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     return index
   }
 
-  private ringCache(level: number): Map<number, CachedRing> {
-    let rings = this.rings.get(level)
+  private ringCache(level: number, planeKey: string): Map<number, CachedRing> {
+    const key = `${level.toString()}@${planeKey}`
+    let rings = this.rings.get(key)
 
     if (rings === undefined) {
       rings = new Map()
-      this.rings.set(level, rings)
+    }
+
+    this.rings.delete(key)
+    this.rings.set(key, rings)
+
+    for (const oldest of this.rings.keys()) {
+      if (this.rings.size <= MAX_RING_PLANES * this.levels.length) {
+        break
+      }
+
+      this.rings.delete(oldest)
     }
 
     return rings
@@ -507,7 +651,8 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
     level: number,
     col: number,
     row: number,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    plane: ImagePyramidPlane,
   ): Promise<SpatialDataLabelChunkTrace> {
     const meta = this.levelMeta(level)
     const x0 = col * meta.chunkWidth
@@ -521,6 +666,7 @@ export class LabelOutlineReader<Level extends LabelLevelGeometry> {
       width: Math.max(0, Math.min(meta.chunkWidth, meta.width - x0)),
       height: Math.max(0, Math.min(meta.chunkHeight, meta.height - y0)),
       ...(signal === undefined ? {} : { signal }),
+      plane,
     })
 
     return {
@@ -568,23 +714,44 @@ export class SpatialDataLabelsReader extends LabelOutlineReader<SpatialDataLabel
     } = {},
   ) {
     const tracer = options.tracer ?? defaultLabelTracer()
+    const base = levels[0]
+    const planeIndices = (level: SpatialDataLabelLevel, plane: ImagePyramidPlane) =>
+      base === undefined ? [] : labelPlaneIndices(level, base, plane)
     super(
       levels,
       toTarget,
-      (request) =>
-        tracer({
+      (request) => {
+        const { level } = request
+        const indices = planeIndices(level, request.plane ?? {})
+
+        return tracer({
           ...request,
-          coords: request.level.array.shape.map((_size, axis) =>
-            axis === request.level.xAxis
-              ? request.col
-              : axis === request.level.yAxis
-                ? request.row
-                : 0,
-          ),
-        }),
-      options.maxTraceCacheBytes === undefined
-        ? {}
-        : { maxTraceCacheBytes: options.maxTraceCacheBytes },
+          coords: level.array.shape.map((_size, axis) => {
+            if (axis === level.xAxis) return request.col
+            if (axis === level.yAxis) return request.row
+            const fixed = indices.find((index) => index.axis === axis)
+            return fixed === undefined
+              ? 0
+              : Math.floor(fixed.index / (level.array.chunks[axis] ?? 1))
+          }),
+          fixedAxes: indices.map((fixed) => ({
+            axis: fixed.axis,
+            index: fixed.index % (level.array.chunks[fixed.axis] ?? 1),
+          })),
+        })
+      },
+      {
+        ...(options.maxTraceCacheBytes === undefined
+          ? {}
+          : { maxTraceCacheBytes: options.maxTraceCacheBytes }),
+        planeKey: (level, plane) =>
+          planeIndices(level, plane)
+            .map((fixed) => `${fixed.axis.toString()}=${fixed.index.toString()}`)
+            .join(','),
+        followsPlanes: base?.zAxis !== undefined || base?.tAxis !== undefined,
+        planeNotice: (plane) =>
+          base === undefined ? undefined : labelPlaneNotice(base, plane),
+      },
     )
   }
 
@@ -599,6 +766,7 @@ export class SpatialDataLabelsReader extends LabelOutlineReader<SpatialDataLabel
   ): Promise<SpatialDataLabelsReader> {
     const multiscale = firstMultiscale(attrs)
     const axes = axisNames(multiscale?.axes)
+    const axisTypes = axisTypeNames(multiscale?.axes)
     const datasets = Array.isArray(multiscale?.datasets) ? multiscale.datasets : []
     const levels: SpatialDataLabelLevel[] = []
     let baseScale: { readonly x: number; readonly y: number } | null = null
@@ -632,6 +800,11 @@ export class SpatialDataLabelsReader extends LabelOutlineReader<SpatialDataLabel
               )
       const xAxis = names.indexOf('x')
       const yAxis = names.indexOf('y')
+      const zAxis = names.findIndex((name) => name.toLowerCase() === 'z')
+      const tAxis = names.findIndex(
+        (name, index) =>
+          name.toLowerCase() === 't' || axisTypes[index]?.toLowerCase() === 'time',
+      )
 
       if (xAxis < 0 || yAxis < 0) {
         continue
@@ -647,6 +820,8 @@ export class SpatialDataLabelsReader extends LabelOutlineReader<SpatialDataLabel
         chunkHeight: array.chunks[yAxis] ?? 1,
         xAxis,
         yAxis,
+        ...(zAxis < 0 ? {} : { zAxis }),
+        ...(tAxis < 0 ? {} : { tAxis }),
         // Level 0 defines the element coordinates.
         scaleX: scale.x / baseScale.x,
         scaleY: scale.y / baseScale.y,
@@ -759,6 +934,69 @@ function axisNames(value: unknown): readonly string[] {
         typeof axis === 'string' ? axis : String(recordOrNull(axis)?.name ?? ''),
       )
     : []
+}
+
+function axisTypeNames(value: unknown): readonly (string | undefined)[] {
+  return Array.isArray(value)
+    ? value.map((axis) => {
+        const type = recordOrNull(axis)?.type
+        return typeof type === 'string' ? type : undefined
+      })
+    : []
+}
+
+// Says when the labels have fewer time points or z planes than `plane` asks
+// for (plan 28-D9).
+function labelPlaneNotice(
+  base: SpatialDataLabelLevel,
+  plane: ImagePyramidPlane,
+): string | undefined {
+  const notices = [
+    { axis: base.tAxis, index: plane.t, name: 'time points' },
+    { axis: base.zAxis, index: plane.z, name: 'z planes' },
+  ].flatMap(({ axis, index, name }) => {
+    const size = axis === undefined ? undefined : base.array.shape[axis]
+    return size === undefined || index === undefined || index < size
+      ? []
+      : [`The labels have ${size.toLocaleString()} ${name}; later ones show the last.`]
+  })
+
+  return notices.length === 0 ? undefined : notices.join(' ')
+}
+
+// The index on each of a level's z and t axes for an image plane (plan
+// 28-D9): clamped to the labels' own planes, and scaled on a level
+// downsampled along the axis, as the image loader does. An axis the image
+// does not give reads its first plane.
+function labelPlaneIndices(
+  level: SpatialDataLabelLevel,
+  base: SpatialDataLabelLevel,
+  plane: ImagePyramidPlane,
+): readonly LabelFixedAxis[] {
+  const indices: LabelFixedAxis[] = []
+
+  for (const [axis, requested] of [
+    [level.tAxis, plane.t],
+    [level.zAxis, plane.z],
+  ] as const) {
+    if (axis === undefined) {
+      continue
+    }
+
+    const baseSize = base.array.shape[axis] ?? 1
+    const size = level.array.shape[axis] ?? 1
+    const index = Math.min(Math.max(0, Math.round(requested ?? 0)), baseSize - 1)
+
+    indices.push({
+      axis,
+      index:
+        size === baseSize
+          ? index
+          : Math.min(size - 1, Math.floor((index * size) / baseSize)),
+    })
+  }
+
+  return indices
 }
 
 function recordOrNull(value: unknown): Record<string, unknown> | null {

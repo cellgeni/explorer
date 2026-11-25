@@ -546,8 +546,17 @@ transform.
 - Axes come from `axes`, else array dimension names, else by position. A 5D
   array (OME-Zarr 0.1 and 0.2) is `t, c, z, y, x`; other ranks end
   `…, c, y, x`. `x` and `y` are required. `z` starts at `omero.rdefs.defaultZ`,
-  else the middle plane, and other planes open as `#z=N` loaders; `t` is
-  `defaultT`, else 0.
+  else the middle plane, and other planes open as `#z=N` loaders. The time
+  axis is the first named `t` or typed `time`; `t` starts at `#t=N`, else
+  `defaultT`, else 0, and `Time point` shows another. Other planes and time
+  points are made from the opened loaders without requests (`atPlane`); a
+  loader keeps the last 16 it made, so a plane asked for again gets the same
+  loader and its tile reads carry on.
+- The canvas keeps the plane it shows until the visible tiles of a new z
+  plane or time point have loaded, then draws it whole; a slider step draws
+  tile by tile after 2 s. `Play time points` reads the next 1, 2 or 3 time
+  points (by performance budget) one tile at a time per channel, and keeps
+  played ones for replay up to 4 × the tile cache limit in 256-pixel tiles.
 - µm/px is the product of multiscale and dataset `scale` values for x, and
   for y when the pixels are not square (`units.yMicrometersPerPixel`, used for
   the image's extent and fit). Units are converted from any length the
@@ -609,6 +618,15 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
   zarrita reads. Up to six enabled channels are
   read, each once while the 3D view stays open; moving the `Z plane` slider
   does not read them again. Leaving 3D drops them.
+- **Time points.** Volumes are keyed by the image, level and time point
+  (plan 28-D11). A `Time point` step reads the new time point's channels while
+  the last one's stay drawn, and draws them together once all are read or
+  have failed; a step made during a read stops it. Until then the slider shows
+  the time point as loading: in 3D it follows the volume, not the 2D canvas
+  under it. Both time points' volumes are in memory during the swap. idr0052A
+  (3 channels, 256 × 256 × 31) takes about 3.6 s per time point (93 chunk
+  reads) and idr0051 (333 × 333 × 201, sharded) about 2.6 s (one shard).
+  `Play` is 2D only.
 - **Textures.** An 8-bit volume is uploaded as it is (`r8unorm`). Other dtypes
   are divided by their largest magnitude and uploaded as half floats
   (`r16float`), so the contrast window still applies to raw values.
@@ -748,8 +766,9 @@ fails, tiles are decoded and sampled on the main thread.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only one time point of OME-Zarr images (`defaultT`, else 0) is shown, and
-  only `t = 0` of OME-TIFFs.
+- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points play in 2D only
+  ([Phase 28](../plan/phases/28-time-points.md)). Label TIFFs and polygon
+  segmentations are the same at every plane.
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
 - The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or

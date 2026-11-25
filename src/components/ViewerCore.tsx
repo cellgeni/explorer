@@ -64,7 +64,6 @@ import { MagicLensOverlay } from './viewerMagicLensOverlay'
 import { magicLensOverlayModel } from './viewerMagicLensModel'
 import {
   bboxFromCircle,
-  equivalentBoundaryStyleViewport,
   equivalentViewState,
   equivalentViewportSize,
   formatMouseCoordinate,
@@ -74,7 +73,6 @@ import {
   viewStateFromKeyboardEvent,
   ZOOM_STEP,
   viewStateKey,
-  type BoundaryStyleViewport,
   type MouseCoordinate,
 } from './viewerNavigation'
 import {
@@ -117,7 +115,6 @@ import {
   createOverviewLayers,
   expressingElementsByScore,
   spatialOverviewView,
-  styleCellsByGeneExpression,
 } from '../rendering/deckLayers'
 import {
   FIT_FALLBACK_VIEWPORT,
@@ -132,7 +129,6 @@ import {
   DEFAULT_OVERVIEW_RENDER_CELL_LIMIT,
   estimateOverviewCellCountInBbox,
   overviewCellsExtentBbox,
-  overviewCellsIntersectingBbox,
 } from '../rendering/cellAggregation'
 import {
   cellPointFilterValues,
@@ -158,6 +154,7 @@ import {
   createObservationColorizer,
 } from '../rendering/cellStyling'
 import { scaleFromZoom } from '../data/coords'
+import { lazyIdLookup } from '../data/lazyIdLookup'
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
@@ -214,6 +211,7 @@ import type {
   ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
+  ViewerImageFrame,
 } from './viewerCoreTypes'
 export type {
   InitialViewStateOverride,
@@ -232,6 +230,7 @@ export type {
   ViewerSelectionOutline,
   ViewerTranscriptHoverDetail,
   ViewerViewportDetail,
+  ViewerImageFrame,
 } from './viewerCoreTypes'
 
 const OVERVIEW_CELL_CLIP_MIN_ZOOM = -2.25
@@ -242,7 +241,6 @@ const CELL_POINT_LAYER_ID = 'cells-overview-scatter'
 interface OverviewCellLookup {
   get(id: string): OverviewCellDatum | undefined
 }
-const BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS = 160
 // How long the view keeps still before it stops counting as moving.
 const VIEW_SETTLE_DELAY_MS = 200
 // @deck.gl/react redraws every layer after each render of <DeckGL>, even when
@@ -290,6 +288,7 @@ export function ViewerCore({
   geometricAnnotations = EMPTY_GEOMETRIC_ANNOTATIONS,
   imageLoader = null,
   imageChannels = EMPTY_IMAGE_CHANNELS,
+  imageFrame = null,
   flatImage = null,
   imageOpacity = 1,
   cellLayersVisible = true,
@@ -416,6 +415,7 @@ export function ViewerCore({
       geometricAnnotations={geometricAnnotations}
       imageLoader={imageLoader}
       imageChannels={imageChannels}
+      imageFrame={imageFrame}
       flatImage={flatImage}
       imageOpacity={imageOpacity}
       cellLayersVisible={cellLayersVisible}
@@ -513,6 +513,7 @@ interface ViewerSurfaceProps {
   readonly geometricAnnotations: readonly GeometricAnnotationDatum[]
   readonly imageLoader: ImagePyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
+  readonly imageFrame: ViewerImageFrame | null
   readonly flatImage: FlatMorphologyCanvasImage | null
   readonly imageOpacity: number
   readonly cellLayersVisible: boolean
@@ -609,6 +610,7 @@ function ViewerSurface({
   geometricAnnotations,
   imageLoader,
   imageChannels,
+  imageFrame,
   flatImage,
   imageOpacity,
   cellLayersVisible,
@@ -737,8 +739,6 @@ function ViewerSurface({
   const [cellBoundaryHover, setCellBoundaryHover] =
     useState<ViewerCellBoundaryHoverDetail | null>(null)
   const [cellHover, setCellHover] = useState<ViewerOverviewCellHoverDetail | null>(null)
-  const [boundaryStyleViewport, setBoundaryStyleViewport] =
-    useState<BoundaryStyleViewport | null>(null)
   const pendingMouseCoordinateRef = useRef<MouseCoordinate | null>(null)
   const mouseCoordinateFrameRef = useRef<number | null>(null)
   // The first measurement of the canvas fits again, so a view set up before
@@ -1035,15 +1035,16 @@ function ViewerSurface({
         : EMPTY_OVERVIEW_CELLS,
     [expressionElements, geneExpressionOverlayEnabled],
   )
-  const cellIndexById = useMemo(() => {
-    const nextCellIndexById = new Map<string, number>()
-
-    cells.forEach((cell, index) => {
-      nextCellIndexById.set(cell.id, index)
-    })
-
-    return nextCellIndexById
-  }, [cells])
+  // Built on first use (a hover, a click or outlines), not on load (O5).
+  const cellIndexById = useMemo(
+    () =>
+      lazyIdLookup(
+        cells,
+        (cell) => cell.id,
+        (_, index) => index,
+      ),
+    [cells],
+  )
   const cellById = useMemo<OverviewCellLookup>(
     () => ({
       get: (id) => {
@@ -1066,61 +1067,12 @@ function ViewerSurface({
     (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
     (observationColorMode === 'metadata' && cellMetadataTrack !== null) ||
     geneExpressionActive
+  // Built when the outlines change; an expression batch, a colour mode or the
+  // fill turning on or off only colours it (O4).
   const boundaryLayerGeometry = useMemo(
-    () =>
-      createCellBoundaryLayerGeometry(boundaries, {
-        includeFill: cellBoundaryFillEnabled,
-      }),
-    [boundaries, cellBoundaryFillEnabled],
+    () => createCellBoundaryLayerGeometry(boundaries),
+    [boundaries],
   )
-  // Without expression data this stays the same empty list, so pan stops do
-  // not restyle every boundary.
-  const boundaryExpressionElements = useMemo(
-    () =>
-      boundaries.length === 0 ||
-      boundaryStyleViewport === null ||
-      expressionElements.length === 0
-        ? EMPTY_OVERVIEW_CELLS
-        : overviewCellsIntersectingBbox(expressionElements, boundaryStyleViewport.bbox),
-    [boundaries.length, boundaryStyleViewport, expressionElements],
-  )
-  const boundaryStyleCells = useMemo(() => {
-    if (boundaryLayerGeometry.boundaryCellIds.size === 0) {
-      return EMPTY_OVERVIEW_CELLS
-    }
-
-    const boundaryCells: OverviewCellDatum[] = []
-
-    for (const cellId of boundaryLayerGeometry.boundaryCellIds) {
-      const cell = cellById.get(cellId)
-
-      if (cell !== undefined) {
-        boundaryCells.push(cell)
-      }
-    }
-
-    const observationStyledCells =
-      observationColorizer === null
-        ? boundaryCells
-        : boundaryCells.map((cell) => ({
-            ...cell,
-            fillColor: observationColorizer(cell),
-          }))
-
-    return styleCellsByGeneExpression(
-      observationStyledCells,
-      boundaryExpressionElements,
-      {
-        styleUnmatchedCells: geneExpressionActive,
-      },
-    )
-  }, [
-    boundaryExpressionElements,
-    boundaryLayerGeometry,
-    cellById,
-    geneExpressionActive,
-    observationColorizer,
-  ])
   const cellPointFilter = useMemo(() => {
     const outlinedCellIndices: number[] = []
 
@@ -1143,18 +1095,28 @@ function ViewerSurface({
     }),
     [cellPointColors, cellPointFilter, cellPointGeometry, cellPointSample],
   )
+  // An outline is coloured as its cell's point, and an expressing cell's by its
+  // expression whether the outlines fill or not.
   const boundaryLayerStyle = useMemo(
     () =>
-      createCellBoundaryLayerStyle(
-        boundaryLayerGeometry,
-        cellBoundaryFillEnabled ? boundaryStyleCells : EMPTY_OVERVIEW_CELLS,
-        boundaryExpressionElements,
-      ),
+      createCellBoundaryLayerStyle(boundaryLayerGeometry, {
+        ...(cellBoundaryFillEnabled
+          ? {
+              cellColor: (cellId: string) => {
+                const cell = cellById.get(cellId)
+
+                return cell === undefined ? undefined : cellPointStyler.fillColor(cell)
+              },
+            }
+          : {}),
+        expressionByElementId: geneExpressionPointStyleIndex.expressionByElementId,
+      }),
     [
-      boundaryExpressionElements,
       boundaryLayerGeometry,
-      boundaryStyleCells,
       cellBoundaryFillEnabled,
+      cellById,
+      cellPointStyler,
+      geneExpressionPointStyleIndex,
     ],
   )
   const overviewLayerOptions = useMemo<OverviewLayerOptions>(
@@ -2296,28 +2258,6 @@ function ViewerSurface({
   }, [])
 
   useEffect(() => {
-    if (boundaries.length === 0 || viewportBbox === null) {
-      return
-    }
-
-    const nextViewport = {
-      bbox: viewportBbox,
-      zoom: viewState.zoom,
-    }
-    const timeout = window.setTimeout(() => {
-      setBoundaryStyleViewport((currentViewport) =>
-        equivalentBoundaryStyleViewport(currentViewport, nextViewport)
-          ? currentViewport
-          : nextViewport,
-      )
-    }, BOUNDARY_STYLE_VIEWPORT_IDLE_DELAY_MS)
-
-    return () => {
-      window.clearTimeout(timeout)
-    }
-  }, [boundaries.length, viewState.zoom, viewportBbox])
-
-  useEffect(() => {
     if (onViewportChange === undefined || !hasSpatialData || viewportBbox === null) {
       return
     }
@@ -2376,6 +2316,19 @@ function ViewerSurface({
           loader={imageLoader}
           opacity={imageOpacity}
           viewState={viewState}
+          {...(imageFrame === null
+            ? {}
+            : {
+                ...(imageFrame.frame === undefined ? {} : { frame: imageFrame.frame }),
+                ...(imageFrame.fallbackMs === undefined
+                  ? {}
+                  : { frameFallbackMs: imageFrame.fallbackMs }),
+                ...(imageFrame.outlinesPlane === undefined
+                  ? {}
+                  : { outlinesPlane: imageFrame.outlinesPlane }),
+                onFrameShown: imageFrame.onShown,
+                prefetchPlanes: imageFrame.prefetchPlanes,
+              })}
           {...(maxConcurrentTileRequests === undefined
             ? {}
             : { maxConcurrentTileRequests })}
@@ -2525,6 +2478,7 @@ function ViewerSurface({
           layout={minimapView}
           imageLoader={imageLoader}
           imageChannels={imageChannels}
+          imageFrame={imageFrame?.frame}
           flatImage={flatImage}
           points={minimapDots}
           viewBbox={viewportBbox}

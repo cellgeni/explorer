@@ -36,7 +36,7 @@ interface AnalysisEmbeddingWorkflowCallbacks {
 interface AnalysisEmbeddingWorkflowData {
   readonly analysisEmbeddingState: AnalysisEmbeddingState<StructuredLoadError>
   readonly loadState: DatasetLoadState<StructuredLoadError>
-  readonly overviewCellById: ReadonlyMap<string, OverviewCellDatum>
+  readonly overviewCellById: Pick<ReadonlyMap<string, OverviewCellDatum>, 'get'>
   readonly selectedEmbeddingKind: AnalysisEmbeddingKind
 }
 

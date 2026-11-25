@@ -85,6 +85,13 @@ export function imageSummary(image: ImageSectionModel, imageAvailable: boolean):
     )
   }
 
+  if (image.timeSeries !== undefined) {
+    const timePoint = image.requestedTimePoint ?? image.timeSeries.timePoint
+    parts.push(
+      `t ${(timePoint + 1).toLocaleString()} of ${image.timeSeries.sizeT.toLocaleString()}`,
+    )
+  }
+
   if (customLayerCount > 0) {
     parts.push(`+${countLabel(customLayerCount, 'layer')}`)
   }

@@ -1,3 +1,4 @@
+import type { GetPickingInfoParams, PickingInfo } from '@deck.gl/core'
 import {
   PathLayer,
   PolygonLayer,
@@ -82,6 +83,10 @@ interface BoundaryFillLayerData {
   readonly attributes: {
     readonly getPolygon: {
       readonly value: Float32Array
+      readonly size: number
+    }
+    readonly indices: {
+      readonly value: Uint32Array
       readonly size: number
     }
     readonly getFillColor: {
@@ -442,27 +447,139 @@ describe('deck layer factory', () => {
 
     expect(layers).toHaveLength(3)
     expect(layers[0]).toBeInstanceOf(PathLayer)
-    expect(layers[1]).toBeInstanceOf(PolygonLayer)
+    expect(layers[1]).toBeInstanceOf(SolidPolygonLayer)
     expect(layers[2]).toBeInstanceOf(ScatterplotLayer)
 
-    const hitLayer = layers[1]
+    const [pathLayer, hitLayer] = layers
 
-    if (!(hitLayer instanceof PolygonLayer)) {
-      throw new Error('Expected second overview layer to be a PolygonLayer.')
+    if (!(pathLayer instanceof PathLayer) || !(hitLayer instanceof SolidPolygonLayer)) {
+      throw new Error('Expected outline paths, then hit areas.')
     }
 
     expect(hitLayer.id).toBe('cell-boundary-hit-areas')
     expect(hitLayer.props.pickable).toBe(true)
-    expect(hitLayer.props.stroked).toBe(false)
     expect(hitLayer.props.filled).toBe(true)
+    expect(hitLayer.props.extruded).toBe(false)
+    expect(hitLayer.props._normalize).toBe(false)
     expect(hitLayer.props.opacity).toBe(0.01)
-    expect(hitLayer.props.data).toEqual(boundaries)
 
-    const getPolygon = hitLayer.props.getPolygon as (
-      boundary: CellBoundaryDatum,
-    ) => readonly (readonly number[])[]
+    // The paths' closed ring, cut into one triangle.
+    const hitData = getBoundaryFillData(hitLayer)
 
-    expect(getPolygon(boundaries[0]!)).toEqual(boundaries[0]!.polygon)
+    expect(hitData.length).toBe(1)
+    expect(hitData.attributes.getPolygon.value).toBe(
+      getBoundaryPathData(pathLayer).attributes.getPath.value,
+    )
+    expect(Array.from(hitData.attributes.indices.value)).toEqual([1, 3, 2])
+
+    // A pick is the outline at its index.
+    const info = hitLayer.getPickingInfo({
+      info: { index: 0 } as PickingInfo,
+      mode: 'hover',
+      sourceLayer: hitLayer,
+    } as GetPickingInfoParams)
+
+    expect(info.object).toBe(boundaries[0])
+  })
+
+  it('cuts the outlines into rings and triangles once, whatever colours or fills them (O4)', () => {
+    const boundaries: readonly CellBoundaryDatum[] = [
+      {
+        id: 'cell-1',
+        polygon: [
+          [0, 0, 0],
+          [10, 0, 0],
+          [10, -10, 0],
+          [0, -10, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+      {
+        id: 'too-short',
+        polygon: [
+          [0, 0, 0],
+          [1, 0, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+      {
+        id: 'cell-2',
+        polygon: [
+          [20, 0, 0],
+          [30, 0, 0],
+          [25, -8, 0],
+          [20, 0, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [246, 242, 232, 210],
+      },
+    ]
+    const geometry = createCellBoundaryLayerGeometry(boundaries)
+    const expression = (fillColor: [number, number, number, number]) =>
+      createCellBoundaryLayerStyle(geometry, {
+        expressionByElementId: new Map([
+          ['cell-2', { id: 'cell-2', position: [25, -3], radiusPixels: 4, fillColor }],
+        ]),
+      })
+    const layersFor = (
+      style: ReturnType<typeof createCellBoundaryLayerStyle>,
+      fillEnabled: boolean,
+    ) => {
+      const layers = createOverviewLayers([], boundaries, {
+        cellBoundaryGeometry: geometry,
+        cellBoundaryStyle: style,
+        cellBoundaryFillEnabled: fillEnabled,
+        cellBoundaryPickable: true,
+      })
+      const byId = (id: string) =>
+        layers.find((layer) => (layer as { readonly id?: string } | null)?.id === id)
+
+      return {
+        fill: byId('cell-boundary-fills') as SolidPolygonLayer | undefined,
+        path: byId('cell-boundary-paths') as PathLayer,
+        hit: byId('cell-boundary-hit-areas') as SolidPolygonLayer,
+      }
+    }
+    const first = layersFor(expression([240, 128, 120, 220]), true)
+    const nextBatch = layersFor(expression([63, 165, 91, 220]), true)
+    const fillOff = layersFor(expression([63, 165, 91, 220]), false)
+
+    // The outline with two vertices draws no ring; the open one is closed.
+    expect(geometry.boundaries.map((boundary) => boundary.id)).toEqual([
+      'cell-1',
+      'cell-2',
+    ])
+    expect(Array.from(geometry.pathLayerData.startIndices)).toEqual([0, 5, 9])
+
+    const positions = getBoundaryPathData(first.path).attributes.getPath.value
+
+    for (const layers of [first, nextBatch, fillOff]) {
+      expect(getBoundaryPathData(layers.path).attributes.getPath.value).toBe(positions)
+      expect(getBoundaryFillData(layers.hit).attributes.getPolygon.value).toBe(positions)
+      expect(getBoundaryFillData(layers.hit).attributes.indices).toBe(
+        getBoundaryFillData(first.hit).attributes.indices,
+      )
+    }
+
+    expect(getBoundaryFillData(first.fill!).attributes.indices).toBe(
+      getBoundaryFillData(first.hit).attributes.indices,
+    )
+    expect(fillOff.fill).toBeUndefined()
+    // Two triangles for the square, one for the triangle, offset to its ring.
+    expect(Array.from(getBoundaryFillData(first.hit).attributes.indices.value)).toEqual([
+      1, 4, 3, 3, 2, 1, 6, 8, 7,
+    ])
+    // Only the colours follow the batch.
+    expect(
+      Array.from(getBoundaryPathData(first.path).attributes.getColor.value.slice(20, 24)),
+    ).toEqual([240, 128, 120, 110])
+    expect(
+      Array.from(
+        getBoundaryPathData(nextBatch.path).attributes.getColor.value.slice(20, 24),
+      ),
+    ).toEqual([63, 165, 91, 110])
   })
 
   it('leaves out cell and nucleus layers while cells are hidden (15.2-C)', () => {
@@ -929,10 +1046,11 @@ describe('deck layer factory', () => {
         expressionCount: 3,
       },
     ]
-    const geometry = createCellBoundaryLayerGeometry(boundaries, {
-      includeFill: true,
+    const geometry = createCellBoundaryLayerGeometry(boundaries)
+    const style = createCellBoundaryLayerStyle(geometry, {
+      expressionByElementId:
+        createGeneExpressionElementStyleIndex(expressionElements).expressionByElementId,
     })
-    const style = createCellBoundaryLayerStyle(geometry, [], expressionElements)
     const layers = createOverviewLayers(fixtureCells, boundaries, {
       cellFillOpacity: 0.45,
       cellBoundaryOpacity: 0.4,
@@ -1172,33 +1290,33 @@ describe('deck layer factory', () => {
         lineColor: [246, 242, 232, 210],
       },
     ]
-    const geometry = createCellBoundaryLayerGeometry(boundaries, {
-      includeFill: true,
+    const geometry = createCellBoundaryLayerGeometry(boundaries)
+    const styleA = createCellBoundaryLayerStyle(geometry, {
+      expressionByElementId: new Map([
+        [
+          'cell-1',
+          {
+            id: 'cell-1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [240, 128, 120, 220],
+          },
+        ],
+      ]),
     })
-    const styleA = createCellBoundaryLayerStyle(
-      geometry,
-      [],
-      [
-        {
-          id: 'cell-1',
-          position: [10, -20, 0],
-          radiusPixels: 6,
-          fillColor: [240, 128, 120, 220],
-        },
-      ],
-    )
-    const styleB = createCellBoundaryLayerStyle(
-      geometry,
-      [],
-      [
-        {
-          id: 'cell-1',
-          position: [10, -20, 0],
-          radiusPixels: 6,
-          fillColor: [63, 165, 91, 220],
-        },
-      ],
-    )
+    const styleB = createCellBoundaryLayerStyle(geometry, {
+      expressionByElementId: new Map([
+        [
+          'cell-1',
+          {
+            id: 'cell-1',
+            position: [10, -20, 0],
+            radiusPixels: 6,
+            fillColor: [63, 165, 91, 220],
+          },
+        ],
+      ]),
+    })
     const layersA = createOverviewLayers(fixtureCells, boundaries, {
       cellBoundaryGeometry: geometry,
       cellBoundaryStyle: styleA,

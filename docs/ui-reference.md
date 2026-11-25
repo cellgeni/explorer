@@ -415,6 +415,10 @@ Enter on the checkbox, the keyboard's route.
 | --------------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `Dataset image opacity`           | Slider 0–100%, step 5                                                      | 100%                                                     | With channel controls present, opacity is applied per channel                          |
 | `Z plane`                         | Slider over the planes; shows "plane / count · depth"                      | Middle plane or `defaultZ`                               | When the dataset image is an OME-TIFF or OME-Zarr z-stack                              |
+| `Time point`                      | Slider over the time points; shows "point / count · time"                  | `defaultT`, else the first                               | When the dataset image is an OME-Zarr with a `t` axis; the time when `t` has a unit    |
+| `Play time points`                | Icon button left of `Time point`; `Pause time points` while playing        | Paused                                                   | 2D only. Each time point shows once whole; stops on a slider move, 3D or a screenshot  |
+| `Speed`                           | Select: 1, 2, 5, 10 or 20 per second                                       | 5 per second                                             | Under `Time point` in 2D; a slow time point waits, and none is skipped                 |
+| `Loop`                            | Checkbox                                                                   | On                                                       | Under `Time point` in 2D; off stops at the last time point                             |
 | `View`                            | Segmented: 2D, 3D                                                          | 2D                                                       | OME-Zarr z-stacks. 3D shows the [3D view](#3d-view) over the canvas; `imageView`       |
 | `Tissue image`                    | Select: High-res, Low-res, None                                            | High-res if present, else Low-res                        | Visium. Lists the images the dataset can place; switches in place; `vimg`              |
 | `Stain`, `Plane`                  | Selects: the `.vzg` stains and None; the stain's z planes with their sizes | DAPI at the middle plane when at most 100 MiB, else None | MERSCOPE with a `.vzg`. Each image is read whole; a change reloads the dataset; `mimg` |
@@ -1280,7 +1284,10 @@ field.
 `VolumeViewer` (`src/components/VolumeViewer.tsx`) covers the canvas when
 the Image section's `View` is `3D`. It draws the dataset image's enabled
 channels (the first six, in channel order) as a volume on black, with their
-colours and contrast windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
+colours and contrast windows; channel changes apply at once. For an image
+with time points, a `Time point` step reads that time point's volume while
+the last one stays drawn, then draws it whole; the slider shows the time point
+as loading until then, and `Play` is hidden. Drag rotates, Shift-drag pans, and
 scrolling zooms. The axes at the top right (`OrbitAxes.tsx`) turn with the
 view to show which way the image's x (red), y (green) and z (blue) increase;
 at the first view y runs down the screen as in 2D. An axis pointing away from
@@ -1954,9 +1961,9 @@ the address shows up to 160 ms later, and says "Link copied" for 2.5 s after
 the latest copy.
 Until the dataset a link names has opened, failed or been cancelled, or
 another dataset is opening, the address and the copied link stay the link it
-was opened with: the load applies its `card`, `roi`, `channels` and `z`
-later. After that the link keeps those until they apply: `channels` and `z`
-while the image opens, a bin or outline `card` until it loads in view, and
+was opened with: the load applies its `card`, `roi`, `channels`, `z` and `t`
+later. After that the link keeps those until they apply: `channels`, `z` and
+`t` while the image opens, a bin or outline `card` until it loads in view, and
 `roi` until ROI queries can run. Another selection or dataset drops them. A
 link names the dataset's full address, so the link to a presigned dataset
 carries its signature or token: anyone with the link can read the dataset
@@ -2015,6 +2022,7 @@ anchor, reloads nothing: the address the page wrote is put back.
 | `cellSize`                                                                                                | Cell point size multiplier; snapped to the nearest slider step                                                                                                                                                                                                                                                                                                                         |
 | `channels`                                                                                                | Enabled image channel IDs, comma-separated and written as `genes` is                                                                                                                                                                                                                                                                                                                   |
 | `z`                                                                                                       | Zero-based z plane of an OME-TIFF or OME-Zarr z-stack dataset image                                                                                                                                                                                                                                                                                                                    |
+| `t`                                                                                                       | Zero-based time point of an OME-Zarr dataset image with a `t` axis; while Play runs, the time point it started from until it stops                                                                                                                                                                                                                                                     |
 | `imageView`                                                                                               | `3d` while the [3D view](#3d-view) is open; `2d` only to undo a manifest's `3d`                                                                                                                                                                                                                                                                                                        |
 | `cellView`                                                                                                | `3d` while the [3D cell view](#3d-cell-view) is open; `2d` only to undo a manifest's `3d`                                                                                                                                                                                                                                                                                              |
 | `tx`, `txDetail`, `txFilter`, `txGene`, `txBudget`, `txQv`, `txSize`, `txOpacity`, `txDensity`, `txColor` | Transcript controls. `txFilter` is the chosen `Feature filter`, not the All features shown while no gene is selected, so such a link leaves it out. `txQv` and `txSize` outside the controls' 0–40 and 1–6 are brought within them                                                                                                                                                     |

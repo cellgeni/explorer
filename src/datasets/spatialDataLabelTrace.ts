@@ -25,7 +25,8 @@ const UP = 3
 
 // Copies the 2D x/y window of a decoded chunk into labels. 64-bit label arrays
 // are read through their low 32-bit words while the high word is 0, which is
-// faster than reading each value as a bigint.
+// faster than reading each value as a bigint. `offset` is the index of the
+// window's plane in the chunk, for a chunk with time points or z planes.
 export function labelWindow(
   data: ArrayLike<number | bigint>,
   stride: readonly number[],
@@ -33,6 +34,7 @@ export function labelWindow(
   yAxis: number,
   width: number,
   height: number,
+  offset = 0,
 ): Float64Array {
   const output = new Float64Array(width * height)
   const strideX = stride[xAxis] ?? 1
@@ -40,7 +42,7 @@ export function labelWindow(
   const words = int64LowWords(data)
 
   for (let y = 0; y < height; y += 1) {
-    const rowOffset = y * strideY
+    const rowOffset = offset + y * strideY
     const outputOffset = y * width
 
     for (let x = 0; x < width; x += 1) {
@@ -429,4 +431,19 @@ function int64LowWords(data: ArrayLike<number | bigint>): Uint32Array | null {
   }
 
   return null
+}
+
+// The index in a decoded chunk of the plane given by an index inside the
+// chunk on each other axis.
+export function fixedAxesOffset(
+  stride: readonly number[],
+  fixedAxes: readonly { readonly axis: number; readonly index: number }[],
+): number {
+  let offset = 0
+
+  for (const fixed of fixedAxes) {
+    offset += fixed.index * (stride[fixed.axis] ?? 0)
+  }
+
+  return offset
 }

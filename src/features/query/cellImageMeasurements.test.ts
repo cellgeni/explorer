@@ -26,6 +26,7 @@ function spec(
     channelId: 'Channel:0',
     level: 0,
     z: null,
+    timePoint: null,
     radius: 1,
     threshold: null,
     ...overrides,
@@ -276,8 +277,9 @@ describe('CellImageMeasurements', () => {
     const { store, context, stateOf } = setup()
     const other = mean({ channelId: 'Channel:9' })
     const plane = mean({ z: 3 })
+    const timePoint = mean({ z: 3, timePoint: 21 })
 
-    store.sync([other, plane], { ...context, loaderFor: () => null })
+    store.sync([other, plane, timePoint], { ...context, loaderFor: () => null })
 
     await vi.waitFor(() => {
       expect(stateOf(other.columnId)).toEqual({
@@ -287,6 +289,10 @@ describe('CellImageMeasurements', () => {
       expect(stateOf(plane.columnId)).toEqual({
         status: 'error',
         message: 'Show plane 3 on the canvas to measure it.',
+      })
+      expect(stateOf(timePoint.columnId)).toEqual({
+        status: 'error',
+        message: 'Show plane 3 at time point 21 on the canvas to measure it.',
       })
     })
   })

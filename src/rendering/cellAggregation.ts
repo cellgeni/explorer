@@ -95,21 +95,6 @@ export function overviewCellsInBbox(
   return visibleCells
 }
 
-export function overviewCellsIntersectingBbox(
-  cells: readonly OverviewCellDatum[],
-  bbox: BBox,
-): readonly OverviewCellDatum[] {
-  const visibleCells: OverviewCellDatum[] = []
-
-  for (const cell of cells) {
-    if (overviewCellIntersectsBbox(cell, bbox)) {
-      visibleCells.push(cell)
-    }
-  }
-
-  return visibleCells
-}
-
 export function overviewCellsExtentBbox(
   cells: readonly OverviewCellDatum[],
 ): BBox | null {

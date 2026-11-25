@@ -5,6 +5,7 @@ import {
   MorphologyCanvas,
   type FlatMorphologyCanvasImage,
   type MorphologyCanvasChannel,
+  type MorphologyCanvasFrame,
 } from './MorphologyCanvas'
 import {
   minimapDeckTarget,
@@ -22,6 +23,8 @@ interface ViewerMinimapProps {
   readonly layout: MinimapLayout
   readonly imageLoader: ImagePyramidLoader | null
   readonly imageChannels: readonly MorphologyCanvasChannel[]
+  // The plane the channels show: the minimap swaps planes whole too.
+  readonly imageFrame?: MorphologyCanvasFrame | undefined
   readonly flatImage: FlatMorphologyCanvasImage | null
   // Cells or bins as dots, when there is no image (deck.gl coordinates).
   readonly points: readonly (readonly [number, number])[]
@@ -43,6 +46,7 @@ export const ViewerMinimap = memo(function ViewerMinimap({
   layout,
   imageLoader,
   imageChannels,
+  imageFrame,
   flatImage,
   points,
   viewBbox,
@@ -107,6 +111,7 @@ export const ViewerMinimap = memo(function ViewerMinimap({
           viewState={layout.viewState}
           maxConcurrentTileRequests={MINIMAP_TILE_REQUESTS}
           tileCacheMaxTiles={tileCacheMaxTiles}
+          {...(imageFrame === undefined ? {} : { frame: imageFrame })}
         />
       ) : (
         <MinimapDots layout={layout} points={points} />

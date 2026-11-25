@@ -1,5 +1,12 @@
-import type { Color, LayersList, Position } from '@deck.gl/core'
+import type {
+  Color,
+  GetPickingInfoParams,
+  LayersList,
+  PickingInfo,
+  Position,
+} from '@deck.gl/core'
 import { PathLayer, PolygonLayer, SolidPolygonLayer } from '@deck.gl/layers'
+import { earcut } from '@math.gl/polygon'
 import type { SpatialElement } from '../datasets/spatialDataset'
 import { annotationPaletteColor, normalizeAnnotationColor } from './annotationPalette'
 import {
@@ -18,7 +25,6 @@ import type {
   CellBoundaryFillGeometryData,
   CellBoundaryFillLayerData,
   CellBoundaryLayerGeometry,
-  CellBoundaryLayerGeometryOptions,
   CellBoundaryLayerStyle,
   CellBoundaryPathGeometryData,
   CellBoundaryPathLayerData,
@@ -43,10 +49,7 @@ const EMPTY_CELL_BOUNDARY_FILL_GEOMETRY: CellBoundaryFillGeometryData = {
 export const EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY: CellBoundaryLayerGeometry = {
   pathLayerData: EMPTY_CELL_BOUNDARY_PATH_GEOMETRY,
   fillLayerData: EMPTY_CELL_BOUNDARY_FILL_GEOMETRY,
-  pathCellIds: [],
-  fillCellIds: [],
-  pathLineColors: [],
-  fillColors: [],
+  boundaries: [],
   boundaryCellIds: new Set<string>(),
 }
 export const EMPTY_CELL_BOUNDARY_LAYER_STYLE: CellBoundaryLayerStyle = {
@@ -58,21 +61,14 @@ interface CellBoundaryLayerDataCache {
   fillData?: CellBoundaryFillLayerData
   fillOpacity?: number
   fillStyle?: CellBoundaryLayerStyle
+  fillIndices?: CellBoundaryFillIndices
+  hitAreaData?: CellBoundaryFillLayerData
   pathData?: CellBoundaryPathLayerData
   pathOpacity?: number
   pathStyle?: CellBoundaryLayerStyle
 }
 
-interface CellBoundaryGeometryBuildResult<
-  LayerData extends CellBoundaryPathGeometryData | CellBoundaryFillGeometryData,
-> {
-  readonly layerData: LayerData
-  readonly cellIds: readonly string[]
-  readonly colors: readonly Color[]
-}
-
 interface CellBoundaryLayerOptions {
-  readonly boundaries: readonly CellBoundaryDatum[]
   readonly geometry: CellBoundaryLayerGeometry
   readonly style: CellBoundaryLayerStyle
   readonly fillEnabled: boolean
@@ -109,6 +105,7 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
           pickable: false,
           filled: true,
           extruded: false,
+          // The rings are closed and their triangles given (fillIndices).
           _normalize: false,
           opacity: 1,
           getPolygon: () => [],
@@ -152,20 +149,46 @@ export function createCellBoundaryLayers(options: CellBoundaryLayerOptions): Lay
 
   if (options.pickable) {
     layers.push(
-      new PolygonLayer<CellBoundaryDatum>({
+      new CellBoundaryHitAreaLayer({
         id: 'cell-boundary-hit-areas',
-        data: options.boundaries,
+        data: cellBoundaryHitAreaLayerData(options.geometry),
+        dataComparator: hasSameCellBoundaryLayerGeometry,
+        cells: options.geometry.boundaries,
         pickable: true,
-        stroked: false,
         filled: true,
+        extruded: false,
+        _normalize: false,
         opacity: CELL_BOUNDARY_HIT_AREA_OPACITY,
-        getPolygon: (boundary) => boundary.polygon,
+        getPolygon: () => [],
         getFillColor: [0, 0, 0, 1],
       }),
     )
   }
 
   return layers
+}
+
+// The outlines a pointer can hover or click, drawn from the fills' rings and
+// triangles. The data is packed, so a pick is matched to its outline by index.
+class CellBoundaryHitAreaLayer extends SolidPolygonLayer<
+  unknown,
+  { readonly cells: readonly CellBoundaryDatum[] }
+> {
+  static override layerName = 'CellBoundaryHitAreaLayer'
+  // deck.gl merges these with the SolidPolygonLayer defaults.
+  static override defaultProps = {
+    cells: { type: 'object', value: [], compare: false },
+  } as unknown as typeof SolidPolygonLayer.defaultProps
+
+  override getPickingInfo(params: GetPickingInfoParams): PickingInfo {
+    const info = super.getPickingInfo(params)
+
+    if (info.index >= 0) {
+      info.object = this.props.cells[info.index]
+    }
+
+    return info
+  }
 }
 
 export const NUCLEUS_BOUNDARY_LAYER_ID = 'nucleus-segmentation-polygons'
@@ -206,52 +229,61 @@ export function createNucleusBoundaryLayers(
   ]
 }
 
+// The paths, fills and hit areas share one set of rings, built when the
+// outlines change; colours and the fill being on or off rebuild none of it
+// (optimization pass, O4).
 export function createCellBoundaryLayerGeometry(
   boundaries: readonly CellBoundaryDatum[],
-  options: CellBoundaryLayerGeometryOptions = {},
 ): CellBoundaryLayerGeometry {
   if (boundaries.length === 0) {
     return EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY
   }
 
-  const includeFill = options.includeFill ?? true
-  const pathLayerData = cellBoundariesToPathLayerGeometry(boundaries)
-  const fillLayerData = includeFill
-    ? cellBoundariesToFillLayerGeometry(boundaries)
-    : {
-        layerData: EMPTY_CELL_BOUNDARY_FILL_GEOMETRY,
-        cellIds: [],
-        colors: [],
-      }
-  const boundaryCellIds = new Set<string>()
+  const rings = closedBoundaryRings(boundaries)
 
-  for (const cellId of pathLayerData.cellIds) {
-    boundaryCellIds.add(cellId)
-  }
-
-  if (boundaryCellIds.size === 0) {
+  if (rings.boundaries.length === 0) {
     return EMPTY_CELL_BOUNDARY_LAYER_GEOMETRY
   }
 
+  const positions = { value: rings.positions, size: 3 }
+
   return {
-    pathLayerData: pathLayerData.layerData,
-    fillLayerData: fillLayerData.layerData,
-    pathCellIds: pathLayerData.cellIds,
-    fillCellIds: fillLayerData.cellIds,
-    pathLineColors: pathLayerData.colors,
-    fillColors: fillLayerData.colors,
-    boundaryCellIds,
+    pathLayerData: {
+      length: rings.boundaries.length,
+      startIndices: rings.startIndices,
+      attributes: { getPath: positions },
+    },
+    fillLayerData: {
+      length: rings.boundaries.length,
+      startIndices: rings.startIndices,
+      attributes: { getPolygon: positions },
+    },
+    boundaries: rings.boundaries,
+    boundaryCellIds: new Set(rings.boundaries.map((boundary) => boundary.id)),
   }
 }
 
+export interface CellBoundaryStyleSource {
+  // The colour of an outlined cell's point (its observation colour, then gene
+  // expression), which fills the outline. Left out, outlines keep their own.
+  readonly cellColor?: (cellId: string) => Color | undefined
+  // Gene expression by element ID: an outline with a matching ID takes its
+  // colour, fill on or off.
+  readonly expressionByElementId?: ReadonlyMap<string, OverviewCellDatum>
+}
+
+// Colours by outline, read by ID for the outlines drawn, so they cost the
+// same however many cells express a gene or which part of the slide is in
+// view.
 export function createCellBoundaryLayerStyle(
   geometry: CellBoundaryLayerGeometry,
-  cells: readonly OverviewCellDatum[],
-  expressionElements: readonly OverviewCellDatum[],
+  source: CellBoundaryStyleSource,
 ): CellBoundaryLayerStyle {
+  const { cellColor, expressionByElementId } = source
+
   if (
     geometry.boundaryCellIds.size === 0 ||
-    (cells.length === 0 && expressionElements.length === 0)
+    (cellColor === undefined && (expressionByElementId?.size ?? 0) === 0)
   ) {
     return EMPTY_CELL_BOUNDARY_LAYER_STYLE
   }
@@ -259,25 +291,24 @@ export function createCellBoundaryLayerStyle(
   const fillColorByCellId = new Map<string, Color>()
   const lineColorByCellId = new Map<string, Color>()
 
-  for (const cell of cells) {
-    if (!geometry.boundaryCellIds.has(cell.id)) {
+  for (const cellId of geometry.boundaryCellIds) {
+    const expressionElement = expressionByElementId?.get(cellId)
+
+    if (expressionElement !== undefined) {
+      fillColorByCellId.set(cellId, expressionElement.fillColor)
+      lineColorByCellId.set(cellId, boundaryLineColor(expressionElement.fillColor))
       continue
     }
 
-    fillColorByCellId.set(cell.id, boundaryFillColor(cell.fillColor))
-    lineColorByCellId.set(cell.id, boundaryLineColor(cell.fillColor))
-  }
+    const color = cellColor?.(cellId)
 
-  for (const cell of expressionElements) {
-    if (!geometry.boundaryCellIds.has(cell.id)) {
-      continue
+    if (color !== undefined) {
+      fillColorByCellId.set(cellId, boundaryFillColor(color))
+      lineColorByCellId.set(cellId, boundaryLineColor(color))
     }
-
-    fillColorByCellId.set(cell.id, cell.fillColor)
-    lineColorByCellId.set(cell.id, boundaryLineColor(cell.fillColor))
   }
 
-  if (fillColorByCellId.size === 0 && lineColorByCellId.size === 0) {
+  if (fillColorByCellId.size === 0) {
     return EMPTY_CELL_BOUNDARY_LAYER_STYLE
   }
 
@@ -371,71 +402,47 @@ export function styleCellBoundariesByGeneExpression(
 
   let hasExpressionMatch = false
   const styledBoundaries = boundaries.map((boundary) => {
-    const expressionElement = expressionByElementId.get(boundary.id)
+    const styledBoundary = styleCellBoundaryByGeneExpression(
+      boundary,
+      expressionByElementId,
+    )
 
-    if (expressionElement === undefined) {
-      return boundary
-    }
-
-    hasExpressionMatch = true
-    return {
-      ...boundary,
-      fillColor: expressionElement.fillColor,
-      lineColor: boundaryLineColor(expressionElement.fillColor),
-      ...(expressionElement.expressionCount === undefined
-        ? {}
-        : { expressionCount: expressionElement.expressionCount }),
-      ...(expressionElement.expressionGenes === undefined
-        ? {}
-        : { expressionGenes: expressionElement.expressionGenes }),
-    }
+    hasExpressionMatch ||= styledBoundary !== boundary
+    return styledBoundary
   })
 
   return hasExpressionMatch ? styledBoundaries : boundaries
 }
 
-function cellBoundariesToFillLayerGeometry(
-  boundaries: readonly CellBoundaryDatum[],
-): CellBoundaryGeometryBuildResult<CellBoundaryFillGeometryData> {
-  const rings = closedBoundaryRings(boundaries, (boundary) => boundary.fillColor)
+// One outline as styleCellBoundariesByGeneExpression styles it, for the
+// outline a card shows rather than every outline drawn.
+export function styleCellBoundaryByGeneExpression(
+  boundary: CellBoundaryDatum,
+  expressionByElementId: ReadonlyMap<string, OverviewCellDatum>,
+): CellBoundaryDatum {
+  const expressionElement = expressionByElementId.get(boundary.id)
 
-  return {
-    layerData: {
-      length: rings.length,
-      startIndices: rings.startIndices,
-      attributes: {
-        getPolygon: { value: rings.positions, size: 3 },
-      },
-    },
-    cellIds: rings.cellIds,
-    colors: rings.colors,
+  if (expressionElement === undefined) {
+    return boundary
   }
-}
-
-function cellBoundariesToPathLayerGeometry(
-  boundaries: readonly CellBoundaryDatum[],
-): CellBoundaryGeometryBuildResult<CellBoundaryPathGeometryData> {
-  const rings = closedBoundaryRings(boundaries, (boundary) => boundary.lineColor)
 
   return {
-    layerData: {
-      length: rings.length,
-      startIndices: rings.startIndices,
-      attributes: {
-        getPath: { value: rings.positions, size: 3 },
-      },
-    },
-    cellIds: rings.cellIds,
-    colors: rings.colors,
+    ...boundary,
+    fillColor: expressionElement.fillColor,
+    lineColor: boundaryLineColor(expressionElement.fillColor),
+    ...(expressionElement.expressionCount === undefined
+      ? {}
+      : { expressionCount: expressionElement.expressionCount }),
+    ...(expressionElement.expressionGenes === undefined
+      ? {}
+      : { expressionGenes: expressionElement.expressionGenes }),
   }
 }
 
 interface ClosedBoundaryRings {
-  readonly length: number
   readonly startIndices: Uint32Array
   readonly positions: Float32Array
-  readonly cellIds: readonly string[]
-  readonly colors: readonly Color[]
+  readonly boundaries: readonly CellBoundaryDatum[]
 }
 
 // Packs boundaries with 3+ vertices into one position buffer. A ring that
@@ -443,7 +450,6 @@ interface ClosedBoundaryRings {
 // it repeated, so fills and outlines both draw the closing edge.
 function closedBoundaryRings(
   boundaries: readonly CellBoundaryDatum[],
-  colorOf: (boundary: CellBoundaryDatum) => Color,
 ): ClosedBoundaryRings {
   let ringCount = 0
   let vertexCount = 0
@@ -463,8 +469,9 @@ function closedBoundaryRings(
 
   const startIndices = new Uint32Array(ringCount + 1)
   const positions = new Float32Array(vertexCount * 3)
-  const cellIds: string[] = []
-  const colors: Color[] = []
+  // The input itself when every boundary makes a ring, as is usual.
+  const ringBoundaries: CellBoundaryDatum[] | null =
+    ringCount === boundaries.length ? null : []
 
   let ringIndex = 0
   let vertexIndex = 0
@@ -476,8 +483,8 @@ function closedBoundaryRings(
     }
 
     startIndices[ringIndex] = vertexIndex
-    cellIds.push(boundary.id)
-    colors.push(colorOf(boundary))
+
+    ringBoundaries?.push(boundary)
 
     for (const point of boundary.polygon) {
       positions[positionIndex] = point[0] ?? 0
@@ -501,7 +508,7 @@ function closedBoundaryRings(
 
   startIndices[ringIndex] = vertexIndex
 
-  return { length: ringCount, startIndices, positions, cellIds, colors }
+  return { startIndices, positions, boundaries: ringBoundaries ?? boundaries }
 }
 
 function cellBoundaryFillLayerDataWithColors(
@@ -520,9 +527,8 @@ function cellBoundaryFillLayerDataWithColors(
   }
 
   const colors = cellBoundaryColorBuffer(
-    geometry.fillLayerData.startIndices,
-    geometry.fillCellIds,
-    geometry.fillColors,
+    geometry,
+    (boundary) => boundary.fillColor,
     style.fillColorByCellId,
     cellFillOpacity,
     { finalAlpha: true },
@@ -533,6 +539,7 @@ function cellBoundaryFillLayerDataWithColors(
     geometryKey: geometry.fillLayerData,
     attributes: {
       ...geometry.fillLayerData.attributes,
+      indices: cellBoundaryFillIndices(geometry),
       getFillColor: { value: colors, size: 4 },
     },
   }
@@ -560,9 +567,8 @@ function cellBoundaryPathLayerDataWithColors(
   }
 
   const colors = cellBoundaryColorBuffer(
-    geometry.pathLayerData.startIndices,
-    geometry.pathCellIds,
-    geometry.pathLineColors,
+    geometry,
+    (boundary) => boundary.lineColor,
     style.lineColorByCellId,
     cellBoundaryOpacity,
   )
@@ -583,6 +589,78 @@ function cellBoundaryPathLayerDataWithColors(
   return data
 }
 
+function cellBoundaryHitAreaLayerData(
+  geometry: CellBoundaryLayerGeometry,
+): CellBoundaryFillLayerData {
+  const cache = cellBoundaryLayerDataCacheForGeometry(geometry)
+
+  if (cache.hitAreaData === undefined) {
+    cache.hitAreaData = {
+      length: geometry.fillLayerData.length,
+      startIndices: geometry.fillLayerData.startIndices,
+      geometryKey: geometry.fillLayerData,
+      attributes: {
+        ...geometry.fillLayerData.attributes,
+        indices: cellBoundaryFillIndices(geometry),
+      },
+    }
+  }
+
+  return cache.hitAreaData
+}
+
+// deck.gl takes `attributes.indices` as the triangles of binary polygons
+// drawn with `_normalize: false`; one descriptor per array, so it is uploaded
+// once.
+interface CellBoundaryFillIndices {
+  readonly value: Uint32Array
+  readonly size: 1
+}
+
+// The fills' triangles, cut once per set of outlines and shared by the fill
+// and hit area layers, which would otherwise each cut their own whenever they
+// are created (deck.gl's own earcut call, on the same closed rings).
+function cellBoundaryFillIndices(
+  geometry: CellBoundaryLayerGeometry,
+): CellBoundaryFillIndices {
+  const cache = cellBoundaryLayerDataCacheForGeometry(geometry)
+
+  if (cache.fillIndices !== undefined) {
+    return cache.fillIndices
+  }
+
+  const { startIndices } = geometry.fillLayerData
+  const positions = geometry.fillLayerData.attributes.getPolygon.value as Float32Array
+  const ringTriangles: number[][] = []
+  let indexCount = 0
+
+  for (let ring = 0; ring < geometry.fillLayerData.length; ring += 1) {
+    const triangles = earcut(
+      positions.subarray(startIndices[ring]! * 3, startIndices[ring + 1]! * 3),
+      undefined,
+      3,
+    )
+
+    ringTriangles.push(triangles)
+    indexCount += triangles.length
+  }
+
+  const indices = new Uint32Array(indexCount)
+  let offset = 0
+
+  ringTriangles.forEach((triangles, ring) => {
+    const start = startIndices[ring]!
+
+    for (const index of triangles) {
+      indices[offset] = start + index
+      offset += 1
+    }
+  })
+
+  cache.fillIndices = { value: indices, size: 1 }
+  return cache.fillIndices
+}
+
 function cellBoundaryLayerDataCacheForGeometry(
   geometry: CellBoundaryLayerGeometry,
 ): CellBoundaryLayerDataCache {
@@ -597,22 +675,21 @@ function cellBoundaryLayerDataCacheForGeometry(
 }
 
 function cellBoundaryColorBuffer(
-  startIndices: Uint32Array,
-  cellIds: readonly string[],
-  baseColors: readonly Color[],
+  geometry: CellBoundaryLayerGeometry,
+  baseColorOf: (boundary: CellBoundaryDatum) => Color,
   styleColorByCellId: ReadonlyMap<string, Color>,
   opacity: number,
   options: { readonly finalAlpha?: boolean } = {},
 ): Uint8Array {
+  const { startIndices } = geometry.pathLayerData
   const vertexCount = startIndices[startIndices.length - 1] ?? 0
   const colors = new Uint8Array(vertexCount * 4)
 
-  for (let cellIndex = 0; cellIndex < cellIds.length; cellIndex += 1) {
+  for (let cellIndex = 0; cellIndex < geometry.boundaries.length; cellIndex += 1) {
     const startIndex = startIndices[cellIndex] ?? 0
     const endIndex = startIndices[cellIndex + 1] ?? startIndex
-    const cellId = cellIds[cellIndex] ?? ''
-    const baseColor = baseColors[cellIndex] ?? [0, 0, 0, 255]
-    const styleColor = styleColorByCellId.get(cellId) ?? baseColor
+    const boundary = geometry.boundaries[cellIndex]!
+    const styleColor = styleColorByCellId.get(boundary.id) ?? baseColorOf(boundary)
     const color =
       options.finalAlpha === true
         ? colorWithFillOpacity(styleColor, opacity)

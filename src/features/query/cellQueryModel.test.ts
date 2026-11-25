@@ -218,6 +218,17 @@ describe('image columns (plan 26-D1, D9)', () => {
         channelId: 'layer:Channel:1',
       }),
     ).toBe('image:above:1:z3:t2176:r5:layer:Channel:1')
+    // A time point follows the plane (plan 28).
+    expect(
+      imageColumnId({
+        stat: 'above',
+        level: 1,
+        z: 3,
+        timePoint: 21,
+        threshold: 2176,
+        channelId: 'Channel:1',
+      }),
+    ).toBe('image:above:1:z3:time21:t2176:Channel:1')
     // The mean has no threshold.
     expect(
       imageColumnId({ stat: 'mean', level: 2, threshold: 9, channelId: 'Channel:0' }),
@@ -232,6 +243,7 @@ describe('image columns (plan 26-D1, D9)', () => {
             stat: fc.constantFrom('mean' as const, 'above' as const),
             level: fc.nat(12),
             z: fc.nat(200),
+            timePoint: fc.nat(1000),
             // A link writes -0 as 0.
             threshold: fc
               .double({ min: -1e6, max: 1e6, noNaN: true })

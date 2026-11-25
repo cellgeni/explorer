@@ -34,7 +34,7 @@ export const CONTROL_AREAS = {
   'spot-options': { kind: 'section', section: CELLS_SECTION },
   // Image section: the Visium tissue image.
   'tissue-image': { kind: 'section', section: /^Image/ },
-  // Image section: opacity, channels, Z plane, custom image layers.
+  // Image section: opacity, channels, Z plane, time point, custom image layers.
   image: { kind: 'section', section: /^Image/ },
   // Cells › Appearance: boundaries and their opacity.
   'cell-appearance': { kind: 'section', section: CELLS_SECTION },
