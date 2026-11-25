@@ -368,14 +368,15 @@ M5, start-up:
 ### Baseline (2026-11-25)
 
 Measured on `3b7e942` (main), with the tools from
-[#433](https://github.com/cellgeni/explorer/pull/433) and the synthetic
-data from [#435](https://github.com/cellgeni/explorer/pull/435) at its
-default size, served by `scripts/range-server.mjs` on the same Mac (M3).
-Production builds without minifying, except S1's; Playwright's Chromium
-drawing with the GPU (Metal), except S1, which draws nothing. Three runs of each; ranges over the runs. "Busy" is
-main-thread time in the phase; "longest" the longest stretch without idle
-time; memory is the page's JavaScript heap and ArrayBuffer memory, and the
-workers' together. S5 and S9 need hosted data and come later.
+[#433](https://github.com/cellgeni/explorer/pull/433) and the synthetic data
+from [#435](https://github.com/cellgeni/explorer/pull/435) at its default
+size, served by `scripts/range-server.mjs` on the same Mac (M3). Production
+builds without minifying, except S1's; Playwright's Chromium drawing with
+the GPU (Metal), except S1, which draws nothing. Three runs of each; ranges
+over the runs. "Busy" is main-thread time in the phase; "longest" the
+longest stretch without idle time; memory is the page's JavaScript heap and
+ArrayBuffer memory, and the workers' together. S5 and S9 need hosted data
+and come later.
 
 | Scenario                                   | Time      | Busy (ms)   | Longest (ms) | Requests            | Page memory    | Workers       |
 | ------------------------------------------ | --------- | ----------- | ------------ | ------------------- | -------------- | ------------- |
