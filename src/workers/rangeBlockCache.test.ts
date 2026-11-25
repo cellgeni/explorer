@@ -100,13 +100,92 @@ describe('RangeBlockCache', () => {
   it('stops read-ahead at a cached block rather than fetching it again', () => {
     const harness = createCache(1024 * KiB)
 
-    harness.read(20 * KiB, 100)
-    harness.read(8 * KiB, 100)
+    harness.read(40 * KiB, 100)
+    harness.read(0, 100)
+    // Continues the stream from 0, whose doubled fetch would reach 48 KiB.
+    harness.read(16 * KiB, 100)
 
     expect(harness.requests).toEqual([
-      [20 * KiB, 36 * KiB],
-      [8 * KiB, 20 * KiB],
+      [40 * KiB, 56 * KiB],
+      [0, 16 * KiB],
+      [16 * KiB, 40 * KiB],
     ])
+  })
+
+  it('reads behind a stream whose misses move backward, doubling each fetch', () => {
+    const harness = createCache(1024 * KiB)
+
+    // As HDF5 reads a string heap: each miss is just before the last fetch.
+    harness.read(200 * KiB, 4 * KiB)
+    expect(harness.read(196 * KiB, 4 * KiB)).toEqual(
+      harness.file.slice(196 * KiB, 200 * KiB),
+    )
+    harness.read(192 * KiB, 100)
+    harness.read(176 * KiB, 100)
+    harness.read(144 * KiB, 100)
+
+    expect(harness.requests).toEqual([
+      [200 * KiB, 216 * KiB],
+      // The first miss before a stream may be a one-off: only what it needs.
+      [196 * KiB, 200 * KiB],
+      [180 * KiB, 196 * KiB],
+      [148 * KiB, 180 * KiB],
+      [84 * KiB, 148 * KiB],
+    ])
+    // All of it is cached: reading the range again fetches nothing.
+    expect(harness.read(84 * KiB, 132 * KiB)).toEqual(
+      harness.file.slice(84 * KiB, 216 * KiB),
+    )
+    expect(harness.requests).toHaveLength(5)
+  })
+
+  it('fills the gap up to the stream on a miss just before it', () => {
+    const harness = createCache(1024 * KiB)
+
+    harness.read(200 * KiB, 100)
+    harness.read(190 * KiB, 100)
+
+    expect(harness.requests).toEqual([
+      [200 * KiB, 216 * KiB],
+      [188 * KiB, 200 * KiB],
+    ])
+  })
+
+  it('keeps the fetch sizes of reading ahead and reading behind apart', () => {
+    const harness = createCache(1024 * KiB)
+
+    harness.read(200 * KiB, 100)
+    harness.read(196 * KiB, 100)
+    harness.read(192 * KiB, 100)
+    // Reading ahead doubles from the first fetch, not from the backward ones.
+    harness.read(216 * KiB, 100)
+
+    expect(harness.requests).toEqual([
+      [200 * KiB, 216 * KiB],
+      [196 * KiB, 200 * KiB],
+      [180 * KiB, 196 * KiB],
+      [216 * KiB, 248 * KiB],
+    ])
+  })
+
+  it('reads behind at most 4 MiB at a time with the default sizes', () => {
+    const MiB = 1024 * KiB
+    const sizes: number[] = []
+    let lowest = 40 * MiB
+    const cache = new RangeBlockCache(64 * MiB, (start, end) => {
+      sizes.push((end - start) / KiB)
+      lowest = Math.min(lowest, start)
+      return new Uint8Array(end - start)
+    })
+    const target = new Uint8Array(100)
+
+    cache.readInto(target, lowest)
+    for (let miss = 0; miss < 5; miss += 1) {
+      cache.readInto(target, lowest - 100)
+    }
+
+    // In KiB: the first fetch, the one-off block, then 1, 2 and 4 MiB.
+    expect(sizes).toEqual([1024, 64, 1024, 2048, 4096, 4096])
   })
 
   it('serves bytes from the head without a request', () => {
