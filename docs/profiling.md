@@ -150,7 +150,7 @@ Then open `http://127.0.0.1:4199/xenium/` or
   - It has a gene panel and a four-channel morphology image, one OME-TIFF
     per channel with a pyramid of SubIFDs.
   - The image's pixels are 0.85 µm, four times the demo's, to keep it to
-    about 1 GB (`--image-pixel-um`).
+    about 600 MB (`--image-pixel-um`).
   - There are no transcripts. `--with-h5` also writes
     `cell_feature_matrix.h5`, which the viewer reads only when the Zarr
     matrix fails.
