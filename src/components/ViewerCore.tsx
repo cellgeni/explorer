@@ -158,6 +158,7 @@ import {
   createObservationColorizer,
 } from '../rendering/cellStyling'
 import { scaleFromZoom } from '../data/coords'
+import { lazyIdLookup } from '../data/lazyIdLookup'
 import type { PickingInfo, ViewStateChangeParameters } from '@deck.gl/core'
 import type { BBox } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
@@ -1045,15 +1046,16 @@ function ViewerSurface({
         : EMPTY_OVERVIEW_CELLS,
     [expressionElements, geneExpressionOverlayEnabled],
   )
-  const cellIndexById = useMemo(() => {
-    const nextCellIndexById = new Map<string, number>()
-
-    cells.forEach((cell, index) => {
-      nextCellIndexById.set(cell.id, index)
-    })
-
-    return nextCellIndexById
-  }, [cells])
+  // Built on first use (a hover, a click or outlines), not on load (O5).
+  const cellIndexById = useMemo(
+    () =>
+      lazyIdLookup(
+        cells,
+        (cell) => cell.id,
+        (_, index) => index,
+      ),
+    [cells],
+  )
   const cellById = useMemo<OverviewCellLookup>(
     () => ({
       get: (id) => {
