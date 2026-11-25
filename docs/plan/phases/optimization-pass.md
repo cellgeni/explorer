@@ -190,15 +190,19 @@ that touch them.
 
 M0, measuring:
 
-- [ ] **O1. Scenarios and tools.** (M)
+- [ ] **O1. Scenarios and tools.** (M) Built in
+      [#433](https://github.com/cellgeni/explorer/pull/433).
   - `scripts/profile-load.mjs`: the GPU channel (`--gpu`), scripted zoom
-    and pan steps after the load (`--steps`), the page's and workers'
-    JavaScript heaps, and the count of live workers.
+    and pan steps after the load (`--steps`), further datasets opened in
+    turn (`--then`), the page's and workers' JavaScript heaps, and the
+    count of live workers.
   - `scripts/range-server.mjs`: a request log, and options that stall or
     fail a share of requests, for O7.
-  - The baseline: S1 to S8, three runs each, recorded here.
-- [ ] **O2. Synthetic data at scale.** (M) A script beside the fixture
-      scripts in `src/test/fixtures/` that writes, outside the repository:
+  - The baseline: S1 to S8, three runs each,
+    [recorded below](#baseline-2026-11-25).
+- [ ] **O2. Synthetic data at scale.** (M) Built in
+      [#435](https://github.com/cellgeni/explorer/pull/435) as
+      `scripts/make_scale_data.py`, which writes, outside the repository:
   - a Xenium-shaped output of N cells (1.4 million by default):
     `experiment.xenium`, `cells.parquet`, the cell-feature matrix as Zarr
     and H5, cell and nucleus outlines, and a four-channel pyramidal
@@ -246,6 +250,14 @@ M1, interaction:
   - A test counts App's hover updates over repeated moves on one
     transcript.
   - Measure S5 with the React Profiler.
+- [ ] **O22. Outlines read as columns.** (S–M) Found by the baseline (S4):
+      the outline query returns a row per vertex, about a million for the
+      view where outlines first show, and each becomes an object on the
+      main thread (`result.toArray()`, `xeniumDatasetReaders.ts:318`;
+      `parseBoundaryRow`, `xeniumDatasetRows.ts:85`). Read the result's
+      columns as typed arrays and cut them into rings by cell instead.
+  - Tests: the same outlines as today from a fixture's rows.
+  - Measure S4.
 
 M2, requests:
 
@@ -353,6 +365,51 @@ M5, start-up:
     groups.
   - Measure S1.
 
+### Baseline (2026-11-25)
+
+Measured on `3b7e942` (main), with the tools from
+[#433](https://github.com/cellgeni/explorer/pull/433) and the synthetic
+data from [#435](https://github.com/cellgeni/explorer/pull/435) at its
+default size, served by `scripts/range-server.mjs` on the same Mac (M3).
+Production builds without minifying, except S1's; Playwright's Chromium
+drawing with the GPU (Metal), except S1, which draws nothing. Three runs of each; ranges over the runs. "Busy" is
+main-thread time in the phase; "longest" the longest stretch without idle
+time; memory is the page's JavaScript heap and ArrayBuffer memory, and the
+workers' together. S5 and S9 need hosted data and come later.
+
+| Scenario                                   | Time      | Busy (ms)   | Longest (ms) | Requests            | Page memory    | Workers       |
+| ------------------------------------------ | --------- | ----------- | ------------ | ------------------- | -------------- | ------------- |
+| S1 Start screen, 10 Mbit/s and 150 ms      | 1.8 s     | 103–151     | 78–113       | 43, 0.9 MB          | 11 MB          | None          |
+| S2 Xenium load, outlines off               | 0.2–0.3 s | 1,406–1,533 | 1,109–1,201  | 225–235, 47–56 MB   | 724–1,014 MB   | 4, 154–185 MB |
+| S3 Colour by `M03a`                        | 1.3–1.6 s | 505–618     | 172–210      | 183–193, 101–109 MB | 1,108–1,122 MB | 7, 187 MB     |
+| S3 Zoom steps 1–5 and a pan, each          | 3 s       | 116–286     | 0–115        | 0–27, ≤ 13 MB       | 1,124–1,307 MB | 8, 175–362 MB |
+| S4 Step 3, where outlines first show       | 3.3–3.4 s | 2,258–2,362 | 2,007–2,137  | 77, 82 MB           | 2,173–2,221 MB | 9, 302–358 MB |
+| S4 Step 4                                  | 3.0–3.1 s | 1,568–1,754 | 1,223–1,251  | 16, 8 MB            | 2,153–2,170 MB | 9, 385–450 MB |
+| S4 Step 5                                  | 3 s       | 736–777     | 494–516      | 9, 4 MB             | 2,397–2,405 MB | 9, 391–456 MB |
+| S6 H5AD load                               | 2.9–3.1 s | 1,249–1,277 | 504–541      | 105, 199 MB         | 1,054–1,073 MB | 1, 210 MB     |
+| S6 Colour by `M03a`                        | 1.1–1.2 s | 1,048–1,113 | 1,033–1,097  | None                | 1,437–1,444 MB | 1, 210 MB     |
+| S7 Four-channel OME-TIFF, 300 ms a request | 7.1 s     | 612–699     | 94–111       | 52, 5.5 MB          | —              | —             |
+| S8 First of ten datasets                   | 0.3 s     | 594–651     | 145–176      | —                   | 214–225 MB     | 7, 193–210 MB |
+| S8 Tenth (the 1M-cell H5AD)                | 3.6–4.1 s | 1,498–1,892 | 622–718      | —                   | 2,359–2,763 MB | 9, 384–391 MB |
+
+What it shows:
+
+- **The first overview draw** (S2) is a stretch of 1.1–1.2 s, 0.86 s of
+  it app code (O5).
+- **Expression reads** on 1.4 million cells kept the main thread busy for
+  0.5–0.6 s when the gene was picked, in stretches of at most 0.21 s, and
+  for at most 0.29 s per zoom step (S3). That is less than the Current
+  State suggests, so O3 and O4 start by profiling where these go.
+- **Outlines** cost the most: the step where they first show holds the
+  main thread for 2.0–2.1 s, 0.9 s of it in DuckDB's JavaScript turning
+  rows into objects (O22), and the page reaches 2.2–2.4 GB. The next zoom
+  step holds it for 1.2 s.
+- **Colouring the H5AD by a gene** is one stretch of 1.0–1.1 s, 0.75 s of
+  it in `h5adDataset` (O15, O17).
+- **The OME-TIFF** opens in about 23 rounds of 300 ms (O9).
+- **Ten datasets in turn** leave 9–10 workers alive and the page at
+  2.4–2.8 GB (O19). Each of the smaller datasets loaded in 0.6–1.2 s.
+
 ### Open Items Taken
 
 Each task takes all or part of an item in [Open Items](../open-items.md).
@@ -374,20 +431,20 @@ Each task takes all or part of an item in [Open Items](../open-items.md).
 
 ### Order And Size
 
-| Milestone        | Tasks      | Size           |
-| ---------------- | ---------- | -------------- |
-| M0 — Measuring   | O1, O2     | About 1 week   |
-| M1 — Interaction | O3 to O6   | About 2 weeks  |
-| M2 — Requests    | O7 to O14  | About 3 weeks  |
-| M3 — Main thread | O15 to O18 | About 1½ weeks |
-| M4 — Memory      | O19, O20   | About 2 weeks  |
-| M5 — Start-up    | O21        | 1–2 days       |
+| Milestone        | Tasks         | Size           |
+| ---------------- | ------------- | -------------- |
+| M0 — Measuring   | O1, O2        | About 1 week   |
+| M1 — Interaction | O3 to O6, O22 | About 2½ weeks |
+| M2 — Requests    | O7 to O14     | About 3 weeks  |
+| M3 — Main thread | O15 to O18    | About 1½ weeks |
+| M4 — Memory      | O19, O20      | About 2 weeks  |
+| M5 — Start-up    | O21           | 1–2 days       |
 
 - M1 comes first: on a large dataset its costs are felt on every gene
   picked and every settled view.
 - O7, O8, O13 and O21 need no synthetic data and can start with M0.
 - O19 can run alongside M2 and M3. O20's ceiling waits for its numbers.
-- The total is about 10 weeks.
+- The total is about 10½ weeks.
 
 ### Risks
 
