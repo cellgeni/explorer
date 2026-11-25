@@ -126,3 +126,51 @@ files downloaded and served from a folder instead.
 The BioImage Archive host is one reason to mirror: some of its range requests
 stall for a minute or more (see
 [Hosts That Stall Range Requests](./s3-cors-playbook.md#hosts-that-stall-range-requests)).
+
+## Synthetic Data At Scale
+
+Most costs worth measuring show only at hundreds of thousands of cells, and
+the test fixtures hold tens. `scripts/make_scale_data.py` writes synthetic
+datasets at the Xenium demo's scale into a folder outside the repository:
+
+```sh
+uv run --no-project --python 3.12 --with "numpy>=2" --with "pyarrow>=15" \
+  --with "h5py>=3.11" --with "zarr>=2.18,<3" --with "tifffile>=2024.8" \
+  python scripts/make_scale_data.py /tmp/scale
+node scripts/range-server.mjs /tmp/scale --port 4199
+```
+
+Then open `http://127.0.0.1:4199/xenium/` or
+`http://127.0.0.1:4199/scale.h5ad`. The two datasets:
+
+- **`xenium/`**, 1.4 million cells: a Xenium Onboard Analysis folder.
+  - Cells and outlines are in Parquet. The cell and nucleus outlines have
+    25 vertices per cell, as in the demo.
+  - The cell-feature matrix and two clusterings are in zipped Zarr.
+  - It has a gene panel and a four-channel morphology image, one OME-TIFF
+    per channel with a pyramid of SubIFDs.
+  - The image's pixels are 0.85 µm, four times the demo's, to keep it to
+    about 1 GB (`--image-pixel-um`).
+  - There are no transcripts. `--with-h5` also writes
+    `cell_feature_matrix.h5`, which the viewer reads only when the Zarr
+    matrix fails.
+- **`scale.h5ad`**, 1 million cells: an AnnData file with `obsm/spatial` in
+  micrometres, an `X_umap` embedding, 20 numeric and 6 categorical obs
+  columns, and a CSR `X`.
+  - At about 200 MB it is read by range, and its `X` is read whole at load.
+  - With more cells or genes per cell, `X` passes 300 MiB and is read gene by
+    gene instead.
+
+Both are drawn from one seeded model of a tissue: cells on a jittered 10 µm
+grid, in 20 clusters that are patches of the slide.
+
+- **Marker genes:** each cluster has five, `M01a` to `M20e`, expressed by
+  most of its cells, so each is in a few percent of all cells.
+- **Other genes:** `G0100` onwards are expressed at random, a few often and
+  most rarely. `RARE1` is in one cell in 2,000.
+
+Options set the cell counts (`--xenium-cells`, `--h5ad-cells`), the genes
+(`--genes`, `--genes-per-cell`), which datasets to write (`--what`) and the
+seed. The default run takes about two minutes and under 3 GB of memory. The same
+options write the same data, so a measurement can be repeated on another
+machine.
