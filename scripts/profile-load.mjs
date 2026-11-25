@@ -11,6 +11,9 @@
 //   --steps <keys>       then press these keys on the spatial view, one
 //                        profile each, e.g. "=,=,=,ArrowRight" (= zooms in)
 //   --step-settle <s>    profile each step this long (default 2)
+//   --then <urls>        then open each of these datasets (comma-separated)
+//                        in turn from the dataset field, one profile each
+//   --hash <params>      add these to the link's hash, e.g. cellBounds=0
 //   --until <selector>   CSS selector that marks the load as done (default:
 //                        the enabled gene search box, or the dataset field
 //                        for `none`)
@@ -29,6 +32,7 @@ import { writeFileSync } from 'node:fs'
 
 const GENE_SEARCH = 'input[placeholder="Search genes"]:not([disabled])'
 const DATASET_FIELD = 'input[title="Dataset or image URL"]'
+const OPEN_DATASET = '.shell-dataset-name'
 const SPATIAL_VIEW = 'Spatial viewer canvas area'
 // Ids for CDP messages sent to workers through the browser session.
 const targetMessageIds = { next: 1 }
@@ -41,7 +45,8 @@ const { positional, options } = parseArgs(process.argv.slice(2))
 if (positional.length < 2 || options.help !== undefined) {
   console.log(
     'Usage: node scripts/profile-load.mjs <app-url>[,<app-url>...] <dataset-url> ' +
-      '[--gene S] [--steps KEYS] [--step-settle S] [--until SELECTOR] [--runs N] ' +
+      '[--gene S] [--steps KEYS] [--step-settle S] [--then URLS] [--hash PARAMS] ' +
+      '[--until SELECTOR] [--runs N] ' +
       '[--settle S] [--requests TEXT] [--memory] [--gpu] [--throttle MBIT,MS] ' +
       '[--raw PREFIX] [--json]',
   )
@@ -54,6 +59,9 @@ const runs = Number(options.runs ?? 1)
 const settleMs = Number(options.settle ?? 3) * 1000
 const stepSettleMs = Number(options['step-settle'] ?? 2) * 1000
 const steps = options.steps === undefined ? [] : options.steps.split(',')
+const thenDatasets = options.then === undefined ? [] : options.then.split(',')
+const extraHash =
+  options.hash === undefined ? '' : `&${options.hash.replace(/^[#&]/, '')}`
 const throttle = parseThrottle(options.throttle)
 
 for (let run = 1; run <= runs; run += 1) {
@@ -110,7 +118,7 @@ async function profileRun(run, appIndex, appUrl) {
     await page.goto(
       datasetUrl === 'none'
         ? `${app}/`
-        : `${app}/#dataset=${encodeURIComponent(datasetUrl)}`,
+        : `${app}/#dataset=${encodeURIComponent(datasetUrl)}${extraHash}`,
     )
     await page
       .locator(options.until ?? (datasetUrl === 'none' ? DATASET_FIELD : GENE_SEARCH))
@@ -167,6 +175,37 @@ async function profileRun(run, appIndex, appUrl) {
         (Date.now() - stepStarted) / 1000,
         (await cdp.send('Profiler.stop')).profile,
         status === null ? {} : { status },
+      )
+    }
+
+    // Each further dataset is opened as a user would, from the dataset
+    // field, so the viewer keeps or disposes the ones before as it does.
+    for (const [index, url] of thenDatasets.entries()) {
+      await cdp.send('Profiler.start')
+      const thenStarted = Date.now()
+      const field = page.locator(DATASET_FIELD).first()
+
+      if (!(await field.isVisible())) {
+        await page.locator(OPEN_DATASET).first().click()
+      }
+
+      await field.fill(url)
+      await field.press('Enter')
+      await page.waitForFunction(
+        (expected) => decodeURIComponent(location.hash).includes(`dataset=${expected}`),
+        url,
+        { timeout: TIMEOUT_MS },
+      )
+      await page
+        .locator(options.until ?? GENE_SEARCH)
+        .first()
+        .waitFor({ timeout: TIMEOUT_MS })
+      const thenSeconds = (Date.now() - thenStarted) / 1000
+      await page.waitForTimeout(settleMs)
+      await report(
+        `then ${index + 1} ${url}`,
+        thenSeconds,
+        (await cdp.send('Profiler.stop')).profile,
       )
     }
   } finally {
