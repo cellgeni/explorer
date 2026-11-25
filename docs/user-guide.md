@@ -309,6 +309,10 @@ switching to 3D or taking a screenshot stops it. The next time points load
 while one is shown, and played ones stay in memory, so a second loop replays
 without reading them again. A new z plane or time point replaces the old one
 whole once it has loaded, or tile by tile after 2 s on a slow connection.
+Label outlines with z planes or time points (SpatialData labels, AnnData
+labels, an imported OME-Zarr mask) follow the image, and a new plane is shown
+once its outlines have loaded too; cells and tables stay the same at every
+time point.
 Contrast stays the same at every time point. For an OME-Zarr z-stack, `View` › `3D` shows the
 whole stack as a volume you can rotate, with axes at the top right showing
 which way x, y and z run (click one to look along it), `Max intensity` and

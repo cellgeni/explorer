@@ -255,6 +255,7 @@ import { useMorphologyWorkflow } from './features/morphology/useMorphologyWorkfl
 import { useMorphologyPlaneWorkflow } from './features/morphology/useMorphologyPlaneWorkflow'
 import {
   morphologyImageFrame,
+  morphologyImagePlane,
   ShownMorphologyFrame,
 } from './features/morphology/morphologyFrame'
 import { useTimePointPlayback } from './features/morphology/useTimePointPlayback'
@@ -2584,6 +2585,79 @@ export function App({ dependencies }: AppProps = {}) {
     },
     [appendDebugEvent, setPinnedTranscript],
   )
+  const {
+    requestedZPlane: requestedMorphologyZPlane,
+    requestedTimePoint: requestedMorphologyTimePoint,
+    selectMorphologyZPlane,
+    selectMorphologyTimePoint,
+  } = useMorphologyPlaneWorkflow({
+    callbacks: { appendDebugEvent },
+    data: { morphologyImage },
+    refs: { loadRequestIdRef: loadRequestId },
+    setters: { setMorphologyImage, setMorphologyState },
+  })
+  // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
+  // dataset it was opened on: another dataset opens in 2D.
+  const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
+  const volumeViewAvailable = useMemo(
+    () => morphologyVolumeLevels(morphologyImage).length > 0,
+    [morphologyImage],
+  )
+  const volumeViewShown =
+    volumeViewAvailable &&
+    volumeViewDatasetUrl !== null &&
+    volumeViewDatasetUrl === loadedDatasetUrl
+  // The dataset image's plane, and the plane the canvas shows while the next
+  // one loads (plan 28-D6).
+  const morphologyFrame = useMemo(
+    () => morphologyImageFrame(morphologyImage),
+    [morphologyImage],
+  )
+  const [shownMorphologyFrame] = useState(() => new ShownMorphologyFrame())
+  // Play (plan 28-G), stopped by the 3D view, a screenshot or a plane that
+  // fails to open.
+  const timePointPlayback = useTimePointPlayback({
+    image: morphologyImage,
+    shownFrame: shownMorphologyFrame,
+    enabled:
+      !volumeViewShown &&
+      screenshotState.status !== 'running' &&
+      morphologyState.status !== 'error',
+    prefetchCount: performanceBudget.timePointPrefetch,
+    selectTimePoint: selectMorphologyTimePoint,
+  })
+  // The plane of the cell outlines drawn, while they follow the image's
+  // plane (28-D9): a new plane waits for its outlines too.
+  const imageOutlinesPlane =
+    layerVisibility.cells &&
+    platformAdapter.cellBoundaryLoadingEnabled(showCellBoundaries) &&
+    (boundaryState.status === 'loading' || boundaryState.status === 'ready')
+      ? boundaryState.plane
+      : undefined
+  const viewerImageFrame = useMemo<ViewerImageFrame>(
+    () => ({
+      frame: morphologyFrame,
+      // Play waits for each time point however long it takes (28-D6).
+      ...(timePointPlayback.playing ? { fallbackMs: Infinity } : {}),
+      onShown: shownMorphologyFrame.show,
+      prefetchPlanes: timePointPlayback.prefetchPlanes,
+      ...(imageOutlinesPlane === undefined ? {} : { outlinesPlane: imageOutlinesPlane }),
+    }),
+    [
+      imageOutlinesPlane,
+      morphologyFrame,
+      shownMorphologyFrame,
+      timePointPlayback.playing,
+      timePointPlayback.prefetchPlanes,
+    ],
+  )
+  // While Play runs the link keeps the time point it started from (28-D12).
+  const shareableMorphologyTimePoint =
+    timePointPlayback.startTimePoint ??
+    morphologyImage?.timeSeries?.timePoint ??
+    (morphologyImage === null && linkImageOpening
+      ? initialShareableState.morphologyTimePoint
+      : undefined)
   const { handleViewportChange } = useViewportDataWorkflow({
     callbacks: {
       appendDebugEvent,
@@ -2604,6 +2678,12 @@ export function App({ dependencies }: AppProps = {}) {
         platformAdapter.kind === 'image'
           ? importedSegmentation.viewportCellCount
           : undefined,
+      boundaryPlane:
+        morphologyImage === null ||
+        (morphologyImage.zStack === undefined && morphologyImage.timeSeries === undefined)
+          ? undefined
+          : morphologyImagePlane(morphologyImage),
+      boundaryPrefetchPlanes: timePointPlayback.prefetchPlanes,
     },
     data: {
       loadState,
@@ -3618,69 +3698,6 @@ export function App({ dependencies }: AppProps = {}) {
         setMorphologyState,
       },
     })
-  const {
-    requestedZPlane: requestedMorphologyZPlane,
-    requestedTimePoint: requestedMorphologyTimePoint,
-    selectMorphologyZPlane,
-    selectMorphologyTimePoint,
-  } = useMorphologyPlaneWorkflow({
-    callbacks: { appendDebugEvent },
-    data: { morphologyImage },
-    refs: { loadRequestIdRef: loadRequestId },
-    setters: { setMorphologyImage, setMorphologyState },
-  })
-  // The 3D view of an OME-Zarr z-stack, over the 2D view, kept open for the
-  // dataset it was opened on: another dataset opens in 2D.
-  const [volumeViewDatasetUrl, setVolumeViewDatasetUrl] = useState<string | null>(null)
-  const volumeViewAvailable = useMemo(
-    () => morphologyVolumeLevels(morphologyImage).length > 0,
-    [morphologyImage],
-  )
-  const volumeViewShown =
-    volumeViewAvailable &&
-    volumeViewDatasetUrl !== null &&
-    volumeViewDatasetUrl === loadedDatasetUrl
-  // The dataset image's plane, and the plane the canvas shows while the next
-  // one loads (plan 28-D6).
-  const morphologyFrame = useMemo(
-    () => morphologyImageFrame(morphologyImage),
-    [morphologyImage],
-  )
-  const [shownMorphologyFrame] = useState(() => new ShownMorphologyFrame())
-  // Play (plan 28-G), stopped by the 3D view, a screenshot or a plane that
-  // fails to open.
-  const timePointPlayback = useTimePointPlayback({
-    image: morphologyImage,
-    shownFrame: shownMorphologyFrame,
-    enabled:
-      !volumeViewShown &&
-      screenshotState.status !== 'running' &&
-      morphologyState.status !== 'error',
-    prefetchCount: performanceBudget.timePointPrefetch,
-    selectTimePoint: selectMorphologyTimePoint,
-  })
-  const viewerImageFrame = useMemo<ViewerImageFrame>(
-    () => ({
-      frame: morphologyFrame,
-      // Play waits for each time point however long it takes (28-D6).
-      ...(timePointPlayback.playing ? { fallbackMs: Infinity } : {}),
-      onShown: shownMorphologyFrame.show,
-      prefetchPlanes: timePointPlayback.prefetchPlanes,
-    }),
-    [
-      morphologyFrame,
-      shownMorphologyFrame,
-      timePointPlayback.playing,
-      timePointPlayback.prefetchPlanes,
-    ],
-  )
-  // While Play runs the link keeps the time point it started from (28-D12).
-  const shareableMorphologyTimePoint =
-    timePointPlayback.startTimePoint ??
-    morphologyImage?.timeSeries?.timePoint ??
-    (morphologyImage === null && linkImageOpening
-      ? initialShareableState.morphologyTimePoint
-      : undefined)
   // The 3D view of cells placed in 3D (a third spatial coordinate), over the
   // 2D view like the image's, and kept open the same way. One 3D view shows
   // at a time.

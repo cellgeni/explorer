@@ -127,8 +127,9 @@ Features:
       does not show OME-TIFF z-stacks or custom layers, nor cells and
       transcripts in 3D, does not know the GPU's real 3D texture limit, and
       is not kept in the link (see
-      [Phase 9](phases/09-ome-zarr.md)). The `t` selection is planned in
-      [Phase 28](phases/28-time-points.md) (2026-11-25).
+      [Phase 9](phases/09-ome-zarr.md)). Time points, Play and labels that
+      follow the image's plane are in [Phase 28](phases/28-time-points.md)
+      (PR 431, 2026-11-25).
 - [ ] H5AD: `/layers/*` and `/raw/X`, and richer schema diagnostics. Only
       `/X` is read. Worker-backed lazy Range reads are done (2026-11-17): a
       plain `.h5ad` over 64 MiB is read by range in the H5 worker, walking
@@ -149,7 +150,7 @@ Features:
       2026-11-21).
 - [ ] SpatialData: rotated or sheared images, `points` (transcripts), Magic
       Lens, and viewport-scoped shape reads; also labels drawn as a raster
-      rather than traced outlines, nucleus labels, labels' other z planes,
+      rather than traced outlines, nucleus labels,
       polygons with holes or several parts (only the outer ring of the
       largest part is kept), and HTTP diagnostics beyond the first 2,000
       table chunks (string arrays first since #369, 2026-11-23) and the

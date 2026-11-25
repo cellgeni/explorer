@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import type { ViewerViewportDetail } from '../../components/ViewerCore'
 import {
   geneExpressionReadCovers,
@@ -20,6 +27,11 @@ import {
 } from '../../data/runtimeMemory'
 import { telemetryEvent, type TelemetryEvent } from '../../data/telemetry'
 import type { BBox } from '../../data/coords'
+import {
+  imagePlaneFromKey,
+  imagePlaneKey,
+  type ImagePyramidPlane,
+} from '../../data/imagePyramid'
 import type { GeneExpressionBatch, SpatialElement } from '../../datasets/spatialDataset'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
 import {
@@ -129,6 +141,12 @@ interface ViewportDataWorkflowControls {
   // image's imported segmentation); replaces the viewer's count for
   // boundary requests.
   readonly viewportCellCount?: ((bbox: BBox) => number) | undefined
+  // The dataset image's z plane and time point: cell outlines from labels
+  // that follow it are read again when it changes (plan 28-D9).
+  readonly boundaryPlane?: ImagePyramidPlane | undefined
+  // Planes whose cell outlines are read ahead for the last area read, such
+  // as the next time points while Play runs (28-D8).
+  readonly boundaryPrefetchPlanes?: readonly ImagePyramidPlane[]
 }
 
 interface ViewportDataWorkflowData {
@@ -162,6 +180,8 @@ export function useViewportDataWorkflow({
     geneExpressionScoreMode,
     visiumHdBinSizeMicrometers,
     viewportCellCount,
+    boundaryPlane,
+    boundaryPrefetchPlanes,
   },
   data: { loadState, overviewExtent, selectedGenes },
   loaders,
@@ -211,6 +231,14 @@ export function useViewportDataWorkflow({
   // Box of the last expression read, trusted only while its key is the
   // current one (clearing the key asks for a new read).
   const geneExpressionReadRef = useRef<GeneExpressionReadArea | null>(null)
+  // One plane object for each plane, so a new object for the same plane does
+  // not read the outlines again.
+  const boundaryPlaneKey =
+    boundaryPlane === undefined ? null : imagePlaneKey(boundaryPlane)
+  const cellBoundaryPlane = useMemo(
+    () => (boundaryPlaneKey === null ? undefined : imagePlaneFromKey(boundaryPlaneKey)),
+    [boundaryPlaneKey],
+  )
   const handleViewportChange = useCallback(
     (detail: ViewerViewportDetail) => {
       if (loadState.status !== 'ready') {
@@ -234,6 +262,7 @@ export function useViewportDataWorkflow({
           kind: 'cell',
           enabled: cellBoundaryLoadingEnabled,
           load: loadBoundaryElements,
+          ...(cellBoundaryPlane === undefined ? {} : { plane: cellBoundaryPlane }),
           requests: {
             abortRef: boundaryAbortRef,
             requestIdRef: boundaryRequestIdRef,
@@ -535,6 +564,7 @@ export function useViewportDataWorkflow({
       boundaryRequestIdRef,
       boundaryViewportKeyRef,
       cellBoundaryLoadingEnabled,
+      cellBoundaryPlane,
       geneExpressionAbortRef,
       geneExpressionDetailMode,
       geneExpressionDisabledMessage,
@@ -576,6 +606,37 @@ export function useViewportDataWorkflow({
     }
   }, [handleViewportChange, lastViewportDetailRef])
 
+  // The next planes' outlines for the area last read, so they come from the
+  // dataset's caches when their plane is shown. Results are not kept here,
+  // and a read that fails is read again when its plane is shown.
+  useEffect(() => {
+    const area = cellBoundaryAreaRef.current
+
+    if (
+      boundaryPrefetchPlanes === undefined ||
+      boundaryPrefetchPlanes.length === 0 ||
+      !cellBoundaryLoadingEnabled ||
+      loadState.status !== 'ready' ||
+      area === null ||
+      area.failed === true
+    ) {
+      return
+    }
+
+    for (const plane of boundaryPrefetchPlanes) {
+      loadBoundaryElements(loadState.url, area.bbox, {
+        cellLimit: boundaryCellLimit,
+        plane,
+      }).catch(() => undefined)
+    }
+  }, [
+    boundaryCellLimit,
+    boundaryPrefetchPlanes,
+    cellBoundaryLoadingEnabled,
+    loadBoundaryElements,
+    loadState,
+  ])
+
   return { handleViewportChange }
 }
 
@@ -615,6 +676,8 @@ interface BoundaryLayer {
   readonly kind: BoundaryLayerKind
   readonly enabled: boolean
   readonly load: BoundaryElementsLoader
+  // The image plane the outlines are read at, for outlines that may follow it.
+  readonly plane?: ImagePyramidPlane
   readonly requests: BoundaryRequestRefs
   readonly areaRef: MutableRef<BoundaryRequestAreaWithKey | null>
   readonly setElements: Setter<readonly SpatialElement[]>
@@ -693,11 +756,16 @@ function requestBoundaryLayer(
   const { appendDebugEvent, baseUrl, boundaryCellLimit, recordTelemetry } = context
   const { boundaryViewportKeyRef } = layer.requests
   const copy = BOUNDARY_LAYER_COPY[layer.kind]
+  // A read is for one view of one plane.
+  const requestKeyFor = (bbox: BBox) =>
+    layer.plane === undefined
+      ? boundaryViewportKey(baseUrl, bbox)
+      : `${boundaryViewportKey(baseUrl, bbox)}@${imagePlaneKey(layer.plane)}`
   const lastArea = layer.areaRef.current
   const currentArea =
     lastArea !== null &&
     lastArea.key === boundaryViewportKeyRef.current &&
-    lastArea.key === boundaryViewportKey(baseUrl, lastArea.bbox)
+    lastArea.key === requestKeyFor(lastArea.bbox)
       ? lastArea
       : null
 
@@ -708,7 +776,7 @@ function requestBoundaryLayer(
   const requestBbox = padded
     ? paddedBoundaryBbox(detail, { cellLimit: boundaryCellLimit })
     : detail.bbox
-  const requestKey = boundaryViewportKey(baseUrl, requestBbox)
+  const requestKey = requestKeyFor(requestBbox)
   const requestArea: BoundaryRequestAreaWithKey = {
     key: requestKey,
     bbox: requestBbox,
@@ -717,7 +785,15 @@ function requestBoundaryLayer(
   layer.areaRef.current = requestArea
   const request = startLatestRequest(layer.requests)
   boundaryViewportKeyRef.current = requestKey
-  layer.setState(boundaryLoadStarted(baseUrl))
+  // The outlines drawn stay until the new ones come, with their plane.
+  layer.setState((current) =>
+    boundaryLoadStarted(
+      baseUrl,
+      current.status === 'loading' || current.status === 'ready'
+        ? current.plane
+        : undefined,
+    ),
+  )
   const startedAt = readTimestamp()
   appendDebugEvent(
     `${copy.label} started: ${detail.visibleCellCount.toLocaleString()} visible cells`,
@@ -725,7 +801,11 @@ function requestBoundaryLayer(
   )
 
   void layer
-    .load(baseUrl, requestBbox, { signal: request.signal, cellLimit: boundaryCellLimit })
+    .load(baseUrl, requestBbox, {
+      signal: request.signal,
+      cellLimit: boundaryCellLimit,
+      ...(layer.plane === undefined ? {} : { plane: layer.plane }),
+    })
     .then((batch) => {
       if (!request.isCurrent()) {
         return
@@ -757,9 +837,13 @@ function requestBoundaryLayer(
       layer.setElements(batch.elements)
       layer.setState(
         batch.overLimit === undefined
-          ? boundaryLoadReady(baseUrl, batch.elements.length)
+          ? boundaryLoadReady(baseUrl, batch.elements.length, batch.plane)
           : boundaryLoadOverLimit(baseUrl, batch.overLimit.count),
       )
+
+      if (batch.planeNotice !== undefined) {
+        appendDebugEvent(batch.planeNotice, { coalesceKey: 'label-plane' })
+      }
       recordTelemetry(
         telemetryEvent(copy.telemetryName, 'success', {
           startedAt,

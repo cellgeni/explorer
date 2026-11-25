@@ -28,7 +28,8 @@ the answers.
 M1 (tasks B to D, choosing a time point) was built the same day:
 [M1 Results](#m1-results-2026-11-25). The spike (task A) and M2 (tasks E to
 G, Play) followed, also the same day: [Spike Results](#spike-results-2026-11-25)
-and [M2 Results](#m2-results-2026-11-25).
+and [M2 Results](#m2-results-2026-11-25). M3 (tasks H and I, labels at a
+plane) came next: [M3 Results](#m3-results-2026-11-25).
 
 The plan rests on a code map made on 2026-11-25 at `d52cc1c`. It is cited
 below as `file:line`; line numbers drift as the code changes.
@@ -314,8 +315,9 @@ As built in M2:
 5. Anything in D10 stops it. Prefetch reads are aborted; read tiles stay in
    the replay cache.
 
-M3 adds outlines: the canvas's report waits for the time point's outlines
-too (D9).
+Since M3, label outlines that follow the plane take part: the next time
+points' outlines are read ahead for the last area read, and the canvas holds a
+new time point until the outlines read at its plane have come (D9).
 
 ## Data
 
@@ -390,13 +392,13 @@ too (D9).
       gate (D8), `Speed`, `Loop`, the stop rules (D10), and the icons.
   - Tests with fake timers: a slow time point delays the next one; it
     never skips; each D10 stop.
-- [ ] **H. Labels at a plane.** (M) `SpatialDataLabelsReader` records its
+- [x] **H. Labels at a plane.** (M) `SpatialDataLabelsReader` records its
       `t` and `z` axes. Chunk coordinates and `fixedAxes` follow the plane
       in the worker and on the main thread. The plane goes into the trace
       and ring keys. `outlines(bounds, { plane })`. The clamp and log (D9).
   - Tests in `spatialDataLabels.test.ts` with a 4 × 2 label image over
     `t` and `z`.
-- [ ] **I. Labels in the datasets.** (M) A plane for `elements(bbox)` in
+- [x] **I. Labels in the datasets.** (M) A plane for `elements(bbox)` in
       SpatialData, AnnData's attached labels and imported segmentations;
       boundaries read again on a plane change; outline readiness for Play
       (D8).
@@ -491,8 +493,8 @@ counts include the minimap, which draws the image too.
   limit in D8 was changed to count pixels rather than tiles, so a 512-pixel
   tile counts as four.
 - **The 2 s fallback** (D6) stays: whole frames took well under 0.5 s.
-- **Label tracing** is measured in M3, with task H: until then labels read
-  only `t = 0`.
+- **Label tracing** was measured in M3:
+  [M3 Results](#m3-results-2026-11-25).
 
 ## M2 Results (2026-11-25)
 
@@ -539,6 +541,55 @@ points` left of the slider, `Speed` and `Loop` under it, hidden in 3D.
 
 - **Not yet**: labels at a plane (M3); Cell Query paused during Play, the
   3D volume key with `t`, and the screenshot PNG's time point (task J).
+
+## M3 Results (2026-11-25)
+
+Tasks H and I, on the plan's branch.
+
+- **The reader** (`spatialDataLabels.ts`): each level records its `z` axis
+  and its `t` axis (named `t` or typed `time`). For an image plane it reads
+  the chunk holding the plane and the plane's index inside it
+  (`fixedAxes`), on the main thread (`labelWindow` gained an offset) and in
+  the worker (which now honours `fixedAxes`). Indices are clamped to the
+  labels' own length and scaled on a downsampled level. The plane is part
+  of the trace key and the ring cache key (8 planes a level kept); 2D labels
+  have one key at every plane, so nothing is traced again. A chunk that
+  holds several planes is read once for all of them (32 MB of stored chunk
+  bytes kept): idr0052A's label chunks hold 10 time points × 8 z planes.
+  `followsPlanes` and `planeNotice` tell the datasets what the labels do.
+- **The datasets**: `elements(bbox, { plane })` on SpatialData and AnnData,
+  and `outlines(bbox, { plane })` on imported segmentations. A batch from
+  labels that follow the plane names it (`plane`, as `imagePlaneKey` writes
+  it, `z:t`) and says when the labels are shorter than the image
+  (`planeNotice`, logged).
+- **The boundaries**: the viewport workflow puts the image plane in the cell
+  outline request key, so a step reads the outlines again; the outlines drawn
+  stay until the new ones come. The load state carries the plane of the
+  outlines drawn, and the canvas holds a new plane until it matches
+  (`outlinesPlane`), unless the outlines are hidden, deferred, over the limit
+  or failed. While Play runs, the next time points' outlines are read ahead.
+- **The Play row**: Play sits left of the slider and `Speed` and `Loop`
+  share the row under it; M2 had left the row without its CSS.
+- **Measured** on idr0052A with `labels/Cell` imported as a segmentation,
+  in the spike's set-up (production build, Playwright, Metal):
+
+  | Case                                      | Result                           |
+  | ----------------------------------------- | -------------------------------- |
+  | One time step, image and outlines shown   | 111–158 ms (image alone 111–235) |
+  | Play at speed 5, outlines read on showing | 3.1 / s, 76 label requests       |
+  | … with outlines read ahead                | 4.6 / s, 124 label requests      |
+  | … and chunks read once for their planes   | 4.7 / s, 12 label requests       |
+  | Play at speed 10                          | 5.5–9.3 / s, 12 label requests   |
+
+  Every draw during Play had all three channels. Screenshots at time points
+  22 and 1 show the outline following the cell from division back to one
+  nucleus. One run at speed 20 drew three partial frames for a time point
+  stuck behind a slow request; the timing fits the 2 s fallback after the
+  script pressed Pause. Four more runs that marked the pause showed no
+  partial draw, during Play or after.
+
+- **Not yet**: the SpatialData fixture with a `t` axis and the end-to-end
+  test (task L).
 
 ## Risks
 

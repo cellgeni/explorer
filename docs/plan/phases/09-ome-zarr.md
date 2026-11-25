@@ -39,8 +39,9 @@ Known gaps:
 
 - [x] Only `t = 0` and `z = 0` are shown. Since 2026-11-14 z planes have
       the `Z plane` control.
-- [ ] Only one `t` is shown: `omero.rdefs.defaultT`, else 0. Planned in
-      [Phase 28](28-time-points.md) (2026-11-25).
+- [x] Only one `t` is shown: `omero.rdefs.defaultT`, else 0. Since
+      2026-11-25 `Time point` and `Play time points` choose and play time
+      points ([Phase 28](28-time-points.md), PR 431).
 - [ ] The 3D view: OME-TIFF z-stacks and custom layers, cells and transcripts
       in 3D, the GPU's real 3D texture limit, and keeping the view in the
       share link.

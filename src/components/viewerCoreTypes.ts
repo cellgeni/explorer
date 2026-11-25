@@ -248,4 +248,7 @@ export interface ViewerImageFrame {
   readonly fallbackMs?: number
   readonly onShown: (frame: MorphologyCanvasFrame) => void
   readonly prefetchPlanes: readonly ImagePyramidPlane[]
+  // The plane of the cell outlines drawn, while they follow the image's
+  // plane: a new plane waits for its outlines too (28-D9).
+  readonly outlinesPlane?: string
 }

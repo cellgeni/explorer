@@ -163,6 +163,10 @@ matrices.
   points (an axis named `t` or typed `time`) are chosen with `Time point`,
   starting at `#t=N`, `defaultT` or 0 (Phase 28). A bioformats2raw store opens
   its first series.
+- Label images (SpatialData `labels`, AnnData attached labels, imported
+  OME-Zarr masks) with an axis named `z`, or named `t` or typed `time`, read
+  the image's z plane and time point, clamped to their own length and scaled
+  on a level downsampled along the axis. Other axes read index 0 (Phase 28).
 - µm/px is the product of multiscale and dataset `scale` values for `x`, with
   unit conversion; a missing scale gives 1 µm/px.
 - `omero.channels` gives names, colours, and windows. An image without a `c`

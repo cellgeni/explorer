@@ -98,15 +98,25 @@ export function datasetDiagnosticsFailed<ErrorType>(
   return { status: 'error', url, error }
 }
 
-export function boundaryLoadStarted(url: string): BoundaryLoadState<never> {
-  return { status: 'loading', url }
+// `plane` is the plane of the outlines still drawn, for outlines that follow
+// the image's plane (plan 28-D9).
+export function boundaryLoadStarted(
+  url: string,
+  plane?: string,
+): BoundaryLoadState<never> {
+  return plane === undefined
+    ? { status: 'loading', url }
+    : { status: 'loading', url, plane }
 }
 
 export function boundaryLoadReady(
   url: string,
   cellCount: number,
+  plane?: string,
 ): BoundaryLoadState<never> {
-  return { status: 'ready', url, cellCount }
+  return plane === undefined
+    ? { status: 'ready', url, cellCount }
+    : { status: 'ready', url, cellCount, plane }
 }
 
 // The view held more outlines than can be drawn, so none were read.
@@ -189,11 +199,14 @@ export type MorphologyLoadState<ErrorType = unknown> =
 
 export type BoundaryLoadState<ErrorType = unknown> =
   | { readonly status: 'idle' }
-  | { readonly status: 'loading'; readonly url: string }
+  | { readonly status: 'loading'; readonly url: string; readonly plane?: string }
   | {
       readonly status: 'ready'
       readonly url: string
       readonly cellCount: number
+      // The plane the outlines were read at, for outlines that follow the
+      // image's z plane and time point (plan 28-D9).
+      readonly plane?: string
       // Set when the view held too many outlines to draw (an imported
       // segmentation); `count` is how many, when known.
       readonly overLimit?: { readonly count?: number }

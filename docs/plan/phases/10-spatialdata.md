@@ -92,12 +92,13 @@ matter on real stores.
       Nucleus shapes are read the same way, the first time nuclei are shown.
 - [ ] Labels are drawn only as traced outlines, not as a raster layer, and
       nucleus labels (`nucleus_labels`) are not traced.
-- [ ] Labels show only their first z plane, and neither images nor labels
+- [x] Labels show only their first z plane, and neither images nor labels
       have a `t` choice (shared with the OME-Zarr `t` item in
       [Open Items](../open-items.md)). Since 2026-11-14 images open on
       `omero.rdefs.defaultZ`, else the middle plane (`omeZarrLoader.ts`), as
-      other z-stacks do. Rechecked 2026-11-17. Planned in
-      [Phase 28](28-time-points.md) (2026-11-25).
+      other z-stacks do. Since 2026-11-25 images have `Time point` and
+      labels follow the image's z plane and time point
+      ([Phase 28](28-time-points.md), PR 431).
 - [ ] Polygons keep only the outer ring of their largest part: holes and the
       other parts of a MultiPolygon are dropped. Fine for cells, wrong for
       tissue or region annotations.

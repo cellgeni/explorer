@@ -624,6 +624,59 @@ describe('MorphologyCanvas', () => {
       expect(context.drawImage.mock.calls.length).toBe(drawsAtZero * 2 + 2)
     })
 
+    it('waits for the outlines of the next plane too (28-D9)', async () => {
+      const context = canvasContext()
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(
+        context as unknown as CanvasRenderingContext2D,
+      )
+      const at = planeLoaders()
+      const onFrameShown = vi.fn()
+      const canvasAt = (t: number, outlinesAt: number) => (
+        <MorphologyCanvas
+          channels={channelsAt(at(t))}
+          frame={frameAt(t)}
+          outlinesPlane={frameAt(outlinesAt).plane}
+          onFrameShown={onFrameShown}
+          prefetchPlanes={[{ t: 1 }]}
+          viewState={viewState}
+        />
+      )
+      const { rerender } = render(canvasAt(0, 0))
+
+      await waitFor(() => {
+        expect(requestsAt(0)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(0))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(1)
+      })
+      await resolveRequests(requestsAt(1))
+      await waitFor(() => {
+        expect(requestsAt(1)).toHaveLength(2)
+      })
+      await resolveRequests(requestsAt(1).slice(1))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(0))
+      })
+      const clearsAtZero = context.clearRect.mock.calls.length
+
+      // Time point 1's tiles are read, but its outlines are not.
+      rerender(canvasAt(1, 0))
+      await act(async () => {
+        await Promise.resolve()
+      })
+      expect(onFrameShown).toHaveBeenCalledTimes(1)
+      const drawsHeld = context.drawImage.mock.calls.length
+
+      rerender(canvasAt(1, 1))
+      await waitFor(() => {
+        expect(onFrameShown).toHaveBeenLastCalledWith(frameAt(1))
+      })
+      expect(context.clearRect.mock.calls.length).toBeGreaterThan(clearsAtZero)
+      expect(context.drawImage.mock.calls.length).toBe(drawsHeld + 2)
+    })
+
     it("draws a slow plane's tiles as they come after the fallback time", async () => {
       const context = canvasContext()
       vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)

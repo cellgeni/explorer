@@ -64,6 +64,31 @@
   accent-color: var(--accent);
 }
 
+/* Play left of the time point slider; Speed and Loop under them (plan 28-D7). */
+.time-point-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.time-point-slider-row input[type='range'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.time-point-play-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: 2px;
+}
+
+.time-point-play-options .ui-field {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .coordinate-unit-control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

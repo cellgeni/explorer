@@ -88,6 +88,20 @@ export interface ImagePyramidPlane {
   readonly t?: number
 }
 
+// A plane as one string, "z:t" with an axis left out empty: the canvas's frame
+// and outlines read at a plane are named so (plan 28).
+export function imagePlaneKey(plane: ImagePyramidPlane): string {
+  return `${plane.z?.toString() ?? ''}:${plane.t?.toString() ?? ''}`
+}
+
+export function imagePlaneFromKey(key: string): ImagePyramidPlane {
+  const [z = '', t = ''] = key.split(':')
+  return {
+    ...(z === '' ? {} : { z: Number(z) }),
+    ...(t === '' ? {} : { t: Number(t) }),
+  }
+}
+
 export type ImagePyramidPixelArray =
   | Uint8Array
   | Uint16Array

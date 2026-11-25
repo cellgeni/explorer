@@ -13,7 +13,11 @@ import type {
 import type { AnalysisAnnotationQueryOptions } from '../data/analysisAnnotations'
 import type { Annotation } from '../data/annotation'
 import type { CellId } from '../data/cellid'
-import type { ImagePyramidLoader, ImagePyramidOpener } from '../data/imagePyramid'
+import type {
+  ImagePyramidLoader,
+  ImagePyramidOpener,
+  ImagePyramidPlane,
+} from '../data/imagePyramid'
 
 export type Platform =
   | 'xenium'
@@ -97,6 +101,17 @@ export interface ElementBatch<ElementId extends SpatialElementId = SpatialElemen
   // Set when the box holds more outlines than can be drawn, so none are
   // returned until the view zooms in; `count` is how many, when known.
   readonly overLimit?: { readonly count?: number }
+  // For outlines that follow the image's z plane and time point (plan
+  // 28-D9), the plane they were read at, as `imagePlaneKey` names it.
+  readonly plane?: string
+  // Says when the outlines have fewer planes than the image, so the last is
+  // shown.
+  readonly planeNotice?: string
+}
+
+export interface ElementReadOptions {
+  // The dataset image's plane, for label outlines that follow it.
+  readonly plane?: ImagePyramidPlane
 }
 
 export interface ChannelInfo {
@@ -260,7 +275,7 @@ export function isCellOutlineDataset(dataset: unknown): dataset is CellOutlineDa
 
 export interface SpatialDataset<ElementId extends SpatialElementId = SpatialElementId> {
   meta(): Promise<DatasetMeta>
-  elements(bbox: BBox): Promise<ElementBatch<ElementId>>
+  elements(bbox: BBox, options?: ElementReadOptions): Promise<ElementBatch<ElementId>>
   matrix(ids: readonly ElementId[]): Promise<GexResult<ElementId>>
   annotations(
     options?: AnalysisAnnotationQueryOptions,

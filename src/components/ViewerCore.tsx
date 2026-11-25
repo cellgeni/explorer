@@ -2407,6 +2407,9 @@ function ViewerSurface({
                 ...(imageFrame.fallbackMs === undefined
                   ? {}
                   : { frameFallbackMs: imageFrame.fallbackMs }),
+                ...(imageFrame.outlinesPlane === undefined
+                  ? {}
+                  : { outlinesPlane: imageFrame.outlinesPlane }),
                 onFrameShown: imageFrame.onShown,
                 prefetchPlanes: imageFrame.prefetchPlanes,
               })}

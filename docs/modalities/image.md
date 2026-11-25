@@ -757,9 +757,9 @@ fails, tiles are decoded and sampled on the main thread.
   and tile size, and for a complete tile list. A stale sidecar with the same
   sizes, or a root sidecar for the focus images picked up by a same-sized
   `morphology.ome.tif`, fetches the wrong bytes.
-- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points play in 2D only,
-  and labels do not follow them yet
-  ([Phase 28](../plan/phases/28-time-points.md)).
+- Only `t = 0` of OME-TIFFs is shown. OME-Zarr time points play in 2D only
+  ([Phase 28](../plan/phases/28-time-points.md)). Label TIFFs and polygon
+  segmentations are the same at every plane.
 - Custom image layers open a z-stack at its middle plane but have no `Z plane`
   control.
 - The 3D view shows OME-Zarr dataset images only, not OME-TIFF z-stacks or

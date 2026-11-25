@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { ImagePyramidLoader, ImagePyramidPlane } from '../../data/imagePyramid'
+import {
+  imagePlaneKey,
+  type ImagePyramidLoader,
+  type ImagePyramidPlane,
+} from '../../data/imagePyramid'
 import type { MorphologyImage } from '../../data/morphologyImage'
 import { sameMorphologyFrame, type ShownMorphologyFrame } from './morphologyFrame'
 
@@ -69,7 +73,10 @@ export function useTimePointPlayback({
   const sizeT = timeSeries?.sizeT
   const zPlane = image?.zStack?.zPlane
   const frameImage = image?.url
-  const framePlane = `${zPlane?.toString() ?? ''}:${timePoint?.toString() ?? ''}`
+  const framePlane = imagePlaneKey({
+    ...(zPlane === undefined ? {} : { z: zPlane }),
+    ...(timePoint === undefined ? {} : { t: timePoint }),
+  })
 
   useEffect(() => {
     if (

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { MorphologyCanvasFrame } from '../../components/MorphologyCanvas'
+import { imagePlaneKey, type ImagePyramidPlane } from '../../data/imagePyramid'
 import type { MorphologyImage } from '../../data/morphologyImage'
 
 // The dataset image's plane as the canvas names it (plan 28-D6), for an image
@@ -11,9 +12,16 @@ export function morphologyImageFrame(
     return undefined
   }
 
+  return { image: image.url, plane: imagePlaneKey(morphologyImagePlane(image)) }
+}
+
+// The image's z plane and time point, for an image with either.
+export function morphologyImagePlane(
+  image: Pick<MorphologyImage, 'zStack' | 'timeSeries'>,
+): ImagePyramidPlane {
   return {
-    image: image.url,
-    plane: `${image.zStack?.zPlane.toString() ?? ''}:${image.timeSeries?.timePoint.toString() ?? ''}`,
+    ...(image.zStack === undefined ? {} : { z: image.zStack.zPlane }),
+    ...(image.timeSeries === undefined ? {} : { t: image.timeSeries.timePoint }),
   }
 }
 

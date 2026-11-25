@@ -59,7 +59,11 @@ export interface MorphologyCanvasProps {
   // How long a new plane waits to be whole before its tiles draw as they
   // come; Infinity waits as long as it takes, as Play does.
   readonly frameFallbackMs?: number
-  // Called once a frame's visible tiles are drawn: read, or failed for good.
+  // The plane of the outlines drawn over the image, while they follow its
+  // plane: a new frame also waits until they are its own (28-D9).
+  readonly outlinesPlane?: string
+  // Called once a frame's visible tiles are drawn (read, or failed for good)
+  // with its outlines.
   readonly onFrameShown?: (frame: MorphologyCanvasFrame) => void
   // Other planes of the image whose visible tiles are read but not drawn,
   // the first first, such as the next time points while Play runs (28-D8).
@@ -120,6 +124,7 @@ export function MorphologyCanvas({
   tilePriority = 0,
   frame,
   frameFallbackMs = FRAME_FALLBACK_MS,
+  outlinesPlane,
   onFrameShown,
   prefetchPlanes = NO_PLANES,
 }: MorphologyCanvasProps) {
@@ -254,11 +259,14 @@ export function MorphologyCanvas({
       frameImage === undefined || framePlane === undefined
         ? undefined
         : { image: frameImage, plane: framePlane }
+    const outlinesAreReady =
+      outlinesPlane === undefined || outlinesPlane === currentFrame?.plane
     const reportShown = () => {
       const reported = reportedFrameRef.current
 
       if (
         currentFrame === undefined ||
+        !outlinesAreReady ||
         (reported?.image === currentFrame.image && reported.plane === currentFrame.plane)
       ) {
         return
@@ -386,7 +394,7 @@ export function MorphologyCanvas({
 
       const visibleTilesAreWhole = visibleTilesAreSettled(channelRequests)
 
-      if (waitForWholeFrame && !visibleTilesAreWhole) {
+      if (waitForWholeFrame && !(visibleTilesAreWhole && outlinesAreReady)) {
         // The held plane, once for this view: its tiles do not change.
         if (!drewHeldFrame) {
           drewHeldFrame = true
@@ -480,6 +488,7 @@ export function MorphologyCanvas({
     frameFallbackMs,
     frameImage,
     framePlane,
+    outlinesPlane,
     maxConcurrentTileRequests,
     onTileCacheEviction,
     onTileError,
