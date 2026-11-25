@@ -101,6 +101,61 @@ export function parseBoundaryRow(row: Record<string, unknown>): {
   }
 }
 
+// One outline's row from a query that gathers its vertices into lists: x and
+// y are Arrow list values (vectors with toArray) or, in tests, arrays.
+export function parseBoundaryRingRow(row: Record<string, unknown>): {
+  readonly cellId: CellId
+  readonly points: DataPoint[]
+} {
+  const cellId = row.cell_id
+
+  if (typeof cellId !== 'string') {
+    throw new Error('Expected boundary row cell_id to be a string.')
+  }
+
+  const xs = readNumericListRowValue(row, 'x')
+  const ys = readNumericListRowValue(row, 'y')
+
+  if (xs.length !== ys.length) {
+    throw new Error('Expected boundary row x and y to have the same length.')
+  }
+
+  const points: DataPoint[] = new Array<DataPoint>(xs.length)
+
+  for (let index = 0; index < xs.length; index += 1) {
+    points[index] = {
+      x: micrometers(Number(xs[index])),
+      y: micrometers(Number(ys[index])),
+    }
+  }
+
+  return { cellId: asCellId(cellId), points }
+}
+
+function readNumericListRowValue(
+  row: Record<string, unknown>,
+  key: string,
+): ArrayLike<number | bigint> {
+  const value = row[key]
+  const values =
+    typeof value === 'object' &&
+    value !== null &&
+    'toArray' in value &&
+    typeof value.toArray === 'function'
+      ? (value.toArray() as unknown)
+      : value
+
+  if (
+    Array.isArray(values)
+      ? values.every((item) => typeof item === 'number' || typeof item === 'bigint')
+      : ArrayBuffer.isView(values) && !(values instanceof DataView)
+  ) {
+    return values as ArrayLike<number | bigint>
+  }
+
+  throw new Error(`Expected row.${key} to be a list of numbers.`)
+}
+
 export function parseViewportCellRow(row: Record<string, unknown>): DatasetCell {
   const cellId = row.cell_id
   const cellFeatureMatrixRow = readOptionalIntegerRowValue(row, 'cell_feature_matrix_row')

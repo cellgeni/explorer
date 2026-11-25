@@ -36,6 +36,7 @@ import {
   normalizeGeneList,
   normalizeMinQv,
   normalizePositiveInteger,
+  parseBoundaryRingRow,
   parseBoundaryRow,
   parseCellTranscriptZDistributionRows,
   parseExtentRow,
@@ -86,26 +87,19 @@ export async function readXeniumBoundaryElements(
   },
   bbox: BBox,
 ): Promise<ElementBatch<CellId>> {
-  const rows = await queryXeniumBoundaryVertices(
+  const rows = await queryXeniumBoundaryRings(
     conn,
     urls.cells,
     urls.cellBoundaries,
     bbox,
     { labelIds: false },
   )
-  const verticesByCell = new Map<CellId, DataPoint[]>()
-
-  for (const row of rows) {
-    const parsed = parseBoundaryRow(row)
-    const vertices = verticesByCell.get(parsed.cellId) ?? []
-    vertices.push(parsed.point)
-    verticesByCell.set(parsed.cellId, vertices)
-  }
 
   return {
-    elements: [...verticesByCell.entries()]
-      .filter(([, points]) => points.length >= 3)
-      .map(([cellId, points]) => ({
+    elements: rows
+      .map(parseBoundaryRingRow)
+      .filter(({ points }) => points.length >= 3)
+      .map(({ cellId, points }) => ({
         id: cellId,
         geometry: {
           kind: 'polygon',
@@ -213,41 +207,28 @@ export async function readXeniumNucleusBoundaryElements(
   bbox: BBox,
   options: { readonly labelIds: boolean },
 ): Promise<readonly SpatialElement[]> {
-  const rows = await queryXeniumBoundaryVertices(
+  // A row per nucleus: by cell and label, in that order.
+  const rows = await queryXeniumBoundaryRings(
     conn,
     urls.cells,
     urls.nucleusBoundaries,
     bbox,
     options,
   )
-  const nuclei = new Map<
-    string,
-    { readonly id: string; readonly cellId: CellId; readonly points: DataPoint[] }
-  >()
   const nucleusCountByCell = new Map<CellId, number>()
+  const nuclei = rows.map((row) => {
+    const parsed = parseBoundaryRingRow(row)
+    const occurrence = (nucleusCountByCell.get(parsed.cellId) ?? 0) + 1
+    nucleusCountByCell.set(parsed.cellId, occurrence)
 
-  for (const row of rows) {
-    const parsed = parseBoundaryRow(row)
-    const key = options.labelIds
-      ? `${parsed.cellId}\n${String(row.label_id)}`
-      : parsed.cellId
-    let nucleus = nuclei.get(key)
-
-    if (nucleus === undefined) {
-      const occurrence = (nucleusCountByCell.get(parsed.cellId) ?? 0) + 1
-      nucleusCountByCell.set(parsed.cellId, occurrence)
-      nucleus = {
-        id: occurrence === 1 ? parsed.cellId : `${parsed.cellId}#nucleus-${occurrence}`,
-        cellId: parsed.cellId,
-        points: [],
-      }
-      nuclei.set(key, nucleus)
+    return {
+      id: occurrence === 1 ? parsed.cellId : `${parsed.cellId}#nucleus-${occurrence}`,
+      cellId: parsed.cellId,
+      points: parsed.points,
     }
+  })
 
-    nucleus.points.push(parsed.point)
-  }
-
-  return [...nuclei.values()]
+  return nuclei
     .filter(({ points }) => points.length >= 3)
     .map(({ id, cellId, points }) => ({
       id,
@@ -265,9 +246,13 @@ export function isMissingParquetColumnError(error: unknown, column: string): boo
   return message.includes('column') && message.includes(column.toLowerCase())
 }
 
-// Vertex rows of the cells whose centroids fall in the box, from a
-// cell_boundaries.parquet-shaped file, in file order per cell.
-async function queryXeniumBoundaryVertices(
+// The outlines of the cells whose centroids fall in the box, from a
+// cell_boundaries.parquet-shaped file: a row per cell (and label), its
+// vertices gathered into lists in file order. DuckDB gathers them in its
+// worker; a row per vertex, about a million for a view of 40,000 cells, took
+// a second to turn into objects on the main thread (S4 in the optimization
+// pass).
+async function queryXeniumBoundaryRings(
   conn: XeniumDuckDbConnection,
   cellsUrl: string,
   boundariesUrl: string,
@@ -295,12 +280,15 @@ WITH viewport_cells AS (
   WHERE x_centroid BETWEEN ? AND ?
     AND y_centroid BETWEEN ? AND ?
 )
-SELECT b.cell_id${labelColumn}, b.vertex_x AS x, b.vertex_y AS y
+SELECT b.cell_id${labelColumn},
+  list(b.vertex_x ORDER BY b.file_row_number) AS x,
+  list(b.vertex_y ORDER BY b.file_row_number) AS y
 FROM read_parquet( ? ) AS b
 WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
   AND ${betweenSql('b.vertex_y', 'FLOAT')}
   AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
-ORDER BY b.cell_id${labelColumn}, b.file_row_number
+GROUP BY b.cell_id${labelColumn}
+ORDER BY b.cell_id${labelColumn}
 `)
   const result = await stmt.query(
     cellsUrl,

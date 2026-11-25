@@ -124,13 +124,17 @@ describe('XeniumDataset', () => {
     })
   })
 
-  it('groups boundary vertices into polygon elements', async () => {
+  it('reads each cell outline from a row of vertex lists', async () => {
     const cellId = intToCellId(1, 1)
+    // DuckDB returns each list as an Arrow vector of FLOAT.
+    const list = (values: readonly number[]) => ({
+      toArray: () => Float32Array.from(values),
+    })
     const conn = new FakeConnection([
       [
-        { cell_id: cellId, x: 0, y: 0 },
-        { cell_id: cellId, x: 10, y: 0 },
-        { cell_id: cellId, x: 10, y: 10 },
+        { cell_id: cellId, x: list([0, 10, 10]), y: list([0, 0, 10]) },
+        // Fewer than three vertices is not an outline.
+        { cell_id: intToCellId(2, 1), x: list([0, 1]), y: list([0, 1]) },
       ],
     ])
     const dataset = makeDataset(conn)
@@ -174,7 +178,11 @@ describe('XeniumDataset', () => {
       micrometers(-150),
       micrometers(160),
     ])
-    expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.file_row_number')
+    // DuckDB gathers each cell's vertices in file order, a row per cell.
+    expect(conn.preparedSql[0]).toContain(
+      'list(b.vertex_y ORDER BY b.file_row_number) AS y',
+    )
+    expect(conn.preparedSql[0]).toContain('GROUP BY b.cell_id\nORDER BY b.cell_id\n')
     // FLOAT vertex bounds are cast so DuckDB can prune row groups; DOUBLE
     // centroid bounds are not.
     expect(conn.preparedSql[0]).toContain(
@@ -272,16 +280,10 @@ describe('XeniumDataset', () => {
   it('splits nucleus vertices by cell and label and numbers extra nuclei', async () => {
     const conn = new FakeConnection([
       [
-        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 0, y: 0 },
-        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 2, y: 0 },
-        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: 2, y: 2 },
-        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 4, y: 4 },
-        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 6, y: 4 },
-        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: 6, y: 6 },
-        { cell_id: 'bbbbbbbb-1', label_id: 9n, x: 9, y: 9 },
-        { cell_id: 'cccccccc-1', label_id: 10n, x: 1, y: 8 },
-        { cell_id: 'cccccccc-1', label_id: 10n, x: 3, y: 8 },
-        { cell_id: 'cccccccc-1', label_id: 10n, x: 3, y: 9 },
+        { cell_id: 'aaaaaaaa-1', label_id: 7n, x: [0, 2, 2], y: [0, 0, 2] },
+        { cell_id: 'aaaaaaaa-1', label_id: 8n, x: [4, 6, 6], y: [4, 4, 6] },
+        { cell_id: 'bbbbbbbb-1', label_id: 9n, x: [9], y: [9] },
+        { cell_id: 'cccccccc-1', label_id: 10n, x: [1, 3, 3], y: [8, 8, 9] },
       ],
     ])
     const validateRangeSupport = vi.fn(async () => undefined)
@@ -332,8 +334,10 @@ describe('XeniumDataset', () => {
     ])
     expect(conn.preparedSql[0]).toContain('SELECT b.cell_id, b.label_id,')
     expect(conn.preparedSql[0]).toContain(
-      'ORDER BY b.cell_id, b.label_id, b.file_row_number',
+      'list(b.vertex_x ORDER BY b.file_row_number) AS x',
     )
+    expect(conn.preparedSql[0]).toContain('GROUP BY b.cell_id, b.label_id')
+    expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.label_id\n')
     expect(conn.preparedSql[0]).toContain(
       'b.vertex_x BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
     )
@@ -341,11 +345,7 @@ describe('XeniumDataset', () => {
 
   it('groups nuclei by cell when the file has no label_id column', async () => {
     const preparedSql: string[] = []
-    const rows = [
-      { cell_id: 'aaaaaaaa-1', x: 0, y: 0 },
-      { cell_id: 'aaaaaaaa-1', x: 2, y: 0 },
-      { cell_id: 'aaaaaaaa-1', x: 2, y: 2 },
-    ]
+    const rows = [{ cell_id: 'aaaaaaaa-1', x: [0, 2, 2], y: [0, 0, 2] }]
     const conn: XeniumDuckDbConnection = {
       async prepare(sql) {
         preparedSql.push(sql)
@@ -394,11 +394,7 @@ describe('XeniumDataset', () => {
               )
             }
 
-            return new FakeTable([
-              { cell_id: 'aaaaaaaa-1', x: 0, y: 0 },
-              { cell_id: 'aaaaaaaa-1', x: 2, y: 0 },
-              { cell_id: 'aaaaaaaa-1', x: 2, y: 2 },
-            ])
+            return new FakeTable([{ cell_id: 'aaaaaaaa-1', x: [0, 2, 2], y: [0, 0, 2] }])
           },
         }
       },
