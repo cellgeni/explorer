@@ -618,6 +618,15 @@ An OME-Zarr z-stack opened as the dataset image can be shown in 3D: `View` ›
   zarrita reads. Up to six enabled channels are
   read, each once while the 3D view stays open; moving the `Z plane` slider
   does not read them again. Leaving 3D drops them.
+- **Time points.** Volumes are keyed by the image, level and time point
+  (plan 28-D11). A `Time point` step reads the new time point's channels while
+  the last one's stay drawn, and draws them together once all are read or
+  have failed; a step made during a read stops it. Until then the slider shows
+  the time point as loading: in 3D it follows the volume, not the 2D canvas
+  under it. Both time points' volumes are in memory during the swap. idr0052A
+  (3 channels, 256 × 256 × 31) takes about 3.6 s per time point (93 chunk
+  reads) and idr0051 (333 × 333 × 201, sharded) about 2.6 s (one shard).
+  `Play` is 2D only.
 - **Textures.** An 8-bit volume is uploaded as it is (`r8unorm`). Other dtypes
   are divided by their largest magnitude and uploaded as half floats
   (`r16float`), so the contrast window still applies to raw values.

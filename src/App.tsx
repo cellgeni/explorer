@@ -2614,6 +2614,10 @@ export function App({ dependencies }: AppProps = {}) {
     [morphologyImage],
   )
   const [shownMorphologyFrame] = useState(() => new ShownMorphologyFrame())
+  // The plane the 3D view draws, which the plane controls follow in 3D: the
+  // 2D canvas under it shows a new time point before its volume is read
+  // (28-D11).
+  const [shownVolumeFrame] = useState(() => new ShownMorphologyFrame())
   // Play (plan 28-G), stopped by the 3D view, a screenshot or a plane that
   // fails to open.
   const timePointPlayback = useTimePointPlayback({
@@ -4856,7 +4860,7 @@ export function App({ dependencies }: AppProps = {}) {
     requestedMorphologyTimePoint,
     selectMorphologyTimePoint,
     morphologyFrame,
-    shownMorphologyFrame,
+    shownMorphologyFrame: volumeViewShown ? shownVolumeFrame : shownMorphologyFrame,
     timePointPlayback,
     setCustomLayerOpacity: handleCustomImageLayerOpacityChange,
     setImageLayerOpacity,
@@ -5622,6 +5626,7 @@ export function App({ dependencies }: AppProps = {}) {
             <MorphologyVolumeView
               image={morphologyImage}
               settings={morphologyChannelSettings}
+              shownFrame={shownVolumeFrame}
               onClose={() => {
                 setVolumeViewOpen(false)
               }}

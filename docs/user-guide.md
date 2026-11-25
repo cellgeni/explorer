@@ -318,7 +318,9 @@ whole stack as a volume you can rotate, with axes at the top right showing
 which way x, y and z run (click one to look along it), `Max intensity` and
 `Translucent` rendering and a `Depth` stretch for stacks whose plane spacing
 is unknown; `2D View` returns to the plane. It draws the first six enabled
-channels and says so when more are on. Xenium, H5AD,
+channels and says so when more are on. In 3D, `Time point` loads that time
+point's volume and keeps showing the last one until it is ready; `Play` is
+2D only. Xenium, H5AD,
 and cell-like views expose cell fill and boundary opacity under Cells ›
 Appearance when cells are available. `Nucleus boundaries` there draws Xenium
 `nucleus_boundaries.parquet`, Atera nuclei, and a SpatialData store's

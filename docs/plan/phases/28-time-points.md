@@ -423,9 +423,9 @@ new time point until the outlines read at its plane have come (D9).
       (D8).
   - Tests in `spatialDataDataset.test.ts` and `datasetBoundaries` tests.
 - [ ] **J. 3D, Screenshot and Cell Query.** (S) The volume key with `t`
-      and `Play` hidden in 3D (D11); the PNG Description, and Play stopped
-      by a screenshot (D14); Cell Query image columns keyed by `{ z, t }`
-      and paused during Play (D14).
+      and `Play` hidden in 3D (D11), done; the PNG Description, and Play
+      stopped by a screenshot (D14); Cell Query image columns keyed by
+      `{ z, t }` and paused during Play (D14).
 - [ ] **K. Docs.** (S) [Docs To Update](#docs-to-update).
 - [ ] **L. End-to-end tests and the example.** (M)
   - The SpatialData fixture store, written with spatialdata 0.9.0 and a
@@ -611,6 +611,30 @@ Tasks H and I, on the plan's branch.
 
 - **Not yet**: the SpatialData fixture with a `t` axis and the end-to-end
   test (task L).
+
+## M4 Results (2026-11-25)
+
+- **3D at a time point** (task J, D11):
+  - `useMorphologyVolumeWorkflow` keys volumes by image root, level and time
+    point. A time step keeps the drawn volumes as `held` while the new time
+    point's channels are read, and draws them together once each is read or
+    has failed. A step during a read aborts it and keeps holding what is
+    drawn.
+  - The 3D view reports its shown frame to its own `ShownMorphologyFrame`,
+    which the plane controls follow while 3D is open. Before, they followed
+    the 2D canvas under the 3D view, which drew the new time point in about
+    0.3 s while the volume stayed at the old one.
+  - Measured in the spike's set-up, one step in 3D:
+
+    | Image                                | Whole volume | Requests |
+    | ------------------------------------ | ------------ | -------- |
+    | idr0052A, 3 channels, 256 × 256 × 31 | 3.6 s        | 99       |
+    | idr0051, 1 channel, 333 × 333 × 201  | 2.6 s        | 7        |
+
+    The requests include the 2D canvas's tiles under the 3D view. Five fast
+    steps on idr0052A made 219: each step's aborted read had started some
+    chunk reads. A screenshot mid-read shows the last time point's volume,
+    not a blank view.
 
 ## Risks
 

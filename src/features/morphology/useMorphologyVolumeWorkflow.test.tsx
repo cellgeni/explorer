@@ -10,6 +10,7 @@ import type { MorphologyChannelSetting } from './morphologyChannels'
 import {
   morphologyVolumeLevels,
   useMorphologyVolumeWorkflow,
+  type MorphologyVolumeChannel,
 } from './useMorphologyVolumeWorkflow'
 
 const LEVELS: readonly ImagePyramidVolumeLevel[] = [
@@ -29,6 +30,7 @@ function volumeImage(
   url: string,
   reads: Read[],
   channelIds: readonly string[] = ['A', 'B'],
+  timePoint?: number,
 ): MorphologyImage {
   const loader = (channelId: string) =>
     ({
@@ -59,7 +61,23 @@ function volumeImage(
     loader: channels[0]?.loader ?? loader('A'),
     channels: channels.map((channel) => channel.info),
     channelLoaders: channels,
+    ...(timePoint === undefined ? {} : { timeSeries: { sizeT: 4, timePoint } }),
   }
+}
+
+// The stack at a time point, as the plane workflow makes it.
+function timePointImage(timePoint: number, reads: Read[]): MorphologyImage {
+  return volumeImage(
+    `https://example.test/stack.ome.zarr#t=${timePoint.toString()}`,
+    reads,
+    ['A', 'B'],
+    timePoint,
+  )
+}
+
+// The first value of each drawn channel's volume.
+function drawnValues(state: { readonly channels: readonly MorphologyVolumeChannel[] }) {
+  return state.channels.map((channel) => [channel.id, channel.texture.data[0]])
 }
 
 function settings(
@@ -102,6 +120,7 @@ describe('useMorphologyVolumeWorkflow', () => {
       enabledChannelCount: 1,
       progress: { planesRead: 0, planesTotal: 3 },
       error: null,
+      frameShown: false,
     })
 
     act(() => {
@@ -115,6 +134,7 @@ describe('useMorphologyVolumeWorkflow', () => {
     })
 
     expect(result.current.progress).toBeNull()
+    expect(result.current.frameShown).toBe(true)
     expect(result.current.channels).toHaveLength(1)
     expect(result.current.channels[0]).toMatchObject({
       id: 'A',
@@ -159,6 +179,125 @@ describe('useMorphologyVolumeWorkflow', () => {
     expect(reads.map((read) => read.channelId)).toEqual(['A', 'B'])
     expect(result.current.channels.map((channel) => channel.id)).toEqual(['A'])
     expect(result.current.progress).toEqual({ planesRead: 0, planesTotal: 3 })
+  })
+
+  it('reads another time point whole while the last stays drawn (plan 28-D11)', async () => {
+    const reads: Read[] = []
+    const { result, rerender } = renderWorkflow({
+      image: timePointImage(0, reads),
+      settings: settings(['A', 'B']),
+    })
+
+    await act(async () => {
+      reads[0]?.resolve(volume(1))
+      reads[1]?.resolve(volume(2))
+      await Promise.resolve()
+    })
+    rerender({ image: timePointImage(1, reads), settings: settings(['A', 'B']) })
+
+    expect(reads.map((read) => read.channelId)).toEqual(['A', 'B', 'A', 'B'])
+    expect(drawnValues(result.current)).toEqual([
+      ['A', 1],
+      ['B', 2],
+    ])
+    expect(result.current).toMatchObject({
+      progress: { planesRead: 0, planesTotal: 6 },
+      frameShown: false,
+    })
+
+    // One channel of the new time point is not drawn without the other.
+    await act(async () => {
+      reads[2]?.resolve(volume(11))
+      await Promise.resolve()
+    })
+    expect(drawnValues(result.current)).toEqual([
+      ['A', 1],
+      ['B', 2],
+    ])
+
+    await act(async () => {
+      reads[3]?.resolve(volume(12))
+      await Promise.resolve()
+    })
+    expect(drawnValues(result.current)).toEqual([
+      ['A', 11],
+      ['B', 12],
+    ])
+    expect(result.current).toMatchObject({ progress: null, frameShown: true })
+  })
+
+  it('stops a time point still being read for the next, keeping the drawn one', async () => {
+    const reads: Read[] = []
+    const { result, rerender } = renderWorkflow({
+      image: timePointImage(0, reads),
+      settings: settings(['A']),
+    })
+
+    await act(async () => {
+      reads[0]?.resolve(volume(1))
+      await Promise.resolve()
+    })
+    rerender({ image: timePointImage(1, reads), settings: settings(['A']) })
+    rerender({ image: timePointImage(2, reads), settings: settings(['A']) })
+
+    expect(reads.map((read) => read.signal?.aborted)).toEqual([false, true, false])
+    expect(drawnValues(result.current)).toEqual([['A', 1]])
+
+    // The stopped time point settles late and is not drawn.
+    await act(async () => {
+      reads[1]?.resolve(volume(11))
+      await Promise.resolve()
+    })
+    expect(drawnValues(result.current)).toEqual([['A', 1]])
+
+    await act(async () => {
+      reads[2]?.resolve(volume(21))
+      await Promise.resolve()
+    })
+    expect(drawnValues(result.current)).toEqual([['A', 21]])
+    expect(result.current.frameShown).toBe(true)
+  })
+
+  it('draws the new time point once its channels are read or failed', async () => {
+    const reads: Read[] = []
+    const { result, rerender } = renderWorkflow({
+      image: timePointImage(0, reads),
+      settings: settings(['A', 'B']),
+    })
+
+    await act(async () => {
+      reads[0]?.resolve(volume(1))
+      reads[1]?.resolve(volume(2))
+      await Promise.resolve()
+    })
+    rerender({ image: timePointImage(1, reads), settings: settings(['A', 'B']) })
+    await act(async () => {
+      reads[2]?.resolve(volume(11))
+      reads[3]?.reject(new Error('404 Not Found'))
+      await Promise.resolve()
+    })
+
+    expect(drawnValues(result.current)).toEqual([['A', 11]])
+    expect(result.current).toMatchObject({
+      error: 'Could not read Channel B in 3D: 404 Not Found',
+      frameShown: true,
+    })
+  })
+
+  it('reports the time point shown when no level fits the 3D view', () => {
+    const reads: Read[] = []
+    const image = volumeImage('https://example.test/huge.ome.zarr', reads)
+    const loader = {
+      ...image.loader,
+      volumeLevels: () => [{ ...LEVELS[0], width: 100_000 }],
+    } as unknown as ImagePyramidLoader
+    const { result } = renderWorkflow({
+      image: { ...image, loader },
+      settings: settings(['A']),
+    })
+
+    expect(reads).toEqual([])
+    expect(result.current).toMatchObject({ level: null, frameShown: true })
   })
 
   it('stops the read of a channel turned off', () => {

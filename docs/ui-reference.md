@@ -1283,7 +1283,10 @@ field.
 `VolumeViewer` (`src/components/VolumeViewer.tsx`) covers the canvas when
 the Image section's `View` is `3D`. It draws the dataset image's enabled
 channels (the first six, in channel order) as a volume on black, with their
-colours and contrast windows; channel changes apply at once. Drag rotates, Shift-drag pans, and
+colours and contrast windows; channel changes apply at once. For an image
+with time points, a `Time point` step reads that time point's volume while
+the last one stays drawn, then draws it whole; the slider shows the time point
+as loading until then, and `Play` is hidden. Drag rotates, Shift-drag pans, and
 scrolling zooms. The axes at the top right (`OrbitAxes.tsx`) turn with the
 view to show which way the image's x (red), y (green) and z (blue) increase;
 at the first view y runs down the screen as in 2D. An axis pointing away from
