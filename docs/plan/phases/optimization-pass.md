@@ -1,12 +1,506 @@
 # Optimization Pass
 
 - [ ] Tune interaction performance, memory pressure, fetch/decode concurrency,
-      and rendering cost without changing product behaviour.
+      and rendering cost without changing product behaviour. Planned
+      2026-11-25: [Plan](#plan-2026-11-25).
 
 Work recorded so far: vendor chunk groups (React, deck.gl, DuckDB-WASM, spatial
 I/O, codecs) cut the entry chunk from about 1.26 MB to about 427 kB; heavy
 readers are lazy-loaded; and the structural refactor in
 [the refactor record](../engineering.md#application-structure-and-refactor-record) is complete.
+
+## Plan (2026-11-25)
+
+Planned 2026-11-25, after the
+[code review](feature-fix-pass.md#code-review-2026-11-19-to-2026-11-24)
+closed. The pass takes the open items about speed, memory and requests,
+measures each one, and fixes those the numbers bear out. What the user sees
+does not change, except where a task says so. The user answered the plan's
+three questions the same day ([Answered Questions](#answered-questions)).
+
+The plan rests on a code map made on 2026-11-25 at `73d1ba7`, cited below as
+`file:line`; line numbers drift as the code changes. Sizes are for one
+developer: **S** ≤ 1 day, **M** 2–4 days, **L** 1–2 weeks.
+
+### Rules
+
+- **Measure before changing.** Each task records a baseline on the setup it
+  names, and the same numbers after the change. A task whose baseline shows
+  no problem closes with its measurement and no code.
+- **Same results.** Values, colours and drawn pixels stay the same. Each PR
+  shows it with a test where one can (identical arrays, identical images of a
+  fixture), or with a comparison in its description where none can.
+- **Production builds.** Profile `vite build --minify false` builds with
+  `scripts/profile-load.mjs` ([Profiling](../../profiling.md)), alternating
+  the base and the branch, three runs or more each, and report ranges.
+- **Drawing on the GPU.** Time drawing in Playwright's `chromium` channel
+  with `--use-angle=metal`. SwiftShader takes seconds per frame on a large
+  dataset and hides the change. Say which was used.
+- **Local data.** Serve data with `scripts/range-server.mjs`, with
+  `--delay 300` where request rounds matter. Hosted datasets are read only
+  as agreed ([Answered Questions](#answered-questions)): to confirm the
+  largest changes.
+- **A guard with each fix.** Where it is cheap, a test keeps the gain: a call
+  or request count, a size limit, a worker that must be used.
+- **One PR per task**, recorded in this file with its numbers, as the
+  [worker moves](#worker-moves-2026-11-13) were.
+
+### Current State
+
+Read from the code at `73d1ba7`; nothing here was timed unless it says so.
+
+Rendering and interaction:
+
+- **An expression batch restyles every cell, twice per read.** Starting a
+  read sets its status to loading (`useViewportDataWorkflow.ts:392`), which
+  clears `geneExpressionActive` (`App.tsx:1316`, `:5410`); the end of the
+  read sets it again. Each change makes a new styler, which packs a colour
+  for every cell with a string lookup per cell (`ViewerCore.tsx:983-995`,
+  `cellPointStyle.ts:150`), builds the layer's fill and line colours in a
+  second pass (`cellPointStyle.ts:183`), and deck.gl uploads both again.
+  Above 500,000 cells a settled zoom reads again once 50,000 cells or fewer
+  are in view (`geneExpressionLod.ts:116-166`).
+- **Outlines are rebuilt for each batch.** The expression style returns a new
+  outline array (`cellBoundaryRenderer.ts:358`, `App.tsx:1321-1328`), so
+  ViewerCore rebuilds the outline geometry, the cell filter and deck.gl's
+  tessellation (`ViewerCore.tsx:1073-1140`). The flag above also turns the
+  fill on and off, which rebuilds the geometry twice per read.
+- **The first overview draw passes over every cell about ten times.** For
+  the Xenium demo's 1.4 million cells, on the main thread: objects from the
+  worker's columns (`hyparquetCells.ts:316-357`), point objects
+  (`cellPointRenderer.ts:236-272`), three extent passes
+  (`useViewerLayerData.ts:214`, `ViewerCore.tsx:366`, `:754`), two maps and a
+  set of every ID (`App.tsx:1449`, `ViewerCore.tsx:1042`,
+  `useCellQueryModel.ts:588`, the last built with Cell Query closed), then
+  colours, ranks, geometry and filter values. The 2.3–3.0 s first render
+  measured on 2026-11-12 came before the worker moves and has not been
+  measured since.
+- **Hovering transcripts renders App on every pointer move.** Each move over
+  a transcript or a density square, which tile the view, sets App state to a
+  new object (`ViewerCore.tsx:1840-1869`, `App.tsx:5504`). Cell, bin and
+  outline hovers stay in ViewerSurface. Each settled view also renders App
+  twice: once for a viewport cell count that nothing reads
+  (`useAppDomainState.ts:557`), and once for a new viewport detail object
+  (`useViewportDataWorkflow.ts:221`). `App.tsx` has 5,927 lines, and
+  ViewerCore is not memoised (`ViewerCore.tsx:273`).
+
+Requests:
+
+- **Range reads have no timeout** except in the H5 worker (120 s, three
+  tries, `h5RangeFile.ts:90-150`). Four other timeouts are separate copies
+  (`datasetFactory.ts:2140`, `h5adDataset.ts:3787`,
+  `datasetCollection.ts:381`, `examplesIndex.ts:181`), and two of them stop
+  timing once the headers arrive, so a stalled body is not covered. Zip
+  entries (`cachedZipStore.ts:89`), the Zarr and Icechunk stores
+  (`zarrStores.ts:60`, `icechunkStore.ts:233`), hyparquet's reads, and TIFF
+  tiles and tags (`tiff/loader.ts:2709`, `remoteTiff.ts:43`) have none.
+- **Cancelling a load does not stop its reads.** `cachedSpatialDataset`
+  takes no signal (`datasetFactory.ts:1926`), and neither do `overview()`,
+  `readBinnedOverview()`, `summary()` or `visiumSummary()`, and
+  `useDatasetLifecycle.ts` calls them without the load's signal.
+- **A pyramidal OME-TIFF opens in about 24 request rounds.** Only geotiff's
+  chain of IFDs must be read in order. Our code reads the eight decode tags
+  one after another (`tiff/loader.ts:2015-2028`), the tile offsets before
+  their byte counts (`:3115`), and the description before the SubIFDs
+  (`:305`, `:426`), and opens the other channel files only after the first
+  has opened (`morphologyImage.ts:106`, `:467`).
+- **QPTIFF auto-contrast reads its tiles one at a time**
+  (`morphologyContrast.ts:94-108`, up to 64 tiles), about 15 s per channel
+  against EBI ([Phase 13](13-qptiff.md#known-gaps)).
+- **Other chains on load:** Visium HD bin sizes probed one at a time
+  (`datasetFactory.ts:1616`); a `bytes=0-0` probe and then hyparquet's
+  `HEAD` for the same file (`datasetOverview.ts:42-61`); AnnData Zarr obs
+  columns, and their codes, categories and colours, read one after another
+  (`h5adDataset.ts:3632-3720`), as are embeddings (`h5adDataset.ts:1114`,
+  `analysisEmbeddings.ts:99`) and a Xenium gene's three reads
+  (`gex.ts:1042-1090`).
+- **Xenium nucleus outlines wait for the cell outlines**, since both query
+  one DuckDB client (`xeniumDataset.ts:304-389`): about 6 s later, cold
+  ([Phase 17](17-xenium-nucleus-boundaries.md#known-gaps)).
+- **A failed Zarr decode worker is started again** for OME-Zarr tiles and
+  SpatialData labels: the flag that stops using workers lives in
+  `workerZarrCodecs.ts:38-43`, not in the pool (`zarrDecodePool.ts`).
+- **OME-Zarr chunks read over HTTP are not kept in IndexedDB**
+  (`zarrStores.ts:52-94`); only zip ranges, TIFF tiles and Parquet footers
+  are.
+
+Main thread:
+
+- **AnnData table code:** `uniqueNames` builds two sets and a map of every
+  name even when none repeats (`h5adDataset.ts:5160`); colouring by a gene
+  rebuilds a map of every cell on each call (`h5adMatrixForCells`, `:4377`);
+  numeric columns are copied to number arrays (`:5289`). Measured on the
+  460-plex zip on 2026-11-13: about 240 ms for unique IDs, 110–145 ms for 20
+  numeric columns, 110 ms for distinct values, and 230–270 ms for one gene's
+  CSR scan on the SpatialData Visium table.
+- **Visium HD positions and barcode mappings** are read as one object per row
+  on the main thread (`visiumHdOverview.ts:282-340`,
+  `visiumHdBarcodeMappings.ts:152-204`); the positions decoded for about
+  0.6 s in short tasks (2026-11-17).
+- **CSV files** named by `annotationUrl=` (up to 100 MB) and embedding CSVs
+  are parsed there, character by character (`customAnnotations.ts:528`,
+  `analysisEmbeddings.ts:459`).
+
+Memory:
+
+- **Kept for the session:** one H5 worker per matrix file (`gex.ts:107`) and
+  per Feature Slice file (`visiumFeatureSlice.ts:57`), each with a block
+  cache of up to 128 MiB; transcript Zarr metadata (`transcriptZarr.ts:181`);
+  cell-ID arrays (`gex.ts:112`); zip folders with up to four inflated entries
+  of 32 MiB each (`zipFolder.ts:67`). TIFF files and pyramids keep the last
+  two to four (`tiff/loader.ts:196`, `:611`, `:1075`), but are not tied to a
+  dataset.
+- **`dispose()`** exists only for Xenium, which closes its DuckDB client, and
+  H5AD, which closes its H5 worker. Visium HD, Visium, SpatialData, MERSCOPE
+  and Atera have none.
+- **No ceiling.** Budgets scale with `navigator.deviceMemory` for tiles and
+  cell caps only (`performanceBudget.ts:45-64`). Each channel's tile cache
+  is sized when it opens (`MorphologyCanvas.tsx:455-459`), so eight channels
+  opened in turn hold up to 346 tiles on the balanced budget of 120.
+  DuckDB has no `memory_limit` (`duckdb.ts`). Telemetry is the tile cache's
+  eviction count and Chrome's main-thread heap in debug details; workers,
+  WebAssembly heaps and the GPU are not counted.
+
+Start-up:
+
+- **The start screen fetches 2,749 kB of JavaScript (887 kB gzip)** in 41
+  files, up from about 2.3 MB (745 kB gzip) on 2026-11-16 (`vite build` at
+  `73d1ba7`). The entry chunk is 1,140 kB. By its source map it holds panels
+  that open on demand, in minified kB: Cell Query (66), Browse Store and
+  Browse File (55), Plots (47) and Screenshot (28).
+
+### Scenarios
+
+Measured at the start of the pass as the baseline, and again by the tasks
+that touch them.
+
+| #   | Scenario                                                  | Data                          | Measures                                |
+| --- | --------------------------------------------------------- | ----------------------------- | --------------------------------------- |
+| S1  | The start screen, at 10 Mbit/s and 150 ms                 | None                          | JavaScript fetched; time to the form    |
+| S2  | Load to the first overview draw                           | Xenium-shaped, 1.4M cells     | Main-thread time, longest stretch, heap |
+| S3  | Colour by a gene, then five zoom steps and a pan          | Xenium-shaped, 1.4M cells     | Main-thread time per settled view       |
+| S4  | S3 with cell outlines on                                  | Xenium-shaped, 1.4M cells     | Main-thread time per batch              |
+| S5  | Move the pointer over transcripts for 5 s                 | Xenium demo, hosted (as S9)   | App renders                             |
+| S6  | Load, then colour by a gene                               | H5AD, 1M cells                | Main-thread time by module              |
+| S7  | Open a pyramidal OME-TIFF with `--delay 300`              | Four-channel OME-TIFF         | Requests and time to the first tile     |
+| S8  | Open ten datasets in turn                                 | Fixtures and the above        | Live workers; page and worker heaps     |
+| S9  | S2 to S4 and S6 on hosted data, with the user's agreement | Xenium demo, 460-plex, QPTIFF | As above                                |
+
+### Tasks
+
+M0, measuring:
+
+- [ ] **O1. Scenarios and tools.** (M) Built in
+      [#433](https://github.com/cellgeni/explorer/pull/433).
+  - `scripts/profile-load.mjs`: the GPU channel (`--gpu`), scripted zoom
+    and pan steps after the load (`--steps`), further datasets opened in
+    turn (`--then`), the page's and workers' JavaScript heaps, and the
+    count of live workers.
+  - `scripts/range-server.mjs`: a request log, and options that stall or
+    fail a share of requests, for O7.
+  - The baseline: S1 to S8, three runs each,
+    [recorded below](#baseline-2026-11-25).
+- [ ] **O2. Synthetic data at scale.** (M) Built in
+      [#435](https://github.com/cellgeni/explorer/pull/435) as
+      `scripts/make_scale_data.py`, which writes, outside the repository:
+  - a Xenium-shaped output of N cells (1.4 million by default):
+    `experiment.xenium`, `cells.parquet`, the cell-feature matrix as Zarr
+    and H5, cell and nucleus outlines, and a four-channel pyramidal
+    OME-TIFF;
+  - an H5AD of N cells with `obsm/spatial`, an embedding, 20 numeric and 6
+    categorical obs columns, and a sparse `X`.
+  - Not run in CI, like the other fixture scripts. The fixtures today hold
+    at most 40,000 cells (`writeLargeFeatureBarcodeMatrix`,
+    `src/test/h5Fixtures.ts:58`), and the costs above show from about
+    500,000.
+
+M1, interaction:
+
+- [ ] **O3. Patch colours per expression batch.** (M) Keep a base colour
+      array per cells and colouriser, and one for cells without expression.
+      For a batch, copy the right one and write only the batch's cells,
+      through the cell index ViewerCore already builds; the layer's fill
+      and line colours the same way. Both restyles of a read become copies.
+      Bins (Visium HD) and datasets with repeated IDs keep the full pass.
+  - A fast-check test: the patched arrays equal the full pass for random
+    cells, batches and colour modes.
+  - Measure S3.
+- [ ] **O4. Colour outlines without rebuilding them.** (M) ViewerCore takes
+      the unstyled outlines and applies expression colours as colour
+      attributes only. The geometry, the cell filter and the tessellation
+      are kept per outline array, and turning the fill on or off does not
+      rebuild the geometry. App keeps its styled list for its other uses
+      (`App.tsx:1363`, `:3474`).
+  - Tests: the colour attributes equal today's, and a batch builds no
+    geometry.
+  - Measure S4.
+- [ ] **O5. Fewer passes before the first overview draw.** (M) One extent
+      pass, reused; the ID maps built when first needed (outlines, a hover,
+      Cell Query opening); ranks with filter values, and colours with layer
+      colours, in one pass each; points packed from the worker's column
+      arrays rather than from two rounds of objects.
+  - Measure S2 first, since the 2026-11-12 numbers came before the worker
+    moves.
+- [ ] **O6. App renders on hover and on settling.** (S) Pass a transcript
+      hover to App only when the hovered object changes; the tooltip still
+      follows the pointer, and the diagnostics dump reads the latest hover
+      from a ref. Remove the unread viewport cell count, and keep the
+      viewport detail when nothing in it changed. Then measure whether
+      memoising ViewerCore saves renders.
+  - A test counts App's hover updates over repeated moves on one
+    transcript.
+  - Measure S5 with the React Profiler.
+- [ ] **O22. Outlines read as columns.** (S–M) Found by the baseline (S4):
+      the outline query returns a row per vertex, about a million for the
+      view where outlines first show, and each becomes an object on the
+      main thread (`result.toArray()`, `xeniumDatasetReaders.ts:318`;
+      `parseBoundaryRow`, `xeniumDatasetRows.ts:85`). Read the result's
+      columns as typed arrays and cut them into rings by cell instead.
+  - Tests: the same outlines as today from a fixture's rows.
+  - Measure S4.
+
+M2, requests:
+
+- [ ] **O7. One fetch with a timeout and retries.** (M) A wrapper in
+      `src/data/` for every range read listed above, replacing the four
+      timeouts. Each attempt ends after a time with no bytes, headers or
+      body; network errors, timeouts, 408, 429 and 5xx are tried again with
+      back-off; a 4xx or the caller's abort is not. The H5 worker moves to
+      it. DuckDB's own reads cannot be wrapped. A stalled request is now
+      tried again after 30 s with no bytes, three attempts in all
+      ([Answered Questions](#answered-questions)).
+  - Tests with a fake fetch that hangs, fails, or stalls mid-body.
+  - Measure with range-server's stall option.
+- [ ] **O8. Cancelling a load stops its reads.** (M–L) A signal through
+      `cachedSpatialDataset`, `overview()`, `readBinnedOverview()`,
+      `summary()` and `visiumSummary()`. A shared read is aborted only
+      when all its callers have aborted, as `utils/sharedLoad.ts` does.
+  - Measure with `--delay 300`: open one fixture, switch to another, and
+    count the first one's requests after the switch.
+- [ ] **O9. Fewer rounds when a TIFF opens.** (S–M) Read the decode tags
+      together, the tile offsets with their byte counts, and the SubIFDs
+      with the description; open the other channel files as soon as the
+      OME-XML names them.
+  - A test counts reads on a SubIFD fixture.
+  - Measure S7.
+- [ ] **O10. QPTIFF auto-contrast reads its tiles together.** (S) Fetch 4–6
+      tiles at a time, passing `upcoming` so that neighbours share a
+      request, and sample them in order, since each tile's first sample
+      depends on the one before (`tileSamples.ts:26`). The samples and the
+      contrast stay the same.
+  - A test with a delayed fake loader.
+  - Measure on the 19-plex tonsil through the mirror (S9).
+- [ ] **O11. Shorter chains on load.** (M, one PR per group)
+  - Probe every Visium HD bin size at once.
+  - Pass the probe's size to hyparquet, so it skips its `HEAD`.
+  - Read AnnData Zarr obs columns, and embeddings, a few at a time.
+  - Read a Xenium gene's three arrays together, and read the next
+    transcript tiles ahead, within the point limit
+    (`transcriptZarr.ts:208`).
+  - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
+    and `visium-hd` fixtures.
+- [ ] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
+      when nucleus outlines are first shown, closed by `dispose()`.
+  - It costs a worker and a WebAssembly heap: measure both (S8), and the
+    time to both outline types (S4).
+- [ ] **O13. The Zarr decode pool remembers a failed worker.** (S) After
+      one fails, OME-Zarr tiles and SpatialData labels decode on the main
+      thread without starting new workers, as the codecs already do.
+  - A test counts worker starts.
+- [ ] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
+      load first, from a host that sends validators and from one that
+      does not; skip if Chromium's HTTP cache already serves it. Chunks
+      would be versioned by the store's metadata, and share the cache's
+      256 MiB with TIFF tiles.
+
+M3, main thread:
+
+- [ ] **O15. AnnData table code, in place.** (S–M) `uniqueNames` returns
+      early when no name repeats; `h5adMatrixForCells` keeps its row and
+      gene maps in the cache; `sparseVectorCell` stops allocating per cell
+      (`h5adDataset.ts:4897`); numeric columns stay typed arrays where
+      their callers allow; distinct values are counted when the annotation
+      list asks for them.
+  - Measure S6, and the 460-plex zip through the mirror (S9).
+- [ ] **O16. Visium HD positions and barcode mappings in a worker.** (M) As
+      for the Xenium overview: columns from a worker, not one object per
+      row. Remove the whole-file mapping read nothing calls
+      (`visiumHdBarcodeMappings.ts:124-150`). Look at the 2 µm
+      `barcodes.tsv.gz` parse (`visiumHdBarcodes.ts:38-145`) too.
+- [ ] **O17. A gene's CSR scan off the main thread.** (M) For an H5AD read
+      by the H5 worker, use its `matrix-cells` request
+      (`h5FileMessages.ts:110`) rather than reading the matrix into the
+      page (`h5adDataset.ts:4097`, `:4205`). For AnnData Zarr, decide after
+      O15's numbers.
+- [ ] **O18. Large CSV files in a worker.** (S) Time both parses at a
+      million rows, and move them to a worker if either blocks for more
+      than 200 ms. The two `parseCsvRows` read quotes and delimiters
+      differently, so merging them is not part of this task.
+
+M4, memory:
+
+- [ ] **O19. Release what a dataset opened.** (L) A registry in
+      `datasetCache.ts` of resources opened for a dataset URL, released when
+      no viewer, preview or cache holds that URL any more. It covers the
+      caches kept for the session above and the TIFF files. Visium HD,
+      Visium, SpatialData, MERSCOPE and Atera get a `dispose()`. The
+      full-file Feature Slice path, which only tests use, goes
+      (`visiumFeatureSlice.ts:56`, `:196-219`).
+  - A test: releasing the last holder ends the workers.
+  - Measure S8.
+- [ ] **O20. Memory telemetry.** (M) Each cache reports its bytes, entries
+      and workers, and Data access notes shows the total. A ceiling is
+      decided from these numbers
+      ([Answered Questions](#answered-questions)). Candidates: one tile
+      budget across channels, a DuckDB `memory_limit`, and a cap on H5
+      workers.
+
+M5, start-up:
+
+- [ ] **O21. Load panels when they open.** (S–M) Cell Query, Browse Store
+      and Browse File, Plots and Screenshot load on first use, with the
+      message that a lazy chunk already shows after a deploy.
+  - A test keeps them out of the entry chunk, as
+    `tests/config/viteConfig.test.ts` keeps `h5wasm` out of the vendor
+    groups.
+  - Measure S1.
+
+### Baseline (2026-11-25)
+
+Measured on `3b7e942` (main), with the tools from
+[#433](https://github.com/cellgeni/explorer/pull/433) and the synthetic data
+from [#435](https://github.com/cellgeni/explorer/pull/435) at its default
+size, served by `scripts/range-server.mjs` on the same Mac (M3). Production
+builds without minifying, except S1's; Playwright's Chromium drawing with
+the GPU (Metal), except S1, which draws nothing. Three runs of each; ranges
+over the runs. "Busy" is main-thread time in the phase; "longest" the
+longest stretch without idle time; memory is the page's JavaScript heap and
+ArrayBuffer memory, and the workers' together. S5 and S9 need hosted data
+and come later.
+
+| Scenario                                   | Time      | Busy (ms)   | Longest (ms) | Requests            | Page memory    | Workers       |
+| ------------------------------------------ | --------- | ----------- | ------------ | ------------------- | -------------- | ------------- |
+| S1 Start screen, 10 Mbit/s and 150 ms      | 1.8 s     | 103–151     | 78–113       | 43, 0.9 MB          | 11 MB          | None          |
+| S2 Xenium load, outlines off               | 0.2–0.3 s | 1,406–1,533 | 1,109–1,201  | 225–235, 47–56 MB   | 724–1,014 MB   | 4, 154–185 MB |
+| S3 Colour by `M03a`                        | 1.3–1.6 s | 505–618     | 172–210      | 183–193, 101–109 MB | 1,108–1,122 MB | 7, 187 MB     |
+| S3 Zoom steps 1–5 and a pan, each          | 3 s       | 116–286     | 0–115        | 0–27, ≤ 13 MB       | 1,124–1,307 MB | 8, 175–362 MB |
+| S4 Step 3, where outlines first show       | 3.3–3.4 s | 2,258–2,362 | 2,007–2,137  | 77, 82 MB           | 2,173–2,221 MB | 9, 302–358 MB |
+| S4 Step 4                                  | 3.0–3.1 s | 1,568–1,754 | 1,223–1,251  | 16, 8 MB            | 2,153–2,170 MB | 9, 385–450 MB |
+| S4 Step 5                                  | 3 s       | 736–777     | 494–516      | 9, 4 MB             | 2,397–2,405 MB | 9, 391–456 MB |
+| S6 H5AD load                               | 2.9–3.1 s | 1,249–1,277 | 504–541      | 105, 199 MB         | 1,054–1,073 MB | 1, 210 MB     |
+| S6 Colour by `M03a`                        | 1.1–1.2 s | 1,048–1,113 | 1,033–1,097  | None                | 1,437–1,444 MB | 1, 210 MB     |
+| S7 Four-channel OME-TIFF, 300 ms a request | 7.1 s     | 612–699     | 94–111       | 52, 5.5 MB          | —              | —             |
+| S8 First of ten datasets                   | 0.3 s     | 594–651     | 145–176      | —                   | 214–225 MB     | 7, 193–210 MB |
+| S8 Tenth (the 1M-cell H5AD)                | 3.6–4.1 s | 1,498–1,892 | 622–718      | —                   | 2,359–2,763 MB | 9, 384–391 MB |
+
+What it shows:
+
+- **The first overview draw** (S2) is a stretch of 1.1–1.2 s, 0.86 s of
+  it app code (O5).
+- **Expression reads** on 1.4 million cells kept the main thread busy for
+  0.5–0.6 s when the gene was picked, in stretches of at most 0.21 s, and
+  for at most 0.29 s per zoom step (S3). That is less than the Current
+  State suggests, so O3 and O4 start by profiling where these go.
+- **Outlines** cost the most: the step where they first show holds the
+  main thread for 2.0–2.1 s, 0.9 s of it in DuckDB's JavaScript turning
+  rows into objects (O22), and the page reaches 2.2–2.4 GB. The next zoom
+  step holds it for 1.2 s.
+- **Colouring the H5AD by a gene** is one stretch of 1.0–1.1 s, 0.75 s of
+  it in `h5adDataset` (O15, O17).
+- **The OME-TIFF** opens in about 23 rounds of 300 ms (O9).
+- **Ten datasets in turn** leave 9–10 workers alive and the page at
+  2.4–2.8 GB (O19). Each of the smaller datasets loaded in 0.6–1.2 s.
+
+### Open Items Taken
+
+Each task takes all or part of an item in [Open Items](../open-items.md).
+
+| Open item                                                      | Tasks      |
+| -------------------------------------------------------------- | ---------- |
+| Every expression batch recolours every cell                    | O3, O4     |
+| The Xenium demo blocks the main thread for up to 4 s           | O5         |
+| Hovering transcripts sets App state on every pointer move      | O6         |
+| Range reads have no timeout or retry                           | O7         |
+| Cancelling a load does not stop the old dataset's reads        | O8         |
+| SVS: a pyramidal OME-TIFF opens in about 24 rounds (part)      | O9         |
+| QPTIFF: auto-contrast reads tiles one at a time (part)         | O10        |
+| Xenium nucleus outlines drawn about 6 s after the cells (part) | O12        |
+| OME-Zarr chunks are not kept in the IndexedDB cache            | O14        |
+| Main-thread exceptions to the worker convention                | O15 to O18 |
+| Per-URL caches that are never released                         | O19        |
+| Memory ceiling with eviction telemetry beyond tile caches      | O20        |
+
+### Order And Size
+
+| Milestone        | Tasks         | Size           |
+| ---------------- | ------------- | -------------- |
+| M0 — Measuring   | O1, O2        | About 1 week   |
+| M1 — Interaction | O3 to O6, O22 | About 2½ weeks |
+| M2 — Requests    | O7 to O14     | About 3 weeks  |
+| M3 — Main thread | O15 to O18    | About 1½ weeks |
+| M4 — Memory      | O19, O20      | About 2 weeks  |
+| M5 — Start-up    | O21           | 1–2 days       |
+
+- M1 comes first: on a large dataset its costs are felt on every gene
+  picked and every settled view.
+- O7, O8, O13 and O21 need no synthetic data and can start with M0.
+- O19 can run alongside M2 and M3. O20's ceiling waits for its numbers.
+- The total is about 10½ weeks.
+
+### Risks
+
+| Risk                                    | Effect                                             | Mitigation                                                       |
+| --------------------------------------- | -------------------------------------------------- | ---------------------------------------------------------------- |
+| A patched colour array misses a cell    | Wrong colours                                      | The property test against the full pass; the full pass for bins  |
+| Retries keep a dead host waiting longer | A failed load takes up to three timeouts to report | The activity log notes each retry; the last error reaches the UI |
+| A second DuckDB client                  | More memory per Xenium dataset                     | Started only for nuclei, closed on dispose, measured (S8)        |
+| Releasing a worker still in use         | A read fails                                       | Released only when no holder is left, keyed by dataset URL       |
+| OME-Zarr chunks crowd out TIFF tiles    | More image requests on reload                      | Measured first (O14); a budget of their own if needed            |
+| Synthetic data behaves unlike real data | A gain that does not carry over                    | The largest changes confirmed on one hosted dataset (S9)         |
+| Lazy panels open more slowly            | A short wait on first open                         | Timed on first open; the chunks are small                        |
+| Headless timings vary                   | Noise taken for a change                           | Builds alternated, ranges over three runs or more                |
+
+### Not In This Pass
+
+- SpatialData shapes by viewport: spatialdata-io writes `shapes.parquet` as
+  one row group with no bounding-box column
+  ([Phase 10](10-spatialdata.md#known-gaps)).
+- Cellpose's stripped masks decode bands as wide as the slide for each view.
+  The file layout causes it, and a tiled mask would not
+  ([Phase 25](25-imported-segmentations.md#known-gaps)).
+- NDPI blocks decoded by the browser's JPEG decoder
+  (`createImageBitmap`), a spike for after this pass
+  ([Phase 19](19-ndpi.md#known-gaps)).
+- MERSCOPE outlines by viewport, and its transcripts: features, not
+  optimisations ([Phase 18](18-merscope.md#later)).
+- Splitting `startDatasetLoad` and the large modules: the code-structure
+  item, kept apart from behaviour work by the
+  [refactor rules](../../../PLAN.md#refactor-rules-2026-06-07).
+
+### Docs To Update
+
+- This file: each task's numbers under a heading of its own.
+- `docs/profiling.md`: the new options and the synthetic data script.
+- `docs/architecture.md`: the fetch wrapper (O7) and dataset-owned
+  resources (O19).
+- `docs/plan/open-items.md`: closed items move here under Closed Open Items.
+- `PLAN.md`: this pass's row.
+
+### Answered Questions
+
+The user answered the plan's three questions on 2026-11-25, each with the
+proposed option.
+
+1. **Data for measuring:** synthetic data first, then hosted data to confirm
+   the largest changes. O2's script may fetch Python packages from PyPI
+   through `uv` (`pyarrow`, `h5py`, `zarr`, `tifffile`). S5 and S9 load the
+   Xenium demo from its bucket, and the 460-plex zip and the QPTIFF tonsil
+   through the local mirror, in a headless browser.
+2. **Timeouts (O7):** an attempt ends after 30 s with no bytes, and is tried
+   again with back-off up to three times; then the error shows, as now. The
+   H5 worker's 120 s becomes 30 s.
+3. **A memory ceiling (O20):** telemetry first; the ceiling is decided from
+   its numbers.
 
 ## Expression And Rendering Rework (November 2026)
 
@@ -268,6 +762,26 @@ Sizes from `vite build` and `gzip -c`, in kB of 1,000 bytes:
 | `codec-vendor`        | 693 kB, 196 kB     | 29 kB, 11 kB      |
 | `tileDecode.worker`   | 965 kB, 297 kB     | 301 kB, 111 kB    |
 | `openjpegwasm_decode` | none               | 255 kB, 84 kB     |
+
+## Million-Cell Embeddings (2026-11-24)
+
+Large H5AD and AnnData Zarr embeddings pan and zoom quickly since
+[#403](https://github.com/cellgeni/explorer/pull/403). The main thread was
+idle during pans; the GPU was not. AnnData has no render cap, so each frame
+drew every point, and at the full view of the 1,025,329-cell GBM atlas
+every point sat at the 5 px cap. Cells now sample down to the budget's cap
+while the view moves and draw in full 200 ms after it stops. Above 20,000
+points the full-view size cap shrinks by √(20,000 ÷ count), and doubles per
+zoom level up to the usual cap, so close views do not change. GPU time per
+draw at the full view (M3, Metal, 2× pixel ratio, 1400 × 900, timed with a
+1-pixel `readPixels` before and after each draw):
+
+| Build            | Panning | 200 ms after stopping | Redraw at rest |
+| ---------------- | ------- | --------------------- | -------------- |
+| Before           | ~170 ms | —                     | 170–210 ms     |
+| Sampling alone   | 46 ms   | 173 ms                | 212 ms         |
+| Point size alone | 48 ms   | —                     | 59 ms          |
+| Both (#403)      | 18 ms   | 43 ms                 | 46 ms          |
 
 ## Closed Open Items
 

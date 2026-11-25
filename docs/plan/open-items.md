@@ -33,7 +33,10 @@ Sequencing:
 - [ ] Feature-fix pass: keep recording fixes until correctness is stable (see
       [Feature-Fix Pass](phases/feature-fix-pass.md)).
 - [ ] Optimization pass: interaction, memory, fetch/decode concurrency, and
-      rendering cost, without behaviour changes.
+      rendering cost, without behaviour changes. Planned 2026-11-25 as 21
+      tasks in six milestones
+      ([Plan](phases/optimization-pass.md#plan-2026-11-25)), which lists the
+      items on this page that each task takes.
 
 Other gaps found in the review:
 
