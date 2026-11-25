@@ -37,12 +37,36 @@ element that appears when the scenario is done.
 
 Other options:
 
-| Option              | Effect                                                                                |
-| ------------------- | ------------------------------------------------------------------------------------- |
-| `--runs <n>`        | Repeat each app URL n times                                                           |
-| `--requests <text>` | Count the requests whose URL contains `<text>`, their megabytes, and the slowest five |
-| `--raw <prefix>`    | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open |
-| `--json`            | Print one JSON line per profile instead of text                                       |
+| Option                   | Effect                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `--runs <n>`             | Repeat each app URL n times                                                                              |
+| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, with one profile per key              |
+| `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                          |
+| `--then <urls>`          | Then open each of these datasets (comma-separated) in turn from the dataset field, with one profile each |
+| `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
+| `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five           |
+| `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker  |
+| `--gpu`                  | Draw with the Mac's GPU (Metal through ANGLE) instead of SwiftShader                                     |
+| `--throttle <mbit>,<ms>` | Limit the bandwidth to `<mbit>` megabits per second and add `<ms>` of latency to every request           |
+| `--raw <prefix>`         | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open                    |
+| `--json`                 | Print one JSON line per profile instead of text                                                          |
+
+A dataset URL of `none` profiles the start screen until the dataset field
+shows. With `--throttle 10,150 --requests <app port>` it gives the
+JavaScript the start screen fetches and how long it takes on a slower
+connection.
+
+Steps are keys pressed on the focused spatial view, using deck.gl's
+keyboard controls: `=` zooms in, `-` zooms out and the arrow keys pan. For
+example, `--gene SNAP25 --steps "=,=,=,=,=,ArrowRight"` colours the cells by
+SNAP25, zooms in five times and pans once, with a profile for each step and
+the expression status line after it.
+
+`--memory` reads CDP's `Runtime.getHeapUsage` from the page and from every
+worker alive at the end of the phase. For each it prints the JavaScript heap
+and the memory behind its ArrayBuffers, which includes WebAssembly memory.
+GPU memory is not counted. A worker that ends before it is read is counted
+as ended.
 
 ## Compare Builds
 
@@ -107,6 +131,20 @@ node scripts/range-server.mjs /path/to/data --port 4199
 Then open, for example, `http://127.0.0.1:4199/heart.h5ad`. Add `--delay 300`
 to answer each request 300 ms after it arrives, as a distant host would, to
 see how many requests a load makes one after another.
+
+Other options, for testing how the viewer copes with a host that misbehaves:
+
+| Option                        | Effect                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------ |
+| `--log`                       | Print a line per request: method, path, range, status, bytes, time, and any fault    |
+| `--fail <share>[:<status>]`   | Answer this share of range requests (0 to 1) with `<status>` (default 503)           |
+| `--stall <share>[:<ms>]`      | Hold this share of range requests for `<ms>` (default 90,000) before answering       |
+| `--stall-body <share>[:<ms>]` | Send the headers and half the body of this share of range requests, then wait `<ms>` |
+| `--seed <n>`                  | Seed the choice of failed and stalled requests (default 1), so a run can be repeated |
+
+Only `GET` requests with a `Range` header fail or stall. `HEAD` probes and
+whole-file reads are always answered. A stalled request still completes, as
+the BioImage Archive's do (see below).
 
 Mirror one remote file, such as a zipped SpatialData store or a large H5AD:
 
