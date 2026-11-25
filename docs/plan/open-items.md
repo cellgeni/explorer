@@ -127,7 +127,8 @@ Features:
       does not show OME-TIFF z-stacks or custom layers, nor cells and
       transcripts in 3D, does not know the GPU's real 3D texture limit, and
       is not kept in the link (see
-      [Phase 9](phases/09-ome-zarr.md)).
+      [Phase 9](phases/09-ome-zarr.md)). The `t` selection is planned in
+      [Phase 28](phases/28-time-points.md) (2026-11-25).
 - [ ] H5AD: `/layers/*` and `/raw/X`, and richer schema diagnostics. Only
       `/X` is read. Worker-backed lazy Range reads are done (2026-11-17): a
       plain `.h5ad` over 64 MiB is read by range in the H5 worker, walking

@@ -96,7 +96,8 @@ matter on real stores.
       have a `t` choice (shared with the OME-Zarr `t` item in
       [Open Items](../open-items.md)). Since 2026-11-14 images open on
       `omero.rdefs.defaultZ`, else the middle plane (`omeZarrLoader.ts`), as
-      other z-stacks do. Rechecked 2026-11-17.
+      other z-stacks do. Rechecked 2026-11-17. Planned in
+      [Phase 28](28-time-points.md) (2026-11-25).
 - [ ] Polygons keep only the outer ring of their largest part: holes and the
       other parts of a MultiPolygon are dropped. Fine for cells, wrong for
       tissue or region annotations.
