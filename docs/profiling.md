@@ -37,17 +37,19 @@ element that appears when the scenario is done.
 
 Other options:
 
-| Option                   | Effect                                                                                                  |
-| ------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `--runs <n>`             | Repeat each app URL n times                                                                             |
-| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, with one profile per key             |
-| `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                         |
-| `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five          |
-| `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker |
-| `--gpu`                  | Draw with the Mac's GPU (Metal through ANGLE) instead of SwiftShader                                    |
-| `--throttle <mbit>,<ms>` | Limit the bandwidth to `<mbit>` megabits per second and add `<ms>` of latency to every request          |
-| `--raw <prefix>`         | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open                   |
-| `--json`                 | Print one JSON line per profile instead of text                                                         |
+| Option                   | Effect                                                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `--runs <n>`             | Repeat each app URL n times                                                                              |
+| `--steps <keys>`         | After the load (and `--gene`), press each key on the spatial view, with one profile per key              |
+| `--step-settle <s>`      | Profile each step this many seconds (default 2)                                                          |
+| `--then <urls>`          | Then open each of these datasets (comma-separated) in turn from the dataset field, with one profile each |
+| `--hash <params>`        | Add these parameters to the link's hash, for example `cellBounds=0` to start with cell outlines off      |
+| `--requests <text>`      | Count each phase's requests whose URL contains `<text>`, their megabytes, and the slowest five           |
+| `--memory`               | After each phase, report the JavaScript heap and ArrayBuffer memory of the page and of each live worker  |
+| `--gpu`                  | Draw with the Mac's GPU (Metal through ANGLE) instead of SwiftShader                                     |
+| `--throttle <mbit>,<ms>` | Limit the bandwidth to `<mbit>` megabits per second and add `<ms>` of latency to every request           |
+| `--raw <prefix>`         | Save each profile as `.cpuprofile`, which Chrome DevTools' Performance panel can open                    |
+| `--json`                 | Print one JSON line per profile instead of text                                                          |
 
 A dataset URL of `none` profiles the start screen until the dataset field
 shows. With `--throttle 10,150 --requests <app port>` it gives the
