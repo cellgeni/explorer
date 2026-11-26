@@ -15,6 +15,7 @@ import type { DecodeWorkerLike } from '../workers/tileDecodePool'
 import { handleTileSamplesRequest } from '../workers/tileSamplesCore'
 import type { AutoContrastTileLoader } from './morphologyContrast'
 import { sampleDecodedTile, type TileSampling } from './tileSamples'
+import { abortError } from '../utils/abort'
 
 // Runs the real samples handler behind a structured-clone boundary, as the
 // tile decode worker does.
@@ -379,10 +380,157 @@ describe('computeChannelAutoContrast off the main thread', () => {
   })
 })
 
-function byteTileLoader(): AutoContrastTileLoader {
+describe('computeChannelAutoContrast with slow tile reads', () => {
+  it('reads six tiles at a time, naming the tiles after each, and samples them in order', async () => {
+    const slow = slowByteTileLoader(12)
+    const options = { maxSamples: 10, lowPercentile: 0, highPercentile: 100 }
+    const contrast = computeChannelAutoContrast(slow.loader, options)
+
+    await vi.waitFor(() => {
+      expect(slow.reads).toHaveLength(6)
+    })
+    expect(slow.reads.map((read) => read.col)).toEqual([0, 1, 2, 3, 4, 5])
+    // The tiles a TIFF loader may read in the same request.
+    expect(slow.reads[0]?.upcoming).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(slow.reads[5]?.upcoming).toEqual([6, 7, 8, 9, 10, 11])
+
+    // Later tiles arriving first wait for the first.
+    for (const col of [5, 4, 3, 2, 1]) slow.answer(col)
+    await flushPromises()
+    expect(slow.reads).toHaveLength(6)
+
+    slow.answer(0)
+    await vi.waitFor(() => {
+      expect(slow.reads).toHaveLength(12)
+    })
+    for (const col of [11, 10, 9, 8, 7, 6]) slow.answer(col)
+
+    // The same samples as reading the tiles one by one.
+    await expect(contrast).resolves.toEqual(
+      await computeChannelAutoContrast(byteTileLoader(slow.tiles), options),
+    )
+    expect(slow.mostInFlight).toBe(6)
+  })
+
+  it('stops its other reads when one fails, or on abort', async () => {
+    const failing = slowByteTileLoader(12)
+    const failed = computeChannelAutoContrast(failing.loader)
+
+    await vi.waitFor(() => {
+      expect(failing.reads).toHaveLength(6)
+    })
+    failing.answer(0)
+    failing.fail(1, new Error('Tile 1 could not be read'))
+
+    await expect(failed).rejects.toThrow('Tile 1 could not be read')
+    expect(failing.reads.slice(2).every((read) => read.signal?.aborted)).toBe(true)
+
+    const aborted = slowByteTileLoader(12)
+    const controller = new AbortController()
+    const cancelled = computeChannelAutoContrast(aborted.loader, {
+      signal: controller.signal,
+    })
+
+    await vi.waitFor(() => {
+      expect(aborted.reads).toHaveLength(6)
+    })
+    controller.abort()
+
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+    expect(aborted.reads.every((read) => read.signal?.aborted)).toBe(true)
+  })
+})
+
+// A loader of `count` tiles like BYTE_TILES' first, each read waiting until
+// the test answers it.
+function slowByteTileLoader(count: number) {
+  const tiles = Array.from({ length: count }, (_unused, col) => {
+    const value = 1 + col * 20
+    return Uint8Array.from([
+      value,
+      value + 1,
+      value + 2,
+      250,
+      value + 3,
+      value + 4,
+      value + 5,
+      250,
+    ])
+  })
+  const reads: {
+    readonly col: number
+    readonly upcoming: readonly number[] | undefined
+    readonly signal: AbortSignal | undefined
+    readonly resolve: (bytes: Uint8Array) => void
+    readonly reject: (error: Error) => void
+  }[] = []
+  let inFlight = 0
+  let mostInFlight = 0
+  const loader: AutoContrastTileLoader = {
+    ...byteTileLoader(tiles),
+    fetchTileBytes: (_level, col, _row, signal, fetchOptions) =>
+      new Promise<Uint8Array>((resolve, reject) => {
+        inFlight += 1
+        mostInFlight = Math.max(mostInFlight, inFlight)
+        let settled = false
+        const settle = () => {
+          if (!settled) inFlight -= 1
+          settled = true
+        }
+        // As fetch does.
+        signal?.addEventListener('abort', () => {
+          settle()
+          reject(abortError(signal))
+        })
+        reads.push({
+          col,
+          upcoming: fetchOptions?.upcoming?.map((tile) => tile.col),
+          signal,
+          resolve: (bytes) => {
+            settle()
+            resolve(bytes)
+          },
+          reject: (error) => {
+            settle()
+            reject(error)
+          },
+        })
+      }),
+  }
+  const readOf = (col: number) => {
+    const read = reads.find((candidate) => candidate.col === col)
+    if (read === undefined) throw new Error(`Tile ${col} has not been read.`)
+    return read
+  }
+
+  return {
+    loader,
+    tiles,
+    reads,
+    get mostInFlight() {
+      return mostInFlight
+    },
+    answer: (col: number) => {
+      readOf(col).resolve(tiles[col] ?? new Uint8Array(0))
+    },
+    fail: (col: number, error: Error) => {
+      readOf(col).reject(error)
+    },
+  }
+}
+
+async function flushPromises(): Promise<void> {
+  for (let turn = 0; turn < 10; turn += 1) {
+    await Promise.resolve()
+  }
+}
+
+function byteTileLoader(
+  tiles: readonly Uint8Array[] = BYTE_TILES,
+): AutoContrastTileLoader {
   return {
     numLevels: 1,
-    tilesForLevel: () => BYTE_TILES.map((_bytes, col) => ({ col, row: 0 })),
+    tilesForLevel: () => tiles.map((_bytes, col) => ({ col, row: 0 })),
     tileSourceSize: () => ({ width: imagePixels(3), height: imagePixels(2) }),
     tileDecodeOptions: () => ({
       compression: 1,
@@ -391,7 +539,7 @@ function byteTileLoader(): AutoContrastTileLoader {
       tileWidth: 4,
       tileHeight: 2,
     }),
-    fetchTileBytes: async (_level, col) => BYTE_TILES[col] ?? new Uint8Array(0),
+    fetchTileBytes: async (_level, col) => tiles[col] ?? new Uint8Array(0),
   }
 }
 

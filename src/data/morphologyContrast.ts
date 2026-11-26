@@ -3,7 +3,7 @@ import type { TiffTileDecodeMetadata } from '../codecs/tiffTile'
 import { TileDecodeWorkerPool, type DecodeWorkerFactory } from '../workers/tileDecodePool'
 import { sampleTileBytes } from '../workers/tileSamplesCore'
 import type { ImagePixels, TileIndex } from './coords'
-import type { ImagePyramidTilePixels } from './imagePyramid'
+import type { ImagePyramidTileFetchOptions, ImagePyramidTilePixels } from './imagePyramid'
 import { sampleDecodedTile, type TileSamples, type TileSampling } from './tileSamples'
 import { throwIfAborted } from '../utils/abort'
 
@@ -37,6 +37,7 @@ export interface AutoContrastTileLoader {
     col: number,
     row: number,
     signal?: AbortSignal,
+    options?: ImagePyramidTileFetchOptions,
   ): Promise<Uint8Array>
   tileDecodeOptions?(level: number, col: number, row: number): TiffTileDecodeMetadata
   loadTilePixels?(
@@ -75,6 +76,12 @@ const DEFAULT_HISTOGRAM_BINS = 32
 // Tiles read from the smallest level, spread over it, so an image without a
 // pyramid is not read whole.
 const MAX_AUTO_CONTRAST_TILES = 64
+// Tiles whose bytes are fetched while an earlier one is sampled. Each fetch
+// names the tiles after it, so that a TIFF loader reads those stored back to
+// back with it in the same request. One at a time, a QPTIFF channel took
+// about 15 s against EBI.
+const TILES_IN_FLIGHT = 6
+const UPCOMING_TILES = 8
 
 export async function computeChannelAutoContrast(
   loader: AutoContrastTileLoader,
@@ -86,21 +93,42 @@ export async function computeChannelAutoContrast(
   const totalPixels = countVisiblePixels(loader, level, tiles)
   const sampleStride = Math.max(1, Math.ceil(totalPixels / maxSamples))
   const workers = new TileWorkers(options)
+  // Only for loaders that give a tile's bytes and nothing else.
+  const reads =
+    loader.fetchTileBytes !== undefined &&
+    loader.sampleTilePixels === undefined &&
+    loader.loadTilePixels === undefined
+      ? new TileByteReads(
+          loader.fetchTileBytes.bind(loader),
+          level,
+          tiles,
+          options.signal,
+        )
+      : null
   const tileSamples: Float64Array[] = []
   let sampleCount = 0
   let pixelIndex = 0
 
   try {
-    for (const tile of tiles) {
+    // In order: a tile's first sample depends on the pixels before it.
+    for (const [index, tile] of tiles.entries()) {
       throwIfAborted(options.signal)
 
       const sourceSize = loader.tileSourceSize(level, tile.col, tile.row)
-      const sampled = await sampleTile(loader, level, tile, workers, options, {
-        startIndex: pixelIndex,
-        stride: sampleStride,
-        width: sourceSize.width,
-        height: sourceSize.height,
-      })
+      const sampled = await sampleTile(
+        loader,
+        level,
+        tile,
+        workers,
+        options,
+        {
+          startIndex: pixelIndex,
+          stride: sampleStride,
+          width: sourceSize.width,
+          height: sourceSize.height,
+        },
+        reads?.take(index),
+      )
 
       tileSamples.push(sampled.samples)
       sampleCount += sampled.samples.length
@@ -112,6 +140,7 @@ export async function computeChannelAutoContrast(
     throw cause
   } finally {
     workers.end()
+    reads?.end()
   }
 
   // NaN marks no-data pixels in some float images; it would sort last and
@@ -293,6 +322,71 @@ class TileWorkers {
   }
 }
 
+// Tile bytes fetched TILES_IN_FLIGHT at a time, ahead of the tile being
+// sampled. Fetches not yet taken stop when the run ends.
+class TileByteReads {
+  private readonly fetchTileBytes: NonNullable<AutoContrastTileLoader['fetchTileBytes']>
+  private readonly level: number
+  private readonly tiles: readonly TileIndex[]
+  private readonly signal: AbortSignal | undefined
+  private readonly controller = new AbortController()
+  private readonly reads = new Map<number, Promise<Uint8Array>>()
+  private started = 0
+  private readonly onAbort = () => {
+    this.controller.abort(this.signal?.reason)
+  }
+
+  constructor(
+    fetchTileBytes: NonNullable<AutoContrastTileLoader['fetchTileBytes']>,
+    level: number,
+    tiles: readonly TileIndex[],
+    signal: AbortSignal | undefined,
+  ) {
+    this.fetchTileBytes = fetchTileBytes
+    this.level = level
+    this.tiles = tiles
+    this.signal = signal
+    signal?.addEventListener('abort', this.onAbort, { once: true })
+  }
+
+  // The bytes of tile `index`, starting the fetches of the tiles after it.
+  take(index: number): Promise<Uint8Array> {
+    const end = Math.min(this.tiles.length, index + TILES_IN_FLIGHT)
+
+    for (; this.started < end; this.started += 1) {
+      this.reads.set(this.started, this.fetch(this.started))
+    }
+
+    const read = this.reads.get(index) ?? this.fetch(index)
+    this.reads.delete(index)
+    return read
+  }
+
+  end(): void {
+    this.signal?.removeEventListener('abort', this.onAbort)
+    this.controller.abort()
+  }
+
+  private fetch(index: number): Promise<Uint8Array> {
+    const [tile, ...upcoming] = this.tiles.slice(index, index + 1 + UPCOMING_TILES)
+
+    if (tile === undefined) {
+      return Promise.reject(new Error(`No auto-contrast tile ${index}.`))
+    }
+
+    const read = this.fetchTileBytes(
+      this.level,
+      tile.col,
+      tile.row,
+      this.controller.signal,
+      { upcoming },
+    )
+    // A failed read is reported when its tile is taken.
+    read.catch(() => undefined)
+    return read
+  }
+}
+
 async function sampleTile(
   loader: AutoContrastTileLoader,
   level: number,
@@ -300,6 +394,8 @@ async function sampleTile(
   workers: TileWorkers,
   options: ComputeChannelAutoContrastOptions,
   sampling: TileSampling,
+  // The tile's bytes, when they were fetched ahead.
+  fetched: Promise<Uint8Array> | undefined,
 ): Promise<TileSamples> {
   const { signal } = options
   const fromLoader = await loader.sampleTilePixels?.(
@@ -323,7 +419,8 @@ async function sampleTile(
     throw new Error('Unable to auto-contrast channel without readable tile pixels.')
   }
 
-  const bytes = await loader.fetchTileBytes(level, tile.col, tile.row, signal)
+  const bytes = await (fetched ??
+    loader.fetchTileBytes(level, tile.col, tile.row, signal))
 
   if (options.decodeTile !== undefined) {
     // A tile the file leaves out has no pixels to sample.

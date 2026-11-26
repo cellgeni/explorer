@@ -191,10 +191,11 @@ describe('TiffPyramidLoader', () => {
     await loader.fetchTileBytes(1, 0, 0)
     expect(readLevel.mock.calls).toEqual([[1]])
 
+    // Fetched twice at once, a tile is read once.
     await Promise.all([loader.fetchTileBytes(0, 0, 0), loader.fetchTileBytes(0, 0, 0)])
     await loader.fetchTileBytes(1, 0, 0)
     expect(readLevel.mock.calls).toEqual([[1], [0]])
-    expect(ranges).toEqual(['bytes=20-21', 'bytes=10-11', 'bytes=10-11', 'bytes=20-21'])
+    expect(ranges).toEqual(['bytes=20-21', 'bytes=10-11', 'bytes=20-21'])
   })
 
   it('reads upcoming tiles stored next to a tile in its request', async () => {
@@ -321,6 +322,56 @@ describe('TiffPyramidLoader', () => {
     await expect(first).rejects.toMatchObject({ name: 'AbortError' })
     await expect(second).resolves.toEqual(tileBytes(1010))
     expect(signals[0]?.aborted).toBe(false)
+  })
+
+  it('reads a tile once when another fetch is reading it', async () => {
+    const { loader, ranges, signals, respond } = adjacentTilesLoader({ delayed: true })
+    const firstController = new AbortController()
+    // The first tile of a run, and a tile read on its own.
+    const runFirst = loader.fetchTileBytes(0, 2, 0, firstController.signal, {
+      upcoming: [{ col: 3, row: 0 }],
+    })
+    const alone = loader.fetchTileBytes(0, 0, 1)
+
+    await vi.waitFor(() => {
+      expect(ranges).toHaveLength(2)
+    })
+    const onSharedRead = vi.fn()
+    const again = [
+      loader.fetchTileBytes(0, 2, 0, undefined, { onSharedRead }),
+      loader.fetchTileBytes(0, 0, 1, undefined, { onSharedRead }),
+    ]
+    await vi.waitFor(() => {
+      expect(onSharedRead).toHaveBeenCalledTimes(2)
+    })
+
+    // The first caller stops waiting; the run goes on for the second.
+    firstController.abort()
+    await expect(runFirst).rejects.toMatchObject({ name: 'AbortError' })
+    respond()
+
+    const [shared, sharedAlone] = await Promise.all(again)
+    expect(shared).toEqual(tileBytes(1020))
+    expect(sharedAlone).toEqual(tileBytes(1060))
+    // Each caller has its own copy, which it may transfer to a worker.
+    expect((await alone).buffer).not.toBe(sharedAlone?.buffer)
+    expect(ranges).toEqual(['bytes=1020-1039', 'bytes=1060-1069'])
+    expect(signals[0]?.aborted).toBe(false)
+
+    // A cancelled read is not joined, though it has not ended yet.
+    const controller = new AbortController()
+    const cancelled = loader.fetchTileBytes(0, 1, 0, controller.signal)
+    await vi.waitFor(() => {
+      expect(ranges).toHaveLength(3)
+    })
+    controller.abort()
+    await expect(cancelled).rejects.toMatchObject({ name: 'AbortError' })
+    const after = loader.fetchTileBytes(0, 1, 0)
+    await vi.waitFor(() => {
+      expect(ranges).toHaveLength(4)
+    })
+    respond()
+    await expect(after).resolves.toEqual(tileBytes(1010))
   })
 
   it('decodes each level with its own tags when the levels have them', () => {

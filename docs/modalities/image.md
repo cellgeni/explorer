@@ -519,10 +519,13 @@ transform.
   16 tiles and 1 MiB. Tiles are mostly stored row by row, so a run is a
   stretch of a row in view, or whole rows when the view spans the image. The
   others wait in memory, at most 512, for their own fetch, and no other run
-  reads them. Tiles not in view are never read ahead, and a run is cancelled
-  once every tile waiting for it has left the view. Xenium's 1,024-pixel
-  JPEG 2000 tiles (400–670 KB) are too large to pair under 1 MiB, so they
-  are read one per request as before.
+  reads them. A tile fetched while another fetch is reading it, such as a
+  coarse tile the canvas and auto-contrast both want as an image opens,
+  waits for that request and takes its own copy of the bytes. Tiles not in
+  view are never read ahead, and a run is cancelled once every tile waiting
+  for it has left the view. Xenium's 1,024-pixel JPEG 2000 tiles
+  (400–670 KB) are too large to pair under 1 MiB, so they are read one per
+  request as before.
 - **Slots.** The concurrency limit counts requests rather than tiles: a tile
   whose bytes turn out to come from another tile's run gives up its slot
   (`onSharedRead`), so the scheduler starts another request instead of
@@ -686,7 +689,10 @@ are not finite, such as NaN for no data, are left out. For whole-number data
 the window is rounded outward to whole numbers; fractional data, such as a
 float image of values below 1, keeps the percentiles as they are. It reads at
 most 64 of the level's tiles, from 8 evenly spaced rows (more per row when
-there are fewer rows), so an image without a pyramid is not read whole. It
+there are fewer rows), so an image without a pyramid is not read whole. A
+TIFF's tiles are fetched six at a time, each naming the eight after it as
+`upcoming`, so tiles stored back to back share a request; they are sampled
+in order, since a tile's first sample depends on the pixels before it. It
 runs after an image loads and when a channel's `Auto` button is pressed.
 Native RGB channels (H&E slides, RGB OME-TIFF and SpatialData images) are not
 auto-contrasted when the image loads: they are drawn without a window, and
