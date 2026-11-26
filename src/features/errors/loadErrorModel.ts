@@ -87,6 +87,24 @@ const ACCESS_DENIED_ACTION =
 const RATE_LIMITED_ACTION =
   'The host is limiting how often it is read. Wait a minute, then reload.'
 
+const CHOSEN_READER_TITLE = 'Not readable with the chosen reader'
+const CHOSEN_READER_ACTION =
+  'Choose Detect automatically, or another reader, from the cog at the end of the address field.'
+
+// A load that used a reader chosen in place of detection says so: the
+// address may open once detected, or with another reader.
+export function withChosenReader(
+  error: StructuredLoadError,
+  readerName: string,
+): StructuredLoadError {
+  return error.title === CHOSEN_READER_TITLE
+    ? error
+    : {
+        ...error,
+        action: `${error.action} The address was opened with the ${readerName} reader: ${CHOSEN_READER_ACTION.charAt(0).toLowerCase()}${CHOSEN_READER_ACTION.slice(1)}`,
+      }
+}
+
 export function createStructuredLoadError(
   source: LoadErrorSource,
   error: unknown,
@@ -184,6 +202,22 @@ export function createStructuredLoadError(
         title: 'File not found',
         message,
         action: 'Check the file path, then reload.',
+      },
+      detail,
+    )
+  }
+
+  // Thrown by detection for an address the reader chosen for it cannot open,
+  // such as a zip that holds another platform's data
+  // (src/datasets/datasetDetectionError.ts).
+  if (error instanceof Error && error.name === 'DatasetReaderError') {
+    return withOptionalDetail(
+      {
+        source,
+        code: 'unsupported',
+        title: CHOSEN_READER_TITLE,
+        message,
+        action: CHOSEN_READER_ACTION,
       },
       detail,
     )

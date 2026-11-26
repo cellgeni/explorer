@@ -28,6 +28,9 @@ export interface ShareableState {
   // `sectionView=`.
   readonly sectionView?: string
   readonly datasetUrl?: string
+  // The reader chosen for the dataset in place of detection, such as `h5ad`:
+  // `reader=`, written only with `dataset=`.
+  readonly datasetReader?: string
   readonly annotationUrl?: string
   // Annotation sets loaded from the dataset itself, such as graphclust.
   readonly annotationGroupIds?: readonly string[]
@@ -158,6 +161,7 @@ export function parseShareableState(hash: string): ShareableState {
   const compareUrls = readStrings(params, 'compare')
   const sectionView = readString(params, 'sectionView')
   const datasetUrl = readString(params, 'dataset')
+  const datasetReader = readString(params, 'reader')
   const annotationUrl = readString(params, 'annotationUrl')
   const annotationGroupIds = readEscapedCsv(params, 'groups')
   const customImageUrls = readStrings(params, 'customImageUrl')
@@ -258,6 +262,10 @@ export function parseShareableState(hash: string): ShareableState {
 
   if (datasetUrl !== undefined) {
     state.datasetUrl = datasetUrl
+  }
+
+  if (datasetReader !== undefined) {
+    state.datasetReader = datasetReader
   }
 
   if (annotationGroupIds !== undefined) {
@@ -573,6 +581,7 @@ export function formatShareableState(state: ShareableState): string {
 
   if (state.datasetUrl !== undefined && state.datasetUrl.trim() !== '') {
     params.set('dataset', state.datasetUrl.trim())
+    setOptionalString(params, 'reader', state.datasetReader)
   }
 
   setOptionalString(params, 'annotationUrl', state.annotationUrl)

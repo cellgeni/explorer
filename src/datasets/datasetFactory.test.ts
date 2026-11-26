@@ -1075,6 +1075,121 @@ describe('spatial dataset detection', () => {
   })
 })
 
+describe('chosen readers', () => {
+  it('opens a folder that detection routes elsewhere with the reader chosen', async () => {
+    const fetcher = fetcherForOkPaths([
+      '/both/explorer.json',
+      '/both/experiment.xenium',
+      '/both/experiment.spatial',
+    ])
+    const requests = () => vi.mocked(fetcher).mock.calls.map(([url]) => String(url))
+
+    await expect(
+      detectSpatialDataset('https://example.test/both/', { fetcher, reader: 'atera' }),
+    ).resolves.toMatchObject({
+      platform: 'atera',
+      baseUrl: 'https://example.test/both',
+      checked: [expect.objectContaining({ path: 'experiment.spatial', ok: true })],
+    })
+    // Neither the manifest nor the Xenium file is asked for.
+    expect(requests()).not.toContain('https://example.test/both/explorer.json')
+    expect(requests()).not.toContain('https://example.test/both/experiment.xenium')
+  })
+
+  it("leaves the address unknown, with the reader's probes, without its files", async () => {
+    const fetcher = fetcherForOkPaths(['/run/experiment.xenium'])
+    const detection = await detectSpatialDataset('https://example.test/run', {
+      fetcher,
+      reader: 'visium',
+    })
+
+    expect(detection.platform).toBe('unknown')
+    expect(detection.checked).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: 'spatial/scalefactors_json.json', ok: false }),
+      ]),
+    )
+    expect(detection.checked.map((probe) => probe.path)).not.toContain(
+      'experiment.xenium',
+    )
+  })
+
+  it('opens a file whose name hides its format as the reader chosen', async () => {
+    const fetcher = fetcherForOkPaths(['/records/7/content'])
+    const url = 'https://example.test/records/7/content'
+
+    await expect(
+      detectSpatialDataset(url, { fetcher, reader: 'h5ad' }),
+    ).resolves.toMatchObject({ platform: 'h5ad', h5adUrl: url })
+    await expect(
+      detectSpatialDataset(url, { fetcher, reader: 'image' }),
+    ).resolves.toMatchObject({ platform: 'image', imageUrl: url, imageKind: 'tiff' })
+  })
+
+  it('opens a Zarr group as AnnData or as an image whatever its root says', async () => {
+    const fetcher = fetcherForOkPaths(['/stores/table/.zgroup', '/stores/plain/.zattrs'])
+
+    await expect(
+      detectSpatialDataset('https://example.test/stores/table', {
+        fetcher,
+        reader: 'h5ad',
+      }),
+    ).resolves.toMatchObject({
+      platform: 'h5ad',
+      h5adUrl: 'https://example.test/stores/table',
+      source: 'zarr',
+    })
+    // An OME-Zarr image opens by a URL that names Zarr.
+    await expect(
+      detectSpatialDataset('https://example.test/stores/plain', {
+        fetcher,
+        reader: 'image',
+      }),
+    ).resolves.toMatchObject({
+      platform: 'image',
+      imageUrl: 'https://example.test/stores/plain/.zattrs',
+      imageKind: 'ome-zarr',
+    })
+  })
+
+  it('refuses a manifest address, and a zip for the Xenium reader, unread', async () => {
+    const fetcher = fetcherForOkPaths([])
+
+    await expect(
+      detectSpatialDataset('https://example.test/run-7.json', {
+        fetcher,
+        reader: 'xenium',
+      }),
+    ).rejects.toMatchObject({ name: 'DatasetReaderError' })
+    await expect(
+      detectSpatialDataset('https://example.test/run-7.zip', {
+        fetcher,
+        reader: 'xenium',
+      }),
+    ).rejects.toMatchObject({ name: 'UnsupportedZipError' })
+    expect(fetcher).not.toHaveBeenCalled()
+  })
+
+  it('does not reuse a dataset another reader opened for the address', async () => {
+    const url = 'https://example.test/records/8/content'
+    const fetcher = fetcherForOkPaths(['/records/8/content'])
+
+    try {
+      const asImage = await detectSpatialDataset(url, { fetcher, reader: 'image' })
+      await expect(
+        cachedSpatialDataset(url, { detection: asImage }),
+      ).resolves.toBeInstanceOf(ImageOnlyDataset)
+
+      const asTable = await detectSpatialDataset(url, { fetcher, reader: 'h5ad' })
+      await expect(
+        cachedSpatialDataset(url, { detection: asTable }),
+      ).resolves.toBeInstanceOf(AnnDataH5adDataset)
+    } finally {
+      dropDatasets(url)
+    }
+  })
+})
+
 describe('dataset manifests', () => {
   it('detects a folder manifest and resolves relocated files through it', async () => {
     const baseUrl = 'https://example.test/manifest-xenium'

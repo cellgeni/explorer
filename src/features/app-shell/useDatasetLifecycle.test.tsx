@@ -448,6 +448,57 @@ describe('useDatasetLifecycle', () => {
     expect(geneScaleRange.state.range).toEqual({ min: null, max: 40 })
   })
 
+  it('detects with the reader chosen, and keeps it for a view change', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef: LifecycleOptions['refs']['startDatasetLoadRef'] = {
+      current: null,
+    }
+    const url = 'https://example.test/both'
+    const detectSpatialDataset: LifecycleOptions['loaders']['detectSpatialDataset'] =
+      vi.fn(async (baseUrl: string) => ({
+        platform: 'xenium' as const,
+        baseUrl,
+        checked: [],
+      }))
+    const setDatasetReader = vi.fn()
+
+    render(
+      <Probe
+        refs={refs}
+        detectSpatialDataset={detectSpatialDataset}
+        startDatasetLoadRef={startDatasetLoadRef}
+        extraSetters={{ setDatasetReader }}
+      />,
+    )
+
+    await act(async () => {
+      await startDatasetLoadRef.current?.(url, false, undefined, 'xenium')
+    })
+    expect(detectSpatialDataset).toHaveBeenLastCalledWith(
+      url,
+      expect.objectContaining({ reader: 'xenium' }),
+    )
+    expect(setDatasetReader).toHaveBeenLastCalledWith('xenium')
+
+    // A reload of the dataset on screen keeps its reader.
+    await act(async () => {
+      await startDatasetLoadRef.current?.(url, false, { restoreControl: vi.fn() })
+    })
+    expect(detectSpatialDataset).toHaveBeenLastCalledWith(
+      url,
+      expect.objectContaining({ reader: 'xenium' }),
+    )
+
+    // Another load detects.
+    await act(async () => {
+      await startDatasetLoadRef.current?.(url, false)
+    })
+    expect(vi.mocked(detectSpatialDataset).mock.lastCall?.[1]).not.toHaveProperty(
+      'reader',
+    )
+    expect(setDatasetReader).toHaveBeenLastCalledWith(null)
+  })
+
   describe('replacing an open dataset (15.1-F)', () => {
     const OPEN_URL = 'https://example.test/open'
     const NEXT_URL = 'https://example.test/next'

@@ -6,12 +6,18 @@ import {
   DownloadIcon,
   ErrorSummary,
 } from '../../components/AppStatusPanels'
-import { Disclosure, InfoTip, Select } from '../../components/ui'
+import { CogIcon, Disclosure, InfoTip, Select } from '../../components/ui'
+import { classNames } from '../../components/ui/classNames'
 import { useKeepFocus } from '../../components/ui/useKeepFocus'
 import { BOUNDARY_LIMIT_HELP } from '../shell/helpText'
 import { isH5Url } from '../store-structure/h5StructureModel'
 import { isParquetUrl } from '../store-structure/parquetStructureModel'
 import { isZarrStoreUrl } from '../store-structure/storeStructureModel'
+import {
+  DATASET_READER_NAMES,
+  DATASET_READERS,
+  parseDatasetReader,
+} from '../../datasets/datasetReader'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import { formatVisiumUnits, type VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -64,21 +70,24 @@ export function OpenDatasetForm({
   return (
     <form className="dataset-form" noValidate onSubmit={open.onSubmit}>
       <label htmlFor={datasetInputId}>Dataset or image URL</label>
-      <input
-        ref={datasetInputRef}
-        id={datasetInputId}
-        name="datasetUrl"
-        type="url"
-        inputMode="url"
-        autoComplete="off"
-        spellCheck={false}
-        value={open.datasetUrl}
-        placeholder="https://bucket.example/output-or-image.ome.tif"
-        title="Dataset or image URL"
-        onChange={(event) => {
-          open.onDatasetUrlChange(event.currentTarget.value)
-        }}
-      />
+      <span className="dataset-url-field">
+        <input
+          ref={datasetInputRef}
+          id={datasetInputId}
+          name="datasetUrl"
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          value={open.datasetUrl}
+          placeholder="https://bucket.example/output-or-image.ome.tif"
+          title="Dataset or image URL"
+          onChange={(event) => {
+            open.onDatasetUrlChange(event.currentTarget.value)
+          }}
+        />
+        <DatasetReaderMenu open={open} />
+      </span>
       <label className="dataset-toggle" htmlFor={morphologyInputId}>
         <input
           id={morphologyInputId}
@@ -150,6 +159,45 @@ export function OpenDatasetForm({
         ) : null}
       </div>
     </form>
+  )
+}
+
+// The reader the address opens with, for advanced use: a cog at the end of
+// the address field over a select the system draws, so it takes no room
+// and the form looks the same until it is used. Detection is the default and
+// the way in; a chosen reader is marked on the cog.
+function DatasetReaderMenu({ open }: { readonly open: OpenDatasetModel }) {
+  const reader = open.datasetReader
+  const title =
+    reader === null
+      ? 'Reader: detect automatically'
+      : `Reader: ${DATASET_READER_NAMES[reader]}, in place of detection`
+
+  return (
+    <span
+      className={classNames(
+        'dataset-reader',
+        reader !== null && 'dataset-reader--chosen',
+      )}
+    >
+      <CogIcon />
+      <select
+        name="datasetReader"
+        aria-label="Reader"
+        title={title}
+        value={reader ?? ''}
+        onChange={(event) => {
+          open.onDatasetReaderChange(parseDatasetReader(event.currentTarget.value))
+        }}
+      >
+        <option value="">Detect automatically</option>
+        {DATASET_READERS.map((option) => (
+          <option key={option} value={option}>
+            {DATASET_READER_NAMES[option]}
+          </option>
+        ))}
+      </select>
+    </span>
   )
 }
 

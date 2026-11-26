@@ -38,6 +38,26 @@ names a dataset (`?dataset=…`) opens it straight away. Supported sources are:
   with `?collection=<url>` in the viewer's address rather than in the form
   (see [Collections](#collections)).
 
+### Choosing A Reader
+
+The viewer works out what an address holds from its name and the files it
+finds there, and that is the way to open data. When it gets it wrong, or
+cannot tell, such as for a download link whose name hides that it is an
+`.h5ad`, or a folder whose manifest names the wrong platform, choose the
+reader yourself: the cog at the end of `Dataset or image URL` opens a list of
+`Detect automatically` and the platforms (Xenium, Atera, Visium, Visium HD,
+MERSCOPE, H5AD, SpatialData, Image). `Load Dataset` then opens the address
+with that reader only. It looks for that platform's files under their
+standard names and reads no manifest. A file opens as the chosen kind, and a
+Zarr store as AnnData, SpatialData or an OME-Zarr image whatever its root
+says. While a reader is chosen the cog is coloured and has a dot.
+
+The reader goes into the link (`reader=`) and into Recent, so the dataset
+opens with it again. If the files do not fit, the error says the address was
+opened with that reader: choose `Detect automatically` to go back. To fix the
+reader for everyone who opens a dataset you host, write a
+[manifest](./dataset-manifest.md) that names its `platform` instead.
+
 ### Browsing A Zarr Store
 
 When the address is a Zarr store (a `.zarr` folder or a group inside one, a
@@ -188,7 +208,8 @@ and its first dataset. If GitHub cannot be reached, the start
 screen says so, offers `Retry`, and still offers the Xenium demo dataset.
 
 The last eight datasets you opened are listed under Recent, in this browser
-only. Remove one with its ×. If the first dataset cannot be opened, the start
+only, each with the reader it was opened with if you chose one. Remove one
+with its ×. If the first dataset cannot be opened, the start
 screen comes back with the reason above the form.
 
 ### Collections

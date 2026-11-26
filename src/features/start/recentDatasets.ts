@@ -13,6 +13,9 @@ export interface RecentDataset {
   readonly name: string
   // A key of PLATFORM_NAMES, such as 'xenium'.
   readonly platform?: string
+  // The reader it was opened with in place of detection, such as 'h5ad', so
+  // it opens with that reader again.
+  readonly reader?: string
   // The address carried a signature or token, left out of `url`, so the
   // dataset reopens only from its full address (EXP-026).
   readonly signed?: boolean
@@ -26,6 +29,7 @@ function isRecentDataset(value: unknown): value is RecentDataset {
     entry.url.trim() !== '' &&
     typeof entry.name === 'string' &&
     (entry.platform === undefined || typeof entry.platform === 'string') &&
+    (entry.reader === undefined || typeof entry.reader === 'string') &&
     (entry.signed === undefined || typeof entry.signed === 'boolean')
   )
 }
@@ -80,6 +84,7 @@ function storedEntries(entries: readonly RecentDataset[]): readonly RecentDatase
         url: known.url,
         name: known.name,
         ...(known.platform === undefined ? {} : { platform: known.platform }),
+        ...(known.reader === undefined ? {} : { reader: known.reader }),
       }
     }
   }
@@ -129,6 +134,7 @@ export function withRecentDataset(
         url: dataset.url,
         name: dataset.name,
         ...(dataset.platform === undefined ? {} : { platform: dataset.platform }),
+        ...(dataset.reader === undefined ? {} : { reader: dataset.reader }),
       }
     : dataset
 
@@ -202,6 +208,7 @@ export function useRecentDatasets(
           first.url === dataset.url &&
           first.name === dataset.name &&
           first.platform === dataset.platform &&
+          first.reader === dataset.reader &&
           first.signed === dataset.signed
           ? null
           : withRecentDataset(current, dataset)

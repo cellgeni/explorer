@@ -33,6 +33,7 @@ import { withMicrometers } from '../../data/units'
 import { ScreenshotButton } from '../screenshot/ScreenshotButton'
 import { isTextEntryTarget, type ActiveTool } from '../app-shell/activeToolModel'
 import { BoundaryLimitField, OpenDatasetForm } from '../sections/DatasetInfoBlocks'
+import type { DatasetReader } from '../../datasets/datasetReader'
 import type { DatasetInfoModel, OpenDatasetModel } from '../sections/datasetInfoModel'
 import { useCopyLinkStatus } from '../sections/useCopyLinkStatus'
 import {
@@ -264,8 +265,8 @@ function DatasetMenu({
   readonly library: DatasetLibraryModel
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const openFromMenu = (url: string) => {
-    library.onOpen(url)
+  const openFromMenu = (url: string, reader?: DatasetReader | null) => {
+    library.onOpen(url, reader)
     setMenuOpen(false)
   }
 

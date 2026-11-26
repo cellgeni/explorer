@@ -110,6 +110,58 @@ describe('OpenDatasetForm', () => {
   })
 })
 
+describe('OpenDatasetForm reader menu', () => {
+  it('detects by default and offers each reader from the cog', () => {
+    const { open } = testDatasetInfoModel()
+    render(<OpenDatasetForm open={open} />)
+    const reader = screen.getByRole('combobox', { name: 'Reader' })
+
+    expect(reader).toHaveValue('')
+    expect(reader).toHaveAttribute('title', 'Reader: detect automatically')
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
+      'Detect automatically',
+      'Xenium',
+      'Atera',
+      'Visium',
+      'Visium HD',
+      'MERSCOPE',
+      'H5AD',
+      'SpatialData',
+      'Image',
+    ])
+    expect(reader.parentElement).not.toHaveClass('dataset-reader--chosen')
+
+    fireEvent.change(reader, { target: { value: 'h5ad' } })
+    expect(open.onDatasetReaderChange).toHaveBeenCalledWith('h5ad')
+    fireEvent.change(reader, { target: { value: '' } })
+    expect(open.onDatasetReaderChange).toHaveBeenLastCalledWith(null)
+  })
+
+  it('marks a chosen reader and submits it with the address', () => {
+    const { open } = testDatasetInfoModel({
+      open: { datasetUrl: 'https://example.test/f/7', datasetReader: 'image' },
+    })
+    const submitted = vi.fn()
+    render(
+      <OpenDatasetForm
+        open={{
+          ...open,
+          onSubmit: (event) => {
+            event.preventDefault()
+            submitted(new FormData(event.currentTarget).get('datasetReader'))
+          },
+        }}
+      />,
+    )
+    const reader = screen.getByRole('combobox', { name: 'Reader' })
+
+    expect(reader).toHaveAttribute('title', 'Reader: Image, in place of detection')
+    expect(reader.parentElement).toHaveClass('dataset-reader--chosen')
+    fireEvent.click(screen.getByRole('button', { name: 'Load Dataset' }))
+    expect(submitted).toHaveBeenCalledWith('image')
+  })
+})
+
 describe('OpenDatasetForm focus', () => {
   it('moves from Load Dataset, off while the dataset loads, to the address (EXP-316)', () => {
     const form = (isLoading: boolean) => (

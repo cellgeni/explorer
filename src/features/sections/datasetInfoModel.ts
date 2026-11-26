@@ -3,6 +3,7 @@ import type { Dispatch, FormEventHandler, SetStateAction } from 'react'
 import { scaffoldDeckLayerCount } from '../../components/viewerCoreModel'
 import type { PerformanceBudget } from '../../data/performanceBudget'
 import type { AnnDataVisiumView } from '../../datasets/h5adDataset'
+import { DATASET_READER_NAMES, type DatasetReader } from '../../datasets/datasetReader'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
 import type { VisiumImageKind } from '../../datasets/visiumFormat'
 import type { VisiumHdBinSizeMicrometers } from '../../datasets/visiumHdDataset'
@@ -222,6 +223,10 @@ export function datasetFacts(input: DatasetFactsInput): readonly DatasetFact[] {
 export interface OpenDatasetModel {
   readonly datasetUrl: string
   readonly onDatasetUrlChange: (url: string) => void
+  // The reader menu at the end of the address field: the reader Load Dataset
+  // opens the address with, or null to detect it.
+  readonly datasetReader: DatasetReader | null
+  readonly onDatasetReaderChange: (reader: DatasetReader | null) => void
   readonly shouldLoadMorphology: boolean
   readonly onShouldLoadMorphologyChange: (enabled: boolean) => void
   // "Tissue image" on Visium and Visium HD, "Morphology image" elsewhere.
@@ -306,6 +311,7 @@ export interface DatasetInfoModelInput {
   // The dataset's image, once it is open.
   readonly datasetImageLoader: ImagePyramidLoader | null
   readonly datasetUrl: string
+  readonly datasetReader: DatasetReader | null
   readonly debugLog: readonly DebugLogEntry[]
   readonly debugMode: boolean
   readonly diagnosticsState: DatasetDiagnosticsState<StructuredLoadError>
@@ -326,6 +332,7 @@ export interface DatasetInfoModelInput {
   readonly performanceBudget: PerformanceBudget
   readonly setBoundaryCellLimit: Dispatch<SetStateAction<number>>
   readonly setDatasetUrl: (url: string) => void
+  readonly setDatasetReader: (reader: DatasetReader | null) => void
   readonly setDebugLog: Dispatch<SetStateAction<readonly DebugLogEntry[]>>
   readonly setShouldLoadMorphology: Dispatch<SetStateAction<boolean>>
   // The link for the current state, which the address shows up to 160 ms
@@ -350,6 +357,7 @@ export function useDatasetInfoModel({
   datasetFactsInput,
   datasetImageLoader,
   datasetUrl,
+  datasetReader,
   debugLog,
   debugMode,
   diagnosticsState,
@@ -368,6 +376,7 @@ export function useDatasetInfoModel({
   performanceBudget,
   setBoundaryCellLimit,
   setDatasetUrl,
+  setDatasetReader,
   setDebugLog,
   setShouldLoadMorphology,
   shareUrl,
@@ -391,6 +400,15 @@ export function useDatasetInfoModel({
     open: {
       datasetUrl,
       onDatasetUrlChange: setDatasetUrl,
+      datasetReader,
+      onDatasetReaderChange: (reader) => {
+        setDatasetReader(reader)
+        appendDebugEvent(
+          reader === null
+            ? 'Reader: detect automatically'
+            : `Reader: ${DATASET_READER_NAMES[reader]}`,
+        )
+      },
       shouldLoadMorphology,
       onShouldLoadMorphologyChange: (checked) => {
         setShouldLoadMorphology(checked)

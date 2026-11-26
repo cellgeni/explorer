@@ -74,6 +74,9 @@ describe('datasetLibraryModel', () => {
     expect(datasetLinkHref(SKIN.manifestUrl, '/explorer/')).toBe(
       `/explorer/?dataset=${encodeURIComponent(SKIN.manifestUrl)}`,
     )
+    expect(datasetLinkHref('https://example.test/f/7', '/', 'h5ad')).toBe(
+      `/?dataset=${encodeURIComponent('https://example.test/f/7')}&reader=h5ad`,
+    )
   })
 
   it('links to a collection with it in the query', () => {
@@ -207,6 +210,12 @@ describe('StartScreen', () => {
       recent: [
         { url: 'https://example.test/run-2', name: 'run-2', platform: 'visium-hd' },
         { url: 'https://example.test/run-1', name: 'run-1' },
+        {
+          url: 'https://example.test/f/7',
+          name: 'f-7',
+          platform: 'h5ad',
+          reader: 'h5ad',
+        },
       ],
     })
     const start = renderStartScreen(library)
@@ -217,6 +226,11 @@ describe('StartScreen', () => {
     )
     fireEvent.click(within(recent).getByRole('link', { name: 'run-1' }))
     expect(library.onOpen).toHaveBeenCalledWith('https://example.test/run-1')
+    // One opened with a chosen reader opens with it again.
+    const chosen = within(recent).getByRole('link', { name: 'f-7' })
+    expect(chosen.getAttribute('href')).toMatch(/&reader=h5ad$/)
+    fireEvent.click(chosen)
+    expect(library.onOpen).toHaveBeenLastCalledWith('https://example.test/f/7', 'h5ad')
 
     fireEvent.click(
       within(recent).getByRole('button', { name: 'Remove run-2 from recent datasets' }),

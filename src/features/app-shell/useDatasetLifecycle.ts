@@ -2,6 +2,7 @@ import {
   useEffect,
   useLayoutEffect,
   useRef,
+  useState,
   type Dispatch,
   type FormEvent,
   type SetStateAction,
@@ -205,6 +206,11 @@ import {
   setVisiumView,
   spatialDataSelectionFor,
 } from '../../datasets/datasetFactory'
+import {
+  DATASET_READER_NAMES,
+  parseDatasetReader,
+  type DatasetReader,
+} from '../../datasets/datasetReader'
 import { datasetDetectionError } from '../../datasets/datasetDetectionError'
 import type { AnnDataVisiumSummary } from '../../datasets/h5adDataset'
 import type { SpatialDataSelection } from '../../datasets/spatialDataDataset'
@@ -233,6 +239,7 @@ import {
 import {
   createStructuredLoadError,
   readErrorMessage,
+  withChosenReader,
   type StructuredLoadError,
 } from '../errors/loadErrorModel'
 import {
@@ -320,10 +327,13 @@ export interface DatasetViewChange {
   readonly restoreControl: () => void
 }
 
+// `reader` is the one chosen for the address in place of detection; a view
+// change keeps the reader of the dataset on screen.
 export type StartDatasetLoad = (
   datasetUrl: string,
   loadImage: boolean,
   viewChange?: DatasetViewChange,
+  reader?: DatasetReader | null,
 ) => Promise<void>
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
@@ -465,6 +475,8 @@ interface UseDatasetLifecycleSetters {
   readonly setCustomMorphologyLayers: Setter<readonly CustomMorphologyLayer[]>
   readonly setCustomImageLayerOpacities: Setter<Readonly<Record<string, number>>>
   readonly setDatasetUrl: (datasetUrl: string) => void
+  // The address field's reader menu.
+  readonly setDatasetReader?: (reader: DatasetReader | null) => void
   readonly setDatasetPlatform: Setter<Platform | null>
   readonly setDatasetWarmupState: Setter<DatasetWarmupState>
   readonly setDiagnosticsState: Setter<DatasetDiagnosticsState<StructuredLoadError>>
@@ -538,6 +550,8 @@ interface PendingDatasetLoad {
   // The change of the view on screen this load makes, if any. It is
   // dropped with the load if the load is cancelled or fails first.
   readonly viewChange: DatasetViewChange | undefined
+  // The reader chosen for the address, or null for detection.
+  readonly reader: DatasetReader | null
 }
 
 interface UseDatasetLifecycleOptions {
@@ -555,6 +569,9 @@ interface UseDatasetLifecycleResult {
   // on screen goes back to no dataset.
   readonly cancelDatasetLoad: () => void
   readonly handleDatasetSubmit: (event: FormEvent<HTMLFormElement>) => Promise<void>
+  // The reader the dataset on screen was opened with, or null when it was
+  // detected: the link's reader=.
+  readonly openDatasetReader: DatasetReader | null
 }
 
 export function useDatasetLifecycle({
@@ -656,6 +673,7 @@ export function useDatasetLifecycle({
     setCustomMorphologyLayers,
     setCustomImageLayerOpacities,
     setDatasetUrl,
+    setDatasetReader,
     setDatasetPlatform,
     setDatasetWarmupState,
     setDiagnosticsState,
@@ -714,6 +732,9 @@ export function useDatasetLifecycle({
   const pendingLoadRef = useRef<PendingDatasetLoad | null>(null)
   // The last load started, pending or committed.
   const latestLoadRef = useRef<PendingDatasetLoad | null>(null)
+  // The reader of the dataset on screen, set when a load replaces it.
+  const [openDatasetReader, setOpenDatasetReader] = useState<DatasetReader | null>(null)
+  const openDatasetReaderRef = useRef<DatasetReader | null>(null)
 
   useEffect(() => {
     if (didApplyInitialDatasetUrlRef.current) {
@@ -727,8 +748,15 @@ export function useDatasetLifecycle({
       initialShareableState.datasetUrl.trim() !== ''
     ) {
       setDatasetUrl(initialShareableState.datasetUrl)
+      setDatasetReader?.(parseDatasetReader(initialShareableState.datasetReader))
     }
-  }, [didApplyInitialDatasetUrlRef, initialShareableState.datasetUrl, setDatasetUrl])
+  }, [
+    didApplyInitialDatasetUrlRef,
+    initialShareableState.datasetReader,
+    initialShareableState.datasetUrl,
+    setDatasetReader,
+    setDatasetUrl,
+  ])
 
   useEffect(() => {
     return () => {
@@ -915,8 +943,11 @@ export function useDatasetLifecycle({
     datasetUrl: string,
     loadImage: boolean,
     viewChange?: DatasetViewChange,
+    requestedReader: DatasetReader | null = null,
   ) {
     const requestedUrl = datasetUrl.trim()
+    const reader =
+      viewChange === undefined ? requestedReader : openDatasetReaderRef.current
 
     if (requestedUrl !== '') {
       const loadStartedAt = readTimestamp()
@@ -955,6 +986,7 @@ export function useDatasetLifecycle({
         queued: [],
         views: [],
         viewChange,
+        reader,
       }
       pendingLoadRef.current = load
       latestLoadRef.current = load
@@ -1089,6 +1121,8 @@ export function useDatasetLifecycle({
         loadRequestIdRef.current += 1
         load.datasetRequestId = loadRequestIdRef.current
         pendingLoadRef.current = null
+        openDatasetReaderRef.current = load.reader
+        setOpenDatasetReader(load.reader)
         for (const show of load.views.splice(0)) {
           show()
         }
@@ -1329,6 +1363,7 @@ export function useDatasetLifecycle({
       }
 
       setDatasetUrl(requestedUrl)
+      setDatasetReader?.(reader)
 
       if (isDatasetLoaded) {
         setPendingDatasetLoadState(datasetLoadStarted(requestedUrl))
@@ -1340,6 +1375,7 @@ export function useDatasetLifecycle({
       try {
         const detection = await detectSpatialDataset(requestedUrl, {
           signal,
+          ...(reader === null ? {} : { reader }),
         })
 
         if (!isCurrentDatasetLoad()) {
@@ -2376,9 +2412,13 @@ export function useDatasetLifecycle({
           return
         }
 
-        const loadError = createStructuredLoadError('Dataset overview', error, {
+        const structuredError = createStructuredLoadError('Dataset overview', error, {
           url: requestedUrl,
         })
+        const loadError =
+          load.reader === null
+            ? structuredError
+            : withChosenReader(structuredError, DATASET_READER_NAMES[load.reader])
         // Reads the load started in the background (gene panel, annotation
         // sets) stop, so none lands after the failure.
         load.controller.abort()
@@ -2477,9 +2517,10 @@ export function useDatasetLifecycle({
     const formData = new FormData(event.currentTarget)
     const datasetUrl = formData.get('datasetUrl')
     const loadImage = formData.get('loadMorphologyImage') === 'on'
+    const reader = parseDatasetReader(formData.get('datasetReader'))
 
     if (typeof datasetUrl === 'string') {
-      await startDatasetLoad(datasetUrl, loadImage)
+      await startDatasetLoad(datasetUrl, loadImage, undefined, reader)
     }
   }
 
@@ -2504,6 +2545,8 @@ export function useDatasetLifecycle({
       void startDatasetLoadRef.current?.(
         initialDatasetUrl,
         initialShouldLoadMorphologyRef.current,
+        undefined,
+        parseDatasetReader(initialShareableState.datasetReader),
       )
     }, 0)
 
@@ -2512,12 +2555,13 @@ export function useDatasetLifecycle({
     }
   }, [
     initialDatasetLoadHeld,
+    initialShareableState.datasetReader,
     initialShareableState.datasetUrl,
     initialShouldLoadMorphologyRef,
     startDatasetLoadRef,
   ])
 
-  return { cancelDatasetLoad, handleDatasetSubmit }
+  return { cancelDatasetLoad, handleDatasetSubmit, openDatasetReader }
 }
 
 export function mergeMorphologyChannelSettings(options: {

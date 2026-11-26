@@ -27,9 +27,41 @@ import {
   formatStructuredError,
   isStructuredLoadError,
   readErrorMessage,
+  withChosenReader,
 } from './loadErrorModel'
 
 describe('loadErrorModel', () => {
+  it('says when a load used a reader chosen in place of detection', () => {
+    const mismatch = createStructuredLoadError(
+      'Dataset overview',
+      Object.assign(
+        new Error('The Visium reader cannot open run.zip: it holds an image.'),
+        {
+          name: 'DatasetReaderError',
+        },
+      ),
+    )
+
+    expect(mismatch).toMatchObject({
+      code: 'unsupported',
+      title: 'Not readable with the chosen reader',
+      action: expect.stringContaining('Detect automatically') as string,
+    })
+    // Said once.
+    expect(withChosenReader(mismatch, 'Visium')).toBe(mismatch)
+
+    const missing = withChosenReader(
+      createStructuredLoadError(
+        'Dataset overview',
+        new Error('HTTP 404 for cells.parquet'),
+      ),
+      'Xenium',
+    )
+    expect(missing.action).toMatch(
+      /The address was opened with the Xenium reader: choose Detect automatically, or another reader, from the cog at the end of the address field\.$/,
+    )
+  })
+
   it('tells a manifest that could not be read from an invalid one (EXP-327)', () => {
     const manifestError = (message: string) =>
       createStructuredLoadError(
