@@ -326,7 +326,9 @@ M2, requests:
     No embeddings are read one after another.
   - Read a Xenium gene's three arrays together, and read the next
     transcript tiles ahead, within the point limit
-    (`transcriptZarr.ts:208`).
+    (`transcriptZarr.ts:208`). The gene's arrays are read together in
+    [#NNN](https://github.com/cellgeni/explorer/pull/NNN):
+    [A Xenium Gene's Arrays Read Together](#a-xenium-genes-arrays-read-together).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
 - [x] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
@@ -1575,6 +1577,47 @@ store.
 Test: `src/datasets/h5adDataset.test.ts` holds the tiny store's requests and
 answers them a round at a time: its metadata takes 3 rounds, and took 11 on
 the base.
+
+### A Xenium Gene's Arrays Read Together
+
+[#NNN](https://github.com/cellgeni/explorer/pull/NNN). Colouring by a gene
+(`selectedGeneRowsFromCellFeatureMatrixZarr`, `gex.ts`) read the zipped
+matrix's feature-major arrays one after another: each array's metadata,
+then the gene's pointers, its indices and its data, then the cell IDs.
+From the zip each read is two round trips, the entry's local header and
+then its bytes, so one gene took 14 rounds.
+
+- **Read together now:** the three arrays' metadata; the pointers, once
+  for all the genes; a gene's indices and data; and the cell IDs,
+  alongside the rest.
+- **Genes are still read one at a time**, since neighbouring genes often
+  share a chunk, which the byte-range cache then holds for the next.
+- **The matrix's own arrays** (the cell IDs and the cell-major CSC arrays),
+  which the warm-up opens at load, are opened together too.
+
+Production builds of the base (`81fa44c`, #475) and the branch,
+alternating, three runs each, with GPU drawing. Each run loads the Xenium
+dataset, waits until its host has been quiet for 5 s, then colours by a
+gene and times until the expression line shows:
+
+| Data                                                 | Base        | Branch      | Base: rounds | Branch: rounds |
+| ---------------------------------------------------- | ----------- | ----------- | ------------ | -------------- |
+| Synthetic 1.4M-cell folder, 300 ms a request, `M03a` | 5.14–5.23 s | 2.53–2.87 s | 14           | 5–6            |
+| Xenium demo, hosted, `SNAP25`                        | 2.62–2.65 s | 2.30–3.66 s | 14           | 1–2            |
+
+- **The same reads:** both builds sent the same requests (16 on the
+  synthetic folder, 14 on the demo) and coloured the same cells (50,291
+  and 231,404).
+- **The demo:** a round trip there is about 25 ms, so the chain cost about
+  0.35 s of the 2.5 s, and the rest is the host's bandwidth and decoding.
+  One base run there took 14.1 s, with 17 of the load's requests still in
+  flight, and is left out.
+- **Lead:** every read of a zip entry is two round trips, its local header
+  and then its bytes (`@zarrita/storage`'s zip store). Reading the header
+  with the bytes would halve the rounds of every zipped store.
+
+Test: `src/data/gexZarrCache.test.ts` answers each open and read a round at
+a time. Two genes take 7 rounds, and took 14 on the base.
 
 ## Closed Open Items
 
