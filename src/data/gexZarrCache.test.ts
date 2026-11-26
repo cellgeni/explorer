@@ -98,6 +98,63 @@ describe('Zarr cell feature matrix cache', () => {
     ).toHaveLength(1)
   })
 
+  it("reads the selected genes' arrays together, and the cell IDs alongside (O11)", async () => {
+    setupZarrMatrixMock({
+      cellIdPairs: new Uint32Array([1, 1, 2, 1, 3, 1]),
+      indptr: new Uint32Array([0, 1, 2, 3]),
+      featureIndptr: new Uint32Array([0, 2, 3]),
+      featureIndices: new Uint32Array([0, 2, 1]),
+      featureData: new Uint32Array([4, 6, 9]),
+      hasCellMajorCsc: false,
+    })
+    // Each open and read waits until those started so far are answered
+    // together, as one round trip.
+    const waiting: (() => void)[] = []
+    const held =
+      <Args extends unknown[]>(
+        answer: ((...args: Args) => Promise<unknown>) | undefined,
+      ) =>
+      (...args: Args) =>
+        new Promise((resolve, reject) => {
+          waiting.push(() => {
+            answer?.(...args).then(resolve, reject)
+          })
+        })
+    zarrMock.open.mockImplementation(held(zarrMock.open.getMockImplementation()))
+    zarrMock.get.mockImplementation(held(zarrMock.get.getMockImplementation()))
+
+    const { selectedGeneRowsFromCellFeatureMatrixZarr } = await import('./gex')
+    let done = false
+    const read = selectedGeneRowsFromCellFeatureMatrixZarr(
+      'https://example.test/xenium/rounds/cell_feature_matrix.zarr.zip',
+      ['Actb', 'Gad1'],
+    ).finally(() => {
+      done = true
+    })
+    let rounds = 0
+
+    while (!done) {
+      for (let quiet = 0, seen = -1; quiet < 8 && !done; ) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        quiet = waiting.length === seen ? quiet + 1 : 0
+        seen = waiting.length
+      }
+
+      if (!done) {
+        rounds += 1
+        waiting.splice(0).forEach((answer) => answer())
+      }
+    }
+
+    await expect(read).resolves.toMatchObject({ nCells: 3 })
+    // The store, the group, then the matrix's arrays opened together; the
+    // feature arrays opened, with the cell IDs read; the pointers, once for
+    // both genes; then each gene's indices and data. It was 14: each array
+    // opened after the one before, then each gene's pointers, indices and
+    // data, then the cell IDs.
+    expect(rounds).toBe(7)
+  })
+
   it('reads each gene in every cell for the Plots panel (plan 22-A)', async () => {
     const cellIdPairs = new Uint32Array([1, 1, 2, 1, 3, 1])
     setupZarrMatrixMock({
