@@ -1630,8 +1630,8 @@ while every tile in flight could still add all its transcripts within the
 point limit, from the grid's counts per tile, so no tile was read only to
 be dropped at the limit.
 
-It made no difference on the demo. Opened at a zoomed-in view where four
-tiles meet (zoom 5, with transcripts on), three alternating runs each:
+It made no difference on the demo. Opened at a zoomed-in view (zoom 5,
+with transcripts on), three alternating runs each:
 
 - **Time:** the exact query took 7.1–8.1 s on the base (#476) and 7.3–8.3 s
   with the tiles read ahead.
