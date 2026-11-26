@@ -33,7 +33,7 @@ Sequencing:
 - [ ] Feature-fix pass: keep recording fixes until correctness is stable (see
       [Feature-Fix Pass](phases/feature-fix-pass.md)).
 - [ ] Optimization pass: interaction, memory, fetch/decode concurrency, and
-      rendering cost, without behaviour changes. Planned 2026-11-25 as 21
+      rendering cost, without behaviour changes. Planned 2026-11-25 as 22
       tasks in six milestones
       ([Plan](phases/optimization-pass.md#plan-2026-11-25)), which lists the
       items on this page that each task takes.
@@ -374,12 +374,8 @@ Rendering:
       over all cells (`ViewerCore.tsx`). Above 500,000 cells
       (`GENE_EXPRESSION_AUTO_ALL_CELLS_LIMIT`) expression is read by
       viewport, so on large Xenium datasets this runs on pan and zoom.
-      Boundaries are restyled into a new array for each batch as well
-      (`App.tsx`). Patching only the cells in the old and new batch would
-      avoid both.
-- [ ] Hovering transcripts sets App state to a new object on every pointer
-      move (`onTranscriptHover`), so App re-renders as the pointer moves. It
-      only needs to change when the hovered transcript does.
+      Patching only the cells in the old and new batch would avoid it (O3).
+      Outlines are no longer restyled per batch (O4, 2026-11-25).
 
 Code structure:
 
