@@ -796,6 +796,20 @@ overview row through the shared `CellColumnReader`, genes through
 `GeneRowReader`, and shapes, whose `contains` runs `roiSelectionContains`.
 Every array is made for the answer and transferred.
 
+Drawing calls send layers by overview row to `PythonLayerStore`
+(`pythonLayerStore.ts`), which holds them in the app, so a restart keeps
+them, and publishes a draft once per input, when `PythonSession` says the
+input ended: an input that draws nothing leaves the canvas's props as they
+were. `ViewerCore` composes the layers once per publish
+(`rendering/pythonOverlay.ts`) into one RGBA and one hidden flag per cell.
+The colours go over `packCellPointColors`' (cells in no layer keep their
+colour at the faded alpha), hidden cells get the GPU filter value outlined
+cells get, and outlines take both through `createCellBoundaryLayerStyle`'s
+`cellOverride`. Highlights are a stroked `ScatterplotLayer` per name, of the
+highlighted cells only (`pythonHighlightLayer.ts`). The pick handlers and
+`Enter` skip hidden cells, outlines and nuclei. The legend's _Python_ section
+(`pythonLegend.ts`) prints in screenshots as a list and a scale per ramp.
+
 Image columns (plan 26) are measured by `CellImageMeasurements`
 (`src/features/query/cellImageMeasurements.ts`), one per Cell Query model.
 A measurement is one channel at one level, z plane, disc radius and

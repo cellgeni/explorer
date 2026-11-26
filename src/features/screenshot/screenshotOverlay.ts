@@ -4,6 +4,7 @@ import {
   LEGEND_CATEGORY_LIMIT,
   type CategoryLegendSection,
   type ContinuousLegendSection,
+  type PythonLegendSection,
   type ViewerLegendSection,
 } from '../../components/viewerLegendTypes'
 import type { ScaleBarModel } from '../../components/viewerMeasurements'
@@ -343,17 +344,19 @@ function legendMarks(
 ): string[] {
   const width = Math.max(120, Math.min(260, frame.width - 36))
   const inner = width - LEGEND_PADDING * 2
-  const blocks = sections.map((section, index) =>
-    section.kind === 'continuous'
-      ? continuousLegend(
-          section,
-          `legend-gradient-${index.toString()}`,
-          inner,
-          paint,
-          measure,
-        )
-      : categoryLegend(section, inner, paint, measure),
-  )
+  const blocks = sections
+    .flatMap(printedLegendSections)
+    .map((section, index) =>
+      section.kind === 'continuous'
+        ? continuousLegend(
+            section,
+            `legend-gradient-${index.toString()}`,
+            inner,
+            paint,
+            measure,
+          )
+        : categoryLegend(section, inner, paint, measure),
+    )
   const height =
     LEGEND_PADDING * 2 +
     blocks.reduce((total, block) => total + block.height, 0) +
@@ -373,6 +376,59 @@ function legendMarks(
   })
 
   return marks
+}
+
+// A Python section prints as the legend's own blocks: its colours and rings
+// as a list, each ramp as a scale.
+function printedLegendSections(
+  section: ViewerLegendSection,
+): (ContinuousLegendSection | CategoryLegendSection)[] {
+  if (section.kind !== 'python') return [section]
+  return pythonPrintedSections(section)
+}
+
+function pythonPrintedSections(
+  section: PythonLegendSection,
+): (ContinuousLegendSection | CategoryLegendSection)[] {
+  const items: CategoryLegendSection['items'][number][] = []
+  const ramps: ContinuousLegendSection[] = []
+
+  for (const item of section.items) {
+    const { swatch } = item
+    if (swatch.kind === 'ramp') {
+      ramps.push({
+        kind: 'continuous',
+        id: `${section.id}:${item.id}`,
+        title: `${section.title}: ${item.label}`,
+        detail: `${item.count.toLocaleString()} ${item.count === 1 ? section.noun.singular : section.noun.plural}`,
+        gradient: swatch.gradient,
+        min: swatch.min,
+        max: swatch.max,
+      })
+    } else {
+      items.push({
+        id: item.id,
+        label: item.label,
+        color: swatch.kind === 'shown' ? 'transparent' : swatch.color,
+        count: item.count,
+        visible: true,
+      })
+    }
+  }
+
+  const list: CategoryLegendSection[] =
+    items.length === 0
+      ? []
+      : [
+          {
+            kind: 'categories',
+            id: section.id,
+            title: section.title,
+            items,
+            noun: section.noun,
+          },
+        ]
+  return [...list, ...ramps]
 }
 
 interface LegendBlock {

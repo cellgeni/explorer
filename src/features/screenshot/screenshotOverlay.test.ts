@@ -90,6 +90,44 @@ describe('screenshot overlays (plan 27, task E)', () => {
     expect(svg).toContain('>+4 more</text>')
   })
 
+  it('prints the Python layers as a list and a scale per ramp (plan 29-D8)', () => {
+    const python: ViewerLegendSection = {
+      kind: 'python',
+      id: 'python',
+      title: 'Python',
+      noun: { singular: 'cell', plural: 'cells' },
+      items: [
+        {
+          id: 'color:ROI picks',
+          label: 'ROI picks',
+          count: 4,
+          swatch: { kind: 'color', color: '#ffa500' },
+        },
+        {
+          id: 'color:Result',
+          label: 'Result',
+          count: 5,
+          swatch: {
+            kind: 'ramp',
+            gradient: 'linear-gradient(90deg, #008000, #d9ecd9)',
+            min: '0',
+            max: '250',
+          },
+        },
+      ],
+    }
+    const svg =
+      screenshotOverlaySvg(frame, { ...models, legend: [python] }, ALL, paint, measure) ??
+      ''
+
+    expect(svg).toContain('>Python</text>')
+    expect(svg).toContain('>ROI picks</text>')
+    expect(svg).toContain('fill="#ffa500"')
+    expect(svg).toContain('>Python: Result</text>')
+    expect(svg).toContain('>5 cells</text>')
+    expect(svg).toContain('>250</text>')
+  })
+
   it('escapes text and colours', () => {
     const svg = screenshotOverlaySvg(frame, models, ALL, paint, measure) ?? ''
 

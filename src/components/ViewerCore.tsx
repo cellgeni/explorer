@@ -139,6 +139,15 @@ import {
   packCellPointGeometry,
 } from '../rendering/cellPointStyle'
 import {
+  composePythonOverlay,
+  EMPTY_PYTHON_OVERLAY,
+  hidePythonCells,
+  overlayCellPointColors,
+  pythonCellHidden,
+  type PythonOverlay,
+} from '../rendering/pythonOverlay'
+import { pythonHighlightDraws } from '../rendering/pythonHighlightLayer'
+import {
   countOverviewCellsInBbox,
   createOverviewCellIndex,
   overviewCellIndicesNear,
@@ -312,6 +321,8 @@ export function ViewerCore({
   onClearSelection,
   onLegendCategoryVisibilityChange,
   onLegendShowMore,
+  pythonOverlay = EMPTY_PYTHON_OVERLAY,
+  onLegendPythonClear,
   coordinateUnit = 'um',
   measurementEnabled = false,
   measurementUnit = 'um',
@@ -442,6 +453,8 @@ export function ViewerCore({
         ? {}
         : { onLegendCategoryVisibilityChange })}
       {...(onLegendShowMore === undefined ? {} : { onLegendShowMore })}
+      pythonOverlay={pythonOverlay}
+      {...(onLegendPythonClear === undefined ? {} : { onLegendPythonClear })}
       coordinateUnit={coordinateUnit}
       measurementEnabled={measurementEnabled}
       measurementUnit={measurementUnit}
@@ -544,6 +557,8 @@ interface ViewerSurfaceProps {
     sectionId: string,
   ) => void
   readonly onLegendShowMore?: (sectionId: string) => void
+  readonly pythonOverlay: PythonOverlay
+  readonly onLegendPythonClear?: (itemId: string) => void
   readonly coordinateUnit: ViewerCoordinateUnit
   readonly measurementEnabled: boolean
   readonly measurementUnit: ViewerCoordinateUnit
@@ -639,6 +654,8 @@ function ViewerSurface({
   onClearSelection,
   onLegendCategoryVisibilityChange,
   onLegendShowMore,
+  pythonOverlay,
+  onLegendPythonClear,
   coordinateUnit,
   measurementEnabled,
   measurementUnit,
@@ -991,9 +1008,18 @@ function ViewerSurface({
       }),
     [geneExpressionActive, geneExpressionPointStyleIndex, observationColorizer],
   )
-  const cellPointColors = useMemo(
+  const modeCellPointColors = useMemo(
     () => packCellPointColors(cells, cellPointStyler),
     [cellPointStyler, cells],
+  )
+  // The Python console's layers over the colour mode (plan 29-D7).
+  const pythonLayers = useMemo(
+    () => composePythonOverlay(pythonOverlay, cells.length),
+    [cells.length, pythonOverlay],
+  )
+  const cellPointColors = useMemo(
+    () => overlayCellPointColors(modeCellPointColors, pythonLayers),
+    [modeCellPointColors, pythonLayers],
   )
   const cellPointRankValues = useMemo(() => cellPointRanks(cells.length), [cells.length])
   const cellPointGeometry = useMemo(() => packCellPointGeometry(cells), [cells])
@@ -1034,7 +1060,7 @@ function ViewerSurface({
   // so they stay on top where cells overlap zoomed out. Cells scoring zero are
   // left to the cell points, which already colour them. The list only changes
   // with the data, not with zoom or pan.
-  const geneExpressionOverlayElements = useMemo(
+  const allGeneExpressionOverlayElements = useMemo(
     () =>
       geneExpressionOverlayEnabled
         ? expressingElementsByScore(expressionElements)
@@ -1072,7 +1098,8 @@ function ViewerSurface({
   const cellBoundaryFillEnabled =
     (observationColorMode === 'annotations' && annotationStyleColors.length > 0) ||
     (observationColorMode === 'metadata' && cellMetadataTrack !== null) ||
-    geneExpressionActive
+    geneExpressionActive ||
+    pythonLayers.colors !== null
   // Built when the outlines change; an expression batch, a colour mode or the
   // fill turning on or off only colours it (O4).
   const boundaryLayerGeometry = useMemo(
@@ -1090,8 +1117,32 @@ function ViewerSurface({
       }
     }
 
-    return cellPointFilterValues(cellPointRankValues, outlinedCellIndices)
-  }, [boundaryLayerGeometry, cellIndexById, cellPointRankValues])
+    return hidePythonCells(
+      cellPointFilterValues(cellPointRankValues, outlinedCellIndices),
+      pythonLayers,
+    )
+  }, [boundaryLayerGeometry, cellIndexById, cellPointRankValues, pythonLayers])
+  // Python's colour layers colour every cell, so expression draws over none;
+  // cells show() hides lose their expression points too.
+  const geneExpressionOverlayElements = useMemo(() => {
+    if (pythonLayers.colors !== null) return EMPTY_OVERVIEW_CELLS
+    if (pythonLayers.hidden === null) return allGeneExpressionOverlayElements
+    return allGeneExpressionOverlayElements.filter(
+      (element) => !pythonCellHidden(pythonLayers, cellIndexById.get(element.id)),
+    )
+  }, [allGeneExpressionOverlayElements, cellIndexById, pythonLayers])
+  const pythonHighlights = useMemo(
+    () => pythonHighlightDraws(pythonLayers, cellPointGeometry),
+    [cellPointGeometry, pythonLayers],
+  )
+  // Whether a picked cell, outline or nucleus belongs to a hidden cell.
+  const pickedHiddenCell = useCallback(
+    (cellId: string | undefined) =>
+      pythonLayers.hidden !== null &&
+      cellId !== undefined &&
+      pythonCellHidden(pythonLayers, cellIndexById.get(cellId)),
+    [cellIndexById, pythonLayers],
+  )
   const cellPointPacking = useMemo(
     () => ({
       geometry: cellPointGeometry,
@@ -1116,13 +1167,34 @@ function ViewerSurface({
             }
           : {}),
         expressionByElementId: geneExpressionPointStyleIndex.expressionByElementId,
+        // Python's layers win over both, and hide outlines with their cells.
+        ...(pythonLayers.colors === null && pythonLayers.hidden === null
+          ? {}
+          : {
+              cellOverride: (cellId: string) => {
+                const index = cellIndexById.get(cellId)
+                if (index === undefined) return undefined
+                if (pythonCellHidden(pythonLayers, index)) return 'hidden'
+                if (pythonLayers.colors === null) return undefined
+                const offset = index * 4
+                return [
+                  cellPointColors[offset] ?? 0,
+                  cellPointColors[offset + 1] ?? 0,
+                  cellPointColors[offset + 2] ?? 0,
+                  cellPointColors[offset + 3] ?? 0,
+                ]
+              },
+            }),
       }),
     [
       boundaryLayerGeometry,
       cellBoundaryFillEnabled,
       cellById,
+      cellIndexById,
+      cellPointColors,
       cellPointStyler,
       geneExpressionPointStyleIndex,
+      pythonLayers,
     ],
   )
   const overviewLayerOptions = useMemo<OverviewLayerOptions>(
@@ -1150,6 +1222,7 @@ function ViewerSurface({
       trueSizePoints,
       cellPointScale,
       cellPointPacking,
+      pythonHighlights,
     }),
     [
       cellBoundaryOpacity,
@@ -1174,6 +1247,7 @@ function ViewerSurface({
       fullViewCellPointCount,
       trueSizePoints,
       cellPointScale,
+      pythonHighlights,
       viewState.zoom,
       fittedViewZoom,
     ],
@@ -1650,7 +1724,16 @@ function ViewerSurface({
           return
         }
 
-        const cell = nearestOverviewCell(overviewCellIndex, cells, x, -deckY, reach)
+        const cell = nearestOverviewCell(
+          overviewCellIndex,
+          cells,
+          x,
+          -deckY,
+          reach,
+          pythonLayers.hidden === null
+            ? undefined
+            : (index) => pythonCellHidden(pythonLayers, index),
+        )
 
         if (cell !== null && onCellClick !== undefined) {
           event.preventDefault()
@@ -1683,6 +1766,7 @@ function ViewerSurface({
       onGridCellClick,
       onRoiComplete,
       overviewCellIndex,
+      pythonLayers,
       renderLodGridCells,
       roiMode,
       selectionHighlight,
@@ -1691,12 +1775,17 @@ function ViewerSurface({
     ],
   )
   const handleDeckClick = useCallback(
-    (info: {
+    (pickedInfo: {
       readonly object?: unknown
       readonly coordinate?: readonly number[]
       readonly x?: number
       readonly y?: number
     }) => {
+      // Cells Python hides are not picked (29-D7).
+      const info = pickedHiddenCell(pickedCellId(pickedInfo))
+        ? { ...pickedInfo, object: undefined }
+        : pickedInfo
+
       if (onPointPick !== undefined) {
         const [x, deckY] = info.coordinate ?? []
         if (x !== undefined && deckY !== undefined) onPointPick({ x, y: -deckY })
@@ -1785,11 +1874,15 @@ function ViewerSurface({
           ? []
           : overviewCellIndicesNear(overviewCellIndex, x, -deckY).flatMap((index) => {
               const cell = cells[index]
-              return cell === undefined ? [] : [cell]
+              return cell === undefined || pythonCellHidden(pythonLayers, index)
+                ? []
+                : [cell]
             })
       const coordinateCell = cellForDeckCoordinate(
         info.coordinate,
-        boundaries,
+        pythonLayers.hidden === null
+          ? boundaries
+          : boundaries.filter((boundary) => !pickedHiddenCell(boundary.id)),
         nearbyCells,
         cellById,
       )
@@ -1809,10 +1902,16 @@ function ViewerSurface({
       onPointPick,
       onTranscriptClick,
       overviewCellIndex,
+      pickedHiddenCell,
+      pythonLayers,
     ],
   )
   const handleDeckHover = useCallback(
-    (info: PickingInfo<unknown>) => {
+    (pickedInfo: PickingInfo<unknown>) => {
+      const info = pickedHiddenCell(pickedCellId(pickedInfo))
+        ? { ...pickedInfo, object: undefined }
+        : pickedInfo
+
       if (isTranscriptPointDatum(info.object)) {
         const detail = {
           transcript: info.object,
@@ -2007,6 +2106,7 @@ function ViewerSurface({
       magicLensActive,
       nucleusIdsByCell,
       onTranscriptHover,
+      pickedHiddenCell,
     ],
   )
   // Without it deck.gl gets onHover null, not no onHover: deck.gl merges
@@ -2542,6 +2642,7 @@ function ViewerSurface({
             sections={legendSections}
             onCategoryVisibilityChange={onLegendCategoryVisibilityChange}
             onShowMore={onLegendShowMore}
+            onPythonClear={onLegendPythonClear}
           />
           <LoadingIndicator tasks={loadingTasks} onCancel={onCancelLoadingTask} />
           {viewportMessage === null ? null : viewportMessage.kind === 'error' ? (
@@ -2622,4 +2723,21 @@ function ScaleBar({ model }: { readonly model: ScaleBarModel }) {
       />
     </div>
   )
+}
+
+// The cell a pick lands on: a cell point, a cell outline, or a nucleus's
+// cell.
+function pickedCellId(info: {
+  readonly layer?: { readonly id: string } | null
+  readonly object?: unknown
+}): string | undefined {
+  const nucleus = pickedNucleusBoundary(info)
+
+  if (nucleus !== null) {
+    return nucleus.cellId
+  }
+
+  return isOverviewCellDatum(info.object) || isCellBoundaryDatum(info.object)
+    ? info.object.id
+    : undefined
 }

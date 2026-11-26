@@ -4,6 +4,10 @@ import { LinkedViewChannel } from './linkedView'
 import { ScreenshotRunner } from '../features/screenshot/screenshotRunner'
 import { ViewerCore, type ViewerViewportDetail } from './ViewerCore'
 import { scaffoldDeckLayerCount } from './viewerCoreModel'
+import { PythonLayerStore } from '../features/python/pythonLayerStore'
+import { pythonLegendSection } from '../features/python/pythonLegend'
+import { EMPTY_PYTHON_OVERLAY, type PythonOverlay } from '../rendering/pythonOverlay'
+import type { PythonDrawCommand } from '../workers/pythonMessages'
 import type {
   CellBoundaryDatum,
   GridCellDatum,
@@ -1704,6 +1708,179 @@ describe('ViewerCore', () => {
       })
 
       expect(onCellBoundaryClick).toHaveBeenCalledWith(cellBoundary)
+    })
+  })
+
+  describe('Python layers (plan 29-D7, D8, D10)', () => {
+    const pythonCells: OverviewCellDatum[] = [
+      { ...overviewCellDatum(), id: 'a', position: [0, 0, 0] },
+      { ...overviewCellDatum(), id: 'b', position: [100, 0, 0] },
+      { ...overviewCellDatum(), id: 'c', position: [200, 0, 0] },
+    ]
+
+    function drawn(...commands: PythonDrawCommand[]): PythonOverlay {
+      const store = new PythonLayerStore()
+      for (const command of commands) store.apply(command, pythonCells.length)
+      store.flush()
+      return store.getSnapshot()
+    }
+
+    function pointAttribute(name: string): ArrayLike<number> {
+      const layer = deckGlMock.layers.find(
+        (candidate) =>
+          (candidate as { readonly id?: string }).id === 'cells-overview-scatter',
+      ) as
+        | {
+            readonly props: {
+              readonly data: {
+                readonly attributes: Record<string, { readonly value: ArrayLike<number> }>
+              }
+            }
+          }
+        | undefined
+      return layer?.props.data.attributes[name]?.value ?? []
+    }
+
+    const green: PythonDrawCommand = {
+      op: 'color',
+      name: 'Result',
+      rows: Uint32Array.of(1),
+      color: '#008000',
+      cmap: null,
+      values: null,
+      vmin: null,
+      vmax: null,
+      reverse: false,
+    }
+
+    it('colours its cells over the colour mode, fades the rest, and lists them', () => {
+      const overlay = drawn(green)
+      const onLegendPythonClear = vi.fn()
+      const section = pythonLegendSection(overlay, pythonCells.length, {
+        singular: 'cell',
+        plural: 'cells',
+      })
+
+      render(
+        <ViewerCore
+          cells={pythonCells}
+          pythonOverlay={overlay}
+          legendSections={section === null ? [] : [section]}
+          onLegendPythonClear={onLegendPythonClear}
+        />,
+      )
+
+      const fill = Array.from(pointAttribute('getFillColor'))
+      expect(fill.slice(4, 7)).toEqual([0, 128, 0])
+      expect(fill.slice(0, 3)).toEqual([215, 63, 124])
+      // The others keep a share of the opacity the coloured cell gets.
+      expect(fill[3]).toBeLessThan((fill[7] ?? 0) / 4)
+
+      fireEvent.click(screen.getByRole('button', { name: 'Clear Result' }))
+      expect(onLegendPythonClear).toHaveBeenCalledWith('color:Result')
+    })
+
+    it('never picks, hovers or opens the cells it hides', () => {
+      vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(rect)
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
+      const outline: CellBoundaryDatum = {
+        id: 'a',
+        polygon: [
+          [-5, -5, 0],
+          [5, -5, 0],
+          [5, 5, 0],
+          [-5, 5, 0],
+        ],
+        fillColor: [32, 102, 83, 34],
+        lineColor: [174, 241, 214, 230],
+      }
+      const onCellClick = vi.fn()
+
+      render(
+        <ViewerCore
+          cells={pythonCells}
+          boundaries={[outline]}
+          cellBoundaryHoverEnabled
+          pythonOverlay={drawn({ op: 'show', rows: Uint32Array.of(1, 2) })}
+          onCellClick={onCellClick}
+          initialViewStateOverride={{ target: [0, 0, 0], zoom: 4 }}
+        />,
+      )
+
+      // Not drawn: filtered out on the GPU, its outline transparent.
+      const filter = Array.from(pointAttribute('getFilterValue'))
+      expect([filter[1], filter[3], filter[5]]).toEqual([1, 0, 0])
+      expect(boundaryPathColorAt(0)).toEqual([0, 0, 0, 0])
+
+      act(() => {
+        deckGlMock.onHover?.({ object: outline, x: 18, y: 24 })
+      })
+      expect(screen.queryByText('Segmented')).toBeNull()
+
+      act(() => {
+        deckGlMock.onClick?.({ object: pythonCells[0], x: 100, y: 50 })
+        deckGlMock.onClick?.({ object: outline, x: 100, y: 50 })
+        deckGlMock.onClick?.({ coordinate: [0, 0, 0], x: 100, y: 50 })
+      })
+      fireEvent.keyDown(screen.getByRole('img', { name: 'Spatial viewer canvas area' }), {
+        key: 'Enter',
+      })
+      expect(onCellClick).not.toHaveBeenCalled()
+
+      act(() => {
+        deckGlMock.onClick?.({ object: pythonCells[1], x: 100, y: 50 })
+      })
+      expect(onCellClick).toHaveBeenCalledWith(pythonCells[1])
+    })
+
+    it('rings highlighted cells above the cells, leaving out hidden ones', () => {
+      render(
+        <ViewerCore
+          cells={pythonCells}
+          pythonOverlay={drawn(
+            {
+              op: 'highlight',
+              name: 'Ring',
+              rows: Uint32Array.of(0, 2),
+              color: '#ffffff',
+            },
+            { op: 'show', rows: Uint32Array.of(0, 1) },
+          )}
+        />,
+      )
+
+      const ids = deckGlMock.layers.map((layer) => (layer as { readonly id: string }).id)
+      expect(ids.indexOf('python-highlight:Ring')).toBeGreaterThan(
+        ids.indexOf('cells-overview-scatter'),
+      )
+      expect(screen.getByTestId('deck-layer-python-highlight:Ring')).toHaveAttribute(
+        'data-count',
+        '1',
+      )
+    })
+
+    it('does not draw again for an input that changed nothing drawn', () => {
+      const { rerender } = render(
+        <ViewerCore cells={pythonCells} pythonOverlay={EMPTY_PYTHON_OVERLAY} />,
+      )
+      const renderCountBefore = deckGlMock.renderCount
+
+      // others() alone changes nothing (29-D7).
+      rerender(
+        <ViewerCore
+          cells={pythonCells}
+          pythonOverlay={{
+            ...EMPTY_PYTHON_OVERLAY,
+            version: 2,
+            cellCount: 3,
+            others: 'hide',
+          }}
+        />,
+      )
+      expect(deckGlMock.renderCount).toBe(renderCountBefore)
+
+      rerender(<ViewerCore cells={pythonCells} pythonOverlay={drawn(green)} />)
+      expect(deckGlMock.renderCount).toBeGreaterThan(renderCountBefore)
     })
   })
 

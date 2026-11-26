@@ -3,6 +3,7 @@ import type { LinkedViewChannel } from './linkedView'
 import type { BBox, DataPoint } from '../data/coords'
 import type { RoiSelection } from '../data/roiSelection'
 import type { ViewerLegendSection } from './viewerLegendTypes'
+import type { PythonOverlay } from '../rendering/pythonOverlay'
 import type { ViewerSelectionHighlight } from './viewerSelectionModel'
 import type {
   AnnotationColorStyle,
@@ -90,6 +91,10 @@ export interface ViewerCoreProps {
   readonly onLegendCategoryVisibilityChange?: LegendCategoryVisibilityChange
   // The legend's "+N more in …", with the legend section's id.
   readonly onLegendShowMore?: (sectionId: string) => void
+  // The Python console's layers, by overview row of `cells` (plan 29-D7).
+  readonly pythonOverlay?: PythonOverlay
+  // A Python layer's clear button in the legend, with the item's id.
+  readonly onLegendPythonClear?: (itemId: string) => void
   readonly coordinateUnit?: ViewerCoordinateUnit
   readonly measurementEnabled?: boolean
   readonly measurementUnit?: ViewerCoordinateUnit

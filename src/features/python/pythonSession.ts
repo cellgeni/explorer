@@ -68,6 +68,9 @@ export interface PythonSessionOptions {
   readonly maxLogEntries?: number
   // How long Stop waits for KeyboardInterrupt before restarting.
   readonly interruptGraceMs?: number
+  // After each input ends, finished, failed or stopped: the canvas draws
+  // the input's layers once (29-D8).
+  readonly onRunEnd?: () => void
 }
 
 export type PythonRunOutcome = PythonRunStatus | 'stopped'
@@ -263,8 +266,10 @@ export class PythonSession {
     this.#readyResolve?.(false)
     this.#readyResolve = null
     this.#ready = null
+    const hadRuns = this.#runs.size > 0
     for (const run of this.#runs.values()) run.resolve(outcome)
     this.#runs.clear()
+    if (hadRuns) this.#options.onRunEnd?.()
     for (const resolve of this.#completions.values()) resolve({ from: 0, items: [] })
     this.#completions.clear()
   }
@@ -315,6 +320,7 @@ export class PythonSession {
         if (message.display !== null) this.#append('result', message.display)
         if (message.error !== null) this.#append('error', message.error)
         if (this.#runs.size === 0) this.#set({ status: 'ready' })
+        this.#options.onRunEnd?.()
         run?.resolve(message.status)
         return
       }

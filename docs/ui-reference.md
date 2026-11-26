@@ -1303,9 +1303,13 @@ Chrome or Edge and runs nothing.
   dataset or its cells change. Gene reads keep Plots' budget: above 32 MiB
   `cells.gene` raises `ReadTooLarge` until called with `allow_large=True`, and
   above 256 MiB it refuses.
-- `color`, `highlight`, `show` and `others` check their arguments but do not
-  draw yet: they raise an error saying drawing comes in the console's next
-  version (plan 29, M2).
+- `color`, `highlight`, `show` and `others` draw layers on the canvas
+  ([Python API](python-api.md#drawing)), once per input when it ends. The
+  legend lists them first, under _Python_, each with a swatch or ramp, its
+  count and a `Clear` button (`×`, 24 px); `show()` adds a "Shown: n of m"
+  row whose button shows every cell again. A line under the list says whether
+  other cells are faded or hidden. Hidden cells and their outlines are not
+  drawn, hovered or picked, by pointer or `Enter`.
 - Nothing about Python is in the link but `panel=python`.
 
 ## Canvas
@@ -1396,6 +1400,11 @@ above the loading indicator, and explains what the canvas shows. The `Legend`
 header collapses it, and Settings › `Show legend` hides it. It has a section
 for each of these, scales first and category lists last:
 
+- `Python`, first, while the [Python console](#python-panel) has drawn
+  layers: each layer by name with a swatch, a ring for a highlight or a ramp
+  with its range, its cell count and a `Clear` button; "Shown: n of m" with a
+  button that shows every cell again; and whether other cells are faded or
+  hidden.
 - `Cell color` Gene expression: the genes (up to three names, then "+n"),
   "Expression per cell" or "{Sum|Mean|Mean z-score} of n genes per cell", and
   the gene scale from 0 to its maximum. Visium says spot, and Visium HD bin. A

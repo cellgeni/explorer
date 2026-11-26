@@ -1,10 +1,12 @@
 import { memo, useState } from 'react'
 import { SHOW_ONLY_HINT, showOnlyClick } from '../utils/altClick'
-import { ChevronDownIcon } from './ui'
+import { ChevronDownIcon, CloseIcon } from './ui'
 import {
   LEGEND_CATEGORY_LIMIT,
   type CategoryLegendSection,
   type ContinuousLegendSection,
+  type PythonLegendItem,
+  type PythonLegendSection,
   type ViewerLegendSection,
 } from './viewerLegendTypes'
 
@@ -22,6 +24,8 @@ interface ViewerLegendProps {
   readonly onCategoryVisibilityChange?: LegendCategoryVisibilityChange | undefined
   // "+N more in …" opens where the rest are listed, with the section's id.
   readonly onShowMore?: ((sectionId: string) => void) | undefined
+  // A Python layer's clear button, with the item's id.
+  readonly onPythonClear?: ((itemId: string) => void) | undefined
 }
 
 // The canvas legend in the bottom-left stack. It sits next to the deck.gl
@@ -31,6 +35,7 @@ export const ViewerLegend = memo(function ViewerLegend({
   sections,
   onCategoryVisibilityChange,
   onShowMore,
+  onPythonClear,
 }: ViewerLegendProps) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -57,6 +62,8 @@ export const ViewerLegend = memo(function ViewerLegend({
           {sections.map((section) =>
             section.kind === 'continuous' ? (
               <ContinuousLegend key={section.id} section={section} />
+            ) : section.kind === 'python' ? (
+              <PythonLegend key={section.id} section={section} onClear={onPythonClear} />
             ) : (
               <CategoryLegend
                 key={section.id}
@@ -165,5 +172,98 @@ function CategoryLegend({
         </button>
       )}
     </div>
+  )
+}
+
+function PythonLegend({
+  section,
+  onClear,
+}: {
+  readonly section: PythonLegendSection
+  readonly onClear?: ((itemId: string) => void) | undefined
+}) {
+  return (
+    <div className="viewer-legend-section">
+      <p className="viewer-legend-title">{section.title}</p>
+      <ul className="viewer-legend-python">
+        {section.items.map((item) => (
+          <li key={item.id}>
+            <PythonLegendRow item={item} noun={section.noun} onClear={onClear} />
+          </li>
+        ))}
+      </ul>
+      {section.detail === undefined ? null : (
+        <p className="viewer-legend-detail">{section.detail}</p>
+      )}
+    </div>
+  )
+}
+
+function PythonLegendRow({
+  item,
+  noun,
+  onClear,
+}: {
+  readonly item: PythonLegendItem
+  readonly noun: PythonLegendSection['noun']
+  readonly onClear?: ((itemId: string) => void) | undefined
+}) {
+  const { swatch } = item
+  const count = `${item.count.toLocaleString()} ${item.count === 1 ? noun.singular : noun.plural}`
+  const what = swatch.kind === 'shown' ? 'show()' : item.label
+
+  return (
+    <>
+      <span className="viewer-legend-python-row" title={item.label}>
+        {swatch.kind === 'ramp' ? null : (
+          <span
+            className={`viewer-legend-swatch${swatch.kind === 'ring' ? ' is-ring' : ''}${swatch.kind === 'shown' ? ' is-shown' : ''}`}
+            style={
+              swatch.kind === 'color'
+                ? { backgroundColor: swatch.color }
+                : swatch.kind === 'ring'
+                  ? { borderColor: swatch.color }
+                  : undefined
+            }
+            aria-hidden="true"
+          />
+        )}
+        <span className="viewer-legend-label">{item.label}</span>
+        {swatch.kind === 'shown' ? null : (
+          <span className="viewer-legend-count" aria-label={count}>
+            {item.count.toLocaleString()}
+          </span>
+        )}
+        {onClear === undefined ? null : (
+          <button
+            type="button"
+            className="viewer-legend-clear"
+            title={swatch.kind === 'shown' ? 'Show every cell again' : `Clear ${what}`}
+            aria-label={
+              swatch.kind === 'shown' ? 'Show every cell again' : `Clear ${what}`
+            }
+            onClick={() => {
+              onClear(item.id)
+            }}
+          >
+            <CloseIcon />
+          </button>
+        )}
+      </span>
+      {swatch.kind === 'ramp' ? (
+        <>
+          <span
+            className="viewer-legend-gradient"
+            style={{ backgroundImage: swatch.gradient }}
+            role="img"
+            aria-label={`${item.label}: from ${swatch.min} to ${swatch.max}`}
+          />
+          <span className="viewer-legend-range" aria-hidden="true">
+            <span>{swatch.min}</span>
+            <span>{swatch.max}</span>
+          </span>
+        </>
+      ) : null}
+    </>
   )
 }

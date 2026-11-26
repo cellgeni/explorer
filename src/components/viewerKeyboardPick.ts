@@ -26,6 +26,8 @@ export function nearestOverviewCell(
   x: number,
   y: number,
   reach: number,
+  // Cells not drawn, which Enter skips.
+  hidden?: (cellIndex: number) => boolean,
 ): OverviewCellDatum | null {
   const radius = Math.max(reach, index.maxRadius)
   let nearest: OverviewCellDatum | null = null
@@ -33,7 +35,7 @@ export function nearestOverviewCell(
 
   for (const cellIndex of overviewCellIndicesNear(index, x, y, radius)) {
     const cell = cells[cellIndex]
-    if (cell === undefined) continue
+    if (cell === undefined || hidden?.(cellIndex) === true) continue
 
     const distance = Math.hypot(
       (index.xs[cellIndex] ?? 0) - x,
