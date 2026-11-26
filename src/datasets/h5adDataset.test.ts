@@ -11,10 +11,16 @@ import type { AnnDataMemoryTable } from './annDataMemory'
 import { loadDatasetCollection } from './annDataSectionCollection'
 import {
   AnnDataH5adDataset,
+  type AnnDataAttachedImage,
   type AnnDataH5adDatasetOptions,
   type AnnDataLabelsOpener,
   uniqueSlugIds,
 } from './h5adDataset'
+import { SpatialDataShapesBuilder } from './spatialDataShapes'
+import {
+  readVectorSegmentation,
+  type ReadVectorSegmentationOptions,
+} from './vectorSegmentation'
 import type { ImagePyramidLoader } from '../data/imagePyramid'
 import {
   ANNDATA_ZARR_FIXTURE_ORIGIN,
@@ -877,6 +883,237 @@ describe('AnnDataH5adDataset', () => {
     expect(openLabels).not.toHaveBeenCalled()
     expect((await unlabelled.meta()).capabilities.cellBoundaries).toBe(false)
     await expect(unlabelled.elements(bbox)).resolves.toEqual({ elements: [] })
+  })
+
+  it('outlines cells from attached polygons matched by the column holding their IDs', async () => {
+    // A 400 x 200 pixel image at 0.25 µm per pixel: 100 x 50 µm.
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      imageWidth: 400,
+      imageHeight: 200,
+      units: { micrometersPerPixel: micrometers(0.25) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    const square = (x: number, size = 4) => [x, 0, x + size, 0, x + size, size, x, size]
+    const readLabelPolygons = vi.fn(async (options: ReadVectorSegmentationOptions) => {
+      const builder = new SpatialDataShapesBuilder()
+      const scale = options.micrometersPerUnit
+      const affine = { a: scale, b: 0, c: 0, d: 0, e: scale, f: 0 }
+      builder.addPolygon('bbbb-1', square(0), affine)
+      // A smaller second polygon of the same cell is not drawn.
+      builder.addPolygon('bbbb-1', square(0, 1), affine)
+      builder.addPolygon('dddd-1', square(20), affine)
+      // No cell has this ID.
+      builder.addPolygon('zzzz-1', square(40), affine)
+      // Beyond the view.
+      builder.addPolygon('aaaa-1', square(90), affine)
+      return builder.build()
+    })
+    const onProgress = vi.fn()
+    const dataset = (image: Partial<AnnDataAttachedImage>) =>
+      createTinyH5ad('dense', {
+        obsNames: ['1', '2', '3', '4'],
+        extraObs: { barcode: ['aaaa-1', 'bbbb-1', 'cccc-1', 'dddd-1'] },
+      }).then(
+        (bytes) =>
+          new AnnDataH5adDataset({
+            url: 'https://example.test/tiny.h5ad',
+            fetcher: h5adFetcher(bytes),
+            onProgress,
+            image: {
+              url: loader.url,
+              coordinates: 'image-pixels',
+              labelsUrl: 'https://example.test/outs/cell_boundaries.parquet',
+              ...image,
+            },
+            openImage: vi.fn().mockResolvedValue(loader),
+            readLabelPolygons,
+          }),
+      )
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(50),
+      maxY: micrometers(50),
+    }
+    const inMicrometres = await dataset({ labelsCoordinates: 'micrometers' })
+
+    // Boundaries are offered before the polygons are read.
+    expect((await inMicrometres.meta()).capabilities.cellBoundaries).toBe(true)
+    expect(readLabelPolygons).not.toHaveBeenCalled()
+
+    const { elements } = await inMicrometres.elements(bbox)
+
+    // Matched by obs barcode, without naming it; elements are cells.
+    expect(elements.map((element) => element.id)).toEqual(['2', '4'])
+    expect(elements[1]?.geometry).toEqual({
+      kind: 'polygon',
+      rings: [
+        [
+          { x: micrometers(20), y: micrometers(0) },
+          { x: micrometers(24), y: micrometers(0) },
+          { x: micrometers(24), y: micrometers(4) },
+          { x: micrometers(20), y: micrometers(4) },
+        ],
+      ],
+    })
+    expect(readLabelPolygons).toHaveBeenCalledWith(
+      expect.objectContaining({
+        file: { kind: 'url', url: 'https://example.test/outs/cell_boundaries.parquet' },
+        format: 'parquet',
+        micrometersPerUnit: 1,
+      }),
+    )
+    expect(onProgress).toHaveBeenCalledWith(
+      'Attached labels: 3 of 5 polygons matched to cells by obs column barcode',
+    )
+    // Unchanged cells keep their elements, and the file is read once.
+    expect((await inMicrometres.elements(bbox)).elements[0]).toBe(elements[0])
+    expect(readLabelPolygons).toHaveBeenCalledTimes(1)
+
+    // By default the polygons are in the cells' units, here image pixels.
+    const inPixels = await dataset({ labelColumn: 'barcode' })
+    const scaled = await inPixels.elements(bbox)
+
+    expect(readLabelPolygons).toHaveBeenLastCalledWith(
+      expect.objectContaining({ micrometersPerUnit: 0.25, yMicrometersPerUnit: 0.25 }),
+    )
+    expect(scaled.elements.map((element) => element.id)).toEqual(['2', '4', '1'])
+    expect(onProgress).toHaveBeenCalledWith(
+      'Attached label polygons cover only the top-left part of the image; if they look shrunk, their coordinates may be micrometres: set labelsCoordinates to "micrometers"',
+    )
+  })
+
+  it('matches attached polygons by obs names, and reports polygons that match no cells', async () => {
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      imageWidth: 100,
+      imageHeight: 100,
+      units: { micrometersPerPixel: micrometers(1) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    // GeoJSON read by the imported-segmentation reader itself.
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [3, 4, 9].map((label) => ({
+        type: 'Feature',
+        properties: { label },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [
+            [
+              [label, 0],
+              [label + 1, 0],
+              [label + 1, 1],
+              [label, 0],
+            ],
+          ],
+        },
+      })),
+    }
+    const readLabelPolygons = (options: ReadVectorSegmentationOptions) =>
+      readVectorSegmentation({
+        ...options,
+        fetcher: (async () => Response.json(geojson)) as typeof fetch,
+      })
+    const dataset = async (
+      fixture: TinyH5adOptions,
+      image: Partial<AnnDataAttachedImage> = {},
+    ) =>
+      new AnnDataH5adDataset({
+        url: 'https://example.test/tiny.h5ad',
+        fetcher: h5adFetcher(await createTinyH5ad('dense', fixture)),
+        image: {
+          url: loader.url,
+          coordinates: 'micrometers',
+          labelsUrl: 'https://example.test/cells.json',
+          ...image,
+        },
+        openImage: vi.fn().mockResolvedValue(loader),
+        readLabelPolygons,
+      })
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(100),
+      maxY: micrometers(100),
+    }
+
+    expect(
+      (
+        await (await dataset({ obsNames: ['1', '2', '3', '4'] })).elements(bbox)
+      ).elements.map((element) => element.id),
+    ).toEqual(['3', '4'])
+    await expect(
+      (await dataset({ obsNames: ['a', 'b', 'c', 'd'] })).elements(bbox),
+    ).rejects.toThrow(
+      'The attached labels match no cells: neither the obs names nor an obs column named like labels or IDs holds the polygon IDs, such as "3"; name the obs column that does in labelColumn.',
+    )
+    await expect(
+      (
+        await dataset(
+          { extraObs: { xenium_id: ['a', 'b', 'c', 'd'] } },
+          { labelColumn: 'xenium_id' },
+        )
+      ).elements(bbox),
+    ).rejects.toThrow(
+      'The attached labels match no cells: obs column "xenium_id" holds none of the polygon IDs, such as "3".',
+    )
+    await expect(
+      (await dataset({}, { labelColumn: 'cell_labels' })).elements(bbox),
+    ).rejects.toThrow(
+      'The attached labels match no cells: obs has no column "cell_labels".',
+    )
+  })
+
+  it('opens attached label masks by format: TIFF, else OME-Zarr', async () => {
+    const loader = {
+      url: 'https://example.test/section-raw.zarr',
+      imageWidth: 80,
+      imageHeight: 80,
+      units: { micrometersPerPixel: micrometers(1) },
+      channels: [],
+    } as unknown as ImagePyramidLoader
+    const openLabels = vi.fn(async () => ({
+      levels: [{ width: 80, height: 80 }],
+      outlines: async () => [{ label: 2, ring: new Float64Array([0, 0, 1, 0, 1, 1]) }],
+    })) as unknown as AnnDataLabelsOpener
+    const bbox = {
+      minX: micrometers(0),
+      minY: micrometers(0),
+      maxX: micrometers(80),
+      maxY: micrometers(80),
+    }
+    const bytes = await createTinyH5ad('dense', { obsNames: ['1', '2', '3', '4'] })
+
+    for (const image of [
+      { labelsUrl: 'https://example.test/masks/section_cp_masks.tif' },
+      { labelsUrl: 'https://example.test/section-label.zarr' },
+      { labelsUrl: 'https://example.test/section-label.zarr.zip' },
+      {
+        labelsUrl: 'https://example.test/masks?id=7',
+        labelsFormat: 'label-tiff' as const,
+      },
+    ]) {
+      const dataset = new AnnDataH5adDataset({
+        url: 'https://example.test/tiny.h5ad',
+        fetcher: h5adFetcher(bytes),
+        image: { url: loader.url, coordinates: 'micrometers', ...image },
+        openImage: vi.fn().mockResolvedValue(loader),
+        openLabels,
+      })
+
+      expect(
+        (await dataset.elements(bbox)).elements.map((element) => element.id),
+      ).toEqual(['2'])
+    }
+
+    expect(vi.mocked(openLabels).mock.calls).toEqual([
+      ['https://example.test/masks/section_cp_masks.tif', 'label-tiff'],
+      ['https://example.test/section-label.zarr', 'label-zarr'],
+      ['https://example.test/section-label.zarr.zip', 'label-zarr'],
+      ['https://example.test/masks?id=7', 'label-tiff'],
+    ])
   })
 
   it('has no image without an attached one', async () => {

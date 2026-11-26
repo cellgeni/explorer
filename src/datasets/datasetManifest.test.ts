@@ -339,6 +339,22 @@ describe('parseDatasetManifest', () => {
         }),
       ),
     ).toMatchObject({ coordinates: 'micrometers' })
+    // Polygons, with their format and units.
+    const polygons = parse({
+      version: 1,
+      platform: 'h5ad',
+      files: { h5ad: 'a.h5ad', image: 'a.ome.tif', labels: 'cells' },
+      options: { labelsFormat: 'parquet', labelsCoordinates: 'micrometers' },
+    })
+    expect(polygons).toHaveProperty('options', {
+      labelsFormat: 'parquet',
+      labelsCoordinates: 'micrometers',
+    })
+    expect(manifestImageAttachment(polygons)).toMatchObject({
+      labels: { path: 'cells' },
+      labelsFormat: 'parquet',
+      labelsCoordinates: 'micrometers',
+    })
     expect(
       manifestImageAttachment(
         parse({ version: 1, platform: 'h5ad', files: { h5ad: 'a.h5ad' } }),
@@ -363,6 +379,14 @@ describe('parseDatasetManifest', () => {
     )
     expect(h5ad({ image: 'a.zarr' }, { labelColumn: 'cell_labels' })).toBe(
       'explorer.json: "options.labelColumn" needs "files.labels".',
+    )
+    expect(h5ad({ image: 'a.zarr' }, { labelsFormat: 'parquet' })).toBe(
+      'explorer.json: "options.labelsFormat" needs "files.labels".',
+    )
+    expect(
+      h5ad({ image: 'a.zarr', labels: 'a.parquet' }, { labelsCoordinates: 'pixels' }),
+    ).toBe(
+      'explorer.json: "options.labelsCoordinates" must be one of "micrometers", "image-pixels".',
     )
     expect(h5ad({ image: 'a.zarr' }, { table: 'x' })).toContain(
       'unknown field "options.table"',

@@ -852,6 +852,36 @@ describe('spatial dataset detection', () => {
       // A later collection listing the dataset without an image replaces it.
       registerCollectionImages(collection())
       await expect(cachedSpatialDataset(url)).resolves.toBe(plain)
+
+      // Polygon labels bring their format and units, and are a different
+      // dataset.
+      registerCollectionImages(
+        parseDatasetCollection(
+          {
+            version: 1,
+            datasets: [
+              {
+                dataset: 'a.h5ad',
+                image: 'a-raw.zarr',
+                coordinates: 'image-pixels',
+                labels: 'cells',
+                labelsFormat: 'parquet',
+                labelsCoordinates: 'micrometers',
+              },
+            ],
+          },
+          'https://example.test/sections/collection.json',
+        ),
+      )
+      const withPolygons = await cachedSpatialDataset(url)
+      expect(withPolygons).not.toBe(plain)
+      expect((withPolygons as AnnDataH5adDataset).attachedImage).toEqual({
+        url: 'https://example.test/sections/a-raw.zarr',
+        coordinates: 'image-pixels',
+        labelsUrl: 'https://example.test/sections/cells',
+        labelsFormat: 'parquet',
+        labelsCoordinates: 'micrometers',
+      })
     } finally {
       clearDatasetImages()
       vi.unstubAllGlobals()

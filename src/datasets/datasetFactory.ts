@@ -1770,6 +1770,12 @@ export async function createSpatialDataset(
               url: image.url,
               coordinates: image.coordinates,
               ...(image.labels === undefined ? {} : { labelsUrl: image.labels.url }),
+              ...(image.labelsFormat === undefined
+                ? {}
+                : { labelsFormat: image.labelsFormat }),
+              ...(image.labelsCoordinates === undefined
+                ? {}
+                : { labelsCoordinates: image.labelsCoordinates }),
               ...(image.labelColumn === undefined
                 ? {}
                 : { labelColumn: image.labelColumn }),
@@ -2346,5 +2352,5 @@ function spatialDatasetCacheKey(
   spatialDataSelection: SpatialDataSelection | undefined,
   image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
+  return `${baseUrl}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelsFormat ?? ''} ${image.labelsCoordinates ?? ''} ${image.labelColumn ?? ''}`}`
 }
