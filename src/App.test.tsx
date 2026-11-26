@@ -149,6 +149,8 @@ describe('App', () => {
     vi.stubGlobal('fetch', offlineFetch)
   })
 
+  // About 1.4 s alone, but over 5 s on CI's runner beside other test files:
+  // the file's first render, and many role queries over the whole shell.
   it('renders the shell with each control in its place', () => {
     useViewerStore.setState(initialViewerState)
     render(<TestApp />)
@@ -276,7 +278,7 @@ describe('App', () => {
       'aria-disabled',
       'true',
     )
-  })
+  }, 15_000)
 
   it('leaves windows a Visium HD dataset lacks out of its link (EXP-277)', async () => {
     const visiumUrl = 'https://example.test/visium-hd'
@@ -8170,6 +8172,7 @@ ${cd16Negative},CD16- NK cells`,
     }
   })
 
+  // About 1.5 s alone, but over 5 s on CI's runner beside other test files.
   it('lets the user paste, score, save, and reapply gene sets', async () => {
     const loadDatasetOverview = vi.fn(async () => [
       {
@@ -8237,7 +8240,7 @@ ${cd16Negative},CD16- NK cells`,
     // Undo (15.3-C) puts the set back.
     fireEvent.click(screen.getByRole('button', { name: 'Undo' }))
     expect(screen.getByLabelText('Saved gene sets')).toHaveTextContent('Interneuron set')
-  })
+  }, 15_000)
 
   it("restores a link's saved gene sets with its dataset", async () => {
     window.history.replaceState(

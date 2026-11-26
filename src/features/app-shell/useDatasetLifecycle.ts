@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   type Dispatch,
   type FormEvent,
@@ -2482,7 +2483,9 @@ export function useDatasetLifecycle({
     }
   }
 
-  useEffect(() => {
+  // In the commit, so a control the commit shows starts a load that knows
+  // what is open: a passive effect can run after a click on that control.
+  useLayoutEffect(() => {
     startDatasetLoadRef.current = startDatasetLoad
   })
 
