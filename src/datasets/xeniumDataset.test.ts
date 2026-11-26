@@ -178,11 +178,14 @@ describe('XeniumDataset', () => {
       micrometers(-150),
       micrometers(160),
     ])
-    // DuckDB gathers each cell's vertices in file order, a row per cell.
+    // DuckDB gathers each cell's vertices in file order, a row per cell,
+    // without an ordered aggregate (see queryXeniumBoundaryRings).
     expect(conn.preparedSql[0]).toContain(
-      'list(b.vertex_y ORDER BY b.file_row_number) AS y',
+      "list_sort(list({'r': b.file_row_number, 'x': b.vertex_x, 'y': b.vertex_y}))",
     )
-    expect(conn.preparedSql[0]).toContain('GROUP BY b.cell_id\nORDER BY b.cell_id\n')
+    expect(conn.preparedSql[0]).toContain('list_transform(v, lambda p: p.y) AS y')
+    expect(conn.preparedSql[0]).not.toContain('ORDER BY b.file_row_number')
+    expect(conn.preparedSql[0]).toContain('GROUP BY b.cell_id\n)\nORDER BY cell_id\n')
     // FLOAT vertex bounds are cast so DuckDB can prune row groups; DOUBLE
     // centroid bounds are not.
     expect(conn.preparedSql[0]).toContain(
@@ -320,24 +323,23 @@ describe('XeniumDataset', () => {
       'https://example.test/xenium/nucleus_boundaries.parquet',
       { label: 'nucleus_boundaries.parquet' },
     )
+    // Nuclei are picked by their own vertices: cells.parquet is not read.
     expect(conn.statements[0]?.params).toEqual([
-      'https://example.test/xenium/cells.parquet',
-      micrometers(-75),
-      micrometers(85),
-      micrometers(-75),
-      micrometers(85),
       'https://example.test/xenium/nucleus_boundaries.parquet',
       micrometers(-150),
       micrometers(160),
       micrometers(-150),
       micrometers(160),
+      micrometers(-75),
+      micrometers(85),
+      micrometers(-75),
+      micrometers(85),
     ])
     expect(conn.preparedSql[0]).toContain('SELECT b.cell_id, b.label_id,')
-    expect(conn.preparedSql[0]).toContain(
-      'list(b.vertex_x ORDER BY b.file_row_number) AS x',
-    )
+    expect(conn.preparedSql[0]).toContain('list_transform(v, lambda p: p.x) AS x')
     expect(conn.preparedSql[0]).toContain('GROUP BY b.cell_id, b.label_id')
-    expect(conn.preparedSql[0]).toContain('ORDER BY b.cell_id, b.label_id\n')
+    expect(conn.preparedSql[0]).toContain('HAVING avg(b.vertex_x) BETWEEN ? AND ?')
+    expect(conn.preparedSql[0]).toContain('ORDER BY cell_id, label_id\n')
     expect(conn.preparedSql[0]).toContain(
       'b.vertex_x BETWEEN CAST(? AS FLOAT) AND CAST(? AS FLOAT)',
     )
