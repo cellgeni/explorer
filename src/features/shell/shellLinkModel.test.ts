@@ -74,6 +74,7 @@ describe('panels in the link', () => {
       embeddingOpen: false,
       plotsOpen: false,
       queryOpen: false,
+      pythonOpen: false,
     })
     // The drawer alone: every section closed (15.5-B).
     expect(panelsFromLink({ panels: ['info'] })).toEqual({
@@ -82,6 +83,7 @@ describe('panels in the link', () => {
       embeddingOpen: false,
       plotsOpen: false,
       queryOpen: false,
+      pythonOpen: false,
     })
     expect(panelsFromLink({ panels: [] }).expanded).toEqual([])
   })
@@ -100,6 +102,7 @@ describe('panels in the link', () => {
           embeddingOpen: false,
           plotsOpen: false,
           queryOpen: false,
+          pythonOpen: false,
         },
         cells,
       ),
@@ -112,6 +115,7 @@ describe('panels in the link', () => {
           embeddingOpen: true,
           plotsOpen: false,
           queryOpen: false,
+          pythonOpen: false,
         },
         cells,
       ),
@@ -124,6 +128,7 @@ describe('panels in the link', () => {
           embeddingOpen: false,
           plotsOpen: true,
           queryOpen: true,
+          pythonOpen: false,
         },
         cells,
       ),
@@ -136,6 +141,7 @@ describe('panels in the link', () => {
           embeddingOpen: false,
           plotsOpen: false,
           queryOpen: false,
+          pythonOpen: false,
         },
         cells,
       ),
@@ -148,6 +154,7 @@ describe('panels in the link', () => {
       embeddingOpen: false,
       plotsOpen: false,
       queryOpen: false,
+      pythonOpen: false,
     }
 
     expect(panelsForLink({ ...closed, expanded: ['cells'] }, ['cells'])).toBeUndefined()
@@ -167,6 +174,7 @@ describe('panels in the link', () => {
       embedding: true,
       plots: false,
       query: false,
+      python: false,
     }
     const panels = {
       expanded: ['cells', 'transcripts'] as const,
@@ -174,6 +182,7 @@ describe('panels in the link', () => {
       embeddingOpen: false,
       plotsOpen: true,
       queryOpen: true,
+      pythonOpen: false,
     }
 
     expect(visiumHd.sections).toEqual(['image', 'cells', 'annotations'])
@@ -188,6 +197,7 @@ describe('panels in the link', () => {
       ...panels,
       plotsOpen: false,
       queryOpen: false,
+      pythonOpen: false,
     })
     const withoutWindows = { ...panels, plotsOpen: false, queryOpen: false }
     expect(closeUnavailableWindows(withoutWindows, visiumHd)).toBe(withoutWindows)
@@ -201,6 +211,7 @@ describe('panels in the link', () => {
         embeddingOpen: false,
         plotsOpen: false,
         queryOpen: false,
+        pythonOpen: false,
       },
       {
         expanded: [],
@@ -208,6 +219,7 @@ describe('panels in the link', () => {
         embeddingOpen: false,
         plotsOpen: false,
         queryOpen: false,
+        pythonOpen: false,
       },
     ]) {
       const hash = formatShareableState({
@@ -225,17 +237,27 @@ describe('panels in the link', () => {
               embeddingOpen: false,
               plotsOpen: false,
               queryOpen: false,
+              pythonOpen: false,
             },
             ['cells'],
           ) ?? [],
       }),
     ).toBe('#xv=2&panel=info')
+    expect(panelsFromLink(parseShareableState('#xv=2&panel=python')).pythonOpen).toBe(
+      true,
+    )
+    expect(
+      panelsForLink({ ...DEFAULT_SHELL_PANELS, expanded: [], pythonOpen: true }, [
+        'cells',
+      ]),
+    ).toEqual(['python'])
     expect(panelsFromLink(parseShareableState('#xv=2&panel='))).toEqual({
       expanded: [],
       infoOpen: false,
       embeddingOpen: false,
       plotsOpen: false,
       queryOpen: false,
+      pythonOpen: false,
     })
   })
 })

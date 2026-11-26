@@ -6,10 +6,16 @@ import { TOOL_ORDER } from './shortcuts'
 
 // The shell's part of a share link (plan 15.2-H, D7):
 // `panel=` lists the open layer sections, `info` (the info drawer),
-// `embedding`, `plots` (plan 22-D8) and `query` (23-D9); `tool=` the active tool; `card=` a card to restore; `hidden=`
+// `embedding`, `plots` (plan 22-D8), `query` (23-D9) and `python` (29-D11); `tool=` the active tool; `card=` a card to restore; `hidden=`
 // the hidden layers. Each is left out at its default.
 
-export type ShellPanelId = LayerSectionId | 'info' | 'embedding' | 'plots' | 'query'
+export type ShellPanelId =
+  | LayerSectionId
+  | 'info'
+  | 'embedding'
+  | 'plots'
+  | 'query'
+  | 'python'
 
 const LAYER_SECTION_IDS: readonly LayerSectionId[] = [
   'image',
@@ -31,6 +37,7 @@ export interface ShellPanelState {
   readonly embeddingOpen: boolean
   readonly plotsOpen: boolean
   readonly queryOpen: boolean
+  readonly pythonOpen: boolean
 }
 
 export const DEFAULT_SHELL_PANELS: ShellPanelState = {
@@ -39,6 +46,7 @@ export const DEFAULT_SHELL_PANELS: ShellPanelState = {
   embeddingOpen: false,
   plotsOpen: false,
   queryOpen: false,
+  pythonOpen: false,
 }
 
 // The sections open until the user opens or closes one: Cells, or Image
@@ -120,6 +128,7 @@ export function panelsFromLink(state: ShareableState): ShellPanelState {
     embeddingOpen: state.panels.includes('embedding'),
     plotsOpen: state.panels.includes('plots'),
     queryOpen: state.panels.includes('query'),
+    pythonOpen: state.panels.includes('python'),
   }
 }
 
@@ -129,6 +138,8 @@ export interface ShellPanelAvailability {
   readonly embedding: boolean
   readonly plots: boolean
   readonly query: boolean
+  // The Python console (29-D11): where Cell Query is, in a browser with JSPI.
+  readonly python: boolean
 }
 
 // The layer sections a platform has, as the layer panel lists them.
@@ -155,12 +166,14 @@ export function closeUnavailableWindows(
 ): ShellPanelState {
   return (panels.embeddingOpen && !available.embedding) ||
     (panels.plotsOpen && !available.plots) ||
-    (panels.queryOpen && !available.query)
+    (panels.queryOpen && !available.query) ||
+    (panels.pythonOpen && !available.python)
     ? {
         ...panels,
         embeddingOpen: panels.embeddingOpen && available.embedding,
         plotsOpen: panels.plotsOpen && available.plots,
         queryOpen: panels.queryOpen && available.query,
+        pythonOpen: panels.pythonOpen && available.python,
       }
     : panels
 }
@@ -179,6 +192,7 @@ export function panelsForLink(
   const embeddingOpen = panels.embeddingOpen && (available?.embedding ?? true)
   const plotsOpen = panels.plotsOpen && (available?.plots ?? true)
   const queryOpen = panels.queryOpen && (available?.query ?? true)
+  const pythonOpen = panels.pythonOpen && (available?.python ?? true)
 
   if (
     (panels.expanded === null ||
@@ -187,7 +201,8 @@ export function panelsForLink(
     !panels.infoOpen &&
     !embeddingOpen &&
     !plotsOpen &&
-    !queryOpen
+    !queryOpen &&
+    !pythonOpen
   ) {
     return undefined
   }
@@ -198,6 +213,7 @@ export function panelsForLink(
     ...(embeddingOpen ? (['embedding'] as const) : []),
     ...(plotsOpen ? (['plots'] as const) : []),
     ...(queryOpen ? (['query'] as const) : []),
+    ...(pythonOpen ? (['python'] as const) : []),
   ]
 }
 

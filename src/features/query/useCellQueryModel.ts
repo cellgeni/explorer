@@ -238,6 +238,9 @@ export interface CellQueryModelInput {
   readonly appendDebugEvent: AppendDebugEvent
   readonly createSession?: () => CellQuerySession
   readonly createImageMeasurements?: () => CellImageMeasurements
+  // Shared with the Python console (plan 29), which reads the same columns;
+  // the model makes its own without one.
+  readonly columnReader?: CellColumnReader
 }
 
 interface SessionEntry {
@@ -297,6 +300,7 @@ export function useCellQueryModel({
   appendDebugEvent,
   createSession = createCellQuerySession,
   createImageMeasurements = createCellImageMeasurements,
+  columnReader: sharedColumnReader,
 }: CellQueryModelInput): CellQueryModel {
   const active = open && available && datasetReady && datasetUrl !== null
   const [extraColumnIds, setExtraColumnIds] = useState<readonly string[]>([])
@@ -493,14 +497,18 @@ export function useCellQueryModel({
 
   // Values read on demand: dataset sets and metadata tracks by the column
   // reader, kept for the dataset, and the saved selections' cells.
-  const [columnReader] = useState(
-    () =>
+  // A reader of its own is stopped with the model; a shared one is not.
+  const [readerHeld] = useState(() => ({
+    reader:
+      sharedColumnReader ??
       new CellColumnReader({
         loadSetAnnotations,
         loadMetadataTrackValues,
         appendDebugEvent,
       }),
-  )
+    own: sharedColumnReader === undefined,
+  }))
+  const columnReader = readerHeld.reader
   const columnLoads = useSyncExternalStore(
     columnReader.subscribe,
     columnReader.getSnapshot,
@@ -522,9 +530,9 @@ export function useCellQueryModel({
   }, [active, columnNeeds, columnReader, datasetUrl])
   useEffect(
     () => () => {
-      columnReader.dispose()
+      if (readerHeld.own) readerHeld.reader.dispose()
     },
-    [columnReader],
+    [readerHeld],
   )
   const savedSelections = useSelectionCells({
     enabled:
