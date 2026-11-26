@@ -336,6 +336,8 @@ interface H5adCache {
   readonly categoricalTracks: readonly H5adCategoricalTrack[]
   readonly continuousTracks: readonly H5adContinuousTrack[]
   readonly matrix: H5adMatrix
+  // The file's other matrices, opened when first asked for.
+  readonly layers: H5adLayers
   readonly extent: BBox
   // The Visium placement for the current view; `visiumSource` holds what any
   // view needs.
@@ -469,6 +471,22 @@ type H5adMatrix =
       readonly rows: number
       readonly cols: number
     }
+
+// The matrices besides /X, by the name the Python console gives them: each
+// of `layers/*`, and `raw` for raw/X. Each is opened when first read, and
+// kept; a section shares its file's.
+interface H5adLayers {
+  names(): Promise<readonly string[]>
+  matrix(layer: string): Promise<H5adLayerMatrix>
+}
+
+interface H5adLayerMatrix {
+  readonly matrix: H5adMatrix
+  // Its columns' genes: var's for a layer, raw/var's for raw/X.
+  readonly geneNames: readonly string[]
+  // Names the matrix in a gene's error.
+  readonly label: string
+}
 
 // A 1-D numeric array read in slices when asked: a Zarr array, or a dataset of
 // an .h5ad file read by range in an H5 file worker.
@@ -1004,10 +1022,12 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   // What reading genes would fetch (22-D7): nothing for a matrix held in
   // memory; for one read over HTTP, the values the layout makes a read take.
+  // `layer` reads layers/<layer>, or raw/X for "raw" (plan 29).
   async estimateGeneValuesRead(
     genes: readonly string[],
+    options: { readonly layer?: string | undefined } = {},
   ): Promise<GeneValuesReadEstimate> {
-    const { matrix, geneNames } = await this.cache()
+    const { matrix, geneNames } = await h5adLayerMatrix(await this.cache(), options.layer)
     return h5adGeneValuesEstimate(matrix, geneColumns(geneNames, genes).cols)
   }
 
@@ -1015,24 +1035,34 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   // every gene asked for.
   async geneValues(
     genes: readonly string[],
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    } = {},
   ): Promise<readonly GeneValuesRead[]> {
-    const { matrix, geneNames, section } = await this.cache()
+    const cache = await this.cache()
+    const { matrix, geneNames, label } = await h5adLayerMatrix(cache, options.layer)
     throwIfAborted(options.signal)
     const { found, cols } = geneColumns(geneNames, genes)
     const columns =
       found.length === 0 ? [] : await h5adGeneValues(matrix, cols, options.signal)
     const byGene = new Map(found.map((gene, index) => [gene, columns[index]]))
+    const { section } = cache
 
     return genes.map((gene) => {
       const column = byGene.get(gene)
       return column === undefined
-        ? { gene, error: `${gene} is not in the expression matrix.` }
+        ? { gene, error: `${gene} is not in ${label}.` }
         : {
             gene,
             ...(section === undefined ? column : sectionGeneValues(column, section)),
           }
     })
+  }
+
+  // The layers and raw a read can name.
+  async geneValuesLayers(): Promise<readonly string[]> {
+    return (await this.cache()).layers.names()
   }
 
   async annotationGroups(
@@ -2609,7 +2639,13 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
 
   try {
     return {
-      ...(await readH5adCacheFromGroup(url, hydrateH5WorkerGroup(file))),
+      ...(await readH5adCacheFromGroup(
+        url,
+        hydrateH5WorkerGroup(file),
+        undefined,
+        undefined,
+        { openPaths: h5WorkerPathOpener(file) },
+      )),
       close: () => file.close(),
     }
   } catch (error) {
@@ -2667,7 +2703,12 @@ async function readH5adByRange(
       hydrateH5WorkerGroup(file),
       undefined,
       undefined,
-      lazyMatrixAboveBytes === undefined ? {} : { lazyMatrixAboveBytes },
+      {
+        ...(lazyMatrixAboveBytes === undefined ? {} : { lazyMatrixAboveBytes }),
+        // Read whole, a layer would be fetched before its estimate.
+        lazyLayerAboveBytes: 0,
+        openPaths: h5WorkerPathOpener(file),
+      },
     )
     reportH5adProgress(
       onProgress,
@@ -2715,6 +2756,11 @@ function rangeReadLabel(stats: H5FileRangeStats | null): string {
 
 function isMatrixInMemory(matrix: H5adMatrix): boolean {
   return matrix.kind === 'dense' || matrix.kind === 'csr' || matrix.kind === 'csc'
+}
+
+// Walks the paths in the worker, which the open's tree left out.
+function h5WorkerPathOpener(file: H5WorkerFile): H5adPathOpener {
+  return async (paths) => hydrateH5WorkerGroup(file, await file.readTree(paths))
 }
 
 function hydrateH5WorkerGroup(
@@ -3342,6 +3388,10 @@ async function readH5adCacheFromGroup(
     readonly visiumLayout?: boolean
     // See `readMatrix`.
     readonly lazyMatrixAboveBytes?: number
+    // As lazyMatrixAboveBytes, for layers and raw/X.
+    readonly lazyLayerAboveBytes?: number
+    // See `H5adPathOpener`.
+    readonly openPaths?: H5adPathOpener
     // Passed to `resolveCoordinates`.
     readonly signal?: AbortSignal
   } = {},
@@ -3421,10 +3471,134 @@ async function readH5adCacheFromGroup(
     categoricalTracks: observationTracks.categoricalTracks,
     continuousTracks: observationTracks.continuousTracks,
     matrix,
+    layers: createH5adLayers({
+      openPaths: options.openPaths ?? (async () => file),
+      rows: cellIds.length,
+      geneNames,
+      lazyAboveBytes: options.lazyLayerAboveBytes,
+    }),
     extent: bboxForPoints(coordinates),
     visium: visiumPlacement?.layout ?? null,
     visiumSource,
   }
+}
+
+// The file's groups with these paths below the root, for a file whose load
+// left them out: an H5 file worker's tree is walked only where the viewer
+// reads. Zarr and in-memory tables hold every path already.
+type H5adPathOpener = (paths: readonly string[]) => Promise<H5GroupLike>
+
+const RAW_LAYER = 'raw'
+
+function createH5adLayers(options: {
+  readonly openPaths: H5adPathOpener
+  readonly rows: number
+  readonly geneNames: readonly string[]
+  readonly lazyAboveBytes: number | undefined
+}): H5adLayers {
+  const { openPaths, rows, lazyAboveBytes } = options
+  let names: Promise<readonly string[]> | null = null
+  const matrices = new Map<string, Promise<H5adLayerMatrix>>()
+
+  const readNames = (): Promise<readonly string[]> => {
+    names ??= openPaths(['layers', 'raw/X'])
+      .then(h5adLayerNames)
+      .catch((error: unknown) => {
+        names = null
+        throw error
+      })
+    return names
+  }
+
+  const readLayer = async (layer: string): Promise<H5adLayerMatrix> => {
+    const known = await readNames()
+
+    if (!known.includes(layer)) {
+      throw new Error(
+        known.length === 0
+          ? `The table has no layer "${layer}": it has no layers or raw.`
+          : `The table has no layer "${layer}". It has ${known.map((name) => `"${name}"`).join(', ')}.`,
+      )
+    }
+
+    if (layer === RAW_LAYER) {
+      const group = await openPaths(['raw/X', 'raw/var'])
+      const rawVar = group.get('/raw/var')
+      // raw keeps the genes from before filtering, so its own var names them.
+      const geneNames = isGroup(rawVar)
+        ? uniqueNames((await readGeneNames(rawVar)).names, 'raw/var')
+        : options.geneNames
+
+      return {
+        matrix: await readMatrix(group, rows, geneNames.length, {
+          path: '/raw/X',
+          lazyAboveBytes,
+        }),
+        geneNames,
+        label: 'raw/X',
+      }
+    }
+
+    const path = `/layers/${layer}`
+
+    return {
+      matrix: await readMatrix(await openPaths([path]), rows, options.geneNames.length, {
+        path,
+        lazyAboveBytes,
+      }),
+      geneNames: options.geneNames,
+      label: `layer "${layer}"`,
+    }
+  }
+
+  return {
+    names: readNames,
+    matrix: (layer) => {
+      let matrix = matrices.get(layer)
+
+      if (matrix === undefined) {
+        matrix = readLayer(layer).catch((error: unknown) => {
+          matrices.delete(layer)
+          throw error
+        })
+        matrices.set(layer, matrix)
+      }
+
+      return matrix
+    },
+  }
+}
+
+// The matrices under layers, then raw when raw/X is there. Other entries,
+// such as a 1-D array, are left out.
+function h5adLayerNames(root: H5GroupLike): readonly string[] {
+  const layers = root.get('/layers')
+  const names = isGroup(layers)
+    ? layers.keys().filter((name) => isH5adMatrixNode(layers.get(name)))
+    : []
+
+  return isH5adMatrixNode(root.get('/raw/X')) ? [...names, RAW_LAYER] : names
+}
+
+function isH5adMatrixNode(node: unknown): boolean {
+  if (isDataset(node)) return node.shape?.length === 2
+
+  const encoding = isGroup(node) ? readStringAttribute(node, 'encoding-type') : undefined
+  return encoding === 'csr_matrix' || encoding === 'csc_matrix'
+}
+
+// The matrix a gene read names: /X without a layer.
+function h5adLayerMatrix(
+  cache: H5adCache,
+  layer: string | undefined,
+): Promise<H5adLayerMatrix> {
+  return layer === undefined
+    ? Promise.resolve({
+        matrix: cache.matrix,
+        geneNames: cache.geneNames,
+        label: 'the expression matrix',
+      })
+    : cache.layers.matrix(layer)
 }
 
 class HydratedH5adGroup implements H5GroupLike {
@@ -4511,14 +4685,16 @@ async function readObsColumnValues(
 
 // A Zarr /X (reference, Icechunk, AnnData Zarr) is sliced per request. One in
 // an H5 file worker is read whole, unless its arrays decode to more than
-// `lazyAboveBytes`; then it too is sliced per request.
+// `lazyAboveBytes`; then it too is sliced per request. `path` reads another
+// matrix of the file's shape, as a layer.
 async function readMatrix(
   file: H5GroupLike,
   rows: number,
   cols: number,
-  options: { readonly lazyAboveBytes?: number } = {},
+  options: { readonly lazyAboveBytes?: number | undefined; readonly path?: string } = {},
 ): Promise<H5adMatrix> {
-  const x = file.get('/X')
+  const path = options.path ?? '/X'
+  const x = file.get(path)
   const readLazily = (...datasets: readonly H5DatasetLike[]) => {
     const { lazyAboveBytes } = options
     let bytes = 0
@@ -4541,10 +4717,10 @@ async function readMatrix(
 
     if (
       shape === null ||
-      readShapeDimension(shape, 0, '/X') !== rows ||
-      readShapeDimension(shape, 1, '/X') !== cols
+      readShapeDimension(shape, 0, path) !== rows ||
+      readShapeDimension(shape, 1, path) !== cols
     ) {
-      throw new Error('H5AD /X dense matrix shape does not match obs x var.')
+      throw new Error(`H5AD ${path} dense matrix shape does not match obs x var.`)
     }
 
     if (isZarrDataset(x)) {
@@ -4562,30 +4738,32 @@ async function readMatrix(
 
     return {
       kind: 'dense',
-      values: readNumericArray(await readDatasetValue(x), '/X'),
+      values: readNumericArray(await readDatasetValue(x), path),
       rows,
       cols,
     }
   }
 
-  const group = expectGroup(x, '/X')
+  const group = expectGroup(x, path)
   const encodingType = readStringAttribute(group, 'encoding-type')
   const shape = readShapeAttribute(group, 'shape')
-  const matrixRows = readShapeDimension(shape, 0, '/X.attrs.shape')
-  const matrixCols = readShapeDimension(shape, 1, '/X.attrs.shape')
+  const matrixRows = readShapeDimension(shape, 0, `${path}.attrs.shape`)
+  const matrixCols = readShapeDimension(shape, 1, `${path}.attrs.shape`)
 
   if (matrixRows !== rows || matrixCols !== cols) {
-    throw new Error('H5AD /X sparse matrix shape does not match obs x var.')
+    throw new Error(`H5AD ${path} sparse matrix shape does not match obs x var.`)
   }
 
-  const data = expectDataset(group.get('data'), '/X/data')
-  const indices = expectDataset(group.get('indices'), '/X/indices')
-  const indptrDataset = expectDataset(group.get('indptr'), '/X/indptr')
-  const indptr = readNumericArray(await readDatasetValue(indptrDataset), '/X/indptr')
+  const data = expectDataset(group.get('data'), `${path}/data`)
+  const indices = expectDataset(group.get('indices'), `${path}/indices`)
+  const indptrDataset = expectDataset(group.get('indptr'), `${path}/indptr`)
+  const indptr = readNumericArray(await readDatasetValue(indptrDataset), `${path}/indptr`)
 
   if (isZarrDataset(data) || isZarrDataset(indices)) {
     if (!isZarrDataset(data) || !isZarrDataset(indices)) {
-      throw new Error('H5AD /X sparse reference arrays must expose data and indices.')
+      throw new Error(
+        `H5AD ${path} sparse reference arrays must expose data and indices.`,
+      )
     }
 
     const matrix = {
@@ -4607,8 +4785,8 @@ async function readMatrix(
     readLazily(data, indices)
   ) {
     const matrix = {
-      data: h5WorkerVectorReader(data.source, '/X/data'),
-      indices: h5WorkerVectorReader(indices.source, '/X/indices'),
+      data: h5WorkerVectorReader(data.source, `${path}/data`),
+      indices: h5WorkerVectorReader(indices.source, `${path}/indices`),
       indptr,
       rows,
       cols,
@@ -4620,8 +4798,8 @@ async function readMatrix(
   }
 
   const matrix = {
-    data: readNumericArray(await readDatasetValue(data), '/X/data'),
-    indices: readNumericArray(await readDatasetValue(indices), '/X/indices'),
+    data: readNumericArray(await readDatasetValue(data), `${path}/data`),
+    indices: readNumericArray(await readDatasetValue(indices), `${path}/indices`),
     indptr,
     rows,
     cols,

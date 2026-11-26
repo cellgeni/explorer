@@ -76,6 +76,9 @@ export interface H5WorkerFile {
   ): Promise<GexResult<ElementId>>
   // A Visium HD feature_slice.h5's metadata, without its feature names.
   featureSliceMetadata(signal?: AbortSignal): Promise<VisiumFeatureSliceMetadata>
+  // The root's tree with just these paths below it, each whole, for groups
+  // the open's tree left out.
+  readTree(paths: readonly string[], signal?: AbortSignal): Promise<H5TreeGroup>
   // Every group, dataset and link, with attributes, for Browse File.
   structure(options: H5WorkerFileStructureOptions): Promise<H5StructureWalk>
   // The first values of a dataset.
@@ -281,6 +284,19 @@ function createH5WorkerFile(
       }
 
       return response.metadata
+    },
+    async readTree(paths, signal) {
+      const response = await connection.request(
+        (id) => ({ id, op: 'tree', paths: [...paths] }),
+        [],
+        signal,
+      )
+
+      if (response.op !== 'tree') {
+        throw new Error('The H5 file worker answered a tree read with another reply.')
+      }
+
+      return response.tree
     },
     async structure({ rootName, maxNodes, onProgress, signal }) {
       const response = await connection.request(

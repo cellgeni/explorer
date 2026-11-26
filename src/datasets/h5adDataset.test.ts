@@ -2,6 +2,7 @@ import type { Group as H5wasmGroup } from 'h5wasm'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { micrometers } from '../data/coords'
 import type { GeneValuesRead } from '../data/geneValues'
+import { GeneRowReader } from '../data/geneValuesByRow'
 import {
   ICECHUNK_FIXTURE_ORIGIN,
   icechunkFixtureFetcher,
@@ -2046,6 +2047,175 @@ describe('AnnDataH5adDataset gene values (plan 22-A)', () => {
   })
 })
 
+describe('AnnDataH5adDataset layers and raw (plan 29)', () => {
+  // Genes Actb, Gad1 and Gapdh, as X; raw adds Sst.
+  const LAYERS: TinyH5adOptions = {
+    // A 1-D array under layers is not a matrix, so it is not listed.
+    padding: 16,
+    layers: {
+      counts: { kind: 'csr', x: [10, 0, 50, 20, 30, 0, 0, 40, 60, 70, 0, 80] },
+      scaled: { kind: 'dense', x: [0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1.5, 0] },
+    },
+    raw: {
+      kind: 'csc',
+      genes: ['Actb', 'Gad1', 'Gapdh', 'Sst'],
+      x: [1, 0, 5, 0, 2, 3, 0, 9, 0, 4, 6, 0, 7, 0, 8, 11],
+    },
+  }
+
+  // Each gene's (row, value) pairs, sorted by row, or its error.
+  function sorted(reads: readonly GeneValuesRead[]) {
+    return reads.map((read) =>
+      'error' in read
+        ? read.error
+        : [...read.rows]
+            .map((row, index) => [row, read.values[index]])
+            .sort((left, right) => (left[0] ?? 0) - (right[0] ?? 0)),
+    )
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('reads a gene from a layer or raw, with raw/var naming its genes', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/layers.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense', LAYERS)),
+    })
+
+    await expect(dataset.geneValuesLayers()).resolves.toEqual(['counts', 'scaled', 'raw'])
+    // The downloaded file's layers are held in memory, as X is.
+    await expect(
+      dataset.estimateGeneValuesRead(['Gad1'], { layer: 'counts' }),
+    ).resolves.toEqual({ kind: 'read', bytes: 0 })
+    expect(
+      sorted(await dataset.geneValues(['Gad1', 'Sst'], { layer: 'counts' })),
+    ).toEqual([
+      [
+        [1, 30],
+        [2, 40],
+      ],
+      'Sst is not in layer "counts".',
+    ])
+    expect(sorted(await dataset.geneValues(['Gad1'], { layer: 'scaled' }))).toEqual([
+      [[3, -1.5]],
+    ])
+    expect(sorted(await dataset.geneValues(['Sst', 'Gad1'], { layer: 'raw' }))).toEqual([
+      [
+        [1, 9],
+        [3, 11],
+      ],
+      [
+        [1, 3],
+        [2, 4],
+      ],
+    ])
+    // Without a layer, X, as Plots reads it.
+    expect(sorted(await dataset.geneValues(['Gad1', 'Sst']))).toEqual([
+      [
+        [1, 3],
+        [2, 4],
+      ],
+      'Sst is not in the expression matrix.',
+    ])
+    await expect(dataset.geneValues(['Gad1'], { layer: 'spliced' })).rejects.toThrow(
+      'The table has no layer "spliced". It has "counts", "scaled", "raw".',
+    )
+    await expect(
+      dataset.estimateGeneValuesRead(['Gad1'], { layer: 'padding' }),
+    ).rejects.toThrow('The table has no layer "padding".')
+  })
+
+  it('says a file has no layers', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/plain.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('csr')),
+    })
+
+    await expect(dataset.geneValuesLayers()).resolves.toEqual([])
+    await expect(dataset.geneValues(['Gad1'], { layer: 'counts' })).rejects.toThrow(
+      'The table has no layer "counts": it has no layers or raw.',
+    )
+  })
+
+  it('reads a layer by range when the file is read by range', async () => {
+    const host = stubH5adRangeHost(
+      await createTinyH5ad('csr', { ...LAYERS, padding: 4 * 1024 * 1024 }),
+    )
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/layers.h5ad',
+      h5WorkerFactory: host.h5WorkerFactory,
+    })
+
+    // Each stored value of the CSR layer, 4 bytes and its 4-byte index; one
+    // slice of raw's CSC matrix.
+    await expect(
+      dataset.estimateGeneValuesRead(['Gad1'], { layer: 'counts' }),
+    ).resolves.toMatchObject({ kind: 'read', bytes: 8 * 8 })
+    await expect(
+      dataset.estimateGeneValuesRead(['Sst'], { layer: 'raw' }),
+    ).resolves.toMatchObject({ kind: 'read', bytes: 2 * 8 })
+    expect(sorted(await dataset.geneValues(['Gad1'], { layer: 'counts' }))).toEqual([
+      [
+        [1, 30],
+        [2, 40],
+      ],
+    ])
+    expect(sorted(await dataset.geneValues(['Sst'], { layer: 'raw' }))).toEqual([
+      [
+        [1, 9],
+        [3, 11],
+      ],
+    ])
+  })
+
+  it("reads a section's rows of a layer", async () => {
+    const file = new AnnDataH5adDataset({
+      url: 'https://example.test/sections.h5ad',
+      fetcher: h5adFetcher(
+        await createTinyH5ad('dense', {
+          ...LAYERS,
+          coordinateKey: 'spatial',
+          extraObs: { section: ['s2', 's1', 's2', 's1'] },
+        }),
+      ),
+    })
+    const section = new AnnDataH5adDataset({
+      url: file.url,
+      section: {
+        column: 'section',
+        value: 's1',
+        holdFile: () => ({ dataset: Promise.resolve(file), release: () => undefined }),
+      },
+    })
+
+    await expect(section.geneValuesLayers()).resolves.toEqual(['counts', 'scaled', 'raw'])
+    // cell-b and cell-d, the file's rows 1 and 3.
+    await expect(section.geneValues(['Gad1'], { layer: 'counts' })).resolves.toEqual([
+      { gene: 'Gad1', rows: Uint32Array.of(0), values: Float32Array.of(30) },
+    ])
+    await expect(section.geneValues(['Sst'], { layer: 'raw' })).resolves.toEqual([
+      { gene: 'Sst', rows: Uint32Array.of(0, 1), values: Float32Array.of(9, 11) },
+    ])
+  })
+
+  it('gives the console one value per overview cell from a layer', async () => {
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/layers.h5ad',
+      fetcher: h5adFetcher(await createTinyH5ad('dense', LAYERS)),
+    })
+    const overviewIds = (await dataset.overview()).map((point) => point.cellId ?? '')
+    const reader = new GeneRowReader(dataset, overviewIds)
+
+    expect(overviewIds).toEqual(['cell-a', 'cell-b', 'cell-c', 'cell-d'])
+    await expect(reader.read('Sst', { layer: 'raw' })).resolves.toEqual(
+      Float32Array.of(0, 9, 0, 11),
+    )
+    await expect(reader.layers()).resolves.toEqual(['counts', 'scaled', 'raw'])
+  })
+})
+
 describe('AnnDataH5adDataset read by range', () => {
   const allCells = ['cell-a', 'cell-b', 'cell-c', 'cell-d']
   const wholeExtent = {
@@ -2431,6 +2601,16 @@ interface TinyH5adOptions {
   readonly padding?: number
   // X as 4 rows of 3 values, written in the matrix kind's layout.
   readonly x?: readonly number[]
+  // More matrices of 4 rows by 3 genes, under `layers`.
+  readonly layers?: Readonly<Record<string, TinyMatrix>>
+  // raw/X, 4 rows by raw's own genes, which raw/var names.
+  readonly raw?: TinyMatrix & { readonly genes: readonly string[] }
+}
+
+interface TinyMatrix {
+  readonly kind: MatrixKind
+  // Row by row.
+  readonly x: readonly number[]
 }
 
 interface CategoricalFeatureNames {
@@ -2499,10 +2679,26 @@ async function createTinyH5ad(
 
   const file = new h5wasm.File(fileName, 'w')
 
+  const layers =
+    options.padding === undefined && options.layers === undefined
+      ? null
+      : file.create_group('layers')
+
   if (options.padding !== undefined) {
-    file
-      .create_group('layers')
-      .create_dataset({ name: 'padding', data: new Uint8Array(options.padding) })
+    layers?.create_dataset({ name: 'padding', data: new Uint8Array(options.padding) })
+  }
+
+  for (const [name, matrix] of Object.entries(options.layers ?? {})) {
+    if (layers !== null) writeTinyMatrix(layers, name, matrix, 3)
+  }
+
+  if (options.raw !== undefined) {
+    const raw = file.create_group('raw')
+    raw.create_attribute('encoding-type', 'raw')
+    const rawVar = raw.create_group('var')
+    rawVar.create_attribute('_index', 'gene_ids')
+    rawVar.create_dataset({ name: 'gene_ids', data: [...options.raw.genes] })
+    writeTinyMatrix(raw, 'X', options.raw, options.raw.genes.length)
   }
 
   const obs = file.create_group('obs')
@@ -2643,6 +2839,34 @@ async function createTinyH5ad(
   FS.unlink(fileName)
 
   return bytes
+}
+
+// A matrix of 4 rows, dense or as an AnnData sparse group.
+function writeTinyMatrix(
+  parent: H5wasmGroup,
+  name: string,
+  matrix: TinyMatrix,
+  cols: number,
+): void {
+  if (matrix.kind === 'dense') {
+    parent.create_dataset({
+      name,
+      data: new Float32Array(matrix.x),
+      shape: [matrix.x.length / cols, cols],
+    })
+    return
+  }
+
+  const group = parent.create_group(name)
+  group.create_attribute(
+    'encoding-type',
+    matrix.kind === 'csc' ? 'csc_matrix' : 'csr_matrix',
+  )
+  group.create_attribute('shape', new Int32Array([matrix.x.length / cols, cols]))
+  const sparse = sparseMatrixFromRows(matrix.x, cols, matrix.kind)
+  group.create_dataset({ name: 'data', data: sparse.data })
+  group.create_dataset({ name: 'indices', data: sparse.indices })
+  group.create_dataset({ name: 'indptr', data: sparse.indptr })
 }
 
 function writeNullableArray(

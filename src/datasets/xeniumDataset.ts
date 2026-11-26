@@ -41,10 +41,11 @@ import type {
 import type { Selection, TranscriptScope } from '../data/gexSelection'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { DatasetRangeValidator } from '../data/datasetOverview'
-import type {
-  GeneValuesRead,
-  GeneValuesReadEstimate,
-  GeneValuesRowIds,
+import {
+  noGeneValuesLayerMessage,
+  type GeneValuesRead,
+  type GeneValuesReadEstimate,
+  type GeneValuesRowIds,
 } from '../data/geneValues'
 import type {
   CellOutlineDataset,
@@ -525,7 +526,12 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
 
   async estimateGeneValuesRead(
     genes: readonly string[],
+    options: { readonly layer?: string | undefined } = {},
   ): Promise<GeneValuesReadEstimate> {
+    if (options.layer !== undefined) {
+      return { kind: 'unavailable', reason: xeniumNoLayer(options.layer) }
+    }
+
     return this.readGeneValues(() =>
       this.geneValuesReader.estimate(this.urlFor('cellFeatureMatrix'), genes),
     )
@@ -533,10 +539,23 @@ export class XeniumDataset implements SpatialDataset<CellId>, CellOutlineDataset
 
   async geneValues(
     genes: readonly string[],
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    } = {},
   ): Promise<readonly GeneValuesRead[]> {
+    const { layer, signal } = options
+
+    if (layer !== undefined) {
+      return genes.map((gene) => ({ gene, error: xeniumNoLayer(layer) }))
+    }
+
     return this.readGeneValues(() =>
-      this.geneValuesReader.values(this.urlFor('cellFeatureMatrix'), genes, options),
+      this.geneValuesReader.values(
+        this.urlFor('cellFeatureMatrix'),
+        genes,
+        signal === undefined ? {} : { signal },
+      ),
     )
   }
 
@@ -685,4 +704,8 @@ function spatialSelectionFor(selectionInput: RoiSelectionInput): Selection | nul
 
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, '')
+}
+
+function xeniumNoLayer(layer: string): string {
+  return noGeneValuesLayerMessage('Xenium', 'cell_feature_matrix', layer)
 }
