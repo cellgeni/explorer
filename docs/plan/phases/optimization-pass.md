@@ -934,6 +934,11 @@ from the page's start.
 - **One stall, not repeated.** In one branch run, the first after a
   rebuild, no request was sent for 15 s between the opening and the first
   tile. It did not recur in ten runs.
+- **S7.** Main read both of each channel's smallest-level tiles twice at
+  once: the canvas's read and auto-contrast's. The branch reads them once,
+  and S7 takes 59 requests rather than 63 (one run each). One tile per
+  channel is still cancelled as its read starts and sent again 20 ms
+  later.
 
 Leads:
 
