@@ -1466,6 +1466,55 @@ describe('deck layer factory', () => {
     expect(readMetadata).not.toHaveBeenCalled()
   })
 
+  it('sets only the fields a cell has, and shares fill colours', () => {
+    const readMetadata = () => ({ cell_type: 'Astrocyte' })
+    const data = overviewCellsToLayerData([
+      {
+        cellId: intToCellId(1, 1),
+        position: { x: micrometers(1), y: micrometers(2) },
+        transcriptCount: 100,
+      },
+      {
+        cellId: intToCellId(2, 1),
+        position: { x: micrometers(3), y: micrometers(4) },
+        z: 5,
+        transcriptCount: 100,
+        cellArea: Math.PI * 4,
+        nucleusCount: 1,
+        segmentationMethod: 'cellpose',
+        metadata: { cell_type: 'Neuron' },
+        readMetadata,
+      },
+      { position: { x: micrometers(5), y: micrometers(6) }, transcriptCount: 25 },
+    ])
+
+    // No key is set to undefined, as when the optional fields were spread in.
+    expect(data.map((datum) => Object.keys(datum).sort())).toEqual([
+      ['fillColor', 'id', 'position', 'radiusPixels', 'transcriptCount'],
+      [
+        'cellArea',
+        'fillColor',
+        'id',
+        'metadata',
+        'nucleusCount',
+        'position',
+        'radiusMicrometers',
+        'radiusPixels',
+        'readMetadata',
+        'segmentationMethod',
+        'transcriptCount',
+        'z',
+      ],
+      ['fillColor', 'id', 'position', 'radiusPixels', 'transcriptCount'],
+    ])
+    expect(data[1]).toMatchObject({ z: 5, radiusMicrometers: 2, nucleusCount: 1 })
+    expect(data[2]?.id).toBe('overview-cell-2')
+    // Cells with the same transcript count share one colour.
+    expect(data[0]?.fillColor).toEqual([72, 68, 58, 240])
+    expect(data[1]?.fillColor).toBe(data[0]?.fillColor)
+    expect(data[2]?.fillColor).toEqual([72, 68, 58, 195])
+  })
+
   it('converts expression cells into deck.gl overlay coordinates', () => {
     const [datum] = geneExpressionElementsToLayerData(
       [

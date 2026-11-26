@@ -6,6 +6,7 @@ import type {
   SpatialElement,
   DatasetCell,
 } from '../../datasets/spatialDataset'
+import { overviewCellsExtentBbox } from '../../rendering/cellAggregation'
 import type { CellBoundaryDatum, OverviewCellDatum } from '../../rendering/deckLayers'
 
 export const CELL_GENE_EXPRESSION_LIMIT = 100_000
@@ -179,32 +180,9 @@ function selectedCellBbox(cell: OverviewCellDatum, minRadiusMicrometers: number)
   }
 }
 
+// The same extent the viewer reads, worked out once per cell array.
 export function overviewCellsToBbox(cells: readonly OverviewCellDatum[]): BBox | null {
-  if (cells.length === 0) {
-    return null
-  }
-
-  let minX = Number.POSITIVE_INFINITY
-  let maxX = Number.NEGATIVE_INFINITY
-  let minY = Number.POSITIVE_INFINITY
-  let maxY = Number.NEGATIVE_INFINITY
-
-  for (const cell of cells) {
-    const [x = 0, deckY = 0] = cell.position
-    const rawY = -deckY
-
-    minX = Math.min(minX, x)
-    maxX = Math.max(maxX, x)
-    minY = Math.min(minY, rawY)
-    maxY = Math.max(maxY, rawY)
-  }
-
-  return {
-    minX: micrometers(minX),
-    maxX: micrometers(maxX),
-    minY: micrometers(minY),
-    maxY: micrometers(maxY),
-  }
+  return overviewCellsExtentBbox(cells)
 }
 
 export async function loadSelectedCellBoundary(
