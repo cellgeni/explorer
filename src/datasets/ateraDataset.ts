@@ -73,6 +73,7 @@ import type {
 } from './spatialDataset'
 import { normalizeSampleStride } from './xeniumDatasetRows'
 import { throwIfAborted } from '../utils/abort'
+import { sharedLoadSlot } from '../utils/sharedLoad'
 import { folderFileUrl, pathInFolder } from '../utils/folderUrl'
 import type {
   Annotation,
@@ -175,7 +176,8 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   private readonly openImage: ImagePyramidOpener
   private experimentPromise: Promise<AteraExperiment> | null = null
   private tablePromise: Promise<AteraTable> | null = null
-  private overviewPromise: Promise<AteraOverview> | null = null
+  // Shared by every caller, and cancelled only once they all have.
+  private readonly overviewLoad = sharedLoadSlot((signal) => this.readOverview(signal))
   private genesPromise: Promise<AteraGenes> | null = null
   private cscPromise: Promise<AteraCscMatrix> | null = null
   private cellsPromise: Promise<AteraCellsStore> | null = null
@@ -281,8 +283,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return elements
   }
 
-  async overview(): Promise<readonly CellOverviewPoint[]> {
-    return (await this.overviewIndex()).points
+  async overview(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly CellOverviewPoint[]> {
+    return (await this.overviewIndex(options.signal)).points
   }
 
   async matrix(ids: readonly SpatialElementId[]): Promise<GexResult<SpatialElementId>> {
@@ -434,8 +438,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
-  async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
-    return (await this.table()).table.annotationGroups()
+  async annotationGroups(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnnotationGroupOption[]> {
+    return (await this.table()).table.annotationGroups(options)
   }
 
   async annotations(
@@ -444,8 +450,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return (await this.table()).table.annotations(options)
   }
 
-  async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
-    const tracks = await (await this.table()).table.metadataTracks()
+  async metadataTracks(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataTrack[]> {
+    const tracks = await (await this.table()).table.metadataTracks(options)
     return tracks.filter((track) => !HIDDEN_METADATA_COLUMNS.has(track.label))
   }
 
@@ -465,8 +473,10 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return (await this.table()).table.embeddings(options)
   }
 
-  async embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]> {
-    return (await this.table()).table.embeddingOptions()
+  async embeddingOptions(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnalysisEmbeddingOption[]> {
+    return (await this.table()).table.embeddingOptions(options)
   }
 
   // Gene features only; control probes and codewords stay readable through
@@ -658,27 +668,20 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
     return { table, store }
   }
 
-  private overviewIndex(): Promise<AteraOverview> {
-    if (this.overviewPromise === null) {
-      this.overviewPromise = this.readOverview().catch((error: unknown) => {
-        this.overviewPromise = null
-        throw error
-      })
-    }
-
-    return this.overviewPromise
+  private overviewIndex(signal?: AbortSignal): Promise<AteraOverview> {
+    return this.overviewLoad.wait(signal)
   }
 
   // Matrix obs gives positions, counts, and areas. Nucleus counts and
   // segmentation methods come from cells.zarr.zip when it can be read.
-  private async readOverview(): Promise<AteraOverview> {
+  private async readOverview(signal: AbortSignal): Promise<AteraOverview> {
     const { table } = await this.table()
     const [tablePoints, cellIds, transcriptCounts, cellAreas, cellDetails] =
       await Promise.all([
-        table.overview(),
-        table.cellIds(),
-        table.numericObsColumn('transcript_counts'),
-        table.numericObsColumn('cell_area'),
+        table.overview({ signal }),
+        table.cellIds({ signal }),
+        table.numericObsColumn('transcript_counts', { signal }),
+        table.numericObsColumn('cell_area', { signal }),
         this.cellDetails().catch((error: unknown) => {
           this.onProgress?.(
             `Atera cell details unavailable: ${error instanceof Error ? error.message : String(error)}`,

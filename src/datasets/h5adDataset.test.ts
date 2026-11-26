@@ -1955,6 +1955,45 @@ describe('AnnDataH5adDataset read by range', () => {
     expect(slices).toEqual(['/X/indices'])
   })
 
+  it('ends the H5 worker when every load reading the file is cancelled', async () => {
+    const host = stubH5adRangeHost(await createTinyH5ad('csr'))
+    const controller = new AbortController()
+    const reads: string[] = []
+    const terminated: boolean[] = []
+    const dataset = new AnnDataH5adDataset({
+      url: 'https://example.test/tiny.h5ad',
+      h5WorkerFactory: () => {
+        const worker = host.h5WorkerFactory()
+        const index = terminated.push(false) - 1
+        const postMessage = worker.postMessage.bind(worker)
+        const terminate = worker.terminate.bind(worker)
+        worker.postMessage = (message, transfer) => {
+          if (message.op === 'read') {
+            reads.push(message.path)
+            controller.abort()
+          }
+
+          postMessage(message, transfer)
+        }
+        worker.terminate = () => {
+          terminated[index] = true
+          terminate()
+        }
+        return worker
+      },
+    })
+
+    await expect(dataset.overview({ signal: controller.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    })
+    // The worker ended at its first read, so nothing after it was read.
+    expect(terminated).toEqual([true])
+    expect(reads).toHaveLength(1)
+    // The next caller opens the file again.
+    await expect(dataset.overview()).resolves.toHaveLength(4)
+    expect(terminated).toEqual([true, false])
+  })
+
   it('downloads a small file whole without range requests', async () => {
     const bytes = await createTinyH5ad('csr')
     const host = stubH5adRangeHost(bytes, { headByteLength: bytes.byteLength })

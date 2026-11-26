@@ -220,6 +220,9 @@ export interface CachedSpatialDatasetOptions {
   // is set for the URL once it replaces the dataset on screen (EXP-002).
   readonly spatialDataSelection?: SpatialDataSelection
   readonly visiumView?: AnnDataVisiumView
+  // The caller's cancel. Opening the dataset stops once every caller has
+  // cancelled.
+  readonly signal?: AbortSignal
 }
 
 const VISIUM_HD_BINS: readonly {
@@ -1909,13 +1912,14 @@ function sectionSource(
   return {
     column,
     value,
-    holdFile: () => {
+    holdFile: (signal: AbortSignal) => {
       const release = retainDataset(fileUrl)
       return {
         dataset: cachedSpatialDataset(fileUrl, {
           ...(options.onH5adLoadProgress === undefined
             ? {}
             : { onH5adLoadProgress: options.onH5adLoadProgress }),
+          signal,
         }),
         release,
       }
@@ -1938,14 +1942,19 @@ export function cachedSpatialDataset(
     spatialDataSelection,
     collectionImageFor(normalizedBaseUrl),
   )
-  const dataset = spatialDatasetCache.get(cacheKey, normalizedBaseUrl, () =>
-    createSpatialDataset(normalizedBaseUrl, {
-      ...(options.onH5adLoadProgress === undefined
-        ? {}
-        : { onH5adLoadProgress: options.onH5adLoadProgress }),
-      ...(options.detection === undefined ? {} : { detection: options.detection }),
-      spatialDataSelection,
-    }),
+  const dataset = spatialDatasetCache.get(
+    cacheKey,
+    normalizedBaseUrl,
+    (signal) =>
+      createSpatialDataset(normalizedBaseUrl, {
+        ...(options.onH5adLoadProgress === undefined
+          ? {}
+          : { onH5adLoadProgress: options.onH5adLoadProgress }),
+        ...(options.detection === undefined ? {} : { detection: options.detection }),
+        spatialDataSelection,
+        signal,
+      }),
+    options.signal,
   )
 
   return Object.keys(visiumView).length === 0

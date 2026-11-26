@@ -264,21 +264,29 @@ type QueueAutoContrast = (
   options?: QueueAutoContrastOptions,
 ) => void
 
+// A load's reads of the dataset it opens stop when the load is cancelled,
+// unless another part of the viewer waits on them too.
+interface LoadReadOptions {
+  readonly signal?: AbortSignal
+}
+
 interface H5adLifecycleDataset {
-  overview(): Promise<readonly CellOverviewPoint[]>
-  genePanel(): Promise<readonly string[]>
-  geneAliases?(): Promise<ReadonlyMap<string, string>>
-  annotationGroups(): Promise<readonly AnnotationGroupOption[]>
-  embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]>
-  metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]>
+  overview(options?: LoadReadOptions): Promise<readonly CellOverviewPoint[]>
+  genePanel(options?: LoadReadOptions): Promise<readonly string[]>
+  geneAliases?(options?: LoadReadOptions): Promise<ReadonlyMap<string, string>>
+  annotationGroups(options?: LoadReadOptions): Promise<readonly AnnotationGroupOption[]>
+  embeddingOptions(options?: LoadReadOptions): Promise<readonly AnalysisEmbeddingOption[]>
+  metadataTracks(
+    options?: LoadReadOptions,
+  ): Promise<readonly ContinuousCellMetadataTrack[]>
 }
 
 interface SpatialDataSummaryDataset {
-  summary(): Promise<SpatialDataSummary>
+  summary(options?: LoadReadOptions): Promise<SpatialDataSummary>
 }
 
 interface MerscopeSummaryDataset {
-  summary(): Promise<MerscopeSummary>
+  summary(options?: LoadReadOptions): Promise<MerscopeSummary>
 }
 
 interface MerscopeImageDataset {
@@ -319,7 +327,7 @@ export type StartDatasetLoad = (
 
 export interface VisiumLifecycleDataset extends H5adLifecycleDataset {
   meta(): Promise<DatasetMeta>
-  visiumSummary(): Promise<AnnDataVisiumSummary | null>
+  visiumSummary(options?: LoadReadOptions): Promise<AnnDataVisiumSummary | null>
   tissueImage(kind: VisiumImageKind): Promise<ImageSource | null>
 }
 
@@ -1422,11 +1430,11 @@ export function useDatasetLifecycle({
 
         // A dataset's pyramid image, loaded in the background.
         const loadPyramidImageInBackground = (dataset: {
-          image(): Promise<ImageSource | null>
+          image(options?: LoadReadOptions): Promise<ImageSource | null>
         }) => {
           loadMorphologyInBackground(
             async () => {
-              const imageSource = await dataset.image()
+              const imageSource = await dataset.image({ signal })
 
               if (imageSource?.kind !== 'pyramid') {
                 return null
@@ -1472,12 +1480,12 @@ export function useDatasetLifecycle({
             embeddingOptions,
             metadataTracks,
           ] = await Promise.all([
-            annDataset.overview(),
-            annDataset.genePanel(),
-            annDataset.geneAliases?.(),
-            annDataset.annotationGroups(),
-            annDataset.embeddingOptions(),
-            annDataset.metadataTracks(),
+            annDataset.overview({ signal }),
+            annDataset.genePanel({ signal }),
+            annDataset.geneAliases?.({ signal }),
+            annDataset.annotationGroups({ signal }),
+            annDataset.embeddingOptions({ signal }),
+            annDataset.metadataTracks({ signal }),
           ])
 
           if (!isCurrentDatasetLoad()) {
@@ -1636,11 +1644,12 @@ export function useDatasetLifecycle({
             onH5adLoadProgress: appendDebugEvent,
             detection,
             visiumView,
+            signal,
           })
           // An .h5ad with `uns/spatial` is standard Visium; the file has to be
           // read to know.
           const visium = isVisiumLifecycleDataset(dataset)
-            ? await dataset.visiumSummary()
+            ? await dataset.visiumSummary({ signal })
             : null
 
           if (!isCurrentDatasetLoad()) {
@@ -1695,13 +1704,14 @@ export function useDatasetLifecycle({
             onH5adLoadProgress: appendDebugEvent,
             detection,
             visiumView,
+            signal,
           })
 
           if (!isVisiumLifecycleDataset(dataset)) {
             throw new Error('Detected Visium dataset does not expose spots.')
           }
 
-          const visium = await dataset.visiumSummary()
+          const visium = await dataset.visiumSummary({ signal })
 
           if (!isCurrentDatasetLoad()) {
             return
@@ -1731,6 +1741,7 @@ export function useDatasetLifecycle({
             onH5adLoadProgress: appendDebugEvent,
             detection,
             ...(spatialDataSelection === undefined ? {} : { spatialDataSelection }),
+            signal,
           })
 
           if (!isCurrentDatasetLoad()) {
@@ -1744,7 +1755,7 @@ export function useDatasetLifecycle({
           }
 
           if (isSpatialDataSummaryDataset(dataset)) {
-            const summary = await dataset.summary()
+            const summary = await dataset.summary({ signal })
 
             // The summary can read the table; another load may have
             // replaced this one meanwhile.
@@ -1791,6 +1802,7 @@ export function useDatasetLifecycle({
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
             detection,
+            signal,
           })
 
           if (!(await loadAnnDataOverview(dataset, 'Atera'))) {
@@ -1875,6 +1887,7 @@ export function useDatasetLifecycle({
           const dataset = await getSpatialDataset(detection.baseUrl, {
             onH5adLoadProgress: appendDebugEvent,
             detection,
+            signal,
           })
 
           if (!(await loadAnnDataOverview(dataset, 'MERSCOPE'))) {
@@ -1885,7 +1898,7 @@ export function useDatasetLifecycle({
             return
           }
 
-          const summary = await dataset.summary()
+          const summary = await dataset.summary({ signal })
 
           if (!isCurrentDatasetLoad()) {
             return
@@ -2029,7 +2042,10 @@ export function useDatasetLifecycle({
             setShowNucleusBoundaries(false)
             setMorphologyState(morphologyLoadStarted(detection.imageUrl))
           })
-          const dataset = await getSpatialDataset(detection.baseUrl, { detection })
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            detection,
+            signal,
+          })
           const [meta, imageSource] = await Promise.all([dataset.meta(), dataset.image()])
 
           if (!isCurrentDatasetLoad()) {
@@ -2104,7 +2120,10 @@ export function useDatasetLifecycle({
             setShowCellBoundaries(restoreState.showCellBoundaries ?? false)
             setShowNucleusBoundaries(restoreState.showNucleusBoundaries ?? false)
           })
-          const dataset = await getSpatialDataset(detection.baseUrl, { detection })
+          const dataset = await getSpatialDataset(detection.baseUrl, {
+            detection,
+            signal,
+          })
 
           if (!isVisiumHdOverviewDataset(dataset)) {
             throw new Error('Detected Visium HD dataset does not expose binned outputs.')
@@ -2150,7 +2169,7 @@ export function useDatasetLifecycle({
           }
 
           const [overview, meta] = await Promise.all([
-            dataset.readBinnedOverview(),
+            dataset.readBinnedOverview(undefined, { signal }),
             dataset.meta(),
           ])
 

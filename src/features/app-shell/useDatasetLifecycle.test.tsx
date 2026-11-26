@@ -669,7 +669,9 @@ describe('useDatasetLifecycle', () => {
       })
 
       // The image opened while the cells load, but the open dataset stays.
-      expect(dataset.image).toHaveBeenCalled()
+      // It can wait on the table for its units, so it stops with the load.
+      expect(dataset.image).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
+      expect(dataset.summary).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) })
       expect(updates).toEqual([])
 
       await act(async () => {
@@ -1616,6 +1618,82 @@ describe('useDatasetLifecycle', () => {
     expect(dataset.tissueImage).not.toHaveBeenCalled()
   })
 
+  it('gives the dataset it opens, and each of its reads, the signal Cancel aborts', async () => {
+    const refs = createLifecycleRefs()
+    const startDatasetLoadRef = {
+      current: null as ((datasetUrl: string, loadImage: boolean) => Promise<void>) | null,
+    }
+    const resultRef: { current: ReturnType<typeof useDatasetLifecycle> | null } = {
+      current: null,
+    }
+    const datasetUrl = 'https://example.test/cells.h5ad'
+    const signals = new Map<string, AbortSignal | undefined>()
+    const read =
+      (name: string) =>
+      (options?: { readonly signal?: AbortSignal }): Promise<never> => {
+        signals.set(name, options?.signal)
+        return new Promise(() => undefined)
+      }
+    const dataset = {
+      overview: vi.fn(read('overview')),
+      genePanel: vi.fn(read('genePanel')),
+      geneAliases: vi.fn(read('geneAliases')),
+      annotationGroups: vi.fn(read('annotationGroups')),
+      embeddingOptions: vi.fn(read('embeddingOptions')),
+      metadataTracks: vi.fn(read('metadataTracks')),
+      meta: vi.fn(),
+      visiumSummary: vi.fn(async (options?: { readonly signal?: AbortSignal }) => {
+        signals.set('visiumSummary', options?.signal)
+        return null
+      }),
+      tissueImage: vi.fn(),
+    }
+
+    render(
+      <Probe
+        refs={refs}
+        isDatasetLoading
+        detectSpatialDataset={vi.fn(async () => ({
+          platform: 'h5ad' as const,
+          baseUrl: datasetUrl,
+          h5adUrl: datasetUrl,
+          checked: [],
+        }))}
+        getSpatialDataset={
+          vi.fn(async (_url: string, options?: { readonly signal?: AbortSignal }) => {
+            signals.set('getSpatialDataset', options?.signal)
+            return dataset
+          }) as unknown as LifecycleOptions['loaders']['getSpatialDataset']
+        }
+        startDatasetLoadRef={startDatasetLoadRef}
+        resultRef={resultRef}
+      />,
+    )
+
+    await act(async () => {
+      void startDatasetLoadRef.current?.(datasetUrl, false)
+      await vi.waitFor(() => {
+        expect(dataset.metadataTracks).toHaveBeenCalled()
+      })
+    })
+
+    expect([...signals.keys()].sort()).toEqual([
+      'annotationGroups',
+      'embeddingOptions',
+      'geneAliases',
+      'genePanel',
+      'getSpatialDataset',
+      'metadataTracks',
+      'overview',
+      'visiumSummary',
+    ])
+    expect([...signals.values()].every((signal) => signal?.aborted === false)).toBe(true)
+    act(() => {
+      resultRef.current?.cancelDatasetLoad()
+    })
+    expect([...signals.values()].every((signal) => signal?.aborted === true)).toBe(true)
+  })
+
   it('loads Atera through AnnData readers and opens its 2D morphology image', async () => {
     const refs = createLifecycleRefs()
     const startDatasetLoadRef = {
@@ -1911,6 +1989,7 @@ describe('useDatasetLifecycle', () => {
     )
     expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
       detection: expect.objectContaining({ platform: 'visium-hd', baseUrl: datasetUrl }),
+      signal: expect.any(AbortSignal),
     })
     expect(loadDatasetOverview).not.toHaveBeenCalled()
     expect(loadGenePanel).not.toHaveBeenCalled()
@@ -2076,6 +2155,7 @@ describe('useDatasetLifecycle', () => {
 
     expect(getSpatialDataset).toHaveBeenCalledWith(datasetUrl, {
       detection: expect.objectContaining({ platform: 'visium-hd', baseUrl: datasetUrl }),
+      signal: expect.any(AbortSignal),
     })
     expect(setVisiumHdControlState).toHaveBeenCalledWith(
       expect.objectContaining({

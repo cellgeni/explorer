@@ -4,6 +4,8 @@
 // the one it is reading. Of the rest, the few used last are kept and older
 // ones are disposed, which ends their workers and lets their data go.
 
+import { sharedLoad, type SharedLoad } from '../utils/sharedLoad'
+
 export interface DisposableDataset {
   // Ends the dataset's workers and drops what it holds. A dataset may be
   // read again afterwards, opening what it needs again.
@@ -12,7 +14,7 @@ export interface DisposableDataset {
 
 interface DatasetCacheEntry<T> {
   readonly url: string
-  readonly promise: Promise<T>
+  readonly load: SharedLoad<T>
 }
 
 const retainedUrls = new Map<string, number>()
@@ -75,27 +77,32 @@ export class DatasetCache<T extends DisposableDataset> {
   }
 
   // The dataset cached under `key`, else the one `create` opens. `baseUrl` is
-  // the URL that retains it. A dataset that fails to open is not kept.
-  get(key: string, baseUrl: string, create: () => Promise<T>): Promise<T> {
+  // the URL that retains it. A dataset that fails to open is not kept. The
+  // opening is shared: it is cancelled only once every caller waiting on it
+  // has cancelled (see sharedLoad), and the next caller opens it again.
+  get(
+    key: string,
+    baseUrl: string,
+    create: (signal: AbortSignal) => Promise<T>,
+    signal?: AbortSignal,
+  ): Promise<T> {
     const existing = this.entries.get(key)
 
-    if (existing !== undefined) {
+    if (existing !== undefined && !existing.load.aborted) {
       this.entries.delete(key)
       this.entries.set(key, existing)
-      return existing.promise
+      return existing.load.wait(signal)
     }
 
-    const promise = create().catch((error: unknown) => {
+    const entry = { url: normalizeDatasetUrl(baseUrl), load: sharedLoad(create) }
+    entry.load.promise.catch(() => {
       if (this.entries.get(key) === entry) {
         this.entries.delete(key)
       }
-
-      throw error
     })
-    const entry = { url: normalizeDatasetUrl(baseUrl), promise }
     this.entries.set(key, entry)
     this.evict()
-    return promise
+    return entry.load.wait(signal)
   }
 
   // Drops the entries whose keys, or the URLs that retain them, `matches`, so
@@ -143,5 +150,5 @@ export class DatasetCache<T extends DisposableDataset> {
 }
 
 function disposeEntry<T extends DisposableDataset>(entry: DatasetCacheEntry<T>): void {
-  entry.promise.then((dataset) => dataset.dispose?.()).catch(() => undefined)
+  entry.load.promise.then((dataset) => dataset.dispose?.()).catch(() => undefined)
 }

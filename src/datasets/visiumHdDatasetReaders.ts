@@ -288,9 +288,11 @@ export class VisiumHdDatasetReaderController {
   private readonly readObjects: VisiumHdParquetObjectReader | undefined
   private readonly loadCompressors: (() => Promise<Compressors>) | undefined
   private readonly byteRangeCache: PersistentByteRangeCache | null | undefined
-  private readonly overviewPromises = new Map<
+  // Shared by every caller, and cancelled only once they all have, such as
+  // when the load that opened the dataset is.
+  private readonly overviewLoads = new Map<
     VisiumHdBinSizeMicrometers,
-    Promise<VisiumHdBinnedOverview>
+    SharedLoad<VisiumHdBinnedOverview>
   >()
   // Expression bins for sizes with no tier, made from a finer one.
   private readonly coarsenedOverviewPromises = new Map<
@@ -717,7 +719,7 @@ export class VisiumHdDatasetReaderController {
     const sourceBinSize = coarsenedOverviewSourceBinSize(
       this.bins,
       binSizeMicrometers,
-      (size) => this.overviewPromises.has(size),
+      (size) => this.overviewLoads.get(size)?.aborted === false,
     )
 
     if (sourceBinSize === undefined) {
@@ -751,29 +753,36 @@ export class VisiumHdDatasetReaderController {
 
   readBinnedOverview(
     binSizeMicrometers = this.defaultBinSizeMicrometers,
+    options: { readonly signal?: AbortSignal } = {},
   ): Promise<VisiumHdBinnedOverview> {
-    if (binSizeMicrometers === 2) {
-      return this.readTwoMicrometerOverviewFromFilteredBarcodes()
-    }
+    return waitForSharedLoad(
+      this.overviewLoads,
+      binSizeMicrometers,
+      (signal) =>
+        binSizeMicrometers === 2
+          ? this.readTwoMicrometerOverviewFromFilteredBarcodes(signal)
+          : this.readTierOverview(binSizeMicrometers, signal),
+      options.signal,
+    )
+  }
 
-    const existing = this.overviewPromises.get(binSizeMicrometers)
-
-    if (existing !== undefined) {
-      return existing
-    }
-
+  private readTierOverview(
+    binSizeMicrometers: VisiumHdBinSizeMicrometers,
+    signal: AbortSignal,
+  ): Promise<VisiumHdBinnedOverview> {
     const bin = findBin(this.bins, binSizeMicrometers)
     const basisSourceBinSize = nestedBasisSourceBinSize(this.bins, binSizeMicrometers)
     const basis =
       basisSourceBinSize === undefined
         ? undefined
-        : this.readBinnedOverview(basisSourceBinSize).then((sourceOverview) =>
+        : this.readBinnedOverview(basisSourceBinSize, { signal }).then((sourceOverview) =>
             deriveNestedGridBasis(
               sourceOverview.grid.basis,
               binSizeMicrometers / basisSourceBinSize,
             ),
           )
-    const promise = readVisiumHdBinnedOverviewLazy({
+
+    return readVisiumHdBinnedOverviewLazy({
       baseUrl: this.baseUrl,
       bin,
       ...(basis === undefined ? {} : { basis }),
@@ -787,74 +796,54 @@ export class VisiumHdDatasetReaderController {
       ...(this.byteRangeCache === undefined
         ? {}
         : { byteRangeCache: this.byteRangeCache }),
-    }).catch((error: unknown) => {
-      if (this.overviewPromises.get(binSizeMicrometers) === promise) {
-        this.overviewPromises.delete(binSizeMicrometers)
-      }
-
-      throw error
+      signal,
     })
-    this.overviewPromises.set(binSizeMicrometers, promise)
-    return promise
   }
 
-  private readTwoMicrometerOverviewFromFilteredBarcodes(): Promise<VisiumHdBinnedOverview> {
-    const existing = this.overviewPromises.get(2)
-
-    if (existing !== undefined) {
-      return existing
-    }
-
+  private async readTwoMicrometerOverviewFromFilteredBarcodes(
+    signal: AbortSignal,
+  ): Promise<VisiumHdBinnedOverview> {
     const bin = findBin(this.bins, 2)
     const sourceBinSize = preferredTwoMicrometerBasisSourceBinSize(this.bins)
-    const promise = (async () => {
-      const [basisSource, scalefactors, barcodes, overviewModule] = await Promise.all([
-        sourceBinSize === undefined
-          ? this.featureSliceMetadataForBasis()
-          : this.readBinnedOverview(sourceBinSize),
-        this.scalefactorsReader(datasetFileUrl(this.baseUrl, bin.scalefactorsPath), {
-          fetcher: this.fetcher,
-        }),
-        this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
-          fetcher: this.fetcher,
-          ...(this.maxTwoMicrometerFilteredBarcodes === undefined
-            ? {}
-            : { maxBarcodeCount: this.maxTwoMicrometerFilteredBarcodes }),
-        }),
-        import('./visiumHdOverview'),
-      ])
-      // A coarser tier's fitted basis, halved down to 2 µm; else the
-      // Feature Slice spot transform.
-      const basis =
-        'grid' in basisSource
-          ? deriveSubdividedGridBasis(
-              basisSource.grid.basis,
-              basisSource.binSizeMicrometers / 2,
-            )
-          : overviewModule.visiumHdGridBasisFromFeatureSlice(basisSource, scalefactors, 2)
+    const [basisSource, scalefactors, barcodes, overviewModule] = await Promise.all([
+      sourceBinSize === undefined
+        ? this.featureSliceMetadataForBasis()
+        : this.readBinnedOverview(sourceBinSize, { signal }),
+      this.scalefactorsReader(datasetFileUrl(this.baseUrl, bin.scalefactorsPath), {
+        fetcher: this.fetcher,
+        signal,
+      }),
+      this.filteredMatrixBarcodeReader(this.baseUrl, bin, {
+        fetcher: this.fetcher,
+        ...(this.maxTwoMicrometerFilteredBarcodes === undefined
+          ? {}
+          : { maxBarcodeCount: this.maxTwoMicrometerFilteredBarcodes }),
+        signal,
+      }),
+      import('./visiumHdOverview'),
+    ])
+    // A coarser tier's fitted basis, halved down to 2 µm; else the
+    // Feature Slice spot transform.
+    const basis =
+      'grid' in basisSource
+        ? deriveSubdividedGridBasis(
+            basisSource.grid.basis,
+            basisSource.binSizeMicrometers / 2,
+          )
+        : overviewModule.visiumHdGridBasisFromFeatureSlice(basisSource, scalefactors, 2)
 
-      if (basis === null) {
-        throw new VisiumHdTwoMicrometerOverviewDisabledError(
-          `${this.featureSliceH5Path} has no spot transform (transform_matrices.spot_colrow_to_microscope_colrow), and there is no 8 µm or 16 µm tier to place the 2 µm bins from.`,
-        )
-      }
-
-      return overviewModule.createVisiumHdBinnedOverviewFromSquareBarcodes(
-        bin,
-        barcodes,
-        scalefactors,
-        basis,
+    if (basis === null) {
+      throw new VisiumHdTwoMicrometerOverviewDisabledError(
+        `${this.featureSliceH5Path} has no spot transform (transform_matrices.spot_colrow_to_microscope_colrow), and there is no 8 µm or 16 µm tier to place the 2 µm bins from.`,
       )
-    })().catch((error: unknown) => {
-      if (this.overviewPromises.get(2) === promise) {
-        this.overviewPromises.delete(2)
-      }
+    }
 
-      throw error
-    })
-
-    this.overviewPromises.set(2, promise)
-    return promise
+    return overviewModule.createVisiumHdBinnedOverviewFromSquareBarcodes(
+      bin,
+      barcodes,
+      scalefactors,
+      basis,
+    )
   }
 
   // feature_slice.h5's metadata, for a dataset with only a 2 µm tier. Its

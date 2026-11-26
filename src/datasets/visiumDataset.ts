@@ -11,6 +11,7 @@ import { isListedAsMissing } from '../data/folderListing'
 import { h5TreeNodeAt, openH5WorkerFile } from '../data/h5WorkerFile'
 import { inflateMaybeGzipBytes, readMaybeGzipText } from '../data/readMaybeGzipText'
 import type { H5TreeGroup } from '../workers/h5FileMessages'
+import { fetcherWithSignal } from '../utils/abort'
 import type { FeatureBarcodeMexReader, FeatureBarcodeMexUrls } from './featureBarcodeMex'
 import { readFeatureBarcodeMexInWorker } from './featureBarcodeMexWorker'
 import type { AnnDataMemoryColumn, AnnDataMemoryTable } from './annDataMemory'
@@ -78,8 +79,13 @@ export function createVisiumDataset(options: VisiumDatasetOptions): AnnDataH5adD
     ...(options.onProgress === undefined ? {} : { onProgress: options.onProgress }),
     memorySource: {
       label: 'Visium Space Ranger output',
-      load: (onProgress) =>
-        readSpaceRangerVisium(options.files, fetcher, onProgress, readMexMatrix),
+      load: (onProgress, signal) =>
+        readSpaceRangerVisium(
+          options.files,
+          signal === undefined ? fetcher : fetcherWithSignal(fetcher, signal),
+          onProgress,
+          readMexMatrix,
+        ),
     },
     visiumImageUrls: options.files.images,
   })

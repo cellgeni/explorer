@@ -1008,7 +1008,7 @@ describe('Visium HD dataset readers', () => {
     expect(filteredMatrixBarcodeReader).toHaveBeenCalledWith(
       'https://example.test/visium',
       bin2,
-      { fetcher: expect.any(Function) },
+      { fetcher: expect.any(Function), signal: expect.any(AbortSignal) },
     )
   })
 
@@ -1051,6 +1051,7 @@ describe('Visium HD dataset readers', () => {
       {
         fetcher: expect.any(Function),
         maxBarcodeCount: 10,
+        signal: expect.any(AbortSignal),
       },
     )
   })

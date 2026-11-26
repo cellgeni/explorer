@@ -7,7 +7,7 @@ import {
   type IcechunkRepository,
 } from '../zarr/icechunkStore'
 import { icechunkCompanionFileUrl } from '../zarr/icechunkUrl'
-import { ZarrChunkUnavailableError } from '../zarr/zarrStores'
+import { storeWithSignal, ZarrChunkUnavailableError } from '../zarr/zarrStores'
 import { getWholeArray } from '../zarr/zarrWholeArray'
 import {
   micrometers,
@@ -110,7 +110,8 @@ import {
   type VisiumScalefactors,
   type VisiumUnits,
 } from './visiumFormat'
-import { throwIfAborted } from '../utils/abort'
+import { fetcherWithSignal, throwIfAborted } from '../utils/abort'
+import { sharedLoadSlot } from '../utils/sharedLoad'
 import {
   isIdLikeAnnotationGroup,
   type Annotation,
@@ -167,8 +168,9 @@ export interface AnnDataH5adDatasetOptions {
 export interface AnnDataSectionSource {
   readonly column: string
   readonly value: string
-  // Opens the file's dataset and keeps it until `release` is called.
-  readonly holdFile: () => AnnDataSectionFileHold
+  // Opens the file's dataset and keeps it until `release` is called. The
+  // opening stops when `signal` aborts, unless another caller waits on it.
+  readonly holdFile: (signal: AbortSignal) => AnnDataSectionFileHold
 }
 
 export interface AnnDataSectionFileHold {
@@ -216,7 +218,11 @@ export type H5adLoadProgressReporter = (message: string) => void
 
 export interface AnnDataMemorySource {
   readonly label: string
-  load(onProgress?: H5adLoadProgressReporter): Promise<AnnDataMemoryTable>
+  // Stops reading when `signal` aborts.
+  load(
+    onProgress?: H5adLoadProgressReporter,
+    signal?: AbortSignal,
+  ): Promise<AnnDataMemoryTable>
 }
 
 // Standard Visium layout found in `uns/spatial/<library>`. Coordinates are
@@ -280,6 +286,7 @@ export interface AnnDataObsAccess {
 // are left out of spatial queries.
 export type AnnDataCoordinateResolver = (
   obs: AnnDataObsAccess,
+  signal?: AbortSignal,
 ) => Promise<readonly DataPoint[] | null>
 
 interface H5adCache {
@@ -674,9 +681,11 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   // While this section's base is read from, or held: ends its hold on the
   // file's dataset.
   private releaseSectionFile: (() => void) | null = null
-  private baseCachePromise: Promise<H5adCache> | null = null
+  // The file's first read, shared by every caller: cancelled only once they
+  // have all cancelled, such as when the load that opened the dataset is.
+  private readonly baseLoad = sharedLoadSlot((signal) => this.readBaseCache(signal))
   // The base cache placed for `visiumView`.
-  private cachePromise: Promise<H5adCache> | null = null
+  private readonly placedLoad = sharedLoadSlot((signal) => this.readPlacedCache(signal))
   private readonly visiumView: AnnDataVisiumView
   // The dataset that reads the file, for one showing another Visium view of
   // it; null for that dataset itself.
@@ -824,16 +833,20 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   }
 
   // Standard Visium layout read from `uns/spatial`, or null for other AnnData.
-  async visiumSummary(): Promise<AnnDataVisiumSummary | null> {
-    const visium = (await this.cache()).visium
+  async visiumSummary(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<AnnDataVisiumSummary | null> {
+    const visium = (await this.cache(options.signal)).visium
 
     return visium === null
       ? null
       : { ...visium.summary, images: this.visiumImageKinds(visium) }
   }
 
-  async overview(): Promise<readonly CellOverviewPoint[]> {
-    const cache = await this.cache()
+  async overview(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly CellOverviewPoint[]> {
+    const cache = await this.cache(options.signal)
 
     if (this.overviewPoints?.cache === cache) {
       return this.overviewPoints.points
@@ -973,8 +986,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     })
   }
 
-  async annotationGroups(): Promise<readonly AnnotationGroupOption[]> {
-    const cache = await this.cache()
+  async annotationGroups(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnnotationGroupOption[]> {
+    const cache = await this.cache(options.signal)
 
     const ids = h5adAnnotationGroupIds(cache.categoricalTracks)
 
@@ -1068,8 +1083,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   // Values stay `null` here: one object per cell per column is too much to build
   // for every column at load. `metadataTrackValues` builds one column on demand.
-  async metadataTracks(): Promise<readonly ContinuousCellMetadataTrack[]> {
-    const cache = await this.cache()
+  async metadataTracks(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly ContinuousCellMetadataTrack[]> {
+    const cache = await this.cache(options.signal)
     const ids = h5adMetadataTrackIds(cache.continuousTracks)
 
     return cache.continuousTracks.map((track, index) => ({
@@ -1138,33 +1155,44 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     return embeddings
   }
 
-  async embeddingOptions(): Promise<readonly AnalysisEmbeddingOption[]> {
-    const cache = await this.cache()
+  async embeddingOptions(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly AnalysisEmbeddingOption[]> {
+    const cache = await this.cache(options.signal)
     return cache.embeddingOptions
   }
 
-  async genePanel(): Promise<readonly string[]> {
-    const cache = await this.cache()
+  async genePanel(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    const cache = await this.cache(options.signal)
     return cache.geneNames
   }
 
   // Gene name to var index name, for genes listed by a symbol column.
-  async geneAliases(): Promise<ReadonlyMap<string, string>> {
-    const cache = await this.cache()
+  async geneAliases(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ReadonlyMap<string, string>> {
+    const cache = await this.cache(options.signal)
     return cache.geneAliases
   }
 
   // Every obs row's id in matrix row order, including rows without
   // coordinates (which `overview` leaves out).
-  async cellIds(): Promise<readonly string[]> {
-    const cache = await this.cache()
+  async cellIds(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly string[]> {
+    const cache = await this.cache(options.signal)
     return cache.cellIds
   }
 
   // A numeric obs column by row, or null when the table has none by that
   // name.
-  async numericObsColumn(key: string): Promise<readonly number[] | null> {
-    const cache = await this.cache()
+  async numericObsColumn(
+    key: string,
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<readonly number[] | null> {
+    const cache = await this.cache(options.signal)
     return cache.continuousTracks.find((track) => track.id === key)?.values ?? null
   }
 
@@ -1231,8 +1259,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
   // The Visium tissue image, high-res when present, else low-res; otherwise
   // the attached image.
-  async image(): Promise<ImageSource | null> {
-    const visium = (await this.cache()).visium
+  async image(
+    options: { readonly signal?: AbortSignal } = {},
+  ): Promise<ImageSource | null> {
+    const visium = (await this.cache(options.signal)).visium
 
     if (visium === null) {
       return this.attachedImage === undefined
@@ -1617,9 +1647,9 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
 
     this.tissueImageUrls.clear()
 
-    const base = this.baseCachePromise
-    this.baseCachePromise = null
-    this.cachePromise = null
+    const base = this.baseLoad.promise
+    this.baseLoad.clear()
+    this.placedLoad.clear()
     this.spotElementsPromise = null
     this.overviewPoints = null
     // A section's arrays are the file's, which its own dataset closes.
@@ -1628,92 +1658,82 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     void base?.then((cache) => cache.close?.()).catch(() => undefined)
   }
 
-  private cache(): Promise<H5adCache> {
-    if (this.cachePromise === null) {
-      const view = this.visiumView
-      const promise = this.baseCache().then(async (base) =>
-        base.visiumSource === null
-          ? withCoordinateScale(base, await this.coordinateScale())
-          : withVisiumView(base, view),
-      )
-      this.cachePromise = promise
-      promise.catch(() => {
-        if (this.cachePromise === promise) {
-          this.cachePromise = null
-        }
-      })
-    }
-
-    return this.cachePromise
+  private cache(signal?: AbortSignal): Promise<H5adCache> {
+    return this.placedLoad.wait(signal)
   }
 
-  private baseCache(): Promise<H5adCache> {
-    if (this.viewOf !== null) {
-      return this.viewOf.baseCache()
+  private async readPlacedCache(signal: AbortSignal): Promise<H5adCache> {
+    const view = this.visiumView
+    const base = await this.baseCache(signal)
+
+    return base.visiumSource === null
+      ? withCoordinateScale(base, await this.coordinateScale())
+      : withVisiumView(base, view)
+  }
+
+  private baseCache(signal?: AbortSignal): Promise<H5adCache> {
+    return this.viewOf === null
+      ? this.baseLoad.wait(signal)
+      : this.viewOf.baseCache(signal)
+  }
+
+  private readBaseCache(signal: AbortSignal): Promise<H5adCache> {
+    if (this.section !== undefined) {
+      return this.sectionBaseCache(this.section, signal)
     }
 
-    if (this.baseCachePromise === null && this.section !== undefined) {
-      this.baseCachePromise = this.sectionBaseCache(this.section)
-    }
-
-    if (this.baseCachePromise === null) {
-      this.baseCachePromise = (
-        this.memorySource !== undefined
-          ? readAnnDataMemory(this.url, this.memorySource, this.onProgress)
-          : this.icechunk
-            ? readAnnDataIcechunk(this.url, this.storeFetcher, this.onProgress)
-            : this.zarrStore
-              ? readAnnDataZarrStore(this.url, this.storeFetcher, this.onProgress)
-              : this.zarrSource === undefined
-                ? readH5ad(this.url, {
-                    fetcher: this.fetcher,
-                    // A custom fetcher, as tests pass, keeps the download on
-                    // this thread.
-                    byRange: this.storeFetcher === undefined,
-                    ...(this.h5WorkerFactory === undefined
-                      ? {}
-                      : { workerFactory: this.h5WorkerFactory }),
-                    ...(this.rangeMatrixMaxBytes === undefined
-                      ? {}
-                      : { rangeMatrixMaxBytes: this.rangeMatrixMaxBytes }),
-                    ...(this.onProgress === undefined
-                      ? {}
-                      : { onProgress: this.onProgress }),
-                  })
-                : readAnnDataZarr(this.url, this.zarrSource, this.onProgress)
-      ).catch((error: unknown) => {
-        this.baseCachePromise = null
-        throw error
-      })
-    }
-
-    return this.baseCachePromise
+    return this.memorySource !== undefined
+      ? readAnnDataMemory(this.url, this.memorySource, this.onProgress, signal)
+      : this.icechunk
+        ? readAnnDataIcechunk(this.url, this.storeFetcher, this.onProgress, signal)
+        : this.zarrStore
+          ? readAnnDataZarrStore(this.url, this.storeFetcher, this.onProgress, signal)
+          : this.zarrSource === undefined
+            ? readH5ad(this.url, {
+                fetcher: this.fetcher,
+                // A custom fetcher, as tests pass, keeps the download on
+                // this thread.
+                byRange: this.storeFetcher === undefined,
+                ...(this.h5WorkerFactory === undefined
+                  ? {}
+                  : { workerFactory: this.h5WorkerFactory }),
+                ...(this.rangeMatrixMaxBytes === undefined
+                  ? {}
+                  : { rangeMatrixMaxBytes: this.rangeMatrixMaxBytes }),
+                ...(this.onProgress === undefined ? {} : { onProgress: this.onProgress }),
+                signal,
+              })
+            : readAnnDataZarr(this.url, this.zarrSource, this.onProgress, signal)
   }
 
   // The section's rows of the file's base, read by the file's dataset, which
   // is held until this section is disposed.
-  private sectionBaseCache(section: AnnDataSectionSource): Promise<H5adCache> {
-    const hold = section.holdFile()
+  private async sectionBaseCache(
+    section: AnnDataSectionSource,
+    signal: AbortSignal,
+  ): Promise<H5adCache> {
+    const hold = section.holdFile(signal)
     this.releaseSectionFile?.()
     this.releaseSectionFile = hold.release
 
-    const promise = hold.dataset.then(async (dataset) => {
+    try {
+      const dataset = await hold.dataset
+
       if (!(dataset instanceof AnnDataH5adDataset)) {
         throw new Error(
           `${this.url} is not AnnData, so it has no obs column "${section.column}" to take a section from.`,
         )
       }
 
-      return withSection(await dataset.baseCache(), section.column, section.value)
-    })
-    promise.catch(() => {
-      if (this.baseCachePromise !== promise) return
+      return withSection(await dataset.baseCache(signal), section.column, section.value)
+    } catch (error) {
+      if (this.releaseSectionFile === hold.release) {
+        this.releaseSectionFile = null
+        hold.release()
+      }
 
-      this.baseCachePromise = null
-      this.releaseSectionFile?.()
-      this.releaseSectionFile = null
-    })
-    return promise
+      throw error
+    }
   }
 }
 
@@ -2169,6 +2189,8 @@ interface ReadH5adOptions {
   readonly workerFactory?: H5WorkerFactory
   readonly rangeMatrixMaxBytes?: number
   readonly onProgress?: H5adLoadProgressReporter
+  // Cancels the read: its requests, and the H5 file worker reading the file.
+  readonly signal?: AbortSignal
 }
 
 // Small files are downloaded whole, and larger ones read by range. A companion
@@ -2176,9 +2198,12 @@ interface ReadH5adOptions {
 // range: its host does not answer range requests, or this is a custom fetcher.
 // Below the limit, such a file is downloaded whole.
 async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCache> {
-  const { fetcher, onProgress } = options
+  const { onProgress, signal } = options
+  const fetcher =
+    signal === undefined ? options.fetcher : fetcherWithSignal(options.fetcher, signal)
   reportH5adProgress(onProgress, 'H5AD size check started')
   const headResponse = await fetchH5adHead(url, fetcher).catch(() => null)
+  throwIfAborted(signal)
   const declaredByteLength =
     headResponse?.ok === true ? readContentLength(headResponse.headers) : null
   const overSizeLimit =
@@ -2267,7 +2292,9 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
     ...(options.workerFactory === undefined
       ? {}
       : { workerFactory: options.workerFactory }),
+    ...(signal === undefined ? {} : { signal }),
   })
+  const stopClosing = closeWhenAborted(file, signal)
 
   try {
     return {
@@ -2276,7 +2303,10 @@ async function readH5ad(url: string, options: ReadH5adOptions): Promise<H5adCach
     }
   } catch (error) {
     file.close()
+    throwIfAborted(signal)
     throw error
+  } finally {
+    stopClosing()
   }
 }
 
@@ -2289,7 +2319,7 @@ async function readH5adByRange(
   url: string,
   options: ReadH5adOptions,
 ): Promise<H5adCache | null> {
-  const { onProgress } = options
+  const { onProgress, signal } = options
   let file: H5WorkerFile
 
   try {
@@ -2300,6 +2330,7 @@ async function readH5adByRange(
       ...(options.workerFactory === undefined
         ? {}
         : { workerFactory: options.workerFactory }),
+      ...(signal === undefined ? {} : { signal }),
     })
   } catch (error) {
     if (error instanceof Error && error.name === H5_RANGE_UNSUPPORTED_ERROR) {
@@ -2308,6 +2339,8 @@ async function readH5adByRange(
 
     throw error
   }
+
+  const stopClosing = closeWhenAborted(file, signal)
 
   try {
     reportH5adProgress(
@@ -2334,7 +2367,29 @@ async function readH5adByRange(
     return { ...cache, close: () => file.close() }
   } catch (error) {
     file.close()
+    throwIfAborted(signal)
     throw error
+  } finally {
+    stopClosing()
+  }
+}
+
+// Ends the H5 file worker when `signal` aborts, which stops the read under
+// way there, as the worker's reads block. Returns what stops listening.
+function closeWhenAborted(
+  file: H5WorkerFile,
+  signal: AbortSignal | undefined,
+): () => void {
+  if (signal === undefined) {
+    return () => undefined
+  }
+
+  const close = () => {
+    file.close()
+  }
+  signal.addEventListener('abort', close, { once: true })
+  return () => {
+    signal.removeEventListener('abort', close)
   }
 }
 
@@ -2465,24 +2520,37 @@ async function readAnnDataIcechunk(
   url: string,
   fetcher: typeof fetch | undefined,
   onProgress: H5adLoadProgressReporter | undefined,
+  signal: AbortSignal,
 ): Promise<H5adCache> {
   reportH5adProgress(onProgress, `Opening Icechunk repository ${url}`)
+  // The repository is shared with detection, which opened it with the same
+  // fetcher, so the signal goes with the reads instead.
   const repository = await openIcechunkRepository(url, {
     ...(fetcher === undefined ? {} : { fetcher }),
     virtualChunkUrl: icechunkCompanionFileUrl(url),
+    signal,
   })
-  return readH5adCacheFromIcechunk(url, repository, 'Icechunk AnnData', onProgress)
+  return readH5adCacheFromIcechunk(
+    url,
+    repository,
+    'Icechunk AnnData',
+    onProgress,
+    signal,
+  )
 }
 
 async function readAnnDataZarrStore(
   url: string,
   fetcher: typeof fetch | undefined,
   onProgress: H5adLoadProgressReporter | undefined,
+  signal: AbortSignal,
 ): Promise<H5adCache> {
   reportH5adProgress(onProgress, `Opening AnnData Zarr store ${url}`)
   const { openAnnDataZarrStore } = await import('./annDataZarrStore')
+  // The store is this read's, and is kept for later reads, which the signal
+  // no longer stops once the read has finished.
   const opened = await openAnnDataZarrStore(url, {
-    ...(fetcher === undefined ? {} : { fetcher }),
+    fetcher: fetcherWithSignal(fetcher ?? globalThis.fetch.bind(globalThis), signal),
     obsmKeys: Array.from(
       new Set([...H5AD_COORDINATE_KEYS, ...H5AD_EMBEDDING_DISPLAY_KEYS]),
     ),
@@ -2516,6 +2584,7 @@ async function readH5adCacheFromIcechunk(
   repository: IcechunkRepository,
   label: string,
   onProgress: H5adLoadProgressReporter | undefined,
+  signal?: AbortSignal,
 ): Promise<H5adCache> {
   reportH5adProgress(
     onProgress,
@@ -2527,7 +2596,14 @@ async function readH5adCacheFromIcechunk(
       .map((node) => node.path),
   )
   const root = await hydrateZarrAnnDataGroup(
-    { store: repository.store, zarrFormat: 3, rootPath: '' },
+    {
+      store:
+        signal === undefined
+          ? repository.store
+          : storeWithSignal(repository.store, signal),
+      zarrFormat: 3,
+      rootPath: '',
+    },
     annDataIndexFromNodes(repository.nodes, ''),
     '',
   )
@@ -2557,14 +2633,21 @@ async function readAnnDataZarr(
   url: string,
   source: AnnDataZarrSource,
   onProgress: H5adLoadProgressReporter | undefined,
+  signal: AbortSignal,
 ): Promise<H5adCache> {
   const label = source.label ?? 'AnnData table'
   const rootPath = normalizeZarrPath(source.path)
   reportH5adProgress(onProgress, `Opening ${label} arrays`)
 
   try {
+    // The store is shared with the source's other reads, so the signal goes
+    // with this table's.
     const root = await hydrateZarrAnnDataGroup(
-      { store: source.store, zarrFormat: source.zarrFormat, rootPath },
+      {
+        store: storeWithSignal(source.store, signal),
+        zarrFormat: source.zarrFormat,
+        rootPath,
+      },
       annDataIndexFromNodes(source.nodes, rootPath),
       '',
     )
@@ -2578,7 +2661,7 @@ async function readAnnDataZarr(
           `${label}: skipped obs column ${key}. ${error.message}`,
         )
       },
-      { visiumLayout: false },
+      { visiumLayout: false, signal },
     )
     reportH5adProgress(
       onProgress,
@@ -2587,6 +2670,7 @@ async function readAnnDataZarr(
     source.onReady?.()
     return cache
   } catch (error) {
+    throwIfAborted(signal)
     throw source.describeError?.(error) ?? error
   }
 }
@@ -2595,8 +2679,9 @@ async function readAnnDataMemory(
   url: string,
   source: AnnDataMemorySource,
   onProgress: H5adLoadProgressReporter | undefined,
+  signal: AbortSignal,
 ): Promise<H5adCache> {
-  const table = await source.load(onProgress)
+  const table = await source.load(onProgress, signal)
   const cache = await readH5adCacheFromGroup(url, annDataGroupFromMemory(table))
   reportH5adProgress(
     onProgress,
@@ -2919,6 +3004,8 @@ async function readH5adCacheFromGroup(
     readonly visiumLayout?: boolean
     // See `readMatrix`.
     readonly lazyMatrixAboveBytes?: number
+    // Passed to `resolveCoordinates`.
+    readonly signal?: AbortSignal
   } = {},
 ): Promise<H5adCache> {
   const obs = expectGroup(file.get('/obs'), '/obs')
@@ -2935,23 +3022,26 @@ async function readH5adCacheFromGroup(
   const resolvedCoordinates =
     resolveCoordinates === undefined
       ? null
-      : await resolveCoordinates({
-          cellIds,
-          columnNames: obs
-            .keys()
-            .filter((key) => key !== '_index' && !key.startsWith('__')),
-          readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
-          readObsInstanceIds: (key) =>
-            readObsColumnValues(obs, key, cellIds.length, { exactIntegers: true }),
-          readObsmPoints: async () => {
-            const coordinates = await readOverviewCoordinateEmbedding(
-              file,
-              embeddingOptions,
-              cellIds,
-            ).catch(() => null)
-            return coordinates?.embedding.points ?? null
+      : await resolveCoordinates(
+          {
+            cellIds,
+            columnNames: obs
+              .keys()
+              .filter((key) => key !== '_index' && !key.startsWith('__')),
+            readObsColumn: (key) => readObsColumnValues(obs, key, cellIds.length),
+            readObsInstanceIds: (key) =>
+              readObsColumnValues(obs, key, cellIds.length, { exactIntegers: true }),
+            readObsmPoints: async () => {
+              const coordinates = await readOverviewCoordinateEmbedding(
+                file,
+                embeddingOptions,
+                cellIds,
+              ).catch(() => null)
+              return coordinates?.embedding.points ?? null
+            },
           },
-        })
+          options.signal,
+        )
   const obsmCoordinates =
     resolvedCoordinates === null
       ? await readOverviewCoordinateEmbedding(file, embeddingOptions, cellIds)

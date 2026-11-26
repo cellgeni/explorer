@@ -44,6 +44,60 @@ describe('SpatialDataDataset', () => {
     await expect(placed(open(ids))).resolves.toHaveLength(2)
   })
 
+  it('stops reading its table once every load waiting on it is cancelled', async () => {
+    const shapesSignals: (AbortSignal | undefined)[] = []
+    let releaseShapes = () => undefined as void
+    const shapesHeld = new Promise<void>((resolve) => {
+      releaseShapes = resolve
+    })
+    const readShapes = shapesReaderFixture({ cells: polygonRows() })
+    const fetcher = inMemoryZarrFetcher(storeFixture())
+    const dataset = new SpatialDataDataset({
+      url: STORE_URL,
+      fetcher,
+      readShapes: async (options) => {
+        shapesSignals.push(options.signal)
+        await shapesHeld
+        return readShapes(options)
+      },
+      openImage: imageOpenerFixture(),
+    })
+    const controller = new AbortController()
+    const { signal } = controller
+    // What a load reads at once: the image's units wait on the table too.
+    const reads = [
+      dataset.summary({ signal }),
+      dataset.image({ signal }),
+      dataset.overview({ signal }),
+      dataset.genePanel({ signal }),
+    ]
+
+    await vi.waitFor(() => {
+      expect(shapesSignals).toHaveLength(1)
+    })
+    controller.abort()
+
+    for (const read of reads) {
+      await expect(read).rejects.toMatchObject({ name: 'AbortError' })
+    }
+
+    // The shapes that place the table's rows were read with the table's own
+    // signal, which aborted once every caller had.
+    expect(shapesSignals[0]?.aborted).toBe(true)
+    // A request still made goes with the aborted signal, so a browser never
+    // sends it.
+    const requests = vi.mocked(fetcher).mock.calls.length
+    releaseShapes()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const later = vi.mocked(fetcher).mock.calls.slice(requests)
+    expect(
+      later.every(([input, init]) => {
+        const requestSignal = input instanceof Request ? input.signal : undefined
+        return (init?.signal ?? requestSignal)?.aborted === true
+      }),
+    ).toBe(true)
+  })
+
   it('places table rows on annotated shapes and exposes AnnData readers', async () => {
     const progress: string[] = []
     const dataset = new SpatialDataDataset({
