@@ -312,6 +312,7 @@ M2, requests:
     [Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26).
 - [ ] **O11. Shorter chains on load.** (M, one PR per group)
   - Probe every Visium HD bin size at once. Built in
+    [#469](https://github.com/cellgeni/explorer/pull/469):
     [Shorter Request Chains On Load](#shorter-request-chains-on-load-2026-11-26).
   - Pass the probe's size to hyparquet, so it skips its `HEAD`.
   - Read AnnData Zarr obs columns, and embeddings, a few at a time.
@@ -1433,9 +1434,9 @@ Task O11, one PR per group of reads that waited for each other.
 
 ### Visium HD Bin Sizes Probed Together
 
-Detecting a Visium HD folder probed its tiers one after another, three
-requests for 2 µm, then 8 µm, then 16 µm, and only then the eight
-segmented-output files (`probeVisiumHdBins`, `datasetFactory.ts`): four
+[#469](https://github.com/cellgeni/explorer/pull/469). Detecting a Visium HD
+folder probed its tiers one after another, three requests for 2 µm, then
+8 µm, then 16 µm, and only then the eight segmented-output files (`probeVisiumHdBins`, `datasetFactory.ts`): four
 rounds of requests. They are now sent together, and their probes are still
 listed a tier at a time, then the segmented outputs, so a detection error
 reads as before. A manifest's own bins are still checked as listed, with
