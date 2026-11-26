@@ -143,7 +143,7 @@ interface Harness {
   readonly run: (code: string) => Promise<PythonWorkerResponse & { type: 'done' }>
 }
 
-async function startHarness(): Promise<Harness> {
+async function startHarness(interruptBuffer: Uint8Array | null = null): Promise<Harness> {
   const wheel = await pythonDirWheel()
   const messages: PythonWorkerResponse[] = []
   const draws: PythonDrawCommand[] = []
@@ -202,7 +202,7 @@ async function startHarness(): Promise<Harness> {
   core.handle({
     type: 'start',
     indexUrl: `${path.join(root, 'node_modules', 'pyodide')}/`,
-    interruptBuffer: null,
+    interruptBuffer,
   })
   const started = await next(
     (message) => message.type === 'ready' || message.type === 'failed',
@@ -286,7 +286,7 @@ describe.skipIf(!jspi)('the Python worker with Pyodide', () => {
     const [green, orange, hide] = harness.draws
     expect(green).toMatchObject({
       op: 'color',
-      name: 'Result',
+      name: null,
       color: '#008000',
       reverse: true,
     })
@@ -340,5 +340,33 @@ describe.skipIf(!jspi)('the Python worker with Pyodide', () => {
     expect(replies).toContainEqual(
       expect.objectContaining({ id: 100, start: 7, items: ['Cell area'] }),
     )
+  })
+})
+
+describe.skipIf(!jspi)('Stop with an interrupt buffer', () => {
+  const buffer = new Uint8Array(new SharedArrayBuffer(1))
+  let harness: Harness
+
+  beforeAll(async () => {
+    harness = await startHarness(buffer)
+  }, 120_000)
+
+  // Stop lands while Python waits on the app's replies, which used to break
+  // Pyodide's event loop or show as a ConversionError.
+  it('raises KeyboardInterrupt in a loop of draw calls, and Python carries on', async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const delay = 50 + attempt * 37
+      setTimeout(() => {
+        buffer[0] = 2
+      }, delay)
+      const result = await harness.run(
+        'i = 0\nwhile True:\n    color(cells.x > i, "red", name="loop")\n    i += 1\n',
+      )
+      expect(result.status).toBe('error')
+      expect(result.error).toContain('KeyboardInterrupt')
+      expect(result.error).not.toContain('ConversionError')
+      buffer[0] = 0
+      expect(await harness.run('i > 0')).toMatchObject({ status: 'ok', display: 'True' })
+    }
   })
 })

@@ -96,9 +96,30 @@ export function createPythonCore({
       `import sys\nif ${JSON.stringify(HOME)} not in sys.path: sys.path.insert(0, ${JSON.stringify(HOME)})`,
     )
     const module = pyodide.pyimport('explorer_runtime') as PyProxy & {
-      setup: (request: (message: unknown) => Promise<unknown>) => void
+      setup: (
+        request: (message: unknown) => Promise<unknown>,
+        interrupts: PythonInterrupts,
+      ) => void
     }
-    module.setup(request)
+    // Stop is held off while Python waits on the app: an interrupt landing
+    // as a reply resolves can break Pyodide's event loop. Python asks again
+    // when the reply is in, and raises KeyboardInterrupt then.
+    const interrupts: PythonInterrupts =
+      interruptBuffer === null
+        ? NO_INTERRUPTS
+        : {
+            pause: () => {
+              pyodide.setInterruptBuffer(undefined as unknown as Uint8Array)
+            },
+            resume: () => {
+              pyodide.setInterruptBuffer(interruptBuffer)
+              pyodide.checkInterrupt()
+            },
+            sleep: interruptibleSleep(() => {
+              pyodide.checkInterrupt()
+            }),
+          }
+    module.setup(request, interrupts)
     runtime = module
     const version = pyodide.runPython('import sys; sys.version.split()[0]') as string
     post({ type: 'ready', pythonVersion: version })
@@ -198,6 +219,36 @@ export function createPythonCore({
           return
       }
     },
+  }
+}
+
+interface PythonInterrupts {
+  readonly pause: () => void
+  readonly resume: () => void
+  // time.sleep that Stop can end, or null to keep Pyodide's.
+  readonly sleep: ((seconds: number) => void) | null
+}
+
+const NO_INTERRUPTS: PythonInterrupts = {
+  pause: () => undefined,
+  resume: () => undefined,
+  sleep: null,
+}
+
+// Pyodide's time.sleep in a browser worker swallows Stop, so the worker
+// sleeps for Python instead: in 50 ms waits on a buffer no one wakes,
+// checking for Stop between them. Only where interrupts work, which is
+// where SharedArrayBuffer does.
+function interruptibleSleep(check: () => void): (seconds: number) => void {
+  const asleep = new Int32Array(new SharedArrayBuffer(4))
+  return (seconds) => {
+    const end = performance.now() + seconds * 1000
+    for (;;) {
+      const left = end - performance.now()
+      if (left <= 0) return
+      Atomics.wait(asleep, 0, 0, Math.min(left, 50))
+      check()
+    }
   }
 }
 

@@ -74,7 +74,7 @@ def test_solid_color(bridge: FakeBridge) -> None:
     assert command["rows"].dtype == np.uint32
     assert {key: value for key, value in command.items() if key != "rows"} == {
         "op": "color",
-        "name": "Result",
+        "name": None,
         "color": "#ffa500",
         "cmap": None,
         "values": None,
@@ -169,7 +169,7 @@ def test_highlight(bridge: FakeBridge) -> None:
     first, second = bridge.draws
     assert first["op"] == "highlight"
     assert first["rows"].tolist() == [2, 5]
-    assert (first["name"], first["color"]) == ("Result", "#ffffff")
+    assert (first["name"], first["color"]) == (None, "#ffffff")
     assert (second["name"], second["color"]) == ("Picked", "#aabbcc")
     assert set(first) == {"op", "name", "rows", "color"}
 

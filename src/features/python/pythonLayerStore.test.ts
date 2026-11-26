@@ -82,6 +82,52 @@ describe('PythonLayerStore', () => {
     ])
   })
 
+  it('keeps every unnamed layer of an input, and replaces them with the next input’s', () => {
+    const store = new PythonLayerStore()
+    // A loop of unnamed calls: each mask stays coloured.
+    for (const row of [0, 1, 2]) store.apply(color([row], { name: null }), 4)
+    store.apply(highlight([3], 'Result'), 4)
+    store.apply(color([3], { name: 'Kept' }), 4)
+    store.flush()
+    expect(
+      store.getSnapshot().layers.map((layer) => `${layer.kind}:${layer.name}`),
+    ).toEqual([
+      'color:Result',
+      'color:Result 2',
+      'color:Result 3',
+      'highlight:Result',
+      'color:Kept',
+    ])
+
+    // The next input's unnamed colour replaces them, and only them.
+    store.apply(color([1], { name: null }), 4)
+    store.flush()
+    expect(
+      store.getSnapshot().layers.map((layer) => `${layer.kind}:${layer.name}`),
+    ).toEqual(['highlight:Result', 'color:Kept', 'color:Result'])
+
+    // An input that draws nothing unnamed leaves them.
+    store.apply(color([2], { name: 'Other' }), 4)
+    store.flush()
+    expect(store.getSnapshot().layers.map((layer) => layer.name)).toContain('Result')
+  })
+
+  it('skips names a named layer has taken', () => {
+    const store = new PythonLayerStore()
+    store.apply(color([0], { name: 'Result' }), 4)
+    store.apply(color([1], { name: 'Result 2' }), 4)
+    store.flush()
+    store.apply(color([2], { name: null }), 4)
+    store.flush()
+
+    // A layer named Result is the user's: an unnamed call does not replace it.
+    expect(store.getSnapshot().layers.map((layer) => layer.name)).toEqual([
+      'Result',
+      'Result 2',
+      'Result 3',
+    ])
+  })
+
   it('colours a ramp per value and keeps its range for the legend', () => {
     const store = new PythonLayerStore()
     store.apply(

@@ -9,7 +9,6 @@ from ._cells import Classes, size
 from ._colors import parse_cmap, parse_color
 from ._text import count_noun
 
-DEFAULT_NAME = "Result"
 OTHERS_MODES = ("fade", "hide")
 
 
@@ -60,9 +59,11 @@ def _rows_of_bools(array: np.ndarray, count: int, noun: str) -> np.ndarray:
     return np.flatnonzero(array).astype(np.uint32)
 
 
-def _layer_name(name: Any) -> str:
+def _layer_name(name: Any) -> str | None:
+    """The layer's name; None for an unnamed call, which the app names Result,
+    Result 2 and so on, replacing the previous input's unnamed layers."""
     if name is None:
-        return DEFAULT_NAME
+        return None
     if not isinstance(name, str):
         raise TypeError(f"name is text; got {type(name).__name__}.")
     if not name.strip():

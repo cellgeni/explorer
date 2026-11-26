@@ -15,6 +15,8 @@ import {
   type SectionStackLayerOptions,
   type StackSectionInput,
 } from './sectionStackLayers'
+import { stackPythonLayers } from './stackPythonLayers'
+import type { ComposedPythonOverlay } from '../../rendering/pythonOverlay'
 
 const OPTIONS: SectionStackLayerOptions = {
   colorScale: 'plasma',
@@ -265,5 +267,112 @@ describe('sectionStackLayers', () => {
 
     expect(stackPick(pick('section-stack-0-context', 0), targets)).toBeNull()
     expect(stackPick(pick('section-stack-0-cells', -1), targets)).toBeNull()
+  })
+})
+
+describe('Python layers in the 3D cell view (plan 29)', () => {
+  // Overview rows by cell ID: cell-2 is row 0, cell-0 row 2, cell-1 row 1.
+  const ROWS: Readonly<Record<string, number>> = { 'cell-2': 0, 'cell-1': 1, 'cell-0': 2 }
+  const rowOf = (cellId: string) => ROWS[cellId]
+
+  function composed(change: Partial<ComposedPythonOverlay>): ComposedPythonOverlay {
+    return { colors: null, hidden: null, highlights: [], ...change }
+  }
+
+  it('matches Python’s rows to the cells by ID', () => {
+    // Row 0 (cell-2) red; row 1 (cell-1) hidden.
+    const layers = stackPythonLayers(
+      {
+        composed: composed({
+          colors: Uint8Array.of(255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0),
+          hidden: Uint8Array.of(0, 1, 0),
+          highlights: [
+            { name: 'Ring', color: [255, 255, 255], rows: Uint32Array.of(0, 2) },
+          ],
+        }),
+        names: ['Result', 'Ring'],
+        rowOf,
+      },
+      CELLS,
+    )
+
+    expect([...(layers?.colors ?? [])]).toEqual([0, 0, 0, 0, 0, 0, 0, 0, 255, 0, 0, 255])
+    expect([...(layers?.hidden ?? [])]).toEqual([0, 1, 0])
+    expect([...(layers?.highlights[0]?.cells ?? [])]).toEqual([2, 0])
+  })
+
+  it('has nothing to draw when Python has drawn nothing', () => {
+    expect(
+      stackPythonLayers({ composed: composed({}), names: [], rowOf }, CELLS),
+    ).toBeNull()
+  })
+
+  it('draws coloured cells solid, the rest faint, rings above, and hidden cells nowhere', () => {
+    const python = stackPythonLayers(
+      {
+        composed: composed({
+          colors: Uint8Array.of(255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0),
+          hidden: Uint8Array.of(0, 1, 0),
+          highlights: [{ name: 'Ring', color: [255, 255, 255], rows: Uint32Array.of(0) }],
+        }),
+        names: ['Result', 'Ring'],
+        rowOf,
+      },
+      CELLS,
+    )
+    // The class colouring it takes over.
+    const input = section({
+      classes: CLASSES,
+      overlay: {
+        kind: 'classes',
+        classOf: CLASSES.classOf,
+        colors: ['#00ff00', '#0000ff'],
+      },
+      python,
+    })
+    const { layers, targets } = sectionStackLayers([input], OPTIONS)
+
+    expect(layers.map((layer) => props(layer).id)).toEqual([
+      'section-stack-0-python',
+      'section-stack-0-python-ring-Ring',
+      'section-stack-0-context',
+    ])
+    const solid = props(layers[0])
+    // Cell 2 (row 0) in red; cell 0 faint; cell 1 hidden.
+    expect([...solid.data.attributes.getPosition!.value]).toEqual([30, -5])
+    expect([...solid.data.attributes.getFillColor!.value]).toEqual([255, 0, 0, 255])
+    expect([...props(layers[2]).data.attributes.getPosition!.value]).toEqual([0, -0])
+    expect(props(layers[1]).pickable).toBe(false)
+    expect(stackPick(pick('section-stack-0-python', 0), targets)).toEqual({
+      section: 0,
+      kind: 'cell',
+      index: 2,
+    })
+
+    // Other cells off: only the coloured one and its ring.
+    const hidden = sectionStackLayers([input], { ...OPTIONS, showContext: false })
+    expect(hidden.layers.map((layer) => props(layer).id)).toEqual([
+      'section-stack-0-python',
+      'section-stack-0-python-ring-Ring',
+    ])
+  })
+
+  it('keeps the section’s own colouring under rings alone', () => {
+    const python = stackPythonLayers(
+      {
+        composed: composed({
+          highlights: [{ name: 'Ring', color: [255, 255, 255], rows: Uint32Array.of(1) }],
+        }),
+        names: ['Ring'],
+        rowOf,
+      },
+      CELLS,
+    )
+    const { layers } = sectionStackLayers([section({ python })], OPTIONS)
+
+    expect(layers.map((layer) => props(layer).id)).toEqual([
+      'section-stack-0-cells',
+      'section-stack-0-python-ring-Ring',
+    ])
   })
 })
