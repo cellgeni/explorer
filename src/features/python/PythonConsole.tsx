@@ -3,12 +3,14 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type DragEvent,
   type KeyboardEvent,
   type PointerEvent,
 } from 'react'
 import { Button } from '../../components/ui'
 import { addPythonHistory, readPythonHistory, stepPythonHistory } from './pythonHistory'
 import { createPythonPrompt, type PythonPrompt } from './pythonPrompt'
+import { CODE_FILE_ACCEPT, readCodeFile } from './pythonCodeFile'
 import { formatPickedPoint, type PythonConsoleModel } from './pythonConsoleModel'
 import {
   clampPromptHeight,
@@ -178,6 +180,34 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
   const running = snapshot.status === 'running'
   const loading = snapshot.status === 'loading'
 
+  // A code file goes in the input at the cursor; it runs when the user runs it.
+  const fileInput = useRef<HTMLInputElement>(null)
+  const [dropping, setDropping] = useState(false)
+  const openCodeFile = async (file: File) => {
+    const read = await readCodeFile(file)
+    session.note(read.note)
+    if (read.ok) prompt.current?.insertAtCursor(read.text)
+  }
+  const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files')
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (unavailable || !hasFiles(event)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'copy'
+    setDropping(true)
+  }
+  const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+      setDropping(false)
+    }
+  }
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    setDropping(false)
+    const file = event.dataTransfer.files[0]
+    if (unavailable || file === undefined) return
+    event.preventDefault()
+    void openCodeFile(file)
+  }
+
   const run = () => {
     const code = prompt.current?.text() ?? ''
     if (code.trim() === '') return
@@ -190,7 +220,13 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
   }
 
   return (
-    <div className="python-console" ref={consoleRef}>
+    <div
+      className={`python-console${dropping ? ' is-dropping' : ''}`}
+      ref={consoleRef}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
       <div
         ref={logRef}
         className="python-log"
@@ -281,6 +317,29 @@ export function PythonConsole({ model }: { readonly model: PythonConsoleModel })
         >
           Pick Point
         </Button>
+        <Button
+          title="Put a .py file's code in the input, to run with Enter or Run; you can also drop a file on the console"
+          disabled={unavailable}
+          onClick={() => {
+            fileInput.current?.click()
+          }}
+        >
+          Open File…
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          accept={CODE_FILE_ACCEPT}
+          hidden
+          title="Choose a code file for the input"
+          aria-label="Code file"
+          onChange={(event) => {
+            const file = event.currentTarget.files?.[0]
+            // The same file can be chosen again.
+            event.currentTarget.value = ''
+            if (file !== undefined) void openCodeFile(file)
+          }}
+        />
         <Button
           title="Clear the output; variables stay"
           variant="ghost"

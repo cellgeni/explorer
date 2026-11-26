@@ -257,6 +257,43 @@ describe('the Python window (plan 29-D11)', () => {
     expect(separator).toHaveAttribute('aria-valuetext', 'Fits the input')
   })
 
+  it('puts a code file in the input, opened or dropped, without running it', async () => {
+    stubWideScreen()
+    const { Harness, workers } = setup()
+    render(<Harness initial={{ ...DEFAULT_SHELL_PANELS, pythonOpen: true }} />)
+    const input = await within(pythonWindow()).findByRole('textbox', {
+      name: 'Python input',
+    })
+    const worker = workers[0]!
+    worker.emit({ type: 'ready', pythonVersion: '3.14.2' })
+    const editor = () => EditorView.findFromDOM(input)?.state.doc.toString()
+
+    fireEvent.change(within(pythonWindow()).getByLabelText('Code file'), {
+      target: { files: [new File(['x = 1\ny = 2\n'], 'setup.py')] },
+    })
+    await waitFor(() => {
+      expect(editor()).toBe('x = 1\ny = 2\n')
+    })
+    const log = within(pythonWindow()).getByRole('log', { name: 'Python output' })
+    await waitFor(() => {
+      expect(log).toHaveTextContent(
+        'setup.py (3 lines) is in the input: press Enter or Run to run it.',
+      )
+    })
+
+    // Dropped on the console, it goes in at the cursor, after the first.
+    fireEvent.drop(pythonWindow().querySelector('.python-console')!, {
+      dataTransfer: {
+        types: ['Files'],
+        files: [new File(['z = 3'], 'more.py')],
+      },
+    })
+    await waitFor(() => {
+      expect(editor()).toBe('x = 1\ny = 2\nz = 3')
+    })
+    expect(worker.sent.some((message) => message.type === 'run')).toBe(false)
+  })
+
   it('arms Pick Point', async () => {
     stubWideScreen()
     const { Harness, onPickingChange } = setup()

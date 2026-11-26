@@ -212,6 +212,11 @@ export class PythonSession {
     this.#set({ log: [] })
   }
 
+  // A note from the console itself, such as a file put in the input.
+  note(text: string): void {
+    this.#append('info', text)
+  }
+
   dispose(): void {
     this.#disposed = true
     this.#endWorker('stopped')

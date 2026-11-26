@@ -122,6 +122,9 @@ for label, hue in zip(clusters.labels[:3], ["red", "orange", "gold"]):
 - **The legend** lists the layers under _Python_, first, each with its swatch
   or ramp, its count and a button to clear it, and the cells `show` keeps
   with a button to show every cell. Screenshots include them.
+- **The 3D cell view** takes the same layers: cells in a colour layer solid,
+  the others faint or hidden, and rings round highlighted cells. With
+  `show()` alone, the shown cells are grey there.
 
 ## Examples
 
@@ -151,6 +154,13 @@ inside = rois["Tumour"].contains(cells)
 clusters = cells["graphclust"]
 {label: int((clusters == label)[inside].sum()) for label in clusters.labels}
 ```
+
+## Code from a file
+
+`Open File…` puts a `.py` file's code in the input at the cursor, as does
+dropping the file on the console. It runs when you press `Enter` or `Run`, so
+you can read or change it first. A file of functions defines them all in one
+go.
 
 ## Stop
 
