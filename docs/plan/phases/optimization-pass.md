@@ -246,6 +246,7 @@ M1, interaction:
   - The ID maps built in [#437](https://github.com/cellgeni/explorer/pull/437):
     [Cell ID Maps Built On First Use](#cell-id-maps-built-on-first-use-2026-11-25).
   - The cell objects and the extent built in
+    [#468](https://github.com/cellgeni/explorer/pull/468):
     [Overview Cells In Fewer Passes](#overview-cells-in-fewer-passes-2026-11-26);
     the ranks and colours were measured and left.
 - [x] **O6. App renders on hover and on settling.** (S) Pass a transcript
@@ -1370,7 +1371,8 @@ row in `cells.parquet`.
 
 ## Overview Cells In Fewer Passes (2026-11-26)
 
-Task O5, second part. After the ID maps
+Task O5, second part, [#468](https://github.com/cellgeni/explorer/pull/468).
+After the ID maps
 ([Cell ID Maps Built On First Use](#cell-id-maps-built-on-first-use-2026-11-25)),
 a CPU profile of the 1.4M-cell Xenium load (S2) put its longest main-thread
 stretch at 0.67–0.80 s, on a machine running other work. Most of it was the
@@ -1580,7 +1582,7 @@ Closed by the pass's tasks:
       2026-11-13), the first render with the overview layer build (2.3–3.0
       s), and the first JPEG 2000 decode (in workers since 2026-11-13). Over
       the first 30 s, the longest stretch is now 0.57–0.60 s, the first
-      overview draw
+      overview draw ([#468](https://github.com/cellgeni/explorer/pull/468))
       ([Overview Cells In Fewer Passes](#overview-cells-in-fewer-passes-2026-11-26)).
 - [x] Hovering transcripts set App state to a new object on every pointer
       move, so App re-rendered as the pointer moved (O6, 2026-11-25). It
