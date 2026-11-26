@@ -318,7 +318,7 @@ M2, requests:
     adopted: Chromium already answers that `HEAD` from its cache. The
     overview's reads waited for each other in that cache instead, and
     Parquet Range reads now skip it, in
-    [#NNN](https://github.com/cellgeni/explorer/pull/NNN):
+    [#472](https://github.com/cellgeni/explorer/pull/472):
     [Parquet Range Reads Skip The HTTP Cache](#parquet-range-reads-skip-the-http-cache).
   - Xenium's extent from `cells.parquet`'s footer statistics, rather than
     DuckDB's scan of two columns, which outlines wait for (found with the
@@ -1467,7 +1467,7 @@ released and counts the rounds: four (3, 3, 3 and 8 requests) before, one
 
 ### Parquet Range Reads Skip The HTTP Cache
 
-[#NNN](https://github.com/cellgeni/explorer/pull/NNN). The second group was
+[#472](https://github.com/cellgeni/explorer/pull/472). The second group was
 to give hyparquet the Range probe's size, so that it would not send a
 `HEAD` for it. Built and measured, that saved nothing on hosts that send
 validators, as nearly all do: Chromium answers the `HEAD` from the probe's
