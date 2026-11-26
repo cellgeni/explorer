@@ -47,7 +47,6 @@ in vec2 instanceColumnVectors;
 in vec2 instanceRowVectors;
 in vec4 instanceFillColors;
 in vec4 instanceLineColors;
-in vec3 instancePickingColors;
 
 out vec4 vFillColor;
 out vec4 vLineColor;
@@ -60,7 +59,9 @@ void main(void) {
 
   geometry.worldPosition = corner;
   geometry.uv = positions.xy;
-  geometry.pickingColor = instancePickingColors;
+  // deck.gl 9.4 no longer generates instancePickingColors; the picking
+  // colour comes from the instance, one per bin.
+  geometry.pickingColor = picking_getPickingColorFromInstanceID();
   vUnit = positions.xy + 0.5;
   vLineWidthDevicePixels = gridBin.lineWidthPixels * project.devicePixelRatio;
 
