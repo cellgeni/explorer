@@ -236,7 +236,7 @@ M1, interaction:
   - Measure S4.
   - Built in [#439](https://github.com/cellgeni/explorer/pull/439):
     [Outlines Coloured By ID](#outlines-coloured-by-id-2026-11-25).
-- [ ] **O5. Fewer passes before the first overview draw.** (M) One extent
+- [x] **O5. Fewer passes before the first overview draw.** (M) One extent
       pass, reused; the ID maps built when first needed (outlines, a hover,
       Cell Query opening); ranks with filter values, and colours with layer
       colours, in one pass each; points packed from the worker's column
@@ -245,6 +245,9 @@ M1, interaction:
     moves.
   - The ID maps built in [#437](https://github.com/cellgeni/explorer/pull/437):
     [Cell ID Maps Built On First Use](#cell-id-maps-built-on-first-use-2026-11-25).
+  - The cell objects and the extent built in
+    [Overview Cells In Fewer Passes](#overview-cells-in-fewer-passes-2026-11-26);
+    the ranks and colours were measured and left.
 - [x] **O6. App renders on hover and on settling.** (S) Pass a transcript
       hover to App only when the hovered object changes; the tooltip still
       follows the pointer, and the diagnostics dump reads the latest hover
@@ -887,8 +890,8 @@ runs each, with GPU drawing:
 - **Same results:** both builds gave "Expression overview: 50,291 positive
   cells across 1,400,000 slide cells".
 
-The rest of O5 (one extent pass, ranks and colours in one pass each, and
-points packed from the worker's columns) is not built yet.
+The rest of O5 is under
+[Overview Cells In Fewer Passes](#overview-cells-in-fewer-passes-2026-11-26).
 
 ## Outlines Coloured By ID (2026-11-25)
 
@@ -1365,6 +1368,62 @@ DuckDB on 5,000 outlines of 25 vertices under a 64 MB memory limit, which
 the ordered aggregate runs out of on main, and picks nuclei that have no
 row in `cells.parquet`.
 
+## Overview Cells In Fewer Passes (2026-11-26)
+
+Task O5, second part. After the ID maps
+([Cell ID Maps Built On First Use](#cell-id-maps-built-on-first-use-2026-11-25)),
+a CPU profile of the 1.4M-cell Xenium load (S2) put its longest main-thread
+stretch at 0.67–0.80 s, on a machine running other work. Most of it was the
+overview's cells built as objects twice, once from the worker's columns
+(`cellsOverviewFromColumns`, 46–67 ms) and once for the layers
+(`overviewCellsToLayerData`, 170–186 ms), and 192–207 ms of garbage
+collection.
+
+- **The layer objects** (`src/rendering/cellPointRenderer.ts`). Each of a
+  cell's optional fields was spread into its literal as
+  `...(x === undefined ? {} : { x })`, which made up to six objects a cell.
+  They are now assigned when the cell has them, so no key is set to
+  `undefined`, as before. The fill
+  colour, which depends only on the cell's share of the largest transcript
+  count, is one of 91 shared arrays rather than an array per cell. They are
+  not frozen: a frozen array is another kind of array to V8, and with both
+  kinds `packCellPointColors` took 52–67 ms against 12–34 ms.
+- **One extent.** The viewer (`overviewCellsExtentBbox`) and the layer data
+  (`overviewCellsToBbox`) each worked out the cells' extent, 12–29 ms a
+  pass. `overviewCellsExtentBbox` keeps its result per cell array, and
+  `overviewCellsToBbox` reads it.
+
+Measured with unminified production builds of main (`9bd96a0`) and the
+branch, alternating, three runs each, with GPU drawing. S2 is the synthetic
+1.4M-cell folder served locally, outlines off, then coloured by `M03a`; S9
+is the demo, coloured by `SNAP25`:
+
+| Load                     | Main: longest | Branch: longest | Main: cell objects | Branch: cell objects | Main: GC   | Branch: GC |
+| ------------------------ | ------------- | --------------- | ------------------ | -------------------- | ---------- | ---------- |
+| S2, the synthetic folder | 766–796 ms    | 562–579 ms      | 170–186 ms         | 71–86 ms             | 192–207 ms | 142–148 ms |
+| S9, the demo             | 463–735 ms    | 314–541 ms      | 172–193 ms         | 59–71 ms             | 154–174 ms | 108–126 ms |
+
+- **Busy time** in S2's load fell by 145–243 ms, paired run for run. The
+  demo's loads vary with the host, which the longest stretches show.
+- **The first colouring by a gene** is unchanged: its longest stretch was
+  314–345 ms on main and 307–357 ms on the branch in S2, and both builds
+  gave the same expression line ("50,291 positive cells across 1,400,000
+  slide cells"; on the demo, 231,404 across 1,414,155).
+- **The first 30 s on the demo.** Profiled from the load until 28 s after
+  the gene search is ready, two runs each, the longest stretch was 640–725
+  ms on main and 569–597 ms on the branch, the first overview draw. The
+  open item's stalls of up to 4 s are gone.
+- **Left as they are:** the ranks (`cellPointRanks`, 26–28 ms) and colours
+  (`packCellPointColors`, 12–34 ms, then `cellPointLayerColors`, 11–16 ms)
+  take a pass each, too little to merge. Packing the points from the
+  worker's columns, rather than building objects at all, would remove both
+  object passes, but the overview's cell objects are read in 36 files.
+
+Tests: `src/rendering/deckLayers.test.ts` checks that a cell's datum has
+only the fields the cell has and that cells share their fill colour, and
+`src/rendering/cellAggregation.test.ts` that an array's extent is worked
+out once. Both fail on main.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1515,6 +1574,14 @@ Found by the 2026-11-16 review:
 
 Closed by the pass's tasks:
 
+- [x] The Xenium demo blocked the main thread for up to 4 s at a time in the
+      first 30 s after load (O5, 2026-11-26). CPU profiles on 2026-11-12 put
+      it on the load: hyparquet decoding `cells.parquet` (in a worker since
+      2026-11-13), the first render with the overview layer build (2.3–3.0
+      s), and the first JPEG 2000 decode (in workers since 2026-11-13). Over
+      the first 30 s, the longest stretch is now 0.57–0.60 s, the first
+      overview draw
+      ([Overview Cells In Fewer Passes](#overview-cells-in-fewer-passes-2026-11-26)).
 - [x] Hovering transcripts set App state to a new object on every pointer
       move, so App re-rendered as the pointer moved (O6, 2026-11-25). It
       now changes only when the hovered transcript does: App renders once
