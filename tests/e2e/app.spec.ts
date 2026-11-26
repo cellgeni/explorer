@@ -959,7 +959,7 @@ test.describe('at 390 × 844 px', () => {
     await menu.click()
     await expect(
       page.getByRole('dialog', { name: 'Panels' }).getByRole('button'),
-    ).toHaveText(['Embedding', 'Plots', 'Query'])
+    ).toHaveText(['Embedding', 'Plots', 'Query', 'Python'])
     await menu.click()
 
     // Focus moves into the window and, when it closes, back to the menu.

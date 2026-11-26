@@ -510,6 +510,7 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
 
   async estimateGeneValuesRead(
     genes: readonly string[],
+    options: { readonly layer?: string | undefined } = {},
   ): Promise<GeneValuesReadEstimate> {
     const table = await this.tableOrNull()
 
@@ -518,18 +519,26 @@ export class SpatialDataDataset implements SpatialDataset<SpatialElementId> {
           kind: 'unavailable',
           reason: 'Plots read the expression matrix of a table, and this store has none.',
         }
-      : table.estimateGeneValuesRead(genes)
+      : table.estimateGeneValuesRead(genes, options)
   }
 
   async geneValues(
     genes: readonly string[],
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    } = {},
   ): Promise<readonly GeneValuesRead[]> {
     const table = await this.tableOrNull()
 
     return table === null
       ? genes.map((gene) => ({ gene, error: 'This store has no table.' }))
       : table.geneValues(genes, options)
+  }
+
+  // The table's layers, and raw.
+  async geneValuesLayers(): Promise<readonly string[]> {
+    return (await this.tableOrNull())?.geneValuesLayers() ?? []
   }
 
   async annotationGroups(

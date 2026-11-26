@@ -17,6 +17,7 @@ import type {
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import {
   columnSlicesReadBytes,
+  noGeneValuesLayerMessage,
   type GeneValuesRead,
   type GeneValuesReadEstimate,
 } from '../data/geneValues'
@@ -383,7 +384,12 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   // Each gene is one column of the CSC matrix.
   async estimateGeneValuesRead(
     genes: readonly string[],
+    options: { readonly layer?: string | undefined } = {},
   ): Promise<GeneValuesReadEstimate> {
+    if (options.layer !== undefined) {
+      return { kind: 'unavailable', reason: ateraNoLayer(options.layer) }
+    }
+
     const [{ columnByName, featureNames }, csc] = await Promise.all([
       this.genes(),
       this.csc(),
@@ -408,8 +414,17 @@ export class AteraDataset implements SpatialDataset<SpatialElementId> {
   // overlay caches.
   async geneValues(
     genes: readonly string[],
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    } = {},
   ): Promise<readonly GeneValuesRead[]> {
+    const { layer } = options
+
+    if (layer !== undefined) {
+      return genes.map((gene) => ({ gene, error: ateraNoLayer(layer) }))
+    }
+
     const { columnByName } = await this.genes()
 
     return mapWithConcurrency(genes, GENE_VALUES_CONCURRENCY, async (gene) => {
@@ -1223,4 +1238,8 @@ function evictOldest<Key, Value>(cache: Map<Key, Value>, limit: number): void {
 
     cache.delete(oldest.value)
   }
+}
+
+function ateraNoLayer(layer: string): string {
+  return noGeneValuesLayerMessage('Atera', 'cell_feature_matrix', layer)
 }

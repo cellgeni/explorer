@@ -33,6 +33,7 @@ export type H5FileWorkerRequest =
   | H5FileStatsRequest
   | H5FileStructureRequest
   | H5FilePreviewRequest
+  | H5FileTreeRequest
 
 export interface H5FileOpenRequest {
   readonly id: number
@@ -44,6 +45,15 @@ export interface H5FileOpenRequest {
   // groups above them with just those children. Each object the walk visits
   // costs a read of its header, which on a remote file can be a request.
   readonly treePaths?: readonly string[]
+}
+
+// Paths the open's tree left out, walked when a reader first needs them, as
+// an H5AD's layers and raw: the root and the groups down to each path, with
+// just those children (see `treePaths`).
+export interface H5FileTreeRequest {
+  readonly id: number
+  readonly op: 'tree'
+  readonly paths: readonly string[]
 }
 
 export type H5FileSource =
@@ -143,6 +153,7 @@ export type H5FileWorkerResponse =
   | H5FileStatsResponse
   | H5FileStructureResponse
   | H5FilePreviewResponse
+  | H5FileTreeResponse
   | H5FileProgressResponse
   | H5FileWorkerFailure
 
@@ -174,6 +185,13 @@ export interface H5FilePreviewResponse {
   readonly ok: true
   readonly op: 'preview'
   readonly preview: H5ValuePreview
+}
+
+export interface H5FileTreeResponse {
+  readonly id: number
+  readonly ok: true
+  readonly op: 'tree'
+  readonly tree: H5TreeGroup
 }
 
 // Sent while a request runs, before its reply: the objects a structure walk

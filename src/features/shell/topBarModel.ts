@@ -34,10 +34,10 @@ export interface ToolGroupModel {
   readonly onSelect: (tool: ActiveTool) => void
 }
 
-// A window the top bar opens and closes: Embedding (15.2-G), Plots (22-D8)
-// or Cell Query (23-D9).
+// A window the top bar opens and closes: Embedding (15.2-G), Plots (22-D8),
+// Cell Query (23-D9) or Python (29-D11).
 export interface PanelToggle {
-  readonly panel: 'embedding' | 'plots' | 'query'
+  readonly panel: 'embedding' | 'plots' | 'query' | 'python'
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
 }

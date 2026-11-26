@@ -1,5 +1,8 @@
-import { xeniumCellIdText } from '../../data/cellid'
-import type { GeneValues, GeneValuesRowIds } from '../../data/geneValues'
+import {
+  geneValuesRowIdAt,
+  type GeneValues,
+  type GeneValuesRowIds,
+} from '../../data/geneValues'
 
 // The numbers behind the plots (plan 22-B, 22-C), computed where the gene
 // values are: in the plot worker, or on this thread without one. Groups are
@@ -128,15 +131,7 @@ export class PlotStatsStore {
   // and the genes.
   setRows(rowIds: GeneValuesRowIds): void {
     const rowById = new Map<string, number>()
-    const rowCount = 'kind' in rowIds ? rowIds.count : rowIds.length
-    const idAt =
-      'kind' in rowIds
-        ? (row: number) =>
-            xeniumCellIdText(
-              rowIds.pairs[row * rowIds.stride] ?? 0,
-              rowIds.pairs[row * rowIds.stride + 1] ?? 0,
-            )
-        : (row: number) => rowIds[row] ?? ''
+    const { count: rowCount, idAt } = geneValuesRowIdAt(rowIds)
 
     for (let row = 0; row < rowCount; row += 1) {
       const id = idAt(row)

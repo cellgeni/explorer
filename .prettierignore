@@ -9,3 +9,9 @@ package-lock.json
 # Written by anndata and spatialdata; kept as written.
 src/test/fixtures/anndata-zarr/
 src/test/fixtures/spatialdata/image_cells.zarr/
+
+# Python (src/python): virtual environment, caches and uv's lock file.
+.venv/
+.pytest_cache/
+__pycache__/
+uv.lock

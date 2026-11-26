@@ -3,9 +3,9 @@ import { CONTROL_AREAS, type ControlArea } from '../../src/test/controlAreas'
 
 // Shows the controls for an area (see src/test/controlAreas.ts) and returns
 // the element that holds them: the start screen or the dataset menu, the info
-// drawer, a layer section, a popover, or the Embedding, Plots or Cell Query
-// window, opened unless it already is. Under 860 px it expands the layer
-// sheet for a section and picks a window from the Panels menu.
+// drawer, a layer section, a popover, or the Embedding, Plots, Cell Query or
+// Python window, opened unless it already is. Under 860 px it expands the
+// layer sheet for a section and picks a window from the Panels menu.
 export async function openControls(page: Page, area: ControlArea): Promise<Locator> {
   const place = CONTROL_AREAS[area]
 

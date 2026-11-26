@@ -152,6 +152,17 @@ export function createH5FileHandler(
           respond({ id: request.id, ok: true, op: 'read', value }, transferablesOf(value))
           return
         }
+        case 'tree': {
+          const current = expectOpen()
+          const tree = h5TreeGroup(
+            current.h5wasm,
+            current.file,
+            h5TreeScope(request.paths),
+          )
+          throwRangeError(current)
+          respond({ id: request.id, ok: true, op: 'tree', tree }, [])
+          return
+        }
         case 'structure': {
           const current = expectOpen()
           const structure = walkH5Structure(

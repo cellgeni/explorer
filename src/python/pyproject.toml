@@ -1,0 +1,25 @@
+[project]
+name = "explorer"
+version = "0.1.0"
+description = "The open dataset's cells as NumPy arrays, for the app's Python console (Pyodide)."
+requires-python = ">=3.12"
+# Pyodide ships NumPy 2.4; test against the same minor version.
+dependencies = ["numpy>=2.4,<2.5"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+# Not built or installed: the app loads the package's files into Pyodide, and
+# pytest finds them through pythonpath below.
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]

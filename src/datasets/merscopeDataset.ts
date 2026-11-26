@@ -21,7 +21,11 @@ import type {
 import type { CellFeatureMatrixReadOptions, GexResult } from '../data/gex'
 import type { CellOverviewPoint } from '../data/hyparquetCells'
 import type { FallbackNotifier } from '../data/fallbackNotice'
-import type { GeneValuesRead, GeneValuesReadEstimate } from '../data/geneValues'
+import {
+  noGeneValuesLayerMessage,
+  type GeneValuesRead,
+  type GeneValuesReadEstimate,
+} from '../data/geneValues'
 import type { ImagePyramidOpener } from '../data/imagePyramid'
 import type { RoiSelectionInput } from '../data/roiSelection'
 import { readZipDirectory, readZipEntry, type ZipDirectory } from '../data/zipArchive'
@@ -410,15 +414,25 @@ export class MerscopeDataset implements SpatialDataset<SpatialElementId> {
 
   async estimateGeneValuesRead(
     genes: readonly string[],
+    options: { readonly layer?: string | undefined } = {},
   ): Promise<GeneValuesReadEstimate> {
-    return this.table.estimateGeneValuesRead(genes)
+    return options.layer === undefined
+      ? this.table.estimateGeneValuesRead(genes)
+      : { kind: 'unavailable', reason: merscopeNoLayer(options.layer) }
   }
 
   async geneValues(
     genes: readonly string[],
-    options: { readonly signal?: AbortSignal } = {},
+    options: {
+      readonly signal?: AbortSignal | undefined
+      readonly layer?: string | undefined
+    } = {},
   ): Promise<readonly GeneValuesRead[]> {
-    return this.table.geneValues(genes, options)
+    const { layer, signal } = options
+
+    return layer === undefined
+      ? this.table.geneValues(genes, signal === undefined ? {} : { signal })
+      : genes.map((gene) => ({ gene, error: merscopeNoLayer(layer) }))
   }
 
   // ROI cells, with the transcript counts the ROI summary averages.
@@ -724,4 +738,8 @@ function boundaryElement(index: BoundaryIndex, kept: number): SpatialElement {
     id: index.shapes.ids[shapeIndex] ?? String(shapeIndex),
     geometry: { kind: 'polygon', rings: [points] },
   }
+}
+
+function merscopeNoLayer(layer: string): string {
+  return noGeneValuesLayerMessage('MERSCOPE', 'cell_by_gene.csv', layer)
 }

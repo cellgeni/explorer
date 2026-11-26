@@ -351,6 +351,7 @@ export function ViewerCore({
   onTileCacheEviction,
   onViewportChange,
   onCellClick,
+  onPointPick,
   onCellBoundaryClick,
   onGridCellClick,
   onTranscriptHover,
@@ -484,6 +485,7 @@ export function ViewerCore({
       {...(onTileCacheEviction === undefined ? {} : { onTileCacheEviction })}
       {...(onViewportChange === undefined ? {} : { onViewportChange })}
       {...(onCellClick === undefined ? {} : { onCellClick })}
+      onPointPick={onPointPick}
       {...(onCellBoundaryClick === undefined ? {} : { onCellBoundaryClick })}
       {...(onGridCellClick === undefined ? {} : { onGridCellClick })}
       {...(onTranscriptHover === undefined ? {} : { onTranscriptHover })}
@@ -583,6 +585,9 @@ interface ViewerSurfaceProps {
   readonly onTileCacheEviction?: (evictedTileCount: number) => void
   readonly onViewportChange?: (detail: ViewerViewportDetail) => void
   readonly onCellClick?: (cell: OverviewCellDatum) => void
+  readonly onPointPick?:
+    | ((point: { readonly x: number; readonly y: number }) => void)
+    | undefined
   readonly onCellBoundaryClick?: (boundary: CellBoundaryDatum) => void
   readonly onGridCellClick?: (cell: GridCellDatum) => void
   readonly onTranscriptHover?: (detail: ViewerTranscriptHoverDetail | null) => void
@@ -675,6 +680,7 @@ function ViewerSurface({
   onTileCacheEviction,
   onViewportChange,
   onCellClick,
+  onPointPick,
   onCellBoundaryClick,
   onGridCellClick,
   onTranscriptHover,
@@ -1342,7 +1348,12 @@ function ViewerSurface({
       : null
   const activeMeasurementLine =
     measurementState.resetKey === measurementResetKey ? measurementState.line : null
-  const activeToolHint = toolHintText({ roiMode, measurementEnabled, magicLensActive })
+  const activeToolHint = toolHintText({
+    roiMode,
+    measurementEnabled,
+    magicLensActive,
+    pickingPoint: onPointPick !== undefined,
+  })
   const selectionOverlay = useMemo(
     () => selectionOverlayModel(selectionHighlight, viewState, viewport),
     [selectionHighlight, viewState, viewport],
@@ -1686,6 +1697,12 @@ function ViewerSurface({
       readonly x?: number
       readonly y?: number
     }) => {
+      if (onPointPick !== undefined) {
+        const [x, deckY] = info.coordinate ?? []
+        if (x !== undefined && deckY !== undefined) onPointPick({ x, y: -deckY })
+        return
+      }
+
       if (isTranscriptPointDatum(info.object)) {
         onTranscriptClick?.({
           transcript: info.object,
@@ -1789,6 +1806,7 @@ function ViewerSurface({
       onCellClick,
       cells,
       onGridCellClick,
+      onPointPick,
       onTranscriptClick,
       overviewCellIndex,
     ],
@@ -2574,11 +2592,14 @@ function toolHintText({
   roiMode,
   measurementEnabled,
   magicLensActive,
+  pickingPoint,
 }: {
   readonly roiMode: RoiDrawMode
   readonly measurementEnabled: boolean
   readonly magicLensActive: boolean
+  readonly pickingPoint: boolean
 }): string | null {
+  if (pickingPoint) return 'Click the map to write that point into the Python prompt.'
   if (roiMode === 'box') return 'Drag to draw a box. Esc cancels.'
   if (roiMode === 'lasso') return 'Drag to draw a lasso. Esc cancels.'
   if (measurementEnabled) return 'Drag to measure a distance. Esc stops measuring.'

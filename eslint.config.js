@@ -14,6 +14,7 @@ export default defineConfig([
     'old',
     'playwright-report',
     'private',
+    '**/.venv',
     'test-results',
   ]),
   {

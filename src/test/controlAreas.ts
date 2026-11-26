@@ -69,6 +69,8 @@ export const CONTROL_AREAS = {
   plots: { kind: 'panel', name: 'Plots', window: 'Plots' },
   // Cell Query window (plan 23-D9): conditions, table, Save As Class, export.
   query: { kind: 'panel', name: 'Query', window: 'Cell Query' },
+  // Python window (plan 29-D11): output, prompt, Run, Stop, Pick Point.
+  python: { kind: 'panel', name: 'Python', window: 'Python' },
 } as const satisfies Record<string, ControlAreaPlace>
 
 export type ControlArea = keyof typeof CONTROL_AREAS

@@ -111,6 +111,33 @@ Decided after the
       Explorer's shortcuts work the same way. The review left this as a lead for a
       decision.
 
+Added 2026-11-26:
+
+- [ ] Xenium runs zipped whole. A `.zip` holding `experiment.xenium` is
+      detected as a Xenium run and refused, because only the main thread's
+      `fetch` answers `<zip url>/<path>` from the zip (`zipFolder.ts`), and
+      Xenium reads in workers: DuckDB, the H5 matrix and the Parquet
+      workers. Atera runs open from a zip since 2026-11-18 (see
+      [Phase 12](phases/12-atera.md#zipped-runs)). The workers would need the
+      zip's directory to turn inner paths into byte ranges themselves. The
+      one public Xenium zip found, GEO GSM7780153 (XOA 1.0.1, 9.9 GB), stores
+      its four `*.zarr.zip` but deflates everything else, the morphology
+      TIFFs (628 MB to 5.2 GB) included, so its image cannot be read by tile.
+- [ ] A reader picker, for advanced use: a small cog icon button at the end
+      of the `Dataset or image URL` field (`OpenDatasetForm`, so on the start
+      screen and in the dataset menu) with a menu of "Detect automatically",
+      the default, and the platforms (Xenium, Atera, Visium, Visium HD,
+      MERSCOPE, H5AD, SpatialData, Image). A choice skips detection and opens
+      the address with that reader; when the files do not fit it, the error
+      is that reader's and suggests detecting again. **DECISION:** detection
+      stays the way in, and choosing a reader is discouraged: the cog has no
+      text, takes no room from the field and leaves the form as it is until
+      it is opened, and only a chosen reader is marked (on the cog and in its
+      tooltip). A host who needs a fixed reader writes a
+      [manifest](../dataset-manifest.md) `platform` instead. Not yet
+      decided: whether the choice is kept in the share link, so that a link
+      to a forced load opens the same way for others.
+
 Features:
 
 - [ ] `t` selection for OME-Zarr, and a `Z plane` control for custom image
@@ -208,10 +235,9 @@ Features:
       `shapes.parquet` that a consolidated store does not list
       (`parquetFileOf` in `storeStructureModel.ts`).
 - [ ] SVS: read an Aperio FL scan's `.afi` file as one image with a channel
-      per listed file (each file opens on its own now). Also: a pyramidal
-      OME-TIFF opens in about 24 rounds of sequential range requests before
-      its first tile, and Zenodo's `/api/records/…/content` URLs are not
-      detected (see [Phase 16](phases/16-svs.md#known-gaps)).
+      per listed file (each file opens on its own now). Also: Zenodo's
+      `/api/records/…/content` URLs are not detected (see
+      [Phase 16](phases/16-svs.md#known-gaps)).
 - [ ] NDPI: files over 4 GB (64-bit offsets; test files and what support
       needs in [Phase 19](phases/19-ndpi.md#64-bit-ndpi-files-over-4-gb)),
       NDPI URLs without a `.ndpi` suffix (a manifest image under 4 GB is
