@@ -395,6 +395,61 @@ describe('labels at a plane (plan 28-D9)', () => {
     ).toEqual([{ axis: 0, index: 3 }])
   })
 
+  it('traces on the main thread, without the pool, once its workers have failed', async () => {
+    const zarray = {
+      zarr_format: 2,
+      shape: [2, 4],
+      chunks: [2, 4],
+      dtype: '<i4',
+      compressor: null,
+      fill_value: 0,
+      order: 'C',
+      filters: null,
+      dimension_separator: '/',
+    }
+    const files = new Map<string, Uint8Array>([
+      ['/mask/.zarray', json(zarray)],
+      ['/mask/0/0', new Uint8Array(Int32Array.from([1, 1, 0, 0, 1, 1, 0, 2]).buffer)],
+    ])
+    const get = vi.fn((key: string) => Promise.resolve(files.get(key)))
+    const array = await zarr.open.v2(zarr.root({ get }).resolve('/mask'), {
+      kind: 'array',
+    })
+    const traceLabels = vi.fn()
+    const tracer = createWorkerLabelTracer({
+      failed: true,
+      traceLabels,
+    } as unknown as ZarrDecodePool)
+    const request = {
+      level: {
+        array,
+        width: 4,
+        height: 2,
+        chunkWidth: 4,
+        chunkHeight: 2,
+        xAxis: 1,
+        yAxis: 0,
+        scaleX: 1,
+        scaleY: 1,
+      },
+      col: 0,
+      row: 0,
+      x0: 0,
+      y0: 0,
+      width: 4,
+      height: 2,
+      coords: [0, 0],
+      fixedAxes: [],
+    }
+
+    const trace = await tracer(request)
+
+    expect(traceLabels).not.toHaveBeenCalled()
+    expect(get.mock.calls.filter(([key]) => key === '/mask/0/0')).toHaveLength(1)
+    expect(trace).toEqual(await traceLabelChunkOnMainThread(request))
+    expect(Array.from(trace.labels)).toEqual([1, 2])
+  })
+
   it('reads 2D labels the same at every plane', async () => {
     const tracer = vi.fn<SpatialDataLabelTracer>(async (request) =>
       traceLabelEdges(

@@ -156,13 +156,14 @@ export const traceLabelChunkOnMainThread: SpatialDataLabelTracer = async (reques
 
 // Fetches the chunk on the main thread (so store error handling and missing
 // chunk tracking apply) and decodes and traces it in a worker. A chunk that
-// holds several planes is read once for all of them.
+// holds several planes is read once for all of them. Once the pool's workers
+// have failed, chunks are read and traced on the main thread instead.
 export function createWorkerLabelTracer(pool: ZarrDecodePool): SpatialDataLabelTracer {
   const planeChunks = new PlaneChunkBytes()
 
   return async (request) => {
     const { level } = request
-    const arrayMetadata = await zarrArrayMetadata(level.array)
+    const arrayMetadata = pool.failed ? null : await zarrArrayMetadata(level.array)
 
     if (arrayMetadata === null) {
       return traceLabelChunkOnMainThread(request)

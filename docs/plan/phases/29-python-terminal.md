@@ -495,7 +495,9 @@ M2 (task G) is PR #456. What changed from the plan while building it:
   with a fake worker: a draw reaches the overlay once its input ends, and an
   input that draws nothing leaves the overlay's identity unchanged.
   `ViewerCore.test.tsx` checks that such an overlay does not render DeckGL.
-- Visium HD bins (grid cells) and the 3D cell view do not take the layers.
+- Visium HD bins (grid cells) do not take the layers. The 3D cell view does
+  since PR #461: colour layers solid, the rest faint, hidden cells left out,
+  highlights as rings; with `show()` alone the shown cells are grey.
 
 On the Xenium demo (1,414,155 cells, production build, Chromium with GPU),
 colouring Cluster 3 (118,549 cells) took 2.2 s from `Enter` to the end of

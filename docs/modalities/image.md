@@ -587,10 +587,11 @@ transform.
   `min(3, hardwareConcurrency − 1)` workers). Each chunk is routed to one
   worker, which keeps it for all of its virtual tiles. If a worker fails, the
   tile is decoded on the main thread with `zarr.get`, through a 256 MiB
-  decoded-chunk cache. Store errors (for example a `403` chunk) are not retried.
+  decoded-chunk cache, and so is every later tile: the pool starts no more
+  workers until the page is reloaded. Store errors (for example a `403` chunk) are not retried.
   A chunk that fails to decode in a worker stays there with its error until it
   is placed again, so its tiles get that error without the chunk being loaded
-  again. No IndexedDB cache is used.
+  again.
 - Range reads (a sharded array's chunks and shard indexes) are sent with
   `cache: 'no-store'`, like TIFF tiles. Chromium's HTTP cache gave a
   truncated body to one of two Range requests for the same bytes at once:
@@ -599,6 +600,11 @@ transform.
   `200` answer to a Range read is refused as blocked Range requests
   (`createZarrFetchStore`), since zarrita would take the whole shard for the
   bytes it asked for.
+- Those range reads are kept in the IndexedDB byte-range cache
+  (`zarr-range`) instead, versioned by the `HEAD` zarrita sends for each
+  shard's size (`src/zarr/zarrRangeCache.ts`). Whole chunk files are not: on
+  a host that sends validators, Chromium's HTTP cache already serves them on
+  a second load, and a zipped store's ranges are cached as `zarr-zip`.
 
 ### 3D View
 

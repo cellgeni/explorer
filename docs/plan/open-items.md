@@ -312,8 +312,6 @@ to it.
       ([Phase 8](phases/08-image-only-geojson.md#known-gaps)). Partly done: a
       feature's `id` is kept as its object ID and exported again (#288,
       2026-11-22).
-- [ ] OME-Zarr chunks read over HTTP are not kept in the IndexedDB cache;
-      only zipped stores use it ([Phase 9](phases/09-ome-zarr.md)).
 - [ ] QPTIFF: the stripped smallest pyramid level is not shown, and a QPTIFF
       cannot be placed over Xenium
       ([Phase 13](phases/13-qptiff.md#known-gaps)).
@@ -322,8 +320,9 @@ to it.
       and `spatial_enrichment.csv` are not read
       ([Phase 14](phases/14-standard-visium.md#known-gaps)).
 - [ ] Xenium nucleus boundaries: with both outline types on and cold, the
-      nuclei are drawn about 6 s after the cells, since both queries share
-      one DuckDB instance; on Visium HD, bins take the pointer from cell and
+      nuclei are drawn about 7 s after the cells, since both queries share
+      one DuckDB instance (a second instance delayed the cells: O12,
+      2026-11-26); on Visium HD, bins take the pointer from cell and
       nucleus outlines
       ([Phase 17](phases/17-xenium-nucleus-boundaries.md#known-gaps)).
 - [ ] MERSCOPE: transcripts are not read; boundaries are not read by viewport;

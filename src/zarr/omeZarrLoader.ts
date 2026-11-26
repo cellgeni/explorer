@@ -48,6 +48,7 @@ import {
   numericPixelsToRgba,
 } from './omeZarrPixels'
 import { throwIfAborted } from '../utils/abort'
+import { defaultPersistentByteRangeCache } from '../data/persistentByteRangeCache'
 
 const DEFAULT_TILE_SIZE = 256
 // Chunks larger than this are served as several virtual tiles, so a 4096²
@@ -365,7 +366,10 @@ async function openImageStore(
   const fetcherOption = options.fetcher === undefined ? {} : { fetcher: options.fetcher }
   const base = isZarrZipUrl(url)
     ? await openZippedImageStore(url, fetcherOption)
-    : createZarrFetchStore(url, fetcherOption)
+    : createZarrFetchStore(url, {
+        ...fetcherOption,
+        rangeCache: defaultPersistentByteRangeCache(),
+      })
   const consolidated = await readConsolidatedZarrMetadata(
     base,
     options.signal === undefined ? {} : { signal: options.signal },

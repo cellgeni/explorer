@@ -118,6 +118,16 @@ centroid is within the bbox ± 75 µm and their vertices within the bbox ±
 max(5% of its width, 150 µm), then rings with fewer than 3 vertices are
 dropped.
 
+The query returns a row per cell, its vertices as lists in file order. They
+are gathered as `{r, x, y}` structs, `r` being the file row, sorted with
+`list_sort`. An ordered aggregate, `list(vertex_x ORDER BY file_row_number)`,
+gives the same lists, but took about 40 KB of DuckDB's memory an outline of
+25 vertices. DuckDB-WASM has 3.1 GiB: about 65,000 outlines fitted and
+73,000 did not. On the demo, cell outlines failed with an out-of-memory error
+at a `Boundary limit` of 100,000 (72,942 cells); they load in about 11 s now.
+The sorted lists need a tenth of the memory or less
+([Xenium Outline Queries In Less Memory](../plan/phases/optimization-pass.md#xenium-outline-queries-in-less-memory-2026-11-26)).
+
 `vertex_x` and `vertex_y` are FLOAT, so the vertex bounds are cast to FLOAT
 (`betweenSql`, `src/data/gexSelection.ts`). DuckDB casts a FLOAT column
 compared with DOUBLE parameters and then cannot skip row groups by their
@@ -130,9 +140,13 @@ way. `cells.parquet` centroids are DOUBLE and are compared as they are.
 ### Nucleus Boundaries
 
 `Nucleus boundaries` reads `nucleus_boundaries.parquet` under the same load
-rule, bbox, and margins as cell outlines, through
+rule, bbox, and vertex margin as cell outlines, through
 `XeniumDataset.segmentationElements('nucleus', bbox)` and
-`readXeniumNucleusBoundaryElements`. The file has the same columns as
+`readXeniumNucleusBoundaryElements`. Nuclei are picked by their own
+vertices: a nucleus is kept when the mean of its vertices is within the
+bbox ± 75 µm, so the query reads no `cells.parquet`. Vertices are read at
+least 75 µm beyond that, so no nucleus kept is cut short at the edge of the
+read. The file has the same columns as
 `cell_boundaries.parquet`, plus `label_id`, which tells apart the nuclei of
 one cell (about 3.5% of the demo's cells have more than one). Rows are
 grouped by `cell_id` and `label_id`. A cell's first nucleus keeps the cell
@@ -152,7 +166,19 @@ runs (`cellBoundaryLoadingEnabled` in `platformAdapter.ts`). Unticking a
 checkbox stops that layer's request but keeps the outlines it already read,
 so ticking it again in the same area reads nothing. Both queries share the
 viewport `XeniumDataset`, whose DuckDB instance runs one query at a time, so
-with both on and cold the nuclei arrive after the cells.
+with both on and cold the nuclei arrive after the cells. A DuckDB client of
+their own drew the nuclei alongside the cells, but the two downloads then
+shared the host and the cell outlines, on by default, arrived 2.7–5.9 s
+later, so it was not adopted (O12 in the optimization pass).
+
+Measured on the demo on 2026-11-26 with both outline types on and cold, at
+the fourth zoom step (66,835 cells), three runs of each build alternating.
+Times are the app's Log lines, from the request to the outlines being ready:
+
+| Ready            | Before      | Now         |
+| ---------------- | ----------- | ----------- |
+| Cell outlines    | 13.2–14.5 s | 10.9–12.5 s |
+| Nucleus outlines | 23.1–25.3 s | 17.8–19.9 s |
 
 Nuclei are drawn as a blue layer that can be hovered and clicked. The tooltip
 shows the nucleus ID, its place among its cell's nuclei in view (`2 of 3`),
@@ -183,8 +209,9 @@ finished, and each checkbox read both again from DuckDB's file cache:
 | Both, cold        | 12.9 s                     | 17.2 s (waits for the cells) |
 
 The cold times include starting DuckDB and reading `cells.parquet` for the
-centroid filter. A cold nucleus query reads 15 MB of the 99.6 MB file, since
-the FLOAT-cast vertex bounds prune row groups.
+centroid filter, which nucleus queries read until 2026-11-26. A cold nucleus
+query reads 15 MB of the 99.6 MB file, since the FLOAT-cast vertex bounds
+prune row groups.
 
 ### Selected-Gene Expression
 
@@ -403,10 +430,11 @@ not passed to the readers, so it does not change the result.
 
 ## Known Limitations
 
-- With both outline types on and cold, the nuclei are drawn about 6 s after
+- With both outline types on and cold, the nuclei are drawn about 7 s after
   the cells on the demo, because both queries run one at a time on one
-  DuckDB instance. A second instance for nuclei would run them side by side,
-  at the cost of another DuckDB worker and file cache.
+  DuckDB instance. A second instance for nuclei ran them side by side, but
+  the cells then shared the host with the nuclei and arrived 2.7–5.9 s
+  later (O12, 2026-11-26).
 - The Magic Lens has no QV filter. A `Min QV` setting that had no effect on
   results was removed in Phase 15.5.
 - The morphology image is the first `experiment.xenium` path the folder's

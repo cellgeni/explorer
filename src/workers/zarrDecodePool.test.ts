@@ -310,6 +310,100 @@ describe('ZarrDecodePool', () => {
       new ZarrDecodeWorkerError('Zarr decode worker failed.'),
     )
   })
+
+  it('starts no more workers once one fails, and refuses requests without reading their chunks', async () => {
+    let starts = 0
+    const pool = new ZarrDecodePool({
+      size: 2,
+      workerFactory: () => {
+        starts += 1
+        // A worker whose script does not load.
+        const worker = new FakeWorker()
+        worker.postMessage = () => {
+          queueMicrotask(() => {
+            worker.onerror?.({ message: '' } as ErrorEvent)
+          })
+        }
+        return worker
+      },
+    })
+    const failure = new ZarrDecodeWorkerError('Zarr decode worker failed.')
+
+    await expect(pool.decodeCodec(GZIP, Uint8Array.from([0]))).rejects.toThrow(failure)
+    expect(starts).toBe(1)
+    expect(pool.failed).toBe(true)
+
+    const loadBytes = vi.fn(async () => Uint8Array.from([1]))
+    const chunk = { cacheKey: 'image/0/3,0', source: SOURCE, loadBytes, window: WINDOW }
+    const requests = [
+      pool.decodeCodec(GZIP, Uint8Array.from([0])),
+      pool.renderTile({ ...chunk, render: {} }),
+      pool.sampleTile({
+        ...chunk,
+        sampling: { startIndex: 0, stride: 1, width: 2, height: 2 },
+      }),
+      pool.traceLabels({
+        source: SOURCE,
+        bytes: undefined,
+        window: WINDOW,
+        levelX0: 0,
+        levelY0: 0,
+        levelWidth: 2,
+      }),
+      pool.measureChunk({
+        source: SOURCE,
+        bytes: undefined,
+        window: WINDOW,
+        measure: {
+          cells: {
+            x: Float32Array.from([1]),
+            y: Float32Array.from([1]),
+            radius: Float32Array.from([1]),
+          },
+          width: 2,
+          height: 2,
+          threshold: 10,
+          yScale: 1,
+        },
+      }),
+    ]
+
+    for (const request of requests) {
+      await expect(request).rejects.toThrow(failure)
+    }
+
+    expect(starts).toBe(1)
+    expect(loadBytes).not.toHaveBeenCalled()
+  })
+
+  it('starts no more workers after one did not start', async () => {
+    const workerFactory = vi.fn((): ZarrDecodeWorkerLike => {
+      throw new Error('Content Security Policy blocks workers')
+    })
+    const pool = new ZarrDecodePool({ size: 1, workerFactory })
+
+    await expect(pool.decodeCodec(GZIP, Uint8Array.from([0]))).rejects.toThrow(
+      ZarrDecodeWorkerError,
+    )
+    await expect(pool.decodeCodec(GZIP, Uint8Array.from([0]))).rejects.toThrow(
+      ZarrDecodeWorkerError,
+    )
+    expect(workerFactory).toHaveBeenCalledOnce()
+  })
+
+  it('starts fresh workers after terminate(), which is not a failure', async () => {
+    const workerFactory = vi.fn(() => new FakeWorker())
+    const pool = new ZarrDecodePool({ size: 1, workerFactory })
+
+    await pool.decodeCodec(GZIP, Uint8Array.from([0]))
+    pool.terminate()
+    await expect(pool.decodeCodec(GZIP, Uint8Array.from([1]))).resolves.toBeInstanceOf(
+      Uint8Array,
+    )
+    expect(pool.failed).toBe(false)
+    expect(workerFactory).toHaveBeenCalledTimes(2)
+  })
+
   it('measures a chunk on the workers in turn, sending it with its cells', async () => {
     const workers: FakeWorker[] = []
     const pool = new ZarrDecodePool({

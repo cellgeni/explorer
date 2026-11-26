@@ -1293,10 +1293,12 @@ Chrome or Edge and runs nothing.
 | Control      | Notes                                                                                                                                                                                                                                                                                                                                                                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Output       | Inputs (`>>>`, `...`), what they print, the last expression's value and tracebacks, newest at the bottom. A polite live region that keeps the last 2,000 entries; a mask prints its count ("mask: 81,394 of 1,414,155 cells")                                                                                                                                                                      |
+| Input height | A bar between the output and the input: drag it, or press `Up` and `Down` on it (24 px a step), to make the input taller for functions and loops, leaving the output 120 px; double-click it, or press `Home` or `Enter`, to fit the input to its text again (up to 40% of the window). The height is kept across visits                                                                           |
 | Python input | CodeMirror with Python highlighting. `Enter` runs an input that is complete and adds a line to one that is not; `Shift+Enter` always adds a line; `Up` on the first line and `Down` on the last walk the history (200 inputs, kept across visits); `Tab` completes names, attributes, column labels inside `cells["…"]` and gene names inside `cells.gene("…")`, or indents at the start of a line |
 | `Run`        | Runs the input, as `Enter` does                                                                                                                                                                                                                                                                                                                                                                    |
 | `Stop`       | Stops the input running. Where the page is cross-origin isolated (development and preview servers) it raises `KeyboardInterrupt` and keeps the variables; elsewhere, as on GitHub Pages, it starts a new Python and the output says the variables were lost                                                                                                                                        |
 | `Pick Point` | Arms one click on the canvas, which writes that point's `(x, y)` in µm into the input at the cursor; the canvas says so at its top. Pressed while armed; press again to cancel                                                                                                                                                                                                                     |
+| `Open File…` | Puts a `.py` or text file's code in the input at the cursor; dropping a file on the console does the same. Nothing runs until `Enter` or `Run`; the output notes the file and its lines. Up to 1 MB                                                                                                                                                                                                |
 | `Clear`      | Clears the output; the variables stay                                                                                                                                                                                                                                                                                                                                                              |
 | `Try Again`  | After start-up failed, starts Python again                                                                                                                                                                                                                                                                                                                                                         |
 
@@ -1374,19 +1376,23 @@ on the `Gene scale`, by the annotation set's classes, or by the metadata
 track's values over its range, in the 2D view's metadata colours. Cells that
 score, are in a shown class, or have a value of the track are solid; the
 others are a faint outline. `Transcript count` and `Cell area` draw every
-cell grey. Drag rotates, Shift-drag pans, and
+cell grey. While the [Python console](#python-panel) has drawn colour layers
+or hidden cells, they colour the view instead: cells in a colour layer solid
+in its colour, the others faint (`Other cells`), hidden cells not drawn; with
+`show()` alone the shown cells are grey. Highlights ring their cells, and the
+toolbar names the layers ("Python: Result, ROI picks"). Drag rotates, Shift-drag pans, and
 scrolling zooms; the canvas, "3D cells canvas area", takes the
 [3D view](#3d-view)'s keys and axes. The top line gives the cells and their z range ("201,789
 cells, z 0 to 780 µm").
 
-| Control       | Type                           | Default                                  | Notes                                                                                     |
-| ------------- | ------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `Depth`       | Slider ×¼–×128, in powers of 2 | About a quarter as deep as wide, at most | Stretches z; ×1 is the cells' true depth                                                  |
-| `Other cells` | Switch                         | On                                       | With genes, an annotation set or a track: the faint outline of the cells not coloured     |
-| Gene scale    | The genes and a ramp           |                                          | Up to the `Gene scale` percentile of the scores above 0 (p99 on Auto), or the typed range |
-| Track scale   | The track and a ramp           |                                          | `Metadata` only: the track's lowest and highest value, as the legend gives them           |
-| Reset (fit)   | Icon button                    |                                          | Back to the first view of all the cells                                                   |
-| `2D View`     | Button                         |                                          | Returns to the 2D view, which kept its place                                              |
+| Control       | Type                           | Default                                  | Notes                                                                                                       |
+| ------------- | ------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `Depth`       | Slider ×¼–×128, in powers of 2 | About a quarter as deep as wide, at most | Stretches z; ×1 is the cells' true depth                                                                    |
+| `Other cells` | Switch                         | On                                       | With genes, an annotation set, a track or Python colour layers: the faint outline of the cells not coloured |
+| Gene scale    | The genes and a ramp           |                                          | Up to the `Gene scale` percentile of the scores above 0 (p99 on Auto), or the typed range                   |
+| Track scale   | The track and a ramp           |                                          | `Metadata` only: the track's lowest and highest value, as the legend gives them                             |
+| Reset (fit)   | Icon button                    |                                          | Back to the first view of all the cells                                                                     |
+| `2D View`     | Button                         |                                          | Returns to the 2D view, which kept its place                                                                |
 
 Hovering a cell gives its z and the cell and its class or value, or its
 score. While

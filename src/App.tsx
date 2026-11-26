@@ -87,6 +87,8 @@ import { formatCellQueryLink, parseCellQueryLink } from './features/query/cellQu
 import { useCellQueryModel } from './features/query/useCellQueryModel'
 import { CellColumnReader } from './features/query/cellColumnReader'
 import { pythonLegendSection } from './features/python/pythonLegend'
+import type { StackPythonSource } from './features/collection/stackPythonLayers'
+import { composePythonOverlay } from './rendering/pythonOverlay'
 import { usePythonConsole } from './features/python/usePythonConsole'
 import { openPlotsSource } from './features/plots/usePlotsWorkflow'
 import {
@@ -5460,6 +5462,31 @@ export function App({ dependencies }: AppProps = {}) {
     view: pythonView,
     selectedCellId: selectedCell?.id ?? null,
   })
+  // Python's layers in the 3D cell view, matched to its cells by ID.
+  const pythonRowById = useMemo(
+    () =>
+      lazyIdLookup(
+        overviewCells,
+        (cell) => cell.id,
+        (_, index) => index,
+      ),
+    [overviewCells],
+  )
+  const cellViewPython = useMemo((): StackPythonSource | null => {
+    const composed = composePythonOverlay(pythonConsole.overlay, overviewCells.length)
+    if (
+      composed.colors === null &&
+      composed.hidden === null &&
+      composed.highlights.length === 0
+    ) {
+      return null
+    }
+    return {
+      composed,
+      names: [...new Set(pythonConsole.overlay.layers.map((layer) => layer.name))],
+      rowOf: (cellId) => pythonRowById.get(cellId),
+    }
+  }, [overviewCells.length, pythonConsole.overlay, pythonRowById])
   // Python's layers head the legend: they colour over the rest (29-D8).
   const canvasLegendSections = useMemo(() => {
     const plural = platformAdapter.labels.embeddingElementPlural
@@ -5804,6 +5831,7 @@ export function App({ dependencies }: AppProps = {}) {
               coloring={sectionColoring}
               cellPointScale={cellPointScale}
               hoverTooltips={showHoverTooltips}
+              python={cellViewPython}
               onClose={() => {
                 setCellViewOpen(false)
               }}

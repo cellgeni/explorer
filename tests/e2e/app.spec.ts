@@ -2662,8 +2662,8 @@ test('loads the hosted Atera kidney run with boundaries, genes, transcripts, and
   await expect(page.getByRole('checkbox', { name: 'Gene-only calls' })).toBeDisabled()
 
   // Density follows Min QV: QV 30 bins UMOD's rows from transcripts.zarr.zip,
-  // or, over the rows one view reads (whole-slide UMOD is), says so. The
-  // field applies a typed value on Enter or blur.
+  // or, over the rows one view reads (whole-slide UMOD is), says so. Min QV
+  // applies on Enter or blur, not on each keystroke.
   const minQv = transcriptsPanel.getByRole('spinbutton', { name: 'Min QV' })
   await minQv.fill('30')
   await minQv.press('Enter')
@@ -3429,8 +3429,12 @@ test('loads Visium HD clusters for each bin size @live', async ({ page }) => {
   await expect(visiumPanel).toContainText('215,320 at 8 µm', {
     timeout: VISIUM_HD_LOAD_TIMEOUT_MS,
   })
+  // The 8 µm bins can be in already (the 16 µm grid is placed from them), so
+  // the wait starts at the click; the tier's sets are listed with HEAD
+  // requests after it, and the selector holds no 8 µm option until then.
   await expect(annotationSet).toHaveValue(
     'visium-hd-clusters:8:gene_expression_graphclust',
+    { timeout: VISIUM_HD_LOAD_TIMEOUT_MS },
   )
   await expect(labels).toContainText('215,196 bins', {
     timeout: VISIUM_HD_LOAD_TIMEOUT_MS,

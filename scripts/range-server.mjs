@@ -27,6 +27,11 @@
 //   --seed <n>
 //     Seeds the choice of failed and stalled requests (1), so that a run can
 //     be repeated.
+//   --validators
+//     Sends ETag and Last-Modified, from each file's size and modification
+//     time, and answers a request that matches them with 304, as object
+//     stores do. Without it, responses carry no validators, so the browser
+//     cannot reuse them.
 import {
   createReadStream,
   existsSync,
@@ -56,6 +61,8 @@ const mirrorIndex = args.indexOf('--mirror')
 const delayIndex = args.indexOf('--delay')
 const delayMs = delayIndex < 0 ? 0 : Number(args[delayIndex + 1])
 const logRequests = args.includes('--log')
+const validators = args.includes('--validators')
+const serverStarted = new Date()
 const failure = shareOption('--fail', 503)
 const stall = shareOption('--stall', 90_000)
 const bodyStall = shareOption('--stall-body', 90_000)
@@ -63,7 +70,7 @@ const seedIndex = args.indexOf('--seed')
 const random = seededRandom(seedIndex < 0 ? 1 : Number(args[seedIndex + 1]))
 const options =
   '[--port N] [--delay MS] [--log] [--fail SHARE[:STATUS]] [--stall SHARE[:MS]] ' +
-  '[--stall-body SHARE[:MS]] [--seed N]'
+  '[--stall-body SHARE[:MS]] [--seed N] [--validators]'
 const usage =
   `Usage: node scripts/range-server.mjs <folder> ${options}\n` +
   `       node scripts/range-server.mjs --mirror <url> <file> ${options}`
@@ -124,6 +131,30 @@ createServer((request, response) => {
 
 // The body length of each response, for --log.
 const bodyBytes = new WeakMap()
+
+// For --validators. Last-Modified has whole seconds, so the time is rounded
+// down to them.
+function validatorHeaders(file) {
+  const seconds = Math.floor(file.modified.getTime() / 1000)
+
+  return {
+    ETag: `"${file.size.toString(16)}-${seconds.toString(16)}"`,
+    'Last-Modified': new Date(seconds * 1000).toUTCString(),
+    'Access-Control-Expose-Headers': `${CORS['Access-Control-Expose-Headers']}, ETag, Last-Modified`,
+  }
+}
+
+function isNotModified(request, file) {
+  const { ETag: etag, 'Last-Modified': modified } = validatorHeaders(file)
+  const match = request.headers['if-none-match']
+
+  if (match !== undefined) {
+    return match.split(',').some((tag) => tag.trim().replace(/^W\//, '') === etag)
+  }
+
+  const since = Date.parse(request.headers['if-modified-since'] ?? '')
+  return Number.isFinite(since) && since >= Date.parse(modified)
+}
 
 function delay(ms) {
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve()
@@ -208,6 +239,14 @@ async function serve(request, response, bodyStallMs = 0) {
     return
   }
 
+  const headers = validators ? { ...CORS, ...validatorHeaders(file) } : CORS
+
+  if (validators && isNotModified(request, file)) {
+    response.writeHead(304, headers)
+    response.end()
+    return
+  }
+
   const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range ?? '')
 
   if (range === null) {
@@ -218,7 +257,7 @@ async function serve(request, response, bodyStallMs = 0) {
       return
     }
 
-    response.writeHead(200, { ...CORS, 'Content-Length': file.size })
+    response.writeHead(200, { ...headers, 'Content-Length': file.size })
     bodyBytes.set(response, request.method === 'HEAD' ? 0 : file.size)
 
     if (request.method === 'HEAD') {
@@ -245,7 +284,7 @@ async function serve(request, response, bodyStallMs = 0) {
 
   const body = request.method === 'HEAD' ? null : await file.read(start, end)
   response.writeHead(206, {
-    ...CORS,
+    ...headers,
     'Content-Length': end - start + 1,
     'Content-Range': `bytes ${start}-${end}/${file.size}`,
   })
@@ -280,6 +319,7 @@ async function folderSource(root) {
       return stats?.isFile() === true
         ? {
             size: stats.size,
+            modified: stats.mtime,
             read: async (start, end) => createReadStream(full, { start, end }),
           }
         : null
@@ -349,6 +389,8 @@ async function mirrorSource(url, path) {
     async file() {
       return {
         size,
+        // The remote file's own validators are not asked for.
+        modified: serverStarted,
         async read(start, end) {
           if (!isCovered(start, end)) {
             const remote = await fetch(url, {

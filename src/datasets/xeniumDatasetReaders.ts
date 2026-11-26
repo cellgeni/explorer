@@ -194,14 +194,16 @@ ORDER BY cell_id, file_row_number
     }))
 }
 
-// Nuclei of the cells in the box, from nucleus_boundaries.parquet. A cell can
-// have several nuclei, told apart by label_id: the first keeps the cell ID and
-// later ones get `<cell_id>#nucleus-N`, as on Atera. Without label IDs (files
-// that lack the column) each cell's vertices form one nucleus.
+// Nuclei in the box, from nucleus_boundaries.parquet. A cell can have several
+// nuclei, told apart by label_id: the first keeps the cell ID and later ones
+// get `<cell_id>#nucleus-N`, as on Atera. Without label IDs (files that lack
+// the column) each cell's vertices form one nucleus.
+//
+// Nuclei are picked by their own vertices, not by their cells' centroids, so
+// the query reads nucleus_boundaries.parquet alone, not cells.parquet too.
 export async function readXeniumNucleusBoundaryElements(
   conn: XeniumDuckDbConnection,
   urls: {
-    readonly cells: string
     readonly nucleusBoundaries: string
   },
   bbox: BBox,
@@ -210,7 +212,7 @@ export async function readXeniumNucleusBoundaryElements(
   // A row per nucleus: by cell and label, in that order.
   const rows = await queryXeniumBoundaryRings(
     conn,
-    urls.cells,
+    null,
     urls.nucleusBoundaries,
     bbox,
     options,
@@ -246,15 +248,25 @@ export function isMissingParquetColumnError(error: unknown, column: string): boo
   return message.includes('column') && message.includes(column.toLowerCase())
 }
 
-// The outlines of the cells whose centroids fall in the box, from a
-// cell_boundaries.parquet-shaped file: a row per cell (and label), its
-// vertices gathered into lists in file order. DuckDB gathers them in its
-// worker; a row per vertex, about a million for a view of 40,000 cells, took
-// a second to turn into objects on the main thread (S4 in the optimization
-// pass).
+// The outlines in the box, from a cell_boundaries.parquet-shaped file: a row
+// per cell (and label), its vertices gathered into lists in file order.
+// DuckDB gathers them in its worker; a row per vertex, about a million for a
+// view of 40,000 cells, took a second to turn into objects on the main thread
+// (S4 in the optimization pass).
+//
+// With cellsUrl, the outlines are those of the cells whose centroids in that
+// file fall in the box, padded. Without it, an outline is kept when the mean
+// of its vertices does. Vertices are read at least 75 µm further out than
+// that, so no outline kept is one cut short at the edge of the read.
+//
+// Each outline's vertices are gathered as {r, x, y} structs and sorted by
+// file row, r. `list(vertex_x ORDER BY file_row_number)` gave the same lists,
+// but as an ordered aggregate it took about 40 KB an outline of 25 vertices:
+// 65,000 outlines fitted in DuckDB-WASM's 3.1 GiB, and 73,000 did not. The
+// sorted lists need a tenth of that or less.
 async function queryXeniumBoundaryRings(
   conn: XeniumDuckDbConnection,
-  cellsUrl: string,
+  cellsUrl: string | null,
   boundariesUrl: string,
   bbox: BBox,
   options: { readonly labelIds: boolean },
@@ -263,44 +275,57 @@ async function queryXeniumBoundaryRings(
     (bbox.maxX - bbox.minX) * 0.05,
     BOUNDARY_VERTEX_FETCH_MARGIN_MICROMETERS,
   )
-  const centroidX0 = bbox.minX - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidX1 = bbox.maxX + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidY0 = bbox.minY - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const centroidY1 = bbox.maxY + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS
-  const vertexX0 = bbox.minX - margin
-  const vertexX1 = bbox.maxX + margin
-  const vertexY0 = bbox.minY - margin
-  const vertexY1 = bbox.maxY + margin
+  const centroidBounds = [
+    bbox.minX - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS,
+    bbox.maxX + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS,
+    bbox.minY - BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS,
+    bbox.maxY + BOUNDARY_CENTROID_FETCH_MARGIN_MICROMETERS,
+  ]
+  const vertexBounds = [
+    bbox.minX - margin,
+    bbox.maxX + margin,
+    bbox.minY - margin,
+    bbox.maxY + margin,
+  ]
+  const label = options.labelIds ? ', label_id' : ''
   const labelColumn = options.labelIds ? ', b.label_id' : ''
-  // Vertices are FLOAT, so their bounds are cast for row-group pruning (see
-  // betweenSql). Centroids are DOUBLE.
-  const stmt = await conn.prepare(`
-WITH viewport_cells AS (
+  const viewportCells =
+    cellsUrl === null
+      ? ''
+      : `WITH viewport_cells AS (
   SELECT cell_id FROM read_parquet( ? )
   WHERE x_centroid BETWEEN ? AND ?
     AND y_centroid BETWEEN ? AND ?
 )
-SELECT b.cell_id${labelColumn},
-  list(b.vertex_x ORDER BY b.file_row_number) AS x,
-  list(b.vertex_y ORDER BY b.file_row_number) AS y
-FROM read_parquet( ? ) AS b
-WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
-  AND ${betweenSql('b.vertex_y', 'FLOAT')}
-  AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
-GROUP BY b.cell_id${labelColumn}
-ORDER BY b.cell_id${labelColumn}
+`
+  const pick =
+    cellsUrl === null
+      ? `
+  GROUP BY b.cell_id${labelColumn}
+  HAVING avg(b.vertex_x) BETWEEN ? AND ?
+    AND avg(b.vertex_y) BETWEEN ? AND ?`
+      : `
+    AND b.cell_id IN (SELECT cell_id FROM viewport_cells)
+  GROUP BY b.cell_id${labelColumn}`
+  // Vertices are FLOAT, so their bounds are cast for row-group pruning (see
+  // betweenSql). Centroids and vertex means are DOUBLE.
+  const stmt = await conn.prepare(`
+${viewportCells}SELECT cell_id${label},
+  list_transform(v, lambda p: p.x) AS x,
+  list_transform(v, lambda p: p.y) AS y
+FROM (
+  SELECT b.cell_id${labelColumn},
+    list_sort(list({'r': b.file_row_number, 'x': b.vertex_x, 'y': b.vertex_y})) AS v
+  FROM read_parquet( ? ) AS b
+  WHERE ${betweenSql('b.vertex_x', 'FLOAT')}
+    AND ${betweenSql('b.vertex_y', 'FLOAT')}${pick}
+)
+ORDER BY cell_id${label}
 `)
   const result = await stmt.query(
-    cellsUrl,
-    centroidX0,
-    centroidX1,
-    centroidY0,
-    centroidY1,
-    boundariesUrl,
-    vertexX0,
-    vertexX1,
-    vertexY0,
-    vertexY1,
+    ...(cellsUrl === null
+      ? [boundariesUrl, ...vertexBounds, ...centroidBounds]
+      : [cellsUrl, ...centroidBounds, boundariesUrl, ...vertexBounds]),
   )
 
   return result.toArray()

@@ -47,7 +47,10 @@ Known gaps:
       share link.
 - [ ] Custom image layers (OME-TIFF and OME-Zarr) have no `Z plane`
       control.
-- [ ] No IndexedDB caching of OME-Zarr chunks.
+- [x] No IndexedDB caching of OME-Zarr chunks. Closed by the optimization
+      pass's O14 (2026-11-26): a sharded array's range reads are cached;
+      whole chunk files come from Chromium's HTTP cache. See
+      [OME-Zarr Shard Ranges Kept Across Loads](optimization-pass.md#ome-zarr-shard-ranges-kept-across-loads-2026-11-26).
 - [ ] One smoke test opens an OME-Zarr z-stack, to check that the 3D volume
       view gives back its WebGL context (#203); the nightly examples test
       loads one OME-Zarr image.

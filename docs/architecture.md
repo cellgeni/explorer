@@ -557,18 +557,18 @@ See [S3/CORS hosting playbook](./s3-cors-playbook.md) for server setup.
 
 ## Caching
 
-| Cache                                                  | Scope                                                                                                                        | Limits                                                                                                         | File                                                            |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
-| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU                                                                  | `src/data/persistentByteRangeCache.ts`                          |
-| Dataset instances                                      | Per URL                                                                                                                      | Retained while in use, else last 2 (1 for the Xenium side instances); dropped on failure or a changed manifest | `datasetCache.ts`, `datasetFactory.ts`, `xeniumDatasetCache.ts` |
-| Dataset manifests                                      | Per entered URL                                                                                                              | Replaced by each detection of that URL                                                                         | `src/data/datasetFiles.ts`                                      |
-| Range-probe results                                    | Per URL + label                                                                                                              | Dropped on failure                                                                                             | `rangeSupport.ts`                                               |
-| Folder listings                                        | Per folder URL                                                                                                               | Replaced by each detection of that folder                                                                      | `src/data/folderListing.ts`                                     |
-| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                               | Cleared when a new Xenium dataset warms up                                                                     | `src/data/gex.ts`                                               |
-| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB    | 128 MiB of blocks each; dropped on failure                                                                     | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts`             |
-| SpatialData chunk cache                                | Per store                                                                                                                    | 256 MiB LRU                                                                                                    | `src/zarr/zarrStores.ts`                                        |
-| Decoded tile bitmaps                                   | Per image channel                                                                                                            | Performance budget                                                                                             | `src/tiff/tileCache.ts`                                         |
-| Visium HD overviews, segmentations                     | Per dataset                                                                                                                  | No eviction                                                                                                    | `visiumHdDatasetReaders.ts`                                     |
+| Cache                                                  | Scope                                                                                                                                                              | Limits                                                                                                         | File                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| IndexedDB byte-range cache `cellgeni-byte-range-cache` | Parquet footers (`parquet-footer`), zipped Zarr store ranges (`zarr-zip`), OME-Zarr shard ranges (`zarr-range`), TIFF tiles (`tiff-tile`); persists across reloads | 256 MiB, 20,000 entries, 8 MiB per entry, LRU                                                                  | `src/data/persistentByteRangeCache.ts`                          |
+| Dataset instances                                      | Per URL                                                                                                                                                            | Retained while in use, else last 2 (1 for the Xenium side instances); dropped on failure or a changed manifest | `datasetCache.ts`, `datasetFactory.ts`, `xeniumDatasetCache.ts` |
+| Dataset manifests                                      | Per entered URL                                                                                                                                                    | Replaced by each detection of that URL                                                                         | `src/data/datasetFiles.ts`                                      |
+| Range-probe results                                    | Per URL + label                                                                                                                                                    | Dropped on failure                                                                                             | `rangeSupport.ts`                                               |
+| Folder listings                                        | Per folder URL                                                                                                                                                     | Replaced by each detection of that folder                                                                      | `src/data/folderListing.ts`                                     |
+| Zarr matrix metadata and cell ID indices               | Per matrix URL                                                                                                                                                     | Cleared when a new Xenium dataset warms up                                                                     | `src/data/gex.ts`                                               |
+| H5 range-read files                                    | Per file URL, open in an H5 file worker: the Xenium H5 fallback, Visium HD matrices, `feature_slice.h5`, H5AD over 64 MiB                                          | 128 MiB of blocks each; dropped on failure                                                                     | `gex.ts`, `visiumFeatureSlice.ts`, `h5adDataset.ts`             |
+| SpatialData chunk cache                                | Per store                                                                                                                                                          | 256 MiB LRU                                                                                                    | `src/zarr/zarrStores.ts`                                        |
+| Decoded tile bitmaps                                   | Per image channel                                                                                                                                                  | Performance budget                                                                                             | `src/tiff/tileCache.ts`                                         |
+| Visium HD overviews, segmentations                     | Per dataset                                                                                                                                                        | No eviction                                                                                                    | `visiumHdDatasetReaders.ts`                                     |
 
 The byte-range cache (database version 3) keeps each range's bytes, each
 range's size and last access, and the cache's totals in three object stores. A
@@ -586,9 +586,10 @@ A range's key is its namespace, URL, byte range and the file's version
 date when it has no ETag (`responseValidator`). A file replaced at the same
 URL therefore misses the ranges cached from the old one. Readers take the
 version from a response they already make, never a request of their own: the
-zip's `HEAD` (`src/zarr/cachedZipStore.ts`), the TIFF header read
-(`src/tiff/remoteTiff.ts`), and hyparquet's `HEAD` for Parquet footers
-(`fetchKeepingValidator`). Last-Modified is always readable cross-origin, but
+zip's `HEAD` (`src/zarr/cachedZipStore.ts`), the `HEAD` zarrita sends for a
+shard's size before it reads the shard's index (`src/zarr/zarrRangeCache.ts`),
+the TIFF header read (`src/tiff/remoteTiff.ts`), and hyparquet's `HEAD` for
+Parquet footers (`fetchKeepingValidator`). Last-Modified is always readable cross-origin, but
 ETag only when the server exposes it. With neither, the key has only the size,
 so a replacement of the same size can still be served the old bytes; a TIFF
 whose host also hides `Content-Range` is cached by URL alone. A file the page
@@ -815,11 +816,14 @@ posts a typed request (`src/workers/pythonMessages.ts`) and waits for the
 reply with `run_sync`, which needs WebAssembly JSPI; replies are handled at
 once, other messages in turn. On the main thread `PythonSession` owns the
 worker, the log and Stop (a `KeyboardInterrupt` through a shared buffer
-where the page is cross-origin isolated, else a new worker), and refuses
-requests the protocol lacks. The answers (`pythonData.ts`) come from the
-app's state when Python asks: positions with y down, Cell Query's columns by
-overview row through the shared `CellColumnReader`, genes through
-`GeneRowReader`, and shapes, whose `contains` runs `roiSelectionContains`.
+where the page is cross-origin isolated, else a new worker; Python holds the
+interrupt off while it builds a request and waits on the reply, since one
+landing as a reply resolves can break Pyodide's event loop, and raises it
+once the reply is in), and refuses requests the protocol lacks. The
+answers (`pythonData.ts`) come from the app's state when Python asks:
+positions with y down, Cell Query's columns by overview row through the
+shared `CellColumnReader`, genes through `GeneRowReader`, and shapes, whose
+`contains` runs `roiSelectionContains`.
 Every array is made for the answer and transferred.
 
 Drawing calls send layers by overview row to `PythonLayerStore`
@@ -910,7 +914,11 @@ is reloaded, rather than starting new workers that fail again, and Data access
 notes says so ("Zarr decoding", `src/zarr/zarrCodecWorkerStatus.ts`), however
 many datasets are opened after. With no `Worker` the registry is left alone.
 OME-Zarr image chunk bytes are fetched on the main thread and decoded whole in
-the Zarr decode workers, which fall back to the main thread if they fail.
+the Zarr decode workers, which fall back to the main thread if they fail. The
+pool (`src/workers/zarrDecodePool.ts`) remembers a failed worker too: it
+starts no more, and refuses later requests at once, so OME-Zarr tiles and
+SpatialData labels go straight to the main thread without reading a chunk for
+a worker first.
 Other hyparquet reads (Visium HD positions and barcode mappings, and
 `Browse File`'s footer and first rows) run on the main thread.
 

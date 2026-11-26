@@ -307,19 +307,28 @@ M2, requests:
     (`transcriptZarr.ts:208`).
   - Measure each with `--delay 300` on the `anndata-zarr`, `spatialdata`
     and `visium-hd` fixtures.
-- [ ] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
+- [x] **O12. Nucleus outlines on their own DuckDB client.** (S–M) Started
       when nucleus outlines are first shown, closed by `dispose()`.
   - It costs a worker and a WebAssembly heap: measure both (S8), and the
     time to both outline types (S4).
-- [ ] **O13. The Zarr decode pool remembers a failed worker.** (S) After
+  - Not adopted: tried in
+    [#458](https://github.com/cellgeni/explorer/pull/458), where the cell
+    outlines arrived 2.7–5.9 s later. The outline query changes it led to
+    are in [#463](https://github.com/cellgeni/explorer/pull/463):
+    [Xenium Outline Queries In Less Memory](#xenium-outline-queries-in-less-memory-2026-11-26).
+- [x] **O13. The Zarr decode pool remembers a failed worker.** (S) After
       one fails, OME-Zarr tiles and SpatialData labels decode on the main
       thread without starting new workers, as the codecs already do.
   - A test counts worker starts.
-- [ ] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
+  - Built in [#457](https://github.com/cellgeni/explorer/pull/457):
+    [Failed Zarr Decode Workers Stay Failed](#failed-zarr-decode-workers-stay-failed-2026-11-26).
+- [x] **O14. OME-Zarr chunks in the IndexedDB cache.** (M) Measure a second
       load first, from a host that sends validators and from one that
       does not; skip if Chromium's HTTP cache already serves it. Chunks
       would be versioned by the store's metadata, and share the cache's
       256 MiB with TIFF tiles.
+  - Built in [#460](https://github.com/cellgeni/explorer/pull/460):
+    [OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26).
 
 M3, main thread:
 
@@ -1017,6 +1026,171 @@ Leads:
   image without a pyramid, six auto-contrast fetches per channel may queue
   ahead of its tiles. Not measured.
 
+## Failed Zarr Decode Workers Stay Failed (2026-11-26)
+
+Task O13, [#457](https://github.com/cellgeni/explorer/pull/457). Once a
+Zarr decode worker fails, because its script did not load or it stopped, or
+once one does not start, the pool starts no more until the page is
+reloaded. It refuses later requests at once, without reading a tile's chunk
+for a worker, so OME-Zarr tiles and SpatialData labels decode on the main
+thread, as the codecs already did
+([Decode Workers](../../architecture.md#decode-workers)). The label tracer
+then reads and traces each chunk on the main thread alone. `terminate()`,
+which Cell Query's measurer calls on close, is not a failure.
+
+Measured on a synthetic OME-Zarr image (2 channels of 6,144 × 6,144
+uint16, 512-pixel zlib chunks, 4 levels) with an OME-Zarr label image of
+93,636 cells, opened with `segmentation=` and then zoomed in three steps.
+The worker script answered 404, as for a tab left open over a deploy.
+Production builds of main (`dbd672c`) and the branch, alternating, three
+runs each, with GPU drawing, and the data from `scripts/range-server.mjs`
+at 300 ms a request. Times run from a step's start to its last data
+request.
+
+| Measure                | Main           | Branch         |
+| ---------------------- | -------------- | -------------- |
+| Workers started        | 197–210        | 3              |
+| Data requests          | 404            | 200            |
+| Data                   | 81.6 MB        | 40.5 MB        |
+| Load                   | 8.9–9.1 s      | 4.3–5.1 s      |
+| First zoom step        | 9.2–9.3 s      | 4.6–4.7 s      |
+| Second and third steps | 3.8–3.9 s      | 1.9–2.0 s      |
+| Main-thread long tasks | 1,548–1,783 ms | 1,472–1,495 ms |
+
+- **Each chunk was read twice.** On main, a tile's chunk was read for a
+  worker that then failed, and read again for the main-thread decode. The
+  branch's 200 requests are the 194 that working workers make, plus the
+  first chunks sent to the three workers started before the first failure
+  came back.
+- **Without a delay**, main started 92–104 workers and the branch 3, with
+  the same request counts.
+- **Working workers are unchanged.** With the script served, both builds
+  start 3 workers and make 194 requests, and at 300 ms a request both load
+  in 4.0 s (one run each).
+- **The same picture.** The screenshots match, and both builds draw 4,793
+  outlines.
+
+Lead:
+
+- The TIFF tile decode pool (`src/workers/tileDecodePool.ts`) also starts
+  a new worker for the next request after one fails. Not measured.
+
+## OME-Zarr Shard Ranges Kept Across Loads (2026-11-26)
+
+Task O14, [#460](https://github.com/cellgeni/explorer/pull/460). A second
+load was measured first, with `scripts/range-server.mjs --validators`
+(new: ETag, Last-Modified and 304s) and without:
+
+- **Chunk files**, read with plain GETs: from a host with validators,
+  Chromium's HTTP cache served every chunk, and the second load made no
+  requests. Without validators everything was read again, but nearly all
+  real hosts send them. Left to the HTTP cache.
+- **Zipped stores** were already in the IndexedDB cache (`zarr-zip`).
+- **Sharded arrays**: their range reads, shard indexes and inner chunks,
+  skip the HTTP cache (`no-store`, since Chromium serialises and can
+  truncate parallel Range requests to one URL), so every load read them
+  again, from either host.
+
+So only shard ranges were added, under `zarr-range`
+([OME-Zarr](../../modalities/image.md#ome-zarr)). They are versioned by
+the `HEAD` zarrita already sends for each shard's size, rather than by the
+store's metadata: its size and validator name the shard's own version, as a
+zip's `HEAD` does, at no extra request. A range of a file the store has not
+sent a `HEAD` for is not cached.
+
+Measured on a synthetic OME-Zarr image (2 channels of 6,144 × 6,144
+uint16, 4 levels, file dates set to 2026-01-01), stored both as Zarr v2
+chunk files and sharded (Zarr v3, 2,048-pixel shards of 512-pixel zstd
+chunks). Production builds of main (`dbd672c`) and the branch, alternating,
+three runs each, with GPU drawing, and the data at 300 ms a request. Each
+run opens the image, zooms in three steps, then opens it again in the same
+browser context, as a new tab would. Times run to the last data request.
+
+| Sharded store, second load | Main        | Branch      |
+| -------------------------- | ----------- | ----------- |
+| With validators: requests  | 114         | 0           |
+| Data                       | 32.4 MB     | 0           |
+| Opening                    | 4.51–4.55 s | 2.96–2.97 s |
+| Zoom steps                 | 2.19–4.10 s | 0.62–0.65 s |
+| Without: requests          | 135         | 21          |
+| Data                       | 32.4 MB     | 0           |
+| Opening                    | 6.98–7.00 s | 5.36–5.41 s |
+| Zoom steps                 | 2.52–4.42 s | 0.93–0.95 s |
+
+- **Without validators**, the 21 requests are the shards' `HEAD`s and the
+  metadata.
+- **First loads are unchanged.** The builds make the same requests, and
+  their times are within 0.1 s per step, slightly slower on the branch,
+  which writes the ranges.
+- **Chunk files** (main, one run each): from the host with validators, the
+  second load's zoom steps settled in 76–96 ms rather than about 2 s;
+  without, all 93 requests (32.1 MB) were made again.
+
+Lead:
+
+- SpatialData and AnnData Zarr stores read sharded arrays the same way,
+  and are not cached. Not measured.
+
+## Xenium Outline Queries In Less Memory (2026-11-26)
+
+Task O12, [#463](https://github.com/cellgeni/explorer/pull/463). A DuckDB
+client of their own for nucleus outlines was tried in
+[#458](https://github.com/cellgeni/explorer/pull/458) and not adopted: the
+cell and nucleus downloads then share the host, so the cell outlines, on by
+default, arrive later. Remeasuring it led to two changes to the outline
+queries, which help with one client
+([Viewport Cell Boundaries](../../modalities/xenium.md#viewport-cell-boundaries),
+[Nucleus Boundaries](../../modalities/xenium.md#nucleus-boundaries)):
+
+- **Nuclei picked by their own vertices.** A nucleus is kept when the mean
+  of its vertices is within the box ± 75 µm, the margin the cells' centroids
+  get, so the nucleus query reads no `cells.parquet`. Vertices are read at
+  least 75 µm beyond that, so no nucleus kept is cut short.
+- **Vertex lists without an ordered aggregate.** Both queries gathered each
+  outline's vertices with `list(vertex_x ORDER BY file_row_number)`, which
+  took about 40 KB of DuckDB's memory an outline of 25 vertices: 128–256 MB
+  for 5,000 outlines, where `{r, x, y}` structs sorted with `list_sort`,
+  which give the same lists, need 16 MB. DuckDB-WASM has 3.1 GiB. Picking
+  nuclei by their vertices groups about 73,000 at the demo's outline step,
+  and with the ordered aggregate that query ran out of memory. On main, the
+  demo's cell outlines run out at a `Boundary limit` of 100,000 (72,942
+  cells); with the change they load in 10.8 s.
+
+Measured on the demo (S9) with production builds of main (`946008c`), main
+with the query changes, and main with the query changes and #458's second
+client, alternating, three runs each, with GPU drawing. Each run opens the
+dataset with `cellBounds=1&nucleusBounds=1` and zooms to the fourth step,
+where outlines first show (66,835 cells). Times are the app's Log lines, from
+the request to the outlines being ready. The bucket was slower than for the
+first O12 runs, so the builds are compared with each other.
+
+| Ready            | Main        | Query changes | Query changes, second client |
+| ---------------- | ----------- | ------------- | ---------------------------- |
+| Cell outlines    | 13.2–14.5 s | 10.9–12.5 s   | 14.5–16.8 s                  |
+| Nucleus outlines | 23.1–25.3 s | 17.8–19.9 s   | 12.8–15.1 s                  |
+
+- **The query changes.** Cell outlines are ready 1.5–2.8 s sooner than on
+  main, paired run for run, and nucleus outlines 4.1–6.7 s sooner. Both
+  queries read about the same bytes as before.
+- **`cells.parquet` was not what delayed the cells.** On the 1.4M-cell
+  folder at 300 ms a request, the second client read the `cells.parquet`
+  ranges the cell query was reading, and Chromium's HTTP cache let one
+  request per URL through at a time. On the demo, every build read 6
+  `cells.parquet` ranges at the outline step; the cell queries of earlier
+  steps had read the rest.
+- **Shared host.** With the second client, the cells' 48–50 MB and the
+  nuclei's 40 MB download together, so the cells arrive 2.7–5.9 s later
+  than with one client, and 0.7–3.1 s later than on main. The nuclei arrive
+  2.7–6.2 s sooner than with one client.
+- **DuckDB alone.** In Node, with DuckDB-WASM 1.5.1 on the 1.4M-cell
+  folder's local files and a box of 57,000 cells, the old nucleus query took
+  3.0 s and the new one 1.0 s.
+
+Tests: `src/datasets/xeniumBoundaryQueries.test.ts` runs both queries in
+DuckDB on 5,000 outlines of 25 vertices under a 64 MB memory limit, which
+the ordered aggregate runs out of on main, and picks nuclei that have no
+row in `cells.parquet`.
+
 ## Closed Open Items
 
 Moved from [Open Items](../open-items.md) when the plan was split (2026-11-13).
@@ -1194,3 +1368,10 @@ Closed by the pass's tasks:
       3.9–4.1 s rather than 6.6–6.8 s at 300 ms a request
       ([#449](https://github.com/cellgeni/explorer/pull/449))
       ([Auto-Contrast Reads Tiles Together](#auto-contrast-reads-tiles-together-2026-11-26)).
+- [x] OME-Zarr chunks read over HTTP were not kept in the IndexedDB cache
+      (O14, 2026-11-26). Chunk files come from Chromium's HTTP cache on a
+      second load from a host that sends validators. A sharded array's
+      range reads, which skip it, are now kept, and a second load of the
+      test image makes no requests rather than 114
+      ([#460](https://github.com/cellgeni/explorer/pull/460))
+      ([OME-Zarr Shard Ranges Kept Across Loads](#ome-zarr-shard-ranges-kept-across-loads-2026-11-26)).
