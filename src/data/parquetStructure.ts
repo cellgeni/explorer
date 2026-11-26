@@ -9,6 +9,7 @@ import {
   type Statistics,
 } from 'hyparquet'
 import { abortable } from '../utils/abortable'
+import { retryingFetch } from './fetchRetry'
 
 // The structure of one Parquet file, for browsing it: the schema as a tree,
 // each column's chunks summed over the row groups, the row groups, and the
@@ -219,7 +220,7 @@ export async function openParquetFile(
       asyncBufferFromUrl({
         url: ref.url,
         ...(byteLength === undefined ? {} : { byteLength }),
-        ...(fetcher === undefined ? {} : { fetch: fetcher }),
+        fetch: retryingFetch(fetcher === undefined ? {} : { fetcher }),
         ...(Object.keys(requestInit).length === 0 ? {} : { requestInit }),
       }),
       signal,

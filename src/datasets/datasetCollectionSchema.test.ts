@@ -14,6 +14,7 @@ import {
   DATASET_MANIFEST_SOURCE_KEYS,
   parseDatasetManifest,
 } from './datasetManifest'
+import { SEGMENTATION_FORMATS } from './segmentationSource'
 
 // The JSON Schema in public/ is for editors; the parser is what the viewer
 // enforces. These checks keep their field lists and values in step.
@@ -48,9 +49,10 @@ describe('dataset collection JSON Schema', () => {
       [...DATASET_COLLECTION_DEFAULT_KEYS].sort(),
     )
     expect(schema.properties?.datasets?.maxItems).toBe(MAX_COLLECTION_DATASETS)
-    expect(schema.$defs?.dataset?.properties?.coordinates?.enum).toEqual(
-      DATASET_IMAGE_COORDINATES,
-    )
+    const entry = schema.$defs?.dataset?.properties
+    expect(entry?.coordinates?.enum).toEqual(DATASET_IMAGE_COORDINATES)
+    expect(entry?.labelsCoordinates?.enum).toEqual(DATASET_IMAGE_COORDINATES)
+    expect(entry?.labelsFormat?.enum).toEqual(SEGMENTATION_FORMATS)
   })
 
   // Editors may pass a collection the viewer refuses, such as one naming a

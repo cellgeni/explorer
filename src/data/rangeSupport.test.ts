@@ -29,6 +29,8 @@ describe('HTTP Range support diagnostics', () => {
       headers: {
         Range: 'bytes=0-0',
       },
+      // fetchWithRetry's, which ends an attempt that gets no bytes.
+      signal: expect.any(AbortSignal),
     })
   })
 

@@ -239,6 +239,56 @@ describe('parseDatasetCollection', () => {
     ).toBe('cell_labels')
   })
 
+  it('takes polygon labels with their format and units', () => {
+    const collection = parse({
+      version: 1,
+      datasets: [
+        {
+          dataset: 'a.zarr',
+          image: 'a-raw.zarr',
+          coordinates: 'image-pixels',
+          labels: 'outs/cell_boundaries.parquet',
+          labelsCoordinates: 'micrometers',
+          labelColumn: 'cell_id',
+        },
+        {
+          dataset: 'b.zarr',
+          image: 'b-raw.zarr',
+          labels: 'b-cells?download=1',
+          labelsFormat: 'geojson',
+        },
+      ],
+    })
+
+    expect(collection.datasets.map((entry) => entry.image)).toMatchObject([
+      {
+        labels: { path: 'outs/cell_boundaries.parquet' },
+        labelsCoordinates: 'micrometers',
+        labelColumn: 'cell_id',
+      },
+      { labels: { path: 'b-cells?download=1' }, labelsFormat: 'geojson' },
+    ])
+    expect(collection.datasets[1]?.image).not.toHaveProperty('labelsCoordinates')
+
+    const entryError = (entry: object) =>
+      parseError({
+        version: 1,
+        datasets: [{ dataset: 'a', image: 'a.zarr', ...entry }],
+      })
+    expect(entryError({ labelsFormat: 'parquet' })).toBe(
+      'collection.json: "datasets[0].labelsFormat" needs "datasets[0].labels".',
+    )
+    expect(entryError({ labelsCoordinates: 'micrometers' })).toBe(
+      'collection.json: "datasets[0].labelsCoordinates" needs "datasets[0].labels".',
+    )
+    expect(entryError({ labels: 'a.parquet', labelsFormat: 'xenium' })).toBe(
+      'collection.json: "datasets[0].labelsFormat" must be one of "label-tiff", "label-zarr", "geojson", "wkt", "parquet".',
+    )
+    expect(entryError({ labels: 'a.parquet', labelsCoordinates: 'pixels' })).toBe(
+      'collection.json: "datasets[0].labelsCoordinates" must be one of "micrometers", "image-pixels".',
+    )
+  })
+
   it('rejects the same dataset listed twice', () => {
     expect(
       parseError({

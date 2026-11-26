@@ -65,7 +65,21 @@ import {
   type ImagePyramidPlane,
 } from '../data/imagePyramid'
 import type { DatasetImageCoordinates } from './datasetManifest'
-import type { SpatialDataLabelsReader } from './spatialDataLabels'
+import type { LabelLevelGeometry, LabelOutlineReader } from './spatialDataLabels'
+import {
+  AnnDataLabelPolygons,
+  matchPolygonCells,
+  polygonPlacementWarning,
+  type PolygonCellCandidate,
+} from './annDataLabelPolygons'
+import {
+  attachedLabelsFormat,
+  isLabelSegmentationFormat,
+  type LabelSegmentationFormat,
+  type SegmentationFormat,
+} from './segmentationSource'
+import { instanceIdString, type SpatialDataShapes } from './spatialDataShapes'
+import type { VectorSegmentationReader } from './vectorSegmentationWorker'
 import { LABEL_OUTLINE_MAX_PIXELS } from './spatialDataLabelTrace'
 import {
   analysisEmbeddingLabel,
@@ -118,6 +132,7 @@ import {
   type AnnotationGroupOption,
   type LoadDatasetAnnotationsOptions,
 } from '../data/annotation'
+import { fetchWithRetry } from '../data/fetchRetry'
 
 export interface AnnDataH5adDatasetOptions {
   readonly url: string
@@ -146,8 +161,12 @@ export interface AnnDataH5adDatasetOptions {
   readonly image?: AnnDataAttachedImage
   // Opens `image`; defaults to the generic image opener.
   readonly openImage?: ImagePyramidOpener
-  // Opens `image.labelsUrl`; defaults to the OME-Zarr label reader.
+  // Opens `image.labelsUrl` when it is a label mask; defaults to the OME-Zarr
+  // or TIFF label reader.
   readonly openLabels?: AnnDataLabelsOpener
+  // Reads `image.labelsUrl` when it is polygons; defaults to the imported
+  // segmentation reader, in a worker.
+  readonly readLabelPolygons?: VectorSegmentationReader
   // Starts the H5 file worker that reads an .h5ad by range; for tests.
   readonly h5WorkerFactory?: H5WorkerFactory
   // An .h5ad read by range reads /X whole at load up to this many decoded
@@ -188,11 +207,18 @@ export interface AnnDataSection {
   readonly z?: number
 }
 
-// What cell boundaries need from a label image's reader.
-export type AnnDataLabelsReader = Pick<SpatialDataLabelsReader, 'levels' | 'outlines'> &
-  Partial<Pick<SpatialDataLabelsReader, 'followsPlanes' | 'planeNotice'>>
+// What cell boundaries need from a label image's reader. Outlines come back
+// in its level-0 pixels.
+export type AnnDataLabelsReader = Pick<
+  LabelOutlineReader<LabelLevelGeometry>,
+  'levels' | 'outlines'
+> &
+  Partial<Pick<LabelOutlineReader<LabelLevelGeometry>, 'followsPlanes' | 'planeNotice'>>
 
-export type AnnDataLabelsOpener = (url: string) => Promise<AnnDataLabelsReader>
+export type AnnDataLabelsOpener = (
+  url: string,
+  format: LabelSegmentationFormat,
+) => Promise<AnnDataLabelsReader>
 
 export interface AnnDataAttachedImage {
   // OME-Zarr, OME-TIFF or another image the generic opener reads.
@@ -200,11 +226,18 @@ export interface AnnDataAttachedImage {
   // With 'image-pixels', the obsm coordinates are the image's full-resolution
   // pixels and are scaled to micrometres by its pixel size.
   readonly coordinates: DatasetImageCoordinates
-  // A segmentation label image (OME-Zarr) covering the image.
+  // A segmentation drawn as cell boundaries: a label mask covering the image
+  // (OME-Zarr or TIFF), or polygons (Parquet, GeoJSON, WKT).
   readonly labelsUrl?: string
-  // The obs column holding each cell's label value. Without it, the
-  // SpatialData instance key in `uns/spatialdata_attrs`, else the obs names:
-  // label 12 outlines the cell named "12".
+  // The labels' format; by default as the name tells, else OME-Zarr.
+  readonly labelsFormat?: SegmentationFormat
+  // What polygon coordinates are in; `coordinates` by default. A mask is
+  // placed over the image whatever its size.
+  readonly labelsCoordinates?: DatasetImageCoordinates
+  // The obs column holding each cell's label value, or its polygon's ID.
+  // Without it, the SpatialData instance key in `uns/spatialdata_attrs`, else
+  // the obs names: label 12 outlines the cell named "12". Polygons take
+  // whichever of these, or of the columns named like IDs, names most of them.
   readonly labelColumn?: string
 }
 
@@ -518,7 +551,6 @@ const VISIUM_IMAGE_KINDS: readonly VisiumImageKind[] = ['hires', 'lowres']
 // Obs columns that name each row's library in multi-sample Visium AnnData.
 const VISIUM_LIBRARY_COLUMNS = ['library_id', 'library', 'sample']
 
-const H5AD_FETCH_TIMEOUT_MS = 60_000
 // The groups an .h5ad file's tree walk visits. Layers, raw, the pairwise
 // matrices and uns other than the Visium layout and a SpatialData table's
 // instance key are never read, and in a file read by range each object visited
@@ -707,6 +739,13 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   private attachedImageLoaderPromise: Promise<ImagePyramidLoader> | null = null
   private readonly openLabels: AnnDataLabelsOpener | undefined
   private labelsReaderPromise: Promise<AnnDataLabelsReader> | null = null
+  private readonly readLabelPolygons: VectorSegmentationReader | undefined
+  // Polygon labels, read once, and matched to cells per placed cache.
+  private labelShapesPromise: Promise<SpatialDataShapes> | null = null
+  private readonly labelPolygonsByCache = new WeakMap<
+    H5adCache,
+    Promise<AnnDataLabelPolygons>
+  >()
   // Label value -> cell id, per placed cache.
   private readonly labelCellIds = new WeakMap<H5adCache, Promise<H5adLabelCells>>()
   // Cell elements for cached label rings, so unchanged cells keep the same
@@ -735,6 +774,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     this.attachedImage = options.image
     this.openImage = options.openImage
     this.openLabels = options.openLabels
+    this.readLabelPolygons = options.readLabelPolygons
     this.visiumView = options.visiumView ?? {}
   }
 
@@ -743,6 +783,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const visium = cache.visium?.summary
     const imageLoader =
       visium === undefined ? await this.attachedImageLoaderOrNull() : null
+    const labelsFormat = this.labelsFormat()
 
     return {
       platform: visium === undefined ? 'h5ad' : 'visium',
@@ -757,21 +798,23 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       capabilities: {
         transcripts: false,
         // A label column that gives no cells is reported when boundaries
-        // load, so it is not mistaken for a table without labels.
+        // load, so it is not mistaken for a table without labels. Polygons
+        // are matched to cells once read, when boundaries first load.
         cellBoundaries:
           visium !== undefined ||
-          (this.attachedImage?.labelsUrl !== undefined &&
-            (await this.labelCellsFor(cache).then(
-              ({ byLabel, error }) => byLabel.size > 0 || error !== undefined,
-            ))),
+          (labelsFormat !== undefined &&
+            (!isLabelSegmentationFormat(labelsFormat) ||
+              (await this.labelCellsFor(cache).then(
+                ({ byLabel, error }) => byLabel.size > 0 || error !== undefined,
+              )))),
         pyramidImage: imageLoader !== null,
         multiChannel: (imageLoader?.channels.length ?? 0) > 1,
       },
     }
   }
 
-  // Visium spot outlines, or outlines traced from the attached label image;
-  // other AnnData has no element geometry.
+  // Visium spot outlines, or outlines from the attached labels, traced from a
+  // mask or read as polygons; other AnnData has no element geometry.
   async elements(
     bbox?: BBox,
     options: ElementReadOptions = {},
@@ -779,11 +822,15 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     const cache = await this.cache()
 
     if (cache.visium === null) {
-      if (bbox === undefined || this.attachedImage?.labelsUrl === undefined) {
+      const format = this.labelsFormat()
+
+      if (bbox === undefined || format === undefined) {
         return { elements: [] }
       }
 
-      return this.labelElements(cache, bbox, options.plane ?? {})
+      return isLabelSegmentationFormat(format)
+        ? this.labelElements(cache, bbox, options.plane ?? {}, format)
+        : { elements: (await this.labelPolygonsFor(cache)).elements(bbox) }
     }
 
     const spots = await this.spotElements()
@@ -1311,7 +1358,16 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
   }
 
-  private labelsReader(): Promise<AnnDataLabelsReader> {
+  // The attached labels' format, or undefined without labels.
+  private labelsFormat(): SegmentationFormat | undefined {
+    const image = this.attachedImage
+
+    return image?.labelsUrl === undefined
+      ? undefined
+      : attachedLabelsFormat(image.labelsUrl, image.labelsFormat)
+  }
+
+  private labelsReader(format: LabelSegmentationFormat): Promise<AnnDataLabelsReader> {
     const url = this.attachedImage?.labelsUrl
 
     if (url === undefined) {
@@ -1319,11 +1375,8 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
 
     if (this.labelsReaderPromise === null) {
-      const promise = (async () => {
-        const openLabels =
-          this.openLabels ?? (await import('./spatialDataLabels')).openOmeZarrLabels
-        return openLabels(url)
-      })()
+      const open = this.openLabels ?? openAttachedLabelMask
+      const promise = (async () => open(url, format))()
       this.labelsReaderPromise = promise
       promise.catch(() => {
         if (this.labelsReaderPromise === promise) {
@@ -1411,6 +1464,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     cache: H5adCache,
     bbox: BBox,
     plane: ImagePyramidPlane,
+    format: LabelSegmentationFormat,
   ): Promise<ElementBatch<SpatialElementId>> {
     const { byLabel: cellIds, error } = await this.labelCellsFor(cache)
 
@@ -1423,7 +1477,7 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
     }
 
     const [reader, image] = await Promise.all([
-      this.labelsReader(),
+      this.labelsReader(format),
       this.attachedImageLoader(),
     ])
     const labels = reader.levels[0]
@@ -1483,6 +1537,145 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
       ...(reader.followsPlanes === true ? { plane: imagePlaneKey(plane) } : {}),
       ...(notice === undefined ? {} : { planeNotice: notice }),
     }
+  }
+
+  // The attached polygons with their cells, once read. A failed read or a
+  // file that matches no cells is tried again at the next boundary load.
+  private labelPolygonsFor(cache: H5adCache): Promise<AnnDataLabelPolygons> {
+    let polygons = this.labelPolygonsByCache.get(cache)
+
+    if (polygons === undefined) {
+      const promise = this.resolveLabelPolygons(cache)
+      this.labelPolygonsByCache.set(cache, promise)
+      promise.catch(() => {
+        if (this.labelPolygonsByCache.get(cache) === promise) {
+          this.labelPolygonsByCache.delete(cache)
+        }
+      })
+      polygons = promise
+    }
+
+    return polygons
+  }
+
+  // Each polygon outlines the cell its ID names: by `labelColumn`, else by
+  // whichever of the obs names, the SpatialData instance key and the columns
+  // named like labels or IDs names the most polygons.
+  private async resolveLabelPolygons(cache: H5adCache): Promise<AnnDataLabelPolygons> {
+    const named = this.attachedImage?.labelColumn
+    let candidates: PolygonCellCandidate[]
+
+    if (named === undefined) {
+      const instanceKey = await readSpatialDataInstanceKey(cache.root)
+      const columns = [
+        ...(instanceKey === undefined ? [] : [instanceKey]),
+        ...[...cache.continuousTracks, ...cache.categoricalTracks]
+          .map((track) => track.id)
+          .filter(
+            (name) =>
+              name !== instanceKey &&
+              (LABEL_COLUMN_PATTERN.test(name) ||
+                POLYGON_ID_COLUMN_NAMES.has(name.toLowerCase())),
+          ),
+      ]
+      candidates = [
+        { values: cache.cellIds },
+        ...columns.flatMap((column) => {
+          const values = obsIdValues(cache, column)
+          return values === null ? [] : [{ column, values }]
+        }),
+      ]
+    } else {
+      const values = obsIdValues(cache, named)
+
+      if (values === null) {
+        throw new Error(
+          `The attached labels match no cells: obs has no column "${named}".`,
+        )
+      }
+
+      candidates = [{ column: named, values }]
+    }
+
+    const shapes = await this.labelShapes()
+    const match = matchPolygonCells(shapes, cache.cellIds, candidates)
+
+    if (match === null) {
+      const example = shapes.ids[0]
+
+      throw new Error(
+        `The attached labels match no cells: ${
+          example === undefined
+            ? 'the file holds no polygons'
+            : named === undefined
+              ? `neither the obs names nor an obs column named like labels or IDs holds the polygon IDs, such as ${JSON.stringify(example)}; name the obs column that does in labelColumn`
+              : `obs column "${named}" holds none of the polygon IDs, such as ${JSON.stringify(example)}`
+        }.`,
+      )
+    }
+
+    const { column } = match.candidate
+    this.onProgress?.(
+      `Attached labels: ${match.count.toLocaleString()} of ${shapes.ids.length.toLocaleString()} polygons matched to cells by ${
+        column === undefined ? 'obs names' : `obs column ${column}`
+      }`,
+    )
+    return new AnnDataLabelPolygons(shapes, match.cellIds)
+  }
+
+  // The attached polygons in micrometres, read once: in the image's pixels,
+  // they are scaled by its pixel size.
+  private labelShapes(): Promise<SpatialDataShapes> {
+    if (this.labelShapesPromise === null) {
+      const promise = this.readLabelShapes()
+      this.labelShapesPromise = promise
+      promise.catch(() => {
+        if (this.labelShapesPromise === promise) {
+          this.labelShapesPromise = null
+        }
+      })
+    }
+
+    return this.labelShapesPromise
+  }
+
+  private async readLabelShapes(): Promise<SpatialDataShapes> {
+    const image = this.attachedImage
+    const format = this.labelsFormat()
+
+    if (
+      image?.labelsUrl === undefined ||
+      format === undefined ||
+      isLabelSegmentationFormat(format)
+    ) {
+      throw new Error('This AnnData dataset has no attached label polygons.')
+    }
+
+    const loader = await this.attachedImageLoader()
+    const inPixels = (image.labelsCoordinates ?? image.coordinates) === 'image-pixels'
+    const read =
+      this.readLabelPolygons ??
+      (await import('./vectorSegmentationWorker')).readVectorSegmentationInWorker
+    const shapes = await read({
+      file: { kind: 'url', url: image.labelsUrl },
+      format,
+      micrometersPerUnit: inPixels ? loader.units.micrometersPerPixel : 1,
+      ...(inPixels ? { yMicrometersPerUnit: micrometersPerPixelY(loader.units) } : {}),
+    })
+    const warning = polygonPlacementWarning(
+      shapes,
+      {
+        width: loader.imageWidth * loader.units.micrometersPerPixel,
+        height: loader.imageHeight * micrometersPerPixelY(loader.units),
+      },
+      inPixels,
+    )
+
+    if (warning !== undefined) {
+      this.onProgress?.(warning)
+    }
+
+    return shapes
   }
 
   // Micrometres per coordinate unit along x and y: the attached image's pixel
@@ -1779,8 +1972,55 @@ function wholeNumberOrNull(value: string | null): number | null {
   return value !== null && /^\d+$/.test(value) ? Number(value) : null
 }
 
+// A column's values by row as polygon IDs: text as it is, and numbers as the
+// polygon readers write numeric IDs. Null when obs has no such column.
+function obsIdValues(
+  cache: H5adCache,
+  column: string,
+): readonly (string | null)[] | null {
+  const numeric = cache.continuousTracks.find((track) => track.id === column)
+
+  if (numeric !== undefined) {
+    return numeric.values.map(instanceIdString)
+  }
+
+  const text = cache.categoricalTracks.find((track) => track.id === column)
+
+  return text === undefined
+    ? null
+    : cache.cellIds.map((_cellId, row) => labelAt(text.values, row))
+}
+
+// A label mask: OME-Zarr (including a bioformats2raw store) or TIFF, read in
+// its own pixels.
+async function openAttachedLabelMask(
+  url: string,
+  format: LabelSegmentationFormat,
+): Promise<AnnDataLabelsReader> {
+  if (format === 'label-tiff') {
+    const [{ openTiffLabelLoader, tiffLabelOutlineReader }, { IDENTITY_AFFINE }] =
+      await Promise.all([import('./tiffLabels'), import('./spatialDataTransforms')])
+    return tiffLabelOutlineReader(await openTiffLabelLoader(url), IDENTITY_AFFINE)
+  }
+
+  return (await import('./spatialDataLabels')).openOmeZarrLabels(url)
+}
+
 // Obs columns SpatialData tables commonly keep label values in.
 const LABEL_COLUMN_PATTERN = /label/i
+// Obs columns that may hold the polygon IDs of attached polygon labels, as
+// the polygon readers find IDs (lower case).
+const POLYGON_ID_COLUMN_NAMES = new Set([
+  'cell_id',
+  'cellid',
+  'cell',
+  'entityid',
+  'id',
+  'object_id',
+  'objectid',
+  'instance_id',
+  'barcode',
+])
 
 // The obs column a SpatialData table links to its elements: `instance_key` in
 // the table's attributes (spatialdata 0.2 and later), or in
@@ -3419,7 +3659,7 @@ function referenceStoreFetch(
       const resolvedUrl = ReferenceStore.resolveUri(request.url)
       const resolvedRequest =
         resolvedUrl === request.url ? request : new Request(resolvedUrl, request)
-      return fetcher(resolvedRequest)
+      return fetchWithRetry(resolvedRequest, undefined, { fetcher })
     })
 }
 
@@ -3871,53 +4111,26 @@ async function readObservationTracks(
   return { categoricalTracks, continuousTracks }
 }
 
+// The file's size, its whole bytes, and its reference file are read through
+// fetchWithRetry (O7): an attempt ends after 30 s with no bytes, its body
+// included, and is tried again, three attempts in all.
 async function fetchH5adHead(url: string, fetcher: typeof fetch): Promise<Response> {
-  return fetchH5adRequest(
+  return fetchWithRetry(
     url,
-    (input, init) => fetchHead(fetcher, String(input), init),
     {},
-    'H5AD file metadata',
+    { fetcher: (input, init) => fetchHead(fetcher, String(input), init) },
   )
 }
 
 async function fetchH5adFile(url: string, fetcher: typeof fetch): Promise<Response> {
-  return fetchH5adRequest(url, fetcher, {}, 'H5AD file')
+  return fetchWithRetry(url, {}, { fetcher })
 }
 
 async function fetchH5adReferenceFile(
   url: string,
   fetcher: typeof fetch,
 ): Promise<Response> {
-  return fetchH5adRequest(url, fetcher, {}, 'H5AD reference file')
-}
-
-async function fetchH5adRequest(
-  url: string,
-  fetcher: typeof fetch,
-  init: RequestInit,
-  label: string,
-): Promise<Response> {
-  const controller = new AbortController()
-  let timedOut = false
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, H5AD_FETCH_TIMEOUT_MS)
-
-  try {
-    return await fetcher(url, { ...init, signal: controller.signal })
-  } catch (error) {
-    if (timedOut) {
-      throw new Error(
-        `${label} request timed out after ${H5AD_FETCH_TIMEOUT_MS.toLocaleString()} ms.`,
-        { cause: error },
-      )
-    }
-
-    throw error
-  } finally {
-    globalThis.clearTimeout(timeout)
-  }
+  return fetchWithRetry(url, {}, { fetcher })
 }
 
 async function readH5adResponseBytes(

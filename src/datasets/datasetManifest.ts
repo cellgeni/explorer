@@ -243,16 +243,27 @@ export interface DatasetImageAttachment {
   readonly path: string
   readonly url: string
   readonly coordinates: DatasetImageCoordinates
-  // A segmentation label image covering the image, drawn as cell boundaries.
+  // A segmentation drawn as cell boundaries: a label mask covering the image
+  // (OME-Zarr or TIFF), or polygons (Parquet, GeoJSON, WKT).
   readonly labels?: DatasetManifestFile
-  // The obs column holding each cell's label value. Without it, the SpatialData
-  // instance key the table records, else the obs names.
+  // The format of `labels` when its name does not tell it.
+  readonly labelsFormat?: SegmentationFormat
+  // What polygon coordinates are in; the cells' `coordinates` by default.
+  readonly labelsCoordinates?: DatasetImageCoordinates
+  // The obs column holding each cell's label value, or its polygon's ID.
+  // Without it, the SpatialData instance key the table records, else the obs
+  // names (for polygons, whichever matches most).
   readonly labelColumn?: string
 }
 
 export const H5AD_MANIFEST_FILES = ['h5ad', 'image', 'labels'] as const
 
-export const H5AD_MANIFEST_OPTIONS = ['coordinates', 'labelColumn'] as const
+export const H5AD_MANIFEST_OPTIONS = [
+  'coordinates',
+  'labelsFormat',
+  'labelsCoordinates',
+  'labelColumn',
+] as const
 
 export interface H5adDatasetManifest extends DatasetManifestBase {
   readonly platform: 'h5ad'
@@ -264,6 +275,8 @@ export interface H5adDatasetManifest extends DatasetManifestBase {
   }
   readonly options: {
     readonly coordinates?: DatasetImageCoordinates
+    readonly labelsFormat?: SegmentationFormat
+    readonly labelsCoordinates?: DatasetImageCoordinates
     readonly labelColumn?: string
   }
 }
@@ -538,6 +551,8 @@ export function parseDatasetManifest(
         image: optionalPath(files, 'image', 'files.', fail),
         labels: optionalPath(files, 'labels', 'files.', fail),
         coordinates: options?.coordinates,
+        labelsFormat: options?.labelsFormat,
+        labelsCoordinates: options?.labelsCoordinates,
         labelColumn:
           options === undefined
             ? undefined
@@ -547,6 +562,8 @@ export function parseDatasetManifest(
         image: 'files.image',
         labels: 'files.labels',
         coordinates: 'options.coordinates',
+        labelsFormat: 'options.labelsFormat',
+        labelsCoordinates: 'options.labelsCoordinates',
         labelColumn: 'options.labelColumn',
       },
       rootUrl,
@@ -567,6 +584,12 @@ export function parseDatasetManifest(
         ...(attachment === undefined || options?.coordinates === undefined
           ? {}
           : { coordinates: attachment.coordinates }),
+        ...(attachment?.labelsFormat === undefined
+          ? {}
+          : { labelsFormat: attachment.labelsFormat }),
+        ...(attachment?.labelsCoordinates === undefined
+          ? {}
+          : { labelsCoordinates: attachment.labelsCoordinates }),
         ...(attachment?.labelColumn === undefined
           ? {}
           : { labelColumn: attachment.labelColumn }),
@@ -706,35 +729,62 @@ export function parseDatasetManifest(
 }
 
 // An image, labels and coordinates read from `fields`; `names` say where each
-// is written, for errors. `coordinates` and `labels` need an image.
+// is written, for errors. `coordinates` and `labels` need an image, and the
+// labels' own settings need labels.
 export function parseImageAttachment(
   fields: {
     readonly image: string | undefined
     readonly labels: string | undefined
     readonly coordinates: unknown
+    readonly labelsFormat: unknown
+    readonly labelsCoordinates: unknown
     readonly labelColumn: string | undefined
   },
   names: {
     readonly image: string
     readonly labels: string
     readonly coordinates: string
+    readonly labelsFormat: string
+    readonly labelsCoordinates: string
     readonly labelColumn: string
   },
   rootUrl: string,
   fail: Fail,
 ): DatasetImageAttachment | undefined {
-  const { image, labels, coordinates, labelColumn } = fields
+  const { image, labels, coordinates, labelsFormat, labelsCoordinates, labelColumn } =
+    fields
+  const withoutLabels = (
+    [
+      [labelsFormat, names.labelsFormat],
+      [labelsCoordinates, names.labelsCoordinates],
+      [labelColumn, names.labelColumn],
+    ] as const
+  ).find(([value]) => value !== undefined)?.[1]
 
-  if (labelColumn !== undefined && labels === undefined) {
-    return fail(`"${names.labelColumn}" needs "${names.labels}".`)
+  if (withoutLabels !== undefined && labels === undefined) {
+    return fail(`"${withoutLabels}" needs "${names.labels}".`)
+  }
+
+  for (const [value, name] of [
+    [coordinates, names.coordinates],
+    [labelsCoordinates, names.labelsCoordinates],
+  ] as const) {
+    if (
+      value !== undefined &&
+      !DATASET_IMAGE_COORDINATES.includes(value as DatasetImageCoordinates)
+    ) {
+      return fail(
+        `"${name}" must be one of ${DATASET_IMAGE_COORDINATES.map((option) => `"${option}"`).join(', ')}.`,
+      )
+    }
   }
 
   if (
-    coordinates !== undefined &&
-    !DATASET_IMAGE_COORDINATES.includes(coordinates as DatasetImageCoordinates)
+    labelsFormat !== undefined &&
+    (typeof labelsFormat !== 'string' || !isSegmentationFormat(labelsFormat))
   ) {
     return fail(
-      `"${names.coordinates}" must be one of ${DATASET_IMAGE_COORDINATES.map((value) => `"${value}"`).join(', ')}.`,
+      `"${names.labelsFormat}" must be one of ${SEGMENTATION_FORMATS.map((option) => `"${option}"`).join(', ')}.`,
     )
   }
 
@@ -757,6 +807,12 @@ export function parseImageAttachment(
     ...(labels === undefined
       ? {}
       : { labels: { path: labels, url: resolve(rootUrl, labels) } }),
+    ...(labelsFormat === undefined
+      ? {}
+      : { labelsFormat: labelsFormat as SegmentationFormat }),
+    ...(labelsCoordinates === undefined
+      ? {}
+      : { labelsCoordinates: labelsCoordinates as DatasetImageCoordinates }),
     ...(labelColumn === undefined ? {} : { labelColumn }),
   }
 }
@@ -770,12 +826,14 @@ export function manifestImageAttachment(
   }
 
   const { image, labels } = manifest.files
-  const { coordinates, labelColumn } = manifest.options
+  const { coordinates, labelsFormat, labelsCoordinates, labelColumn } = manifest.options
 
   return {
     ...image,
     coordinates: coordinates ?? 'micrometers',
     ...(labels === undefined ? {} : { labels }),
+    ...(labelsFormat === undefined ? {} : { labelsFormat }),
+    ...(labelsCoordinates === undefined ? {} : { labelsCoordinates }),
     ...(labelColumn === undefined ? {} : { labelColumn }),
   }
 }

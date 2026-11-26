@@ -132,6 +132,44 @@ describe('Zarr stores', () => {
     ])
   })
 
+  it('reads a chunk again after a 503 or a body that breaks off (O7)', async () => {
+    let sent = false
+    const answers = [
+      () => new Response(null, { status: 503 }),
+      () =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            // Two bytes, then the connection drops.
+            pull(controller) {
+              if (sent) {
+                controller.error(new TypeError('network error'))
+                return
+              }
+
+              sent = true
+              controller.enqueue(new Uint8Array([1, 2]))
+            },
+          }),
+          { status: 206 },
+        ),
+      () => new Response(new Uint8Array([3, 4]), { status: 206 }),
+    ]
+    const ranges: (string | null)[] = []
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      ranges.push((input as Request).headers.get('Range'))
+      return answers.shift()!()
+    }) as unknown as typeof fetch
+    const store = createZarrFetchStore('https://example.test/data/store.zarr/', {
+      fetcher,
+    })
+
+    await expect(store.getRange('/0/c/0/0', { offset: 8, length: 4 })).resolves.toEqual(
+      new Uint8Array([1, 2, 3, 4]),
+    )
+    // The third attempt asks for the bytes the second did not bring.
+    expect(ranges).toEqual(['bytes=8-11', 'bytes=8-11', 'bytes=10-11'])
+  })
+
   it('reads keys whose names hold %, # and ? at their own URLs', async () => {
     const urls: string[] = []
     const fetcher = vi.fn(async (input: RequestInfo | URL) => {

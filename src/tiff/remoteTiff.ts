@@ -7,6 +7,7 @@ import type {
   RemoteSourceOptions,
 } from 'geotiff'
 import { byteRangeFileVersion, responseValidator } from '../data/persistentByteRangeCache'
+import { fetchWithRetry } from '../data/fetchRetry'
 
 // The version of each file opened by openRemoteTiff (see
 // byteRangeFileVersion), which its tiles are cached under.
@@ -41,7 +42,7 @@ class VersionedFetchClient implements BaseClient {
   constructor(readonly url: string) {}
 
   async request(options: RequestInit = {}): Promise<BaseResponse> {
-    const response = await fetch(this.url, options)
+    const response = await fetchWithRetry(this.url, options)
 
     if (this.version === undefined && response.status === 206) {
       this.version = byteRangeFileVersion(

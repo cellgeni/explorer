@@ -79,6 +79,7 @@ import type {
   H5adLoadProgressReporter,
 } from './h5adDataset'
 import type { SpatialDataSelection } from './spatialDataDataset'
+import { FetchTimeoutError, fetchWithRetry } from '../data/fetchRetry'
 
 export type AnySpatialDataset = SpatialDataset<CellId> | SpatialDataset<SpatialElementId>
 
@@ -1773,6 +1774,12 @@ export async function createSpatialDataset(
               url: image.url,
               coordinates: image.coordinates,
               ...(image.labels === undefined ? {} : { labelsUrl: image.labels.url }),
+              ...(image.labelsFormat === undefined
+                ? {}
+                : { labelsFormat: image.labelsFormat }),
+              ...(image.labelsCoordinates === undefined
+                ? {}
+                : { labelsCoordinates: image.labelsCoordinates }),
               ...(image.labelColumn === undefined
                 ? {}
                 : { labelColumn: image.labelColumn }),
@@ -2146,6 +2153,9 @@ function zarrStoreDetection(
     : { platform: 'h5ad', baseUrl, h5adUrl: storeUrl, source: 'zarr', checked }
 }
 
+// A detection request, sent once: a probe that goes `timeoutMs` without bytes,
+// its body included, has timed out (fetchWithRetry, O7). Probes are not tried
+// again, so a host without CORS is reported as soon as it fails.
 async function fetchWithTimeout(
   fetcher: typeof fetch,
   input: RequestInfo | URL,
@@ -2153,39 +2163,26 @@ async function fetchWithTimeout(
   signal: AbortSignal | undefined,
   timeoutMs: number,
 ): Promise<Response> {
+  const sent = signal === undefined ? init : { ...init, signal }
+
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    return fetcher(input, signal === undefined ? init : { ...init, signal })
-  }
-
-  const controller = new AbortController()
-  let timedOut = false
-  const abortFromParent = () => {
-    controller.abort(signal?.reason)
-  }
-  const timeout = globalThis.setTimeout(() => {
-    timedOut = true
-    controller.abort()
-  }, timeoutMs)
-
-  if (signal?.aborted === true) {
-    abortFromParent()
-  } else {
-    signal?.addEventListener('abort', abortFromParent, { once: true })
+    return fetcher(input, sent)
   }
 
   try {
-    return await fetcher(input, { ...init, signal: controller.signal })
+    return await fetchWithRetry(input, sent, {
+      fetcher,
+      idleTimeoutMs: timeoutMs,
+      attempts: 1,
+    })
   } catch (error) {
-    if (timedOut) {
+    if (error instanceof FetchTimeoutError) {
       throw new Error(`Request timed out after ${timeoutMs.toLocaleString()} ms.`, {
         cause: error,
       })
     }
 
     throw error
-  } finally {
-    globalThis.clearTimeout(timeout)
-    signal?.removeEventListener('abort', abortFromParent)
   }
 }
 
@@ -2355,5 +2352,5 @@ function spatialDatasetCacheKey(
   spatialDataSelection: SpatialDataSelection | undefined,
   image: DatasetImageAttachment | undefined,
 ): string {
-  return `${baseUrl}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelColumn ?? ''}`}`
+  return `${baseUrl}\nspatialData=${JSON.stringify(spatialDataSelection ?? {})}\nimage=${image === undefined ? '' : `${image.url} ${image.coordinates} ${image.labels?.url ?? ''} ${image.labelsFormat ?? ''} ${image.labelsCoordinates ?? ''} ${image.labelColumn ?? ''}`}`
 }

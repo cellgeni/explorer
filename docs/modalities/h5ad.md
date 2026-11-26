@@ -361,7 +361,24 @@ SpatialData store's `images/he`), OME-TIFF, TIFF, QPTIFF, SVS or NDPI.
   joined across chunk edges, and rings are cached while their chunks are. The
   view's bbox is converted to label pixels by the image's extent over the
   label image's (`labelElements`), and the rings back to micrometres. Labels
-  no cell has are skipped before rings are joined.
+  no cell has are skipped before rings are joined. A label TIFF opens with
+  `openTiffLabelLoader` and `tiffLabelOutlineReader`
+  (`src/datasets/tiffLabels.ts`) and is read the same way. The format comes
+  from `attachedLabelsFormat` (`src/datasets/segmentationSource.ts`):
+  `labelsFormat`, else the name, else OME-Zarr.
+- **Polygon labels.** Parquet, GeoJSON and WKT `labels` are read once, whole,
+  by the imported-segmentation reader in its worker
+  (`readVectorSegmentationInWorker`), in micrometres: with
+  `labelsCoordinates` (by default `coordinates`) `image-pixels`, scaled by
+  the image's pixel size. `resolveLabelPolygons` then matches polygon IDs to
+  cells (`matchPolygonCells`, `src/datasets/annDataLabelPolygons.ts`): by
+  `labelColumn`, else by whichever of the obs names, the instance key and the
+  obs columns named like labels or IDs holds the most IDs, compared as text
+  (numbers as whole-number text). `meta()` reports `cellBoundaries` for
+  polygons without reading them; a file that matches no cell throws from
+  `elements(bbox)`, and a failed read is tried again at the next load.
+  `elements(bbox)` returns the matched cells whose polygon bounds meet
+  `bbox`, keeping element objects for reuse across viewport requests.
   `H5AD_PLATFORM_ADAPTER` loads boundaries while `Cell boundaries` is on, and
   points get outlines only then.
 - **Not used.** A Visium table keeps its own tissue image, and other platforms

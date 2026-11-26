@@ -260,12 +260,20 @@ describe('zip folders', () => {
     const zip = archive(false)
     const host = byteRangeFetcher(new Map([[ZIP, zip]]))
     const directory = await readZipDirectory(ZIP, { fetcher: host })
-    // Reads of the file stall until cancelled, then fail as Chromium reports
-    // a failed body read of a Response built from a stream.
+    const localHeaderOffset = directory.entries.get('outs/morphology 2d/image.tif')
+      ?.localHeaderOffset as number
+    // Reads of the file's data stall until cancelled, then fail as Chromium
+    // reports a failed body read of a Response built from a stream. Its local
+    // header, read first, is answered.
     registerZipFolder({ url: ZIP, root: 'outs/', directory }, async (input, init) => {
       const signal = init?.signal
 
-      if (signal === undefined || signal === null) {
+      if (
+        signal === undefined ||
+        signal === null ||
+        new Headers(init?.headers).get('Range') ===
+          `bytes=${localHeaderOffset}-${localHeaderOffset + 29}`
+      ) {
         return host(input, init)
       }
 

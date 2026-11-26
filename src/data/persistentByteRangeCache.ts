@@ -1,4 +1,5 @@
 import { throwIfAborted } from '../utils/abort'
+import { fetchWithRetry } from './fetchRetry'
 export const DEFAULT_BYTE_RANGE_CACHE_NAME = 'cellgeni-byte-range-cache'
 export const DEFAULT_BYTE_RANGE_CACHE_VERSION = 3
 export const DEFAULT_BYTE_RANGE_CACHE_MAX_BYTES = 256 * 1024 * 1024
@@ -280,7 +281,7 @@ export function fetchKeepingValidator(
 
   return {
     fetch: async (input, init) => {
-      const response = await fetcher(input, init)
+      const response = await fetchWithRetry(input, init, { fetcher })
 
       if (!seen && response.ok) {
         seen = true

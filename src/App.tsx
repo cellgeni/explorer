@@ -59,6 +59,7 @@ import {
 } from './datasets/segmentationSource'
 import { manifestSegmentationSource } from './datasets/datasetManifest'
 import { datasetManifestFor } from './data/datasetFiles'
+import { addFetchRetryListener, describeFetchRetry } from './data/fetchRetry'
 import { lazyIdLookup } from './data/lazyIdLookup'
 import { ShellLayout } from './features/shell/ShellLayout'
 import { useTopBarModel } from './features/shell/topBarModel'
@@ -1158,6 +1159,17 @@ export function App({ dependencies }: AppProps = {}) {
       setDebugLog((current) => appendDebugLogEntry(current, entry))
     },
     [setDebugLog],
+  )
+  // Reads tried again after a timeout or a failed request (O7). Reads in
+  // workers are tried again there, out of this log.
+  useEffect(
+    () =>
+      addFetchRetryListener((retry) => {
+        appendDebugEvent(describeFetchRetry(retry), {
+          coalesceKey: `fetch-retry:${retry.url}`,
+        })
+      }),
+    [appendDebugEvent],
   )
   const morphologyChannels = useMemo(
     () => [

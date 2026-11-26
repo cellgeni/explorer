@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  attachedLabelsFormat,
   segmentationFormatFromFileName,
   segmentationFormatFromName,
   segmentationLinkFor,
@@ -32,6 +33,23 @@ describe('segmentationFormatFromName', () => {
     expect(segmentationFormatFromName('mask.tif.gz')).toBeNull()
     expect(segmentationFormatFromName('cells.parquet.gz')).toBeNull()
     expect(segmentationFormatFromName('https://x/download?id=3')).toBeNull()
+  })
+})
+
+describe('attachedLabelsFormat', () => {
+  it('takes the set format, else the name, else OME-Zarr', () => {
+    expect(
+      attachedLabelsFormat('https://x/outs/cell_boundaries.parquet', undefined),
+    ).toBe('parquet')
+    expect(attachedLabelsFormat('https://x/cells.geojson', undefined)).toBe('geojson')
+    expect(attachedLabelsFormat('https://x/masks.tif', undefined)).toBe('label-tiff')
+    expect(attachedLabelsFormat('https://x/a-label.zarr', undefined)).toBe('label-zarr')
+    // Stores whose names tell no format were read as OME-Zarr before.
+    expect(attachedLabelsFormat('https://x/a-label.zarr.zip', undefined)).toBe(
+      'label-zarr',
+    )
+    expect(attachedLabelsFormat('https://x/a.zarr/0', undefined)).toBe('label-zarr')
+    expect(attachedLabelsFormat('https://x/download?id=7', 'wkt')).toBe('wkt')
   })
 })
 

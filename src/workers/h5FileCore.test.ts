@@ -442,7 +442,7 @@ describe('createH5FileHandler', () => {
           tree: false,
         }),
       ).resolves.toMatchObject({ response: { ok: true, op: 'open' } })
-      expect(fetcher).toHaveBeenCalledWith('https://example.test/a.h5')
+      expect(fetcher).toHaveBeenCalledWith('https://example.test/a.h5', expect.anything())
       await expect(
         harness.send({ op: 'read', path: '/obs/cell_id' }),
       ).resolves.toMatchObject({ response: { ok: true, value: ['a', 'b', 'c'] } })

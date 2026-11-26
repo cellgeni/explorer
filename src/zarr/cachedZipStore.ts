@@ -1,5 +1,6 @@
 import { ZipFileStore } from '@zarrita/storage'
 import { fetchHead } from '../data/hostResponses'
+import { fetchWithRetry } from '../data/fetchRetry'
 import { ZipArchiveError } from '../data/zipArchive'
 import {
   byteRangeFileVersion,
@@ -86,12 +87,16 @@ export class CachedHttpRangeReader {
         // time, so without no-store every read of the zip (image tiles, table
         // chunks, shapes) waits behind the one in flight. The persistent
         // cache above keeps the ranges instead.
-        const response = await this.fetcher(this.url, {
-          cache: 'no-store',
-          headers: {
-            Range: `bytes=${offset}-${offset + size - 1}`,
+        const response = await fetchWithRetry(
+          this.url,
+          {
+            cache: 'no-store',
+            headers: {
+              Range: `bytes=${offset}-${offset + size - 1}`,
+            },
           },
-        })
+          { fetcher: this.fetcher },
+        )
 
         return readRangeBody(this.url, response, offset, size)
       },

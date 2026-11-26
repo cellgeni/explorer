@@ -226,6 +226,56 @@ describe('createXhrRangeRead', () => {
       'm.h5 bytes 0-2 failed after 3 attempts: NetworkError',
     )
   })
+
+  it('tries 408, 429 and 5xx again, and times an attempt by its size', () => {
+    const { createRequest } = fakeRequests([
+      { status: 503 },
+      { status: 429 },
+      { status: 206, body: new ArrayBuffer(3) },
+      { status: 500 },
+      { status: 502 },
+      { status: 504 },
+    ])
+    const timeouts: number[] = []
+    const read = createXhrRangeRead('https://example.test/m.h5', 'm.h5', {
+      createRequest: () => {
+        const request = createRequest()
+
+        Object.defineProperty(request, 'send', {
+          value: ((send) => () => {
+            timeouts.push(request.timeout)
+            send()
+          })(request.send.bind(request)),
+        })
+        return request
+      },
+    })
+
+    expect(read(0, 3)).toHaveLength(3)
+    // The last answer's error goes to the caller.
+    expect(() => read(0, 3)).toThrow('m.h5 returned HTTP 504 for bytes 0-2.')
+    // 30 s with no bytes, plus 1 ms per 256 bytes.
+    expect(timeouts[0]).toBe(30_001)
+
+    const large = fakeRequests([{ status: 206, body: new ArrayBuffer(16 * 1024 * 1024) }])
+    let largeTimeout = 0
+    const readLarge = createXhrRangeRead('https://example.test/m.h5', 'm.h5', {
+      createRequest: () => {
+        const request = large.createRequest()
+
+        Object.defineProperty(request, 'send', {
+          value: ((send) => () => {
+            largeTimeout = request.timeout
+            send()
+          })(request.send.bind(request)),
+        })
+        return request
+      },
+    })
+
+    readLarge(0, 16 * 1024 * 1024)
+    expect(largeTimeout).toBe(30_000 + 65_536)
+  })
 })
 
 describe('contentRangeSize', () => {

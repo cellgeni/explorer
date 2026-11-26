@@ -125,7 +125,10 @@ match:
 | 7     | At least one complete `binned_outputs/square_*um` tier                                                                                  | `visium-hd`                                                        |
 | —     | Nothing matched                                                                                                                         | `unknown` → "Unsupported spatial dataset layout."                  |
 
-Every probe has a 15 s timeout. When all of steps 4a to 4c time out, detection
+Every probe is sent once and gives up after 15 s without bytes, its body
+included (`fetchWithRetry`, see
+[HTTP Requirements In Code](#http-requirements-in-code)). When all of steps 4a
+to 4c time out, detection
 stops there instead of waiting out each later step, and reports "Host not
 responding". A `HEAD` that gets no response, as on a host whose CORS rules allow
 only `GET`, is sent again as a one-byte Range `GET` (`fetchHead`,
@@ -436,6 +439,37 @@ All screen↔data conversions go through `coords.ts`.
 
 ## HTTP Requirements In Code
 
+- **Timeouts and retries.** Range reads go through `fetchWithRetry`
+  (`src/data/fetchRetry.ts`): zip entries and zipped folders, the Zarr,
+  Icechunk and H5AD reference stores, hyparquet, TIFF tags and tiles, the
+  Range probe, the H5 worker's first read, and H5AD and collection files.
+  - An attempt ends when it has waited 30 s for bytes, before the headers or
+    while a read of the body waits, and its host has sent no bytes to any of
+    the page's requests in that time. Chromium sends at most six HTTP/1.1
+    requests to a host at once and queues the rest, so a request can wait
+    with no bytes while the host is answering others. The page and its
+    workers tell each other when a host sends bytes, at most once a second
+    per host (a `BroadcastChannel`). A slow reader does not count.
+  - A timeout, a failed fetch, and 408, 429 and 5xx are tried again after
+    about 1 s, then 2 s, three attempts in all. A body that stops part way
+    resumes from the next byte, or from the start with the bytes read
+    skipped when the request was not a single range; a changed ETag or
+    Last-Modified ends it instead. The last answer or error goes to the
+    caller.
+  - Not tried again: other 4xx, the caller's abort, methods other than `GET`
+    and `HEAD`, and a failed fetch on an origin that has answered but never
+    with a readable error status (`hidesErrorResponses`), where it most likely
+    stands for a hidden 404.
+  - Each retry on the main thread is written to the activity log. A read
+    whose last attempt timed out is reported as "Host not responding".
+  - Detection probes and the examples index are sent once, with their own
+    limits (15 s and 5 s); collections wait 15 s per attempt.
+  - The H5 worker reads synchronously for h5wasm (`createXhrRangeRead`), and
+    a synchronous request reports no progress: its timeout is 30 s plus the
+    time the bytes take at 256 kB/s, and its retries follow at once.
+  - Not covered: DuckDB's own reads, the transcript zip read by
+    `@zarrita/storage`, the Visium HD nucleus mask read by geotiff's
+    `fromUrl`, and whole-file reads such as CSV and matrix files.
 - **Zipped run folders.** A zip that holds an Atera run instead of a Zarr
   store is registered as a folder (`registerZipFolder`,
   `src/data/zipFolder.ts`), and `installZipFolderFetch` (called from

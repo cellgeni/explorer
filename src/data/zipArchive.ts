@@ -8,6 +8,7 @@
 // middle, so an entry is always read whole.
 
 import { fetchHead } from './hostResponses'
+import { fetchWithRetry } from './fetchRetry'
 import { responseValidator } from './persistentByteRangeCache'
 
 export interface ZipEntry {
@@ -250,11 +251,15 @@ export async function readZipEntry(
     start: number,
     stop: number,
   ): Promise<ReadableStream<Uint8Array<ArrayBuffer>>> => {
-    const response = await fetcher(url, {
-      cache: 'no-store',
-      headers: { Range: `bytes=${start}-${stop - 1}` },
-      ...(options.signal === undefined ? {} : { signal: options.signal }),
-    })
+    const response = await fetchWithRetry(
+      url,
+      {
+        cache: 'no-store',
+        headers: { Range: `bytes=${start}-${stop - 1}` },
+        ...(options.signal === undefined ? {} : { signal: options.signal }),
+      },
+      { fetcher },
+    )
 
     if (response.status !== 206 || response.body === null) {
       await response.body?.cancel()
@@ -428,11 +433,15 @@ async function readRange(
   fetcher: typeof fetch,
   signal: AbortSignal | undefined,
 ): Promise<Uint8Array> {
-  const response = await fetcher(url, {
-    cache: 'no-store',
-    headers: { Range: `bytes=${start}-${end - 1}` },
-    ...(signal === undefined ? {} : { signal }),
-  })
+  const response = await fetchWithRetry(
+    url,
+    {
+      cache: 'no-store',
+      headers: { Range: `bytes=${start}-${end - 1}` },
+      ...(signal === undefined ? {} : { signal }),
+    },
+    { fetcher },
+  )
 
   if (response.status !== 206) {
     await response.body?.cancel()

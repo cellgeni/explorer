@@ -20,6 +20,7 @@ import {
   parseDatasetManifest,
 } from './datasetManifest'
 import { ATERA_FILE_DEFAULTS, ATERA_OPTIONAL_FILES } from './ateraFormat'
+import { SEGMENTATION_FORMATS } from './segmentationSource'
 import { MERSCOPE_FILE_DEFAULTS, MERSCOPE_OPTIONAL_FILES } from './merscopeFormat'
 import {
   VISIUM_FILE_DEFAULTS,
@@ -92,9 +93,10 @@ describe('dataset manifest JSON Schema', () => {
     expect(keys(h5adPlatform?.then?.properties?.options)).toEqual(
       [...H5AD_MANIFEST_OPTIONS].sort(),
     )
-    expect(
-      h5adPlatform?.then?.properties?.options?.properties?.coordinates?.enum,
-    ).toEqual(DATASET_IMAGE_COORDINATES)
+    const h5adOptions = h5adPlatform?.then?.properties?.options?.properties
+    expect(h5adOptions?.coordinates?.enum).toEqual(DATASET_IMAGE_COORDINATES)
+    expect(h5adOptions?.labelsCoordinates?.enum).toEqual(DATASET_IMAGE_COORDINATES)
+    expect(h5adOptions?.labelsFormat?.enum).toEqual(SEGMENTATION_FORMATS)
     expect(keys(definition('visiumFiles'))).toEqual(
       [
         ...Object.keys(VISIUM_FILE_DEFAULTS),

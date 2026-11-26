@@ -1,6 +1,7 @@
 import { asyncBufferFromUrl, parquetMetadataAsync, parquetReadObjects } from 'hyparquet'
 import type { AsyncBuffer, Compressors, FileMetaData, ParquetParsers } from 'hyparquet'
 import { DEFAULT_PARSERS } from 'hyparquet/src/convert.js'
+import { retryingFetch } from '../data/fetchRetry'
 import { readMaybeGzipBytes } from '../data/readMaybeGzipText'
 import {
   affineScale,
@@ -89,7 +90,9 @@ export const readSpatialDataShapes: SpatialDataShapesReader = async (options) =>
       ? await fetchWholeFile(options)
       : await asyncBufferFromUrl({
           url: options.url,
-          ...(options.fetcher === undefined ? {} : { fetch: options.fetcher }),
+          fetch: retryingFetch(
+            options.fetcher === undefined ? {} : { fetcher: options.fetcher },
+          ),
           ...(options.signal === undefined
             ? {}
             : { requestInit: { signal: options.signal } }),
