@@ -5052,7 +5052,9 @@ export function App({ dependencies }: AppProps = {}) {
   // The `Open N Sections` link: an AnnData table's section columns.
   const sectionColumns = useSectionColumns({
     datasetUrl: loadState.status === 'ready' ? loadedDatasetUrl : null,
-    enabled: datasetPlatform === 'h5ad' && readyCollection === null,
+    enabled:
+      (datasetPlatform === 'h5ad' || datasetPlatform === 'visium') &&
+      readyCollection === null,
     getSpatialDataset,
   })
   const annotationsSection = useAnnotationsSectionModel({

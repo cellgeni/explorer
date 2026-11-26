@@ -38,6 +38,8 @@ export const SECTION_COLUMN_NAMES: readonly string[] = [
 export interface AnnDataSectionColumn {
   readonly column: string
   readonly sectionCount: number
+  // A Visium table's library column, the only one it splits by.
+  readonly library?: boolean
 }
 
 export function parseAnnDataSectionUrl(url: string): AnnDataSectionRef | null {

@@ -250,7 +250,11 @@ described in [Host your own H5AD data](#host-your-own-h5ad-data). Keep
 `obsm/spatial` in full-resolution pixels, `uns/spatial/<library>/scalefactors`,
 and the `hires` or `lowres` image under `uns/spatial/<library>/images`. Include
 `obs/array_row` and `obs/array_col` so the scale can be fitted from the spot
-grid; without them it is estimated from spot spacing.
+grid; without them it is estimated from spot spacing. With several libraries,
+add an obs column holding each spot's library name (`library_id`, or any label
+column such as `spaceranger_id` whose values are the `uns/spatial` keys): the
+viewer shows one library at a time and can split the file into a collection of
+its libraries.
 
 See [Standard Visium](./modalities/visium.md) for how each file is read.
 

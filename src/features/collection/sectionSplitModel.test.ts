@@ -33,7 +33,21 @@ describe('sectionSplitLink', () => {
     ).toBeNull()
   })
 
-  it('offers nothing for a section, a collection, a Visium table or another platform', () => {
+  it("links a Visium table to its libraries by its library column, whatever it's named", () => {
+    expect(
+      sectionSplitLink({
+        ...OPEN,
+        platform: 'visium',
+        sectionColumns: [{ column: 'spaceranger_id', sectionCount: 3, library: true }],
+      }),
+    ).toEqual({
+      href: `/explorer/?collection=${encodeURIComponent(`${TABLE}#obs.spaceranger_id`)}`,
+      column: 'spaceranger_id',
+      sectionCount: 3,
+    })
+  })
+
+  it('offers nothing for a section, a collection, a Visium table without a library column or another platform', () => {
     expect(
       sectionSplitLink({ ...OPEN, datasetUrl: `${TABLE}#obs.section=s1` }),
     ).toBeNull()

@@ -96,8 +96,12 @@ async function splitAnnDataCollection(
     )
   }
 
-  const columns = (await read(() => dataset.sectionColumns())).map(({ column }) => column)
-  const column = namedColumn ?? columns.find(isSectionColumnName)
+  const splits = await read(() => dataset.sectionColumns())
+  const columns = splits.map(({ column }) => column)
+  const column =
+    namedColumn ??
+    splits.find(({ library }) => library === true)?.column ??
+    columns.find(isSectionColumnName)
 
   if (column === undefined) {
     throw new DatasetCollectionError(

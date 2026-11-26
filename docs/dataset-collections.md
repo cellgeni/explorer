@@ -585,9 +585,13 @@ names the column: `#obs.<column>` after the table's URL, written
 `%23obs.<column>` inside the viewer's address. A table without such a column
 stops with an error that lists the columns it could be split by: label columns
 with 2 to 500 values.
-`.h5ad` files, AnnData Zarr stores and AnnData in Icechunk split alike; a
-Visium table does not, since its sections are its libraries, which its
-`Library` select chooses.
+`.h5ad` files, AnnData Zarr stores and AnnData in Icechunk split alike. A
+Visium table splits only into its libraries, by the obs column that names each
+spot's `uns/spatial` library, whatever it is called (`library_id`, or
+`spaceranger_id` when its values are the library names); each section shows
+its library's spots on its own tissue image. Naming another column for a
+Visium table stops with an error, since spots of several libraries have no one
+image to sit on.
 
 With such a column in the open table, the Cells section's `Open N Sections`
 link opens the same collection.

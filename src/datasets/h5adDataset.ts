@@ -368,6 +368,8 @@ interface H5adVisiumSource {
   readonly pixels: readonly { readonly x: number; readonly y: number }[]
   // Each row's library from an obs library column; null without one.
   readonly rowLibraries: readonly (string | null)[] | null
+  // That column's name, by which the table splits into its libraries.
+  readonly libraryColumn: string | null
   readonly inTissue: readonly number[] | null
   readonly arrayRows: readonly number[] | null
   readonly arrayCols: readonly number[] | null
@@ -1247,10 +1249,19 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   // gives, the likeliest first (see SECTION_COLUMN_NAMES): label columns with
   // from 2 to MAX_SECTIONS values, and number columns named like a section
   // column with as many distinct finite values, as anndata stores whole-number
-  // IDs (EXP-041). None for a Visium table, whose sections are its libraries.
+  // IDs (EXP-041). A Visium table splits only into its libraries, by its
+  // library column.
   async sectionColumns(): Promise<readonly AnnDataSectionColumn[]> {
     const base = await this.baseCache()
-    if (base.visiumSource !== null) return []
+
+    if (base.visiumSource !== null) {
+      const column = base.visiumSource.libraryColumn
+      const sectionCount = column === null ? 0 : (visiumLibraryGroups(base)?.length ?? 0)
+
+      return column !== null && sectionCount >= 2 && sectionCount <= MAX_SECTIONS
+        ? [{ column, sectionCount, library: true }]
+        : []
+    }
 
     const labels = base.categoricalTracks.map((track) => ({
       column: track.id,
@@ -1276,7 +1287,10 @@ export class AnnDataH5adDataset implements SpatialDataset<SpatialElementId> {
   // a categorical's categories, numbers ascending, else as first seen.
   async sections(column: string): Promise<readonly AnnDataSection[]> {
     const base = await this.baseCache()
-    const groups = sectionGroups(base, column)
+    const groups =
+      base.visiumSource === null
+        ? sectionGroups(base, column)
+        : visiumLibraryGroups(base, column)
 
     if (groups === null) {
       throw new Error(`obs has no column "${column}" to split into sections.`)
@@ -2101,13 +2115,10 @@ interface H5adSectionGroup {
 // `column` holds `value`. obsm and the matrix stay the file's, read by the
 // file's rows (`section.rows`); the H5 file worker is the file's to close.
 function withSection(base: H5adCache, column: string, value: string): H5adCache {
-  if (base.visiumSource !== null) {
-    throw new Error(
-      'A Visium table is split into sections by its libraries: open the file itself and choose one under Image.',
-    )
-  }
-
-  const groups = sectionGroups(base, column)
+  const groups =
+    base.visiumSource === null
+      ? sectionGroups(base, column)
+      : visiumLibraryGroups(base, column)
 
   if (groups === null) {
     throw new Error(`obs has no column "${column}" to take a section from.`)
@@ -2120,9 +2131,12 @@ function withSection(base: H5adCache, column: string, value: string): H5adCache 
   }
 
   const coordinates = pickRows(base.coordinates, rows)
+  const visiumSource = base.visiumSource
 
   return {
     ...base,
+    visiumSource:
+      visiumSource === null ? null : visiumLibrarySection(visiumSource, value, rows),
     cellIds: pickRows(base.cellIds, rows),
     coordinates,
     depths: sectionDepths(base.depths, rows, sectionDepth(base, rows)),
@@ -2137,6 +2151,63 @@ function withSection(base: H5adCache, column: string, value: string): H5adCache 
     extent: bboxForPoints(coordinates),
     close: undefined,
     section: { rows, fileCellIds: base.cellIds },
+  }
+}
+
+// A Visium table's sections: the rows of each library, by its library column,
+// in the column's order. Throws for another column, as spots of several
+// libraries have no one image to sit on; null when the table has no library
+// column, or `column` is not in obs.
+function visiumLibraryGroups(
+  cache: H5adCache,
+  column?: string,
+): readonly H5adSectionGroup[] | null {
+  const source = cache.visiumSource
+  const libraryColumn = source?.libraryColumn ?? null
+
+  if (source === null || libraryColumn === null) {
+    if (column !== undefined && sectionGroups(cache, column) !== null) {
+      throw new Error(
+        'This Visium table has no obs column naming the uns/spatial library of each spot, so it cannot be split into sections. Open the file itself and choose a library under Image.',
+      )
+    }
+
+    return null
+  }
+
+  if (column !== undefined && column !== libraryColumn) {
+    if (sectionGroups(cache, column) === null) return null
+
+    throw new Error(
+      `A Visium table splits into its libraries, by obs column "${libraryColumn}", not by "${column}".`,
+    )
+  }
+
+  const libraries = new Set(source.libraries.map(({ id }) => id))
+  return (sectionGroups(cache, libraryColumn) ?? []).filter(({ value }) =>
+    libraries.has(value),
+  )
+}
+
+// The Visium placement of one library's rows: only that library, and each
+// row-indexed array narrowed to the section's rows.
+function visiumLibrarySection(
+  source: H5adVisiumSource,
+  libraryId: string,
+  rows: Uint32Array,
+): H5adVisiumSource {
+  const pick = <T>(values: readonly T[] | null) =>
+    values === null ? null : pickRows(values, rows)
+
+  return {
+    ...source,
+    libraries: source.libraries.filter(({ id }) => id === libraryId),
+    defaultLibraryId: libraryId,
+    pixels: pickRows(source.pixels, rows),
+    rowLibraries: pick(source.rowLibraries),
+    inTissue: pick(source.inTissue),
+    arrayRows: pick(source.arrayRows),
+    arrayCols: pick(source.arrayCols),
   }
 }
 
@@ -3050,16 +3121,14 @@ async function readVisiumSource(
   const libraries = await Promise.all(
     libraryIds.map((id) => readVisiumLibrary(spatial, id)),
   )
-  // With several libraries, an obs column says which rows belong to each.
-  const libraryLabels =
+  // With several libraries, an obs column says which rows belong to each: one
+  // named like a library column that names a library, else one that names
+  // only libraries, as `spaceranger_id` can.
+  const libraryColumn =
     libraryIds.length > 1
-      ? tracks.categoricalTracks
-          .filter((track) => VISIUM_LIBRARY_COLUMNS.includes(track.id))
-          .map((track) => labelsByRow(track.values))
-          .find((labels) =>
-            labels.some((value) => value !== null && libraryIds.includes(value)),
-          )
-      : undefined
+      ? visiumLibraryColumn(tracks.categoricalTracks, libraryIds)
+      : null
+  const libraryLabels = libraryColumn?.labels
   const continuous = (id: string) =>
     tracks.continuousTracks.find((track) => track.id === id)?.values ?? null
   const inTissue = continuous('in_tissue')
@@ -3072,11 +3141,40 @@ async function readVisiumSource(
       ) ?? libraryIds[0]!,
     pixels: embedding.points,
     rowLibraries: libraryLabels ?? null,
+    libraryColumn: libraryColumn?.id ?? null,
     // Unless no row is under tissue, in which case the column is ignored.
     inTissue: inTissue?.some((value) => value !== 0) === true ? inTissue : null,
     arrayRows: continuous('array_row'),
     arrayCols: continuous('array_col'),
   }
+}
+
+function visiumLibraryColumn(
+  tracks: readonly H5adCategoricalTrack[],
+  libraryIds: readonly string[],
+): { readonly id: string; readonly labels: readonly (string | null)[] } | null {
+  const libraries = new Set(libraryIds)
+  const named = tracks.filter((track) => VISIUM_LIBRARY_COLUMNS.includes(track.id))
+  const others = tracks.filter((track) => !VISIUM_LIBRARY_COLUMNS.includes(track.id))
+
+  for (const track of named) {
+    const labels = labelsByRow(track.values)
+    if (labels.some((value) => value !== null && libraries.has(value))) {
+      return { id: track.id, labels }
+    }
+  }
+
+  for (const track of others) {
+    const labels = labelsByRow(track.values)
+    if (
+      labels.some((value) => value !== null) &&
+      labels.every((value) => value === null || libraries.has(value))
+    ) {
+      return { id: track.id, labels }
+    }
+  }
+
+  return null
 }
 
 async function readVisiumLibrary(
