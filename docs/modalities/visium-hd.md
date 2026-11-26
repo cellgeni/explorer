@@ -12,9 +12,10 @@ Visium HD is the last platform `detectSpatialDataset`
 (`src/datasets/datasetFactory.ts`) tries: after the `.h5ad`, Zarr, and TIFF
 URL checks, the `experiment.xenium` probe, and the root Zarr metadata probes.
 
-- **Bin tiers.** For each tier in `VISIUM_HD_BINS`, in the order 2, 8, 16 µm,
-  three `HEAD` requests run in parallel. A tier counts as present only when all
-  three succeed (`visiumHdRequiredBinPaths`):
+- **Bin tiers.** Three `HEAD` requests for each tier in `VISIUM_HD_BINS` (2, 8,
+  16 µm), all nine sent together with the segmented-output probes below, so
+  detection takes one round of requests rather than four. A tier counts as
+  present only when all three succeed (`visiumHdRequiredBinPaths`):
   - `binned_outputs/square_XXXum/spatial/tissue_positions.parquet` for 8 and
     16 µm; for 2 µm, whose positions file is not read,
     `binned_outputs/square_002um/filtered_feature_bc_matrix/barcodes.tsv.gz`
