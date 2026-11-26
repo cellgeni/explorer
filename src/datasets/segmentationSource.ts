@@ -40,8 +40,26 @@ export const SEGMENTATION_FORMAT_LABELS: Readonly<Record<SegmentationFormat, str
 export const SEGMENTATION_FILE_ACCEPT =
   '.tif,.tiff,.geojson,.json,.parquet,.geoparquet,.wkt,.csv,.tsv,.txt,.gz'
 
-export function isLabelSegmentationFormat(format: SegmentationFormat): boolean {
+export type LabelSegmentationFormat = Extract<
+  SegmentationFormat,
+  'label-tiff' | 'label-zarr'
+>
+
+export function isLabelSegmentationFormat(
+  format: SegmentationFormat,
+): format is LabelSegmentationFormat {
   return format === 'label-tiff' || format === 'label-zarr'
+}
+
+// The format of labels a collection or H5AD manifest pairs with an AnnData
+// table: as set, else as the name tells, else OME-Zarr, which is all such
+// labels could be before, so stores named `….zarr.zip` or `….zarr/0` still
+// open.
+export function attachedLabelsFormat(
+  url: string,
+  format: SegmentationFormat | undefined,
+): SegmentationFormat {
+  return format ?? segmentationFormatFromName(url) ?? 'label-zarr'
 }
 
 // The format a URL names, or null. `.gz` text files are read inflated, so the

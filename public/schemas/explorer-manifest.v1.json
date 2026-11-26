@@ -177,7 +177,7 @@
       "if": { "properties": { "platform": { "const": "h5ad" } } },
       "then": {
         "required": ["files"],
-        "$comment": "options.coordinates needs files.image, and options.labelColumn files.labels.",
+        "$comment": "options.coordinates needs files.image, and options.labelsFormat, options.labelsCoordinates and options.labelColumn files.labels.",
         "allOf": [
           {
             "if": {
@@ -189,7 +189,15 @@
           {
             "if": {
               "required": ["options"],
-              "properties": { "options": { "required": ["labelColumn"] } }
+              "properties": {
+                "options": {
+                  "anyOf": [
+                    { "required": ["labelsFormat"] },
+                    { "required": ["labelsCoordinates"] },
+                    { "required": ["labelColumn"] }
+                  ]
+                }
+              }
             },
             "then": { "properties": { "files": { "required": ["labels"] } } }
           }
@@ -209,7 +217,7 @@
               },
               "labels": {
                 "$ref": "#/$defs/path",
-                "description": "An OME-Zarr segmentation label image covering `image`, drawn as cell boundaries. Label N outlines the cell whose label value is N (see `labelColumn`). Needs `image`."
+                "description": "A segmentation drawn as cell boundaries: a label mask covering `image` (OME-Zarr or TIFF), where label N outlines the cell whose label value is N, or polygons (Parquet, including Xenium's cell_boundaries.parquet, GeoJSON or WKT), each outlining the cell its ID names (see `labelColumn`). The format comes from the name unless `options.labelsFormat` sets it; a name that tells none is read as OME-Zarr. Needs `image`."
               }
             },
             "dependentRequired": { "labels": ["image"] },
@@ -223,11 +231,19 @@
                 "default": "micrometers",
                 "description": "What the table's cell coordinates are in: micrometres, or the image's full-resolution pixels, which are scaled to micrometres by the image's pixel size. Needs `files.image`."
               },
+              "labelsFormat": {
+                "enum": ["label-tiff", "label-zarr", "geojson", "wkt", "parquet"],
+                "description": "The format of `files.labels` when its name does not tell it. Needs `files.labels`."
+              },
+              "labelsCoordinates": {
+                "enum": ["micrometers", "image-pixels"],
+                "description": "What the polygon coordinates of `files.labels` are in: micrometres, as Xenium writes them, or the image's full-resolution pixels. Defaults to `options.coordinates`. Label masks are placed over the image whatever this says. Needs `files.labels`."
+              },
               "labelColumn": {
                 "type": "string",
                 "minLength": 1,
                 "pattern": "\\S",
-                "description": "The obs column holding each cell's label value: whole numbers, or strings of them. Without it, the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Needs `files.labels`."
+                "description": "The obs column holding each cell's label value (whole numbers, or strings of them), or, for polygons, its polygon's ID. Without it, a mask's labels match the table's SpatialData instance key, else the shortest obs column named like \"label\", whichever holds whole numbers for most cells; else the obs names. Polygons match whichever of the obs names, the instance key and the obs columns named like labels or IDs (such as `cell_id`) holds the most polygon IDs. Needs `files.labels`."
               }
             },
             "additionalProperties": false

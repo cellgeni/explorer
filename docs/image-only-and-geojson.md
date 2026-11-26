@@ -162,6 +162,9 @@ Enter its URL and `Load`, or `Open File` for a local file. It is outlines
 only: there is no cell table, so the outlines do not colour by genes or
 classes, and ROI, the Cell card and Cell Query do not count them. One
 segmentation is open at a time, and opening another dataset drops it.
+To outline an AnnData table's cells with the same files, so that each
+outline is one of its cells, name them as the table's
+[`labels`](./dataset-collections.md#labels) in a collection or H5AD manifest.
 
 | Format         | Names                                       | What is read                                                                                                                                                                                                                                                                                                              |
 | -------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

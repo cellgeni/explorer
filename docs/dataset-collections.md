@@ -112,17 +112,19 @@ Unknown fields are errors, as in a dataset manifest.
 
 ### Datasets
 
-| Key                | Required | Value                                                                                                                                                                         |
-| ------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dataset`          | Yes      | What `dataset=` opens: a dataset folder, file or store, a [dataset manifest](./dataset-manifest.md), or [one section of a table](#sections-of-one-table). Relative or http(s) |
-| `name`             | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name                                                            |
-| `group`            | No       | Group label, such as a time point or donor                                                                                                                                    |
-| `image`            | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                                                                                 |
-| `coordinates`      | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                                                                          |
-| `labels`           | No       | A segmentation label image covering `image`, drawn as cell boundaries. See [Labels](#labels). Needs `image`                                                                   |
-| `labelColumn`      | No       | The obs column holding each cell's label value. See [Labels](#labels). Needs `labels`                                                                                         |
-| `coordinateSystem` | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                                                                     |
-| `z`                | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`                                                             |
+| Key                 | Required | Value                                                                                                                                                                         |
+| ------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`           | Yes      | What `dataset=` opens: a dataset folder, file or store, a [dataset manifest](./dataset-manifest.md), or [one section of a table](#sections-of-one-table). Relative or http(s) |
+| `name`              | No       | Label in the bar. Without it, the bar shows the last part of the path. The top bar prefers the manifest's own name                                                            |
+| `group`             | No       | Group label, such as a time point or donor                                                                                                                                    |
+| `image`             | No       | An image to show under an AnnData dataset's cells. Relative or http(s). See [Images](#images)                                                                                 |
+| `coordinates`       | No       | `micrometers` (default) or `image-pixels`: what the dataset's cell coordinates are in. Needs `image`                                                                          |
+| `labels`            | No       | A segmentation drawn as cell boundaries: a label mask covering `image` (OME-Zarr or TIFF), or polygons (Parquet, GeoJSON, WKT). See [Labels](#labels). Needs `image`          |
+| `labelsFormat`      | No       | `label-zarr`, `label-tiff`, `parquet`, `geojson` or `wkt`: the format of `labels` when its name does not tell it. Needs `labels`                                              |
+| `labelsCoordinates` | No       | `micrometers` or `image-pixels`: what polygon coordinates are in. Defaults to `coordinates`. Needs `labels`                                                                   |
+| `labelColumn`       | No       | The obs column holding each cell's label value, or its polygon's ID. See [Labels](#labels). Needs `labels`                                                                    |
+| `coordinateSystem`  | No       | A name for registered coordinates, such as `patient-1`. See [Side by Side](#side-by-side)                                                                                     |
+| `z`                 | No       | The section's depth in its coordinate system, in micrometres. See [3D Stack](#3d-stack). Needs `coordinateSystem`                                                             |
 
 - Paths resolve and are checked like
   [manifest paths](./dataset-manifest.md#paths): against `root` when set
@@ -182,13 +184,40 @@ See [Attached Image](./modalities/h5ad.md#attached-image) for how it is read.
 
 ### Labels
 
-`labels` names a segmentation mask to draw as the dataset's cell boundaries:
-an OME-Zarr label image, including a `bioformats2raw` store, whose pixel
-values are cell labels and 0 is background. WebAtlas publishes one next to
-each section (`-label.zarr`).
+`labels` names a segmentation to draw as the dataset's cell boundaries:
 
-- **Which cell.** Label N outlines the cell whose label value is N. The
-  values come from:
+- a **label mask**, whose pixel values are cell labels and 0 is background: an
+  OME-Zarr label image, including a `bioformats2raw` store such as the one
+  WebAtlas publishes next to each section (`-label.zarr`), or a TIFF, such as
+  Cellpose's `_cp_masks.tif`;
+- or **polygons**, one per cell: Parquet (GeoParquet, a WKB or WKT column, or
+  one row per vertex as in Xenium's `cell_boundaries.parquet`), GeoJSON, or
+  WKT text.
+
+These are the formats and readers of an image's
+[imported segmentation](./image-only-and-geojson.md#imported-segmentations).
+The format comes from the name (`.zarr`, `.tif`, `.parquet`, `.geojson`,
+`.wkt`, `.csv`, …) unless `labelsFormat` sets it. A name that tells none,
+such as `cells.zarr.zip` or `sample.zarr/0`, is read as OME-Zarr.
+
+For example, a SPCOX section outlined by its Xenium run's
+`cell_boundaries.parquet` instead of the WebAtlas mask, with the polygons in
+micrometres while the cells are in image pixels:
+
+```json
+{
+  "dataset": "SPCOX-Sham-A-anndata.zarr",
+  "image": "SPCOX-Sham-A-raw.zarr",
+  "coordinates": "image-pixels",
+  "labels": "https://example.org/sham-a/outs/cell_boundaries.parquet",
+  "labelsCoordinates": "micrometers",
+  "name": "Sham-A",
+  "group": "Sham"
+}
+```
+
+- **Which cell (mask).** Label N outlines the cell whose label value is N.
+  The values come from:
   1. `labelColumn`, an obs column of whole numbers or of strings of them.
      A column that is missing, or holds no whole numbers, shows as a
      `Cell boundaries` error when boundaries load.
@@ -206,20 +235,45 @@ each section (`-label.zarr`).
   It matches by `cell_labels`, and all 905 cells in a 300 × 250 µm window
   sit inside their own outlines; by obs name, none would.
 
-- **Where.** The label image covers the same area as `image`, so its pixels
-  are scaled to the image's extent. A mask on the image's own pixel grid, such
-  as SPCOX's, lines up pixel for pixel; a downsampled one is stretched to fit.
+- **Which cell (polygons).** Each polygon's ID, read as for an imported
+  segmentation (a `cell_id`, `label`, `EntityID`, `id` … column or property),
+  names its cell: the cell whose `labelColumn` value is that ID, or, without
+  `labelColumn`, whichever of the obs names, the instance key, and the obs
+  columns with "label" in their name or named `cell_id`, `cell`, `id`,
+  `barcode`, `EntityID`, `object_id` or `instance_id` holds the most polygon
+  IDs. A SPCOX table names its cells 1, 2, ... and keeps the Xenium IDs
+  (`aaaaeagj-1`) in obs `cell_id`, so Xenium polygons match by `cell_id`
+  without naming it. The log says what matched and how many polygons
+  (`16,597 of 16,597 polygons matched to cells by obs column cell_id`).
+  Polygons that no cell has are not drawn, and a cell with several keeps its
+  largest. A file that matches no cell shows as a `Cell boundaries` error
+  naming one of its IDs.
+
+- **Where.** A mask covers the same area as `image`, so its pixels are scaled
+  to the image's extent. A mask on the image's own pixel grid, such as
+  SPCOX's, lines up pixel for pixel; a downsampled one is stretched to fit.
   The mask's own pixel size is not used: bioformats2raw writes 1 when it has
-  none.
+  none. Polygon coordinates are in `labelsCoordinates`, by default the
+  cells' `coordinates`: micrometres, as Xenium writes them, are used as they
+  are, and image pixels are scaled by the image's pixel size. Polygons far
+  beyond the image, or only in its top-left part, get a line in the log
+  suggesting the other units.
+
 - **Drawing.** `Cell boundaries` starts on, and outlines load for the view as
   for Xenium: once fewer than the Boundary limit's cells (50,000 by default)
-  are in view, from the finest pyramid level whose pixels in view fit 16
-  million. They are traced in the Zarr decode workers and coloured like the
-  cells. Hovering one shows its cell.
+  are in view. A mask is read from the finest pyramid level whose pixels in
+  view fit 16 million, and traced in the decode workers. A
+  polygon file is read whole in a worker the first time boundaries load,
+  then kept. Outlines are coloured like the cells; hovering one shows its
+  cell.
 - For SPCOX (headless Chromium with the GPU), the full view of Sham-A (16,597
   cells) reads its outlines from a coarse level: 8 label chunks, 0.8 MB. A
   field about 1.3 mm wide reads 12 chunks (1.4 MB) and one about 300 µm wide
-  12 chunks (0.75 MB), each done within 2.6 s of zooming.
+  12 chunks (0.75 MB), each done within 2.6 s of zooming. A Xenium-style
+  `cell_boundaries.parquet` for the same section (574,093 vertex rows,
+  2.3 MB) is read in 4 requests and matched to all 16,597 cells; a label TIFF
+  at a quarter of the image's resolution reads 3 requests (18 KB) for a field
+  about 250 µm wide.
 
 ### Defaults
 

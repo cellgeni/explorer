@@ -219,8 +219,10 @@ matrices.
   files left out keep their standard names. H5AD, SpatialData, and image
   manifests must name their one source file.
 - `options`: Visium HD `binSize`; SpatialData `table`, `coordinateSystem`,
-  `image`, `micrometersPerUnit`; H5AD `coordinates` and `labelColumn`.
-- H5AD manifests may also name an `image` and a `labels` mask, and
+  `image`, `micrometersPerUnit`; H5AD `coordinates`, `labelsFormat`,
+  `labelsCoordinates` and `labelColumn`.
+- H5AD manifests may also name an `image` and `labels`: a mask (OME-Zarr or
+  TIFF) or polygons (Parquet, GeoJSON, WKT) matched to cells by ID, and
   `files.h5ad` may be an AnnData Zarr store or an Icechunk repository.
 - `defaults`: genes, cell colour, gene scale, range and score, boundary
   toggles, image channels, three opacities, cell point size, and the
@@ -236,8 +238,8 @@ matrices.
   [`public/schemas/explorer-collection.v1.json`](../../public/schemas/explorer-collection.v1.json).
 - Each entry is anything `dataset=` opens (a folder, file, store or
   manifest), with an optional `name` and `group`. An AnnData entry may add
-  `image`, `labels`, `coordinates` and `labelColumn`, as an H5AD manifest
-  does.
+  `image`, `labels`, `coordinates`, `labelsFormat`, `labelsCoordinates` and
+  `labelColumn`, as an H5AD manifest does.
 - Optional `defaults` use the manifest's cross-dataset keys (genes, cell
   colour, gene scale, range and score, cell point size) and apply to the first
   dataset opened.
