@@ -326,8 +326,6 @@ to it.
       ([Phase 8](phases/08-image-only-geojson.md#known-gaps)). Partly done: a
       feature's `id` is kept as its object ID and exported again (#288,
       2026-11-22).
-- [ ] OME-Zarr chunks read over HTTP are not kept in the IndexedDB cache;
-      only zipped stores use it ([Phase 9](phases/09-ome-zarr.md)).
 - [ ] QPTIFF: the stripped smallest pyramid level is not shown, and a QPTIFF
       cannot be placed over Xenium
       ([Phase 13](phases/13-qptiff.md#known-gaps)).
