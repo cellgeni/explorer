@@ -60,7 +60,7 @@ no longer breaks loading, and so a dataset can say how it should be shown.
       a top that may be a percentile such as `"p95"` (#128, 2026-11-16). A
       link's own `geneRange=` wins.
 - [x] A reader chosen in place of detection, the ad hoc counterpart of a
-      manifest's `platform` (2026-11-26; added to Open Items that day). A
+      manifest's `platform` (#459, 2026-11-26; added to Open Items that day). A
       cog at the end of the `Dataset or image URL` field opens a system list
       of "Detect automatically" and the eight platforms; the choice goes
       into the link as `reader=`, and into Recent. **DECISION:** detection
